@@ -15,6 +15,15 @@ use signal_guitar_proto::{PatchInfo, PerformanceModel, PresetInfo};
 use crate::perform::folder_color;
 
 /// Section eyebrow shared by every sidebar group.
+
+// Profile-list row layout, as inline styles Blitz honours (see the
+// `blitz-design` skill): the name takes the slack and clips; the preset is a
+// fixed right-aligned cell that clips (no `text-overflow` in Blitz).
+const PATCH_ROW: &str = "display: flex; align-items: center; gap: 8px; min-width: 0; \
+                         margin-left: 16px; padding: 4px 8px; text-align: left; cursor: pointer;";
+const NAME_CELL: &str = "flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-align: left;";
+const PRESET_CELL: &str = "flex-shrink: 0; width: 76px; overflow: hidden; white-space: nowrap; text-align: right;";
+
 #[component]
 fn PanelLabel(label: &'static str) -> Element {
     rsx! {
@@ -205,7 +214,10 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                     }
                 }
             }
-            div { class: "flex-1 overflow-y-auto min-h-0 p-2 flex flex-col gap-0.5",
+            div {
+                class: "flex-1 min-h-0 p-2 flex flex-col gap-0.5",
+                // Blitz: `overflow-y: scroll` scrolls; `auto` is dropped.
+                style: "overflow-y: scroll; scrollbar-width: thin;",
                 div { class: "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-bold",
                     span { class: "w-2 h-2 rounded-full bg-current opacity-60" }
                     if model.profile_name.is_empty() { "— no profile —" } else { "{model.profile_name}" }
@@ -239,12 +251,15 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                     }
                                 },
                                 span { class: "w-2 h-2 rounded-full flex-shrink-0", style: "background-color: {dot};" }
-                                span { class: "text-xs font-bold uppercase tracking-wider",
+                                span {
+                                    class: "text-xs font-bold uppercase tracking-wider",
+                                    style: "{NAME_CELL}",
                                     "{stack_label}"
                                 }
-                                span { class: "ml-auto text-[9px] font-mono opacity-50 truncate max-w-[80px]", "{main_preset}" }
+                                span { class: "text-[9px] font-mono opacity-50", style: "{PRESET_CELL}", "{main_preset}" }
                                 span {
-                                    class: "ml-auto text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 cursor-pointer",
+                                    class: "text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 cursor-pointer",
+                                    style: "flex-shrink: 0;",
                                     title: "Delete stack (patches stay)",
                                     onclick: {
                                         let rig = rig.clone();
@@ -283,14 +298,18 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                     let is_default = p.default_in_stack;
                                     let is_sel = selected_patch() == Some(i);
                                     rsx! {
-                                        button {
+                                        // A div, not a <button>: Blitz gives a
+                                        // button centred content, which set every
+                                        // name at a different offset.
+                                        div {
                                             key: "{i}",
+                                            style: "{PATCH_ROW}",
                                             class: if p.active {
-                                                "group flex items-center gap-2 rounded-md ml-4 px-2 py-1 text-left text-sm font-bold bg-accent text-accent-foreground"
+                                                "group rounded-md text-sm font-bold bg-accent text-accent-foreground"
                                             } else if is_sel {
-                                                "group flex items-center gap-2 rounded-md ml-4 px-2 py-1 text-left text-sm ring-1 ring-ring text-foreground"
+                                                "group rounded-md text-sm ring-1 ring-ring text-foreground"
                                             } else {
-                                                "group flex items-center gap-2 rounded-md ml-4 px-2 py-1 text-left text-sm text-foreground hover:bg-accent/40"
+                                                "group rounded-md text-sm text-foreground hover:bg-accent/40"
                                             },
                                             onclick: {
                                                 let rig = rig.clone();
@@ -326,7 +345,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                                 }
                                             } else {
                                                 span {
-                                                    class: "truncate",
+                                                    style: "{NAME_CELL}",
                                                     ondoubleclick: {
                                                         let name = name.clone();
                                                         move |e: MouseEvent| {
@@ -346,19 +365,24 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                                     "★"
                                                 }
                                             }
-                                            span { class: "ml-auto text-[9px] font-mono opacity-50 truncate max-w-[80px] flex-shrink-0",
-                                                "{preset}"
-                                            }
                                             if !p.override_modules.is_empty() {
                                                 span {
-                                                    class: "text-[9px] opacity-70 flex-shrink-0",
+                                                    class: "opacity-70",
+                                                    style: "display: flex; gap: 3px; flex-shrink: 0;",
                                                     title: "overrides: {p.override_modules.join(\", \")}",
-                                                    {p.override_modules.iter().map(|m| crate::icons::module_icon(m)).collect::<String>()}
+                                                    for m in p.override_modules.iter() {
+                                                        crate::icons::ModuleGlyph { key: "{m}", module: m.clone(), size: 10 }
+                                                    }
                                                 }
                                             }
                                             if !p.available {
                                                 span { class: "w-1.5 h-1.5 rounded-full flex-shrink-0",
                                                     style: "background-color: #fde047;" }
+                                            }
+                                            // Preset last (fixed, right-aligned) so it lines
+                                            // up down the list; icons sit to its left.
+                                            span { class: "text-[9px] font-mono opacity-50", style: "{PRESET_CELL}",
+                                                "{preset}"
                                             }
                                             span {
                                                 class: "text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-shrink-0 cursor-pointer",

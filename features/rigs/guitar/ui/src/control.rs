@@ -499,54 +499,80 @@ fn VFader(
 /// MIDI monitor behind a header icon — system-wide, out of the surface.
 /// Shows a dot when events have been seen; click for the full log.
 #[component]
-pub fn MidiMonitorButton() -> Element {
+pub fn MidiIndicator(
+    /// Open the audio & MIDI settings (the rig's device dialog).
+    on_settings: Callback<()>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut log = use_signal(Vec::<String>::new);
-    let mut open = use_signal(|| false);
+    // Lit while events are arriving: the log changed on a recent poll.
+    let mut active = use_signal(|| false);
+    let mut monitor = use_signal(|| false);
     {
         let rig = rig;
         use_future(move || {
             let rig = rig.clone();
             async move {
                 let Some(rig) = rig else { return };
+                let mut quiet = 0u32;
                 loop {
                     if let Ok(l) = rig.midi_recent().await {
-                        log.set(l);
+                        let changed = *log.peek() != l;
+                        if changed {
+                            log.set(l);
+                            quiet = 0;
+                        } else {
+                            quiet += 1;
+                        }
+                        // Stay lit ~1.2 s past the last event.
+                        let lit = quiet < 3;
+                        if *active.peek() != lit {
+                            active.set(lit);
+                        }
                     }
-                    architect::platform::sleep(Duration::from_millis(800)).await;
+                    architect::platform::sleep(Duration::from_millis(400)).await;
                 }
             }
         });
     }
     let entries = log();
-    let seen = !entries.is_empty();
+    let dot = if active() {
+        "#34d399"
+    } else if entries.is_empty() {
+        "#3f3f46"
+    } else {
+        "#166534"
+    };
+    let items = vec![
+        crate::indicators::IndicatorItem::new(
+            if monitor() { "Hide MIDI monitor" } else { "MIDI monitor" },
+            Callback::new(move |()| monitor.toggle()),
+        ),
+        crate::indicators::IndicatorItem::new("Audio & MIDI settings…", on_settings),
+    ];
     rsx! {
-        button {
-            class: "relative flex items-center justify-center w-7 h-7 rounded-md border border-border text-muted-foreground hover:text-foreground",
-            title: "MIDI monitor",
-            onclick: move |_| open.set(true),
-            span { class: "text-[10px] font-bold tracking-tight", "MIDI" }
-            if seen {
-                span { class: "absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400" }
-            }
-        }
-        if open() {
-            div {
-                class: "fixed inset-0 z-50 flex flex-col bg-black/95 p-8",
-                onclick: move |_| open.set(false),
-                div { class: "flex items-center mb-4",
-                    span { class: "text-sm font-bold uppercase tracking-wider", "MIDI Monitor" }
-                    span { class: "ml-auto text-xs text-muted-foreground", "tap anywhere to close" }
-                }
-                div { class: "flex-1 overflow-y-auto font-mono text-xs flex flex-col-reverse gap-0.5",
-                    for (i, e) in entries.iter().enumerate().rev() {
-                        div { key: "{i}", class: "text-muted-foreground", "{e}" }
-                    }
-                    if entries.is_empty() {
-                        span { class: "italic", "listening — no MIDI events yet" }
+        crate::indicators::Indicator {
+            label: "MIDI".to_string(),
+            dot: dot.to_string(),
+            title: if active() { "MIDI — receiving".to_string() } else { "MIDI".to_string() },
+            items,
+            pinned: monitor(),
+            on_close: move |()| monitor.set(false),
+            extra: rsx! {
+                if monitor() {
+                    div {
+                        style: "margin-top: 4px; padding: 6px 8px; width: 320px; height: 220px; \
+                                border-top: 1px solid #1c1c21; font-family: monospace; font-size: 10px; \
+                                color: #a1a1aa; overflow-y: scroll; display: flex; flex-direction: column; gap: 2px;",
+                        if entries.is_empty() {
+                            span { style: "font-style: italic;", "listening — no MIDI events yet" }
+                        }
+                        for (i, e) in entries.iter().enumerate().rev() {
+                            div { key: "{i}", style: "white-space: nowrap; overflow: hidden;", "{e}" }
+                        }
                     }
                 }
-            }
+            },
         }
     }
 }
@@ -1573,7 +1599,6 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     let gr_db = state.comp_gr_db.cloned();
     let spectrum = state.spectrum.cloned();
     let comp_wave = state.comp_wave.cloned();
-    let dsp = state.dsp.cloned();
 
     let eq = find_block(&blocks, BlockType::Eq, "Amp EQ");
     // The drive board: Boost + the three drives, plus the amps.
@@ -1786,13 +1811,9 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                 }
 
-                // The cost strip, under the modules — what the rig is spending
-                // of its realtime budget while it plays. Here rather than in a
-                // settings page because the number that matters is the one
-                // measured with the chain a player is actually running.
-                div { style: "flex-shrink: 0; display: flex; justify-content: flex-end;",
-                    crate::meters::DspReadout { perf: dsp }
-                }
+                // (The DSP cost readout lives in the bar's Audio indicator —
+                // and the macOS menu bar — so the modules reach the bottom,
+                // level with the meters either side.)
             }
 
             // ── Output rail: mute on top, then FOH trim + out meter,

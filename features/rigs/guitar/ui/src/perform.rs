@@ -105,6 +105,10 @@ pub fn PerformGrid(
     on_prev_song: Callback<()>,
     on_next_song: Callback<()>,
     on_select_song: Callback<usize>,
+    /// Both rows compact and equal: the switches as a short strip, so the
+    /// page above gets the height.
+    #[props(default)]
+    compact: bool,
 ) -> Element {
     let stacks = model.stacks;
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -300,7 +304,11 @@ pub fn PerformGrid(
         // lives "up" from your toe) — a slim strip, ~1/8 the main row.
         div {
             class: "grid grid-cols-5 gap-3 flex-1 min-h-0",
-            style: "grid-template-rows: minmax(44px, 1fr) minmax(0, 7fr);",
+            style: if compact {
+                "grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);"
+            } else {
+                "grid-template-rows: minmax(44px, 1fr) minmax(0, 7fr);"
+            },
 
             // ── Row A: setlist mode shows the song's parts; otherwise the
             // hold layer (switches 6–10), compact ──
@@ -450,6 +458,7 @@ pub fn PerformGrid(
                         stack,
                         on_press,
                         on_hold: hold_actions[i],
+                        compact,
                     }
                 } else {
                     div { key: "s{i}", class: "relative rounded-xl border-2 border-dashed border-border/30",
@@ -459,6 +468,7 @@ pub fn PerformGrid(
             }
             // Switch 5: Tap Tempo (hold: tuner).
             TapTempoTile {
+                compact,
                 tempo_bpm: model.tempo_bpm,
                 on_tap: on_tap_tempo,
                 on_hold: Callback::new({
@@ -530,15 +540,17 @@ fn StackTile(
                     for m in stack.override_modules.iter() {
                         span {
                             key: "{m}",
-                            class: "text-[10px] opacity-80",
+                            class: "opacity-80",
                             title: "overrides {m}",
-                            {crate::icons::module_icon(m)}
+                            crate::icons::ModuleGlyph { module: m.clone(), size: 11 }
                         }
                     }
                 }
             } else if !stack.override_modules.is_empty() {
-                span { class: "text-[10px] opacity-70",
-                    {stack.override_modules.iter().map(|m| crate::icons::module_icon(m)).collect::<String>()}
+                span { class: "opacity-70", style: "display: flex; gap: 3px;",
+                    for m in stack.override_modules.iter() {
+                        crate::icons::ModuleGlyph { key: "{m}", module: m.clone(), size: 10 }
+                    }
                 }
             }
             // Rotation dots — one per patch in the folder, current one lit.
@@ -638,7 +650,12 @@ fn BoostTile(
 /// the block flashing at the current tempo (the tile *is* the metronome).
 /// Tap = tempo tap; hold = open the tuner (footswitch 5's hold layer).
 #[component]
-fn TapTempoTile(tempo_bpm: u32, on_tap: Callback<()>, on_hold: Callback<()>) -> Element {
+fn TapTempoTile(
+    tempo_bpm: u32,
+    on_tap: Callback<()>,
+    on_hold: Callback<()>,
+    #[props(default)] compact: bool,
+) -> Element {
     let mut lit = use_signal(|| false);
 
     // Props aren't reactive — mirror the tempo into a signal so the blink
@@ -671,8 +688,14 @@ fn TapTempoTile(tempo_bpm: u32, on_tap: Callback<()>, on_hold: Callback<()>) -> 
             on_tap,
             on_hold: Some(on_hold),
             SwitchNo { no: 5 }
-            span { class: "text-lg font-bold tracking-wide", "Tap Tempo" }
-            span { class: "text-[11px] text-zinc-500", "{tempo_bpm} BPM · hold: tuner" }
+            span {
+                class: if compact { "text-sm font-bold tracking-wide" } else { "text-lg font-bold tracking-wide" },
+                "Tap Tempo"
+            }
+            span {
+                class: if compact { "text-[10px] text-zinc-500" } else { "text-[11px] text-zinc-500" },
+                if compact { "{tempo_bpm} BPM" } else { "{tempo_bpm} BPM · hold: tuner" }
+            }
         }
     }
 }

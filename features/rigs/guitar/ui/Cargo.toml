@@ -15,6 +15,9 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+# The app chrome's bar pieces: the rig header claims the app bar and becomes
+# the one bar (crumbs, drag space, window controls). Inert outside the app.
+fts-chrome.workspace = true
 dioxus.workspace = true
 # Shared audio-gui widgets (knob + arc geometry) — one copy for every rig UI.
 signal-widgets.workspace = true

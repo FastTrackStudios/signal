@@ -26,6 +26,7 @@ mod grid;
 /// The shared audio-gui knob (moved to signal-widgets).
 pub use signal_widgets::knob;
 mod icons;
+mod indicators;
 mod meters;
 mod palette;
 mod perform;
@@ -37,7 +38,7 @@ mod wire_param;
 
 pub use chain::ChainStrip;
 pub use comp_surface::CompSurface;
-pub use control::{ControlView, MidiMonitorButton, ZoomPanel};
+pub use control::{ControlView, MidiIndicator, ZoomPanel};
 pub use eq_surface::EqProSurface;
 pub use grid::RigGraph;
 pub use icons::module_icon;
