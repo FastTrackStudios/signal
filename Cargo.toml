@@ -828,12 +828,12 @@ pipewire-sys = { git = "https://gitlab.freedesktop.org/pipewire/pipewire-rs.git"
 # Rebased branches are parked on the fork at fts-focus-2026-08 (onto
 # main) and fts-focus-2026-08b (onto db12391a, the last commit with
 # the `incremental` feature) so the rebase does not have to be redone.
-blitz-dom = { git = "https://github.com/FastTrackStudios/blitz", rev = "296b18780ae439349572f1b64605d484703061fe" }
-blitz-traits = { git = "https://github.com/FastTrackStudios/blitz", rev = "296b18780ae439349572f1b64605d484703061fe" }
-blitz-paint = { git = "https://github.com/FastTrackStudios/blitz", rev = "296b18780ae439349572f1b64605d484703061fe" }
-blitz-shell = { git = "https://github.com/FastTrackStudios/blitz", rev = "296b18780ae439349572f1b64605d484703061fe" }
-blitz-net = { git = "https://github.com/FastTrackStudios/blitz", rev = "296b18780ae439349572f1b64605d484703061fe" }
-blitz-html = { git = "https://github.com/FastTrackStudios/blitz", rev = "296b18780ae439349572f1b64605d484703061fe" }
+blitz-dom = { path = "../blitz/packages/blitz-dom" }
+blitz-traits = { path = "../blitz/packages/blitz-traits" }
+blitz-paint = { path = "../blitz/packages/blitz-paint" }
+blitz-shell = { path = "../blitz/packages/blitz-shell" }
+blitz-net = { path = "../blitz/packages/blitz-net" }
+blitz-html = { path = "../blitz/packages/blitz-html" }
 # Vendored one-line fix: quote scalars containing `<`/`>` — upstream
 # (facet-rs/facet) styx-format emits them bare but styx-parse rejects
 # them, so serialized keybind configs (`keys "<C-s>"`) could not be
@@ -1105,6 +1105,44 @@ opt-level = 3
 # with equivalent guarantees — see libs/vendor/dioxus-native-dom/UPSTREAM.md.
 [patch."https://github.com/DioxusLabs/dioxus"]
 dioxus-native-dom = { path = "libs/vendor/dioxus-native-dom" }
+
+# Local processor checkout (../processor), so the FX, their UIs and
+# fts-audio-ui can be edited alongside signal without cutting a tag — the
+# same arrangement as the daw table below. Machine-specific, like that one.
+[patch."https://github.com/FastTrackStudios/processor"]
+chorus-dsp = { path = "../processor/features/fx/modulation/chorus-dsp" }
+comp = { path = "../processor/features/fx/comp/comp" }
+comp-dsp = { path = "../processor/features/fx/comp/comp-dsp" }
+comp-profiles = { path = "../processor/features/fx/comp/comp-profiles" }
+comp-ui = { path = "../processor/features/fx/comp/comp-ui" }
+delay = { path = "../processor/features/fx/delay/delay" }
+delay-dsp = { path = "../processor/features/fx/delay/delay-dsp" }
+delay-profiles = { path = "../processor/features/fx/delay/delay-profiles" }
+delay-ui = { path = "../processor/features/fx/delay/delay-ui" }
+dsp-core = { path = "../processor/features/fx/dsp-core" }
+eq = { path = "../processor/features/fx/eq/eq" }
+eq-dsp = { path = "../processor/features/fx/eq/eq-dsp" }
+eq-profiles = { path = "../processor/features/fx/eq/eq-profiles" }
+eq-ui = { path = "../processor/features/fx/eq/eq-ui" }
+fts-audio-ui = { path = "../processor/libs/ui/fts-audio-ui" }
+fx-blocks = { path = "../processor/features/fx/fx-blocks" }
+modulation = { path = "../processor/features/fx/modulation/modulation" }
+modulation-profiles = { path = "../processor/features/fx/modulation/modulation-profiles" }
+modulation-ui = { path = "../processor/features/fx/modulation/modulation-ui" }
+musical-time = { path = "../processor/features/fx/musical-time/musical-time" }
+musical-time-ui = { path = "../processor/features/fx/musical-time/musical-time-ui" }
+pattern-ui = { path = "../processor/features/fx/modulation/pattern-ui" }
+reverb = { path = "../processor/features/fx/reverb/reverb" }
+reverb-dsp = { path = "../processor/features/fx/reverb/reverb-dsp" }
+reverb-profiles = { path = "../processor/features/fx/reverb/reverb-profiles" }
+reverb-ui = { path = "../processor/features/fx/reverb/reverb-ui" }
+saturate-dsp = { path = "../processor/features/fx/saturate/saturate-dsp" }
+spectrum-analyzer = { path = "../processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer" }
+spectrum-analyzer-dsp = { path = "../processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer-dsp" }
+spectrum-analyzer-ui = { path = "../processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer-ui" }
+trem-dsp = { path = "../processor/features/fx/modulation/trem-dsp" }
+tune = { path = "../processor/features/fx/tune/tune" }
+wah-dsp = { path = "../processor/features/fx/modulation/wah-dsp" }
 
 [patch."https://github.com/FastTrackStudios/daw"]
 audio-controls = { path = "../daw/features/audio/audio-controls" }
