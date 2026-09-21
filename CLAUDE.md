@@ -236,13 +236,17 @@ bite this repo, with what to write instead:
 | unsupported | instead |
 |---|---|
 | `position: fixed` (and `sticky`, `static`) | an absolute box positions against its *immediate parent*; for overlays, mount at the root and use `position: absolute; inset: 0` there, or close on `focusout` rather than covering the window |
-| `overflow: auto` (`overflow-y-auto`, …) | `overflow: hidden` renders; a scrollable pane needs its own solution, so cap what you put in one |
+| `overflow: auto` (`overflow-y-auto`, …) | `overflow-y: scroll` for a pane that scrolls (supported — scrollbars, wheel, `scroll` event); `overflow: hidden` to clip |
 | `text-overflow` / `truncate` | `overflow: hidden` clips |
 | CSS `fill:` / `stroke:` on SVG | SVG *presentation attributes* (`fill: "none"`, `stroke_width: "2"`) work — style geometry there, not in `style` |
 | `vertical-align`, `text-shadow`, `mix-blend-mode`, 3D transforms, multi-column, container queries, scroll-snap, custom cursors, `border-image` | no substitute; design without them |
 
-`filter: blur`/`drop-shadow` work on the vello backend only. A WebView
-escape hatch exists (`signal-desktop --features webview`) but nothing
+`filter: blur`/`drop-shadow` work on the vello backend only. The full
+support matrix, the layout rules that keep a surface inside its window, and
+how to check a change live in the **`blitz-design` skill** — load it before
+building or refactoring signal UI.
+
+A WebView escape hatch exists (`signal-desktop --features webview`) but nothing
 painted can mount under it — see the launch docs in `apps/desktop`.
 
 **Platform targets** — processing-core crates (`daw-audio-graph`,
