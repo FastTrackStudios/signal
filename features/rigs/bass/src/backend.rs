@@ -179,7 +179,7 @@ impl BassRigBackend {
         // only fires while running, so re-try a missing handle here.
         if tick.tick.is_multiple_of(60)
             && self.inner.midi_handle.lock_ok().is_none()
-            && !midicore::pipewire::input_ports().is_empty()
+            && !midicore::input_ports().is_empty()
         {
             self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortsChanged);
         }
@@ -550,7 +550,7 @@ impl RigBackend for BassRigBackend {
     }
 
     fn midi_ports(&self) -> Vec<String> {
-        midicore::pipewire::input_ports()
+        midicore::input_ports()
     }
 
     fn on_midi_ports_changed(&self, ports: &[String]) {
@@ -691,7 +691,7 @@ impl BassRigSvc for BassRigBackend {
     }
 
     fn midi_ports(&self) -> Vec<String> {
-        midicore::pipewire::input_ports()
+        midicore::input_ports()
     }
 
     fn set_midi_port(&self, name: String) {

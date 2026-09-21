@@ -18,9 +18,10 @@
 //!
 //! # Shape
 //!
-//! The hub sits on [`midicore::pipewire`], the native PipeWire backend: **one
-//! graph node** (`Signal`) with **one MIDI port** that every selected device
-//! is linked into. That replaced a midir/JACK arrangement whose cost was
+//! The hub sits on [`midicore::MidiInput`], the platform's native input: on
+//! Linux that is the PipeWire backend — **one graph node** (`Signal`) with
+//! **one MIDI port** that every selected device is linked into; on macOS, one
+//! CoreMIDI client whose input port every selected source is connected to. That replaced a midir/JACK arrangement whose cost was
 //! structural rather than incidental —
 //!
 //! - midir opens one OS client per connection (its API, not our choice), so
@@ -49,7 +50,8 @@
 
 use std::sync::{Arc, Mutex, RwLock};
 
-use midicore::pipewire::MidiInput;
+use midicore::MidiInput;
+use midicore::InputConfig;
 use midicore_proto::{PortSelector, TimedEvent};
 
 /// A registered listener.
@@ -159,7 +161,7 @@ impl MidiHub {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .as_ref()
-            .map(midicore::pipewire::MidiInput::ports)
+            .map(midicore::MidiInput::ports)
             .unwrap_or_default()
     }
 
@@ -187,17 +189,18 @@ impl MidiHub {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(existing) = input.as_ref() {
-            existing.set_selectors(selectors)
+            existing.select(selectors)
         } else {
             if selectors.is_empty() {
                 return; // Nothing to listen for yet.
             }
             let started = std::time::Instant::now();
-            match MidiInput::open(PortSelector::All, self.make_sink()) {
+            let config = InputConfig::new(midicore::DEFAULT_INPUT_NAME).selecting(selectors);
+            match MidiInput::open_with(config, self.make_sink()) {
                 Ok(new) => {
-                    new.set_selectors(selectors);
                     tracing::info!(
-                        midi.node = midicore::pipewire::DEFAULT_NODE_NAME,
+                        midi.node = midicore::DEFAULT_INPUT_NAME,
+                        midi.backend = MidiInput::BACKEND,
                         midi.elapsed_ms = started.elapsed().as_millis(),
                         "midi hub: opened"
                     );

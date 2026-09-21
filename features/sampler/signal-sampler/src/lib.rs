@@ -217,7 +217,7 @@ pub use midicore;
 pub use midicore::MidiEvent;
 pub use midicore::PortSelector as MidiSelection;
 #[cfg(not(target_arch = "wasm32"))]
-pub use midicore::pipewire::MidiInput as MidiInputHandle;
+pub use midicore::MidiInput as MidiInputHandle;
 pub use spec::LibrarySpec;
 pub use stats::AudioStatsSnapshot;
 

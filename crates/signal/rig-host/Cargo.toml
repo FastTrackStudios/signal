@@ -34,7 +34,7 @@ facet-styx.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # The MIDI attach lifecycle this crate instruments (src/midi.rs).
 # Native only — midir has no wasm backend.
-midicore = { workspace = true, features = ["midir", "pipewire"] }
+midicore = { workspace = true, features = ["midir", "pipewire", "native"] }
 midicore-proto.workspace = true
 # Drain-style hub subscriptions (mirrors MidiStream's bounded channel).
 crossbeam-channel.workspace = true

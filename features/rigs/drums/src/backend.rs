@@ -705,7 +705,7 @@ impl DrumRigBackend {
             "drums",
             trigger,
             port.as_deref(),
-            midicore::pipewire::input_ports().len(),
+            midicore::input_ports().len(),
             || {
                 if let Ok(mut s) = self.inner.state.lock() {
                     s.midi_handle = None;
