@@ -1188,6 +1188,50 @@ impl GuitarRigBackend {
     /// because it is the part that can be slow, and a switch that takes a
     /// second to settle is not a switch a player can use: the trims land after
     /// the note, so the level shifts under them.
+    /// Apply a section's overrides to the live chain.
+    ///
+    /// Through `set_block_param`, which is the same path a knob takes — so a
+    /// section change behaves exactly like someone reaching over and turning
+    /// the control, including the drive compensation and delay re-timing
+    /// that hang off particular parameters. A separate path would be a
+    /// second implementation of "what does this parameter mean", and the two
+    /// would drift.
+    ///
+    /// Blocks are matched by name against the live chain. A section naming a
+    /// block the current patch does not have is a warning, not a failure:
+    /// songs outlive profile edits, and losing the section is better than
+    /// losing the song.
+    fn apply_section_overrides(&self, overrides: &[crate::profiles::OverrideDef]) {
+        if overrides.is_empty() {
+            return;
+        }
+        for ov in overrides {
+            let id = {
+                let blocks = self.blocks.lock_ok();
+                blocks
+                    .iter()
+                    .find(|b| b.name.eq_ignore_ascii_case(&ov.block))
+                    .map(|b| b.id.clone())
+            };
+            let Some(id) = id else {
+                tracing::warn!(
+                    block = %ov.block,
+                    param = %ov.param,
+                    "section override names a block this patch does not have"
+                );
+                continue;
+            };
+            match ov.op.as_str() {
+                "bypass" => self.set_block_bypass(id, ov.value >= 0.5),
+                _ if !ov.param.is_empty() => {
+                    self.set_block_param(id, ov.param.clone(), ov.value);
+                }
+                _ => tracing::warn!(op = %ov.op, "section override has no parameter"),
+            }
+        }
+        tracing::info!(count = overrides.len(), "section overrides applied");
+    }
+
     fn sync_after_switch(&self, audible: std::time::Duration, via: &str) {
         let t = std::time::Instant::now();
         self.resync_blocks();
@@ -1255,9 +1299,21 @@ impl GuitarRigBackend {
                 // matched by name, empty for a section that is still a label.
                 let parts: Vec<PerfPart> = song
                     .map(|s| {
-                        s.parts_with_recalls()
+                        s.parts_with_changes()
                             .into_iter()
-                            .map(|(name, patch)| PerfPart { name, patch })
+                            .map(|(name, patch, overrides)| PerfPart {
+                                name,
+                                patch,
+                                overrides: overrides
+                                    .iter()
+                                    .map(|o| signal_guitar_proto::PartOverride {
+                                        block: o.block.clone(),
+                                        param: o.param.clone(),
+                                        op: o.op.clone(),
+                                        value: o.value,
+                                    })
+                                    .collect(),
+                            })
                             .collect()
                     })
                     .unwrap_or_default();
@@ -2198,12 +2254,23 @@ impl Rig for GuitarRigBackend {
             else {
                 return;
             };
+            // Keep whatever the section already overrides: this call sets
+            // the PATCH a section recalls, and clearing it should not throw
+            // away the parameter changes that are the section's real
+            // content.
+            let kept = song
+                .part_recalls
+                .iter()
+                .find(|r| r.part.eq_ignore_ascii_case(&part))
+                .map(|r| r.overrides.clone())
+                .unwrap_or_default();
             song.part_recalls
                 .retain(|r| !r.part.eq_ignore_ascii_case(&part));
-            if !patch.is_empty() {
+            if !patch.is_empty() || !kept.is_empty() {
                 song.part_recalls.push(crate::profiles::PartRecallDef {
                     part: part.clone(),
                     patch: patch.clone(),
+                    overrides: kept,
                 });
             }
             tracing::info!(
@@ -2211,6 +2278,74 @@ impl Rig for GuitarRigBackend {
                 part = %part,
                 patch = %patch,
                 "guitar: section recall set"
+            );
+            RigLibrary::save_songs(&songs);
+        }
+        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+    }
+
+    fn set_part_overrides(
+        &self,
+        part: String,
+        overrides: Vec<signal_guitar_proto::PartOverride>,
+    ) {
+        let song_name = {
+            let i = *self.song_index.lock_ok();
+            self.resolved_setlist()
+                .get(i)
+                .map(|(name, ..)| name.clone())
+        };
+        let Some(song_name) = song_name else {
+            tracing::warn!(%part, "no song is up — nothing to set a section on");
+            return;
+        };
+        {
+            let mut songs = self.songs_lib.lock_ok();
+            let Some(song) = songs
+                .iter_mut()
+                .find(|s| s.name.eq_ignore_ascii_case(&song_name))
+            else {
+                return;
+            };
+            let defs: Vec<crate::profiles::OverrideDef> = overrides
+                .iter()
+                .map(|o| crate::profiles::OverrideDef {
+                    module: String::new(),
+                    block: o.block.clone(),
+                    param: o.param.clone(),
+                    op: if o.op.is_empty() {
+                        "set".to_string()
+                    } else {
+                        o.op.clone()
+                    },
+                    value: o.value,
+                    text: String::new(),
+                })
+                .collect();
+
+            // Keep the patch this section already recalls: this call sets
+            // what it CHANGES, and the two are independent halves of the
+            // same section.
+            let patch = song
+                .part_recalls
+                .iter()
+                .find(|r| r.part.eq_ignore_ascii_case(&part))
+                .map(|r| r.patch.clone())
+                .unwrap_or_default();
+            song.part_recalls
+                .retain(|r| !r.part.eq_ignore_ascii_case(&part));
+            if !patch.is_empty() || !defs.is_empty() {
+                song.part_recalls.push(crate::profiles::PartRecallDef {
+                    part: part.clone(),
+                    patch,
+                    overrides: defs,
+                });
+            }
+            tracing::info!(
+                song = %song_name,
+                %part,
+                count = overrides.len(),
+                "guitar: section overrides set"
             );
             RigLibrary::save_songs(&songs);
         }
@@ -2379,11 +2514,38 @@ impl Rig for GuitarRigBackend {
         // A section recalls a patch, when it has been given one. That is what
         // makes a section part of the performance rather than a label on it:
         // stepping through a song's sections switches the rig with it.
-        let recall = self
+        let section = self
             .resolved_setlist()
             .get(song_idx)
-            .and_then(|(_, _, _, _, parts)| parts.get(idx).cloned())
-            .filter(|part| !part.patch.is_empty());
+            .and_then(|(_, _, _, _, parts)| parts.get(idx).cloned());
+        // What this section changes on top of its patch, from the library
+        // rather than the perf model — the model carries what a remote needs
+        // to DISPLAY, and these are what the rig has to APPLY.
+        let overrides = {
+            let song_name = self
+                .resolved_setlist()
+                .get(song_idx)
+                .map(|(name, ..)| name.clone())
+                .unwrap_or_default();
+            match (&section, song_name.is_empty()) {
+                (Some(part), false) => {
+                    let songs = self.songs_lib.lock_ok();
+                    songs
+                        .iter()
+                        .find(|s| s.name.eq_ignore_ascii_case(&song_name))
+                        .and_then(|s| {
+                            s.part_recalls
+                                .iter()
+                                .find(|r| r.part.eq_ignore_ascii_case(&part.name))
+                                .map(|r| r.overrides.clone())
+                        })
+                        .unwrap_or_default()
+                }
+                _ => Vec::new(),
+            }
+        };
+
+        let recall = section.filter(|part| !part.patch.is_empty());
         if let Some(part) = recall {
             tracing::info!(part = %part.name, patch = %part.patch, "part → patch");
             let switched = {
@@ -2417,9 +2579,35 @@ impl Rig for GuitarRigBackend {
                     "guitar: section names a patch the profile does not have"
                 );
             }
+        } else if !overrides.is_empty() {
+            // A section with overrides and no patch of its own still needs a
+            // baseline, or it inherits whatever the previous section left
+            // behind. Re-establishing the current patch is what makes a
+            // section the same sound every time it comes round.
+            let current = {
+                let guard = self.rig.lock_ok();
+                guard
+                    .as_ref()
+                    .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+                    .unwrap_or_else(|| self.design_patch.lock_ok().clone())
+            };
+            if !current.is_empty() {
+                let reset = {
+                    let mut guard = self.rig.lock_ok();
+                    match guard.as_mut() {
+                        Some(prig) => activate_patch_by_name(prig, &current),
+                        None => true,
+                    }
+                };
+                if reset {
+                    self.sync_after_switch(std::time::Duration::ZERO, "section");
+                }
+            }
         } else {
             tracing::info!("part → {idx} (song {song_idx})");
         }
+
+        self.apply_section_overrides(&overrides);
         self.events.publish(RigEvent::Perf(Rig::perf(self)));
     }
 

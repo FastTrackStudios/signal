@@ -365,9 +365,31 @@ pub struct TunerReading {
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct PerfPart {
     pub name: String,
-    /// The patch this section switches to. Empty means it recalls nothing —
-    /// a label, which is what every section was before.
+    /// The patch this section switches to. Empty means it stays on whatever
+    /// is up — which, with [`overrides`](Self::overrides), is the common
+    /// case: a chorus is usually the verse's sound with one thing changed.
     pub patch: String,
+    /// What this section changes on top of that patch.
+    #[facet(default)]
+    pub overrides: Vec<PartOverride>,
+}
+
+/// One parameter a section changes.
+///
+/// The section's real content. Recalling a whole patch forces a separate
+/// patch for every variation — a Verb-heavy chorus of an otherwise identical
+/// sound becomes a second patch to build, level and maintain. This says the
+/// one thing that is different.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[repr(C)]
+pub struct PartOverride {
+    /// Block name, as it appears in the chain.
+    pub block: String,
+    /// Parameter name; empty when `op` is `bypass`.
+    pub param: String,
+    /// `set` or `bypass`. For `bypass`, `value >= 0.5` means bypassed.
+    pub op: String,
+    pub value: f32,
 }
 
 /// One controllable parameter of a live block.
@@ -437,8 +459,8 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, LevelProgress, LiveBlock, LiveNode, PatchInfo, PerformanceModel, PresetInfo,
-        RigStatus, TunerReading,
+        Artwork, LevelProgress, LiveBlock, LiveNode, PartOverride, PatchInfo, PerformanceModel,
+        PresetInfo, RigStatus, TunerReading,
     };
 
     /// One live rig change. Every variant carries **full state** (idempotent
@@ -636,6 +658,13 @@ pub mod rig {
         fn rename_stack(&self, old: String, new_name: String);
         /// Delete a stack (its patches stay in the pool).
         fn delete_stack(&self, name: String);
+        /// Set what a section changes on top of its patch.
+        ///
+        /// Replaces the whole list for that section, so a remote sends the
+        /// set it wants rather than diffing — an override list is short and
+        /// a partial-update protocol for it would be more moving parts than
+        /// the thing it edits.
+        fn set_part_overrides(&self, part: String, overrides: Vec<PartOverride>);
         /// Add a song to the library with default key + tempo.
         fn add_song(&self, name: String, key: String, bpm: u32);
         /// Create an empty setlist.

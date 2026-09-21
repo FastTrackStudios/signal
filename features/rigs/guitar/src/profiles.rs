@@ -705,6 +705,30 @@ impl SongDef {
             })
             .collect()
     }
+
+    /// Every section with the patch it recalls AND what it changes on top.
+    ///
+    /// The recall alone stopped being the whole story when sections gained
+    /// overrides: a section with no patch and three overrides is doing more
+    /// than a section with a patch and none, and
+    /// [`parts_with_recalls`](Self::parts_with_recalls) shows it as empty.
+    #[must_use]
+    pub fn parts_with_changes(&self) -> Vec<(String, String, Vec<OverrideDef>)> {
+        self.parts
+            .iter()
+            .map(|name| {
+                let recall = self
+                    .part_recalls
+                    .iter()
+                    .find(|r| r.part.eq_ignore_ascii_case(name));
+                (
+                    name.clone(),
+                    recall.map(|r| r.patch.clone()).unwrap_or_default(),
+                    recall.map(|r| r.overrides.clone()).unwrap_or_default(),
+                )
+            })
+            .collect()
+    }
 }
 
 /// One section's recall: the patch selecting it switches to.
@@ -712,9 +736,25 @@ impl SongDef {
 pub struct PartRecallDef {
     /// The section's name, as it appears in [`SongDef::parts`].
     pub part: String,
-    /// The patch to switch to. Empty means the section recalls nothing —
-    /// which is what every section did before this existed.
+    /// The patch to switch to. Empty means the section stays on whatever
+    /// patch is up — which, with [`overrides`](Self::overrides), is the
+    /// common case: a chorus is usually the verse's sound with one or two
+    /// things changed, not a different rig.
     pub patch: String,
+    /// What this section changes on top of the patch.
+    ///
+    /// The point of a section. Recalling a whole patch is the blunt version
+    /// and it forces a separate patch for every variation — a Verb-heavy
+    /// chorus of an otherwise identical sound becomes a second patch to
+    /// build, level and maintain. An override says the one thing that is
+    /// different and leaves the rest of the profile alone.
+    ///
+    /// Applied AFTER the patch is re-established, so a section is the same
+    /// sound every time it comes round regardless of which section preceded
+    /// it. Without that, overrides would accumulate: a chorus that lifted
+    /// the delay would leave it lifted in the verse that followed.
+    #[facet(default)]
+    pub overrides: Vec<OverrideDef>,
 }
 
 /// One song-level stack override: which patch a stack lands on.
@@ -1079,10 +1119,12 @@ mod song_tests {
                 PartRecallDef {
                     part: "chorus".into(),
                     patch: "Ambient".into(),
+                    overrides: Vec::new(),
                 },
                 PartRecallDef {
                     part: "Bridge".into(),
                     patch: "Lead".into(),
+                    overrides: Vec::new(),
                 },
             ],
         }
@@ -1125,6 +1167,7 @@ mod song_tests {
         s.part_recalls.push(PartRecallDef {
             part: "Outro".into(),
             patch: "Clean".into(),
+                    overrides: Vec::new(),
         });
         assert_eq!(s.parts_with_recalls().len(), 4);
     }
@@ -1227,5 +1270,89 @@ mod trim_tests {
             "the patch level leaked onto the scene output ({})",
             patch.output_trim_db
         );
+    }
+}
+
+#[cfg(test)]
+mod section_tests {
+    use super::*;
+
+    fn song_with_sections() -> SongDef {
+        SongDef {
+            name: "Test Song".into(),
+            key: "E".into(),
+            bpm: 120,
+            stack: 0,
+            parts: vec!["Verse".into(), "Chorus".into(), "Bridge".into()],
+            stack_defaults: Vec::new(),
+            part_recalls: vec![
+                // A section that only changes things — no patch of its own.
+                PartRecallDef {
+                    part: "Chorus".into(),
+                    patch: String::new(),
+                    overrides: vec![OverrideDef::set("Time", "VERB 1", "mix", 0.35)],
+                },
+                // A section that recalls a patch AND changes something.
+                PartRecallDef {
+                    part: "Bridge".into(),
+                    patch: "Lead".into(),
+                    overrides: vec![OverrideDef::set("Time", "DLY 1", "mix", 0.4)],
+                },
+            ],
+        }
+    }
+
+    /// A section can change parameters without recalling a whole patch.
+    ///
+    /// The whole point. Recalling a patch for every variation forces a
+    /// second patch to build, level and maintain for a chorus that is the
+    /// verse's sound with the reverb up.
+    #[test]
+    fn a_section_can_change_things_without_recalling_a_patch() {
+        let song = song_with_sections();
+        let changes = song.parts_with_changes();
+        let chorus = changes
+            .iter()
+            .find(|(name, ..)| name == "Chorus")
+            .expect("Chorus");
+        assert!(chorus.1.is_empty(), "no patch recall");
+        assert_eq!(chorus.2.len(), 1, "but it changes one thing");
+        assert_eq!(chorus.2[0].block, "VERB 1");
+    }
+
+    /// A section that does neither is still listed. Sections are the song's
+    /// structure first and the rig's second — a verse with nothing dialed is
+    /// still a verse, and dropping it would renumber every section after it.
+    #[test]
+    fn a_section_with_nothing_set_is_still_a_section() {
+        let song = song_with_sections();
+        let changes = song.parts_with_changes();
+        assert_eq!(changes.len(), 3, "all three sections are listed");
+        let verse = &changes[0];
+        assert_eq!(verse.0, "Verse");
+        assert!(verse.1.is_empty() && verse.2.is_empty());
+    }
+
+    /// Patch recall and overrides are independent halves of one section.
+    #[test]
+    fn a_section_can_do_both() {
+        let song = song_with_sections();
+        let bridge = song
+            .parts_with_changes()
+            .into_iter()
+            .find(|(name, ..)| name == "Bridge")
+            .expect("Bridge");
+        assert_eq!(bridge.1, "Lead");
+        assert_eq!(bridge.2.len(), 1);
+    }
+
+    /// `parts_with_recalls` still answers what it always answered, so the
+    /// callers that only want the patch are unaffected.
+    #[test]
+    fn the_old_view_still_works() {
+        let song = song_with_sections();
+        let recalls = song.parts_with_recalls();
+        assert_eq!(recalls.len(), 3);
+        assert_eq!(recalls[2], ("Bridge".to_string(), "Lead".to_string()));
     }
 }
