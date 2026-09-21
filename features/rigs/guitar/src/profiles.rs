@@ -763,6 +763,10 @@ pub fn song_library() -> Vec<SongDef> {
         song("WASHED", "E", 139),
         song("Who Else", "A", 68),
         song("Build My Life / With Everything", "A", 70),
+        // Tempos not yet dialed — `add_song`'s own default. The key is the
+        // part that was known.
+        song("Thank God I'm Free", "E", 120),
+        song("Always on Time", "E", 120),
     ]
 }
 
