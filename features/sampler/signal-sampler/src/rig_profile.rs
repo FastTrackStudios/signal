@@ -32,6 +32,7 @@ use crate::SamplerError;
 use crate::rig::RigBlock;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::rig::{GuitarRig, ModelId};
+use crate::rig::{PreparedChain, prepare_chain};
 
 /// One patch in a rig profile: a named tone whose chain is either inlined or
 /// **referenced** from a [`RigPreset`](crate::rig_library::RigPreset) scene.
@@ -386,6 +387,54 @@ pub struct ProfileRig {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+/// One patch resolved into the blocks and ids a chain is built from.
+struct ChainSpec {
+    blocks: Vec<RigBlock>,
+    block_ids: Vec<String>,
+}
+
+/// Build every chain, concurrently where the platform has threads.
+///
+/// The result is parallel to `specs` — `None` where the patch had nothing to
+/// build — so the caller can install them in patch order.
+fn prepare_all(
+    specs: &[Option<ChainSpec>],
+    sample_rate: u32,
+) -> Vec<Option<Result<PreparedChain, String>>> {
+    let one = |spec: &Option<ChainSpec>| {
+        spec.as_ref()
+            .map(|s| prepare_chain(&s.blocks, &s.block_ids, sample_rate))
+    };
+
+    // No threads in the browser build.
+    #[cfg(target_arch = "wasm32")]
+    return specs.iter().map(one).collect();
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let threads = std::thread::available_parallelism()
+            .map_or(1, std::num::NonZeroUsize::get)
+            .min(specs.len());
+        if threads <= 1 {
+            return specs.iter().map(one).collect();
+        }
+        let chunk = specs.len().div_ceil(threads);
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = specs
+                .chunks(chunk)
+                .map(|c| scope.spawn(move || c.iter().map(one).collect::<Vec<_>>()))
+                .collect();
+            handles
+                .into_iter()
+                // A panic in a build thread is the caller's panic; losing it
+                // would silently shorten the vec and misalign every patch
+                // after it.
+                .flat_map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+                .collect()
+        })
+    }
+}
+
 impl ProfileRig {
     pub fn new(rig: GuitarRig) -> Self {
         Self {
@@ -477,9 +526,17 @@ impl ProfileRig {
         self.active = None;
         self.stack_pos = vec![0; profile.stacks.len()];
 
+        let build_began = std::time::Instant::now();
         let mut loaded = 0usize;
         let mut first_ok: Option<usize> = None;
-        for (i, patch) in profile.patches.iter().enumerate() {
+
+        // Resolving a patch into blocks is cheap; *building* those blocks is
+        // not — thirteen patches of twenty-one blocks cost about two and a
+        // half seconds of dead air between "device linked" and "profile
+        // loaded". The patches don't depend on each other, so resolve them
+        // all here, build them concurrently, and install them in order.
+        let mut specs: Vec<Option<ChainSpec>> = Vec::with_capacity(profile.patches.len());
+        for patch in &profile.patches {
             // Resolve every buildable block's asset path against the base dir;
             // skip blocks with no audio backend yet — i.e. `Native` blocks, whose
             // built-in DSP isn't written (a not-yet-chosen Time-module effect).
@@ -506,7 +563,7 @@ impl ProfileRig {
                 .collect();
 
             if blocks.is_empty() {
-                self.patch_ids.push(MODEL_UNAVAILABLE);
+                specs.push(None);
                 tracing::warn!(patch = %patch.name, "ProfileRig: patch has no blocks — skipping");
                 continue;
             }
@@ -532,9 +589,21 @@ impl ProfileRig {
                     id
                 })
                 .collect();
-            match self.rig.install_chain_with_ids(&blocks, &block_ids) {
-                Ok(id) => {
-                    self.patch_ids.push(id);
+            specs.push(Some(ChainSpec { blocks, block_ids }));
+        }
+
+        let built = prepare_all(&specs, self.rig.sample_rate);
+
+        // Install in patch order: `install_prepared` hands out model ids in
+        // the order it is called, and the UI addresses patches by index.
+        for (i, (patch, outcome)) in profile.patches.iter().zip(built).enumerate() {
+            let Some(outcome) = outcome else {
+                self.patch_ids.push(MODEL_UNAVAILABLE);
+                continue;
+            };
+            match outcome {
+                Ok(prepared) => {
+                    self.patch_ids.push(self.rig.install_prepared(prepared));
                     loaded += 1;
                     first_ok.get_or_insert(i);
                 }
@@ -548,6 +617,13 @@ impl ProfileRig {
                 }
             }
         }
+
+        tracing::info!(
+            profile.patches = profile.patches.len(),
+            profile.loaded = loaded,
+            profile.build_ms = build_began.elapsed().as_secs_f64() * 1000.0,
+            "ProfileRig: profile built"
+        );
 
         if loaded == 0 && !profile.patches.is_empty() {
             self.profile = Some(profile);

@@ -912,6 +912,105 @@ impl BuiltBlock {
     }
 }
 
+/// A chain whose blocks are built but not yet resident in a rig.
+///
+/// Building a chain is the expensive part — model loads, DSP allocation,
+/// `prepare()` — and it needs nothing from the rig but the sample rate, so
+/// it can happen on any thread. Installing is cheap. Keeping them apart is
+/// what lets a profile build its patches concurrently and install them one
+/// after another; see [`Rig::install_prepared`].
+pub struct PreparedChain {
+    boxes: Vec<Option<Box<dyn PluginInstance>>>,
+    names: Vec<String>,
+    ids: Vec<String>,
+    prepare_on_arm: Vec<bool>,
+    primary_loudness: Option<f64>,
+    primary_expected_sr: Option<f64>,
+    primary_input_level_dbu: Option<f64>,
+    primary_output_level_dbu: Option<f64>,
+}
+
+impl PreparedChain {
+    /// The chain's display name — the block names joined by arrows.
+    #[must_use]
+    pub fn display_name(&self) -> String {
+        self.names.join(" → ")
+    }
+}
+
+/// Build every block of a chain, off the rig.
+///
+/// The counterpart to [`Rig::install_prepared`]. Takes the sample rate
+/// rather than a rig so several chains can be prepared at once.
+///
+/// # Errors
+///
+/// Returns an error if the chain is empty or too long, or if any block
+/// fails to load, validate, or prepare.
+pub fn prepare_chain(
+    blocks: &[RigBlock],
+    block_ids: &[String],
+    sample_rate: u32,
+) -> Result<PreparedChain, String> {
+    if blocks.is_empty() {
+        return Err("chain has no blocks".into());
+    }
+    if blocks.len() > MAX_CHAIN_SLOTS {
+        return Err(format!(
+            "chain has {} blocks; the rig supports at most {MAX_CHAIN_SLOTS}",
+            blocks.len()
+        ));
+    }
+    let mut boxes: Vec<Option<Box<dyn PluginInstance>>> = Vec::with_capacity(blocks.len());
+    let mut names = Vec::with_capacity(blocks.len());
+    let mut ids = Vec::with_capacity(blocks.len());
+    // Which slots hold a tail that must be cleared when the chain is armed.
+    let mut prepare_on_arm = Vec::with_capacity(blocks.len());
+    let mut primary_loudness = None;
+    let mut primary_expected_sr = None;
+    let mut primary_input_level_dbu = None;
+    let mut primary_output_level_dbu = None;
+    let mut primary_captured = false;
+
+    for (i, b) in blocks.iter().enumerate() {
+        let began = std::time::Instant::now();
+        let built = build_block(b, sample_rate)?;
+        tracing::trace!(
+            block.name = %b.name,
+            block.kind = ?b.block_type,
+            block.build_ms = began.elapsed().as_secs_f64() * 1000.0,
+            "prepare_chain: block built"
+        );
+        if !primary_captured && b.is_nam() {
+            primary_captured = true;
+            primary_loudness = built.loudness;
+            primary_expected_sr = built.expected_sr;
+            primary_input_level_dbu = built.input_level_dbu;
+            primary_output_level_dbu = built.output_level_dbu;
+        }
+        names.push(built.display_name);
+        ids.push(
+            block_ids
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| default_block_id(b.asset_path())),
+        );
+        prepare_on_arm.push(b.is_time_fx());
+        boxes.push(Some(built.boxed));
+    }
+
+    Ok(PreparedChain {
+        boxes,
+        names,
+        ids,
+        prepare_on_arm,
+        primary_loudness,
+        primary_expected_sr,
+        primary_input_level_dbu,
+        primary_output_level_dbu,
+    })
+}
+
 /// Build a prepared box for one [`RigBlock`] at `sample_rate`.
 pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlock, String> {
     // Reject implementations that don't fit the block type (e.g. NAM on a Delay)
@@ -1481,47 +1580,27 @@ impl GuitarRig {
         blocks: &[RigBlock],
         block_ids: &[String],
     ) -> Result<ModelId, String> {
-        if blocks.is_empty() {
-            return Err("chain has no blocks".into());
-        }
-        if blocks.len() > MAX_CHAIN_SLOTS {
-            return Err(format!(
-                "chain has {} blocks; the rig supports at most {MAX_CHAIN_SLOTS}",
-                blocks.len()
-            ));
-        }
-        let mut boxes: Vec<Option<Box<dyn PluginInstance>>> = Vec::with_capacity(blocks.len());
-        let mut names = Vec::with_capacity(blocks.len());
-        let mut ids = Vec::with_capacity(blocks.len());
-        // Which slots hold a tail that must be cleared when the chain is armed.
-        let mut prepare_on_arm = Vec::with_capacity(blocks.len());
-        let mut primary_loudness = None;
-        let mut primary_expected_sr = None;
-        let mut primary_input_level_dbu = None;
-        let mut primary_output_level_dbu = None;
-        // The first NAM block in the chain is the amp — its levels drive
-        // per-patch level-match + input staging, even if its loudness is unknown.
-        let mut primary_captured = false;
+        let prepared = prepare_chain(blocks, block_ids, self.sample_rate)?;
+        Ok(self.install_prepared(prepared))
+    }
 
-        for (i, b) in blocks.iter().enumerate() {
-            let built = build_block(b, self.sample_rate)?;
-            if !primary_captured && b.is_nam() {
-                primary_captured = true;
-                primary_loudness = built.loudness;
-                primary_expected_sr = built.expected_sr;
-                primary_input_level_dbu = built.input_level_dbu;
-                primary_output_level_dbu = built.output_level_dbu;
-            }
-            names.push(built.display_name);
-            ids.push(
-                block_ids
-                    .get(i)
-                    .cloned()
-                    .unwrap_or_else(|| default_block_id(b.asset_path())),
-            );
-            prepare_on_arm.push(b.is_time_fx());
-            boxes.push(Some(built.boxed));
-        }
+    /// Install an already-[`prepare_chain`]d chain. Does not activate.
+    ///
+    /// This is the cheap half of installing: a handful of moves and one
+    /// insert under the swap lock. All the expensive work — model loads,
+    /// DSP allocation, `prepare()` — already happened in [`prepare_chain`],
+    /// which is why the two are separable in the first place.
+    pub fn install_prepared(&mut self, prepared: PreparedChain) -> ModelId {
+        let PreparedChain {
+            boxes,
+            names,
+            ids,
+            prepare_on_arm,
+            primary_loudness,
+            primary_expected_sr,
+            primary_input_level_dbu,
+            primary_output_level_dbu,
+        } = prepared;
 
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
@@ -1548,7 +1627,7 @@ impl GuitarRig {
                     prepare_on_arm,
                 },
             );
-        Ok(id)
+        id
     }
 
     /// Convenience: install a single-NAM chain (amp only). Does not activate.
