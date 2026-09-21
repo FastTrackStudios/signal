@@ -271,7 +271,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                             }
                                         }
                                     },
-                                    "✕"
+                                    fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 10 }
                                 }
                             }
                                 }
@@ -362,7 +362,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                             if is_default {
                                                 span { class: "text-[9px] opacity-60 flex-shrink-0",
                                                     title: "stack default",
-                                                    "★"
+                                                    fts_chrome::Glyph { icon: fts_chrome::Icon::Star, size: 10 }
                                                 }
                                             }
                                             if !p.override_modules.is_empty() {
@@ -398,7 +398,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                                         }
                                                     }
                                                 },
-                                                "✕"
+                                                fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 10 }
                                             }
                                         }
                                     }
@@ -541,7 +541,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                                 }
                                             }
                                         },
-                                        "✕"
+                                        fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 10 }
                                     }
                                 }
                             }
@@ -924,7 +924,7 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
                                                         editing_entry.set(None);
                                                     }
                                                 },
-                                                "✓"
+                                                fts_chrome::Glyph { icon: fts_chrome::Icon::Check, size: 11 }
                                             }
                                         }
                                     } else {
@@ -942,7 +942,7 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
                                                     editing_entry.set(Some(i));
                                                 }
                                             },
-                                            "✎"
+                                            fts_chrome::Glyph { icon: fts_chrome::Icon::Pencil, size: 11 }
                                         }
                                         span {
                                             class: "text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-shrink-0 cursor-pointer",
@@ -957,7 +957,7 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
                                                     }
                                                 }
                                             },
-                                            "✕"
+                                            fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 10 }
                                         }
                                     }
                                 }

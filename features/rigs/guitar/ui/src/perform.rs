@@ -737,7 +737,7 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
             span {
                 class: "text-base font-bold w-7 text-center leading-none flex-shrink-0",
                 style: if in_tune { "color: #22c55e;" } else if r.active { "color: #e4e4e7;" } else { "color: #4b5563;" },
-                if r.active { "{r.note}" } else { "♪" }
+                if r.active { "{r.note}" } else { fts_chrome::Glyph { icon: fts_chrome::Icon::Note, size: 16 } }
             }
             div { class: "relative flex-1 h-3 min-w-0",
                 div { class: "absolute inset-x-0 top-1/2 h-px bg-white/20" }

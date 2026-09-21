@@ -110,14 +110,14 @@ pub fn ZoomPanel(
                         style: if on { "color: #4ade80;" } else { "color: #52525b;" },
                         title: if on { "Bypass all" } else { "Engage" },
                         onclick: move |_| cb.call(()),
-                        "⏻"
+                        fts_chrome::Glyph { icon: fts_chrome::Icon::Power, size: 12 }
                     }
                 }
                 button {
                     class: "text-muted-foreground/60 hover:text-foreground text-sm leading-none",
                     title: "{title}",
                     onclick: move |_| zoomed.set(true),
-                    "⤢"
+                    fts_chrome::Glyph { icon: fts_chrome::Icon::Expand, size: 12 }
                 }
             }
         }
@@ -126,7 +126,7 @@ pub fn ZoomPanel(
                 button {
                     class: "absolute top-3 right-4 z-10 text-muted-foreground hover:text-foreground text-xl",
                     onclick: move |_| zoomed.set(false),
-                    "✕"
+                    fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 16 }
                 }
                 div { class: "flex-1 min-h-0", {zoomed_view.unwrap_or(children)} }
             }
@@ -594,22 +594,29 @@ fn AlgoPicker(
         .copied()
         .unwrap_or(options.first().copied().unwrap_or("—"));
     rsx! {
+        // Anchored under the name, not a full-screen overlay: Blitz has no
+        // `position: fixed`. Closes when the pointer leaves the pair.
+        div {
+            style: "position: relative;",
+            onmouseleave: move |_| open.set(false),
         button {
             class: "flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 hover:bg-accent/30",
-            onclick: move |_| open.set(true),
+            onclick: move |_| open.toggle(),
             span {
                 class: "text-[11px] font-bold tracking-wide",
                 style: "color: {accent};",
                 "{current}"
             }
-            span { class: "text-[8px] text-muted-foreground", "▾" }
+            span { class: "text-muted-foreground",
+                fts_chrome::Glyph { icon: fts_chrome::Icon::ChevronDown, size: 10 }
+            }
         }
         if open() {
             div {
-                class: "fixed inset-0 z-50 flex items-center justify-center bg-black/80",
-                onclick: move |_| open.set(false),
+                style: "position: absolute; top: 100%; left: 0; z-index: 60; padding-top: 4px;",
                 div {
-                    class: "grid grid-cols-3 gap-1 p-3 rounded-lg border border-border bg-card max-w-md",
+                    class: "grid grid-cols-3 gap-1 p-2 rounded-lg border border-border bg-card",
+                    style: "width: 260px; box-shadow: 0 12px 32px #000c;",
                     for (i, o) in options.iter().enumerate() {
                         {
                             let rig = rig.clone();
@@ -632,6 +639,7 @@ fn AlgoPicker(
                     }
                 }
             }
+        }
         }
     }
 }
@@ -763,7 +771,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                                             }
                                         }
                                     },
-                                    "⏻"
+                                    fts_chrome::Glyph { icon: fts_chrome::Icon::Power, size: 12 }
                                 }
                                 span { style: "font-size:8px; font-weight:700; color:{color};", "{di + 1}" }
                                 if dim {
@@ -931,7 +939,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                                             }
                                         }
                                     },
-                                    "⏻"
+                                    fts_chrome::Glyph { icon: fts_chrome::Icon::Power, size: 12 }
                                 }
                                 span { style: "font-size:8px; font-weight:700; color:{color};", "{vi + 1}" }
                                 if dim {
@@ -1075,8 +1083,9 @@ fn ModGroupPanel(
 
     rsx! {
         div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
-            // Header: arrows rotate the engaged member.
-            div { class: "flex items-center gap-1 px-1.5 pt-1 flex-shrink-0",
+            // Header: arrows rotate the engaged member. The right inset keeps
+            // the engine picker clear of ZoomPanel's floating expand button.
+            div { class: "flex items-center gap-1 pl-1.5 pt-1 flex-shrink-0", style: "padding-right: 22px;",
                 button {
                     style: if engaged { "font-size:10px; line-height:1; color:#4ade80;" } else { "font-size:10px; line-height:1; color:#52525b;" },
                     title: if engaged { "Bypass group" } else { "Engage" },
@@ -1097,7 +1106,7 @@ fn ModGroupPanel(
                             });
                         }
                     },
-                    "⏻"
+                    fts_chrome::Glyph { icon: fts_chrome::Icon::Power, size: 12 }
                 }
                 span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "{title}" }
                 button {
