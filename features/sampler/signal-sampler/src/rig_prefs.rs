@@ -48,6 +48,12 @@ pub struct RigAudioPrefs {
     pub phones_mix_in_l: usize,
     #[facet(default)]
     pub phones_mix_in_r: usize,
+    /// Let the rig open a built-in microphone as its input. Off by default —
+    /// the laptop mic through the laptop speakers feeds back the moment the
+    /// rig opens (see `daw_audio_io::input_guard`). `allow_builtin_mic true`
+    /// in the rig's styx turns it on.
+    #[facet(default)]
+    pub allow_builtin_mic: bool,
 }
 
 impl Default for RigAudioPrefs {
@@ -65,6 +71,7 @@ impl Default for RigAudioPrefs {
             phones_out_r: 0,
             phones_mix_in_l: 0,
             phones_mix_in_r: 0,
+            allow_builtin_mic: false,
         }
     }
 }
@@ -106,6 +113,7 @@ impl From<&RigAudioPrefs> for daw_audio_io::AudioIoPrefs {
             sample_rate: p.sample_rate,
             buffer_size: p.buffer_size,
             want_input: true,
+            allow_builtin_mic: p.allow_builtin_mic,
             // The guitar rig keeps the engine's default node name; the caller
             // overrides it where a process runs more than one engine.
             node_name: String::new(),

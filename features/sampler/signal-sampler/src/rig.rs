@@ -1406,6 +1406,7 @@ impl GuitarRig {
             phones_out_r: 0,
             phones_mix_in_l: 0,
             phones_mix_in_r: 0,
+            allow_builtin_mic: false,
         })
     }
 
@@ -1482,6 +1483,7 @@ impl GuitarRig {
             phones_out_r: 0,
             phones_mix_in_l: 0,
             phones_mix_in_r: 0,
+            allow_builtin_mic: prefs.allow_builtin_mic,
         };
 
         Ok(Self {
