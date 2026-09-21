@@ -50,6 +50,9 @@ tracing.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
+# The startup benchmarks (examples/startup_cost.rs, examples/nam_split.rs)
+# load captures directly, outside a rig.
+neural-amp-modeler = { workspace = true }
 tracing-subscriber.workspace = true
 # headless_rig example: serve the backend on an in-process vox link and drive
 # it like a remote GUI would.

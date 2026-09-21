@@ -13322,6 +13322,7 @@ dependencies = [
  "facet-styx",
  "fx-blocks",
  "midicore",
+ "neural-amp-modeler",
  "signal-guitar-proto",
  "signal-nam",
  "signal-proto",
