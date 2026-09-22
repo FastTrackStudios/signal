@@ -92,6 +92,7 @@ pub fn GuitarRigRemote() -> Element {
     let palette_open = use_signal(|| false);
     // The library picker, open on a kind — or closed.
     let library_open = use_signal(|| None::<crate::library::Kind>);
+    use_context_provider(|| crate::library::OpenLibrary(library_open));
     // The view actions the palette and the keymap can ask for.
     let on_local = use_callback(move |e: crate::palette::Effect| {
         let mut library_open = library_open;
@@ -672,7 +673,7 @@ pub fn GuitarRigRemote() -> Element {
                         div { class: "flex flex-col gap-3 h-full min-h-0 overflow-hidden",
                             div {
                                 class: "min-h-0 flex flex-col overflow-hidden",
-                                style: "flex: 2 1 0%;",
+                                style: "flex: 3 1 0%;",
                                 if mode() == Mode::Routing {
                                     crate::grid::RigGraph {
                                         blocks: blocks(),
@@ -753,7 +754,7 @@ pub fn GuitarRigRemote() -> Element {
                                 style: if switches() == Switches::Compact {
                                     "flex: 0 0 116px;"
                                 } else {
-                                    "flex: 1 1 0%;"
+                                    "flex: 1.2 1 0%;"
                                 },
                                 PerformGrid {
                                     compact: switches() == Switches::Compact,

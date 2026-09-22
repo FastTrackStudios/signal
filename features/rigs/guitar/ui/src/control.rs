@@ -1246,6 +1246,65 @@ fn ModGroupPanel(
 
 // ── The drive board rail ──// ── The drive board rail ───────────────────────────────────────────────────
 
+/// A module's preset controls, at the head of its row: ▾ opens the Library
+/// on that module's presets, ‹ › step through the playing preset's
+/// snapshots. The label is what the module plays — preset · snapshot.
+#[component]
+fn ModuleControls(
+    kind: crate::library::Kind,
+    pick: Option<signal_guitar_proto::ModulePick>,
+    /// Extra inline style (width, height) — the controls sit in a row's
+    /// head or a panel's corner.
+    #[props(default)]
+    style: String,
+) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let open = try_use_context::<crate::library::OpenLibrary>();
+    let module = kind.module().unwrap_or_default();
+    let (preset, snapshot) = pick
+        .as_ref()
+        .map(|p| (p.preset.clone(), p.snapshot.clone()))
+        .unwrap_or_default();
+    let step = move |delta: i32| {
+        let rig = rig.clone();
+        move |e: MouseEvent| {
+            e.stop_propagation();
+            if let Some(r) = rig.clone() {
+                spawn(async move { let _ = r.step_module(module.to_string(), delta).await; });
+            }
+        }
+    };
+    let btn = "flex items-center justify-center w-5 h-full text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent/40 cursor-pointer select-none flex-shrink-0";
+    rsx! {
+        div {
+            class: "flex items-center gap-0 border border-border overflow-hidden flex-shrink-0",
+            style: "background: #0d0d10; {style}",
+            div {
+                class: btn,
+                title: "Browse {module} presets",
+                onclick: move |e: MouseEvent| {
+                    e.stop_propagation();
+                    if let Some(mut o) = open.map(|o| o.0) {
+                        o.set(Some(kind));
+                    }
+                },
+                fts_chrome::Glyph { icon: fts_chrome::Icon::ChevronDown, size: 10 }
+            }
+            div { class: "flex flex-col justify-center min-w-0 flex-1 px-1 leading-none",
+                span { class: "text-[8px] uppercase tracking-wider text-muted-foreground", "{module}" }
+                span { class: "text-[10px] font-semibold truncate",
+                    if preset.is_empty() { "—" } else { "{preset}" }
+                    if !snapshot.is_empty() {
+                        span { class: "text-muted-foreground font-normal", " · {snapshot}" }
+                    }
+                }
+            }
+            div { class: btn, title: "Previous snapshot", onclick: step(-1), "‹" }
+            div { class: btn, title: "Next snapshot", onclick: step(1), "›" }
+        }
+    }
+}
+
 /// The cab after an amp: its IR's name, lit while it convolves. A tap
 /// engages/bypasses it; which IR is set on the amp's preset (Library →
 /// Presets → Cab), because a cab belongs to the amp tone it was picked for.
@@ -1720,6 +1779,31 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
         .filter(|p| !p.is_empty());
     let cab_l = find_block(&blocks, BlockType::Cabinet, "Cab L");
     let cab_r = find_block(&blocks, BlockType::Cabinet, "Cab R");
+    // The module picks the playing patch resolves to, for the rows' heads.
+    let mut comp_rev = use_signal(|| model.revision);
+    if *comp_rev.peek() != model.revision {
+        comp_rev.set(model.revision);
+    }
+    let compositions = use_resource({
+        let rig = rig.clone();
+        move || {
+            let _ = comp_rev();
+            let rig = rig.clone();
+            async move {
+                match rig {
+                    Some(r) => r.compositions().await.unwrap_or_default(),
+                    None => signal_guitar_proto::CompositionModel::default(),
+                }
+            }
+        }
+    });
+    let pick_of = |module: &str| {
+        compositions
+            .read()
+            .as_ref()
+            .and_then(|c| c.active_modules.iter().find(|m| m.module.eq_ignore_ascii_case(module)).cloned())
+    };
+    let (drive_pick, amp_pick, time_pick) = (pick_of("Drive"), pick_of("Amp"), pick_of("Time"));
     let comp = find_block(&blocks, BlockType::Compressor, "Compressor");
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
 
@@ -1744,6 +1828,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // Cab R) in signal order. A drive or amp chunk is its
                     // level fader; a cab chunk only engages/bypasses. ──
                     div { class: "flex gap-0 flex-shrink-0", style: "height: 30px;",
+                        ModuleControls { kind: crate::library::Kind::DriveModules, pick: drive_pick, style: "width: 170px;" }
                         for b in board.iter() {
                             DriveChunk {
                                 key: "{b.id}",
@@ -1757,6 +1842,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                     }
                     div { class: "flex gap-0 flex-shrink-0", style: "height: 30px;",
+                        ModuleControls { kind: crate::library::Kind::AmpModules, pick: amp_pick, style: "width: 170px;" }
                         DriveChunk {
                             // Constant-loudness drive: the bar pushes the
                             // capture harder while calibration holds the
@@ -1897,6 +1983,10 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 }
                             }
                         }
+                        // The Time module — delays and reverbs — under one
+                        // preset head, like the board's rows.
+                        div { class: "min-h-0 h-full flex flex-col", style: "flex: 4 1 0%;",
+                        div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%;",
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
                                 title: "Delay".to_string(),
@@ -1948,6 +2038,9 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 })),
                                 ReverbPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
                             }
+                        }
+                        }
+                        ModuleControls { kind: crate::library::Kind::TimeModules, pick: time_pick, style: "height: 22px; width: 100%;" }
                         }
                     }
                 }

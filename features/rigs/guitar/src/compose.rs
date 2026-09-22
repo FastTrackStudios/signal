@@ -408,3 +408,171 @@ mod tests {
         assert_eq!(flat.presets.len(), def.presets.len());
     }
 }
+
+/// What migrating a profile to compositions would produce.
+#[derive(Clone, Debug)]
+pub struct Migration {
+    pub modules: Vec<ModulePresetDef>,
+    pub presets: Vec<RigPresetDef>,
+    /// The profile, its patches pointed at the new presets.
+    pub profile: ProfileDef,
+}
+
+/// The family an amp capture belongs to: its name's first word, so "Fender
+/// Clean" and "Fender DI" become snapshots of one Amp preset "Fender".
+fn family(name: &str) -> (String, String) {
+    let mut words = name.split_whitespace();
+    let head = words.next().unwrap_or(name).to_string();
+    let rest = words.collect::<Vec<_>>().join(" ");
+    (head, if rest.is_empty() { "Default".to_string() } else { rest })
+}
+
+/// Propose compositions for a profile written the old way, without changing
+/// a single sound: every pool capture becomes a snapshot of an Amp preset
+/// (grouped by family), the profile's pedal board becomes a Drive preset,
+/// and the patches on each amp family become snapshots of one preset
+/// carrying their overrides. Patches already composed are left alone.
+#[must_use]
+pub fn propose(def: &ProfileDef) -> Migration {
+    let mut modules: Vec<ModulePresetDef> = Vec::new();
+    let mut amp_of = std::collections::HashMap::new();
+    for p in &def.presets {
+        let (fam, snap) = family(&p.name);
+        let fam = format!("{} {fam}", def.name);
+        let module = match modules.iter_mut().find(|m| m.module == "Amp" && m.name == fam) {
+            Some(m) => m,
+            None => {
+                modules.push(ModulePresetDef { module: "Amp".into(), name: fam.clone(), snapshots: Vec::new() });
+                modules.last_mut().expect("just pushed")
+            }
+        };
+        module.snapshots.push(ModuleSnapshotDef {
+            name: snap.clone(),
+            nam: p.nam.clone(),
+            cab: p.cab.clone(),
+            ..ModuleSnapshotDef::default()
+        });
+        amp_of.insert(p.name.to_lowercase(), (fam, snap));
+    }
+    let board = format!("{} Board", def.name);
+    if !def.drives.is_empty() {
+        modules.push(ModulePresetDef {
+            module: "Drive".into(),
+            name: board.clone(),
+            snapshots: vec![ModuleSnapshotDef {
+                name: "Board".into(),
+                drives: def.drives.clone(),
+                ..ModuleSnapshotDef::default()
+            }],
+        });
+    }
+
+    let mut presets: Vec<RigPresetDef> = Vec::new();
+    let mut profile = def.clone();
+    for patch in &mut profile.patches {
+        if !patch.rig_preset.is_empty() || !patch.modules.is_empty() {
+            continue;
+        }
+        let Some((fam, snap)) = amp_of.get(&patch.preset.to_lowercase()).cloned() else {
+            continue;
+        };
+        let mut picks = vec![ModuleChoiceDef { module: "Amp".into(), preset: fam.clone(), snapshot: snap }];
+        if !def.drives.is_empty() {
+            picks.push(ModuleChoiceDef { module: "Drive".into(), preset: board.clone(), snapshot: "Board".into() });
+        }
+        // Amp R stays a patch-level pick: no module snapshot holds it yet.
+        if !patch.preset2.is_empty() {
+            continue;
+        }
+        let preset_name = fam.trim_start_matches(&format!("{} ", def.name)).to_string();
+        let preset_name = format!("{} {preset_name}", def.name);
+        let entry = match presets.iter_mut().find(|p| p.name == preset_name) {
+            Some(p) => p,
+            None => {
+                presets.push(RigPresetDef { name: preset_name.clone(), snapshots: Vec::new() });
+                presets.last_mut().expect("just pushed")
+            }
+        };
+        entry.snapshots.push(PresetSnapshotDef {
+            name: patch.name.clone(),
+            modules: std::mem::take(&mut picks),
+            overrides: std::mem::take(&mut patch.overrides),
+        });
+        patch.rig_preset = preset_name;
+        patch.snapshot = patch.name.clone();
+    }
+    Migration { modules, presets, profile }
+}
+
+#[cfg(test)]
+mod migration_tests {
+    use super::*;
+    use crate::profiles::{build_profile, drive_presets, worship_def};
+
+    /// Migrating changes how the library is organised, never how a patch
+    /// sounds: every block of every patch builds the same.
+    #[test]
+    fn migrating_a_profile_changes_no_sound() {
+        let def = worship_def();
+        let m = propose(&def);
+        assert!(m.profile.patches.iter().all(|p| !p.rig_preset.is_empty()), "every patch composed");
+        let comp = Compositions { modules: m.modules.clone(), presets: m.presets.clone() };
+        let before = build_profile(&def, &drive_presets());
+        let after = build_profile(&flatten(&m.profile, &comp), &drive_presets());
+        for (a, b) in before.patches.iter().zip(&after.patches) {
+            assert_eq!(a.chain.len(), b.chain.len(), "{}", a.name);
+            for (x, y) in a.chain.iter().zip(&b.chain) {
+                assert_eq!(
+                    (&x.name, &x.nam, &x.ir, x.bypassed),
+                    (&y.name, &y.nam, &y.ir, y.bypassed),
+                    "{}",
+                    a.name
+                );
+                for param in &x.params {
+                    assert_eq!(y.param_f32(&param.name), x.param_f32(&param.name), "{} {} {}", a.name, x.name, param.name);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn captures_group_into_amp_presets_by_family() {
+        let m = propose(&worship_def());
+        let amps: Vec<_> = m.modules.iter().filter(|x| x.module == "Amp").collect();
+        assert!(amps.iter().any(|a| a.snapshots.len() > 1), "some family has several captures");
+    }
+}
+
+/// Migrate a profile on disk: propose, then (unless `dry_run`) merge the new
+/// module presets and presets into the shared libraries — keeping any that
+/// already exist by name — and save the profile pointed at them.
+///
+/// # Errors
+///
+/// When no profile has that name.
+pub fn migrate_profile(name: &str, dry_run: bool) -> Result<Migration, String> {
+    let lib = crate::library::RigLibrary::load_or_bootstrap();
+    let def = lib
+        .profiles
+        .iter()
+        .find(|p| p.name.eq_ignore_ascii_case(name))
+        .cloned()
+        .ok_or_else(|| format!("no profile named {name:?}"))?;
+    let m = propose(&def);
+    if !dry_run {
+        let mut comp = crate::library::RigLibrary::load_compositions();
+        for module in &m.modules {
+            if comp.module(&module.module, &module.name).is_none() {
+                comp.modules.push(module.clone());
+            }
+        }
+        for preset in &m.presets {
+            if comp.preset(&preset.name).is_none() {
+                comp.presets.push(preset.clone());
+            }
+        }
+        crate::library::RigLibrary::save_compositions(&comp);
+        crate::library::RigLibrary::save_profile(&m.profile);
+    }
+    Ok(m)
+}

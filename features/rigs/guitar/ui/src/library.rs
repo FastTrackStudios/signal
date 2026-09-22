@@ -25,9 +25,14 @@ use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{
-    DriveEntry, LibraryModel, PatchInfo, PerformanceModel, PresetInfo, ProfileEntry, SetlistEntry,
+    CompositionModel, DriveEntry, LibraryModel, PatchInfo, PerformanceModel, PresetInfo, ProfileEntry, SetlistEntry,
     SongEntry,
 };
+
+/// The picker's open state, in context — so a surface deep in the rig (the
+/// board's module rows) can open it on a kind without threading a prop.
+#[derive(Clone, Copy)]
+pub struct OpenLibrary(pub Signal<Option<Kind>>);
 
 /// What the picker is browsing — the tag on the search. [`Kind::All`] is no
 /// tag: the search runs over everything.
@@ -38,30 +43,56 @@ pub enum Kind {
     Songs,
     Profiles,
     Patches,
+    /// The amp captures in the profile's pool (each a NAM + its cab).
     Presets,
     Drives,
+    /// Presets proper: compositions of module presets, with snapshots.
+    Compositions,
+    /// Module presets, per module — what a row's ▾ on the board opens.
+    AmpModules,
+    DriveModules,
+    TimeModules,
 }
 
 impl Kind {
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 10] = [
         Self::Setlists,
         Self::Songs,
         Self::Profiles,
         Self::Patches,
+        Self::Compositions,
+        Self::AmpModules,
+        Self::DriveModules,
+        Self::TimeModules,
         Self::Presets,
         Self::Drives,
     ];
 
     /// The rail: no tag, then every kind.
-    const RAIL: [Self; 7] = [
+    const RAIL: [Self; 11] = [
         Self::All,
         Self::Setlists,
         Self::Songs,
         Self::Profiles,
         Self::Patches,
+        Self::Compositions,
+        Self::AmpModules,
+        Self::DriveModules,
+        Self::TimeModules,
         Self::Presets,
         Self::Drives,
     ];
+
+    /// The module a module-preset kind browses, as the rig names it.
+    #[must_use]
+    pub const fn module(self) -> Option<&'static str> {
+        match self {
+            Self::AmpModules => Some("Amp"),
+            Self::DriveModules => Some("Drive"),
+            Self::TimeModules => Some("Time"),
+            _ => None,
+        }
+    }
 
     pub(crate) const fn label(self) -> &'static str {
         match self {
@@ -70,8 +101,12 @@ impl Kind {
             Self::Songs => "Songs",
             Self::Profiles => "Profiles",
             Self::Patches => "Patches",
-            Self::Presets => "Presets",
+            Self::Presets => "Captures",
             Self::Drives => "Drives",
+            Self::Compositions => "Presets",
+            Self::AmpModules => "Amp",
+            Self::DriveModules => "Drive",
+            Self::TimeModules => "Time",
         }
     }
 
@@ -83,8 +118,12 @@ impl Kind {
             Self::Songs => "song",
             Self::Profiles => "profile",
             Self::Patches => "patch",
-            Self::Presets => "preset",
+            Self::Presets => "capture",
             Self::Drives => "drive",
+            Self::Compositions => "preset",
+            Self::AmpModules => "amp preset",
+            Self::DriveModules => "drive preset",
+            Self::TimeModules => "time preset",
         }
     }
 
@@ -95,8 +134,12 @@ impl Kind {
             Self::Songs => fts_chrome::Icon::Note,
             Self::Profiles => fts_chrome::Icon::Profile,
             Self::Patches => fts_chrome::Icon::Perform,
-            Self::Presets => fts_chrome::Icon::Preset,
+            Self::Presets => fts_chrome::Icon::Star,
             Self::Drives => fts_chrome::Icon::Tones,
+            Self::Compositions => fts_chrome::Icon::Preset,
+            Self::AmpModules => fts_chrome::Icon::Guitar,
+            Self::DriveModules => fts_chrome::Icon::Power,
+            Self::TimeModules => fts_chrome::Icon::Refresh,
         }
     }
 
@@ -136,13 +179,43 @@ fn rows(
     lib: &LibraryModel,
     patches: &[PatchInfo],
     presets: &[PresetInfo],
+    comp: &CompositionModel,
     model: &PerformanceModel,
 ) -> Vec<Row> {
     match kind {
         Kind::All => Kind::ALL
             .iter()
-            .flat_map(|&k| rows(k, lib, patches, presets, model))
+            .flat_map(|&k| rows(k, lib, patches, presets, comp, model))
             .collect(),
+        Kind::Compositions => comp
+            .presets
+            .iter()
+            .enumerate()
+            .map(|(idx, p)| Row {
+                kind,
+                name: p.name.clone(),
+                idx,
+                sub: p.snapshots.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(" · "),
+                active: comp.active_preset.eq_ignore_ascii_case(&p.name),
+            })
+            .collect(),
+        Kind::AmpModules | Kind::DriveModules | Kind::TimeModules => {
+            let module = kind.module().unwrap_or_default();
+            comp.modules
+                .iter()
+                .enumerate()
+                .filter(|(_, m)| m.module.eq_ignore_ascii_case(module))
+                .map(|(idx, m)| Row {
+                    kind,
+                    name: m.name.clone(),
+                    idx,
+                    sub: m.snapshots.join(" · "),
+                    active: comp.active_modules.iter().any(|a| {
+                        a.module.eq_ignore_ascii_case(module) && a.preset.eq_ignore_ascii_case(&m.name)
+                    }),
+                })
+                .collect()
+        }
         Kind::Setlists => lib
             .setlists
             .iter()
@@ -288,6 +361,15 @@ fn activate(rig: &Option<RigClient>, row: &Row, model: &PerformanceModel) -> boo
         Kind::Presets => send(rig, move |r| async move {
             let _ = r.play_preset(idx).await;
         }),
+        Kind::Compositions => send(rig, move |r| async move {
+            let _ = r.choose_preset(name, String::new()).await;
+        }),
+        Kind::AmpModules | Kind::DriveModules | Kind::TimeModules => {
+            let module = row.kind.module().unwrap_or_default().to_string();
+            send(rig, move |r| async move {
+                let _ = r.choose_module(module, name, String::new()).await;
+            });
+        }
         Kind::Drives | Kind::All => return false,
     }
     true
@@ -350,6 +432,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                         r.library().await.unwrap_or_default(),
                         r.patches().await.unwrap_or_default(),
                         r.presets().await.unwrap_or_default(),
+                        r.compositions().await.unwrap_or_default(),
                     ),
                     None => Default::default(),
                 }
@@ -360,14 +443,14 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
     let Some(kind) = open() else {
         return rsx! {};
     };
-    let (lib, patches, presets): (LibraryModel, Vec<PatchInfo>, Vec<PresetInfo>) =
+    let (lib, patches, presets, comp): (LibraryModel, Vec<PatchInfo>, Vec<PresetInfo>, CompositionModel) =
         data.read().clone().unwrap_or_default();
 
     let q = query();
     let per_kind: Vec<(Kind, Vec<Row>)> = Kind::RAIL
         .iter()
         .map(|&k| {
-            let all = rows(k, &lib, &patches, &presets, &model);
+            let all = rows(k, &lib, &patches, &presets, &comp, &model);
             (k, all.into_iter().filter(|r| q.trim().is_empty() || matches(r, &q)).collect())
         })
         .collect();
@@ -592,7 +675,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                 span { style: "font-size: 11px; color: {FAINT};", "of {model.profile_name}" }
                             }
                             div { style: "flex: 1;" }
-                            if !matches!(kind, Kind::Drives | Kind::All) {
+                            if !matches!(kind, Kind::Drives | Kind::All | Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules) {
                                 button {
                                     style: format!(
                                         "padding: 5px 11px; border-radius: 7px; cursor: pointer; font-size: 11px; \
@@ -724,6 +807,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                     lib: lib.clone(),
                                     patches: patches.clone(),
                                     presets: presets.clone(),
+                                    comp: comp.clone(),
                                     model: model.clone(),
                                     on_go: move |target: (Kind, String)| go(target),
                                 }
@@ -773,6 +857,7 @@ fn Detail(
     lib: LibraryModel,
     patches: Vec<PatchInfo>,
     presets: Vec<PresetInfo>,
+    comp: CompositionModel,
     model: PerformanceModel,
     on_go: EventHandler<(Kind, String)>,
 ) -> Element {
@@ -820,6 +905,7 @@ fn Detail(
         })),
         // A song's name is edited with its key and tempo, below.
         Kind::Songs | Kind::Drives | Kind::All => None,
+        Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules => None,
     };
 
     rsx! {
@@ -864,6 +950,14 @@ fn Detail(
                 },
                 Kind::Drives => match lib.drives.get(row.idx).cloned() {
                     Some(drive) => rsx! { DriveDetail { drive } },
+                    None => rsx! {},
+                },
+                Kind::Compositions => match comp.presets.get(row.idx).cloned() {
+                    Some(preset) => rsx! { CompositionDetail { preset, comp: comp.clone() } },
+                    None => rsx! {},
+                },
+                Kind::AmpModules | Kind::DriveModules | Kind::TimeModules => match comp.modules.get(row.idx).cloned() {
+                    Some(entry) => rsx! { ModuleDetail { entry, comp: comp.clone() } },
                     None => rsx! {},
                 },
                 // A row always names its own kind; `All` is only a tag.
@@ -1772,6 +1866,99 @@ fn DriveDetail(drive: DriveEntry) -> Element {
     }
 }
 
+/// A module preset: its snapshots as chips — the one playing is lit, a tap
+/// plays another on the active patch.
+#[component]
+fn ModuleDetail(entry: signal_guitar_proto::ModulePresetEntry, comp: CompositionModel) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let playing = comp
+        .active_modules
+        .iter()
+        .find(|a| a.module.eq_ignore_ascii_case(&entry.module) && a.preset.eq_ignore_ascii_case(&entry.name))
+        .map(|a| a.snapshot.clone());
+    rsx! {
+        Section { label: "Snapshots",
+            div { style: "display: flex; flex-wrap: wrap; gap: 6px;",
+                for (i, snap) in entry.snapshots.iter().enumerate() {
+                    {
+                        let lit = playing.as_deref().is_some_and(|p| p.eq_ignore_ascii_case(snap)
+                            || (p.is_empty() && i == 0));
+                        let (module, preset, snap_name) = (entry.module.clone(), entry.name.clone(), snap.clone());
+                        let rig = rig.clone();
+                        rsx! {
+                            button {
+                                key: "{snap}",
+                                style: format!(
+                                    "padding: 6px 12px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; \
+                                     border: 1px solid {}; background: {}; color: {};",
+                                    if lit { LIVE } else { LINE },
+                                    if lit { "rgba(34,197,94,0.12)" } else { "transparent" },
+                                    if lit { TEXT } else { MUTED },
+                                ),
+                                onclick: move |_| {
+                                    let (m, p, s) = (module.clone(), preset.clone(), snap_name.clone());
+                                    send(&rig, move |r| async move { let _ = r.choose_module(m, p, s).await; });
+                                },
+                                "{snap}"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        span { style: "font-size: 11px; color: {FAINT}; line-height: 1.5;",
+            "Choosing here sets this module on the playing patch only — its preset keeps its own pick."
+        }
+    }
+}
+
+/// A preset: each snapshot with the module snapshots it plays.
+#[component]
+fn CompositionDetail(preset: signal_guitar_proto::PresetEntry, comp: CompositionModel) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let playing_here = comp.active_preset.eq_ignore_ascii_case(&preset.name);
+    rsx! {
+        Section { label: "Snapshots",
+            for (i, snap) in preset.snapshots.iter().enumerate() {
+                {
+                    let lit = playing_here
+                        && (comp.active_snapshot.eq_ignore_ascii_case(&snap.name)
+                            || (comp.active_snapshot.is_empty() && i == 0));
+                    let (name, snap_name) = (preset.name.clone(), snap.name.clone());
+                    let rig = rig.clone();
+                    let picks = snap
+                        .modules
+                        .iter()
+                        .map(|m| format!("{}: {} · {}", m.module, m.preset, if m.snapshot.is_empty() { "—" } else { &m.snapshot }))
+                        .collect::<Vec<_>>();
+                    rsx! {
+                        button {
+                            key: "{snap.name}",
+                            style: format!(
+                                "display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; \
+                                 padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid {}; background: {};",
+                                if lit { LIVE } else { LINE },
+                                if lit { "rgba(34,197,94,0.10)" } else { "transparent" },
+                            ),
+                            onclick: move |_| {
+                                let (n, s) = (name.clone(), snap_name.clone());
+                                send(&rig, move |r| async move { let _ = r.choose_preset(n, s).await; });
+                            },
+                            span { style: "font-size: 13px; font-weight: 700; color: {TEXT};", "{snap.name}" }
+                            for line in picks {
+                                span { style: "font-size: 11px; color: {MUTED};", "{line}" }
+                            }
+                            if snap.overrides > 0 {
+                                span { style: "font-size: 11px; color: {FAINT};", "+ {snap.overrides} overrides" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ── New ────────────────────────────────────────────────────────────────────
 
 /// The "+ New" form for a kind, inline above the list. `on_done` gets the
@@ -1804,6 +1991,7 @@ fn NewForm(
             Kind::Patches => patches.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
             Kind::Presets => presets.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
             Kind::Drives | Kind::All => false,
+            Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules => false,
         }
     };
     let n = name();
@@ -1847,6 +2035,7 @@ fn NewForm(
                     send(&rig, move |r| async move { let _ = r.add_preset(n, p).await; });
                 }
                 Kind::Drives | Kind::All => return,
+                Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules => return,
             }
             on_done.call(Some(done));
         }

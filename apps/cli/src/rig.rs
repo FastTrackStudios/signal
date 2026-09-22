@@ -18,10 +18,52 @@ pub enum Command {
         #[arg(long, default_value_t = 48_000)]
         sample_rate: u32,
     },
+    /// Regroup a profile into presets with snapshots, built from module
+    /// presets (amp captures grouped by family, the pedal board as a Drive
+    /// preset). Sounds are unchanged. Prints the proposal; `--write` saves.
+    Migrate {
+        profile: String,
+        #[arg(long)]
+        write: bool,
+    },
 }
 
 pub fn run(command: Command) -> ExitCode {
     match command {
+        Command::Migrate { profile, write } => match signal_guitar::compose::migrate_profile(&profile, !write) {
+            Ok(m) => {
+                println!("Module presets:");
+                for module in &m.modules {
+                    let snaps: Vec<&str> = module.snapshots.iter().map(|s| s.name.as_str()).collect();
+                    println!("  {:<6} {:<24} {}", module.module, module.name, snaps.join(" · "));
+                }
+                println!("\nPresets:");
+                for preset in &m.presets {
+                    println!("  {}", preset.name);
+                    for snap in &preset.snapshots {
+                        let picks: Vec<String> =
+                            snap.modules.iter().map(|p| format!("{}: {} / {}", p.module, p.preset, p.snapshot)).collect();
+                        println!("    {:<22} {}  (+{} overrides)", snap.name, picks.join(", "), snap.overrides.len());
+                    }
+                }
+                let left: Vec<&str> = m
+                    .profile
+                    .patches
+                    .iter()
+                    .filter(|p| p.rig_preset.is_empty())
+                    .map(|p| p.name.as_str())
+                    .collect();
+                if !left.is_empty() {
+                    println!("\nLeft as they are (a second amp, or no pool capture): {}", left.join(", "));
+                }
+                println!("{}", if write { "\nwritten." } else { "\n(dry run — pass --write to save)" });
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::FAILURE
+            }
+        },
         Command::Level {
             profile,
             dry_run,
