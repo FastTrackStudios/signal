@@ -198,6 +198,17 @@ impl Tone3000Backend {
     /// every one of those is a reason to fall back to a local session, not
     /// a reason to fail the call.
     async fn brokered_client(&self) -> Option<api::Client> {
+        let token = self.brokered_token().await?;
+        let mut builder =
+            api::Client::builder(&self.inner.cfg.publishable_key).access_token(token);
+        if let Some(base) = &self.inner.cfg.base_url {
+            builder = builder.base_url(base.clone());
+        }
+        Some(builder.build())
+    }
+
+    /// The account's linked TONE3000 token, if the brokered route is up.
+    async fn brokered_token(&self) -> Option<String> {
         let account = self.inner.account.as_ref()?;
         match account
             .linked_token(signal_account::TONE3000_PROVIDER)
@@ -208,12 +219,7 @@ impl Tone3000Backend {
                     login = linked.login.as_deref().unwrap_or_default(),
                     "tone3000: using the account's linked token"
                 );
-                let mut builder = api::Client::builder(&self.inner.cfg.publishable_key)
-                    .access_token(linked.access_token);
-                if let Some(base) = &self.inner.cfg.base_url {
-                    builder = builder.base_url(base.clone());
-                }
-                Some(builder.build())
+                Some(linked.access_token)
             }
             Err(e) => {
                 tracing::debug!(%e, "tone3000: no brokered token — falling back to a local session");
@@ -362,14 +368,21 @@ impl Tone3000Backend {
         progress.model_name.clone_from(&model.name);
         self.inner.downloads.publish(progress.clone());
 
-        // The token is read AFTER the call above, which is what refreshes it
-        // if it was stale — so this is the credential the API just accepted.
-        let tokens = self.inner.session.stored_tokens()?;
+        // The file is fetched with the same credential the API call used:
+        // the account's linked token when there is one — a machine signed in
+        // only through its account has no local session, and reading one
+        // here failed every download there with "not signed in". Otherwise
+        // the local token, read AFTER the call above, which is what
+        // refreshes it if it was stale.
+        let bearer = match self.brokered_token().await {
+            Some(token) => token,
+            None => self.inner.session.stored_tokens()?.access_token,
+        };
         let response = self
             .inner
             .http
             .get(&model.model_url)
-            .bearer_auth(&tokens.access_token)
+            .bearer_auth(&bearer)
             .send()
             .await
             .map_err(|e| SessionError::Api(e.to_string()))?;
