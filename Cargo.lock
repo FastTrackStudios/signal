@@ -8973,7 +8973,6 @@ dependencies = [
 [[package]]
 name = "neural-amp-modeler"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/neural-amp-modeler-rs?tag=v0.1.0#85bd05bba98559c0ffe4e8ef41f744419c82a699"
 dependencies = [
  "cc",
  "serde_json",

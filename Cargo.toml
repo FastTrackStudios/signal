@@ -1110,6 +1110,12 @@ opt-level = 3
 [patch."https://github.com/DioxusLabs/dioxus"]
 dioxus-native-dom = { path = "libs/vendor/dioxus-native-dom" }
 
+# Local neural-amp-modeler-rs checkout (../neural-amp-modeler-rs): the pure
+# engine's wasm speed-up (5x, bit-identical) lives there until it is tagged.
+# Machine-specific, like the processor and daw tables.
+[patch."https://github.com/FastTrackStudios/neural-amp-modeler-rs"]
+neural-amp-modeler = { path = "../neural-amp-modeler-rs" }
+
 # Local processor checkout (../processor), so the FX, their UIs and
 # fts-audio-ui can be edited alongside signal without cutting a tag — the
 # same arrangement as the daw table below. Machine-specific, like that one.
