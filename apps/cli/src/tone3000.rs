@@ -38,6 +38,9 @@ pub enum Command {
         /// `best-match`, `newest`, `oldest`, `trending`, `downloads`.
         #[arg(long, default_value = "downloads")]
         sort: String,
+        /// `nam` for captures, `ir` for cab impulse responses (`.wav`).
+        #[arg(long, default_value = "nam")]
+        format: String,
         #[arg(long, default_value_t = 25)]
         limit: u32,
     },
@@ -102,8 +105,9 @@ pub async fn run(command: Command) -> ExitCode {
             query,
             gear,
             sort,
+            format,
             limit,
-        } => search(&backend, &query.join(" "), gear, &sort, limit).await,
+        } => search(&backend, &query.join(" "), gear, &sort, &format, limit).await,
         Command::Shelf { which } => shelf(&backend, &which).await,
         Command::Show { tone } => show(&backend, &tone_id_from(&tone)).await,
         Command::Fetch { tone, model } => {
@@ -133,13 +137,14 @@ async fn search(
     text: &str,
     gear: Option<String>,
     sort: &str,
+    format: &str,
     limit: u32,
 ) -> ExitCode {
     let page = backend
         .search(ToneQuery {
             text: text.to_string(),
             gears: gear.into_iter().collect(),
-            format: "nam".to_string(),
+            format: format.to_string(),
             sort: sort_key(sort),
             page: 1,
             page_size: limit,
