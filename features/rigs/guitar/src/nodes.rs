@@ -710,7 +710,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
             // The amp slot holds the first capture; every patch that wants a
             // different one swaps it. Only "Amp L" — the pool-preset swap
             // this whole node model was built around. "Amp R" (a second amp,
-            // in series — see `profiles::PatchDef::preset2`) has no swap
+            // in parallel — see `profiles::PatchDef::preset2`) has no swap
             // variant of its own yet in this node model, so it falls through
             // to the generic leaf path below like any other block: one leaf,
             // seeded from the first patch's chain, the same as every patch

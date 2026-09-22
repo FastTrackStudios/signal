@@ -999,6 +999,24 @@ pub fn prepare_chain(
         boxes.push(Some(built.boxed));
     }
 
+    // Two amps loaded: Amp L and Amp R blend in parallel rather than one
+    // driving the other (see `amp_blend`).
+    let block_names: Vec<&str> = blocks.iter().map(|b| b.name.as_str()).collect();
+    let r_loaded = blocks
+        .iter()
+        .any(|b| b.name.eq_ignore_ascii_case(crate::amp_blend::AMP_R) && b.is_nam());
+    let roles = crate::amp_blend::roles(&block_names, r_loaded);
+    if roles.iter().any(Option::is_some) {
+        let shared = crate::amp_blend::Shared::new(MAX_BLOCK);
+        for (slot, role) in boxes.iter_mut().zip(roles) {
+            if let (Some(role), Some(inner)) = (role, slot.take()) {
+                *slot = Some(Box::new(crate::amp_blend::BlendStage::new(inner, role, shared.clone())));
+            } else if let Some(inner) = slot.take() {
+                *slot = Some(inner);
+            }
+        }
+    }
+
     Ok(PreparedChain {
         boxes,
         names,

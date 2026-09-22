@@ -703,8 +703,8 @@ pub mod rig {
         /// Point patch `patch` at preset `preset` — rebuilds and reloads the
         /// profile's chains (brief audio gap; an edit-time operation).
         fn set_patch_preset(&self, patch: u32, preset: u32);
-        /// Load a second amp (Amp R) into the patch, in series right after
-        /// the first — same slot shape as a drive pedal, independently
+        /// Load a second amp (Amp R) into the patch: Amp L → Cab L and
+        /// Amp R → Cab R run in parallel and are blended. Independently
         /// bypassable. `preset` indexes the same pool `set_patch_preset` does.
         fn set_patch_preset2(&self, patch: u32, preset: u32);
         /// Unload Amp R — the slot goes back to an empty, bypassed passthrough.

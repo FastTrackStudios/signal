@@ -82,6 +82,7 @@
 // tree renderer + the keys lane machinery — see `keys_rig::KeysRig::
 // open_headless` and the browser worklet entry (signal-keys-worklet).
 #[cfg(not(target_arch = "wasm32"))]
+pub mod amp_blend;
 pub mod api;
 pub mod audio_soundsource;
 pub mod bank;

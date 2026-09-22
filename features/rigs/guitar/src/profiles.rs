@@ -162,8 +162,9 @@ pub fn drive_presets() -> Vec<DrivePresetDef> {
 pub struct PatchDef {
     pub name: String,
     pub preset: String,
-    /// A second amp, in series right after the first (Amp R on the board,
-    /// same slot shape as a drive pedal — independently bypassable). Empty
+    /// A second amp (Amp R), in parallel with the first: Amp L → Cab L and
+    /// Amp R → Cab R both hear the guitar and are blended at the end (see
+    /// `signal_sampler::amp_blend`). Independently bypassable. Empty
     /// = the slot is unloaded; the chain still has the block (so bypass
     /// grouping and the board layout stay constant) but it has no
     /// realization, so it is skipped at install and costs nothing.
@@ -505,8 +506,8 @@ fn drive_board(drives: &[DriveSlotDef], dps: &[DrivePresetDef], patch: RigPatch)
 
 #[must_use]
 pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
-    // One amp + its cab, in series — the same shape used for "Amp L" and
-    // "Amp R" (a second amp is just another board pedal). A `.nam` that is
+    // One amp + its cab — the same shape for "Amp L" and "Amp R"; with both
+    // loaded the engine runs the two stages in parallel. A `.nam` that is
     // already a full rig (`amp_cab`) leaves `cab` empty, and an
     // empty-realization Cabinet block has no backend and is skipped at
     // install (pure passthrough) — so the second slot costs nothing while

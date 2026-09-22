@@ -3344,8 +3344,8 @@ impl Rig for GuitarRigBackend {
         self.publish_state();
     }
 
-    /// Load a second amp (Amp R) into the patch, in series after the first —
-    /// same slot shape as a drive pedal, independently bypassable. See
+    /// Load a second amp (Amp R) into the patch, blended in parallel with the
+    /// first — independently bypassable. See
     /// [`set_patch_preset`](Self::set_patch_preset).
     fn set_patch_preset2(&self, patch: u32, preset: u32) {
         let rebuilt = {
