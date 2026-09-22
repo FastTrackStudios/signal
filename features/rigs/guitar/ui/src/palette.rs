@@ -1,6 +1,6 @@
 //! **The command picker** — Cmd/Ctrl+P. Every rig action reachable from the
-//! keyboard, found by fuzzy typing: jump to a patch, song, setlist or
-//! profile; create things (with an inline argument step); toggle FX, boost,
+//! keyboard, found by fuzzy typing: jump to a patch, song, song part,
+//! setlist or profile; create things (with an inline argument step); toggle FX, boost,
 //! tuner, mute; level the patches; open the library on a kind.
 //!
 //! Matching is fuzzy the way editors' pickers are: the query's letters in
@@ -53,7 +53,7 @@ pub enum Effect {
     NewPatch,
     /// Import a preset from a `.nam` path.
     ImportPreset,
-    /// A new section on the current song.
+    /// A new song part on the current song.
     NewPart,
     // ── Local: the remote's own view state, not the rig ──
     /// Open the library on a kind.
@@ -87,7 +87,7 @@ const fn arg_prompt(e: &Effect) -> Option<&'static str> {
         Effect::NewStack => Some("Stack name…"),
         Effect::NewPatch => Some("Patch name (lands on the active stack + preset)…"),
         Effect::ImportPreset => Some("/path/to/capture.nam…"),
-        Effect::NewPart => Some("Section name — Intro, Verse 1, Chorus…"),
+        Effect::NewPart => Some("Part name — Verse 1, Rhythm, Clean lead…"),
         _ => None,
     }
 }
@@ -116,7 +116,7 @@ fn actions(
     out.push(cmd("Previous Song", "action", Effect::PrevSong));
     out.push(cmd("Reload Library (styx files)", "action", Effect::ReloadLibrary));
     out.push(cmd("New Song…", "create", Effect::NewSong));
-    out.push(cmd("New Section on This Song…", "create", Effect::NewPart));
+    out.push(cmd("New Song Part…", "create", Effect::NewPart));
     out.push(cmd("New Patch…", "create", Effect::NewPatch));
     out.push(cmd("New Stack…", "create", Effect::NewStack));
     out.push(cmd("New Setlist…", "create", Effect::NewSetlist));
@@ -163,7 +163,7 @@ fn actions(
         ));
     }
     for (i, p) in model.parts.iter().enumerate() {
-        out.push(cmd(&format!("Section: {}", p.name), "section", Effect::SelectPart(i as u32)));
+        out.push(cmd(&format!("Part: {}", p.name), "part", Effect::SelectPart(i as u32)));
     }
     for (i, s) in model.setlists.iter().enumerate() {
         out.push(cmd(

@@ -1379,10 +1379,10 @@ fn SongDetail(
                 }
             }
         }
-        Section { label: "Parts",
+        Section { label: "Song parts",
             if song.parts.is_empty() {
                 span { style: "font-size: 12px; color: {FAINT}; line-height: 1.5;",
-                    "No sections yet — add them in Setlist mode's Song Parts, with the song playing."
+                    "No song parts yet — add them in Setlist mode's sidebar, with the song playing."
                 }
             } else {
                 Chips { options: song.parts.clone(), on_pick: |_: String| {} }

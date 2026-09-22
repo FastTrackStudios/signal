@@ -215,6 +215,18 @@ pub fn PerformGrid(
         if mode == 2 {
             div { class: "flex items-center gap-2 flex-shrink-0",
                 span { class: "text-xs text-muted-foreground truncate", "{current_song} · {song_pos}" }
+                // The part that is up, and what it lays over the profile.
+                if let Some(part) = model.parts.get(model.part_index as usize) {
+                    span { class: "text-xs truncate", style: "color: #bfdbfe;",
+                        "Part: {part.name}"
+                    }
+                    if !part.patch.is_empty() {
+                        span { class: "text-xs text-muted-foreground truncate", "→ {part.patch}" }
+                    }
+                    if !part.overrides.is_empty() {
+                        span { class: "text-xs text-muted-foreground", "± {part.overrides.len()}" }
+                    }
+                }
             }
         }
 
@@ -310,37 +322,12 @@ pub fn PerformGrid(
                 "grid-template-rows: minmax(44px, 1fr) minmax(0, 7fr);"
             },
 
-            // ── Row A: setlist mode shows the song's parts; otherwise the
-            // hold layer (switches 6–10), compact ──
-            if mode == 2 && !model.parts.is_empty() {
-                for (i, part) in model.parts.iter().enumerate() {
-                    button {
-                        key: "part-{i}",
-                        class: if i == model.part_index as usize {
-                            "rounded-lg px-2 text-sm font-bold bg-accent text-accent-foreground min-h-0"
-                        } else {
-                            "rounded-lg px-2 text-sm text-muted-foreground border border-border hover:bg-accent/40 min-h-0"
-                        },
-                        onclick: {
-                            let rig = rig.clone();
-                            move |_| {
-                                if let Some(r) = rig.clone() {
-                                    spawn(async move { let _ = r.select_part(i as u32).await; });
-                                }
-                            }
-                        },
-                        div { class: "flex flex-col items-center leading-tight",
-                            span { "{part.name}" }
-                            // What the section recalls, when it has been
-                            // given a patch — so a player can see the song
-                            // move the rig, not just the highlight.
-                            if !part.patch.is_empty() {
-                                span { class: "text-[9px] opacity-60 truncate max-w-full", "{part.patch}" }
-                            }
-                        }
-                    }
-                }
-            } else if let Some(stack) = stacks.get(4).cloned() {
+            // ── Row A: the hold layer (switches 6–10), compact. The same in
+            // every mode: song parts overlay the profile rather than taking
+            // switches of their own, so Setlist mode plays the rig with the
+            // same feet as Profile mode — parts are chosen from the sidebar,
+            // the palette or the keymap. ──
+            if let Some(stack) = stacks.get(4).cloned() {
                 StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true }
             } else {
                 div { class: "relative rounded-lg border border-dashed border-border/30",

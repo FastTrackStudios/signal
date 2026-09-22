@@ -1,7 +1,7 @@
 //! **The setlist sidebar** — the left sidebar in Setlist mode.
 //!
 //! One tree, in the shape a set is played: the set, its songs in order, and
-//! under the song that is up, its sections. Nothing else is nested and
+//! under the song that is up, its **song parts**. Nothing else is nested and
 //! nothing lives in a second sidebar, so there is one place to look for
 //! "where am I in the set" and it reads top to bottom:
 //!
@@ -10,16 +10,21 @@
 //! CYA 9-24-26 ▾                  ← opens the library on setlists
 //!  1  AMAZING!        B · 145    ← the song that is up
 //!     │ Intro      → Clean
-//!     │ Verse 1    → Clean · ±2   ← the section that is up
-//!     │ + section
+//!     │ Rhythm     → Clean · ±2   ← the part that is up
+//!     │ + part
 //!  2  WASHED          B · 139
 //!  3  TAKEOVER        C · 66
 //! + Add song                     ← opens the library on songs
 //! ```
 //!
-//! A click on a song plays it; a click on a section recalls it. Editing is
-//! one step further in, so the tree stays calm while playing: a click on the
-//! section that is *already* up opens its editor (what it recalls, rename,
+//! A part is not a verse number: it is whatever the player calls a moment of
+//! the song — "Verse 1", or "Rhythm", or "Clean lead" — and it **overlays
+//! the profile**: it picks another patch from a stack and/or changes a few
+//! things on top. The footswitches stay the profile's.
+//!
+//! A click on a song plays it; a click on a part recalls it. Editing is one
+//! step further in, so the tree stays calm while playing: a click on the
+//! part that is *already* up opens its editor (what it recalls, rename,
 //! move, remove), and the pencil on the current song edits its key and tempo
 //! for this set and its place in it.
 //!
@@ -58,7 +63,7 @@ where
 pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
 
-    // The patch list, for telling a section what to recall — re-read when
+    // The patch list, for telling a part what to recall — re-read when
     // the rig's state moves.
     let mut rev = use_signal(|| model.revision);
     if *rev.peek() != model.revision {
@@ -79,7 +84,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
     });
     let patch_list: Vec<PatchInfo> = patches.read().clone().unwrap_or_default();
 
-    // One editor open at a time: the current song's entry, or a section.
+    // One editor open at a time: the current song's entry, or a part.
     let mut editing_song = use_signal(|| false);
     let mut editing_part = use_signal(|| None::<usize>);
     let mut adding_part = use_signal(|| false);
@@ -122,7 +127,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                 }
             }
 
-            // ── Songs, and the sections of the one that is up ──
+            // ── Songs, and the parts of the one that is up ──
             div { style: "flex: 1 1 0; min-height: 0; overflow-y: scroll; padding: 8px;",
                 if model.songs.is_empty() {
                     div { style: "padding: 10px 6px; font-size: 12px; color: {FAINT}; line-height: 1.5;",
@@ -197,7 +202,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                         on_done: move |()| editing_song.set(false),
                                     }
                                 }
-                                // Its sections — only under the song that is up.
+                                // Its parts — only under the song that is up.
                                 if is_current {
                                     div { style: "display: flex; flex-direction: column; gap: 2px; margin: 4px 0 6px 20px; \
                                                   padding-left: 8px; border-left: 1px solid {LINE};",
@@ -217,9 +222,9 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                             if part_on { PART_BG } else { "transparent" },
                                                             if part_on { TEXT } else { MUTED },
                                                         ),
-                                                        title: if part_on { "Click again to edit this section" } else { "Recall this section" },
+                                                        title: if part_on { "Click again to edit this part" } else { "Recall this part" },
                                                         // First click recalls it; a click on the
-                                                        // section already up opens its editor.
+                                                        // part already up opens its editor.
                                                         onclick: move |_| {
                                                             if part_on {
                                                                 editing_part.set(if open { None } else { Some(pi) });
@@ -254,6 +259,10 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                             name: part.name.clone(),
                                                             patch: part.patch.clone(),
                                                             patches: patch_list.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
+                                                            labels: patch_list
+                                                                .iter()
+                                                                .map(|p| if p.stack.is_empty() { p.name.clone() } else { format!("{} · {}", p.stack, p.name) })
+                                                                .collect::<Vec<_>>(),
                                                             on_done: move |()| editing_part.set(None),
                                                         }
                                                     }
@@ -262,7 +271,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                         }
                                         if model.parts.is_empty() && !adding_part() {
                                             span { style: "padding: 4px 8px; font-size: 11px; color: {FAINT}; line-height: 1.5;",
-                                                "No sections yet."
+                                                "No parts yet — name the moments of the song: Verse, Rhythm, Clean lead…"
                                             }
                                         }
                                         if adding_part() {
@@ -275,7 +284,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                     adding_part.set(true);
                                                     editing_part.set(None);
                                                 },
-                                                "+ section"
+                                                "+ part"
                                             }
                                         }
                                     }
@@ -456,7 +465,8 @@ fn SongEntryEditor(
     }
 }
 
-/// A section's editor: what it recalls, its name, its place, removing it.
+/// A part's editor: which patch it lays over the profile, its name, its
+/// place, removing it.
 #[component]
 fn PartEditor(
     index: usize,
@@ -464,6 +474,9 @@ fn PartEditor(
     name: String,
     patch: String,
     patches: Vec<String>,
+    /// `patches` as the picker shows them — "Stack · Patch", so a part reads
+    /// as "this stack's other patch".
+    labels: Vec<String>,
     on_done: EventHandler<()>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -479,9 +492,9 @@ fn PartEditor(
             span { style: "font-size: 10px; color: {FAINT};", "Recalls" }
             div { style: "display: flex; gap: 6px; align-items: center;",
                 Picker {
-                    options: patches.clone(),
+                    options: labels.clone(),
                     selected,
-                    placeholder: "— stays on the patch —".to_string(),
+                    placeholder: "— stays on the profile's patch —".to_string(),
                     size: PickerSize::Normal,
                     width: "100%".to_string(),
                     on_select: {
@@ -543,7 +556,7 @@ fn PartEditor(
                 div { style: "flex: 1;" }
                 Tool {
                     icon: fts_chrome::Icon::Close,
-                    title: "Remove this section",
+                    title: "Remove this part",
                     danger: true,
                     onclick: {
                         let (rig, part) = (rig.clone(), name.clone());
@@ -559,7 +572,7 @@ fn PartEditor(
     }
 }
 
-/// Naming a new section on the current song.
+/// Naming a new part on the current song.
 #[component]
 fn NewPart(on_done: EventHandler<()>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -568,10 +581,10 @@ fn NewPart(on_done: EventHandler<()>) -> Element {
         div { style: "display: flex; gap: 6px; align-items: center; padding: 2px 0;",
             Field {
                 value: name(),
-                placeholder: "Intro, Verse 1, Chorus…",
+                placeholder: "Verse 1, Rhythm, Clean lead…",
                 autofocus: true,
                 on_input: move |v: String| name.set(v),
-                // Enter adds and stays open for the next one: sections are
+                // Enter adds and stays open for the next one: parts are
                 // named in a run, top to bottom.
                 on_enter: {
                     let rig = rig.clone();
