@@ -28,10 +28,60 @@ pub enum Command {
     },
     /// List the module presets as the rig loads them (modules.styx).
     Modules,
+    /// Level every preset snapshot to the same loudness (writes each
+    /// snapshot's `level_db` into presets.styx). The rig picks it up on the
+    /// next change — no restart.
+    LevelPresets {
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long, default_value_t = 48_000)]
+        sample_rate: u32,
+        #[arg(long, default_value_t = 8)]
+        threads: usize,
+    },
 }
 
 pub fn run(command: Command) -> ExitCode {
     match command {
+        Command::LevelPresets { dry_run, sample_rate, threads } => {
+            let cal = signal_guitar::levelling::apply_nam_calibration();
+            println!("NAM calibration: {}", cal.map_or("off".to_string(), |c| format!("{c} dBu interface")));
+            let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
+            let mut comp = signal_guitar::library::RigLibrary::load_compositions();
+            if comp.presets.is_empty() {
+                eprintln!("no presets loaded");
+                return ExitCode::FAILURE;
+            }
+            let started = std::time::Instant::now();
+            let results =
+                signal_guitar::compose::level_presets(&mut comp, &lib.profile, &lib.drive_presets, sample_rate, threads);
+            let mut failed = 0;
+            let mut last = String::new();
+            for r in &results {
+                if r.preset != last {
+                    println!("{}", r.preset);
+                    last.clone_from(&r.preset);
+                }
+                match r.lufs {
+                    Some(l) => println!("  {:<20} {l:>7.1} LUFS  →  {:+.1} dB", r.snapshot, r.level_db),
+                    None => {
+                        failed += 1;
+                        println!("  {:<20} did not render — left at {:+.1} dB", r.snapshot, r.level_db);
+                    }
+                }
+            }
+            if !dry_run {
+                signal_guitar::library::RigLibrary::save_compositions(&comp);
+            }
+            println!(
+                "\n{} snapshots in {:.0}s, {} failed{}",
+                results.len(),
+                started.elapsed().as_secs_f64(),
+                failed,
+                if dry_run { " (dry run — nothing written)" } else { "" }
+            );
+            if failed > 0 { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+        }
         Command::Modules => {
             let comp = signal_guitar::library::RigLibrary::load_compositions();
             if comp.modules.is_empty() {

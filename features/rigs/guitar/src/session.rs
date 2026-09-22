@@ -30,7 +30,7 @@ use crate::profiles::{DriveImport, DrivePresetDef, ProfileDef, SetlistDef, SongD
 
 /// Rig whose audio prefs the settings service reads/writes (persisted to
 /// `<config>/signal/rigs/guitar-rig.styx` by `RigManager`).
-const AUDIO_RIG_NAME: &str = "Guitar Rig";
+pub(crate) const AUDIO_RIG_NAME: &str = "Guitar Rig";
 
 /// The boost pedal's cycle: first press engages +1 dB, then each press
 /// advances — +2, +3, a −1 dB cut, and back around to +1.
@@ -672,7 +672,8 @@ impl GuitarRigBackend {
     /// through their drive preset; the amp resolves through the active
     /// patch's pool preset.
     fn nam_path_for_block(&self, block_name: &str) -> Option<String> {
-        let def = self.profile_def.lock_ok();
+        let flat = self.flat_def();
+        let def = &flat;
         if let Some(slot) = def
             .drives
             .iter()
@@ -1283,6 +1284,12 @@ impl GuitarRigBackend {
         profile_from_library(&def, &dps)
     }
 
+    /// The profile with every composed patch resolved — what actually plays.
+    fn flat_def(&self) -> crate::profiles::ProfileDef {
+        let def = self.profile_def.lock_ok().clone();
+        crate::compose::flatten(&def, &RigLibrary::load_compositions())
+    }
+
     /// The patch playing now: the rig's active one, or design mode's.
     fn live_patch_name(&self) -> Option<String> {
         let live = self
@@ -1835,6 +1842,9 @@ impl GuitarRigBackend {
         }
 
         let mut mgr = RigManager::load(AUDIO_RIG_NAME);
+        let cal = mgr.audio.nam_calibration();
+        signal_sampler::nam::set_interface_calibration_dbu(cal);
+        tracing::info!(nam.calibration_dbu = ?cal, "rig open: NAM level calibration");
         // Monitor + play through a single duplex interface.
         if mgr.audio.output_device.is_empty() && !mgr.audio.input_device.is_empty() {
             mgr.audio.output_device = mgr.audio.input_device.clone();
@@ -1909,6 +1919,7 @@ impl GuitarRigBackend {
     /// block's initial bypass to the engine (activation re-enables all slots,
     /// so the off-by-default blocks must be re-bypassed here).
     fn resync_blocks(&self) {
+        let comp = RigLibrary::load_compositions();
         // No engine to mirror — build the chain the definition describes.
         if self.rig.lock_ok().is_none() && crate::library::rig_is_design() {
             *self.blocks.lock_ok() = self.design_blocks();
@@ -2014,6 +2025,32 @@ impl GuitarRigBackend {
                                         )
                                     })
                                     .unwrap_or_default()
+                            } else if let Some((label, snaps, idx, has_r)) = (block.block_type == BlockType::Amp)
+                                .then(|| {
+                                    let own = def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&patch.name))?;
+                                    let pick = crate::compose::module_picks(&comp, own)
+                                        .into_iter()
+                                        .find(|m| m.module.eq_ignore_ascii_case("Amp"))?;
+                                    let module = comp.module("Amp", &pick.preset)?;
+                                    let snaps: Vec<String> = module.snapshots.iter().map(|s| s.name.clone()).collect();
+                                    let idx = snaps
+                                        .iter()
+                                        .position(|s| s.eq_ignore_ascii_case(&pick.snapshot))
+                                        .unwrap_or(0);
+                                    let has_r = module.snapshots.get(idx).is_some_and(|s| !s.nam2.is_empty());
+                                    let label = format!("{} · {}", module.name, snaps.get(idx).cloned().unwrap_or_default());
+                                    Some((label, snaps, idx as u32, has_r))
+                                })
+                                .flatten()
+                            {
+                                // A composed patch's amp is its Amp module
+                                // pick: name it that way, and let the chunk
+                                // step that amp's snapshots.
+                                if name.eq_ignore_ascii_case("Amp R") && !has_r {
+                                    <(String, Vec<String>, u32)>::default()
+                                } else {
+                                    (label, snaps, idx)
+                                }
                             } else if block.block_type == BlockType::Amp {
                                 // "Amp L" names the patch's first preset;
                                 // "Amp R" its second — a second amp is just
@@ -3412,6 +3449,19 @@ impl Rig for GuitarRigBackend {
                     .iter()
                     .position(|p| p.name.eq_ignore_ascii_case(&active))
             };
+            // A composed patch: the chunk's options are its Amp module's
+            // snapshots, so choosing one is a module pick.
+            let comp = RigLibrary::load_compositions();
+            if let Some(pick) = self.live_pick(&comp, "Amp") {
+                if let Some(snap) = comp
+                    .module("Amp", &pick.preset)
+                    .and_then(|m| m.snapshots.get(option as usize))
+                    .map(|s| s.name.clone())
+                {
+                    self.choose_module("Amp".into(), pick.preset, snap);
+                    return;
+                }
+            }
             if let Some(patch) = patch {
                 if block_name.eq_ignore_ascii_case("Amp R") {
                     self.set_patch_preset2(patch as u32, option);
@@ -4423,6 +4473,9 @@ impl Rig for GuitarRigBackend {
         self.edit_live_patch(move |patch| {
             patch.rig_preset = name;
             patch.snapshot = snapshot;
+            // A whole preset replaces what the patch had picked module by
+            // module — otherwise an old Amp pick keeps playing under it.
+            patch.modules.clear();
         });
     }
 

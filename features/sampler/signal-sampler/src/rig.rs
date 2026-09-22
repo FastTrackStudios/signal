@@ -1043,6 +1043,11 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
             let mut nam = NamProcessor::load(&block.nam, sample_rate as f64, MAX_BLOCK)?;
             nam.input_gain_db = block.input_trim_db;
             nam.output_gain_db = block.output_trim_db;
+            if let Some(iface) = crate::nam::interface_calibration_dbu() {
+                let (cin, cout) = crate::nam::calibration_for(nam.input_level(), nam.output_level(), iface);
+                nam.calibration_in_db = cin;
+                nam.calibration_out_db = cout;
+            }
             if let Some(exp) = nam.expected_sample_rate() {
                 if (exp - sample_rate as f64).abs() > 1.0 {
                     tracing::warn!(
@@ -1425,6 +1430,7 @@ impl GuitarRig {
             phones_mix_in_l: 0,
             phones_mix_in_r: 0,
             allow_builtin_mic: false,
+            ..RigAudioPrefs::default()
         })
     }
 
@@ -1502,6 +1508,8 @@ impl GuitarRig {
             phones_mix_in_l: 0,
             phones_mix_in_r: 0,
             allow_builtin_mic: prefs.allow_builtin_mic,
+            input_calibration_dbu: prefs.input_calibration_dbu,
+            nam_calibration_off: prefs.nam_calibration_off,
         };
 
         Ok(Self {

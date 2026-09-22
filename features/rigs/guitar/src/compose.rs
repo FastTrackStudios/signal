@@ -67,6 +67,12 @@ pub struct PresetSnapshotDef {
     pub modules: Vec<ModuleChoiceDef>,
     #[facet(default)]
     pub overrides: Vec<OverrideDef>,
+    /// The loudness calibration, dB — what [`level_presets`] measured this
+    /// snapshot needs to sit at the target. A patch playing it takes this as
+    /// its calibration (its own `trim_db` stays on top), so every preset and
+    /// every snapshot of one arrives at the same loudness.
+    #[facet(default)]
+    pub level_db: f32,
 }
 
 /// A preset: a composition of module presets, with snapshots.
@@ -220,6 +226,7 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
             .and_then(|p| snapshot(&p.snapshots, &patch.snapshot, |s| &s.name))
         {
             overrides.extend(snap.overrides.iter().cloned());
+            patch.level_db = snap.level_db;
         }
         overrides.append(&mut patch.overrides);
         patch.overrides = overrides;
@@ -307,11 +314,13 @@ mod tests {
                         name: "Clean".into(),
                         modules: vec![choice("Amp", "Deluxe", "Clean"), choice("Time", "Plate", "Short")],
                         overrides: vec![OverrideDef::set("Time", "VERB 1", "mix", 0.3)],
+                        level_db: 0.0,
                     },
                     PresetSnapshotDef {
                         name: "Edge".into(),
                         modules: vec![choice("Amp", "Deluxe", "Edge")],
                         overrides: Vec::new(),
+                        level_db: 0.0,
                     },
                 ],
             }],
@@ -502,6 +511,7 @@ pub fn propose(def: &ProfileDef) -> Migration {
             name: patch.name.clone(),
             modules: std::mem::take(&mut picks),
             overrides: std::mem::take(&mut patch.overrides),
+            level_db: 0.0,
         });
         patch.rig_preset = preset_name;
         patch.snapshot = patch.name.clone();
@@ -580,4 +590,92 @@ pub fn migrate_profile(name: &str, dry_run: bool) -> Result<Migration, String> {
         crate::library::RigLibrary::save_profile(&m.profile);
     }
     Ok(m)
+}
+
+/// One preset snapshot's measurement.
+#[derive(Clone, Debug)]
+pub struct SnapshotLevel {
+    pub preset: String,
+    pub snapshot: String,
+    pub lufs: Option<f32>,
+    pub level_db: f32,
+}
+
+/// Level every snapshot of every preset to the same loudness: build each
+/// one's full chain on `base` (a profile, for its board), render the DI
+/// reference through it, and set `level_db` to the distance from the
+/// target. Measured with no calibration of its own, so a second pass
+/// repeats the first. `threads` renders run at once (they are offline and
+/// slow; the cache is shared).
+#[must_use]
+pub fn level_presets(
+    comp: &mut Compositions,
+    base: &ProfileDef,
+    drives: &[crate::profiles::DrivePresetDef],
+    sample_rate: u32,
+    threads: usize,
+) -> Vec<SnapshotLevel> {
+    let jobs: Vec<(usize, usize)> = comp
+        .presets
+        .iter()
+        .enumerate()
+        .flat_map(|(p, preset)| (0..preset.snapshots.len()).map(move |s| (p, s)))
+        .collect();
+    let measure = |(p, s): (usize, usize)| -> Option<f32> {
+        let preset = &comp.presets[p];
+        let mut def = base.clone();
+        let mut patch = def.patches.first()?.clone();
+        patch.name = "level".into();
+        patch.rig_preset = preset.name.clone();
+        patch.snapshot = preset.snapshots[s].name.clone();
+        patch.modules.clear();
+        patch.overrides.clear();
+        patch.drives.clear();
+        patch.preset2.clear();
+        patch.level_db = 0.0;
+        patch.trim_db = 0.0;
+        patch.boost_db = 0.0;
+        def.patches = vec![patch];
+        let mut calm = comp.clone();
+        calm.presets[p].snapshots[s].level_db = 0.0;
+        let flat = flatten(&def, &calm);
+        let built = crate::profiles::build_profile(&flat, drives);
+        let blocks: Vec<_> = built.patches.first()?.chain.iter().filter(|b| b.has_backend()).cloned().collect();
+        signal_sampler::patch_level::level_of(&blocks, sample_rate)
+            .filter(|l| l.is_finite() && *l > -70.0)
+            .map(|l| l as f32)
+    };
+    let results = std::sync::Mutex::new(vec![None; jobs.len()]);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|scope| {
+        for _ in 0..threads.max(1) {
+            scope.spawn(|| loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some(&job) = jobs.get(i) else { break };
+                let lufs = measure(job);
+                results.lock().unwrap_or_else(std::sync::PoisonError::into_inner)[i] = lufs;
+            });
+        }
+    });
+    let results = results.into_inner().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let target = signal_sampler::patch_level::TARGET_LUFS as f32;
+    jobs.iter()
+        .zip(results)
+        .map(|(&(p, s), lufs)| {
+            let preset = comp.presets[p].name.clone();
+            let snap = &mut comp.presets[p].snapshots[s];
+            if let Some(l) = lufs {
+                // Wider than a patch's ±24: a library of amps spans clean
+                // captures ~40 dB under a dimed amp-only one through an
+                // un-normalised IR, and a clamp would leave them unlevelled.
+                snap.level_db = (target - l).clamp(-40.0, 40.0);
+            }
+            SnapshotLevel {
+                preset,
+                snapshot: snap.name.clone(),
+                lufs,
+                level_db: snap.level_db,
+            }
+        })
+        .collect()
 }

@@ -271,7 +271,12 @@ pub fn trim_for_target(blocks: &[RigBlock], sample_rate: u32, target_lufs: f64) 
 #[must_use]
 pub fn level_of(blocks: &[RigBlock], sample_rate: u32) -> Option<f64> {
     let di = DiReference::load_or_synthetic(f64::from(sample_rate));
-    let hash = chain_hash(blocks);
+    // Calibration changes what a chain sounds like without changing the
+    // chain, so it is part of what was measured.
+    let hash = match crate::nam::interface_calibration_dbu() {
+        Some(cal) => format!("{}-cal{cal}", chain_hash(blocks)),
+        None => chain_hash(blocks),
+    };
     {
         let cache = cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(hit) = cache.lookup(&hash, &di.id, sample_rate) {

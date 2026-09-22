@@ -37,6 +37,15 @@ pub struct NamProcessor {
     pub input_gain_db: f32,
     /// User trim after NAM. Default 0 dB.
     pub output_gain_db: f32,
+    /// Level calibration before the model (dB): the interface's full-scale
+    /// dBu minus the level the capture declares it was fed at, so the model
+    /// sees the analog level it was trained on. Separate from the trims —
+    /// the drive knob rewrites those live and must not undo this.
+    pub calibration_in_db: f32,
+    /// Level calibration after the model (dB): the capture's declared output
+    /// level minus the interface's, so every capture lands in one level
+    /// domain. See [`calibration_for`].
+    pub calibration_out_db: f32,
     /// Sample rate the model was prepared at.
     pub sample_rate: f64,
     /// Activation flag for the [`PluginInstance`] adapter. `load` leaves the
@@ -73,6 +82,8 @@ impl NamProcessor {
             display_name,
             input_gain_db: 0.0,
             output_gain_db: 0.0,
+            calibration_in_db: 0.0,
+            calibration_out_db: 0.0,
             sample_rate,
             prepared: true,
         })
@@ -150,8 +161,8 @@ impl NamProcessor {
             self.in_mono.resize(frames, 0.0);
             self.out_mono.resize(frames, 0.0);
         }
-        let gin = db_to_lin(self.input_gain_db) as f64;
-        let gout = db_to_lin(self.output_gain_db) as f64;
+        let gin = db_to_lin(self.input_gain_db + self.calibration_in_db) as f64;
+        let gout = db_to_lin(self.output_gain_db + self.calibration_out_db) as f64;
         // De-interleave + sum to mono (× input gain). Halve the sum so
         // a centered signal lands at unity instead of doubling.
         for i in 0..frames {
@@ -256,8 +267,8 @@ impl PluginInstance for NamProcessor {
             self.in_mono.resize(frames, 0.0);
             self.out_mono.resize(frames, 0.0);
         }
-        let gin = db_to_lin(self.input_gain_db) as f64;
-        let gout = db_to_lin(self.output_gain_db) as f64;
+        let gin = db_to_lin(self.input_gain_db + self.calibration_in_db) as f64;
+        let gout = db_to_lin(self.output_gain_db + self.calibration_out_db) as f64;
         // Sum L+R to mono (× input gain). Halve so a centered signal lands at
         // unity instead of doubling — matches `process_interleaved`.
         for i in 0..frames {
@@ -351,5 +362,51 @@ mod tests {
         assert!(!a.is_prepared());
         a.prepare(48_000.0, 128).unwrap();
         assert!(a.is_prepared());
+    }
+}
+
+/// The interface's input calibration, dBu at 0 dBFS, as f32 bits; NaN = off.
+static INTERFACE_CAL: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x7fc0_0000);
+
+/// Turn NAM level calibration on at `dbu` (the interface's full-scale input
+/// level — the MiniFuse instrument input is +11.5 dBu at minimum gain), or
+/// off with `None`. Chains built afterwards are calibrated.
+pub fn set_interface_calibration_dbu(dbu: Option<f32>) {
+    let bits = dbu.filter(|d| d.is_finite()).map_or(0x7fc0_0000, f32::to_bits);
+    INTERFACE_CAL.store(bits, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The interface calibration, if NAM calibration is on.
+#[must_use]
+pub fn interface_calibration_dbu() -> Option<f32> {
+    let v = f32::from_bits(INTERFACE_CAL.load(std::sync::atomic::Ordering::Relaxed));
+    v.is_finite().then_some(v)
+}
+
+/// `(input dB, output dB)` calibration for a capture declaring
+/// `input_level`/`output_level` (dBu at 0 dBFS), against an interface whose
+/// full scale is `interface` dBu. Keeps the signal in the interface's level
+/// domain across every model: a model is fed what it was trained on, and
+/// hands back what it would have put out. An undeclared level is 0 dB.
+#[must_use]
+pub fn calibration_for(input_level: Option<f64>, output_level: Option<f64>, interface: f32) -> (f32, f32) {
+    let i = f64::from(interface);
+    (
+        input_level.map_or(0.0, |l| (i - l) as f32),
+        output_level.map_or(0.0, |l| (l - i) as f32),
+    )
+}
+
+#[cfg(test)]
+mod calibration_tests {
+    use super::calibration_for;
+
+    /// A capture trained at +12 dBu in and +18 dBu out, on a +11.5 dBu
+    /// interface: fed 0.5 dB less, handed back 6.5 dB more.
+    #[test]
+    fn calibration_is_the_distance_between_level_domains() {
+        let (i, o) = calibration_for(Some(12.0), Some(18.0), 11.5);
+        assert!((i + 0.5).abs() < 1e-6 && (o - 6.5).abs() < 1e-6);
+        assert_eq!(calibration_for(None, None, 11.5), (0.0, 0.0));
     }
 }

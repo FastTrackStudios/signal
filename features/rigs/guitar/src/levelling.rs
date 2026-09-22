@@ -6,6 +6,17 @@
 //! patch before the app is ever opened.
 
 use crate::library::RigLibrary;
+
+/// Apply the rig's NAM level calibration (from its audio prefs) to every
+/// chain built from now on — the live rig and offline levelling alike, so
+/// what is measured is what is heard.
+pub fn apply_nam_calibration() -> Option<f32> {
+    let cal = signal_sampler::RigManager::load(crate::session::AUDIO_RIG_NAME)
+        .audio
+        .nam_calibration();
+    signal_sampler::nam::set_interface_calibration_dbu(cal);
+    cal
+}
 use crate::nodes::profile_from_library;
 
 /// One patch's measurement.
@@ -30,6 +41,7 @@ pub struct Levelled {
 ///
 /// When no profile has that name.
 pub fn level_profile(name: Option<&str>, sample_rate: u32, dry_run: bool) -> Result<Vec<Levelled>, String> {
+    apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
     let mut def = match name {
         None => lib.profile.clone(),
