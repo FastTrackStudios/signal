@@ -29,9 +29,11 @@ use signal_guitar_proto::{
     SongEntry,
 };
 
-/// What the picker is browsing.
+/// What the picker is browsing — the tag on the search. [`Kind::All`] is no
+/// tag: the search runs over everything.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
+    All,
     Setlists,
     Songs,
     Profiles,
@@ -50,8 +52,20 @@ impl Kind {
         Self::Drives,
     ];
 
-    const fn label(self) -> &'static str {
+    /// The rail: no tag, then every kind.
+    const RAIL: [Self; 7] = [
+        Self::All,
+        Self::Setlists,
+        Self::Songs,
+        Self::Profiles,
+        Self::Patches,
+        Self::Presets,
+        Self::Drives,
+    ];
+
+    pub(crate) const fn label(self) -> &'static str {
         match self {
+            Self::All => "All",
             Self::Setlists => "Setlists",
             Self::Songs => "Songs",
             Self::Profiles => "Profiles",
@@ -62,8 +76,9 @@ impl Kind {
     }
 
     /// The singular, for "New song".
-    const fn one(self) -> &'static str {
+    pub(crate) const fn one(self) -> &'static str {
         match self {
+            Self::All => "item",
             Self::Setlists => "setlist",
             Self::Songs => "song",
             Self::Profiles => "profile",
@@ -73,8 +88,9 @@ impl Kind {
         }
     }
 
-    const fn icon(self) -> fts_chrome::Icon {
+    pub(crate) const fn icon(self) -> fts_chrome::Icon {
         match self {
+            Self::All => fts_chrome::Icon::Browser,
             Self::Setlists => fts_chrome::Icon::Setlist,
             Self::Songs => fts_chrome::Icon::Note,
             Self::Profiles => fts_chrome::Icon::Profile,
@@ -105,6 +121,8 @@ impl Kind {
 /// One row of the list — the same shape for every kind.
 #[derive(Clone, PartialEq)]
 struct Row {
+    /// What it is — a row of the untagged list can be any kind.
+    kind: Kind,
     name: String,
     /// Position in the source list, for the index-addressed rig calls.
     idx: usize,
@@ -121,11 +139,16 @@ fn rows(
     model: &PerformanceModel,
 ) -> Vec<Row> {
     match kind {
+        Kind::All => Kind::ALL
+            .iter()
+            .flat_map(|&k| rows(k, lib, patches, presets, model))
+            .collect(),
         Kind::Setlists => lib
             .setlists
             .iter()
             .enumerate()
             .map(|(idx, s)| Row {
+                kind,
                 name: s.name.clone(),
                 idx,
                 sub: count(s.songs.len(), "song"),
@@ -137,6 +160,7 @@ fn rows(
             .iter()
             .enumerate()
             .map(|(idx, s)| Row {
+                kind,
                 name: s.name.clone(),
                 idx,
                 sub: if s.parts.is_empty() {
@@ -155,6 +179,7 @@ fn rows(
             .iter()
             .enumerate()
             .map(|(idx, p)| Row {
+                kind,
                 name: p.name.clone(),
                 idx,
                 sub: format!("{} · {}", count(p.stacks.len(), "stack"), count(p.patches as usize, "patch")),
@@ -165,6 +190,7 @@ fn rows(
             .iter()
             .enumerate()
             .map(|(idx, p)| Row {
+                kind,
                 name: p.name.clone(),
                 idx,
                 sub: if p.stack.is_empty() {
@@ -179,6 +205,7 @@ fn rows(
             .iter()
             .enumerate()
             .map(|(idx, p)| Row {
+                kind,
                 name: p.name.clone(),
                 idx,
                 sub: {
@@ -193,6 +220,7 @@ fn rows(
             .iter()
             .enumerate()
             .map(|(idx, d)| Row {
+                kind,
                 name: d.name.clone(),
                 idx,
                 sub: if d.slots.is_empty() {
@@ -236,10 +264,10 @@ where
 /// Load what a row names: play the set, the song, the profile, the patch,
 /// the preset. Returns whether there was anything to load (a drive, or a song
 /// outside the active set, is only browsed).
-fn activate(rig: &Option<RigClient>, kind: Kind, row: &Row, model: &PerformanceModel) -> bool {
+fn activate(rig: &Option<RigClient>, row: &Row, model: &PerformanceModel) -> bool {
     let idx = row.idx as u32;
     let name = row.name.clone();
-    match kind {
+    match row.kind {
         Kind::Setlists => send(rig, move |r| async move {
             let _ = r.select_setlist(idx).await;
         }),
@@ -260,7 +288,7 @@ fn activate(rig: &Option<RigClient>, kind: Kind, row: &Row, model: &PerformanceM
         Kind::Presets => send(rig, move |r| async move {
             let _ = r.play_preset(idx).await;
         }),
-        Kind::Drives => return false,
+        Kind::Drives | Kind::All => return false,
     }
     true
 }
@@ -287,9 +315,20 @@ const DANGER: &str = "#f87171";
 pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut query = use_signal(String::new);
-    // The focused row, by name: names are stable across the re-fetch that
-    // every edit triggers, indices are not.
-    let mut focus = use_signal(|| None::<String>);
+    // The focused row, by kind and name: names are stable across the
+    // re-fetch that every edit triggers, indices are not, and the untagged
+    // list can hold a patch and a preset of the same name.
+    let mut focus = use_signal(|| None::<(Kind, String)>);
+    // The search field, so a click elsewhere in the picker can hand the
+    // keyboard straight back to it.
+    let mut search = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    let refocus = move || {
+        if let Some(el) = search() {
+            spawn(async move {
+                let _ = el.set_focus(true).await;
+            });
+        }
+    };
     let mut creating = use_signal(|| false);
 
     // Everything the picker lists, re-read whenever the rig's state moves.
@@ -325,7 +364,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
         data.read().clone().unwrap_or_default();
 
     let q = query();
-    let per_kind: Vec<(Kind, Vec<Row>)> = Kind::ALL
+    let per_kind: Vec<(Kind, Vec<Row>)> = Kind::RAIL
         .iter()
         .map(|&k| {
             let all = rows(k, &lib, &patches, &presets, &model);
@@ -339,13 +378,14 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
         .unwrap_or_default();
     // The focused row, else the active one, else the first — so the detail
     // pane always shows something when the list does.
+    let is = |r: &Row, f: &(Kind, String)| r.kind == f.0 && r.name == f.1;
     let focused: Option<Row> = focus()
-        .and_then(|f| list.iter().find(|r| r.name == f).cloned())
+        .and_then(|f| list.iter().find(|r| is(r, &f)).cloned())
         .or_else(|| list.iter().find(|r| r.active).cloned())
         .or_else(|| list.first().cloned());
     let cursor = focused
         .as_ref()
-        .and_then(|f| list.iter().position(|r| r.name == f.name));
+        .and_then(|f| list.iter().position(|r| r.kind == f.kind && r.name == f.name));
 
     let mut close = move || {
         open.set(None);
@@ -357,7 +397,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
         open.set(Some(k));
         query.set(String::new());
         creating.set(false);
-        focus.set(Some(name));
+        focus.set(Some((k, name)));
     };
 
     let context = format!(
@@ -398,12 +438,12 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                             } else {
                                 at.saturating_sub(1)
                             };
-                            focus.set(Some(list[next].name.clone()));
+                            focus.set(Some((list[next].kind, list[next].name.clone())));
                         }
                         Key::Enter => {
                             if let Some(row) = cursor.and_then(|c| list.get(c)) {
                                 e.prevent_default();
-                                if activate(&rig, kind, row, &model) {
+                                if activate(&rig, row, &model) {
                                     close();
                                 }
                             }
@@ -425,17 +465,54 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                 align-items: center; gap: 8px; padding: 0 10px; height: 34px; \
                                 border-radius: 9px; background: {PANE}; border: 1px solid {LINE};",
                         SearchGlyph {}
+                        // The tag the rail set, as a chip in the field.
+                        if kind != Kind::All {
+                            button {
+                                style: "display: flex; align-items: center; gap: 5px; flex-shrink: 0; \
+                                        padding: 2px 6px 2px 8px; border-radius: 6px; border: none; \
+                                        cursor: pointer; background: {FOCUS_BG}; color: {FOCUS_FG}; \
+                                        font-size: 11px; font-weight: 600;",
+                                title: "Search everything (Backspace in an empty field)",
+                                onmousedown: move |e: MouseEvent| e.prevent_default(),
+                                onclick: move |_| {
+                                    open.set(Some(Kind::All));
+                                    focus.set(None);
+                                    creating.set(false);
+                                    refocus();
+                                },
+                                fts_chrome::Glyph { icon: kind.icon(), size: 11 }
+                                "{kind.label()}"
+                                fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 10 }
+                            }
+                        }
                         input {
                             style: "flex: 1; min-width: 0; background: transparent; border: none; \
                                     outline: none; color: {TEXT}; font-size: 13px;",
-                            placeholder: "Search setlists, songs, profiles, patches, presets…",
+                            placeholder: if kind == Kind::All {
+                                "Search setlists, songs, profiles, patches, presets…".to_string()
+                            } else {
+                                format!("Search {}…", kind.label().to_lowercase())
+                            },
                             value: "{q}",
                             // `autofocus` is ignored on a node inserted after
                             // load; take focus when mounted instead.
                             onmounted: move |e| {
+                                let el = e.data();
+                                search.set(Some(el.clone()));
                                 spawn(async move {
-                                    let _ = e.data().set_focus(true).await;
+                                    let _ = el.set_focus(true).await;
                                 });
+                            },
+                            // Backspace past the start of the text takes the
+                            // tag off, as in a token field.
+                            onkeydown: move |e: KeyboardEvent| {
+                                if e.key() == Key::Backspace
+                                    && query.peek().is_empty()
+                                    && kind != Kind::All
+                                {
+                                    open.set(Some(Kind::All));
+                                    focus.set(None);
+                                }
                             },
                             oninput: move |e| {
                                 query.set(e.value());
@@ -486,10 +563,16 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                     if k == kind { FOCUS_BG } else { "transparent" },
                                     if k == kind { FOCUS_FG } else if hits == 0 { FAINT } else { MUTED },
                                 ),
+                                // A tag on the search, not a place to go: the
+                                // field keeps the keyboard, so typing carries on.
+                                // Pointer-down moves focus to the nearest focusable element
+                                // (this button); cancelling it keeps the search field's.
+                                onmousedown: move |e: MouseEvent| e.prevent_default(),
                                 onclick: move |_| {
-                                    open.set(Some(k));
+                                    open.set(Some(if k == kind { Kind::All } else { k }));
                                     focus.set(None);
                                     creating.set(false);
+                                    refocus();
                                 },
                                 fts_chrome::Glyph { icon: k.icon(), size: 14 }
                                 span { style: "flex: 1; min-width: 0; font-size: 12px; font-weight: 600;", "{k.label()}" }
@@ -509,7 +592,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                 span { style: "font-size: 11px; color: {FAINT};", "of {model.profile_name}" }
                             }
                             div { style: "flex: 1;" }
-                            if kind != Kind::Drives {
+                            if !matches!(kind, Kind::Drives | Kind::All) {
                                 button {
                                     style: format!(
                                         "padding: 5px 11px; border-radius: 7px; cursor: pointer; font-size: 11px; \
@@ -532,7 +615,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                 on_done: move |name: Option<String>| {
                                     creating.set(false);
                                     if let Some(n) = name {
-                                        focus.set(Some(n));
+                                        focus.set(Some((kind, n)));
                                         query.set(String::new());
                                     }
                                 },
@@ -544,19 +627,25 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                     if q.trim().is_empty() {
                                         "Nothing here yet."
                                     } else {
-                                        "No {kind.label().to_lowercase()} match \"{q}\" — the counts on the left show where it is."
+                                        if kind == Kind::All {
+                                            "Nothing matches \"{q}\"."
+                                        } else {
+                                            "No {kind.label().to_lowercase()} match \"{q}\" — the counts on the left show where it is."
+                                        }
                                     }
                                 }
                             }
                             for row in list.iter().cloned() {
                                 {
-                                    let is_focus = focused.as_ref().is_some_and(|f| f.name == row.name);
+                                    let is_focus = focused
+                                        .as_ref()
+                                        .is_some_and(|f| f.kind == row.kind && f.name == row.name);
                                     let rig = rig.clone();
                                     let model = model.clone();
-                                    let name = row.name.clone();
+                                    let target = (row.kind, row.name.clone());
                                     rsx! {
                                         button {
-                                            key: "{row.name}",
+                                            key: "{row.kind.label()}-{row.name}",
                                             style: format!(
                                                 "display: flex; align-items: center; gap: 10px; width: 100%; \
                                                  padding: 8px 10px; margin-bottom: 1px; border-radius: 8px; \
@@ -565,11 +654,15 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                                 if is_focus { FOCUS_BG } else { "transparent" },
                                                 if is_focus { FOCUS_FG } else { TEXT },
                                             ),
-                                            onclick: move |_| focus.set(Some(name.clone())),
+                                            onmousedown: move |e: MouseEvent| e.prevent_default(),
+                                            onclick: move |_| {
+                                                focus.set(Some(target.clone()));
+                                                refocus();
+                                            },
                                             ondoubleclick: {
                                                 let row = row.clone();
                                                 move |_| {
-                                                    if activate(&rig, kind, &row, &model) {
+                                                    if activate(&rig, &row, &model) {
                                                         close();
                                                     }
                                                 }
@@ -586,6 +679,14 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                                 }
                                                 span { style: "font-size: 11px; color: {FAINT}; white-space: nowrap; overflow: hidden;",
                                                     "{row.sub}"
+                                                }
+                                            }
+                                            if kind == Kind::All {
+                                                span {
+                                                    style: "display: flex; align-items: center; gap: 4px; flex-shrink: 0; \
+                                                            font-size: 10px; color: {FAINT};",
+                                                    fts_chrome::Glyph { icon: row.kind.icon(), size: 11 }
+                                                    "{row.kind.one()}"
                                                 }
                                             }
                                             if row.active {
@@ -612,8 +713,8 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                             },
                             Some(row) => rsx! {
                                 Detail {
-                                    key: "{kind.label()}-{row.name}",
-                                    kind,
+                                    key: "{row.kind.label()}-{row.name}",
+                                    kind: row.kind,
                                     row,
                                     lib: lib.clone(),
                                     patches: patches.clone(),
@@ -713,7 +814,7 @@ fn Detail(
             }
         })),
         // A song's name is edited with its key and tempo, below.
-        Kind::Songs | Kind::Drives => None,
+        Kind::Songs | Kind::Drives | Kind::All => None,
     };
 
     rsx! {
@@ -760,6 +861,8 @@ fn Detail(
                     Some(drive) => rsx! { DriveDetail { drive } },
                     None => rsx! {},
                 },
+                // A row always names its own kind; `All` is only a tag.
+                Kind::All => rsx! {},
             }
         }
     }
@@ -1593,7 +1696,7 @@ fn NewForm(
             Kind::Profiles => lib.profiles.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
             Kind::Patches => patches.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
             Kind::Presets => presets.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
-            Kind::Drives => false,
+            Kind::Drives | Kind::All => false,
         }
     };
     let n = name();
@@ -1636,7 +1739,7 @@ fn NewForm(
                     let p = path.peek().trim().to_string();
                     send(&rig, move |r| async move { let _ = r.add_preset(n, p).await; });
                 }
-                Kind::Drives => return,
+                Kind::Drives | Kind::All => return,
             }
             on_done.call(Some(done));
         }
@@ -1751,6 +1854,7 @@ mod tests {
 
     fn row(name: &str, sub: &str) -> Row {
         Row {
+            kind: Kind::Songs,
             name: name.into(),
             idx: 0,
             sub: sub.into(),

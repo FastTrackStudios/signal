@@ -92,6 +92,15 @@ pub fn GuitarRigRemote() -> Element {
     let palette_open = use_signal(|| false);
     // The library picker, open on a kind — or closed.
     let library_open = use_signal(|| None::<crate::library::Kind>);
+    // The view actions the palette and the keymap can ask for.
+    let on_local = use_callback(move |e: crate::palette::Effect| {
+        let mut library_open = library_open;
+        match e {
+            crate::palette::Effect::Browse(k) => library_open.set(Some(k)),
+            crate::palette::Effect::CycleSwitches => switches.set(switches().next()),
+            _ => {}
+        }
+    });
 
     // Device lists, fetched once over the settings service.
     let devices = use_resource({
@@ -338,15 +347,16 @@ pub fn GuitarRigRemote() -> Element {
                         b.keys.eq_ignore_ascii_case(&combo)
                             || b.keys.replace("ctrl+", "meta+").eq_ignore_ascii_case(&combo)
                     });
-                    if let (Some(b), Some(r)) = (hit, rig.clone()) {
-                        if let Some(effect) = crate::palette::effect_from_action(&b.action) {
-                            e.prevent_default();
+                    if let Some(effect) = hit.and_then(|b| crate::palette::effect_from_action(&b.action)) {
+                        e.prevent_default();
+                        if effect.is_local() {
+                            on_local.call(effect);
+                        } else if let Some(r) = rig.clone() {
                             crate::palette::execute(r, effect, String::new());
                         }
                     }
                 }
             },
-            crate::palette::CommandPalette { model: perf_now.clone(), open: palette_open }
             // The bar — the app's and the rig's in one: crumbs, the rig's own
             // controls, the window's drag space and controls.
             header {
@@ -531,6 +541,9 @@ pub fn GuitarRigRemote() -> Element {
                     }
                 }
 
+                // A levelling pass (started from ⌘P): progress, then result.
+                crate::sidebars::LevellingChip {}
+
                 // Command palette (also Cmd/Ctrl+P).
                 button {
                     class: "flex items-center justify-center h-7 px-2 rounded-md border border-border text-muted-foreground hover:text-foreground text-[10px] font-mono",
@@ -615,7 +628,7 @@ pub fn GuitarRigRemote() -> Element {
 
             // Body: [presets] [rig] [songs]
             //
-            // Not drawn while the library covers it — mounted, so nothing
+            // Not drawn while the library or the palette covers it — mounted, so nothing
             // loses its state, but out of layout and paint. The rig redraws
             // every frame (meters, visualisers), and winit's macOS loop runs
             // redraws ahead of everything else: with the rig *and* the
@@ -624,9 +637,31 @@ pub fn GuitarRigRemote() -> Element {
             // appeared and the window looked frozen.
             div {
                 class: "flex-1 min-h-0 flex flex-row overflow-hidden",
-                style: if library_open().is_some() { "display: none;" } else { "" },
+                style: if library_open().is_some() || palette_open() { "display: none;" } else { "" },
+                // The left sidebar follows the mode: the pool for Preset,
+                // the profile tree for Profile, the set and its songs for
+                // Setlist.
                 if left_open() {
-                    crate::sidebars::LeftSidebar { model: perf_now.clone() }
+                    if perf_now.perform_mode == 2 {
+                        crate::setlist_bar::SetlistSidebar {
+                            model: perf_now.clone(),
+                            on_browse: move |k: crate::library::Kind| {
+                                let mut library_open = library_open;
+                                library_open.set(Some(k));
+                            },
+                        }
+                    } else if perf_now.perform_mode == 0 {
+                        crate::preset_bar::PresetSidebar {
+                            model: perf_now.clone(),
+                            on_browse: move |k: crate::library::Kind| {
+                                let mut library_open = library_open;
+                                library_open.set(Some(k));
+                            },
+                            on_tones: move |()| mode.set(Mode::Tones),
+                        }
+                    } else {
+                        crate::sidebars::LeftSidebar { model: perf_now.clone() }
+                    }
                 }
                 div { class: "flex-1 min-w-0 min-h-0 overflow-hidden", style: "padding: 8px 10px 10px;",
                 if let Some((on_press, on_toggle_fx, on_toggle_boost, on_cycle_boost, on_tap_tempo, on_prev_song, on_next_song, on_select_song)) = controls {
@@ -739,14 +774,14 @@ pub fn GuitarRigRemote() -> Element {
                     }
                 }
                 }
-                // The setlist/parts sidebar only matters in Setlist mode.
-                // The songs sidebar belongs to Setlist mode, and shows there.
-                if perf_now.perform_mode == 2 {
-                    crate::sidebars::RightSidebar { model: perf_now.clone() }
-                }
             }
-            // Last, so it paints over the bar and the body.
+            // Last, so they paint over the bar and the body.
             crate::library::LibraryPicker { model: perf_now.clone(), open: library_open }
+            crate::palette::CommandPalette {
+                model: perf_now.clone(),
+                open: palette_open,
+                on_local: move |e| on_local.call(e),
+            }
         }
 
         // Model-driven: the footswitch (hold tap-tempo), any remote, or
