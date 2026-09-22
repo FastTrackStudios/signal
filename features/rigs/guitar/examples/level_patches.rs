@@ -77,7 +77,12 @@ fn report(p: &signal_guitar::proto::LevelProgress) {
 
     // Only measured patches have a spread; reporting one across patches that
     // did not render would read as a finding when it is a failure.
-    let mut lufs: Vec<f32> = p.results.iter().map(|r| r.lufs).filter(|l| l.is_finite()).collect();
+    let mut lufs: Vec<f32> = p
+        .results
+        .iter()
+        .map(|r| r.lufs)
+        .filter(|l| l.is_finite())
+        .collect();
     lufs.sort_by(f32::total_cmp);
     let unmeasured = p.results.len() - lufs.len();
     println!();
@@ -89,7 +94,10 @@ fn report(p: &signal_guitar::proto::LevelProgress) {
         _ => println!("  too few patches measured to report a spread"),
     }
     if unmeasured > 0 {
-        println!("  {unmeasured} of {} patches did not render", p.results.len());
+        println!(
+            "  {unmeasured} of {} patches did not render",
+            p.results.len()
+        );
     }
     println!();
 }

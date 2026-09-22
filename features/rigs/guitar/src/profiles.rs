@@ -499,9 +499,9 @@ fn drive_block(drives: &[DriveSlotDef], dps: &[DrivePresetDef], block: &str) -> 
 /// transparent placeholder so every slot stays addressable either way.
 fn drive_board(drives: &[DriveSlotDef], dps: &[DrivePresetDef], patch: RigPatch) -> RigPatch {
     let boosted = patch.with_block(off_fx(BlockType::Boost, "Boost", &[("drive", "0.5")]));
-    DRIVE_SLOTS
-        .iter()
-        .fold(boosted, |p, slot| p.with_block(drive_block(drives, dps, slot)))
+    DRIVE_SLOTS.iter().fold(boosted, |p, slot| {
+        p.with_block(drive_block(drives, dps, slot))
+    })
 }
 
 #[must_use]
@@ -547,7 +547,12 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             .with_block(off_fx(
                 BlockType::Compressor,
                 PRE_COMP,
-                &[("threshold", "-30"), ("ratio", "4"), ("attack", "20"), ("release", "200")],
+                &[
+                    ("threshold", "-30"),
+                    ("ratio", "4"),
+                    ("attack", "20"),
+                    ("release", "200"),
+                ],
             ))
             .with_block(off(BlockType::Pitch, "Pitch"))
             // Volume pedal (clean gain, unity default) — the Control view's
@@ -566,11 +571,26 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             // then colours. All off until a preset engages them.
             .with_block(in_module(off(BlockType::Trem, "Pre Motion"), PRE_FX))
             .with_block(in_module(
-                off_fx(BlockType::Reverb, "Pre Verb", &[("algorithm", "3"), ("mix", "0.15"), ("decay", "0.35")]),
+                off_fx(
+                    BlockType::Reverb,
+                    "Pre Verb",
+                    &[("algorithm", "3"), ("mix", "0.15"), ("decay", "0.35")],
+                ),
                 PRE_FX,
             ))
             .with_block(in_module(
-                off_fx(BlockType::Delay, "Pre Delay", &[("style", "0"), ("tap_div_l", "7"), ("tap_div_r", "7"), ("time", "120"), ("mix", "0.15"), ("feedback", "0.15")]),
+                off_fx(
+                    BlockType::Delay,
+                    "Pre Delay",
+                    &[
+                        ("style", "0"),
+                        ("tap_div_l", "7"),
+                        ("tap_div_r", "7"),
+                        ("time", "120"),
+                        ("mix", "0.15"),
+                        ("feedback", "0.15"),
+                    ],
+                ),
                 PRE_FX,
             ))
             // The Amp module: the amp stage, then what shapes it — gate,
@@ -579,12 +599,20 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             .with_block(in_module(cab_l, "Amp"))
             .with_block(in_module(amp_r, "Amp"))
             .with_block(in_module(cab_r, "Amp"))
-            .with_block(in_module(on_fx(BlockType::Gate, "Gate", &[("threshold", "-50")]), "Amp"))
+            .with_block(in_module(
+                on_fx(BlockType::Gate, "Gate", &[("threshold", "-50")]),
+                "Amp",
+            ))
             .with_block(in_module(
                 off_fx(
                     BlockType::Compressor,
                     POST_COMP,
-                    &[("threshold", "-24"), ("ratio", "3"), ("attack", "20"), ("release", "100")],
+                    &[
+                        ("threshold", "-24"),
+                        ("ratio", "3"),
+                        ("attack", "20"),
+                        ("release", "100"),
+                    ],
                 ),
                 "Amp",
             ))
@@ -595,24 +623,24 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 off_fx(
                     BlockType::Eq,
                     "Amp EQ",
-                &[
-                    ("b1_used", "1"),
-                    ("b1_on", "1"),
-                    ("b1_freq", "80"),
-                    ("b1_shape", "3"),
-                    ("b2_used", "1"),
-                    ("b2_on", "1"),
-                    ("b2_freq", "212"),
-                    ("b3_used", "1"),
-                    ("b3_on", "1"),
-                    ("b3_freq", "560"),
-                    ("b4_used", "1"),
-                    ("b4_on", "1"),
-                    ("b4_freq", "1400"),
-                    ("b5_used", "1"),
-                    ("b5_on", "1"),
-                    ("b5_freq", "5500"),
-                ],
+                    &[
+                        ("b1_used", "1"),
+                        ("b1_on", "1"),
+                        ("b1_freq", "80"),
+                        ("b1_shape", "3"),
+                        ("b2_used", "1"),
+                        ("b2_on", "1"),
+                        ("b2_freq", "212"),
+                        ("b3_used", "1"),
+                        ("b3_on", "1"),
+                        ("b3_freq", "560"),
+                        ("b4_used", "1"),
+                        ("b4_on", "1"),
+                        ("b4_freq", "1400"),
+                        ("b5_used", "1"),
+                        ("b5_on", "1"),
+                        ("b5_freq", "5500"),
+                    ],
                 ),
                 "Amp",
             ))
@@ -629,39 +657,51 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             .with_block(in_module(off(BlockType::Flanger, "Flanger"), "Modulation"))
             .with_block(in_module(off(BlockType::Phaser, "Phaser"), "Modulation"))
             // Time module — subtle pair on, extreme pair bypassed.
-            .with_block(in_module(on_fx(
-                BlockType::Delay,
-                "DLY 1",
-                &[
-                    ("mix", "0.2"),
-                    ("style", "0"),
-                    ("time", "350"),
-                    ("feedback", "0.28"),
-                    ("tap_div_l", "0"),
-                    ("tap_div_r", "0"),
-                ],
-            ), "Time"))
-            .with_block(in_module(off_fx(
-                BlockType::Delay,
-                "DLY 2",
-                &[
-                    ("mix", "0.10"),
-                    ("time", "600"),
-                    ("feedback", "0.62"),
-                    ("tap_div_l", "1"),
-                    ("tap_div_r", "1"),
-                ],
-            ), "Time"))
-            .with_block(in_module(on_fx(
-                BlockType::Reverb,
-                "VERB 1",
-                &[("mix", "0.08"), ("decay", "0.42"), ("size", "0.45")],
-            ), "Time"))
-            .with_block(in_module(off_fx(
-                BlockType::Reverb,
-                "VERB 2",
-                &[("mix", "0.10"), ("decay", "0.85"), ("size", "0.92")],
-            ), "Time"))
+            .with_block(in_module(
+                on_fx(
+                    BlockType::Delay,
+                    "DLY 1",
+                    &[
+                        ("mix", "0.2"),
+                        ("style", "0"),
+                        ("time", "350"),
+                        ("feedback", "0.28"),
+                        ("tap_div_l", "0"),
+                        ("tap_div_r", "0"),
+                    ],
+                ),
+                "Time",
+            ))
+            .with_block(in_module(
+                off_fx(
+                    BlockType::Delay,
+                    "DLY 2",
+                    &[
+                        ("mix", "0.10"),
+                        ("time", "600"),
+                        ("feedback", "0.62"),
+                        ("tap_div_l", "1"),
+                        ("tap_div_r", "1"),
+                    ],
+                ),
+                "Time",
+            ))
+            .with_block(in_module(
+                on_fx(
+                    BlockType::Reverb,
+                    "VERB 1",
+                    &[("mix", "0.08"), ("decay", "0.42"), ("size", "0.45")],
+                ),
+                "Time",
+            ))
+            .with_block(in_module(
+                off_fx(
+                    BlockType::Reverb,
+                    "VERB 2",
+                    &[("mix", "0.10"), ("decay", "0.85"), ("size", "0.92")],
+                ),
+                "Time",
+            ))
             // Master: a final EQ (flat until a preset shapes it) and a
             // zero-latency brickwall — the compressor with no lookahead at
             // 20:1 and a 0.1 ms attack, catching peaks before the output.
@@ -670,7 +710,13 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 on_fx(
                     BlockType::Compressor,
                     LIMITER,
-                    &[("threshold", "-1"), ("ratio", "20"), ("attack", "0.1"), ("release", "50"), ("knee", "0")],
+                    &[
+                        ("threshold", "-1"),
+                        ("ratio", "20"),
+                        ("attack", "0.1"),
+                        ("release", "50"),
+                        ("knee", "0"),
+                    ],
                 ),
                 "Master",
             ))
@@ -1402,7 +1448,7 @@ mod song_tests {
             profile: String::new(),
             part: "Outro".into(),
             patch: "Clean".into(),
-                    overrides: Vec::new(),
+            overrides: Vec::new(),
         });
         assert_eq!(s.parts_with_recalls().len(), 4);
     }
@@ -1707,7 +1753,10 @@ mod section_tests {
         let mut song = song_with_sections();
         assert!(!song.add_part("Chorus"), "duplicate refused");
         assert!(!song.add_part("  chorus "), "and case/space insensitively");
-        assert!(!song.rename_part("Verse", "Chorus"), "rename cannot collide");
+        assert!(
+            !song.rename_part("Verse", "Chorus"),
+            "rename cannot collide"
+        );
         assert_eq!(song.parts.len(), 3);
     }
 
@@ -1789,5 +1838,4 @@ part_recalls ({part Verse, profile Rock, patch Crunch, overrides ()})
         let song: super::SongDef = facet_styx::from_str(old).expect("an old song parses");
         assert!(song.profile.is_empty() && song.start_part.is_empty());
     }
-
 }

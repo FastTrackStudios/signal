@@ -40,7 +40,11 @@ pub struct Levelled {
 /// # Errors
 ///
 /// When no profile has that name.
-pub fn level_profile(name: Option<&str>, sample_rate: u32, dry_run: bool) -> Result<Vec<Levelled>, String> {
+pub fn level_profile(
+    name: Option<&str>,
+    sample_rate: u32,
+    dry_run: bool,
+) -> Result<Vec<Levelled>, String> {
     apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
     let mut def = match name {
@@ -69,7 +73,13 @@ pub fn level_profile(name: Option<&str>, sample_rate: u32, dry_run: bool) -> Res
             .patches
             .iter()
             .find(|p| p.name.eq_ignore_ascii_case(&patch.name))
-            .map(|p| p.chain.iter().filter(|b| b.has_backend()).cloned().collect())
+            .map(|p| {
+                p.chain
+                    .iter()
+                    .filter(|b| b.has_backend())
+                    .cloned()
+                    .collect()
+            })
             .unwrap_or_default();
         let lufs = signal_sampler::patch_level::level_of(&blocks, sample_rate)
             .filter(|l| l.is_finite())
@@ -77,7 +87,8 @@ pub fn level_profile(name: Option<&str>, sample_rate: u32, dry_run: bool) -> Res
         if let Some(l) = lufs {
             // Same clamp as the rig's pass: more than this is a patch built
             // wrong, and the makeup would only amplify noise.
-            patch.level_db = ((signal_sampler::patch_level::TARGET_LUFS as f32) - l).clamp(-24.0, 24.0);
+            patch.level_db =
+                ((signal_sampler::patch_level::TARGET_LUFS as f32) - l).clamp(-24.0, 24.0);
         }
         out.push(Levelled {
             patch: patch.name.clone(),

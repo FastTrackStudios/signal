@@ -58,7 +58,11 @@ pub fn envelope(t: f32) -> f32 {
     let attack = (since / 0.008).min(1.0);
     let decay = (-since / 0.6).exp();
     // Plucks vary: a player does not hit every note the same.
-    let velocity = 0.55 + 0.45 * ((t / (PLUCK_EVERY * 3.0)) * std::f32::consts::TAU).sin().abs();
+    let velocity = 0.55
+        + 0.45
+            * ((t / (PLUCK_EVERY * 3.0)) * std::f32::consts::TAU)
+                .sin()
+                .abs();
     (0.04 + 0.92 * attack * decay * velocity).clamp(0.0, 1.0)
 }
 

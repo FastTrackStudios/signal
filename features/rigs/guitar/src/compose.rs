@@ -20,7 +20,9 @@
 
 use facet::Facet;
 
-use crate::profiles::{DriveSlotDef, ModuleChoiceDef, OverrideDef, PatchDef, PresetDef, ProfileDef};
+use crate::profiles::{
+    DriveSlotDef, ModuleChoiceDef, OverrideDef, PatchDef, PresetDef, ProfileDef,
+};
 
 /// The block-preset library's file in the rig directory.
 pub const BLOCKS_FILE: &str = "blocks.styx";
@@ -159,7 +161,9 @@ impl Compositions {
 
     #[must_use]
     pub fn block_preset(&self, name: &str) -> Option<&BlockPresetDef> {
-        self.blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name))
+        self.blocks
+            .iter()
+            .find(|b| b.name.eq_ignore_ascii_case(name))
     }
 
     /// A block preset as the overrides it stands for, on `block`. Unknown
@@ -172,18 +176,27 @@ impl Compositions {
         };
         let mut out = vec![OverrideDef::bypass("", &choice.block, p.bypass)];
         if !p.bypass {
-            out.extend(p.params.iter().map(|x| OverrideDef::set("", &choice.block, &x.param, x.value)));
+            out.extend(
+                p.params
+                    .iter()
+                    .map(|x| OverrideDef::set("", &choice.block, &x.param, x.value)),
+            );
         }
         out
     }
 
     #[must_use]
     pub fn preset(&self, name: &str) -> Option<&RigPresetDef> {
-        self.presets.iter().find(|p| p.name.eq_ignore_ascii_case(name))
+        self.presets
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(name))
     }
 
     /// Module presets for one module, in library order.
-    pub fn modules_of<'a>(&'a self, module: &'a str) -> impl Iterator<Item = &'a ModulePresetDef> + 'a {
+    pub fn modules_of<'a>(
+        &'a self,
+        module: &'a str,
+    ) -> impl Iterator<Item = &'a ModulePresetDef> + 'a {
         self.modules
             .iter()
             .filter(move |m| m.module.eq_ignore_ascii_case(module))
@@ -208,7 +221,10 @@ pub fn module_picks(comp: &Compositions, patch: &PatchDef) -> Vec<ModuleChoiceDe
         .map(|s| s.modules.clone())
         .unwrap_or_default();
     for own in &patch.modules {
-        match picks.iter_mut().find(|p| p.module.eq_ignore_ascii_case(&own.module)) {
+        match picks
+            .iter_mut()
+            .find(|p| p.module.eq_ignore_ascii_case(&own.module))
+        {
             Some(p) => *p = own.clone(),
             None => picks.push(own.clone()),
         }
@@ -242,7 +258,11 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
         let ordered = MODULES
             .iter()
             .filter_map(|m| picks.iter().find(|p| p.module.eq_ignore_ascii_case(m)))
-            .chain(picks.iter().filter(|p| !MODULES.iter().any(|m| p.module.eq_ignore_ascii_case(m))));
+            .chain(
+                picks
+                    .iter()
+                    .filter(|p| !MODULES.iter().any(|m| p.module.eq_ignore_ascii_case(m))),
+            );
         for pick in ordered {
             let Some(module) = comp.module(&pick.module, &pick.preset) else {
                 tracing::warn!(patch = %patch.name, module = %pick.module, preset = %pick.preset, "compose: no such module preset");
@@ -283,7 +303,11 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
                 overrides.extend(comp.block_overrides(choice));
             }
             for d in &snap.drives {
-                match patch.drives.iter_mut().find(|x| x.block.eq_ignore_ascii_case(&d.block)) {
+                match patch
+                    .drives
+                    .iter_mut()
+                    .find(|x| x.block.eq_ignore_ascii_case(&d.block))
+                {
                     Some(x) => *x = d.clone(),
                     None => patch.drives.push(d.clone()),
                 }
@@ -312,7 +336,10 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
 pub fn drives_for(def: &ProfileDef, patch: &PatchDef) -> Vec<DriveSlotDef> {
     let mut out = def.drives.clone();
     for d in &patch.drives {
-        match out.iter_mut().find(|x| x.block.eq_ignore_ascii_case(&d.block)) {
+        match out
+            .iter_mut()
+            .find(|x| x.block.eq_ignore_ascii_case(&d.block))
+        {
             Some(x) => *x = d.clone(),
             None => out.push(d.clone()),
         }
@@ -386,7 +413,10 @@ mod tests {
                     PresetSnapshotDef {
                         blocks: Vec::new(),
                         name: "Clean".into(),
-                        modules: vec![choice("Amp", "Deluxe", "Clean"), choice("Time", "Plate", "Short")],
+                        modules: vec![
+                            choice("Amp", "Deluxe", "Clean"),
+                            choice("Time", "Plate", "Short"),
+                        ],
                         overrides: vec![OverrideDef::set("Time", "VERB 1", "mix", 0.3)],
                         level_db: 0.0,
                     },
@@ -415,7 +445,11 @@ mod tests {
     fn a_preset_snapshot_resolves_to_its_modules_captures() {
         let flat = flatten(&composed("Clean"), &comp());
         let patch = &flat.patches[0];
-        let pool = flat.presets.iter().find(|p| p.name == patch.preset).expect("synthesised");
+        let pool = flat
+            .presets
+            .iter()
+            .find(|p| p.name == patch.preset)
+            .expect("synthesised");
         assert_eq!(pool.nam, "/caps/deluxe-clean.nam");
         assert_eq!(pool.cab, "/irs/1x12.wav");
         assert!(patch.preset2.is_empty(), "no second amp in this snapshot");
@@ -436,7 +470,11 @@ mod tests {
         // applied in order, so the patch wins.
         assert_eq!(mixes, vec![0.2, 0.3, 0.5]);
         let built = crate::profiles::build_profile(&flat, &drive_presets());
-        let verb = built.patches[0].chain.iter().find(|b| b.name == "VERB 1").unwrap();
+        let verb = built.patches[0]
+            .chain
+            .iter()
+            .find(|b| b.name == "VERB 1")
+            .unwrap();
         assert_eq!(verb.param_f32("mix"), Some(0.5));
     }
 
@@ -444,20 +482,41 @@ mod tests {
     fn another_snapshot_of_the_same_preset_loads_a_second_amp() {
         let flat = flatten(&composed("Edge"), &comp());
         let patch = &flat.patches[0];
-        let r = flat.presets.iter().find(|p| p.name == patch.preset2).expect("Amp R loaded");
+        let r = flat
+            .presets
+            .iter()
+            .find(|p| p.name == patch.preset2)
+            .expect("Amp R loaded");
         assert_eq!(r.nam, "/caps/ac30.nam");
     }
 
     #[test]
     fn a_patchs_own_pick_replaces_the_presets_for_that_module() {
         let mut def = composed("Clean");
-        def.patches[0].modules = vec![choice("Amp", "Deluxe", "Edge"), choice("Drive", "Klon", "On")];
+        def.patches[0].modules = vec![
+            choice("Amp", "Deluxe", "Edge"),
+            choice("Drive", "Klon", "On"),
+        ];
         let flat = flatten(&def, &comp());
         let patch = &flat.patches[0];
-        let pool = flat.presets.iter().find(|p| p.name == patch.preset).unwrap();
-        assert_eq!(pool.nam, "/caps/deluxe-edge.nam", "the patch's amp pick won");
-        let slot = patch.drives.iter().find(|d| d.block == "Drive 1").expect("drive pick");
-        assert_eq!((slot.preset.as_str(), slot.option), ("JHS Morning Glory", 2));
+        let pool = flat
+            .presets
+            .iter()
+            .find(|p| p.name == patch.preset)
+            .unwrap();
+        assert_eq!(
+            pool.nam, "/caps/deluxe-edge.nam",
+            "the patch's amp pick won"
+        );
+        let slot = patch
+            .drives
+            .iter()
+            .find(|d| d.block == "Drive 1")
+            .expect("drive pick");
+        assert_eq!(
+            (slot.preset.as_str(), slot.option),
+            ("JHS Morning Glory", 2)
+        );
         // The Time pick still comes from the preset snapshot.
         assert!(patch.overrides.iter().any(|o| o.block == "VERB 1"));
     }
@@ -467,7 +526,10 @@ mod tests {
     #[test]
     fn the_live_rig_plays_a_composed_patch_like_the_builder() {
         let mut def = composed("Edge");
-        def.patches[0].modules = vec![choice("Drive", "Klon", "On"), choice("Time", "Plate", "Short")];
+        def.patches[0].modules = vec![
+            choice("Drive", "Klon", "On"),
+            choice("Time", "Plate", "Short"),
+        ];
         let flat = flatten(&def, &comp());
         let drives = drive_presets();
         let live = crate::nodes::to_nodes(&flat, &drives).to_profile(&flat, &drives);
@@ -477,15 +539,25 @@ mod tests {
                 .find(|b| b.name == name)
                 .map(|b| (b.nam.clone(), b.ir.clone(), b.bypassed, b.param_f32("mix")))
         };
-        for slot in ["Amp L", "Cab L", "Amp R", "Cab R", "Drive 1", "Drive 2", "VERB 1"] {
+        for slot in [
+            "Amp L", "Cab L", "Amp R", "Cab R", "Drive 1", "Drive 2", "VERB 1",
+        ] {
             assert_eq!(
                 key(&live.patches[0].chain, slot),
                 key(&built.patches[0].chain, slot),
                 "{slot}"
             );
         }
-        let d1 = live.patches[0].chain.iter().find(|b| b.name == "Drive 1").unwrap();
-        assert!(d1.nam.contains("High Gain"), "the Drive snapshot's pedal: {}", d1.nam);
+        let d1 = live.patches[0]
+            .chain
+            .iter()
+            .find(|b| b.name == "Drive 1")
+            .unwrap();
+        assert!(
+            d1.nam.contains("High Gain"),
+            "the Drive snapshot's pedal: {}",
+            d1.nam
+        );
     }
 
     /// A block preset on a module snapshot engages its block and sets its
@@ -497,8 +569,14 @@ mod tests {
             block_type: "compressor".into(),
             name: "Studio Glue".into(),
             params: vec![
-                ParamSetDef { param: "ratio".into(), value: 3.0 },
-                ParamSetDef { param: "attack".into(), value: 20.0 },
+                ParamSetDef {
+                    param: "ratio".into(),
+                    value: 3.0,
+                },
+                ParamSetDef {
+                    param: "attack".into(),
+                    value: 20.0,
+                },
             ],
             bypass: false,
         });
@@ -507,7 +585,12 @@ mod tests {
             preset: "Studio Glue".into(),
         });
         let mut def = composed("Clean");
-        def.patches[0].overrides = vec![OverrideDef::set("Amp", crate::profiles::POST_COMP, "ratio", 4.0)];
+        def.patches[0].overrides = vec![OverrideDef::set(
+            "Amp",
+            crate::profiles::POST_COMP,
+            "ratio",
+            4.0,
+        )];
         let flat = flatten(&def, &c);
         let built = crate::profiles::build_profile(&flat, &drive_presets());
         let comp_block = built.patches[0]
@@ -517,7 +600,11 @@ mod tests {
             .expect("Post Comp");
         assert!(!comp_block.bypassed, "the preset engages it");
         assert_eq!(comp_block.param_f32("attack"), Some(20.0));
-        assert_eq!(comp_block.param_f32("ratio"), Some(4.0), "the patch's override wins");
+        assert_eq!(
+            comp_block.param_f32("ratio"),
+            Some(4.0),
+            "the patch's override wins"
+        );
     }
 
     #[test]
@@ -525,7 +612,10 @@ mod tests {
         let def = worship_def();
         let flat = flatten(&def, &comp());
         assert_eq!(flat.patches[0].preset, def.patches[0].preset);
-        assert_eq!(flat.patches[0].overrides.len(), def.patches[0].overrides.len());
+        assert_eq!(
+            flat.patches[0].overrides.len(),
+            def.patches[0].overrides.len()
+        );
         assert_eq!(flat.presets.len(), def.presets.len());
     }
 }
@@ -545,7 +635,14 @@ fn family(name: &str) -> (String, String) {
     let mut words = name.split_whitespace();
     let head = words.next().unwrap_or(name).to_string();
     let rest = words.collect::<Vec<_>>().join(" ");
-    (head, if rest.is_empty() { "Default".to_string() } else { rest })
+    (
+        head,
+        if rest.is_empty() {
+            "Default".to_string()
+        } else {
+            rest
+        },
+    )
 }
 
 /// Propose compositions for a profile written the old way, without changing
@@ -560,10 +657,17 @@ pub fn propose(def: &ProfileDef) -> Migration {
     for p in &def.presets {
         let (fam, snap) = family(&p.name);
         let fam = format!("{} {fam}", def.name);
-        let module = match modules.iter_mut().find(|m| m.module == "Amp" && m.name == fam) {
+        let module = match modules
+            .iter_mut()
+            .find(|m| m.module == "Amp" && m.name == fam)
+        {
             Some(m) => m,
             None => {
-                modules.push(ModulePresetDef { module: "Amp".into(), name: fam.clone(), snapshots: Vec::new() });
+                modules.push(ModulePresetDef {
+                    module: "Amp".into(),
+                    name: fam.clone(),
+                    snapshots: Vec::new(),
+                });
                 modules.last_mut().expect("just pushed")
             }
         };
@@ -597,20 +701,33 @@ pub fn propose(def: &ProfileDef) -> Migration {
         let Some((fam, snap)) = amp_of.get(&patch.preset.to_lowercase()).cloned() else {
             continue;
         };
-        let mut picks = vec![ModuleChoiceDef { module: "Amp".into(), preset: fam.clone(), snapshot: snap }];
+        let mut picks = vec![ModuleChoiceDef {
+            module: "Amp".into(),
+            preset: fam.clone(),
+            snapshot: snap,
+        }];
         if !def.drives.is_empty() {
-            picks.push(ModuleChoiceDef { module: "Drive".into(), preset: board.clone(), snapshot: "Board".into() });
+            picks.push(ModuleChoiceDef {
+                module: "Drive".into(),
+                preset: board.clone(),
+                snapshot: "Board".into(),
+            });
         }
         // Amp R stays a patch-level pick: no module snapshot holds it yet.
         if !patch.preset2.is_empty() {
             continue;
         }
-        let preset_name = fam.trim_start_matches(&format!("{} ", def.name)).to_string();
+        let preset_name = fam
+            .trim_start_matches(&format!("{} ", def.name))
+            .to_string();
         let preset_name = format!("{} {preset_name}", def.name);
         let entry = match presets.iter_mut().find(|p| p.name == preset_name) {
             Some(p) => p,
             None => {
-                presets.push(RigPresetDef { name: preset_name.clone(), snapshots: Vec::new() });
+                presets.push(RigPresetDef {
+                    name: preset_name.clone(),
+                    snapshots: Vec::new(),
+                });
                 presets.last_mut().expect("just pushed")
             }
         };
@@ -624,7 +741,11 @@ pub fn propose(def: &ProfileDef) -> Migration {
         patch.rig_preset = preset_name;
         patch.snapshot = patch.name.clone();
     }
-    Migration { modules, presets, profile }
+    Migration {
+        modules,
+        presets,
+        profile,
+    }
 }
 
 #[cfg(test)]
@@ -638,8 +759,15 @@ mod migration_tests {
     fn migrating_a_profile_changes_no_sound() {
         let def = worship_def();
         let m = propose(&def);
-        assert!(m.profile.patches.iter().all(|p| !p.rig_preset.is_empty()), "every patch composed");
-        let comp = Compositions { modules: m.modules.clone(), presets: m.presets.clone(), blocks: Vec::new() };
+        assert!(
+            m.profile.patches.iter().all(|p| !p.rig_preset.is_empty()),
+            "every patch composed"
+        );
+        let comp = Compositions {
+            modules: m.modules.clone(),
+            presets: m.presets.clone(),
+            blocks: Vec::new(),
+        };
         let before = build_profile(&def, &drive_presets());
         let after = build_profile(&flatten(&m.profile, &comp), &drive_presets());
         for (a, b) in before.patches.iter().zip(&after.patches) {
@@ -652,7 +780,14 @@ mod migration_tests {
                     a.name
                 );
                 for param in &x.params {
-                    assert_eq!(y.param_f32(&param.name), x.param_f32(&param.name), "{} {} {}", a.name, x.name, param.name);
+                    assert_eq!(
+                        y.param_f32(&param.name),
+                        x.param_f32(&param.name),
+                        "{} {} {}",
+                        a.name,
+                        x.name,
+                        param.name
+                    );
                 }
             }
         }
@@ -662,7 +797,10 @@ mod migration_tests {
     fn captures_group_into_amp_presets_by_family() {
         let m = propose(&worship_def());
         let amps: Vec<_> = m.modules.iter().filter(|x| x.module == "Amp").collect();
-        assert!(amps.iter().any(|a| a.snapshots.len() > 1), "some family has several captures");
+        assert!(
+            amps.iter().any(|a| a.snapshots.len() > 1),
+            "some family has several captures"
+        );
     }
 }
 
@@ -748,7 +886,14 @@ pub fn level_presets(
         calm.presets[p].snapshots[s].level_db = 0.0;
         let flat = flatten(&def, &calm);
         let built = crate::profiles::build_profile(&flat, drives);
-        let blocks: Vec<_> = built.patches.first()?.chain.iter().filter(|b| b.has_backend()).cloned().collect();
+        let blocks: Vec<_> = built
+            .patches
+            .first()?
+            .chain
+            .iter()
+            .filter(|b| b.has_backend())
+            .cloned()
+            .collect();
         signal_sampler::patch_level::level_of(&blocks, sample_rate)
             .filter(|l| l.is_finite() && *l > -70.0)
             .map(|l| l as f32)
@@ -757,15 +902,21 @@ pub fn level_presets(
     let next = std::sync::atomic::AtomicUsize::new(0);
     std::thread::scope(|scope| {
         for _ in 0..threads.max(1) {
-            scope.spawn(|| loop {
-                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let Some(&job) = jobs.get(i) else { break };
-                let lufs = measure(job);
-                results.lock().unwrap_or_else(std::sync::PoisonError::into_inner)[i] = lufs;
+            scope.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(&job) = jobs.get(i) else { break };
+                    let lufs = measure(job);
+                    results
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)[i] = lufs;
+                }
             });
         }
     });
-    let results = results.into_inner().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let results = results
+        .into_inner()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let target = signal_sampler::patch_level::TARGET_LUFS as f32;
     jobs.iter()
         .zip(results)
@@ -841,8 +992,16 @@ pub fn recompose(
             })
             .collect::<Vec<_>>()
             .join(" + ");
-        if !comp.modules.iter().any(|m| m.module == "Drive" && m.name == PEDALBOARD) {
-            comp.modules.push(ModulePresetDef { module: "Drive".into(), name: PEDALBOARD.into(), snapshots: Vec::new() });
+        if !comp
+            .modules
+            .iter()
+            .any(|m| m.module == "Drive" && m.name == PEDALBOARD)
+        {
+            comp.modules.push(ModulePresetDef {
+                module: "Drive".into(),
+                name: PEDALBOARD.into(),
+                snapshots: Vec::new(),
+            });
         }
         let board = comp
             .modules
@@ -850,9 +1009,17 @@ pub fn recompose(
             .find(|m| m.module == "Drive" && m.name == PEDALBOARD)
             .expect("just ensured");
         if !board.snapshots.iter().any(|s| s.name == name) {
-            board.snapshots.push(ModuleSnapshotDef { name: name.clone(), drives: def.drives.clone(), ..ModuleSnapshotDef::default() });
+            board.snapshots.push(ModuleSnapshotDef {
+                name: name.clone(),
+                drives: def.drives.clone(),
+                ..ModuleSnapshotDef::default()
+            });
         }
-        ModuleChoiceDef { module: "Drive".into(), preset: PEDALBOARD.into(), snapshot: name }
+        ModuleChoiceDef {
+            module: "Drive".into(),
+            preset: PEDALBOARD.into(),
+            snapshot: name,
+        }
     });
 
     let stack_of = |patch: &str| {
@@ -864,7 +1031,10 @@ pub fn recompose(
     let stacks: Vec<String> = def.patches.iter().map(|p| stack_of(&p.name)).collect();
     for (patch, stack) in def.patches.iter_mut().zip(stacks) {
         if patch.rig_preset.is_empty() {
-            let Some((_, amp)) = amp_map.iter().find(|(old, _)| old.eq_ignore_ascii_case(&patch.preset)) else {
+            let Some((_, amp)) = amp_map
+                .iter()
+                .find(|(old, _)| old.eq_ignore_ascii_case(&patch.preset))
+            else {
                 unmapped.push(patch.name.clone());
                 continue;
             };
@@ -872,7 +1042,10 @@ pub fn recompose(
             modules.extend(board_pick.clone());
             let preset_name = format!("{} {stack}", def.name);
             if comp.preset(&preset_name).is_none() {
-                comp.presets.push(RigPresetDef { name: preset_name.clone(), snapshots: Vec::new() });
+                comp.presets.push(RigPresetDef {
+                    name: preset_name.clone(),
+                    snapshots: Vec::new(),
+                });
             }
             let preset = comp
                 .presets
@@ -886,7 +1059,11 @@ pub fn recompose(
                 overrides: std::mem::take(&mut patch.overrides),
                 level_db: 0.0,
             };
-            match preset.snapshots.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&patch.name)) {
+            match preset
+                .snapshots
+                .iter_mut()
+                .find(|s| s.name.eq_ignore_ascii_case(&patch.name))
+            {
                 Some(existing) => *existing = snap,
                 None => preset.snapshots.push(snap),
             }

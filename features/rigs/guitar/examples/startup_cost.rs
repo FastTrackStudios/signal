@@ -23,8 +23,12 @@ fn chains() -> Vec<(String, Vec<RigBlock>)> {
         .patches
         .iter()
         .map(|p| {
-            let blocks: Vec<RigBlock> =
-                p.chain.iter().filter(|b| b.has_backend()).cloned().collect();
+            let blocks: Vec<RigBlock> = p
+                .chain
+                .iter()
+                .filter(|b| b.has_backend())
+                .cloned()
+                .collect();
             (p.name.clone(), blocks)
         })
         .filter(|(_, b)| !b.is_empty())
@@ -74,7 +78,10 @@ fn main() {
             ms / serial_ms * 100.0
         );
     }
-    println!("  {:<24} {blocks_total:>4} blocks  {serial_ms:>9.1} ms", "TOTAL");
+    println!(
+        "  {:<24} {blocks_total:>4} blocks  {serial_ms:>9.1} ms",
+        "TOTAL"
+    );
 
     // Whole chains, serial.
     let t = Instant::now();

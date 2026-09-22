@@ -363,7 +363,9 @@ impl RigLibrary {
                 store.resolve(&mut preset.nam);
             }
         }
-        let wanted = Self::load_last_state().map(|s| s.profile).unwrap_or_default();
+        let wanted = Self::load_last_state()
+            .map(|s| s.profile)
+            .unwrap_or_default();
         let profile = profiles
             .iter()
             .find(|p| p.name.eq_ignore_ascii_case(&wanted))
@@ -410,12 +412,18 @@ impl RigLibrary {
             .read::<crate::compose::BlockLib>(crate::compose::BLOCKS_FILE)
             .unwrap_or_default()
             .presets;
-        crate::compose::Compositions { modules, presets, blocks }
+        crate::compose::Compositions {
+            modules,
+            presets,
+            blocks,
+        }
     }
 
     /// Write both composition libraries back.
     pub fn save_compositions(comp: &crate::compose::Compositions) {
-        let Some(store) = writable_store() else { return };
+        let Some(store) = writable_store() else {
+            return;
+        };
         let mut modules = comp.modules.clone();
         for m in &mut modules {
             for snap in &mut m.snapshots {
@@ -423,14 +431,21 @@ impl RigLibrary {
                 store.relativize(&mut snap.nam2);
             }
         }
-        store.write(crate::compose::MODULES_FILE, &crate::compose::ModuleLib { presets: modules });
+        store.write(
+            crate::compose::MODULES_FILE,
+            &crate::compose::ModuleLib { presets: modules },
+        );
         store.write(
             crate::compose::PRESETS_FILE,
-            &crate::compose::PresetLib { presets: comp.presets.clone() },
+            &crate::compose::PresetLib {
+                presets: comp.presets.clone(),
+            },
         );
         store.write(
             crate::compose::BLOCKS_FILE,
-            &crate::compose::BlockLib { presets: comp.blocks.clone() },
+            &crate::compose::BlockLib {
+                presets: comp.blocks.clone(),
+            },
         );
     }
 
@@ -448,13 +463,17 @@ impl RigLibrary {
     /// Write it back. Best-effort, like the profile: losing a preset is not
     /// worth failing a rig for.
     pub fn save_node_store(nodes: &crate::node_store::NodeStore) {
-        let Some(store) = writable_store() else { return };
+        let Some(store) = writable_store() else {
+            return;
+        };
         store.write(crate::node_store::NODE_STORE_FILE, nodes);
     }
 
     /// Write a profile to `profiles/<file>.styx`, named for the profile.
     pub fn save_profile(profile: &ProfileDef) {
-        let Some(store) = writable_store() else { return };
+        let Some(store) = writable_store() else {
+            return;
+        };
         let mut profile = profile.clone();
         for preset in &mut profile.presets {
             store.relativize(&mut preset.nam);
@@ -475,7 +494,9 @@ impl RigLibrary {
     }
 
     pub fn save_drive_presets(presets: &[DrivePresetDef]) {
-        let Some(store) = writable_store() else { return };
+        let Some(store) = writable_store() else {
+            return;
+        };
         let mut presets = presets.to_vec();
         for dp in &mut presets {
             for option in &mut dp.options {
@@ -486,7 +507,9 @@ impl RigLibrary {
     }
 
     pub fn save_songs(songs: &[SongDef]) {
-        let Some(store) = writable_store() else { return };
+        let Some(store) = writable_store() else {
+            return;
+        };
         store.write(
             "songs.styx",
             &SongLib {
@@ -496,7 +519,9 @@ impl RigLibrary {
     }
 
     pub fn save_setlists(setlists: &[SetlistDef]) {
-        let Some(store) = writable_store() else { return };
+        let Some(store) = writable_store() else {
+            return;
+        };
         store.write(
             "setlists.styx",
             &SetlistLib {
@@ -506,7 +531,9 @@ impl RigLibrary {
     }
 
     pub fn save_last_state(state: &LastState) {
-        let Some(store) = writable_store() else { return };
+        let Some(store) = writable_store() else {
+            return;
+        };
         store.write("last-state.styx", state);
     }
 

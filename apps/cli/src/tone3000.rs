@@ -115,7 +115,18 @@ pub async fn run(command: Command) -> ExitCode {
             format,
             arch,
             limit,
-        } => search(&backend, &query.join(" "), gear, &sort, &format, arch.as_deref().unwrap_or(""), limit).await,
+        } => {
+            search(
+                &backend,
+                &query.join(" "),
+                gear,
+                &sort,
+                &format,
+                arch.as_deref().unwrap_or(""),
+                limit,
+            )
+            .await
+        }
         Command::Shelf { which } => shelf(&backend, &which).await,
         Command::Show { tone } => show(&backend, &tone_id_from(&tone)).await,
         Command::Fetch { tone, model } => {
@@ -290,7 +301,10 @@ async fn account_login(account: &signal_account::Account) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    println!("Approve the sign-in in your browser. If nothing opens, visit:\n\n{}\n", start.authorize_url);
+    println!(
+        "Approve the sign-in in your browser. If nothing opens, visit:\n\n{}\n",
+        start.authorize_url
+    );
     if std::env::var_os("SIGNAL_NO_BROWSER").is_none() {
         open_browser(&start.authorize_url);
     }

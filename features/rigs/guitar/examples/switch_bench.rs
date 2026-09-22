@@ -43,7 +43,6 @@ async fn main() {
         }
     }
 
-
     let switches: usize = std::env::args()
         .nth(1)
         .and_then(|a| a.parse().ok())
@@ -58,7 +57,10 @@ async fn main() {
 
     let model = rig.perf().await.expect("perf");
     let stacks = model.stacks.len();
-    assert!(stacks > 0, "profile has no footswitch stacks to switch between");
+    assert!(
+        stacks > 0,
+        "profile has no footswitch stacks to switch between"
+    );
     eprintln!("{stacks} stacks; {switches} switches…\n");
 
     // Let the rig settle: the first switch after an open pays for anything the

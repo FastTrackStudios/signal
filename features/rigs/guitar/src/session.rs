@@ -223,7 +223,8 @@ fn process_cpu_time() -> Option<std::time::Duration> {
         usage.assume_init()
     };
     let tv = |t: libc::timeval| {
-        std::time::Duration::from_secs(t.tv_sec as u64) + std::time::Duration::from_micros(t.tv_usec as u64)
+        std::time::Duration::from_secs(t.tv_sec as u64)
+            + std::time::Duration::from_micros(t.tv_usec as u64)
     };
     Some(tv(usage.ru_utime) + tv(usage.ru_stime))
 }
@@ -297,9 +298,7 @@ impl GuitarRigBackend {
         // Design mode opens no MIDI: the hub creates a graph node and claims
         // every input port, so two copies would fight over the footswitch and
         // clutter the patchbay of whatever rig is actually playing.
-        if !crate::library::rig_is_design()
-            && (pump.tick == 1 || pump.tick.is_multiple_of(60))
-        {
+        if !crate::library::rig_is_design() && (pump.tick == 1 || pump.tick.is_multiple_of(60)) {
             // Subscribe once, then let the hub own re-opening. The pump used
             // to call `rescan_stream`, which reopened all 23 ports whenever
             // the ordered port list differed — an unstable enumeration order
@@ -503,7 +502,9 @@ impl GuitarRigBackend {
         let def = self.profile_def.lock_ok();
         def.patches
             .iter()
-            .find(|p| !def.default_patch.is_empty() && p.name.eq_ignore_ascii_case(&def.default_patch))
+            .find(|p| {
+                !def.default_patch.is_empty() && p.name.eq_ignore_ascii_case(&def.default_patch)
+            })
             .or_else(|| def.patches.first())
             .map(|p| p.name.clone())
             .unwrap_or_default()
@@ -911,8 +912,7 @@ impl GuitarRigBackend {
 
     fn publish_levelling(&self) {
         let progress = self.levelling.lock_ok().clone();
-        self.events
-            .publish(RigEvent::Levelling(progress));
+        self.events.publish(RigEvent::Levelling(progress));
     }
 
     /// Pre-measure drive curves for every NAM the profile can reach (drive
@@ -1305,10 +1305,16 @@ impl GuitarRigBackend {
 
     /// Change the live patch's definition, save it, and rebuild so it is heard.
     fn edit_live_patch(&self, edit: impl FnOnce(&mut crate::profiles::PatchDef)) {
-        let Some(name) = self.live_patch_name() else { return };
+        let Some(name) = self.live_patch_name() else {
+            return;
+        };
         let rebuilt = {
             let mut def = self.profile_def.lock_ok();
-            let Some(patch) = def.patches.iter_mut().find(|p| p.name.eq_ignore_ascii_case(&name)) else {
+            let Some(patch) = def
+                .patches
+                .iter_mut()
+                .find(|p| p.name.eq_ignore_ascii_case(&name))
+            else {
                 return;
             };
             edit(patch);
@@ -1320,10 +1326,17 @@ impl GuitarRigBackend {
     }
 
     /// The live patch's effective pick for one module.
-    fn live_pick(&self, comp: &crate::compose::Compositions, module: &str) -> Option<crate::profiles::ModuleChoiceDef> {
+    fn live_pick(
+        &self,
+        comp: &crate::compose::Compositions,
+        module: &str,
+    ) -> Option<crate::profiles::ModuleChoiceDef> {
         let name = self.live_patch_name()?;
         let def = self.profile_def.lock_ok();
-        let patch = def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&name))?;
+        let patch = def
+            .patches
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&name))?;
         crate::compose::module_picks(comp, patch)
             .into_iter()
             .find(|m| m.module.eq_ignore_ascii_case(module))
@@ -1417,7 +1430,10 @@ impl GuitarRigBackend {
     /// speed whatever rate the pump happens to be publishing at.
     fn design_seconds(&self) -> f32 {
         static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-        START.get_or_init(std::time::Instant::now).elapsed().as_secs_f32()
+        START
+            .get_or_init(std::time::Instant::now)
+            .elapsed()
+            .as_secs_f32()
     }
 
     /// Load the profile and nothing else — see [`open_blocking`](Self::open_blocking).
@@ -1684,7 +1700,8 @@ impl GuitarRigBackend {
             switch.boost_ms = ms(boost),
             switch.drives_ms = ms(drives),
             switch.publish_ms = ms(publish),
-            switch.total_ms = ms(audible) + ms(resync) + ms(tempo) + ms(boost) + ms(drives) + ms(publish),
+            switch.total_ms =
+                ms(audible) + ms(resync) + ms(tempo) + ms(boost) + ms(drives) + ms(publish),
             "patch switch"
         );
     }
@@ -1761,9 +1778,17 @@ impl GuitarRigBackend {
             .lock_ok()
             .iter()
             .find(|s| s.name.eq_ignore_ascii_case(&name))
-            .map(|s| (s.profile.clone(), s.start_part.clone(), s.stack_defaults.clone()))
+            .map(|s| {
+                (
+                    s.profile.clone(),
+                    s.start_part.clone(),
+                    s.stack_defaults.clone(),
+                )
+            })
             .unwrap_or_default();
-        tracing::info!("setlist → {name} ({key} · {bpm} BPM, profile '{profile}', starts '{start_part}')");
+        tracing::info!(
+            "setlist → {name} ({key} · {bpm} BPM, profile '{profile}', starts '{start_part}')"
+        );
 
         // The song's profile first: everything after it — the stack
         // tuning, the landing patch, the part — is in that profile's terms.
@@ -1800,7 +1825,11 @@ impl GuitarRigBackend {
             def.stacks
                 .iter()
                 .find(|st| st.patches.iter().any(|p| p.eq_ignore_ascii_case(&default)))
-                .and_then(|st| defaults.iter().find(|d| d.stack.eq_ignore_ascii_case(&st.name)))
+                .and_then(|st| {
+                    defaults
+                        .iter()
+                        .find(|d| d.stack.eq_ignore_ascii_case(&st.name))
+                })
                 .map_or(default, |d| d.patch.clone())
         };
         if self.activate_named(&landing) {
@@ -2025,20 +2054,32 @@ impl GuitarRigBackend {
                                         )
                                     })
                                     .unwrap_or_default()
-                            } else if let Some((label, snaps, idx, has_r)) = (block.block_type == BlockType::Amp)
+                            } else if let Some((label, snaps, idx, has_r)) = (block.block_type
+                                == BlockType::Amp)
                                 .then(|| {
-                                    let own = def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&patch.name))?;
+                                    let own = def
+                                        .patches
+                                        .iter()
+                                        .find(|p| p.name.eq_ignore_ascii_case(&patch.name))?;
                                     let pick = crate::compose::module_picks(&comp, own)
                                         .into_iter()
                                         .find(|m| m.module.eq_ignore_ascii_case("Amp"))?;
                                     let module = comp.module("Amp", &pick.preset)?;
-                                    let snaps: Vec<String> = module.snapshots.iter().map(|s| s.name.clone()).collect();
+                                    let snaps: Vec<String> =
+                                        module.snapshots.iter().map(|s| s.name.clone()).collect();
                                     let idx = snaps
                                         .iter()
                                         .position(|s| s.eq_ignore_ascii_case(&pick.snapshot))
                                         .unwrap_or(0);
-                                    let has_r = module.snapshots.get(idx).is_some_and(|s| !s.nam2.is_empty());
-                                    let label = format!("{} · {}", module.name, snaps.get(idx).cloned().unwrap_or_default());
+                                    let has_r = module
+                                        .snapshots
+                                        .get(idx)
+                                        .is_some_and(|s| !s.nam2.is_empty());
+                                    let label = format!(
+                                        "{} · {}",
+                                        module.name,
+                                        snaps.get(idx).cloned().unwrap_or_default()
+                                    );
                                     Some((label, snaps, idx as u32, has_r))
                                 })
                                 .flatten()
@@ -2066,10 +2107,10 @@ impl GuitarRigBackend {
                                 };
                                 let pool: Vec<String> =
                                     def.presets.iter().map(|p| p.name.clone()).collect();
-                                let index = pool
-                                    .iter()
-                                    .position(|p| p.eq_ignore_ascii_case(&current))
-                                    .unwrap_or(0) as u32;
+                                let index =
+                                    pool.iter()
+                                        .position(|p| p.eq_ignore_ascii_case(&current))
+                                        .unwrap_or(0) as u32;
                                 (current, pool, index)
                             } else if block.block_type == BlockType::Cabinet {
                                 // A cab is named by its IR, so the board says
@@ -2766,11 +2807,7 @@ impl Rig for GuitarRigBackend {
         });
     }
 
-    fn set_part_overrides(
-        &self,
-        part: String,
-        overrides: Vec<signal_guitar_proto::PartOverride>,
-    ) {
+    fn set_part_overrides(&self, part: String, overrides: Vec<signal_guitar_proto::PartOverride>) {
         let song_name = {
             let i = *self.song_index.lock_ok();
             self.resolved_setlist()
@@ -3178,7 +3215,9 @@ impl Rig for GuitarRigBackend {
             }
             let profile = self.design_profile();
             let active = self.design_active_patch(&profile);
-            return self.patch_infos(&profile.patches, &profile.stacks, active.as_deref(), |_| true);
+            return self.patch_infos(&profile.patches, &profile.stacks, active.as_deref(), |_| {
+                true
+            });
         };
         let active = prig.active_patch().map(|p| p.name.clone());
         self.patch_infos(prig.patches(), prig.stacks(), active.as_deref(), |i| {
@@ -3310,10 +3349,7 @@ impl Rig for GuitarRigBackend {
 
     fn level_patches(&self) {
         use std::sync::atomic::Ordering;
-        if self
-            .levelling_busy
-            .swap(true, Ordering::SeqCst)
-        {
+        if self.levelling_busy.swap(true, Ordering::SeqCst) {
             tracing::info!("patch levelling already running");
             return;
         }
@@ -4372,10 +4408,17 @@ impl Rig for GuitarRigBackend {
             .live_patch_name()
             .and_then(|name| {
                 let def = self.profile_def.lock_ok();
-                def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&name)).map(|p| {
-                    let picks = crate::compose::module_picks(&comp, p);
-                    (p.rig_preset.clone(), p.snapshot.clone(), picks.iter().map(pick).collect())
-                })
+                def.patches
+                    .iter()
+                    .find(|p| p.name.eq_ignore_ascii_case(&name))
+                    .map(|p| {
+                        let picks = crate::compose::module_picks(&comp, p);
+                        (
+                            p.rig_preset.clone(),
+                            p.snapshot.clone(),
+                            picks.iter().map(pick).collect(),
+                        )
+                    })
             })
             .unwrap_or_default();
         CompositionModel {
@@ -4417,7 +4460,11 @@ impl Rig for GuitarRigBackend {
             return;
         };
         let snapshot = if snapshot.is_empty() {
-            found.snapshots.first().map(|s| s.name.clone()).unwrap_or_default()
+            found
+                .snapshots
+                .first()
+                .map(|s| s.name.clone())
+                .unwrap_or_default()
         } else {
             snapshot
         };
@@ -4427,7 +4474,11 @@ impl Rig for GuitarRigBackend {
             snapshot,
         };
         self.edit_live_patch(move |patch| {
-            match patch.modules.iter_mut().find(|m| m.module.eq_ignore_ascii_case(&choice.module)) {
+            match patch
+                .modules
+                .iter_mut()
+                .find(|m| m.module.eq_ignore_ascii_case(&choice.module))
+            {
                 Some(m) => *m = choice,
                 None => patch.modules.push(choice),
             }
@@ -4448,7 +4499,13 @@ impl Rig for GuitarRigBackend {
                     .position(|s| s.name.eq_ignore_ascii_case(&c.snapshot))
                     .unwrap_or(0) as i32;
                 let next = (at + delta).rem_euclid(n) as usize;
-                (m.name.clone(), m.snapshots.get(next).map(|s| s.name.clone()).unwrap_or_default())
+                (
+                    m.name.clone(),
+                    m.snapshots
+                        .get(next)
+                        .map(|s| s.name.clone())
+                        .unwrap_or_default(),
+                )
             }
             None => match comp.modules_of(&module).next() {
                 Some(m) => (m.name.clone(), String::new()),
@@ -4466,7 +4523,11 @@ impl Rig for GuitarRigBackend {
         };
         let name = found.name.clone();
         let snapshot = if snapshot.is_empty() {
-            found.snapshots.first().map(|s| s.name.clone()).unwrap_or_default()
+            found
+                .snapshots
+                .first()
+                .map(|s| s.name.clone())
+                .unwrap_or_default()
         } else {
             snapshot
         };
@@ -4490,7 +4551,9 @@ impl Rig for GuitarRigBackend {
         }) else {
             return;
         };
-        let Some(found) = comp.preset(&preset) else { return };
+        let Some(found) = comp.preset(&preset) else {
+            return;
+        };
         let n = found.snapshots.len().max(1) as i32;
         let at = found
             .snapshots
@@ -4521,7 +4584,11 @@ impl Rig for GuitarRigBackend {
                     stack: p
                         .stacks
                         .iter()
-                        .find(|st| st.patches.iter().any(|n| n.eq_ignore_ascii_case(&patch.name)))
+                        .find(|st| {
+                            st.patches
+                                .iter()
+                                .any(|n| n.eq_ignore_ascii_case(&patch.name))
+                        })
                         .map(|st| st.name.clone())
                         .unwrap_or_default(),
                 })
@@ -4531,7 +4598,12 @@ impl Rig for GuitarRigBackend {
         let (mut profiles, slots) = {
             let active = self.profile_def.lock_ok();
             let mut profiles = vec![entry(&active, true)];
-            profiles.extend(self.other_profiles.lock_ok().iter().map(|p| entry(p, false)));
+            profiles.extend(
+                self.other_profiles
+                    .lock_ok()
+                    .iter()
+                    .map(|p| entry(p, false)),
+            );
             let slots: Vec<(String, String)> = active
                 .drives
                 .iter()
@@ -4553,7 +4625,11 @@ impl Rig for GuitarRigBackend {
                 parts: s.parts.clone(),
                 setlists: sets
                     .iter()
-                    .filter(|set| set.entries.iter().any(|e| e.song.eq_ignore_ascii_case(&s.name)))
+                    .filter(|set| {
+                        set.entries
+                            .iter()
+                            .any(|e| e.song.eq_ignore_ascii_case(&s.name))
+                    })
                     .map(|set| set.name.clone())
                     .collect(),
                 profile: s.profile.clone(),
@@ -4570,7 +4646,9 @@ impl Rig for GuitarRigBackend {
                     .entries
                     .iter()
                     .map(|e| {
-                        let song = songs_lib.iter().find(|s| s.name.eq_ignore_ascii_case(&e.song));
+                        let song = songs_lib
+                            .iter()
+                            .find(|s| s.name.eq_ignore_ascii_case(&e.song));
                         SongSlot {
                             name: e.song.clone(),
                             key: if e.key.is_empty() {
@@ -4578,7 +4656,11 @@ impl Rig for GuitarRigBackend {
                             } else {
                                 e.key.clone()
                             },
-                            bpm: if e.bpm == 0 { song.map_or(0, |s| s.bpm) } else { e.bpm },
+                            bpm: if e.bpm == 0 {
+                                song.map_or(0, |s| s.bpm)
+                            } else {
+                                e.bpm
+                            },
                         }
                     })
                     .collect(),
@@ -4631,7 +4713,11 @@ impl Rig for GuitarRigBackend {
             // A starter that plays: the amps and pedals already on hand, one
             // stack holding one patch on the first amp.
             let active = self.profile_def.lock_ok();
-            let first = active.presets.first().map(|p| p.name.clone()).unwrap_or_default();
+            let first = active
+                .presets
+                .first()
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
             ProfileDef {
                 default_patch: String::new(),
                 name: String::new(),
@@ -4724,7 +4810,10 @@ impl Rig for GuitarRigBackend {
         }
         {
             let mut others = self.other_profiles.lock_ok();
-            let Some(i) = others.iter().position(|p| p.name.eq_ignore_ascii_case(&name)) else {
+            let Some(i) = others
+                .iter()
+                .position(|p| p.name.eq_ignore_ascii_case(&name))
+            else {
                 return;
             };
             let gone = others.remove(i);
@@ -4863,7 +4952,10 @@ impl Rig for GuitarRigBackend {
     fn set_song_profile(&self, song: String, profile: String) {
         {
             let mut songs = self.songs_lib.lock_ok();
-            let Some(s) = songs.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&song)) else {
+            let Some(s) = songs
+                .iter_mut()
+                .find(|s| s.name.eq_ignore_ascii_case(&song))
+            else {
                 return;
             };
             s.profile = profile.trim().to_string();
@@ -4886,7 +4978,10 @@ impl Rig for GuitarRigBackend {
     fn set_song_start_part(&self, song: String, part: String) {
         {
             let mut songs = self.songs_lib.lock_ok();
-            let Some(s) = songs.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&song)) else {
+            let Some(s) = songs
+                .iter_mut()
+                .find(|s| s.name.eq_ignore_ascii_case(&song))
+            else {
                 return;
             };
             let part = part.trim();
@@ -4906,7 +5001,11 @@ impl Rig for GuitarRigBackend {
             if !song.parts.iter().any(|p| p.eq_ignore_ascii_case(&part)) {
                 return false;
             }
-            match song.part_recalls.iter_mut().find(|r| r.part.eq_ignore_ascii_case(&part)) {
+            match song
+                .part_recalls
+                .iter_mut()
+                .find(|r| r.part.eq_ignore_ascii_case(&part))
+            {
                 Some(r) => r.profile.clone_from(&profile),
                 None => song.part_recalls.push(crate::profiles::PartRecallDef {
                     part: part.clone(),
@@ -4922,7 +5021,11 @@ impl Rig for GuitarRigBackend {
         let is_current = self
             .resolved_setlist()
             .get(song_idx)
-            .and_then(|(.., parts)| parts.get(part_idx).map(|p| p.name.eq_ignore_ascii_case(&part)))
+            .and_then(|(.., parts)| {
+                parts
+                    .get(part_idx)
+                    .map(|p| p.name.eq_ignore_ascii_case(&part))
+            })
             .unwrap_or(false);
         if is_current {
             Rig::select_part(self, part_idx as u32);
@@ -4932,7 +5035,12 @@ impl Rig for GuitarRigBackend {
     fn set_profile_default(&self, profile: String, patch: String) {
         let patch = patch.trim().to_string();
         let set = |def: &mut ProfileDef| -> bool {
-            if !patch.is_empty() && !def.patches.iter().any(|p| p.name.eq_ignore_ascii_case(&patch)) {
+            if !patch.is_empty()
+                && !def
+                    .patches
+                    .iter()
+                    .any(|p| p.name.eq_ignore_ascii_case(&patch))
+            {
                 tracing::warn!("set_profile_default: '{}' has no patch '{patch}'", def.name);
                 return false;
             }
