@@ -1467,7 +1467,9 @@ impl GuitarRigBackend {
                     // Not a lie about the rig: nothing here is playing. The
                     // real chain reports its real bypass, because there the
                     // distinction is audible.
-                    bypassed: false,
+                    // Except an amp slot with nothing loaded: lit, it reads
+                    // as a second amp that is playing.
+                    bypassed: block.block_type == BlockType::Amp && block.asset_path().is_empty(),
                     param_name,
                     param_value,
                     param_min,

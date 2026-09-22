@@ -122,6 +122,7 @@ impl RigNodes {
 
             let mut built = RigPatch::new(&patch.name);
             built.chain = signal_sampler::from_node::to_chain(&resolved);
+            settle_amp_stage(&mut built.chain, def, patch);
             // On the trim block inside the chain, not the scene's output —
             // see `profiles::set_patch_trim` for why a level after the
             // reverbs cannot be changed without hearing it.
@@ -394,6 +395,56 @@ fn drive_leaf(name: &str, path: &str) -> Node {
 /// `to_profile_matches_the_builder_for_the_shipped_rig`, patch for patch and
 /// parameter for parameter.
 #[must_use]
+/// Give a resolved chain's amp stage what the patch definition says.
+///
+/// The node model has one swappable amp slot and seeds everything else from
+/// the first patch's chain, so on its own it would name the amp after its
+/// preset (the UI and `set_block_option` look for "Amp L"), keep the first
+/// patch's cab on every patch, and play the first patch's Amp R everywhere.
+/// The definition is the authority for all three, so they are settled here,
+/// once, after resolving — keeping this path equal to `build_profile`.
+fn settle_amp_stage(
+    chain: &mut [signal_sampler::RigBlock],
+    def: &ProfileDef,
+    patch: &crate::profiles::PatchDef,
+) {
+    let preset = |name: &str| def.presets.iter().find(|p| p.name.eq_ignore_ascii_case(name));
+    let (cab_l, nam_r, cab_r) = (
+        preset(&patch.preset).map(|p| p.cab.clone()).unwrap_or_default(),
+        preset(&patch.preset2).map(|p| p.nam.clone()).unwrap_or_default(),
+        preset(&patch.preset2).map(|p| p.cab.clone()).unwrap_or_default(),
+    );
+    // Amp R's bypass: the patch's own override if it has one, else engaged
+    // exactly when something is loaded.
+    let r_bypassed = patch
+        .overrides
+        .iter()
+        .rev()
+        .find(|o| o.op.eq_ignore_ascii_case("bypass") && o.block.eq_ignore_ascii_case("Amp R"))
+        .map_or(nam_r.is_empty(), |o| o.value >= 0.5 || nam_r.is_empty());
+
+    if let Some(amp) = chain
+        .iter_mut()
+        .find(|b| b.block_type == BlockType::Amp && !b.name.eq_ignore_ascii_case("Amp R"))
+    {
+        amp.name = "Amp L".to_string();
+    }
+    for block in chain.iter_mut() {
+        match block.name.as_str() {
+            "Cab L" => block.ir = cab_l.clone(),
+            "Amp R" => {
+                block.nam = nam_r.clone();
+                block.bypassed = r_bypassed;
+            }
+            "Cab R" => {
+                block.ir = cab_r.clone();
+                block.bypassed = r_bypassed;
+            }
+            _ => {}
+        }
+    }
+}
+
 pub fn profile_from_library(
     def: &ProfileDef,
     drives: &[DrivePresetDef],
@@ -1399,6 +1450,50 @@ mod tests {
     /// source of what sounds. This compares the two `RigProfile`s the live rig
     /// would receive — patch for patch, block for block, parameter for
     /// parameter, plus the trims and stacks a footswitch depends on.
+    /// Per-preset cabs and a second amp reach the live rig per patch —
+    /// the node model seeds from the first patch, so without settling the
+    /// amp stage every patch played the first patch's cab and Amp R.
+    #[test]
+    fn cabs_and_the_second_amp_follow_each_patch() {
+        let (mut def, drives) = shipped();
+        let first = def.patches[0].preset.clone();
+        let other = def
+            .presets
+            .iter()
+            .find(|p| !p.name.eq_ignore_ascii_case(&first))
+            .expect("two presets")
+            .name
+            .clone();
+        for p in &mut def.presets {
+            p.cab = format!("/irs/{}.wav", p.name);
+        }
+        // A later patch on a different amp, with a second amp loaded.
+        let later = def
+            .patches
+            .iter()
+            .position(|p| p.preset.eq_ignore_ascii_case(&other))
+            .expect("a patch on another preset");
+        def.patches[later].preset2 = first.clone();
+
+        let from_nodes = to_nodes(&def, &drives).to_profile(&def);
+        let from_builder = crate::profiles::build_profile(&def, &drives);
+        for (n, b) in from_nodes.patches.iter().zip(&from_builder.patches) {
+            let pick = |chain: &[signal_sampler::RigBlock], name: &str| {
+                chain
+                    .iter()
+                    .find(|x| x.name.eq_ignore_ascii_case(name))
+                    .map(|x| (x.nam.clone(), x.ir.clone(), x.bypassed))
+                    .unwrap_or_else(|| panic!("{}: no {name}", n.name))
+            };
+            for slot in ["Amp L", "Cab L", "Amp R", "Cab R"] {
+                assert_eq!(pick(&n.chain, slot), pick(&b.chain, slot), "{}: {slot}", n.name);
+            }
+        }
+        let live = &from_nodes.patches[later];
+        let amp_r = live.chain.iter().find(|x| x.name == "Amp R").expect("Amp R");
+        assert!(!amp_r.bypassed && !amp_r.nam.is_empty(), "the second amp plays");
+    }
+
     #[test]
     fn to_profile_matches_the_builder_for_the_shipped_rig() {
         let (def, drives) = shipped();

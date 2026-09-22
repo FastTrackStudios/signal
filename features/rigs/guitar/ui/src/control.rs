@@ -1684,7 +1684,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                 .map(|st| st.preset.clone())
                 .filter(|p| !p.is_empty())
         })
-        .unwrap_or_else(|| "Amp L".to_string());
+        .unwrap_or_else(|| "Amp 1".to_string());
     let amp_r = blocks
         .iter()
         .find(|b| b.block_type == BlockType::Amp && b.name.eq_ignore_ascii_case("Amp R"))
@@ -1740,7 +1740,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 options: amp.options.clone(),
                                 option: amp.option,
                                 amp_style: true,
-                                cab_engaged: cab_l.as_ref().map(|c| !c.bypassed),
+                                cab_engaged: Some(cab_l.as_ref().is_some_and(|c| !c.bypassed)),
                                 on_cab_toggle: cab_l.as_ref().map(|c| {
                                     let (rig, id) = (rig.clone(), c.id.clone());
                                     Callback::new(move |()| {
@@ -1754,7 +1754,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             }
                         }
                         DriveChunk {
-                            name: amp_r_preset.clone().unwrap_or_else(|| "Amp R".to_string()),
+                            name: amp_r_preset.clone().unwrap_or_else(|| "Amp 2".to_string()),
                             level: amp_r
                                 .as_ref()
                                 .and_then(|a| a.params.iter().find(|p| p.name == "drive"))

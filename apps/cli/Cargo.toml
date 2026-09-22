@@ -26,6 +26,9 @@ signal-nam.workspace = true
 # `signal_config_dir()`. Deliberately rig-host rather than signal-sampler:
 # the CLI wants the path, not an audio engine.
 signal-rig-host.workspace = true
+# Offline patch levelling: builds a profile's chains from disk and renders
+# them, so levels can be set before the app is opened.
+signal-guitar.workspace = true
 
 clap = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }

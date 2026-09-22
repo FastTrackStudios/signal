@@ -13094,6 +13094,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "signal-account",
+ "signal-guitar",
  "signal-nam",
  "signal-rig-host",
  "signal-tone3000",

@@ -20,6 +20,7 @@
 //! signal tone3000 fetch 82521
 //! ```
 
+mod rig;
 mod tone3000;
 
 use clap::{Parser, Subcommand};
@@ -41,6 +42,11 @@ enum Command {
     Tone3000 {
         #[command(subcommand)]
         command: tone3000::Command,
+    },
+    /// The guitar rig's library on disk — profiles, patches.
+    Rig {
+        #[command(subcommand)]
+        command: rig::Command,
     },
 }
 
@@ -64,5 +70,6 @@ fn main() -> std::process::ExitCode {
 
     match cli.command {
         Command::Tone3000 { command } => runtime.block_on(tone3000::run(command)),
+        Command::Rig { command } => rig::run(command),
     }
 }
