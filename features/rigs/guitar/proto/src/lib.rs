@@ -387,6 +387,51 @@ pub struct TunerReading {
 /// Everything the library holds, for the browser — one fetch, re-read when
 /// [`PerformanceModel::revision`] moves.
 ///
+/// One module's pick: which module preset, and which of its snapshots.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct ModulePick {
+    pub module: String,
+    pub preset: String,
+    pub snapshot: String,
+}
+
+/// A module preset (Amp, Drive, Time, …) and its snapshots, by name.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct ModulePresetEntry {
+    pub module: String,
+    pub name: String,
+    pub snapshots: Vec<String>,
+}
+
+/// One snapshot of a preset: its module picks.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct PresetSnapshotEntry {
+    pub name: String,
+    pub modules: Vec<ModulePick>,
+    /// How many overrides it layers on top of its modules.
+    pub overrides: u32,
+}
+
+/// A preset: a composition of module presets, with snapshots.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct PresetEntry {
+    pub name: String,
+    pub snapshots: Vec<PresetSnapshotEntry>,
+}
+
+/// The composition libraries, and what the active patch plays from them.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct CompositionModel {
+    pub modules: Vec<ModulePresetEntry>,
+    pub presets: Vec<PresetEntry>,
+    /// The active patch's preset and snapshot (empty when it is not composed).
+    pub active_preset: String,
+    pub active_snapshot: String,
+    /// The active patch's effective module picks — its preset snapshot's,
+    /// with its own over them.
+    pub active_modules: Vec<ModulePick>,
+}
+
 /// Patches and presets are not here: they belong to the active profile and
 /// already have their own lists ([`rig::Rig::patches`], [`rig::Rig::presets`]),
 /// in the order their index-addressed calls expect.
@@ -560,8 +605,8 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, LevelProgress, LibraryModel, LiveBlock, LiveNode, PartOverride, PatchInfo,
-        PerformanceModel, PresetInfo, RigStatus, TunerReading,
+        Artwork, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode, PartOverride,
+        PatchInfo, PerformanceModel, PresetInfo, RigStatus, TunerReading,
     };
 
     /// One live rig change. Every variant carries **full state** (idempotent
@@ -832,6 +877,21 @@ pub mod rig {
         /// Every profile, song, setlist and drive preset — the browser's
         /// view of the library.
         fn library(&self) -> LibraryModel;
+        /// The module-preset and preset libraries, and the active patch's
+        /// picks from them.
+        fn compositions(&self) -> CompositionModel;
+        /// Play `module`'s preset `preset` (at `snapshot`; empty = its
+        /// first) on the active patch — saved as the patch's own pick, over
+        /// whatever its preset snapshot chose.
+        fn choose_module(&self, module: String, preset: String, snapshot: String);
+        /// Step the active patch's `module` pick through its preset's
+        /// snapshots (`delta` −1 / +1, wrapping). With no pick yet, takes
+        /// the module's first preset.
+        fn step_module(&self, module: String, delta: i32);
+        /// Point the active patch at a preset snapshot.
+        fn choose_preset(&self, preset: String, snapshot: String);
+        /// Step the active patch through its preset's snapshots.
+        fn step_preset_snapshot(&self, delta: i32);
         /// Play a different profile. Rebuilds the rig from it (an audio gap,
         /// like any rebuild) and remembers it across restarts.
         fn select_profile(&self, name: String);

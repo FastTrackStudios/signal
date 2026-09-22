@@ -1283,6 +1283,45 @@ impl GuitarRigBackend {
         profile_from_library(&def, &dps)
     }
 
+    /// The patch playing now: the rig's active one, or design mode's.
+    fn live_patch_name(&self) -> Option<String> {
+        let live = self
+            .rig
+            .lock_ok()
+            .as_ref()
+            .and_then(|prig| prig.active_patch().map(|p| p.name.clone()));
+        live.or_else(|| {
+            let profile = self.design_profile();
+            self.design_active_patch(&profile)
+        })
+    }
+
+    /// Change the live patch's definition, save it, and rebuild so it is heard.
+    fn edit_live_patch(&self, edit: impl FnOnce(&mut crate::profiles::PatchDef)) {
+        let Some(name) = self.live_patch_name() else { return };
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let Some(patch) = def.patches.iter_mut().find(|p| p.name.eq_ignore_ascii_case(&name)) else {
+                return;
+            };
+            edit(patch);
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+    }
+
+    /// The live patch's effective pick for one module.
+    fn live_pick(&self, comp: &crate::compose::Compositions, module: &str) -> Option<crate::profiles::ModuleChoiceDef> {
+        let name = self.live_patch_name()?;
+        let def = self.profile_def.lock_ok();
+        let patch = def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&name))?;
+        crate::compose::module_picks(comp, patch)
+            .into_iter()
+            .find(|m| m.module.eq_ignore_ascii_case(module))
+    }
+
     /// Design mode's active patch: the restored/selected `design_patch`, or
     /// the first patch when that is empty or no longer in the profile — the
     /// same fallback `design_blocks` builds the chain from.
@@ -4263,6 +4302,148 @@ impl Rig for GuitarRigBackend {
             self.record_patch_override(&id, None, if byp { 1.0 } else { 0.0 });
         }
         self.publish_state();
+    }
+
+    fn compositions(&self) -> signal_guitar_proto::CompositionModel {
+        use signal_guitar_proto::{
+            CompositionModel, ModulePick, ModulePresetEntry, PresetEntry, PresetSnapshotEntry,
+        };
+        let comp = RigLibrary::load_compositions();
+        let pick = |c: &crate::profiles::ModuleChoiceDef| ModulePick {
+            module: c.module.clone(),
+            preset: c.preset.clone(),
+            snapshot: c.snapshot.clone(),
+        };
+        let (active_preset, active_snapshot, active_modules) = self
+            .live_patch_name()
+            .and_then(|name| {
+                let def = self.profile_def.lock_ok();
+                def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&name)).map(|p| {
+                    let picks = crate::compose::module_picks(&comp, p);
+                    (p.rig_preset.clone(), p.snapshot.clone(), picks.iter().map(pick).collect())
+                })
+            })
+            .unwrap_or_default();
+        CompositionModel {
+            modules: comp
+                .modules
+                .iter()
+                .map(|m| ModulePresetEntry {
+                    module: m.module.clone(),
+                    name: m.name.clone(),
+                    snapshots: m.snapshots.iter().map(|s| s.name.clone()).collect(),
+                })
+                .collect(),
+            presets: comp
+                .presets
+                .iter()
+                .map(|p| PresetEntry {
+                    name: p.name.clone(),
+                    snapshots: p
+                        .snapshots
+                        .iter()
+                        .map(|s| PresetSnapshotEntry {
+                            name: s.name.clone(),
+                            modules: s.modules.iter().map(pick).collect(),
+                            overrides: s.overrides.len() as u32,
+                        })
+                        .collect(),
+                })
+                .collect(),
+            active_preset,
+            active_snapshot,
+            active_modules,
+        }
+    }
+
+    fn choose_module(&self, module: String, preset: String, snapshot: String) {
+        let comp = RigLibrary::load_compositions();
+        let Some(found) = comp.module(&module, &preset) else {
+            tracing::warn!(%module, %preset, "choose_module: no such module preset");
+            return;
+        };
+        let snapshot = if snapshot.is_empty() {
+            found.snapshots.first().map(|s| s.name.clone()).unwrap_or_default()
+        } else {
+            snapshot
+        };
+        let choice = crate::profiles::ModuleChoiceDef {
+            module: found.module.clone(),
+            preset: found.name.clone(),
+            snapshot,
+        };
+        self.edit_live_patch(move |patch| {
+            match patch.modules.iter_mut().find(|m| m.module.eq_ignore_ascii_case(&choice.module)) {
+                Some(m) => *m = choice,
+                None => patch.modules.push(choice),
+            }
+        });
+    }
+
+    fn step_module(&self, module: String, delta: i32) {
+        let comp = RigLibrary::load_compositions();
+        let current = self
+            .live_pick(&comp, &module)
+            .and_then(|c| comp.module(&c.module, &c.preset).map(|m| (m, c)));
+        let (preset, snapshot) = match current {
+            Some((m, c)) => {
+                let n = m.snapshots.len().max(1) as i32;
+                let at = m
+                    .snapshots
+                    .iter()
+                    .position(|s| s.name.eq_ignore_ascii_case(&c.snapshot))
+                    .unwrap_or(0) as i32;
+                let next = (at + delta).rem_euclid(n) as usize;
+                (m.name.clone(), m.snapshots.get(next).map(|s| s.name.clone()).unwrap_or_default())
+            }
+            None => match comp.modules_of(&module).next() {
+                Some(m) => (m.name.clone(), String::new()),
+                None => return,
+            },
+        };
+        self.choose_module(module, preset, snapshot);
+    }
+
+    fn choose_preset(&self, preset: String, snapshot: String) {
+        let comp = RigLibrary::load_compositions();
+        let Some(found) = comp.preset(&preset) else {
+            tracing::warn!(%preset, "choose_preset: no such preset");
+            return;
+        };
+        let name = found.name.clone();
+        let snapshot = if snapshot.is_empty() {
+            found.snapshots.first().map(|s| s.name.clone()).unwrap_or_default()
+        } else {
+            snapshot
+        };
+        self.edit_live_patch(move |patch| {
+            patch.rig_preset = name;
+            patch.snapshot = snapshot;
+        });
+    }
+
+    fn step_preset_snapshot(&self, delta: i32) {
+        let comp = RigLibrary::load_compositions();
+        let Some((preset, snapshot)) = self.live_patch_name().and_then(|name| {
+            let def = self.profile_def.lock_ok();
+            def.patches
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&name))
+                .map(|p| (p.rig_preset.clone(), p.snapshot.clone()))
+        }) else {
+            return;
+        };
+        let Some(found) = comp.preset(&preset) else { return };
+        let n = found.snapshots.len().max(1) as i32;
+        let at = found
+            .snapshots
+            .iter()
+            .position(|s| s.name.eq_ignore_ascii_case(&snapshot))
+            .unwrap_or(0) as i32;
+        let next = (at + delta).rem_euclid(n) as usize;
+        if let Some(s) = found.snapshots.get(next) {
+            self.choose_preset(found.name.clone(), s.name.clone());
+        }
     }
 
     fn library(&self) -> signal_guitar_proto::LibraryModel {
