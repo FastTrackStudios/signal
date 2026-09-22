@@ -772,6 +772,9 @@ impl Tone3000 for Tone3000Backend {
         if let Some(format) = parse_enum(&query.format) {
             search = search.format(format);
         }
+        if let Some(arch) = parse_enum(&query.architecture) {
+            search = search.architecture(arch);
+        }
         search = search
             .sort(sort_of(&query.sort, query.text.is_empty()))
             .page(query.page.max(1))

@@ -143,6 +143,9 @@ pub struct ToneQuery {
     pub page: u32,
     /// Capped at 25 by the API; 0 takes the default.
     pub page_size: u32,
+    /// NAM architecture version: `1`, `2` (A2), `custom`. Empty = any.
+    #[facet(default)]
+    pub architecture: String,
 }
 
 /// Which bounded list to serve — the free tier's alternative to search.

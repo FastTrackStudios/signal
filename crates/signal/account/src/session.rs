@@ -252,6 +252,7 @@ impl Account {
             .map_err(|e| AccountError::Issuer(e.to_string()))?;
         let token =
             oidc::access_token_from(&text).map_err(|e| AccountError::Issuer(e.to_string()))?;
+        self.save_refresh(&text);
 
         // Who signed in, asked once and cached, so `status` never needs the
         // network. A userinfo failure does not fail the sign-in: the token
@@ -275,6 +276,95 @@ impl Account {
         Ok(self.status())
     }
 
+    /// Where the refresh token lives: beside the session, because the
+    /// shared `StoredSession` has no field for one. Without it the access
+    /// token died an hour after sign-in and the person had to sign in again.
+    fn refresh_path(&self) -> PathBuf {
+        self.cfg.session_path.with_file_name("refresh.json")
+    }
+
+    /// Keep the refresh token and expiry from a token response, if it has one.
+    fn save_refresh(&self, token_response: &str) {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(token_response) else { return };
+        let Some(refresh) = v.get("refresh_token").and_then(|r| r.as_str()) else { return };
+        let expires_in = v.get("expires_in").and_then(serde_json::Value::as_i64).unwrap_or(3600);
+        let record = serde_json::json!({
+            "refresh_token": refresh,
+            "expires_at": now_unix() + expires_in,
+        });
+        let path = self.refresh_path();
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Err(e) = std::fs::write(&path, record.to_string()) {
+            tracing::warn!(error = %e, "account: could not keep the refresh token");
+            return;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+        }
+    }
+
+    /// `(refresh token, access-token expiry)`, if kept.
+    fn load_refresh(&self) -> Option<(String, i64)> {
+        let text = std::fs::read_to_string(self.refresh_path()).ok()?;
+        let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+        Some((
+            v.get("refresh_token")?.as_str()?.to_string(),
+            v.get("expires_at").and_then(serde_json::Value::as_i64).unwrap_or(0),
+        ))
+    }
+
+    /// An access token that is good now: the stored one, refreshed first
+    /// when it is within a minute of expiring (or `force`, after the issuer
+    /// refused it). The issuer rotates the refresh token, so the new one is
+    /// kept before the call returns.
+    ///
+    /// # Errors
+    ///
+    /// [`AccountError::NotSignedIn`] with no session; the issuer's refusal
+    /// when a needed refresh fails (the person must sign in again).
+    pub async fn fresh_access_token(&self, force: bool) -> Result<String, AccountError> {
+        let current = self.access_token()?;
+        let Some((refresh, expires_at)) = self.load_refresh() else {
+            return Ok(current);
+        };
+        if !force && expires_at > now_unix() + 60 {
+            return Ok(current);
+        }
+        let body = format!(
+            "grant_type=refresh_token&refresh_token={}&client_id={}",
+            urlencode(&refresh),
+            urlencode(&self.cfg.client_id)
+        );
+        let response = self
+            .http
+            .post(format!("{}/oauth2/token", self.issuer()))
+            .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(body)
+            .send()
+            .await
+            .map_err(|e| AccountError::Issuer(e.to_string()))?;
+        let text = response
+            .text()
+            .await
+            .map_err(|e| AccountError::Issuer(e.to_string()))?;
+        let token = oidc::access_token_from(&text).map_err(|e| {
+            tracing::warn!(error = %e, "account: refresh refused — sign in again");
+            AccountError::Issuer(e.to_string())
+        })?;
+        self.save_refresh(&text);
+        let mut session = self.store.load().ok().flatten().unwrap_or_else(|| StoredSession::new(token.clone()));
+        session.token.clone_from(&token);
+        self.store
+            .save(&session)
+            .map_err(|e| AccountError::Issuer(e.to_string()))?;
+        tracing::debug!("account: access token refreshed");
+        Ok(token)
+    }
+
     /// Forget the session.
     ///
     /// # Errors
@@ -285,6 +375,7 @@ impl Account {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clear();
+        let _ = std::fs::remove_file(self.refresh_path());
         self.store
             .clear()
             .map_err(|e| AccountError::Issuer(e.to_string()))
@@ -313,6 +404,21 @@ impl Account {
     pub(crate) fn issuer(&self) -> &str {
         self.cfg.issuer.trim_end_matches('/')
     }
+}
+
+fn now_unix() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64)
+}
+
+fn urlencode(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }
 
 #[cfg(test)]

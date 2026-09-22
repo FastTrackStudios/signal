@@ -44,6 +44,9 @@ pub enum Command {
         /// `nam` for captures, `ir` for cab impulse responses (`.wav`).
         #[arg(long, default_value = "nam")]
         format: String,
+        /// NAM architecture: `1`, `2` (A2), `custom`. Default: any.
+        #[arg(long)]
+        arch: Option<String>,
         #[arg(long, default_value_t = 25)]
         limit: u32,
     },
@@ -110,8 +113,9 @@ pub async fn run(command: Command) -> ExitCode {
             gear,
             sort,
             format,
+            arch,
             limit,
-        } => search(&backend, &query.join(" "), gear, &sort, &format, limit).await,
+        } => search(&backend, &query.join(" "), gear, &sort, &format, arch.as_deref().unwrap_or(""), limit).await,
         Command::Shelf { which } => shelf(&backend, &which).await,
         Command::Show { tone } => show(&backend, &tone_id_from(&tone)).await,
         Command::Fetch { tone, model } => {
@@ -142,6 +146,7 @@ async fn search(
     gear: Option<String>,
     sort: &str,
     format: &str,
+    arch: &str,
     limit: u32,
 ) -> ExitCode {
     let page = backend
@@ -149,6 +154,7 @@ async fn search(
             text: text.to_string(),
             gears: gear.into_iter().collect(),
             format: format.to_string(),
+            architecture: arch.to_string(),
             sort: sort_key(sort),
             page: 1,
             page_size: limit,
