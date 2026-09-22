@@ -251,6 +251,15 @@ pub struct ProfileDef {
     pub presets: Vec<PresetDef>,
     pub patches: Vec<PatchDef>,
     pub stacks: Vec<StackDef>,
+    /// The patch the profile lands on when it loads — its default scene.
+    /// Empty means the first patch.
+    ///
+    /// What lets every profile keep the same slot convention (1 clean,
+    /// 2 crunchier, 3 drive, 4 lead) and still start where it is played: a
+    /// metal profile lands on the chug in slot 3 without moving the chug to
+    /// slot 1.
+    #[facet(default)]
+    pub default_patch: String,
 }
 
 /// A footswitch stack: a name and its patch rotation.
@@ -303,6 +312,7 @@ pub fn worship_def() -> ProfileDef {
         },
     ];
     ProfileDef {
+        default_patch: String::new(),
         drives,
         name: "Worship".to_string(),
         presets: vec![
@@ -678,6 +688,14 @@ pub struct SongDef {
     /// first of those.
     #[facet(default)]
     pub part_recalls: Vec<PartRecallDef>,
+    /// The profile the song is played on; empty keeps whatever is loaded.
+    /// Its parts overlay this one unless a part names its own.
+    #[facet(default)]
+    pub profile: String,
+    /// The part the song starts on — an intro lead, say. Empty lands on the
+    /// profile's default patch.
+    #[facet(default)]
+    pub start_part: String,
 }
 
 impl SongDef {
@@ -797,6 +815,11 @@ impl SongDef {
 pub struct PartRecallDef {
     /// The section's name, as it appears in [`SongDef::parts`].
     pub part: String,
+    /// The profile this part is played on, when it is not the song's —
+    /// a part is a base profile, then a patch in it, then changes on top.
+    /// Empty means the song's profile.
+    #[facet(default)]
+    pub profile: String,
     /// The patch to switch to. Empty means the section stays on whatever
     /// patch is up — which, with [`overrides`](Self::overrides), is the
     /// common case: a chorus is usually the verse's sound with one or two
@@ -848,6 +871,8 @@ pub struct SetlistDef {
 pub fn song_library() -> Vec<SongDef> {
     fn song(name: &str, key: &str, bpm: u32) -> SongDef {
         SongDef {
+            profile: String::new(),
+            start_part: String::new(),
             name: name.to_string(),
             key: key.to_string(),
             bpm,
@@ -1056,6 +1081,7 @@ mod import_tests {
     /// A profile with no drive slots assigned yet.
     fn empty_profile() -> ProfileDef {
         ProfileDef {
+            default_patch: String::new(),
             drives: Vec::new(),
             name: "Test".to_string(),
             presets: Vec::new(),
@@ -1165,6 +1191,8 @@ mod song_tests {
 
     fn song() -> SongDef {
         SongDef {
+            profile: String::new(),
+            start_part: String::new(),
             name: "No Other Name".into(),
             key: "G".into(),
             bpm: 74,
@@ -1178,11 +1206,13 @@ mod song_tests {
             stack_defaults: Vec::new(),
             part_recalls: vec![
                 PartRecallDef {
+                    profile: String::new(),
                     part: "chorus".into(),
                     patch: "Ambient".into(),
                     overrides: Vec::new(),
                 },
                 PartRecallDef {
+                    profile: String::new(),
                     part: "Bridge".into(),
                     patch: "Lead".into(),
                     overrides: Vec::new(),
@@ -1226,6 +1256,7 @@ mod song_tests {
     fn a_recall_for_a_missing_section_adds_nothing() {
         let mut s = song();
         s.part_recalls.push(PartRecallDef {
+            profile: String::new(),
             part: "Outro".into(),
             patch: "Clean".into(),
                     overrides: Vec::new(),
@@ -1340,6 +1371,8 @@ mod section_tests {
 
     fn song_with_sections() -> SongDef {
         SongDef {
+            profile: String::new(),
+            start_part: String::new(),
             name: "Test Song".into(),
             key: "E".into(),
             bpm: 120,
@@ -1349,12 +1382,14 @@ mod section_tests {
             part_recalls: vec![
                 // A section that only changes things — no patch of its own.
                 PartRecallDef {
+                    profile: String::new(),
                     part: "Chorus".into(),
                     patch: String::new(),
                     overrides: vec![OverrideDef::set("Time", "VERB 1", "mix", 0.35)],
                 },
                 // A section that recalls a patch AND changes something.
                 PartRecallDef {
+                    profile: String::new(),
                     part: "Bridge".into(),
                     patch: "Lead".into(),
                     overrides: vec![OverrideDef::set("Time", "DLY 1", "mix", 0.4)],
@@ -1496,4 +1531,27 @@ mod section_tests {
         assert_eq!(recalls.len(), 3);
         assert_eq!(recalls[2], ("Bridge".to_string(), "Lead".to_string()));
     }
+
+    #[test]
+    fn a_song_names_its_profile_and_where_it_starts_and_old_files_still_read() {
+        let text = r#"name AMAZING!
+key B
+bpm 145
+stack 0
+parts ("Intro Lead" Verse)
+stack_defaults ()
+profile Worship
+start_part "Intro Lead"
+part_recalls ({part Verse, profile Rock, patch Crunch, overrides ()})
+"#;
+        let song: super::SongDef = facet_styx::from_str(text).expect("a song with profiles parses");
+        assert_eq!(song.profile, "Worship");
+        assert_eq!(song.start_part, "Intro Lead");
+        assert_eq!(song.part_recalls[0].profile, "Rock");
+        // A file from before songs named profiles reads with them empty.
+        let old = "name X\nkey G\nbpm 70\nstack 0\nparts ()\nstack_defaults ()\n";
+        let song: super::SongDef = facet_styx::from_str(old).expect("an old song parses");
+        assert!(song.profile.is_empty() && song.start_part.is_empty());
+    }
+
 }

@@ -654,7 +654,12 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                                 if is_focus { FOCUS_BG } else { "transparent" },
                                                 if is_focus { FOCUS_FG } else { TEXT },
                                             ),
-                                            onmousedown: move |e: MouseEvent| e.prevent_default(),
+                                            // No mousedown-preventDefault here (unlike the rail
+                                            // and the tag chip): cancelling pointerdown's default
+                                            // action on this button also skips the click Blitz's
+                                            // pointerup default action queues from it, so the row
+                                            // never registered a click at all. `refocus()` below
+                                            // puts the keyboard back in the search field instead.
                                             onclick: move |_| {
                                                 focus.set(Some(target.clone()));
                                                 refocus();
@@ -1379,6 +1384,42 @@ fn SongDetail(
                 }
             }
         }
+        Section { label: "Played on",
+            Chips {
+                options: std::iter::once("Whatever is loaded".to_string())
+                    .chain(lib.profiles.iter().map(|p| p.name.clone()))
+                    .collect::<Vec<_>>(),
+                selected: if song.profile.is_empty() { "Whatever is loaded".to_string() } else { song.profile.clone() },
+                on_pick: {
+                    let rig = rig.clone();
+                    let name = song.name.clone();
+                    move |p: String| {
+                        let p = if p == "Whatever is loaded" { String::new() } else { p };
+                        let name = name.clone();
+                        send(&rig, move |r| async move { let _ = r.set_song_profile(name, p).await; });
+                    }
+                },
+            }
+        }
+        if !song.parts.is_empty() {
+            Section { label: "Starts on",
+                Chips {
+                    options: std::iter::once("Profile default".to_string())
+                        .chain(song.parts.iter().cloned())
+                        .collect::<Vec<_>>(),
+                    selected: if song.start_part.is_empty() { "Profile default".to_string() } else { song.start_part.clone() },
+                    on_pick: {
+                        let rig = rig.clone();
+                        let name = song.name.clone();
+                        move |p: String| {
+                            let p = if p == "Profile default" { String::new() } else { p };
+                            let name = name.clone();
+                            send(&rig, move |r| async move { let _ = r.set_song_start_part(name, p).await; });
+                        }
+                    },
+                }
+            }
+        }
         Section { label: "Song parts",
             if song.parts.is_empty() {
                 span { style: "font-size: 12px; color: {FAINT}; line-height: 1.5;",
@@ -1466,6 +1507,39 @@ fn ProfileDetail(profile: ProfileEntry, on_go: EventHandler<(Kind, String)>) -> 
                             send(&rig, move |r| async move { let _ = r.add_profile(n, from).await; });
                             on_go.call((Kind::Profiles, go));
                         }
+                    }
+                },
+            }
+        }
+        // Its default scene: where it lands when loaded. Keeps the slot
+        // convention (1 clean … 4 lead) while a metal profile still starts
+        // on the chug in slot 3.
+        Section { label: "Lands on",
+            Chips {
+                options: profile
+                    .patch_list
+                    .iter()
+                    .map(|p| if p.stack.is_empty() { p.name.clone() } else { format!("{} · {}", p.stack, p.name) })
+                    .collect::<Vec<_>>(),
+                selected: profile
+                    .patch_list
+                    .iter()
+                    .find(|p| p.name.eq_ignore_ascii_case(&profile.default_patch))
+                    .or_else(|| profile.patch_list.first())
+                    .map(|p| if p.stack.is_empty() { p.name.clone() } else { format!("{} · {}", p.stack, p.name) })
+                    .unwrap_or_default(),
+                on_pick: {
+                    let rig = rig.clone();
+                    let name = profile.name.clone();
+                    let patches = profile.patch_list.clone();
+                    move |label: String| {
+                        let Some(p) = patches.iter().find(|p| {
+                            label == p.name || label == format!("{} · {}", p.stack, p.name)
+                        }) else {
+                            return;
+                        };
+                        let (name, patch) = (name.clone(), p.name.clone());
+                        send(&rig, move |r| async move { let _ = r.set_profile_default(name, patch).await; });
                     }
                 },
             }

@@ -573,6 +573,8 @@ pub fn GuitarRigRemote() -> Element {
 
                 // Indicators, not buttons: MIDI and audio at a glance, their
                 // options behind a right-click or double-click.
+                // The whole app's CPU, as a share of the machine.
+                crate::meters::CpuMeter { perf: (state.dsp)() }
                 crate::control::MidiIndicator {
                     on_settings: move |()| audio_open.set(true),
                 }

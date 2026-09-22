@@ -130,3 +130,36 @@ pub fn DspReadout(perf: RigPerf) -> Element {
 fn us_ms(us: u32) -> String {
     format!("{:.2}", f64::from(us) / 1000.0)
 }
+
+/// The whole app's CPU, for the bar: a percentage and a short bar.
+///
+/// The share of the machine, so a full bar is every core busy — the number
+/// that says whether the laptop is about to struggle. The tooltip puts it in
+/// cores too, the unit Activity Monitor uses. Distinct from [`DspReadout`],
+/// which is the audio callback against its own deadline.
+#[component]
+pub fn CpuMeter(perf: RigPerf) -> Element {
+    let pct = (perf.cpu * 100.0).round().clamp(0.0, 100.0);
+    let colour = match perf.cpu {
+        c if c >= 0.8 => "#ef4444",
+        c if c >= 0.5 => "#eab308",
+        _ => "#22c55e",
+    };
+    let cores_busy = perf.cpu * perf.cores as f32;
+    let title = format!(
+        "Signal is using {pct:.0}% of the machine — {cores_busy:.1} of {} cores",
+        perf.cores.max(1)
+    );
+    rsx! {
+        div {
+            style: "display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; \
+                    border-radius: 6px; flex-shrink: 0; font-size: 10px; color: #a1a1aa;",
+            title: "{title}",
+            span { style: "font-weight: 600; letter-spacing: 0.04em;", "CPU" }
+            div { style: "width: 44px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden;",
+                div { style: "height: 100%; width: {pct}%; background: {colour};" }
+            }
+            span { style: "width: 28px; text-align: right; font-variant-numeric: tabular-nums;", "{pct:.0}%" }
+        }
+    }
+}

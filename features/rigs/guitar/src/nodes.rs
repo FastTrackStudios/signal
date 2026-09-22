@@ -131,6 +131,14 @@ impl RigNodes {
         for stack in &def.stacks {
             profile = profile.with_stack(RigStack::new(&stack.name, stack.patches.clone()));
         }
+        // Where the profile lands when it loads: its default scene, by name.
+        if let Some(i) = profile
+            .patches
+            .iter()
+            .position(|p| !def.default_patch.is_empty() && p.name.eq_ignore_ascii_case(&def.default_patch))
+        {
+            profile.default_patch = i;
+        }
         profile
     }
 
@@ -530,6 +538,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
     // override the same parameter corrected it. Silent, and exactly the kind
     // of thing you would chase as "the Dry patch sounds gated".
     let unbent = ProfileDef {
+        default_patch: String::new(),
         patches: def
             .patches
             .iter()
@@ -1246,6 +1255,31 @@ mod tests {
     ///
     /// If this passes, the node library is the guitar rig rather than a model
     /// of it.
+    #[test]
+    fn a_profile_lands_on_its_default_scene() {
+        let mut def: ProfileDef = facet_styx::from_str(crate::library::DEFAULT_PROFILE)
+            .expect("the shipped profile parses");
+        let drives: Vec<DrivePresetDef> = {
+            #[derive(facet::Facet)]
+            struct Presets {
+                presets: Vec<DrivePresetDef>,
+            }
+            let parsed: Presets = facet_styx::from_str(crate::library::DEFAULT_DRIVE_PRESETS)
+                .expect("the shipped drive presets parse");
+            parsed.presets
+        };
+        // No default: the first patch, as before there were defaults.
+        let rig = profile_from_library(&def, &drives);
+        assert_eq!(rig.default_patch, 0);
+        // A named default is where it lands, wherever it sits in the pool.
+        def.default_patch = "lead".to_string();
+        let rig = profile_from_library(&def, &drives);
+        assert_eq!(rig.patches[rig.default_patch].name, "Lead");
+        // A name it does not have falls back to the first, not a panic.
+        def.default_patch = "Nope".to_string();
+        assert_eq!(profile_from_library(&def, &drives).default_patch, 0);
+    }
+
     #[test]
     fn the_library_reproduces_the_shipped_rig() {
         let def: ProfileDef = facet_styx::from_str(crate::library::DEFAULT_PROFILE)

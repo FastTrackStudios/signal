@@ -34,7 +34,7 @@
 use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::RigClient;
-use signal_guitar_proto::{PatchInfo, PerformanceModel};
+use signal_guitar_proto::{LibraryModel, PerformanceModel, ProfileEntry};
 use signal_widgets::{Picker, PickerSize};
 
 use crate::library::Kind;
@@ -76,13 +76,31 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
             let rig = rig.clone();
             async move {
                 match rig {
-                    Some(r) => r.patches().await.unwrap_or_default(),
-                    None => Vec::new(),
+                    Some(r) => r.library().await.unwrap_or_default(),
+                    None => LibraryModel::default(),
                 }
             }
         }
     });
-    let patch_list: Vec<PatchInfo> = patches.read().clone().unwrap_or_default();
+    let lib: LibraryModel = patches.read().clone().unwrap_or_default();
+    let profile_names: Vec<String> = lib.profiles.iter().map(|p| p.name.clone()).collect();
+    let loaded = model.profile_name.clone();
+    // A profile's patches as a part's recall list: "Stack · Patch".
+    let patches_of = |name: &str| -> (Vec<String>, Vec<String>) {
+        lib.profiles
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(name))
+            .map(|p: &ProfileEntry| {
+                (
+                    p.patch_list.iter().map(|x| x.name.clone()).collect(),
+                    p.patch_list
+                        .iter()
+                        .map(|x| if x.stack.is_empty() { x.name.clone() } else { format!("{} · {}", x.stack, x.name) })
+                        .collect(),
+                )
+            })
+            .unwrap_or_default()
+    };
 
     // One editor open at a time: the current song's entry, or a part.
     let mut editing_song = use_signal(|| false);
@@ -191,9 +209,24 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                         }
                                     }
                                 }
+                                // What the song is played on, under the song that is up.
+                                if is_current {
+                                    span { style: "margin: 2px 0 0 32px; font-size: 10px; color: {FAINT};",
+                                        if model.song_profile.is_empty() {
+                                            "on {loaded} (whatever is loaded)"
+                                        } else {
+                                            "on {model.song_profile}"
+                                        }
+                                    }
+                                }
                                 if is_current && editing_song() {
                                     SongEntryEditor {
-                                        key: "{song.name}-{song.key}-{song.bpm}",
+                                        key: "{song.name}-{song.key}-{song.bpm}-{model.song_profile}-{model.start_part}",
+                                        song: song.name.clone(),
+                                        profile: model.song_profile.clone(),
+                                        start_part: model.start_part.clone(),
+                                        profiles: profile_names.clone(),
+                                        parts: model.parts.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
                                         index: i,
                                         count: model.songs.len(),
                                         setlist: model.setlist_index,
@@ -246,24 +279,47 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                        white-space: nowrap; overflow: hidden;",
                                                             "{part.name}"
                                                         }
+                                                        if part.name.eq_ignore_ascii_case(&model.start_part) {
+                                                            span {
+                                                                style: "flex-shrink: 0; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; \
+                                                                        text-transform: uppercase; color: {SONG_FG};",
+                                                                title: "The song starts here",
+                                                                "start"
+                                                            }
+                                                        }
                                                         span { style: "flex-shrink: 0; font-size: 10px; color: {FAINT}; white-space: nowrap;",
+                                                            if !part.profile.is_empty() { "{part.profile} · " }
                                                             if part.patch.is_empty() { "" } else { "{part.patch}" }
                                                             if !part.overrides.is_empty() { " · ±{part.overrides.len()}" }
                                                         }
                                                     }
                                                     if open {
-                                                        PartEditor {
-                                                            key: "{pi}-{part.name}-editor",
-                                                            index: pi,
-                                                            count: model.parts.len(),
-                                                            name: part.name.clone(),
-                                                            patch: part.patch.clone(),
-                                                            patches: patch_list.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
-                                                            labels: patch_list
-                                                                .iter()
-                                                                .map(|p| if p.stack.is_empty() { p.name.clone() } else { format!("{} · {}", p.stack, p.name) })
-                                                                .collect::<Vec<_>>(),
-                                                            on_done: move |()| editing_part.set(None),
+                                                        {
+                                                            // The recall list is the patches of the
+                                                            // profile the part is played on.
+                                                            let base = if !part.profile.is_empty() {
+                                                                part.profile.clone()
+                                                            } else if !model.song_profile.is_empty() {
+                                                                model.song_profile.clone()
+                                                            } else {
+                                                                loaded.clone()
+                                                            };
+                                                            let (names, labels) = patches_of(&base);
+                                                            rsx! {
+                                                                PartEditor {
+                                                                    key: "{pi}-{part.name}-{part.profile}-editor",
+                                                                    index: pi,
+                                                                    count: model.parts.len(),
+                                                                    name: part.name.clone(),
+                                                                    patch: part.patch.clone(),
+                                                                    profile: part.profile.clone(),
+                                                                    song_profile: if model.song_profile.is_empty() { loaded.clone() } else { model.song_profile.clone() },
+                                                                    profiles: profile_names.clone(),
+                                                                    patches: names,
+                                                                    labels,
+                                                                    on_done: move |()| editing_part.set(None),
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -390,6 +446,12 @@ fn Field(
 /// zero fall back to the song's own), its position, and taking it out.
 #[component]
 fn SongEntryEditor(
+    song: String,
+    /// The song's profile; empty keeps whatever is loaded.
+    profile: String,
+    start_part: String,
+    profiles: Vec<String>,
+    parts: Vec<String>,
     index: usize,
     count: usize,
     setlist: u32,
@@ -412,6 +474,35 @@ fn SongEntryEditor(
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 6px; margin: 4px 0 4px 24px; padding: 8px; \
                       border-radius: 8px; border: 1px solid {LINE};",
+            span { style: "font-size: 10px; color: {FAINT};", "Played on" }
+            // Index 0 is "nothing chosen": the song keeps whatever is loaded.
+            Picker {
+                options: std::iter::once("— whatever is loaded —".to_string()).chain(profiles.iter().cloned()).collect::<Vec<_>>(),
+                selected: profiles.iter().position(|p| p.eq_ignore_ascii_case(&profile)).map_or(0, |p| p as u32 + 1),
+                width: "100%".to_string(),
+                on_select: {
+                    let (rig, song, profiles) = (rig.clone(), song.clone(), profiles.clone());
+                    move |i: u32| {
+                        let chosen = if i == 0 { String::new() } else { profiles.get(i as usize - 1).cloned().unwrap_or_default() };
+                        let song = song.clone();
+                        send(&rig, move |r| async move { let _ = r.set_song_profile(song, chosen).await; });
+                    }
+                },
+            }
+            span { style: "font-size: 10px; color: {FAINT};", "Starts on" }
+            Picker {
+                options: std::iter::once("— the profile's default —".to_string()).chain(parts.iter().cloned()).collect::<Vec<_>>(),
+                selected: parts.iter().position(|p| p.eq_ignore_ascii_case(&start_part)).map_or(0, |p| p as u32 + 1),
+                width: "100%".to_string(),
+                on_select: {
+                    let (rig, song, parts) = (rig.clone(), song.clone(), parts.clone());
+                    move |i: u32| {
+                        let chosen = if i == 0 { String::new() } else { parts.get(i as usize - 1).cloned().unwrap_or_default() };
+                        let song = song.clone();
+                        send(&rig, move |r| async move { let _ = r.set_song_start_part(song, chosen).await; });
+                    }
+                },
+            }
             span { style: "font-size: 10px; color: {FAINT};", "In this set" }
             div { style: "display: flex; gap: 6px; align-items: center;",
                 Field {
@@ -473,6 +564,11 @@ fn PartEditor(
     count: usize,
     name: String,
     patch: String,
+    /// The part's own profile; empty = the song's.
+    profile: String,
+    /// What "the song's" means right now, for the placeholder.
+    song_profile: String,
+    profiles: Vec<String>,
     patches: Vec<String>,
     /// `patches` as the picker shows them — "Stack · Patch", so a part reads
     /// as "this stack's other patch".
@@ -489,12 +585,26 @@ fn PartEditor(
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 6px; margin: 2px 0 6px; padding: 8px; \
                       border-radius: 8px; border: 1px solid {LINE};",
+            span { style: "font-size: 10px; color: {FAINT};", "Profile" }
+            Picker {
+                options: std::iter::once(format!("— the song's ({song_profile}) —")).chain(profiles.iter().cloned()).collect::<Vec<_>>(),
+                selected: profiles.iter().position(|p| p.eq_ignore_ascii_case(&profile)).map_or(0, |p| p as u32 + 1),
+                width: "100%".to_string(),
+                on_select: {
+                    let (rig, part, profiles) = (rig.clone(), name.clone(), profiles.clone());
+                    move |i: u32| {
+                        let chosen = if i == 0 { String::new() } else { profiles.get(i as usize - 1).cloned().unwrap_or_default() };
+                        let part = part.clone();
+                        send(&rig, move |r| async move { let _ = r.set_part_profile(part, chosen).await; });
+                    }
+                },
+            }
             span { style: "font-size: 10px; color: {FAINT};", "Recalls" }
             div { style: "display: flex; gap: 6px; align-items: center;",
                 Picker {
                     options: labels.clone(),
                     selected,
-                    placeholder: "— stays on the profile's patch —".to_string(),
+                    placeholder: "— the profile's current patch —".to_string(),
                     size: PickerSize::Normal,
                     width: "100%".to_string(),
                     on_select: {

@@ -19,6 +19,8 @@ pipewire = []
 
 [dependencies]
 uuid.workspace = true
+# getrusage — the process's own CPU time, for the bar's CPU meter.
+libc.workspace = true
 signal-rigs-proto.workspace = true
 # The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
 # RigAudioPrefs. The guitar feature is a thin live-handle layer on top.

@@ -173,6 +173,64 @@ pub struct GuitarRigBackend {
     events: PubSub<RigEvent>,
     /// Once-start guard for the shared meter pump (`architect::rig`).
     pump_started: Arc<std::sync::atomic::AtomicBool>,
+    /// The process CPU meter's last sample (see [`CpuMeter`]).
+    cpu: Arc<Mutex<CpuMeter>>,
+}
+
+/// The process's CPU share, from its CPU time against the wall clock.
+///
+/// Every remote polls status at meter rate, so a delta per call would be a
+/// delta over a few milliseconds — noise. It re-samples at most every half
+/// second and hands out the last value in between.
+#[derive(Default)]
+struct CpuMeter {
+    last: Option<(std::time::Instant, std::time::Duration)>,
+    value: f32,
+}
+
+impl CpuMeter {
+    const WINDOW: std::time::Duration = std::time::Duration::from_millis(500);
+
+    fn sample(&mut self, cores: u32) -> f32 {
+        let now = std::time::Instant::now();
+        let Some(cpu) = process_cpu_time() else {
+            return 0.0;
+        };
+        match self.last {
+            Some((at, _)) if now.duration_since(at) < Self::WINDOW => {}
+            Some((at, before)) => {
+                let wall = now.duration_since(at).as_secs_f32();
+                let used = cpu.saturating_sub(before).as_secs_f32();
+                self.value = (used / wall / cores.max(1) as f32).clamp(0.0, 1.0);
+                self.last = Some((now, cpu));
+            }
+            None => self.last = Some((now, cpu)),
+        }
+        self.value
+    }
+}
+
+/// User + system CPU time this process has used, all threads.
+#[cfg(unix)]
+fn process_cpu_time() -> Option<std::time::Duration> {
+    let mut usage = std::mem::MaybeUninit::<libc::rusage>::zeroed();
+    // SAFETY: getrusage writes a whole `rusage` on success and we read it
+    // only then.
+    let usage = unsafe {
+        if libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) != 0 {
+            return None;
+        }
+        usage.assume_init()
+    };
+    let tv = |t: libc::timeval| {
+        std::time::Duration::from_secs(t.tv_sec as u64) + std::time::Duration::from_micros(t.tv_usec as u64)
+    };
+    Some(tv(usage.ru_utime) + tv(usage.ru_stime))
+}
+
+#[cfg(not(unix))]
+fn process_cpu_time() -> Option<std::time::Duration> {
+    None
 }
 
 impl Default for GuitarRigBackend {
@@ -217,6 +275,7 @@ impl GuitarRigBackend {
             revision: Arc::new(Mutex::new(0)),
             events: architect::rig::events_hub(),
             pump_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            cpu: Arc::new(Mutex::new(CpuMeter::default())),
         };
         backend.spawn_meter_pump("rig-meter-pump");
         backend.spawn_drive_calibration();
@@ -359,11 +418,141 @@ impl GuitarRigBackend {
 
     /// Load a rebuilt profile into the live rig, restore the active patch,
     /// and resync everything — the shared tail of every edit-time rebuild.
+    /// Status without the CPU meter — [`Rig::status`] adds it.
+    fn raw_status(&self) -> RigStatus {
+        // Design mode: the fake instrument, and the patch the definition says
+        // is live. Everything else on this payload is genuinely absent — there
+        // is no engine to report a block size or a render time, and inventing
+        // those would make the DSP strip lie about a rig that is not running.
+        if crate::library::rig_is_design() && self.rig.lock_ok().is_none() {
+            let f = crate::design::frame(self.design_seconds());
+            let patch = self.design_patch.lock_ok().clone();
+            return RigStatus {
+                running: true,
+                input_peak: f.input,
+                output_peak: f.output,
+                active_patch: Some(patch).filter(|p| !p.is_empty()),
+                comp_gr_db: f.gain_reduction_db,
+                input_peak_l: f.input,
+                input_peak_r: f.input,
+                output_peak_l: f.output,
+                output_peak_r: f.output,
+                perf: signal_guitar_proto::RigPerf::default(),
+            };
+        }
+        let guard = self.rig.lock_ok();
+        let (input_peak, output_peak, in_lr, out_lr, active_patch, perf) = match guard.as_ref() {
+            Some(prig) => {
+                let rig = prig.rig();
+                (
+                    rig.input_peak(),
+                    rig.output_peak(),
+                    rig.input_peak_lr(),
+                    rig.output_peak_lr(),
+                    prig.active_patch().map(|p| p.name.clone()),
+                    signal_guitar_proto::RigPerf {
+                        block_frames: rig.block_frames(),
+                        sample_rate: rig.sample_rate,
+                        render_us: rig.render_us(),
+                        peak_render_us: rig.peak_render_us(),
+                        mean_render_us: rig.mean_render_us(),
+                        load: rig.dsp_load(),
+                        mean_load: rig.mean_dsp_load(),
+                        over_budget: rig.over_budget(),
+                        xruns: rig.underruns(),
+                        blocks: rig.blocks_rendered(),
+                        // The process meter is added by `Rig::status`.
+                        cpu: 0.0,
+                        cores: 0,
+                    },
+                )
+            }
+            None => return RigStatus::default(),
+        };
+        drop(guard);
+        let in_db = if input_peak > 0.0 {
+            (20.0 * input_peak.log10()).max(-90.0)
+        } else {
+            -90.0
+        };
+        let _ = in_db;
+        RigStatus {
+            running: true,
+            input_peak,
+            output_peak,
+            active_patch,
+            comp_gr_db: self.live_comp_gr(),
+            input_peak_l: in_lr.0,
+            input_peak_r: in_lr.1,
+            output_peak_l: out_lr.0,
+            output_peak_r: out_lr.1,
+            perf,
+        }
+    }
+
     /// Every profile's name, the active one first.
     fn profile_names(&self) -> Vec<String> {
         let mut names = vec![self.profile_def.lock_ok().name.clone()];
         names.extend(self.other_profiles.lock_ok().iter().map(|p| p.name.clone()));
         names
+    }
+
+    /// The active profile's default patch by name — its default scene, or
+    /// the first patch when it names none (or one it no longer has).
+    fn default_patch_name(&self) -> String {
+        let def = self.profile_def.lock_ok();
+        def.patches
+            .iter()
+            .find(|p| !def.default_patch.is_empty() && p.name.eq_ignore_ascii_case(&def.default_patch))
+            .or_else(|| def.patches.first())
+            .map(|p| p.name.clone())
+            .unwrap_or_default()
+    }
+
+    /// Make `name` the playing profile, if it is not already. `false` when
+    /// nothing changed — already playing, or no such profile.
+    fn ensure_profile(&self, name: &str) -> bool {
+        if name.is_empty() || self.profile_def.lock_ok().name.eq_ignore_ascii_case(name) {
+            return false;
+        }
+        let def = self
+            .other_profiles
+            .lock_ok()
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(name))
+            .cloned();
+        match def {
+            Some(def) => {
+                self.switch_profile(def);
+                true
+            }
+            None => {
+                tracing::warn!("no profile named '{name}' — staying on the one loaded");
+                false
+            }
+        }
+    }
+
+    /// Activate a patch of the playing profile by name, in the engine or,
+    /// with none, in design mode. `false` if the profile has no such patch.
+    fn activate_named(&self, name: &str) -> bool {
+        let mut guard = self.rig.lock_ok();
+        match guard.as_mut() {
+            Some(prig) => activate_patch_by_name(prig, name),
+            None => {
+                drop(guard);
+                let known = self
+                    .profile_def
+                    .lock_ok()
+                    .patches
+                    .iter()
+                    .any(|p| p.name.eq_ignore_ascii_case(name));
+                if known {
+                    *self.design_patch.lock_ok() = name.to_string();
+                }
+                known
+            }
+        }
     }
 
     /// Play `def` instead of the active profile, which goes back on the
@@ -378,9 +567,9 @@ impl GuitarRigBackend {
             others.push(old);
             others.sort_by_key(|p| p.name.to_lowercase());
         }
-        // The patch that was up belongs to the other profile; design mode
-        // falls back to the first patch when this names none.
-        self.design_patch.lock_ok().clear();
+        // The patch that was up belongs to the other profile: land on the
+        // new one's default scene (design mode has no engine to do it).
+        *self.design_patch.lock_ok() = self.default_patch_name();
         let rebuilt = {
             let def = self.profile_def.lock_ok();
             let dps = self.drive_presets.lock_ok();
@@ -1098,6 +1287,7 @@ impl GuitarRigBackend {
             .patches
             .iter()
             .find(|p| !chosen.is_empty() && p.name.eq_ignore_ascii_case(&chosen))
+            .or_else(|| profile.patches.get(profile.default_patch))
             .or_else(|| profile.patches.first())
             .map(|p| p.name.clone())
     }
@@ -1475,6 +1665,12 @@ impl GuitarRigBackend {
                         s.parts_with_changes()
                             .into_iter()
                             .map(|(name, patch, overrides)| PerfPart {
+                                profile: s
+                                    .part_recalls
+                                    .iter()
+                                    .find(|r| r.part.eq_ignore_ascii_case(&name))
+                                    .map(|r| r.profile.clone())
+                                    .unwrap_or_default(),
                                 name,
                                 patch,
                                 overrides: overrides
@@ -1498,49 +1694,63 @@ impl GuitarRigBackend {
     /// Recall setlist entry `idx`: activate its stack, set the song's tempo
     /// (which re-times the delays), and rewind to the first section.
     fn recall_song(&self, idx: usize) {
-        let entry = self.resolved_setlist().get(idx).cloned();
-        if let Some((name, key, bpm, stack, _)) = entry {
-            *self.part_index.lock_ok() = 0;
-            *self.tempo.lock_ok() = Some(bpm as f32);
-            self.mark_state_dirty();
-            tracing::info!("setlist → {name} ({key} · {bpm} BPM, stack {stack})");
-            self.apply_tempo_to_delays();
-            // Song switch tuning: reset every stack cursor, then point the
-            // song's overridden stacks at their landing patches — the
-            // switches are dialed for the song before anything activates.
-            let defaults = self
-                .songs_lib
-                .lock_ok()
-                .iter()
-                .find(|s| s.name.eq_ignore_ascii_case(&name))
-                .map(|s| s.stack_defaults.clone())
-                .unwrap_or_default();
-            {
-                let mut guard = self.rig.lock_ok();
-                if let Some(prig) = guard.as_mut() {
-                    prig.reset_stack_positions();
-                    for d in &defaults {
-                        prig.point_stack_at(&d.stack, &d.patch);
-                    }
+        let Some((name, key, bpm, _, parts)) = self.resolved_setlist().get(idx).cloned() else {
+            return;
+        };
+        *self.part_index.lock_ok() = 0;
+        *self.tempo.lock_ok() = Some(bpm as f32);
+        self.mark_state_dirty();
+        let (profile, start_part, defaults) = self
+            .songs_lib
+            .lock_ok()
+            .iter()
+            .find(|s| s.name.eq_ignore_ascii_case(&name))
+            .map(|s| (s.profile.clone(), s.start_part.clone(), s.stack_defaults.clone()))
+            .unwrap_or_default();
+        tracing::info!("setlist → {name} ({key} · {bpm} BPM, profile '{profile}', starts '{start_part}')");
+
+        // The song's profile first: everything after it — the stack
+        // tuning, the landing patch, the part — is in that profile's terms.
+        self.ensure_profile(&profile);
+        self.apply_tempo_to_delays();
+
+        // Song switch tuning: reset every stack cursor, then point the
+        // song's overridden stacks at their landing patches — the switches
+        // are dialed for the song before anything activates.
+        {
+            let mut guard = self.rig.lock_ok();
+            if let Some(prig) = guard.as_mut() {
+                prig.reset_stack_positions();
+                for d in &defaults {
+                    prig.point_stack_at(&d.stack, &d.patch);
                 }
             }
-            // Recall activates the song's stack only when it isn't already
-            // the active one — a press on the active stack would *rotate*
-            // it (FM9 semantics), silently changing the patch.
-            let already_active = self.rig.lock_ok().as_ref().is_some_and(|prig| {
-                prig.stacks().get(stack).is_some_and(|st| {
-                    st.patches.iter().any(|p| {
-                        prig.active_patch()
-                            .is_some_and(|a| a.name.eq_ignore_ascii_case(p))
-                    })
-                })
-            });
-            if already_active {
-                self.publish_state();
-            } else {
-                self.activate_stack_and_sync(stack);
-            }
         }
+
+        // Where the song starts: its start part (an intro lead, say), which
+        // brings its own profile, patch and changes…
+        if let Some(pi) = parts
+            .iter()
+            .position(|p| !start_part.is_empty() && p.name.eq_ignore_ascii_case(&start_part))
+        {
+            Rig::select_part(self, pi as u32);
+            return;
+        }
+        // …or the profile's default scene — through the song's tuning of
+        // that stack, when it has one (Clean → "Clean Verb" for this song).
+        let landing = {
+            let default = self.default_patch_name();
+            let def = self.profile_def.lock_ok();
+            def.stacks
+                .iter()
+                .find(|st| st.patches.iter().any(|p| p.eq_ignore_ascii_case(&default)))
+                .and_then(|st| defaults.iter().find(|d| d.stack.eq_ignore_ascii_case(&st.name)))
+                .map_or(default, |d| d.patch.clone())
+        };
+        if self.activate_named(&landing) {
+            self.sync_after_switch(std::time::Duration::ZERO, "song");
+        }
+        self.publish_state();
     }
 
     /// Open (or re-open) the live rig, then load the Worship profile (which
@@ -2038,6 +2248,8 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         headphone: HeadphoneState::default(),
         master_trim_db: 0.0,
         revision: 0,
+        song_profile: String::new(),
+        start_part: String::new(),
     }
 }
 
@@ -2256,71 +2468,11 @@ impl Rig for GuitarRigBackend {
     }
 
     fn status(&self) -> RigStatus {
-        // Design mode: the fake instrument, and the patch the definition says
-        // is live. Everything else on this payload is genuinely absent — there
-        // is no engine to report a block size or a render time, and inventing
-        // those would make the DSP strip lie about a rig that is not running.
-        if crate::library::rig_is_design() && self.rig.lock_ok().is_none() {
-            let f = crate::design::frame(self.design_seconds());
-            let patch = self.design_patch.lock_ok().clone();
-            return RigStatus {
-                running: true,
-                input_peak: f.input,
-                output_peak: f.output,
-                active_patch: Some(patch).filter(|p| !p.is_empty()),
-                comp_gr_db: f.gain_reduction_db,
-                input_peak_l: f.input,
-                input_peak_r: f.input,
-                output_peak_l: f.output,
-                output_peak_r: f.output,
-                perf: signal_guitar_proto::RigPerf::default(),
-            };
-        }
-        let guard = self.rig.lock_ok();
-        let (input_peak, output_peak, in_lr, out_lr, active_patch, perf) = match guard.as_ref() {
-            Some(prig) => {
-                let rig = prig.rig();
-                (
-                    rig.input_peak(),
-                    rig.output_peak(),
-                    rig.input_peak_lr(),
-                    rig.output_peak_lr(),
-                    prig.active_patch().map(|p| p.name.clone()),
-                    signal_guitar_proto::RigPerf {
-                        block_frames: rig.block_frames(),
-                        sample_rate: rig.sample_rate,
-                        render_us: rig.render_us(),
-                        peak_render_us: rig.peak_render_us(),
-                        mean_render_us: rig.mean_render_us(),
-                        load: rig.dsp_load(),
-                        mean_load: rig.mean_dsp_load(),
-                        over_budget: rig.over_budget(),
-                        xruns: rig.underruns(),
-                        blocks: rig.blocks_rendered(),
-                    },
-                )
-            }
-            None => return RigStatus::default(),
-        };
-        drop(guard);
-        let in_db = if input_peak > 0.0 {
-            (20.0 * input_peak.log10()).max(-90.0)
-        } else {
-            -90.0
-        };
-        let _ = in_db;
-        RigStatus {
-            running: true,
-            input_peak,
-            output_peak,
-            active_patch,
-            comp_gr_db: self.live_comp_gr(),
-            input_peak_l: in_lr.0,
-            input_peak_r: in_lr.1,
-            output_peak_l: out_lr.0,
-            output_peak_r: out_lr.1,
-            perf,
-        }
+        let mut status = self.raw_status();
+        let cores = std::thread::available_parallelism().map_or(1, |n| n.get() as u32);
+        status.perf.cpu = self.cpu.lock_ok().sample(cores);
+        status.perf.cores = cores;
+        status
     }
 
     fn perf(&self) -> PerformanceModel {
@@ -2383,6 +2535,17 @@ impl Rig for GuitarRigBackend {
                 .collect();
         }
         m.part_index = *self.part_index.lock_ok() as u32;
+        if let Some(song) = m.songs.get(m.song_index as usize) {
+            if let Some(def) = self
+                .songs_lib
+                .lock_ok()
+                .iter()
+                .find(|s| s.name.eq_ignore_ascii_case(&song.name))
+            {
+                m.song_profile = def.profile.clone();
+                m.start_part = def.start_part.clone();
+            }
+        }
         m.headphone = self.headphone.lock_ok().clone();
         m.master_trim_db = *self.master_trim.lock_ok();
         m.revision = *self.revision.lock_ok();
@@ -2445,16 +2608,17 @@ impl Rig for GuitarRigBackend {
             // the PATCH a section recalls, and clearing it should not throw
             // away the parameter changes that are the section's real
             // content.
-            let kept = song
+            let (kept, profile) = song
                 .part_recalls
                 .iter()
                 .find(|r| r.part.eq_ignore_ascii_case(&part))
-                .map(|r| r.overrides.clone())
+                .map(|r| (r.overrides.clone(), r.profile.clone()))
                 .unwrap_or_default();
             song.part_recalls
                 .retain(|r| !r.part.eq_ignore_ascii_case(&part));
-            if !patch.is_empty() || !kept.is_empty() {
+            if !patch.is_empty() || !kept.is_empty() || !profile.is_empty() {
                 song.part_recalls.push(crate::profiles::PartRecallDef {
+                    profile,
                     part: part.clone(),
                     patch: patch.clone(),
                     overrides: kept,
@@ -2544,16 +2708,17 @@ impl Rig for GuitarRigBackend {
             // Keep the patch this section already recalls: this call sets
             // what it CHANGES, and the two are independent halves of the
             // same section.
-            let patch = song
+            let (patch, profile) = song
                 .part_recalls
                 .iter()
                 .find(|r| r.part.eq_ignore_ascii_case(&part))
-                .map(|r| r.patch.clone())
+                .map(|r| (r.patch.clone(), r.profile.clone()))
                 .unwrap_or_default();
             song.part_recalls
                 .retain(|r| !r.part.eq_ignore_ascii_case(&part));
-            if !patch.is_empty() || !defs.is_empty() {
+            if !patch.is_empty() || !defs.is_empty() || !profile.is_empty() {
                 song.part_recalls.push(crate::profiles::PartRecallDef {
+                    profile,
                     part: part.clone(),
                     patch,
                     overrides: defs,
@@ -2763,6 +2928,28 @@ impl Rig for GuitarRigBackend {
             }
         };
 
+        // A part is a base profile first — its own, else the song's — then a
+        // patch in it, then changes on top.
+        let song_profile = {
+            let song_name = self
+                .resolved_setlist()
+                .get(song_idx)
+                .map(|(name, ..)| name.clone())
+                .unwrap_or_default();
+            self.songs_lib
+                .lock_ok()
+                .iter()
+                .find(|s| s.name.eq_ignore_ascii_case(&song_name))
+                .map(|s| s.profile.clone())
+                .unwrap_or_default()
+        };
+        let want_profile = section
+            .as_ref()
+            .map(|p| p.profile.clone())
+            .filter(|p| !p.is_empty())
+            .unwrap_or(song_profile);
+        let switched_profile = self.ensure_profile(&want_profile);
+
         let recall = section.filter(|part| !part.patch.is_empty());
         if let Some(part) = recall {
             tracing::info!(part = %part.name, patch = %part.patch, "part → patch");
@@ -2821,6 +3008,9 @@ impl Rig for GuitarRigBackend {
                     self.sync_after_switch(std::time::Duration::ZERO, "section");
                 }
             }
+        } else if switched_profile {
+            // A part that only changes the profile lands on its default.
+            tracing::info!("part → {idx} (song {song_idx}) on '{want_profile}'");
         } else {
             tracing::info!("part → {idx} (song {song_idx})");
         }
@@ -3484,6 +3674,8 @@ impl Rig for GuitarRigBackend {
                 return;
             }
             songs.push(SongDef {
+                profile: String::new(),
+                start_part: String::new(),
                 name: name.clone(),
                 key: if key.is_empty() { "C".to_string() } else { key },
                 bpm: if bpm == 0 { 120 } else { bpm },
@@ -3986,6 +4178,20 @@ impl Rig for GuitarRigBackend {
             stacks: p.stacks.iter().map(|s| s.name.clone()).collect(),
             patches: p.patches.len() as u32,
             presets: p.presets.iter().map(|p| p.name.clone()).collect(),
+            patch_list: p
+                .patches
+                .iter()
+                .map(|patch| signal_guitar_proto::ProfilePatch {
+                    name: patch.name.clone(),
+                    stack: p
+                        .stacks
+                        .iter()
+                        .find(|st| st.patches.iter().any(|n| n.eq_ignore_ascii_case(&patch.name)))
+                        .map(|st| st.name.clone())
+                        .unwrap_or_default(),
+                })
+                .collect(),
+            default_patch: p.default_patch.clone(),
         };
         let (mut profiles, slots) = {
             let active = self.profile_def.lock_ok();
@@ -4015,6 +4221,8 @@ impl Rig for GuitarRigBackend {
                     .filter(|set| set.entries.iter().any(|e| e.song.eq_ignore_ascii_case(&s.name)))
                     .map(|set| set.name.clone())
                     .collect(),
+                profile: s.profile.clone(),
+                start_part: s.start_part.clone(),
             })
             .collect();
         let setlists = sets
@@ -4090,6 +4298,7 @@ impl Rig for GuitarRigBackend {
             let active = self.profile_def.lock_ok();
             let first = active.presets.first().map(|p| p.name.clone()).unwrap_or_default();
             ProfileDef {
+                default_patch: String::new(),
                 name: String::new(),
                 drives: active.drives.clone(),
                 presets: active.presets.clone(),
@@ -4309,6 +4518,104 @@ impl Rig for GuitarRigBackend {
             self.mark_state_dirty();
         }
         self.publish_state();
+    }
+
+    fn set_song_profile(&self, song: String, profile: String) {
+        {
+            let mut songs = self.songs_lib.lock_ok();
+            let Some(s) = songs.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&song)) else {
+                return;
+            };
+            s.profile = profile.trim().to_string();
+            RigLibrary::save_songs(&songs);
+        }
+        tracing::info!("song '{song}' → profile '{profile}'");
+        // The song that is up is re-recalled, so the choice is heard now
+        // rather than the next time the song comes round.
+        let current = *self.song_index.lock_ok();
+        let is_current = self
+            .resolved_setlist()
+            .get(current)
+            .is_some_and(|(name, ..)| name.eq_ignore_ascii_case(&song));
+        if is_current {
+            self.recall_song(current);
+        }
+        self.publish_state();
+    }
+
+    fn set_song_start_part(&self, song: String, part: String) {
+        {
+            let mut songs = self.songs_lib.lock_ok();
+            let Some(s) = songs.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&song)) else {
+                return;
+            };
+            let part = part.trim();
+            if !part.is_empty() && !s.parts.iter().any(|p| p.eq_ignore_ascii_case(part)) {
+                tracing::warn!("set_song_start_part: '{song}' has no part '{part}'");
+                return;
+            }
+            s.start_part = part.to_string();
+            RigLibrary::save_songs(&songs);
+        }
+        self.publish_state();
+    }
+
+    fn set_part_profile(&self, part: String, profile: String) {
+        let profile = profile.trim().to_string();
+        self.edit_current_song("set_part_profile", |song| {
+            if !song.parts.iter().any(|p| p.eq_ignore_ascii_case(&part)) {
+                return false;
+            }
+            match song.part_recalls.iter_mut().find(|r| r.part.eq_ignore_ascii_case(&part)) {
+                Some(r) => r.profile.clone_from(&profile),
+                None => song.part_recalls.push(crate::profiles::PartRecallDef {
+                    part: part.clone(),
+                    profile: profile.clone(),
+                    patch: String::new(),
+                    overrides: Vec::new(),
+                }),
+            }
+            true
+        });
+        // The part that is up is re-recalled, so the choice is heard now.
+        let (song_idx, part_idx) = (*self.song_index.lock_ok(), *self.part_index.lock_ok());
+        let is_current = self
+            .resolved_setlist()
+            .get(song_idx)
+            .and_then(|(.., parts)| parts.get(part_idx).map(|p| p.name.eq_ignore_ascii_case(&part)))
+            .unwrap_or(false);
+        if is_current {
+            Rig::select_part(self, part_idx as u32);
+        }
+    }
+
+    fn set_profile_default(&self, profile: String, patch: String) {
+        let patch = patch.trim().to_string();
+        let set = |def: &mut ProfileDef| -> bool {
+            if !patch.is_empty() && !def.patches.iter().any(|p| p.name.eq_ignore_ascii_case(&patch)) {
+                tracing::warn!("set_profile_default: '{}' has no patch '{patch}'", def.name);
+                return false;
+            }
+            def.default_patch = patch.clone();
+            RigLibrary::save_profile(def);
+            true
+        };
+        let done = {
+            let mut active = self.profile_def.lock_ok();
+            if active.name.eq_ignore_ascii_case(&profile) {
+                set(&mut active)
+            } else {
+                self.other_profiles
+                    .lock_ok()
+                    .iter_mut()
+                    .find(|p| p.name.eq_ignore_ascii_case(&profile))
+                    .is_some_and(|p| set(p))
+            }
+        };
+        if done {
+            tracing::info!("profile '{profile}' lands on '{patch}'");
+            self.publish_state();
+        }
     }
 
     fn set_block_param(&self, id: String, param: String, value: f32) {
@@ -4678,6 +4985,7 @@ mod tests {
     #[test]
     fn a_patch_names_its_amp() {
         let def = ProfileDef {
+            default_patch: String::new(),
             drives: Vec::new(),
             name: "test".to_string(),
             presets: Vec::new(),

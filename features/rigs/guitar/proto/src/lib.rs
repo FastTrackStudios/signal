@@ -92,6 +92,18 @@ pub struct RigPerf {
     pub xruns: u64,
     /// Blocks rendered — the sample count behind `mean_render_us`.
     pub blocks: u64,
+    /// The whole process's CPU — audio, NAM, UI, everything — as a share of
+    /// the machine (0..=1), averaged over the last half second or so.
+    ///
+    /// Not the same question as [`load`](Self::load): that is the audio
+    /// callback against its deadline, and a rig can make every deadline
+    /// while the UI burns two cores. This is what Activity Monitor would
+    /// say, divided by the cores.
+    #[facet(default)]
+    pub cpu: f32,
+    /// Logical cores — so `cpu` can also be read as cores busy.
+    #[facet(default)]
+    pub cores: u32,
 }
 
 impl RigPerf {
@@ -246,6 +258,12 @@ pub struct PerformanceModel {
     /// (patch repoints, preset edits) that don't change the fields above,
     /// so clients can refetch derived data (patches/presets) on change.
     pub revision: u64,
+    /// The current song's profile; empty when it keeps whatever is loaded.
+    #[facet(default)]
+    pub song_profile: String,
+    /// The part the current song starts on; empty = the profile's default.
+    #[facet(default)]
+    pub start_part: String,
 }
 
 /// One patch in the loaded profile — the preset browser's row.
@@ -386,6 +404,19 @@ pub struct ProfileEntry {
     pub patches: u32,
     /// Pool preset names — the amps this profile is built on.
     pub presets: Vec<String>,
+    /// Every patch, with its stack — what a song part can pick from this
+    /// profile when the part is played on it.
+    pub patch_list: Vec<ProfilePatch>,
+    /// The patch it lands on when loaded (its default scene); empty = the
+    /// first.
+    pub default_patch: String,
+}
+
+/// A patch of a profile, and the stack (footswitch slot) holding it.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct ProfilePatch {
+    pub name: String,
+    pub stack: String,
 }
 
 /// One song in the library, with its defaults.
@@ -398,6 +429,10 @@ pub struct SongEntry {
     pub parts: Vec<String>,
     /// Names of the setlists it appears in — why it cannot be deleted.
     pub setlists: Vec<String>,
+    /// The profile it is played on; empty keeps whatever is loaded.
+    pub profile: String,
+    /// The part it starts on; empty = the profile's default patch.
+    pub start_part: String,
 }
 
 /// One setlist and its songs as the set plays them.
@@ -430,6 +465,9 @@ pub struct PerfPart {
     /// What this section changes on top of that patch.
     #[facet(default)]
     pub overrides: Vec<PartOverride>,
+    /// The profile this part is played on, when it is not the song's.
+    #[facet(default)]
+    pub profile: String,
 }
 
 /// One parameter a section changes.
@@ -799,6 +837,16 @@ pub mod rig {
         fn duplicate_setlist(&self, index: u32, new_name: String);
         /// Delete setlist `index` — refused for the last one.
         fn delete_setlist(&self, index: u32);
+        /// The profile a song is played on (empty: keep whatever is loaded).
+        fn set_song_profile(&self, song: String, profile: String);
+        /// The part a song starts on (empty: the profile's default patch).
+        fn set_song_start_part(&self, song: String, part: String);
+        /// The profile a part of the **current song** is played on (empty:
+        /// the song's).
+        fn set_part_profile(&self, part: String, profile: String);
+        /// The patch a profile lands on when loaded — its default scene
+        /// (empty: the first patch).
+        fn set_profile_default(&self, profile: String, patch: String);
 
         /// Every rig change, as it happens: meters at meter rate, perf/chain
         /// on mutation. Remotes render from this stream instead of polling.

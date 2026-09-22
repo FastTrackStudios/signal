@@ -92,16 +92,36 @@ pub fn ZoomPanel(
     /// of `children` (e.g. the gate's expanded editor with attack/release).
     #[props(default)]
     zoomed_view: Option<Element>,
-    /// Bypass-all control shown beside the zoom icon: `Some(engaged)` +
-    /// `on_power` renders the power button.
+    /// Bypass-all control shown beside the zoom icon (top-right): `Some(engaged)`
+    /// + `on_power` renders the power button. Used by the grouped panels
+    /// (Delay/Reverb), which draw their own per-member power button at the
+    /// left inside `children`, so a second one here would be redundant.
     #[props(default)]
     power_on: Option<bool>,
     #[props(default)] on_power: Option<Callback<()>>,
+    /// A single block's own bypass, shown at the top-LEFT instead — for a
+    /// panel that is one block and has no internal header of its own to put
+    /// it in (Compressor, Gate, Amp EQ). `Some(engaged)` + `on_left_power`
+    /// renders it; omit both for a panel with nothing to bypass as a whole.
+    #[props(default)]
+    left_power_on: Option<bool>,
+    #[props(default)] on_left_power: Option<Callback<()>>,
 ) -> Element {
     let mut zoomed = use_signal(|| false);
     rsx! {
         div { class: "relative flex flex-col flex-1 border border-border bg-card min-h-0 overflow-hidden",
             div { class: "flex-1 min-h-0", {children.clone()} }
+            if let (Some(on), Some(cb)) = (left_power_on, on_left_power) {
+                div { class: "absolute top-1 left-1.5 z-20 flex items-center gap-1.5",
+                    button {
+                        class: "text-sm leading-none",
+                        style: if on { "color: #4ade80;" } else { "color: #52525b;" },
+                        title: if on { "Bypass" } else { "Engage" },
+                        onclick: move |_| cb.call(()),
+                        fts_chrome::Glyph { icon: fts_chrome::Icon::Power, size: 12 }
+                    }
+                }
+            }
             // Floating corner controls — power (bypass all) + zoom.
             div { class: "absolute top-1 right-1.5 z-20 flex items-center gap-1.5",
                 if let (Some(on), Some(cb)) = (power_on, on_power) {
@@ -1703,7 +1723,19 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     div { class: "flex gap-0 min-h-0 w-full", style: "flex: 3 1 0%; min-height: 0;",
                         // Height-driven square: width follows the row height.
                         div { class: "min-h-0 h-full aspect-square flex flex-col flex-shrink-0",
-                            ZoomPanel { title: "Compressor".to_string(),
+                            ZoomPanel {
+                                title: "Compressor".to_string(),
+                                left_power_on: comp.as_ref().map(|b| !b.bypassed),
+                                on_left_power: comp.as_ref().map(|b| {
+                                    let (rig, id) = (rig.clone(), b.id.clone());
+                                    Callback::new(move |()| {
+                                        let (rig, id) = (rig.clone(), id.clone());
+                                        spawn(async move {
+                                            let Some(r) = rig else { return };
+                                            let _ = r.toggle_block_bypass(id).await;
+                                        });
+                                    })
+                                }),
                                 if let Some(comp) = comp {
                                     crate::comp_surface::CompSurface {
                                         block: comp,
@@ -1723,6 +1755,17 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 zoomed_view: gate.clone().map(|g| rsx! {
                                     GatePanel { block: g, in_db, expanded: true }
                                 }),
+                                left_power_on: gate.as_ref().map(|b| !b.bypassed),
+                                on_left_power: gate.as_ref().map(|b| {
+                                    let (rig, id) = (rig.clone(), b.id.clone());
+                                    Callback::new(move |()| {
+                                        let (rig, id) = (rig.clone(), id.clone());
+                                        spawn(async move {
+                                            let Some(r) = rig else { return };
+                                            let _ = r.toggle_block_bypass(id).await;
+                                        });
+                                    })
+                                }),
                                 if let Some(gate) = gate {
                                     GatePanel { block: gate, in_db }
                                 } else {
@@ -1731,7 +1774,19 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             }
                         }
                         div { class: "min-h-0 flex flex-col", style: "flex: 1 1 0%;",
-                            ZoomPanel { title: "Amp EQ".to_string(),
+                            ZoomPanel {
+                                title: "Amp EQ".to_string(),
+                                left_power_on: eq.as_ref().map(|b| !b.bypassed),
+                                on_left_power: eq.as_ref().map(|b| {
+                                    let (rig, id) = (rig.clone(), b.id.clone());
+                                    Callback::new(move |()| {
+                                        let (rig, id) = (rig.clone(), id.clone());
+                                        spawn(async move {
+                                            let Some(r) = rig else { return };
+                                            let _ = r.toggle_block_bypass(id).await;
+                                        });
+                                    })
+                                }),
                                 if let Some(eq) = eq {
                                     // The plugin's own editor where there is a
                                     // renderer that can paint it; the portable

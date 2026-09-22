@@ -46,7 +46,7 @@ pub use eq_surface::EqProSurface;
 pub use grid::RigGraph;
 pub use icons::module_icon;
 pub use library::{Kind as LibraryKind, LibraryPicker};
-pub use meters::{DspReadout, MeterBar, MeterPair, meter_level};
+pub use meters::{CpuMeter, DspReadout, MeterBar, MeterPair, meter_level};
 pub use perform::PerformGrid;
 pub use remote::GuitarRigRemote;
 pub use settings::{AudioSettingsBridge, AudioSettingsModal};
