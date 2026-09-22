@@ -90,6 +90,8 @@ pub fn GuitarRigRemote() -> Element {
     fts_chrome::use_bar_claim();
     let mut left_open = use_signal(|| true);
     let palette_open = use_signal(|| false);
+    // The library picker, open on a kind — or closed.
+    let library_open = use_signal(|| None::<crate::library::Kind>);
 
     // Device lists, fetched once over the settings service.
     let devices = use_resource({
@@ -275,6 +277,8 @@ pub fn GuitarRigRemote() -> Element {
         fts_audio_ui::drag::DragProvider { fill: true,
         div {
             class: "flex flex-col h-full bg-background text-foreground outline-none",
+            // The library picker covers this box (Blitz has no `fixed`).
+            style: "position: relative;",
             tabindex: "0",
             // Cmd/Ctrl+P: the command palette. Everything else: the
             // keymap (keymap.styx) — "ctrl+1" strings → rig actions.
@@ -282,6 +286,7 @@ pub fn GuitarRigRemote() -> Element {
                 let mut palette_open = palette_open;
                 let rig = rig.clone();
                 let bindings = perf_now.key_bindings.clone();
+                let perf_mode = perf_now.perform_mode;
                 move |e: KeyboardEvent| {
                     let mods = e.modifiers();
                     if e.key() == Key::Character("p".to_string())
@@ -291,8 +296,18 @@ pub fn GuitarRigRemote() -> Element {
                         palette_open.toggle();
                         return;
                     }
-                    if palette_open() {
-                        return; // the palette owns the keyboard while open
+                    // Cmd/Ctrl+L: the library, on what the mode plays from.
+                    if e.key() == Key::Character("l".to_string())
+                        && (mods.ctrl() || mods.meta())
+                    {
+                        e.prevent_default();
+                        let mut library_open = library_open;
+                        let at = crate::library::Kind::for_perform_mode(perf_mode);
+                        library_open.set(if library_open().is_some() { None } else { Some(at) });
+                        return;
+                    }
+                    if palette_open() || library_open().is_some() {
+                        return; // the palette / library owns the keyboard while open
                     }
                     // Normalize the pressed combo to "ctrl+shift+x" form.
                     let key_name = match e.key() {
@@ -400,7 +415,7 @@ pub fn GuitarRigRemote() -> Element {
                     ] {
                         button {
                             key: "{label}",
-                            title: "{label}",
+                            title: if perf_now.perform_mode == pm { format!("{label} — click to browse") } else { label.to_string() },
                             style: "display: flex; align-items: center; gap: 5px;",
                             // The play mode is always one of the three —
                             // highlight it regardless of which work view is
@@ -410,10 +425,17 @@ pub fn GuitarRigRemote() -> Element {
                             } else {
                                 "rounded px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
                             },
+                            // A second click on the mode you are in opens the
+                            // picker for it: the mode names what you play
+                            // from, the picker is where you choose it.
                             onclick: {
                                 let rig = rig.clone();
+                                let current = perf_now.perform_mode;
+                                let mut library_open = library_open;
                                 move |_| {
-                                    if let Some(r) = rig.clone() {
+                                    if current == pm {
+                                        library_open.set(Some(crate::library::Kind::for_perform_mode(pm)));
+                                    } else if let Some(r) = rig.clone() {
                                         spawn(async move { let _ = r.set_perform_mode(pm).await; });
                                     }
                                 }
@@ -422,6 +444,23 @@ pub fn GuitarRigRemote() -> Element {
                             "{label}"
                         }
                     }
+                }
+                // The library: setlists, songs, profiles, patches, presets.
+                button {
+                    class: if library_open().is_some() {
+                        "flex items-center h-7 px-2 rounded-md bg-accent text-accent-foreground text-xs font-semibold"
+                    } else {
+                        "flex items-center h-7 px-2 rounded-md border border-border text-muted-foreground hover:text-foreground text-xs"
+                    },
+                    style: "display: flex; align-items: center; gap: 5px;",
+                    title: "Library (⌘L)",
+                    onclick: {
+                        let mut library_open = library_open;
+                        let at = crate::library::Kind::for_perform_mode(perf_now.perform_mode);
+                        move |_| library_open.set(if library_open().is_some() { None } else { Some(at) })
+                    },
+                    fts_chrome::Glyph { icon: fts_chrome::Icon::Browser, size: 13 }
+                    "Library"
                 }
                 // The bar's slack moves the window (and double-click maximises).
                 fts_chrome::DragSpace {}
@@ -575,7 +614,17 @@ pub fn GuitarRigRemote() -> Element {
             }
 
             // Body: [presets] [rig] [songs]
-            div { class: "flex-1 min-h-0 flex flex-row overflow-hidden",
+            //
+            // Not drawn while the library covers it — mounted, so nothing
+            // loses its state, but out of layout and paint. The rig redraws
+            // every frame (meters, visualisers), and winit's macOS loop runs
+            // redraws ahead of everything else: with the rig *and* the
+            // library to lay out each frame, the frame outgrew its budget and
+            // Dioxus never got a turn to apply anything — the library never
+            // appeared and the window looked frozen.
+            div {
+                class: "flex-1 min-h-0 flex flex-row overflow-hidden",
+                style: if library_open().is_some() { "display: none;" } else { "" },
                 if left_open() {
                     crate::sidebars::LeftSidebar { model: perf_now.clone() }
                 }
@@ -696,6 +745,8 @@ pub fn GuitarRigRemote() -> Element {
                     crate::sidebars::RightSidebar { model: perf_now.clone() }
                 }
             }
+            // Last, so it paints over the bar and the body.
+            crate::library::LibraryPicker { model: perf_now.clone(), open: library_open }
         }
 
         // Model-driven: the footswitch (hold tap-tempo), any remote, or

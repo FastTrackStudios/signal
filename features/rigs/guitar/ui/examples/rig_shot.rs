@@ -167,8 +167,36 @@ fn Shot() -> Element {
         // Viewport units, not percentages: a percentage height needs a
         // definite height on every ancestor, and in a headless document the
         // chain above this is not one the app controls.
-        div { style: "width: 100vw; height: 100vh;",
+        div { style: "width: 100vw; height: 100vh; position: relative;",
             signal_guitar_ui::GuitarRigRemote {}
+            // `RIG_SHOT_LIBRARY=setlists` (or songs, profiles, patches,
+            // presets, drives): the library picker, open, over the rig.
+            if let Some(kind) = shot_library() {
+                LibraryOver { kind }
+            }
         }
+    }
+}
+
+/// The picker kind `RIG_SHOT_LIBRARY` names, if any.
+fn shot_library() -> Option<signal_guitar_ui::LibraryKind> {
+    use signal_guitar_ui::LibraryKind as K;
+    let v = std::env::var("RIG_SHOT_LIBRARY").ok()?;
+    Some(match v.to_lowercase().as_str() {
+        "songs" => K::Songs,
+        "profiles" => K::Profiles,
+        "patches" => K::Patches,
+        "presets" => K::Presets,
+        "drives" => K::Drives,
+        _ => K::Setlists,
+    })
+}
+
+#[component]
+fn LibraryOver(kind: signal_guitar_ui::LibraryKind) -> Element {
+    let state = signal_guitar_ui::use_rig_state();
+    let open = use_signal(|| Some(kind));
+    rsx! {
+        signal_guitar_ui::LibraryPicker { model: (state.perf)(), open }
     }
 }
