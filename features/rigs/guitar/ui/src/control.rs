@@ -1257,7 +1257,7 @@ fn DriveChunk(
     /// Level 0..1 (drive amount / how hard the amp is pushed).
     level: f32,
     engaged: bool,
-    /// None → an empty slot (e.g. Amp R until dual-amp lands).
+    /// None → an empty slot (e.g. Amp R until a second amp is loaded).
     #[props(default)]
     block_id: Option<String>,
     /// The wire param the bar writes.
@@ -1266,6 +1266,14 @@ fn DriveChunk(
     /// Map bar position 0..1 → param value.
     #[props(default = (0.0, 1.0))]
     range: (f32, f32),
+    /// An amp slot's cab: `Some(true)` = convolving an IR, `Some(false)` =
+    /// no cab loaded (either the `.nam` already IS a full rig, or none was
+    /// picked yet) — tap the badge to engage/bypass once one is loaded.
+    /// `None` hides the badge (not an amp slot, or the slot is empty).
+    #[props(default)]
+    cab_engaged: Option<bool>,
+    #[props(default)]
+    on_cab_toggle: Option<Callback<()>>,
     /// Amber accent for the amps instead of drive red.
     #[props(default)]
     amp_style: bool,
@@ -1400,6 +1408,25 @@ fn DriveChunk(
                                 }
                             },
                         }
+                    }
+                }
+                if let Some(cab_on) = cab_engaged {
+                    div {
+                        class: "ml-auto pointer-events-auto rounded px-1 text-[9px] font-semibold cursor-pointer select-none",
+                        style: if cab_on {
+                            "background: rgba(245,158,11,0.22); color: #f59e0b;"
+                        } else {
+                            "background: rgba(120,120,125,0.12); color: #71717a;"
+                        },
+                        title: if cab_on { "Cab: convolving an IR — tap to bypass" } else { "Cab: none (built-in, or not loaded) — tap to engage" },
+                        onpointerdown: move |e: PointerEvent| e.stop_propagation(),
+                        onpointerup: move |e: PointerEvent| {
+                            e.stop_propagation();
+                            if let Some(cb) = on_cab_toggle {
+                                cb.call(());
+                            }
+                        },
+                        "CAB"
                     }
                 }
             }
@@ -1658,6 +1685,16 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                 .filter(|p| !p.is_empty())
         })
         .unwrap_or_else(|| "Amp L".to_string());
+    let amp_r = blocks
+        .iter()
+        .find(|b| b.block_type == BlockType::Amp && b.name.eq_ignore_ascii_case("Amp R"))
+        .cloned();
+    let amp_r_preset = amp_r
+        .as_ref()
+        .map(|a| a.preset.clone())
+        .filter(|p| !p.is_empty());
+    let cab_l = find_block(&blocks, BlockType::Cabinet, "Cab L");
+    let cab_r = find_block(&blocks, BlockType::Cabinet, "Cab R");
     let comp = find_block(&blocks, BlockType::Compressor, "Compressor");
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
 
@@ -1691,7 +1728,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 option: b.option,
                             }
                         }
-                        if let Some(amp) = amp_l {
+                        if let Some(amp) = amp_l.clone() {
                             DriveChunk {
                                 name: amp_preset,
                                 // Constant-loudness drive: the bar pushes the
@@ -1700,14 +1737,44 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 level: amp.params.iter().find(|p| p.name == "drive").map_or(0.5, |p| p.value),
                                 engaged: !amp.bypassed,
                                 block_id: Some(amp.id.clone()),
+                                options: amp.options.clone(),
+                                option: amp.option,
                                 amp_style: true,
+                                cab_engaged: cab_l.as_ref().map(|c| !c.bypassed),
+                                on_cab_toggle: cab_l.as_ref().map(|c| {
+                                    let (rig, id) = (rig.clone(), c.id.clone());
+                                    Callback::new(move |()| {
+                                        let (rig, id) = (rig.clone(), id.clone());
+                                        spawn(async move {
+                                            let Some(r) = rig else { return };
+                                            let _ = r.toggle_block_bypass(id).await;
+                                        });
+                                    })
+                                }),
                             }
                         }
                         DriveChunk {
-                            name: "Amp R".to_string(),
-                            level: 0.5,
-                            engaged: false,
+                            name: amp_r_preset.clone().unwrap_or_else(|| "Amp R".to_string()),
+                            level: amp_r
+                                .as_ref()
+                                .and_then(|a| a.params.iter().find(|p| p.name == "drive"))
+                                .map_or(0.5, |p| p.value),
+                            engaged: amp_r.as_ref().is_some_and(|a| !a.bypassed),
+                            block_id: amp_r.as_ref().map(|a| a.id.clone()),
+                            options: amp_r.as_ref().map(|a| a.options.clone()).unwrap_or_default(),
+                            option: amp_r.as_ref().map_or(0, |a| a.option),
                             amp_style: true,
+                            cab_engaged: amp_r_preset.is_some().then(|| cab_r.as_ref().is_some_and(|c| !c.bypassed)),
+                            on_cab_toggle: cab_r.as_ref().map(|c| {
+                                let (rig, id) = (rig.clone(), c.id.clone());
+                                Callback::new(move |()| {
+                                    let (rig, id) = (rig.clone(), id.clone());
+                                    spawn(async move {
+                                        let Some(r) = rig else { return };
+                                        let _ = r.toggle_block_bypass(id).await;
+                                    });
+                                })
+                            }),
                         }
                     }
                     // Height from the column, not from an aspect ratio.

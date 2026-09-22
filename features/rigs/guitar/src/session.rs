@@ -691,7 +691,15 @@ impl GuitarRigBackend {
                     .as_ref()
                     .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))?
             };
-            let preset = pool_preset_of(&def, &active)?;
+            let preset = if block_name.eq_ignore_ascii_case("Amp R") {
+                def.patches
+                    .iter()
+                    .find(|p| p.name.eq_ignore_ascii_case(&active))
+                    .map(|p| p.preset2.clone())
+                    .filter(|p| !p.is_empty())?
+            } else {
+                pool_preset_of(&def, &active)?
+            };
             return def
                 .presets
                 .iter()
@@ -1966,8 +1974,18 @@ impl GuitarRigBackend {
                                     })
                                     .unwrap_or_default()
                             } else if block.block_type == BlockType::Amp {
-                                let current =
-                                    pool_preset_of(&def, &patch.name).unwrap_or_default();
+                                // "Amp L" names the patch's first preset;
+                                // "Amp R" its second — a second amp is just
+                                // another board pedal, its own pool slot.
+                                let current = if name.eq_ignore_ascii_case("Amp R") {
+                                    def.patches
+                                        .iter()
+                                        .find(|p| p.name.eq_ignore_ascii_case(&patch.name))
+                                        .map(|p| p.preset2.clone())
+                                        .unwrap_or_default()
+                                } else {
+                                    pool_preset_of(&def, &patch.name).unwrap_or_default()
+                                };
                                 let pool: Vec<String> =
                                     def.presets.iter().map(|p| p.name.clone()).collect();
                                 let index = pool
@@ -3157,6 +3175,7 @@ impl Rig for GuitarRigBackend {
                         .and_then(|p| p.tone_url.clone())
                         .unwrap_or_default(),
                     gear: provenance.and_then(|p| p.gear.clone()).unwrap_or_default(),
+                    cab: preset.cab.clone(),
                     has_artwork: provenance.is_some_and(|p| p.artwork_path.is_some()),
                 }
             })
@@ -3276,6 +3295,43 @@ impl Rig for GuitarRigBackend {
         self.publish_state();
     }
 
+    /// Load a second amp (Amp R) into the patch, in series after the first —
+    /// same slot shape as a drive pedal, independently bypassable. See
+    /// [`set_patch_preset`](Self::set_patch_preset).
+    fn set_patch_preset2(&self, patch: u32, preset: u32) {
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let Some(preset_name) = def.presets.get(preset as usize).map(|p| p.name.clone()) else {
+                return;
+            };
+            let Some(p) = def.patches.get_mut(patch as usize) else {
+                return;
+            };
+            tracing::info!("patch '{}' → second amp '{preset_name}'", p.name);
+            p.preset2 = preset_name;
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+    }
+
+    /// Unload Amp R — the slot goes back to an empty, bypassed passthrough.
+    fn clear_patch_preset2(&self, patch: u32) {
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let Some(p) = def.patches.get_mut(patch as usize) else {
+                return;
+            };
+            tracing::info!("patch '{}' → second amp cleared", p.name);
+            p.preset2.clear();
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+    }
+
     fn set_block_option(&self, id: String, option: u32) {
         // The id addresses a live block; resolve its name, flip the option
         // in the definition, rebuild + reload (edit-time gap, patches stay
@@ -3308,7 +3364,11 @@ impl Rig for GuitarRigBackend {
                     .position(|p| p.name.eq_ignore_ascii_case(&active))
             };
             if let Some(patch) = patch {
-                self.set_patch_preset(patch as u32, option);
+                if block_name.eq_ignore_ascii_case("Amp R") {
+                    self.set_patch_preset2(patch as u32, option);
+                } else {
+                    self.set_patch_preset(patch as u32, option);
+                }
             }
             return;
         }
@@ -3389,6 +3449,8 @@ impl Rig for GuitarRigBackend {
                 name: name.clone(),
                 hash: capture_hash(&nam_path),
                 nam: nam_path,
+                cab: String::new(),
+                cab_hash: String::new(),
             });
             RigLibrary::save_profile(&def);
         }
@@ -3439,6 +3501,7 @@ impl Rig for GuitarRigBackend {
             def.patches.push(crate::profiles::PatchDef {
                 name: name.clone(),
                 preset,
+                preset2: String::new(),
                 trim_db: 0.0,
                 level_db: 0.0,
                 boost_db: 0.0,
@@ -3829,6 +3892,30 @@ impl Rig for GuitarRigBackend {
         };
         self.reload_rebuilt(rebuilt);
         self.spawn_drive_calibration();
+    }
+
+    fn set_preset_cab(&self, index: u32, ir_path: String) {
+        if !ir_path.is_empty() && !std::path::Path::new(&ir_path).exists() {
+            tracing::warn!("set_preset_cab: {ir_path} does not exist");
+            return;
+        }
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let Some(p) = def.presets.get_mut(index as usize) else {
+                return;
+            };
+            tracing::info!("preset '{}' cab → {ir_path}", p.name);
+            p.cab_hash = if ir_path.is_empty() {
+                String::new()
+            } else {
+                capture_hash(&ir_path)
+            };
+            p.cab = ir_path;
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
     }
 
     fn set_patch_trim(&self, patch: u32, db: f32) {
@@ -4305,6 +4392,7 @@ impl Rig for GuitarRigBackend {
                 patches: vec![crate::profiles::PatchDef {
                     name: "Clean".to_string(),
                     preset: first,
+                    preset2: String::new(),
                     trim_db: 0.0,
                     level_db: 0.0,
                     boost_db: 0.0,
@@ -4966,6 +5054,7 @@ mod tests {
         PatchDef {
             name: name.to_string(),
             preset: preset.to_string(),
+            preset2: String::new(),
             trim_db: 0.0,
             level_db: 0.0,
             boost_db: 0.0,

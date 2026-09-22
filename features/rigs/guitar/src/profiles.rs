@@ -60,6 +60,18 @@ pub struct PresetDef {
     /// the catalog has never seen.
     #[facet(default)]
     pub hash: String,
+    /// A cabinet impulse response (`.wav`) to convolve right after this
+    /// amp's NAM, for a capture that is amp-only (`gear_type: amp`, no
+    /// cab/mic baked in). Empty for a capture that already IS a full rig
+    /// (`amp_cab`) — the chain always has a Cabinet block after the amp,
+    /// but an empty `cab` makes it a no-op passthrough (`RigBlock` with no
+    /// realization has no backend and is skipped at install), so pointing
+    /// two different preset kinds at the same chain shape is free.
+    #[facet(default)]
+    pub cab: String,
+    /// SHA-256 of the IR. See [`hash`](Self::hash).
+    #[facet(default)]
+    pub cab_hash: String,
 }
 
 /// One NAM option inside a drive block preset — pedals are commonly
@@ -150,6 +162,13 @@ pub fn drive_presets() -> Vec<DrivePresetDef> {
 pub struct PatchDef {
     pub name: String,
     pub preset: String,
+    /// A second amp, in series right after the first (Amp R on the board,
+    /// same slot shape as a drive pedal — independently bypassable). Empty
+    /// = the slot is unloaded; the chain still has the block (so bypass
+    /// grouping and the board layout stay constant) but it has no
+    /// realization, so it is skipped at install and costs nothing.
+    #[facet(default)]
+    pub preset2: String,
     /// The player's own level for this patch, dB, relative to every other
     /// patch after normalisation.
     ///
@@ -278,6 +297,8 @@ pub fn worship_def() -> ProfileDef {
         name: name.to_string(),
         nam,
         hash: String::new(),
+        cab: String::new(),
+        cab_hash: String::new(),
     };
     let stack = |name: &str, patches: &[&str]| StackDef {
         name: name.to_string(),
@@ -289,6 +310,7 @@ pub fn worship_def() -> ProfileDef {
     let patch = |name: &str, preset: &str| PatchDef {
         name: name.to_string(),
         preset: preset.to_string(),
+        preset2: String::new(),
         trim_db: 0.0,
         level_db: 0.0,
         boost_db: 0.0,
@@ -455,9 +477,25 @@ fn drive_board(def: &ProfileDef, dps: &[DrivePresetDef], patch: RigPatch) -> Rig
 
 #[must_use]
 pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
-    // The standard full chain around one NAM capture — see the block-name
-    // comments in the module docs (names match the guitar-rig-template slots).
-    let amp = |name: &str, path: String| {
+    // One amp + its cab, in series — the same shape used for "Amp L" and
+    // "Amp R" (a second amp is just another board pedal). A `.nam` that is
+    // already a full rig (`amp_cab`) leaves `cab` empty, and an
+    // empty-realization Cabinet block has no backend and is skipped at
+    // install (pure passthrough) — so the second slot costs nothing while
+    // unloaded, and an amp-only capture (`gear_type: amp`) pointing `cab`
+    // at an IR is what makes it usable at all.
+    let amp_stage = |suffix: &str, path: String, cab: String, bypassed: bool| {
+        let mut amp_block = RigBlock::nam(path).named(format!("Amp {suffix}"));
+        amp_block.bypassed = bypassed;
+        let mut cab_block = if cab.is_empty() {
+            RigBlock::effect(BlockType::Cabinet, format!("Cab {suffix}"))
+        } else {
+            RigBlock::cab_ir(cab).named(format!("Cab {suffix}"))
+        };
+        cab_block.bypassed = bypassed;
+        [amp_block, cab_block]
+    };
+    let amp = |name: &str, path: String, cab: String, path2: String, cab2: String| {
         // The head of the chain, up to and including the drive board. Split
         // out because the board is a fold over `DRIVE_SLOTS` rather than a
         // fixed run of `.with_block` calls.
@@ -474,8 +512,14 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 "Volume Pedal",
                 &[("gain_db", "0")],
             ));
+        let [amp_l, cab_l] = amp_stage("L", path, cab, false);
+        let has_amp_r = !path2.is_empty();
+        let [amp_r, cab_r] = amp_stage("R", path2, cab2, !has_amp_r);
         drive_board(def, dps, head)
-            .with_block(RigBlock::nam(path).named("Amp L"))
+            .with_block(amp_l)
+            .with_block(cab_l)
+            .with_block(amp_r)
+            .with_block(cab_r)
             // Post-amp shaping, part of the Amp module: gate into the amp
             // EQ — both dialed against the amp's character.
             .with_block(on_fx(BlockType::Gate, "Gate", &[("threshold", "-50")]))
@@ -561,9 +605,22 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             .map(|p| p.nam.clone())
             .unwrap_or_default()
     };
+    let cab_of = |preset: &str| {
+        def.presets
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(preset))
+            .map(|p| p.cab.clone())
+            .unwrap_or_default()
+    };
     let mut profile = RigProfile::new(&def.name);
     for p in &def.patches {
-        let mut patch = amp(&p.name, nam_of(&p.preset));
+        let mut patch = amp(
+            &p.name,
+            nam_of(&p.preset),
+            cab_of(&p.preset),
+            nam_of(&p.preset2),
+            cab_of(&p.preset2),
+        );
         set_patch_trim(&mut patch, p.level_db + p.trim_db);
         apply_overrides(&mut patch, &p.overrides);
         profile = profile.with_patch(patch);
@@ -1362,6 +1419,99 @@ mod trim_tests {
             "the patch level leaked onto the scene output ({})",
             patch.output_trim_db
         );
+    }
+}
+
+#[cfg(test)]
+mod cab_tests {
+    use super::*;
+
+    fn block<'a>(patch: &'a RigPatch, name: &str) -> &'a RigBlock {
+        patch
+            .chain
+            .iter()
+            .find(|b| b.name.eq_ignore_ascii_case(name))
+            .unwrap_or_else(|| panic!("{name} is in the chain"))
+    }
+
+    /// A patch always has a Cab block right after its amp — the chain shape
+    /// never changes whether or not a cab is loaded, so switching between an
+    /// amp-only and a full-rig capture never rebuilds the chain's structure.
+    #[test]
+    fn every_amp_has_a_cab_block_right_after_it() {
+        let profile = build_profile(&worship_def(), &drive_presets());
+        let patch = profile.patches.first().expect("a patch");
+        let amp_l = patch
+            .chain
+            .iter()
+            .position(|b| b.name.eq_ignore_ascii_case("Amp L"))
+            .expect("Amp L");
+        let cab_l = patch
+            .chain
+            .iter()
+            .position(|b| b.name.eq_ignore_ascii_case("Cab L"))
+            .expect("Cab L");
+        assert_eq!(cab_l, amp_l + 1, "the cab must sit right after the amp");
+    }
+
+    /// A preset with no `cab` set builds a Cab block with no realization —
+    /// which has no backend and is skipped at install, so a full-rig
+    /// capture (`amp_cab`) plays exactly as it did before this block existed.
+    #[test]
+    fn no_cab_on_the_preset_is_a_passthrough_block() {
+        let profile = build_profile(&worship_def(), &drive_presets());
+        let patch = profile.patches.first().expect("a patch");
+        let cab = block(patch, "Cab L");
+        assert!(cab.ir.is_empty(), "no cab picked ⇒ no realization");
+    }
+
+    /// A preset with `cab` set builds a Cab block realized by that IR — what
+    /// makes an amp-only capture usable at all.
+    #[test]
+    fn a_preset_cab_becomes_the_cab_blocks_ir() {
+        let mut def = worship_def();
+        let preset_name = def.presets.first().expect("a preset").name.clone();
+        def.presets.first_mut().expect("a preset").cab = "/tmp/v30.wav".to_string();
+        let patch_name = def
+            .patches
+            .iter()
+            .find(|p| p.preset.eq_ignore_ascii_case(&preset_name))
+            .expect("a patch on that preset")
+            .name
+            .clone();
+        let profile = build_profile(&def, &drive_presets());
+        let patch = profile
+            .patches
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&patch_name))
+            .expect("the built patch");
+        let cab = block(patch, "Cab L");
+        assert_eq!(cab.ir, "/tmp/v30.wav");
+    }
+
+    /// A patch with no second amp still has the Amp R / Cab R blocks (so the
+    /// board's shape is constant) but bypassed — an unloaded slot is silent,
+    /// not broken.
+    #[test]
+    fn an_unloaded_second_amp_is_bypassed_not_missing() {
+        let profile = build_profile(&worship_def(), &drive_presets());
+        let patch = profile.patches.first().expect("a patch");
+        assert!(block(patch, "Amp R").bypassed);
+        assert!(block(patch, "Cab R").bypassed);
+    }
+
+    /// Pointing a patch at a second preset loads Amp R for real, engaged by
+    /// default — the player asked for it, so it should be audible.
+    #[test]
+    fn a_second_preset_loads_amp_r_engaged() {
+        let mut def = worship_def();
+        let second = def.presets.get(1).expect("a second preset").name.clone();
+        def.patches.first_mut().expect("a patch").preset2 = second.clone();
+        let profile = build_profile(&def, &drive_presets());
+        let patch = profile.patches.first().expect("a patch");
+        let amp_r = block(patch, "Amp R");
+        assert!(!amp_r.bypassed);
+        assert!(!amp_r.nam.is_empty());
     }
 }
 

@@ -1648,6 +1648,7 @@ fn PresetDetail(
     on_go: EventHandler<(Kind, String)>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let mut editing_cab = use_signal(|| false);
     let users: Vec<PatchInfo> = patches
         .iter()
         .filter(|p| p.preset.eq_ignore_ascii_case(&preset.name))
@@ -1710,6 +1711,38 @@ fn PresetDetail(
                 }
                 if !preset.tone_url.is_empty() {
                     span { style: "font-size: 11px; color: {FAINT}; overflow-wrap: anywhere;", "{preset.tone_url}" }
+                }
+            }
+        }
+        Section { label: "Cab",
+            if editing_cab() {
+                NamePrompt {
+                    label: "IR wav path (blank = none / built-in)".to_string(),
+                    initial: preset.cab.clone(),
+                    on_done: {
+                        let rig = rig.clone();
+                        move |v: Option<String>| {
+                            editing_cab.set(false);
+                            let path = v.unwrap_or_default();
+                            send(&rig, move |r| async move { let _ = r.set_preset_cab(index, path).await; });
+                        }
+                    },
+                }
+            } else {
+                div { style: "display: flex; align-items: center; gap: 8px;",
+                    span { style: "font-size: 12px; color: {MUTED}; flex: 1; overflow-wrap: anywhere;",
+                        if !preset.cab.is_empty() {
+                            "{preset.cab}"
+                        } else if preset.gear.eq_ignore_ascii_case("amp-cab") {
+                            "None needed — this capture is already a full rig"
+                        } else {
+                            "None — this amp is played dry until one is picked"
+                        }
+                    }
+                    Act {
+                        label: if preset.cab.is_empty() { "Pick" } else { "Change" },
+                        onclick: move |()| editing_cab.set(true),
+                    }
                 }
             }
         }

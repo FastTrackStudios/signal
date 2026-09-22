@@ -619,8 +619,15 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
                 // library's chain a block shorter than the rig's.
             }
             // The amp slot holds the first capture; every patch that wants a
-            // different one swaps it.
-            if block.block_type == BlockType::Amp {
+            // different one swaps it. Only "Amp L" — the pool-preset swap
+            // this whole node model was built around. "Amp R" (a second amp,
+            // in series — see `profiles::PatchDef::preset2`) has no swap
+            // variant of its own yet in this node model, so it falls through
+            // to the generic leaf path below like any other block: one leaf,
+            // seeded from the first patch's chain, the same as every patch
+            // until a variant-swap is added for it too.
+            if block.block_type == BlockType::Amp && block.display_name().eq_ignore_ascii_case("Amp L")
+            {
                 if let Some((_, id)) = amps.first() {
                     push_into(module_of(block), id.clone(), &mut modules);
                     amp_slot = Some(id.clone());

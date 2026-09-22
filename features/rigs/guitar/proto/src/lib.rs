@@ -304,6 +304,11 @@ pub struct PresetInfo {
     pub tone_url: String,
     /// What was captured: `amp`, `amp-cab`, `pedal`, …
     pub gear: String,
+    /// The cab IR (`.wav`) this preset's Cab block convolves, if any. Empty
+    /// when `gear` is already `amp-cab` (a full rig, nothing more needed)
+    /// or when an amp-only capture hasn't had one picked yet.
+    #[facet(default)]
+    pub cab: String,
     /// Whether the catalog holds cover art for this preset — so a list can
     /// leave room for a picture before asking for the bytes.
     /// Fetch it with [`Rig::preset_artwork`].
@@ -653,6 +658,12 @@ pub mod rig {
         /// Point patch `patch` at preset `preset` — rebuilds and reloads the
         /// profile's chains (brief audio gap; an edit-time operation).
         fn set_patch_preset(&self, patch: u32, preset: u32);
+        /// Load a second amp (Amp R) into the patch, in series right after
+        /// the first — same slot shape as a drive pedal, independently
+        /// bypassable. `preset` indexes the same pool `set_patch_preset` does.
+        fn set_patch_preset2(&self, patch: u32, preset: u32);
+        /// Unload Amp R — the slot goes back to an empty, bypassed passthrough.
+        fn clear_patch_preset2(&self, patch: u32);
         /// Set the headphone-cue module (volume + self mix, 0–1 each).
         fn set_headphone(&self, volume: f32, self_mix: f32);
         /// Mute/unmute the main output (headphone cue survives).
@@ -794,6 +805,11 @@ pub mod rig {
         /// Re-point a pool preset at a different `.nam` capture (preset
         /// editing); persists and rebuilds every patch using it.
         fn set_preset_nam(&self, index: u32, nam_path: String);
+        /// Point a pool preset's Cab block at an IR wav (empty clears it,
+        /// making the Cab block a passthrough again — for a preset whose
+        /// `.nam` is already a full rig). Persists and rebuilds every patch
+        /// using it.
+        fn set_preset_cab(&self, index: u32, ir_path: String);
         /// Manual patch output trim (dB, on top of loudness calibration).
         fn set_patch_trim(&self, patch: u32, db: f32);
         /// Toggle the fullscreen tuner overlay on every remote.
