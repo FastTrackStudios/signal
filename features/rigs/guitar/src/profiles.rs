@@ -534,7 +534,9 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
         // out because the board is a fold over `DRIVE_SLOTS` rather than a
         // fixed run of `.with_block` calls.
         let head = RigPatch::new(name)
-            .with_block(on_fx(
+            // Bypassed by default while presets are built from Drive/Amp/
+            // Time modules alone; a preset or patch engages it.
+            .with_block(off_fx(
                 BlockType::Compressor,
                 "Compressor",
                 &[("threshold", "-40")],
@@ -560,7 +562,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             // The amp EQ ships with the electric-guitar "magic frequencies"
             // preset (eq-ui cheatsheet zones): low cut at 80 Hz, then flat
             // named bells on body / character / honk / presence.
-            .with_block(on_fx(
+            .with_block(off_fx(
                 BlockType::Eq,
                 "Amp EQ",
                 &[
