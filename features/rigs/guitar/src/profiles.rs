@@ -530,17 +530,26 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                cab: String,
                path2: String,
                cab2: String| {
-        // The head of the chain, up to and including the drive board. Split
-        // out because the board is a fold over `DRIVE_SLOTS` rather than a
-        // fixed run of `.with_block` calls.
+        // The chain, in order — each block tagged with its module, because a
+        // Reverb before the amp and one after it are different things:
+        //   Pre Comp · Pitch · Volume · Boost + Drives · Pre FX · Amp ·
+        //   Trim · Motion · Modulation · Time · Master
+        let in_module = |mut b: RigBlock, module: &str| {
+            b.module = module.to_string();
+            b
+        };
         let head = RigPatch::new(name)
-            // Bypassed by default while presets are built from Drive/Amp/
-            // Time modules alone; a preset or patch engages it.
+            // Pedal-style squeeze before everything (off until a preset
+            // engages it): slow-ish attack lets the pick through.
+            // (No explicit module for these two single blocks: a module named
+            // like its only block makes an override addressed to the block
+            // find the module instead.)
             .with_block(off_fx(
                 BlockType::Compressor,
-                "Compressor",
-                &[("threshold", "-40")],
+                PRE_COMP,
+                &[("threshold", "-30"), ("ratio", "4"), ("attack", "20"), ("release", "200")],
             ))
+            .with_block(off(BlockType::Pitch, "Pitch"))
             // Volume pedal (clean gain, unity default) — the Control view's
             // left pedal drives it.
             .with_block(on_fx(
@@ -552,19 +561,40 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
         let has_amp_r = !path2.is_empty();
         let [amp_r, cab_r] = amp_stage("R", path2, cab2, !has_amp_r);
         drive_board(drives, dps, head)
-            .with_block(amp_l)
-            .with_block(cab_l)
-            .with_block(amp_r)
-            .with_block(cab_r)
-            // Post-amp shaping, part of the Amp module: gate into the amp
-            // EQ — both dialed against the amp's character.
-            .with_block(on_fx(BlockType::Gate, "Gate", &[("threshold", "-50")]))
+            // Pre FX: what sits in front of the amp — a motion block, and a
+            // reverb (a spring, like the tank in a Fender) and delay the amp
+            // then colours. All off until a preset engages them.
+            .with_block(in_module(off(BlockType::Trem, "Pre Motion"), PRE_FX))
+            .with_block(in_module(
+                off_fx(BlockType::Reverb, "Pre Verb", &[("algorithm", "3"), ("mix", "0.15"), ("decay", "0.35")]),
+                PRE_FX,
+            ))
+            .with_block(in_module(
+                off_fx(BlockType::Delay, "Pre Delay", &[("style", "0"), ("tap_div_l", "7"), ("tap_div_r", "7"), ("time", "120"), ("mix", "0.15"), ("feedback", "0.15")]),
+                PRE_FX,
+            ))
+            // The Amp module: the amp stage, then what shapes it — gate,
+            // studio-style glue compression, and the amp EQ.
+            .with_block(in_module(amp_l, "Amp"))
+            .with_block(in_module(cab_l, "Amp"))
+            .with_block(in_module(amp_r, "Amp"))
+            .with_block(in_module(cab_r, "Amp"))
+            .with_block(in_module(on_fx(BlockType::Gate, "Gate", &[("threshold", "-50")]), "Amp"))
+            .with_block(in_module(
+                off_fx(
+                    BlockType::Compressor,
+                    POST_COMP,
+                    &[("threshold", "-24"), ("ratio", "3"), ("attack", "20"), ("release", "100")],
+                ),
+                "Amp",
+            ))
             // The amp EQ ships with the electric-guitar "magic frequencies"
             // preset (eq-ui cheatsheet zones): low cut at 80 Hz, then flat
             // named bells on body / character / honk / presence.
-            .with_block(off_fx(
-                BlockType::Eq,
-                "Amp EQ",
+            .with_block(in_module(
+                off_fx(
+                    BlockType::Eq,
+                    "Amp EQ",
                 &[
                     ("b1_used", "1"),
                     ("b1_on", "1"),
@@ -583,24 +613,23 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     ("b5_on", "1"),
                     ("b5_freq", "5500"),
                 ],
+                ),
+                "Amp",
             ))
             // The patch's own level, and the LAST thing before the time
-            // section. Normalisation and the player's per-patch offset both
-            // land here rather than on the scene's output, so switching
-            // patches cannot rescale a delay or reverb tail that is already
-            // ringing — see `set_patch_trim`.
+            // section — see `set_patch_trim`.
             .with_block(on_fx(BlockType::Volume, "Patch Trim", &[("gain_db", "0")]))
             // Boost gain block the footswitch drives (0 dB until engaged).
             .with_block(on_fx(BlockType::Volume, "Boost", &[("gain_db", "0")]))
-            // Modulation + Motion modules — all off by default.
-            .with_block(off(BlockType::Chorus, "Chorus"))
-            .with_block(off(BlockType::Flanger, "Flanger"))
-            .with_block(off(BlockType::Phaser, "Phaser"))
-            .with_block(off(BlockType::Trem, "Tremolo"))
-            .with_block(off(BlockType::Vibrato, "Vibrato"))
-            .with_block(off(BlockType::Rotary, "Rotary"))
+            // Motion, then Modulation — all off by default.
+            .with_block(in_module(off(BlockType::Trem, "Tremolo"), "Motion"))
+            .with_block(in_module(off(BlockType::Vibrato, "Vibrato"), "Motion"))
+            .with_block(in_module(off(BlockType::Rotary, "Rotary"), "Motion"))
+            .with_block(in_module(off(BlockType::Chorus, "Chorus"), "Modulation"))
+            .with_block(in_module(off(BlockType::Flanger, "Flanger"), "Modulation"))
+            .with_block(in_module(off(BlockType::Phaser, "Phaser"), "Modulation"))
             // Time module — subtle pair on, extreme pair bypassed.
-            .with_block(on_fx(
+            .with_block(in_module(on_fx(
                 BlockType::Delay,
                 "DLY 1",
                 &[
@@ -611,8 +640,8 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     ("tap_div_l", "0"),
                     ("tap_div_r", "0"),
                 ],
-            ))
-            .with_block(off_fx(
+            ), "Time"))
+            .with_block(in_module(off_fx(
                 BlockType::Delay,
                 "DLY 2",
                 &[
@@ -622,16 +651,28 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     ("tap_div_l", "1"),
                     ("tap_div_r", "1"),
                 ],
-            ))
-            .with_block(on_fx(
+            ), "Time"))
+            .with_block(in_module(on_fx(
                 BlockType::Reverb,
                 "VERB 1",
                 &[("mix", "0.08"), ("decay", "0.42"), ("size", "0.45")],
-            ))
-            .with_block(off_fx(
+            ), "Time"))
+            .with_block(in_module(off_fx(
                 BlockType::Reverb,
                 "VERB 2",
                 &[("mix", "0.10"), ("decay", "0.85"), ("size", "0.92")],
+            ), "Time"))
+            // Master: a final EQ (flat until a preset shapes it) and a
+            // zero-latency brickwall — the compressor with no lookahead at
+            // 20:1 and a 0.1 ms attack, catching peaks before the output.
+            .with_block(in_module(off(BlockType::Eq, "Master EQ"), "Master"))
+            .with_block(in_module(
+                on_fx(
+                    BlockType::Compressor,
+                    LIMITER,
+                    &[("threshold", "-1"), ("ratio", "20"), ("attack", "0.1"), ("release", "50"), ("knee", "0")],
+                ),
+                "Master",
             ))
     };
     let nam_of = |preset: &str| {
@@ -670,6 +711,14 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
 
 /// The block a patch's level lands on.
 pub const TRIM_BLOCK: &str = "Patch Trim";
+/// The pedal-style compressor at the head of the chain.
+pub const PRE_COMP: &str = "Pre Comp";
+/// The studio-style compressor after the amp, in the Amp module.
+pub const POST_COMP: &str = "Post Comp";
+/// The zero-latency brickwall at the end, in the Master module.
+pub const LIMITER: &str = "Limiter";
+/// The module holding what sits in front of the amp.
+pub const PRE_FX: &str = "Pre FX";
 
 /// Put a patch's level on its trim block, INSIDE the chain and upstream of
 /// the time effects.

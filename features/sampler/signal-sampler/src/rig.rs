@@ -84,7 +84,7 @@ const MAX_BLOCK: usize = FX_PREPARE_BLOCK as usize;
 /// constant count keeps the project's `fx_chain` (guids) immutable, so patch
 /// switches never rebuild the renderer's snapshot — the swap is pure box-insert.
 #[cfg(not(target_arch = "wasm32"))]
-const MAX_CHAIN_SLOTS: usize = 24;
+const MAX_CHAIN_SLOTS: usize = 40;
 
 /// Identifies a chain resident control-side. Assigned on install; opaque
 /// elsewhere.
@@ -512,6 +512,19 @@ impl RigBlock {
     pub fn is_time_fx(&self) -> bool {
         self.module.eq_ignore_ascii_case("time")
             || self.block_type.category() == BlockCategory::Time
+    }
+
+    /// In the Time module — what the global time/FX bypass acts on. An
+    /// explicit module wins over the block type's category, so a reverb
+    /// placed before the amp (module "Pre FX") is not killed by the FX
+    /// switch meant for the delays and reverbs at the end of the chain.
+    #[must_use]
+    pub fn is_time_module(&self) -> bool {
+        if self.module.is_empty() {
+            self.block_type.category() == BlockCategory::Time
+        } else {
+            self.module.eq_ignore_ascii_case("time")
+        }
     }
 
     #[must_use]

@@ -714,7 +714,7 @@ impl ProfileRig {
         let live_ids = self.rig.active_block_ids();
         let real = patch.chain.iter().filter(|b| b.has_backend());
         for (block, id) in real.zip(live_ids.iter()) {
-            if block.is_time_fx() {
+            if block.is_time_module() {
                 // Releasing the global bypass must not resurrect blocks the
                 // patch keeps bypassed by configuration (e.g. an "extreme"
                 // DLY 2 / VERB 2 pair) — OR with the block's own state.

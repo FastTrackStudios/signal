@@ -44,6 +44,13 @@ fn find_block(blocks: &[LiveBlock], bt: BlockType, name: &str) -> Option<LiveBlo
         .cloned()
 }
 
+/// A block of the Pre FX module (in front of the amp). The Time, Mod and
+/// Motion panels are the end of the chain, so they skip these — a spring
+/// reverb before the amp is not "the reverb".
+fn is_pre_fx(b: &LiveBlock) -> bool {
+    b.name.starts_with("Pre ") && !b.name.eq_ignore_ascii_case("Pre Comp")
+}
+
 fn param(block: &LiveBlock, name: &str) -> Option<BlockParam> {
     block.params.iter().find(|p| p.name == name).cloned()
 }
@@ -729,7 +736,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
     const W: f32 = 460.0;
     let delays: Vec<LiveBlock> = blocks
         .iter()
-        .filter(|b| b.block_type == BlockType::Delay)
+        .filter(|b| b.block_type == BlockType::Delay && !is_pre_fx(b))
         .cloned()
         .collect();
     if delays.is_empty() {
@@ -871,7 +878,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
     const W: f32 = 460.0;
     let verbs: Vec<LiveBlock> = blocks
         .iter()
-        .filter(|b| b.block_type == BlockType::Reverb)
+        .filter(|b| b.block_type == BlockType::Reverb && !is_pre_fx(b))
         .cloned()
         .collect();
     if verbs.is_empty() {
@@ -1046,7 +1053,7 @@ fn ModGroupPanel(
     let rig = use_hook(try_consume_context::<RigClient>);
     let members: Vec<LiveBlock> = kinds
         .iter()
-        .filter_map(|k| blocks.iter().find(|b| b.block_type == *k).cloned())
+        .filter_map(|k| blocks.iter().find(|b| b.block_type == *k && !is_pre_fx(b)).cloned())
         .collect();
     if members.is_empty() {
         return rsx! { {empty_slot(title)} };
@@ -1245,6 +1252,55 @@ fn ModGroupPanel(
 }
 
 // ── The drive board rail ──// ── The drive board rail ───────────────────────────────────────────────────
+
+/// The Pre FX module: each block in front of the amp as a strip — power,
+/// name, and the knobs that matter for it.
+#[component]
+fn PreFxPanel(blocks: Vec<LiveBlock>) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    rsx! {
+        div { class: "flex flex-col gap-0 h-full min-h-0",
+            for b in blocks {
+                {
+                    let knobs: &[(&'static str, &'static str)] = match b.block_type {
+                        BlockType::Reverb => &[("mix", "Mix"), ("decay", "Decay"), ("size", "Size"), ("tone", "Tone")],
+                        BlockType::Delay => &[("mix", "Mix"), ("time", "Time"), ("feedback", "Fdbk")],
+                        _ => &[("depth", "Depth"), ("rate", "Rate"), ("mix", "Mix")],
+                    };
+                    let (rig, id) = (rig.clone(), b.id.clone());
+                    rsx! {
+                        div { key: "{b.id}", class: "flex items-center gap-2 px-2 border-b border-border/50 min-h-0", style: "flex: 1 1 0%;",
+                            div {
+                                class: "cursor-pointer select-none flex-shrink-0 text-[10px] font-bold",
+                                style: if b.bypassed { "color: #52525b;" } else { "color: #22c55e;" },
+                                title: "Engage / bypass",
+                                onclick: move |_| {
+                                    let (rig, id) = (rig.clone(), id.clone());
+                                    spawn(async move {
+                                        let Some(r) = rig else { return };
+                                        let _ = r.toggle_block_bypass(id).await;
+                                    });
+                                },
+                                "⏻"
+                            }
+                            span {
+                                class: if b.bypassed { "text-[10px] w-16 flex-shrink-0 text-muted-foreground" } else { "text-[10px] w-16 flex-shrink-0 font-semibold" },
+                                "{b.name}"
+                            }
+                            div { class: "flex items-center gap-1 flex-1 min-w-0",
+                                for (pname, label) in knobs.iter().copied() {
+                                    if let Some(p) = param(&b, pname) {
+                                        PKnob { key: "{pname}", block_id: b.id.clone(), name: pname, label, p, tiny: true }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// A module's preset controls, at the head of its row: ▾ opens the Library
 /// on that module's presets, ‹ › step through the playing preset's
@@ -1732,6 +1788,9 @@ fn eq_panel(block: LiveBlock, spectrum: Vec<f32>) -> Element {
 #[component]
 pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    // Which side of the amp the dynamics row shows: POST (Post Comp, Gate,
+    // Amp EQ — the Amp module) or PRE (Pre Comp and the Pre FX module).
+    let mut post_side = use_signal(|| true);
     let blocks = state.blocks.cloned();
     let in_db = state.in_peak_db.cloned();
     let out_db = state.out_peak_db.cloned();
@@ -1804,7 +1863,16 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
             .and_then(|c| c.active_modules.iter().find(|m| m.module.eq_ignore_ascii_case(module)).cloned())
     };
     let (drive_pick, amp_pick, time_pick) = (pick_of("Drive"), pick_of("Amp"), pick_of("Time"));
-    let comp = find_block(&blocks, BlockType::Compressor, "Compressor");
+    let comp = if post_side() {
+        find_block(&blocks, BlockType::Compressor, "Post Comp")
+    } else {
+        find_block(&blocks, BlockType::Compressor, "Pre Comp")
+    };
+    let comp_title = if post_side() { "Post Comp" } else { "Pre Comp" };
+    let pre_fx: Vec<LiveBlock> = ["Pre Verb", "Pre Delay", "Pre Motion"]
+        .iter()
+        .filter_map(|n| blocks.iter().find(|b| b.name.eq_ignore_ascii_case(n)).cloned())
+        .collect();
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
 
     let hp = model.headphone.clone();
@@ -1884,10 +1952,27 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // proportion without the ambiguity, and the compressor's
                     // `aspect-square` still takes its width from the height.
                     div { class: "flex gap-0 min-h-0 w-full", style: "flex: 3 1 0%; min-height: 0;",
+                        // PRE / POST — which side of the amp this row shows.
+                        div { class: "flex flex-col flex-shrink-0 border border-border", style: "width: 22px;",
+                            for (label, is_post) in [("PRE", false), ("POST", true)] {
+                                div {
+                                    key: "{label}",
+                                    class: "flex-1 flex items-center justify-center cursor-pointer select-none text-[8px] font-bold tracking-wider",
+                                    style: if post_side() == is_post {
+                                        "background: #1b2331; color: #bfdbfe;"
+                                    } else {
+                                        "color: #63636b;"
+                                    },
+                                    title: if is_post { "After the amp: Post Comp, Gate, Amp EQ" } else { "Before the amp: Pre Comp and Pre FX" },
+                                    onclick: move |_| post_side.set(is_post),
+                                    "{label}"
+                                }
+                            }
+                        }
                         // Height-driven square: width follows the row height.
                         div { class: "min-h-0 h-full aspect-square flex flex-col flex-shrink-0",
                             ZoomPanel {
-                                title: "Compressor".to_string(),
+                                title: comp_title.to_string(),
                                 left_power_on: comp.as_ref().map(|b| !b.bypassed),
                                 on_left_power: comp.as_ref().map(|b| {
                                     let (rig, id) = (rig.clone(), b.id.clone());
@@ -1907,10 +1992,17 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                         gr_db,
                                     }
                                 } else {
-                                    {empty_slot("Compressor")}
+                                    {empty_slot(comp_title)}
                                 }
                             }
                         }
+                        if !post_side() {
+                            div { class: "min-h-0 flex flex-col", style: "flex: 1 1 0%;",
+                                ZoomPanel { title: "Pre FX".to_string(),
+                                    PreFxPanel { blocks: pre_fx.clone() }
+                                }
+                            }
+                        } else {
                         // The gate, tall and slim — level vs threshold at a glance.
                         div { class: "min-h-0 h-full w-14 flex flex-col flex-shrink-0",
                             ZoomPanel {
@@ -1961,6 +2053,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 }
                             }
                         }
+                        }
                     }
                     // Time section: stereo delay + stereo reverb + modulation.
                     div { class: "flex gap-0 min-h-0 w-full", style: "flex: 2 1 0%; min-height: 150px;",
@@ -1990,14 +2083,14 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
                                 title: "Delay".to_string(),
-                                power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Delay && !b.bypassed)),
+                                power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Delay && !is_pre_fx(b) && !b.bypassed)),
                                 on_power: Some(Callback::new({
                                     let rig = rig.clone();
                                     let blocks = blocks.clone();
                                     move |(): ()| {
                                         let ids: Vec<(String, bool)> = blocks
                                             .iter()
-                                            .filter(|b| b.block_type == BlockType::Delay)
+                                            .filter(|b| b.block_type == BlockType::Delay && !is_pre_fx(b))
                                             .map(|b| (b.id.clone(), b.bypassed))
                                             .collect();
                                         let any_on = ids.iter().any(|(_, byp)| !byp);
@@ -2016,14 +2109,14 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
                                 title: "Reverb".to_string(),
-                                power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Reverb && !b.bypassed)),
+                                power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Reverb && !is_pre_fx(b) && !b.bypassed)),
                                 on_power: Some(Callback::new({
                                     let rig = rig.clone();
                                     let blocks = blocks.clone();
                                     move |(): ()| {
                                         let ids: Vec<(String, bool)> = blocks
                                             .iter()
-                                            .filter(|b| b.block_type == BlockType::Reverb)
+                                            .filter(|b| b.block_type == BlockType::Reverb && !is_pre_fx(b))
                                             .map(|b| (b.id.clone(), b.bypassed))
                                             .collect();
                                         let any_on = ids.iter().any(|(_, byp)| !byp);

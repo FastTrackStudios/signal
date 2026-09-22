@@ -22,6 +22,8 @@ use facet::Facet;
 
 use crate::profiles::{DriveSlotDef, ModuleChoiceDef, OverrideDef, PatchDef, PresetDef, ProfileDef};
 
+/// The block-preset library's file in the rig directory.
+pub const BLOCKS_FILE: &str = "blocks.styx";
 /// The module-preset library's file in the rig directory.
 pub const MODULES_FILE: &str = "modules.styx";
 /// The preset library's file.
@@ -29,6 +31,42 @@ pub const PRESETS_FILE: &str = "presets.styx";
 
 /// The modules a preset composes, in signal order.
 pub const MODULES: [&str; 5] = ["Dynamics", "Drive", "Amp", "Modulation", "Time"];
+
+/// One parameter a block preset sets.
+#[derive(Clone, Debug, Default, Facet)]
+pub struct ParamSetDef {
+    pub param: String,
+    pub value: f32,
+}
+
+/// A preset for one kind of block — a compressor setting, an EQ curve, a
+/// spring reverb — picked onto any chain block of that kind.
+#[derive(Clone, Debug, Default, Facet)]
+pub struct BlockPresetDef {
+    /// The block type's storage key: `compressor`, `eq`, `reverb`, `gate`, …
+    pub block_type: String,
+    pub name: String,
+    #[facet(default)]
+    pub params: Vec<ParamSetDef>,
+    /// The preset is "off": picking it bypasses the block.
+    #[facet(default)]
+    pub bypass: bool,
+}
+
+/// Put a block preset on a named chain block.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Facet)]
+pub struct BlockChoiceDef {
+    /// The chain block, by name: `Post Comp`, `Pre Verb`, `Amp EQ`, …
+    pub block: String,
+    pub preset: String,
+}
+
+/// `blocks.styx`.
+#[derive(Clone, Debug, Default, Facet)]
+pub struct BlockLib {
+    #[facet(default)]
+    pub presets: Vec<BlockPresetDef>,
+}
 
 /// One variation of a module preset.
 #[derive(Clone, Debug, Default, Facet)]
@@ -47,6 +85,9 @@ pub struct ModuleSnapshotDef {
     /// Drive: which pedal (and which of its captures) each slot runs.
     #[facet(default)]
     pub drives: Vec<DriveSlotDef>,
+    /// Block presets on this module's blocks (applied before `overrides`).
+    #[facet(default)]
+    pub blocks: Vec<BlockChoiceDef>,
     #[facet(default)]
     pub overrides: Vec<OverrideDef>,
 }
@@ -65,6 +106,10 @@ pub struct PresetSnapshotDef {
     pub name: String,
     #[facet(default)]
     pub modules: Vec<ModuleChoiceDef>,
+    /// Block presets on any chain block (after the modules, before
+    /// `overrides`).
+    #[facet(default)]
+    pub blocks: Vec<BlockChoiceDef>,
     #[facet(default)]
     pub overrides: Vec<OverrideDef>,
     /// The loudness calibration, dB — what [`level_presets`] measured this
@@ -101,6 +146,7 @@ pub struct PresetLib {
 pub struct Compositions {
     pub modules: Vec<ModulePresetDef>,
     pub presets: Vec<RigPresetDef>,
+    pub blocks: Vec<BlockPresetDef>,
 }
 
 impl Compositions {
@@ -109,6 +155,26 @@ impl Compositions {
         self.modules
             .iter()
             .find(|m| m.module.eq_ignore_ascii_case(module) && m.name.eq_ignore_ascii_case(preset))
+    }
+
+    #[must_use]
+    pub fn block_preset(&self, name: &str) -> Option<&BlockPresetDef> {
+        self.blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name))
+    }
+
+    /// A block preset as the overrides it stands for, on `block`. Unknown
+    /// presets resolve to nothing (and say so).
+    #[must_use]
+    pub fn block_overrides(&self, choice: &BlockChoiceDef) -> Vec<OverrideDef> {
+        let Some(p) = self.block_preset(&choice.preset) else {
+            tracing::warn!(block = %choice.block, preset = %choice.preset, "compose: no such block preset");
+            return Vec::new();
+        };
+        let mut out = vec![OverrideDef::bypass("", &choice.block, p.bypass)];
+        if !p.bypass {
+            out.extend(p.params.iter().map(|x| OverrideDef::set("", &choice.block, &x.param, x.value)));
+        }
+        out
     }
 
     #[must_use]
@@ -213,6 +279,9 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
                     patch.preset2 = r;
                 }
             }
+            for choice in &snap.blocks {
+                overrides.extend(comp.block_overrides(choice));
+            }
             for d in &snap.drives {
                 match patch.drives.iter_mut().find(|x| x.block.eq_ignore_ascii_case(&d.block)) {
                     Some(x) => *x = d.clone(),
@@ -225,6 +294,9 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
             .preset(&patch.rig_preset)
             .and_then(|p| snapshot(&p.snapshots, &patch.snapshot, |s| &s.name))
         {
+            for choice in &snap.blocks {
+                overrides.extend(comp.block_overrides(choice));
+            }
             overrides.extend(snap.overrides.iter().cloned());
             patch.level_db = snap.level_db;
         }
@@ -263,6 +335,7 @@ mod tests {
 
     fn comp() -> Compositions {
         Compositions {
+            blocks: Vec::new(),
             modules: vec![
                 ModulePresetDef {
                     module: "Amp".into(),
@@ -311,12 +384,14 @@ mod tests {
                 name: "Fender".into(),
                 snapshots: vec![
                     PresetSnapshotDef {
+                        blocks: Vec::new(),
                         name: "Clean".into(),
                         modules: vec![choice("Amp", "Deluxe", "Clean"), choice("Time", "Plate", "Short")],
                         overrides: vec![OverrideDef::set("Time", "VERB 1", "mix", 0.3)],
                         level_db: 0.0,
                     },
                     PresetSnapshotDef {
+                        blocks: Vec::new(),
                         name: "Edge".into(),
                         modules: vec![choice("Amp", "Deluxe", "Edge")],
                         overrides: Vec::new(),
@@ -411,6 +486,38 @@ mod tests {
         }
         let d1 = live.patches[0].chain.iter().find(|b| b.name == "Drive 1").unwrap();
         assert!(d1.nam.contains("High Gain"), "the Drive snapshot's pedal: {}", d1.nam);
+    }
+
+    /// A block preset on a module snapshot engages its block and sets its
+    /// parameters; the patch's own override still has the last word.
+    #[test]
+    fn a_block_preset_sets_its_block_and_overrides_still_win() {
+        let mut c = comp();
+        c.blocks.push(BlockPresetDef {
+            block_type: "compressor".into(),
+            name: "Studio Glue".into(),
+            params: vec![
+                ParamSetDef { param: "ratio".into(), value: 3.0 },
+                ParamSetDef { param: "attack".into(), value: 20.0 },
+            ],
+            bypass: false,
+        });
+        c.modules[0].snapshots[0].blocks.push(BlockChoiceDef {
+            block: crate::profiles::POST_COMP.into(),
+            preset: "Studio Glue".into(),
+        });
+        let mut def = composed("Clean");
+        def.patches[0].overrides = vec![OverrideDef::set("Amp", crate::profiles::POST_COMP, "ratio", 4.0)];
+        let flat = flatten(&def, &c);
+        let built = crate::profiles::build_profile(&flat, &drive_presets());
+        let comp_block = built.patches[0]
+            .chain
+            .iter()
+            .find(|b| b.name == crate::profiles::POST_COMP)
+            .expect("Post Comp");
+        assert!(!comp_block.bypassed, "the preset engages it");
+        assert_eq!(comp_block.param_f32("attack"), Some(20.0));
+        assert_eq!(comp_block.param_f32("ratio"), Some(4.0), "the patch's override wins");
     }
 
     #[test]
@@ -508,6 +615,7 @@ pub fn propose(def: &ProfileDef) -> Migration {
             }
         };
         entry.snapshots.push(PresetSnapshotDef {
+            blocks: Vec::new(),
             name: patch.name.clone(),
             modules: std::mem::take(&mut picks),
             overrides: std::mem::take(&mut patch.overrides),
@@ -531,7 +639,7 @@ mod migration_tests {
         let def = worship_def();
         let m = propose(&def);
         assert!(m.profile.patches.iter().all(|p| !p.rig_preset.is_empty()), "every patch composed");
-        let comp = Compositions { modules: m.modules.clone(), presets: m.presets.clone() };
+        let comp = Compositions { modules: m.modules.clone(), presets: m.presets.clone(), blocks: Vec::new() };
         let before = build_profile(&def, &drive_presets());
         let after = build_profile(&flatten(&m.profile, &comp), &drive_presets());
         for (a, b) in before.patches.iter().zip(&after.patches) {
@@ -772,6 +880,7 @@ pub fn recompose(
                 .find(|p| p.name.eq_ignore_ascii_case(&preset_name))
                 .expect("just ensured");
             let snap = PresetSnapshotDef {
+                blocks: Vec::new(),
                 name: patch.name.clone(),
                 modules,
                 overrides: std::mem::take(&mut patch.overrides),

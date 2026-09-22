@@ -157,7 +157,27 @@ pub fn run(command: Command) -> ExitCode {
                     }
                 }
             }
+            for b in &comp.blocks {
+                println!("Block  {:<11} {:<24} {}", b.block_type, b.name, if b.bypass { "(off)" } else { "" });
+            }
             let mut dangling = 0;
+            let block_ok = |c: &signal_guitar::compose::BlockChoiceDef| comp.block_preset(&c.preset).is_some();
+            for m in &comp.modules {
+                for snap in &m.snapshots {
+                    for c in snap.blocks.iter().filter(|c| !block_ok(c)) {
+                        dangling += 1;
+                        eprintln!("  {} {} / {}: no block preset {} for {}", m.module, m.name, snap.name, c.preset, c.block);
+                    }
+                }
+            }
+            for p in &comp.presets {
+                for snap in &p.snapshots {
+                    for c in snap.blocks.iter().filter(|c| !block_ok(c)) {
+                        dangling += 1;
+                        eprintln!("  {} / {}: no block preset {} for {}", p.name, snap.name, c.preset, c.block);
+                    }
+                }
+            }
             for p in &comp.presets {
                 for snap in &p.snapshots {
                     for pick in &snap.modules {
@@ -172,7 +192,8 @@ pub fn run(command: Command) -> ExitCode {
                 }
             }
             println!(
-                "\n{} module presets ({} files missing); {} presets, {} snapshots ({} picks dangling)",
+                "\n{} block presets; {} module presets ({} files missing); {} presets, {} snapshots ({} picks dangling)",
+                comp.blocks.len(),
                 comp.modules.len(),
                 missing,
                 comp.presets.len(),

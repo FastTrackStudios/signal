@@ -406,7 +406,11 @@ impl RigLibrary {
             .read::<crate::compose::PresetLib>(crate::compose::PRESETS_FILE)
             .unwrap_or_default()
             .presets;
-        crate::compose::Compositions { modules, presets }
+        let blocks = store
+            .read::<crate::compose::BlockLib>(crate::compose::BLOCKS_FILE)
+            .unwrap_or_default()
+            .presets;
+        crate::compose::Compositions { modules, presets, blocks }
     }
 
     /// Write both composition libraries back.
@@ -423,6 +427,10 @@ impl RigLibrary {
         store.write(
             crate::compose::PRESETS_FILE,
             &crate::compose::PresetLib { presets: comp.presets.clone() },
+        );
+        store.write(
+            crate::compose::BLOCKS_FILE,
+            &crate::compose::BlockLib { presets: comp.blocks.clone() },
         );
     }
 
