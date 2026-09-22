@@ -26,10 +26,34 @@ pub enum Command {
         #[arg(long)]
         write: bool,
     },
+    /// List the module presets as the rig loads them (modules.styx).
+    Modules,
 }
 
 pub fn run(command: Command) -> ExitCode {
     match command {
+        Command::Modules => {
+            let comp = signal_guitar::library::RigLibrary::load_compositions();
+            if comp.modules.is_empty() {
+                eprintln!("no module presets loaded — modules.styx is missing or did not parse");
+                return ExitCode::FAILURE;
+            }
+            let mut missing = 0;
+            for m in &comp.modules {
+                let snaps: Vec<&str> = m.snapshots.iter().map(|s| s.name.as_str()).collect();
+                println!("{:<6} {:<24} {}", m.module, m.name, snaps.join(" · "));
+                for s in &m.snapshots {
+                    for p in [&s.nam, &s.cab, &s.nam2, &s.cab2] {
+                        if !p.is_empty() && !std::path::Path::new(p).exists() {
+                            missing += 1;
+                            eprintln!("  missing: {p}");
+                        }
+                    }
+                }
+            }
+            println!("\n{} presets, {} presets' files missing", comp.modules.len(), missing);
+            if missing > 0 { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+        }
         Command::Migrate { profile, write } => match signal_guitar::compose::migrate_profile(&profile, !write) {
             Ok(m) => {
                 println!("Module presets:");
