@@ -12,7 +12,6 @@ use dioxus::prelude::*;
 use signal_guitar_proto::AudioPrefs;
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::RigClient;
-use signal_widgets::Picker;
 
 use crate::perform::PerformGrid;
 use crate::settings::{AudioSettingsBridge, AudioSettingsModal};
@@ -625,7 +624,7 @@ pub fn GuitarRigRemote() -> Element {
                         div { class: "flex flex-col gap-3 h-full min-h-0 overflow-hidden",
                             div {
                                 class: "min-h-0 flex flex-col overflow-hidden",
-                                style: "flex: 3 1 0%;",
+                                style: "flex: 3 1 0%; min-height: 0; display: flex; flex-direction: column; overflow: hidden;",
                                 if mode() == Mode::Routing {
                                     crate::grid::RigGraph {
                                         blocks: blocks(),

@@ -178,14 +178,19 @@ pub fn Knob(
                               inset 0 1px 1px rgba(255,255,255,0.07), \
                               inset 0 -1px 1px rgba(0,0,0,0.25); \
                             border: 1px solid rgba(255,255,255,0.04); \
-                            position: absolute; z-index: 1;",
+                            position: absolute;",
                 }
 
                 svg {
                     width: "{d}",
                     height: "{d}",
                     view_box: "0 0 {d} {d}",
-                    style: "position: absolute; z-index: 2; pointer-events: none;",
+                    // No z-index on either layer: document order already
+                    // paints the arc over the body, and a z-index hoists the
+                    // element into its stacking context — above any scrolling
+                    // ancestor's clip, so a knob scrolled out of a pane was
+                    // still drawn (Blitz).
+                    style: "position: absolute; pointer-events: none;",
                     path {
                         d: "{track_path}",
                         fill: "none",

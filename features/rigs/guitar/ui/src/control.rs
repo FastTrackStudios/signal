@@ -119,7 +119,7 @@ pub fn ZoomPanel(
         div { class: "relative flex flex-col flex-1 border border-border bg-card min-h-0 overflow-hidden",
             div { class: "flex-1 min-h-0", {children.clone()} }
             if let (Some(on), Some(cb)) = (left_power_on, on_left_power) {
-                div { class: "absolute top-1 left-1.5 z-20 flex items-center gap-1.5",
+                div { class: "absolute top-1 left-1.5 flex items-center gap-1.5",
                     button {
                         class: "text-sm leading-none",
                         style: if on { "color: #4ade80;" } else { "color: #52525b;" },
@@ -130,7 +130,7 @@ pub fn ZoomPanel(
                 }
             }
             // Floating corner controls — power (bypass all) + zoom.
-            div { class: "absolute top-1 right-1.5 z-20 flex items-center gap-1.5",
+            div { class: "absolute top-1 right-1.5 flex items-center gap-1.5",
                 if let (Some(on), Some(cb)) = (power_on, on_power) {
                     button {
                         class: "text-sm leading-none",
@@ -730,13 +730,13 @@ fn PKnob(
 /// stacked (1 top, 2 bottom) — click a lane to select it — with the
 /// selected delay's controls in a strip beneath.
 #[component]
-fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
+fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut sel = use_signal(|| 0usize);
     const W: f32 = 460.0;
     let delays: Vec<LiveBlock> = blocks
         .iter()
-        .filter(|b| b.block_type == BlockType::Delay && !is_pre_fx(b))
+        .filter(|b| b.block_type == BlockType::Delay && is_pre_fx(b) == pre)
         .cloned()
         .collect();
     if delays.is_empty() {
@@ -872,13 +872,13 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
 /// stacked — click a lane to select — with the selected reverb's controls
 /// beneath.
 #[component]
-fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
+fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut sel = use_signal(|| 0usize);
     const W: f32 = 460.0;
     let verbs: Vec<LiveBlock> = blocks
         .iter()
-        .filter(|b| b.block_type == BlockType::Reverb && !is_pre_fx(b))
+        .filter(|b| b.block_type == BlockType::Reverb && is_pre_fx(b) == pre)
         .cloned()
         .collect();
     if verbs.is_empty() {
@@ -1049,11 +1049,14 @@ fn ModGroupPanel(
     /// Speed as tempo divisions (Motion) instead of a Hz knob (Modulation).
     #[props(default)]
     tempo_divisions: bool,
+    /// Show the Pre FX module's blocks (in front of the amp) instead.
+    #[props(default)]
+    pre: bool,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let members: Vec<LiveBlock> = kinds
         .iter()
-        .filter_map(|k| blocks.iter().find(|b| b.block_type == *k && !is_pre_fx(b)).cloned())
+        .filter_map(|k| blocks.iter().find(|b| b.block_type == *k && is_pre_fx(b) == pre).cloned())
         .collect();
     if members.is_empty() {
         return rsx! { {empty_slot(title)} };
@@ -1357,6 +1360,134 @@ fn ModuleControls(
             }
             div { class: btn, title: "Previous snapshot", onclick: step(-1), "‹" }
             div { class: btn, title: "Next snapshot", onclick: step(1), "›" }
+        }
+    }
+}
+
+/// The Pitch strip: the note being played (large), a vertical cents meter
+/// with the in-tune zone, and a short trace of the detected pitch.
+#[component]
+fn PitchStrip() -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut reading = use_signal(signal_guitar_proto::TunerReading::default);
+    let mut trace = use_signal(|| std::collections::VecDeque::<f32>::with_capacity(48));
+    use_future(move || {
+        let rig = rig.clone();
+        async move {
+            let Some(rig) = rig else { return };
+            loop {
+                if let Ok(r) = rig.tuner().await {
+                    let mut t = trace.write();
+                    if t.len() >= 48 {
+                        t.pop_front();
+                    }
+                    t.push_back(if r.active { r.cents } else { f32::NAN });
+                    drop(t);
+                    reading.set(r);
+                }
+                architect::platform::sleep(std::time::Duration::from_millis(60)).await;
+            }
+        }
+    });
+    let r = reading();
+    let in_tune = r.active && r.cents.abs() <= 5.0;
+    let accent = if in_tune { "#22c55e" } else if r.active { "#eab308" } else { "#3f3f46" };
+    // Cents → y in a 0..100 box, sharp up.
+    let y = |c: f32| 50.0 - c.clamp(-50.0, 50.0);
+    let points: String = trace
+        .read()
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.is_finite())
+        .map(|(i, c)| format!("{:.1},{:.1} ", i as f32 * (40.0 / 47.0), y(*c)))
+        .collect();
+    let needle = y(r.cents);
+    rsx! {
+        div { style: "display: flex; flex-direction: column; align-items: center; height: 100%; padding: 18px 4px 6px; gap: 4px; min-height: 0;",
+            span { style: "font-size: 15px; font-weight: 800; line-height: 1; color: {accent};",
+                if r.active { "{r.note}" } else { "—" }
+            }
+            span { style: "font-size: 9px; font-family: monospace; color: #a1a1aa;",
+                {if r.active { format!("{:+.0}¢", r.cents) } else { String::new() }}
+            }
+            div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; gap: 3px;",
+                // The cents meter: in-tune band, centre line, needle.
+                div { style: "position: relative; width: 10px; height: 100%; background: #0a0a0d; border: 1px solid #26262b; border-radius: 3px;",
+                    div { style: "position: absolute; left: 0; right: 0; top: 45%; height: 10%; background: rgba(34,197,94,0.18);" }
+                    div { style: "position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255,255,255,0.35);" }
+                    if r.active {
+                        div { style: "position: absolute; left: -1px; right: -1px; top: {needle}%; height: 2px; background: {accent};" }
+                    }
+                }
+                // Where the pitch has been.
+                svg {
+                    style: "flex: 1 1 0%; height: 100%; min-width: 0;",
+                    view_box: "0 0 40 100",
+                    preserve_aspect_ratio: "none",
+                    line { x1: "0", y1: "50", x2: "40", y2: "50", stroke: "#27272a", stroke_width: "1" }
+                    polyline { points: "{points}", fill: "none", stroke: "{accent}", stroke_width: "1.5", stroke_linejoin: "round" }
+                }
+            }
+        }
+    }
+}
+
+/// The Gate: the DI level it keys from, scrolling right-to-left, against
+/// its threshold. Moments under the threshold (gated) draw dim; the header
+/// says whether it is open now.
+#[component]
+fn GateViz(block: LiveBlock, level: Signal<f32>) -> Element {
+    const N: usize = 90;
+    let mut hist = use_signal(|| std::collections::VecDeque::<f32>::from(vec![-90.0; N]));
+    use_future(move || async move {
+        loop {
+            let v = *level.peek();
+            let mut h = hist.write();
+            h.pop_front();
+            h.push_back(v);
+            drop(h);
+            architect::platform::sleep(std::time::Duration::from_millis(33)).await;
+        }
+    });
+    let threshold = param(&block, "threshold").map_or(-50.0, |p| p.value);
+    let floor = -90.0f32;
+    let y = |db: f32| 100.0 * (1.0 - ((db.max(floor) - floor) / -floor));
+    let open = !block.bypassed && *level.read() >= threshold;
+    let h = hist.read();
+    let bars: Vec<(f32, f32, bool)> = h
+        .iter()
+        .enumerate()
+        .map(|(i, db)| (i as f32 * (100.0 / N as f32), y(*db), *db >= threshold))
+        .collect();
+    let ty = y(threshold);
+    let bw = 100.0 / N as f32;
+    rsx! {
+        div { style: "display: flex; flex-direction: column; height: 100%; min-height: 0; padding: 18px 6px 6px; gap: 4px;",
+            div { style: "display: flex; align-items: center; justify-content: space-between;",
+                span {
+                    style: if open {
+                        "font-size: 9px; font-weight: 800; letter-spacing: 0.08em; color: #22c55e;"
+                    } else {
+                        "font-size: 9px; font-weight: 800; letter-spacing: 0.08em; color: #71717a;"
+                    },
+                    if block.bypassed { "OFF" } else if open { "OPEN" } else { "CLOSED" }
+                }
+                span { style: "font-size: 9px; font-family: monospace; color: #a1a1aa;", {format!("{threshold:.0} dB")} }
+            }
+            svg {
+                style: "flex: 1 1 0%; width: 100%; min-height: 0; background: #0a0a0d; border: 1px solid #26262b; border-radius: 4px;",
+                view_box: "0 0 100 100",
+                preserve_aspect_ratio: "none",
+                // Gated region: everything under the threshold.
+                rect { x: "0", y: "{ty}", width: "100", height: "{100.0 - ty}", fill: "rgba(113,113,122,0.10)" }
+                for (x, top, above) in bars {
+                    rect {
+                        x: "{x}", y: "{top}", width: "{bw}", height: "{100.0 - top}",
+                        fill: if above { "rgba(34,197,94,0.75)" } else { "rgba(113,113,122,0.45)" },
+                    }
+                }
+                line { x1: "0", y1: "{ty}", x2: "100", y2: "{ty}", stroke: "#f59e0b", stroke_width: "1.2" }
+            }
         }
     }
 }
@@ -1790,8 +1921,12 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     // Which side of the amp the dynamics row shows: POST (Post Comp, Gate,
     // Amp EQ — the Amp module) or PRE (Pre Comp and the Pre FX module).
-    let mut post_side = use_signal(|| true);
+    // Page one is the everyday surface: Pre Comp, Gate, Amp EQ above the
+    // post-amp Motion/Modulation and Time. The rest is on page two, below.
+    let bpre = false;
     let blocks = state.blocks.cloned();
+    let master_eq = find_block(&blocks, BlockType::Eq, "Master EQ");
+    let limiter = find_block(&blocks, BlockType::Compressor, "Limiter");
     let in_db = state.in_peak_db.cloned();
     let out_db = state.out_peak_db.cloned();
     let (in_l, in_r, out_l, out_r) = state.stereo_db.cloned();
@@ -1863,16 +1998,10 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
             .and_then(|c| c.active_modules.iter().find(|m| m.module.eq_ignore_ascii_case(module)).cloned())
     };
     let (drive_pick, amp_pick, time_pick) = (pick_of("Drive"), pick_of("Amp"), pick_of("Time"));
-    let comp = if post_side() {
-        find_block(&blocks, BlockType::Compressor, "Post Comp")
-    } else {
-        find_block(&blocks, BlockType::Compressor, "Pre Comp")
-    };
-    let comp_title = if post_side() { "Post Comp" } else { "Pre Comp" };
-    let pre_fx: Vec<LiveBlock> = ["Pre Verb", "Pre Delay", "Pre Motion"]
-        .iter()
-        .filter_map(|n| blocks.iter().find(|b| b.name.eq_ignore_ascii_case(n)).cloned())
-        .collect();
+    let comp = find_block(&blocks, BlockType::Compressor, "Pre Comp");
+    let post_comp = find_block(&blocks, BlockType::Compressor, "Post Comp");
+    let comp_title = "Compressor";
+
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
 
     let hp = model.headphone.clone();
@@ -1880,17 +2009,20 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
 
     rsx! {
         div { class: "flex gap-0 h-full min-h-0 overflow-hidden",
+            style: "width: 100%; height: 100%; display: flex; min-height: 0; overflow: hidden;",
             // ── Input meter rail ──
             div { class: "w-6 flex-shrink-0", StereoMeter { label: "In", l_db: in_l, r_db: in_r } }
 
             // ── Center surface ──
             div { class: "flex flex-col gap-1 flex-1 min-w-0 min-h-0",
+                style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow-y: scroll;",
                 // Main modules, in signal order: Compressor → Gate → Amp EQ,
                 // with the time section (Delay | Reverb) docked flush beneath.
                 // Grows, so the rows below it have a height to divide. Left
                 // content-sized, a `flex` weight on a child has nothing to
                 // take a share OF and collapses to its basis — which is zero.
-                div { class: "flex flex-col gap-0 min-h-0", style: "flex: 1 1 0%;",
+                // The main surface fills the view; what follows it scrolls in.
+                div { class: "flex flex-col gap-0 min-h-0", style: "flex: 0 0 100%; min-height: 0; display: flex; flex-direction: column;",
                     // ── The board, two rows of four: the pedals (Boost +
                     // Drive 1-3), then the amp stage (Amp L, Cab L, Amp R,
                     // Cab R) in signal order. A drive or amp chunk is its
@@ -1952,23 +2084,6 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // proportion without the ambiguity, and the compressor's
                     // `aspect-square` still takes its width from the height.
                     div { class: "flex gap-0 min-h-0 w-full", style: "flex: 3 1 0%; min-height: 0;",
-                        // PRE / POST — which side of the amp this row shows.
-                        div { class: "flex flex-col flex-shrink-0 border border-border", style: "width: 22px;",
-                            for (label, is_post) in [("PRE", false), ("POST", true)] {
-                                div {
-                                    key: "{label}",
-                                    class: "flex-1 flex items-center justify-center cursor-pointer select-none text-[8px] font-bold tracking-wider",
-                                    style: if post_side() == is_post {
-                                        "background: #1b2331; color: #bfdbfe;"
-                                    } else {
-                                        "color: #63636b;"
-                                    },
-                                    title: if is_post { "After the amp: Post Comp, Gate, Amp EQ" } else { "Before the amp: Pre Comp and Pre FX" },
-                                    onclick: move |_| post_side.set(is_post),
-                                    "{label}"
-                                }
-                            }
-                        }
                         // Height-driven square: width follows the row height.
                         div { class: "min-h-0 h-full aspect-square flex flex-col flex-shrink-0",
                             ZoomPanel {
@@ -1987,7 +2102,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 if let Some(comp) = comp {
                                     crate::comp_surface::CompSurface {
                                         block: comp,
-                                        wave: comp_wave,
+                                        wave: comp_wave.clone(),
                                         in_db,
                                         gr_db,
                                     }
@@ -1996,36 +2111,11 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 }
                             }
                         }
-                        if !post_side() {
-                            div { class: "min-h-0 flex flex-col", style: "flex: 1 1 0%;",
-                                ZoomPanel { title: "Pre FX".to_string(),
-                                    PreFxPanel { blocks: pre_fx.clone() }
-                                }
-                            }
-                        } else {
-                        // The gate, tall and slim — level vs threshold at a glance.
-                        div { class: "min-h-0 h-full w-14 flex flex-col flex-shrink-0",
-                            ZoomPanel {
-                                title: "Gate".to_string(),
-                                zoomed_view: gate.clone().map(|g| rsx! {
-                                    GatePanel { block: g, in_db, expanded: true }
-                                }),
-                                left_power_on: gate.as_ref().map(|b| !b.bypassed),
-                                on_left_power: gate.as_ref().map(|b| {
-                                    let (rig, id) = (rig.clone(), b.id.clone());
-                                    Callback::new(move |()| {
-                                        let (rig, id) = (rig.clone(), id.clone());
-                                        spawn(async move {
-                                            let Some(r) = rig else { return };
-                                            let _ = r.toggle_block_bypass(id).await;
-                                        });
-                                    })
-                                }),
-                                if let Some(gate) = gate {
-                                    GatePanel { block: gate, in_db }
-                                } else {
-                                    {empty_slot("Gate")}
-                                }
+                        // Pitch — thin: the note being played, how far off
+                        // it is, and where it has been.
+                        div { class: "min-h-0 h-full flex flex-col flex-shrink-0", style: "width: 64px;",
+                            ZoomPanel { title: "Pitch".to_string(),
+                                PitchStrip {}
                             }
                         }
                         div { class: "min-h-0 flex flex-col", style: "flex: 1 1 0%;",
@@ -2047,32 +2137,61 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                     // renderer that can paint it; the portable
                                     // SVG re-host on wasm. Same band model
                                     // either way — see `eq_vello`.
-                                    {eq_panel(eq, spectrum)}
+                                    {eq_panel(eq, spectrum.clone())}
                                 } else {
                                     {empty_slot("Amp EQ")}
                                 }
                             }
                         }
-                        }
-                    }
-                    // Time section: stereo delay + stereo reverb + modulation.
-                    div { class: "flex gap-0 min-h-0 w-full", style: "flex: 2 1 0%; min-height: 150px;",
-                        div { class: "min-h-0 h-full flex flex-col gap-0", style: "flex: 1 1 0%;",
-                            ZoomPanel { title: "Modulation".to_string(),
-                                ModGroupPanel {
-                                    title: "Mod",
-                                    kinds: MOD_KINDS.to_vec(),
-                                    blocks: blocks.clone(),
-                                    tempo_bpm: model.tempo_bpm,
+                        // The gate, right of the EQ: the DI level it keys
+                        // from, scrolling, against its threshold.
+                        div { class: "min-h-0 h-full flex flex-col flex-shrink-0", style: "width: 132px;",
+                            ZoomPanel {
+                                title: "Gate".to_string(),
+                                zoomed_view: gate.clone().map(|g| rsx! {
+                                    GatePanel { block: g, in_db, expanded: true }
+                                }),
+                                left_power_on: gate.as_ref().map(|b| !b.bypassed),
+                                on_left_power: gate.as_ref().map(|b| {
+                                    let (rig, id) = (rig.clone(), b.id.clone());
+                                    Callback::new(move |()| {
+                                        let (rig, id) = (rig.clone(), id.clone());
+                                        spawn(async move {
+                                            let Some(r) = rig else { return };
+                                            let _ = r.toggle_block_bypass(id).await;
+                                        });
+                                    })
+                                }),
+                                if let Some(gate) = gate {
+                                    GateViz { block: gate, level: state.in_peak_db }
+                                } else {
+                                    {empty_slot("Gate")}
                                 }
                             }
-                            ZoomPanel { title: "Motion".to_string(),
+                        }
+                    }
+                    // Time section: stereo delay + stereo reverb + modulation —
+                    // or, on PRE, the Pre FX module's motion, delay and reverb.
+                    div { class: "flex gap-0 min-h-0 w-full", style: "flex: 2 1 0%; min-height: 150px;",
+                        div { class: "min-h-0 h-full flex flex-col gap-0", style: "flex: 1 1 0%;",
+                            if !bpre {
+                                ZoomPanel { title: "Modulation".to_string(),
+                                    ModGroupPanel {
+                                        title: "Mod",
+                                        kinds: MOD_KINDS.to_vec(),
+                                        blocks: blocks.clone(),
+                                        tempo_bpm: model.tempo_bpm,
+                                    }
+                                }
+                            }
+                            ZoomPanel { title: if bpre { "Pre Motion".to_string() } else { "Motion".to_string() },
                                 ModGroupPanel {
                                     title: "Motion",
                                     kinds: MOTION_KINDS.to_vec(),
                                     blocks: blocks.clone(),
                                     tempo_bpm: model.tempo_bpm,
                                     tempo_divisions: true,
+                                    pre: bpre,
                                 }
                             }
                         }
@@ -2082,15 +2201,15 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%;",
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
-                                title: "Delay".to_string(),
-                                power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Delay && !is_pre_fx(b) && !b.bypassed)),
+                                title: if bpre { "Pre Delay".to_string() } else { "Delay".to_string() },
+                                power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Delay && is_pre_fx(b) == bpre && !b.bypassed)),
                                 on_power: Some(Callback::new({
                                     let rig = rig.clone();
                                     let blocks = blocks.clone();
                                     move |(): ()| {
                                         let ids: Vec<(String, bool)> = blocks
                                             .iter()
-                                            .filter(|b| b.block_type == BlockType::Delay && !is_pre_fx(b))
+                                            .filter(|b| b.block_type == BlockType::Delay && is_pre_fx(b) == bpre)
                                             .map(|b| (b.id.clone(), b.bypassed))
                                             .collect();
                                         let any_on = ids.iter().any(|(_, byp)| !byp);
@@ -2103,20 +2222,20 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                         }
                                     }
                                 })),
-                                DelayPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
+                                DelayPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm, pre: bpre }
                             }
                         }
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
-                                title: "Reverb".to_string(),
-                                power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Reverb && !is_pre_fx(b) && !b.bypassed)),
+                                title: if bpre { "Pre Verb".to_string() } else { "Reverb".to_string() },
+                                power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Reverb && is_pre_fx(b) == bpre && !b.bypassed)),
                                 on_power: Some(Callback::new({
                                     let rig = rig.clone();
                                     let blocks = blocks.clone();
                                     move |(): ()| {
                                         let ids: Vec<(String, bool)> = blocks
                                             .iter()
-                                            .filter(|b| b.block_type == BlockType::Reverb && !is_pre_fx(b))
+                                            .filter(|b| b.block_type == BlockType::Reverb && is_pre_fx(b) == bpre)
                                             .map(|b| (b.id.clone(), b.bypassed))
                                             .collect();
                                         let any_on = ids.iter().any(|(_, byp)| !byp);
@@ -2129,11 +2248,108 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                         }
                                     }
                                 })),
-                                ReverbPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
+                                ReverbPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm, pre: bpre }
                             }
                         }
                         }
-                        ModuleControls { kind: crate::library::Kind::TimeModules, pick: time_pick, style: "height: 22px; width: 100%;" }
+                        if !bpre {
+                            ModuleControls { kind: crate::library::Kind::TimeModules, pick: time_pick, style: "height: 22px; width: 100%;" }
+                        }
+                        }
+                    }
+                }
+
+                // ── Page two, below the fold (the surface scrolls): the
+                // secondary blocks, grouped by use rather than signal order.
+                // Post-amp glue and what sits in front of the amp… ──
+                div { class: "flex gap-0 flex-shrink-0 w-full", style: "height: 280px;",
+                    div { class: "min-h-0 h-full aspect-square flex flex-col flex-shrink-0",
+                        ZoomPanel {
+                            title: "Post Comp".to_string(),
+                            left_power_on: post_comp.as_ref().map(|b| !b.bypassed),
+                            on_left_power: post_comp.as_ref().map(|b| {
+                                let (rig, id) = (rig.clone(), b.id.clone());
+                                Callback::new(move |()| {
+                                    let (rig, id) = (rig.clone(), id.clone());
+                                    spawn(async move {
+                                        let Some(r) = rig else { return };
+                                        let _ = r.toggle_block_bypass(id).await;
+                                    });
+                                })
+                            }),
+                            if let Some(pc) = post_comp.clone() {
+                                crate::comp_surface::CompSurface { block: pc, wave: comp_wave.clone(), in_db, gr_db }
+                            } else {
+                                {empty_slot("Post Comp")}
+                            }
+                        }
+                    }
+                    div { class: "min-h-0 h-full flex flex-col", style: "flex: 1 1 0%;",
+                        ZoomPanel { title: "Pre Motion".to_string(),
+                            ModGroupPanel {
+                                title: "Motion",
+                                kinds: MOTION_KINDS.to_vec(),
+                                blocks: blocks.clone(),
+                                tempo_bpm: model.tempo_bpm,
+                                tempo_divisions: true,
+                                pre: true,
+                            }
+                        }
+                    }
+                    div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
+                        ZoomPanel { title: "Pre Delay".to_string(),
+                            DelayPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm, pre: true }
+                        }
+                    }
+                    div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
+                        ZoomPanel { title: "Pre Verb".to_string(),
+                            ReverbPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm, pre: true }
+                        }
+                    }
+                }
+                // …and the Master module: a final EQ and the zero-latency
+                // limiter.
+                div { class: "flex gap-0 flex-shrink-0 w-full", style: "height: 280px;",
+                    div { class: "min-h-0 h-full flex flex-col", style: "flex: 1 1 0%;",
+                        ZoomPanel {
+                            title: "Master EQ".to_string(),
+                            left_power_on: master_eq.as_ref().map(|b| !b.bypassed),
+                            on_left_power: master_eq.as_ref().map(|b| {
+                                let (rig, id) = (rig.clone(), b.id.clone());
+                                Callback::new(move |()| {
+                                    let (rig, id) = (rig.clone(), id.clone());
+                                    spawn(async move {
+                                        let Some(r) = rig else { return };
+                                        let _ = r.toggle_block_bypass(id).await;
+                                    });
+                                })
+                            }),
+                            if let Some(meq) = master_eq.clone() {
+                                {eq_panel(meq, spectrum.clone())}
+                            } else {
+                                {empty_slot("Master EQ")}
+                            }
+                        }
+                    }
+                    div { class: "min-h-0 h-full aspect-square flex flex-col flex-shrink-0",
+                        ZoomPanel {
+                            title: "Limiter".to_string(),
+                            left_power_on: limiter.as_ref().map(|b| !b.bypassed),
+                            on_left_power: limiter.as_ref().map(|b| {
+                                let (rig, id) = (rig.clone(), b.id.clone());
+                                Callback::new(move |()| {
+                                    let (rig, id) = (rig.clone(), id.clone());
+                                    spawn(async move {
+                                        let Some(r) = rig else { return };
+                                        let _ = r.toggle_block_bypass(id).await;
+                                    });
+                                })
+                            }),
+                            if let Some(lim) = limiter.clone() {
+                                crate::comp_surface::CompSurface { block: lim, wave: comp_wave.clone(), in_db, gr_db }
+                            } else {
+                                {empty_slot("Limiter")}
+                            }
                         }
                     }
                 }
