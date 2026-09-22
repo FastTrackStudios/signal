@@ -94,7 +94,12 @@ impl PatchLevelCache {
     }
 
     #[must_use]
-    pub fn lookup(&self, chain_hash: &str, di_id: &str, sample_rate: u32) -> Option<&PatchLevelEntry> {
+    pub fn lookup(
+        &self,
+        chain_hash: &str,
+        di_id: &str,
+        sample_rate: u32,
+    ) -> Option<&PatchLevelEntry> {
         self.entries.iter().find(|e| {
             e.chain_hash == chain_hash && e.di_id == di_id && e.sample_rate == sample_rate
         })
@@ -278,7 +283,9 @@ pub fn level_of(blocks: &[RigBlock], sample_rate: u32) -> Option<f64> {
         None => chain_hash(blocks),
     };
     {
-        let cache = cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cache = cache()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(hit) = cache.lookup(&hash, &di.id, sample_rate) {
             return Some(hit.lufs);
         }
@@ -289,11 +296,17 @@ pub fn level_of(blocks: &[RigBlock], sample_rate: u32) -> Option<f64> {
     // nothing means something is wrong with the render, not that the patch is
     // silent, and caching it would make the bug permanent and invisible.
     if !lufs.is_finite() || lufs <= SILENCE_LUFS {
-        tracing::warn!(lufs, blocks = blocks.len(), "patch level: rendered silent — not caching");
+        tracing::warn!(
+            lufs,
+            blocks = blocks.len(),
+            "patch level: rendered silent — not caching"
+        );
         return Some(lufs);
     }
     {
-        let mut cache = cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut cache = cache()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         cache.insert(PatchLevelEntry {
             chain_hash: hash,
             di_id: di.id.clone(),
@@ -307,7 +320,9 @@ pub fn level_of(blocks: &[RigBlock], sample_rate: u32) -> Option<f64> {
 
 /// Forget every measurement — for when the DI changes under them.
 pub fn clear_cache() {
-    let mut cache = cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut cache = cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     *cache = PatchLevelCache::default();
     let _ = std::fs::remove_file(PatchLevelCache::path());
 }
@@ -317,7 +332,8 @@ mod tests {
     use super::*;
 
     fn block(name: &str, gain: f32) -> RigBlock {
-        RigBlock::effect(signal_proto::block::BlockType::Boost, name).with_param("gain", gain.to_string())
+        RigBlock::effect(signal_proto::block::BlockType::Boost, name)
+            .with_param("gain", gain.to_string())
     }
 
     /// A chain hashes by what it is, not what it is called: renaming a patch
@@ -392,6 +408,14 @@ mod tests {
             lufs: -20.0,
         });
         assert_eq!(cache.entries.len(), 1);
-        assert!((cache.lookup(cache_key, "di", 48_000).expect("replaced").lufs + 20.0).abs() < 1e-9);
+        assert!(
+            (cache
+                .lookup(cache_key, "di", 48_000)
+                .expect("replaced")
+                .lufs
+                + 20.0)
+                .abs()
+                < 1e-9
+        );
     }
 }

@@ -32,6 +32,7 @@ use crate::SamplerError;
 use crate::rig::RigBlock;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::rig::{GuitarRig, ModelId};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::rig::{PreparedChain, prepare_chain};
 
 /// One patch in a rig profile: a named tone whose chain is either inlined or
@@ -393,6 +394,7 @@ struct ChainSpec {
     block_ids: Vec<String>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// Build every chain, concurrently where the platform has threads.
 ///
 /// The result is parallel to `specs` — `None` where the patch had nothing to
@@ -435,6 +437,7 @@ fn prepare_all(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl ProfileRig {
     pub fn new(rig: GuitarRig) -> Self {
         Self {

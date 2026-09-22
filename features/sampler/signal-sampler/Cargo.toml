@@ -88,6 +88,10 @@ sha2        = "0.10"
 # the native half (`engine` = mmap, rayon preload, encoders, stream cache)
 # rides the native target table below.
 fts-sample = { workspace = true, features = ["load", "engine-core"] }
+# Neural Amp Modeler — backs NAM blocks on every target: the C++ core
+# natively (vendored in the bindings' build.rs), the pure-Rust engine (A1 +
+# A2) on wasm32.
+neural-amp-modeler = { workspace = true }
 
 # Error handling
 eyre        = { workspace = true }
@@ -111,9 +115,6 @@ midicore = { workspace = true, features = ["midir", "pipewire", "native"] }
 # signal-plugin-host so the shared CLAP backend links once.
 daw = { workspace = true, features = ["standalone-audio", "clap-host"] }
 signal-plugin-host = { workspace = true, features = ["clap-host"] }
-# Neural Amp Modeler — backs `FxBackend::Nam` slots. The NAM C++ core is
-# vendored into the bindings crate's build.rs, so no system dep is needed.
-neural-amp-modeler = { workspace = true }
 # The native pack/cache/stream engine half (mmap, rayon preload, encoders).
 fts-sample = { workspace = true, features = ["engine"] }
 # `fts signal pack` CLI (src/pack_cli.rs) — mounted by fts-cli.

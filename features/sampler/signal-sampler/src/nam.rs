@@ -61,6 +61,7 @@ impl NamProcessor {
     /// # Errors
     ///
     /// Returns an error if the file cannot be read or parsed.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load(
         path: impl AsRef<std::path::Path>,
         sample_rate: f64,
@@ -87,6 +88,45 @@ impl NamProcessor {
             sample_rate,
             prepared: true,
         })
+    }
+
+    /// Build from a `.nam` file's bytes — the browser path, where models
+    /// arrive over HTTP rather than from a disk. `name` is the display name
+    /// (and the key the rig knows the model by).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bytes are not a model this engine can run.
+    pub fn from_bytes(
+        bytes: &[u8],
+        name: impl Into<String>,
+        sample_rate: f64,
+        max_block: usize,
+    ) -> Result<Self, String> {
+        let mut model = NamModel::from_bytes(bytes)?;
+        model.reset(sample_rate, max_block);
+        let name = name.into();
+        Ok(Self {
+            model,
+            in_mono: vec![0.0; max_block],
+            out_mono: vec![0.0; max_block],
+            display_name: crate::assets::stem(&name),
+            model_path: name,
+            input_gain_db: 0.0,
+            output_gain_db: 0.0,
+            calibration_in_db: 0.0,
+            calibration_out_db: 0.0,
+            sample_rate,
+            prepared: true,
+        })
+    }
+
+    /// Run a smaller version of a slimmable (A2) model — `val` in 0..=1,
+    /// cheaper toward 0. Returns false for a model that is not slimmable.
+    /// The browser uses it when more models are playing than one thread can
+    /// run at full size.
+    pub fn set_slimmable_size(&mut self, val: f64) -> bool {
+        self.model.set_slimmable_size(val)
     }
 
     /// Sample rate the model was trained at, if the `.nam` file declares it
@@ -131,8 +171,23 @@ impl NamProcessor {
     /// to `(self.sample_rate, max_block)` afterward so it stays live-ready.
     /// Returns `None` if the model produced silence (no reliable measurement).
     pub fn measured_loudness(&mut self, max_block: usize) -> Option<f64> {
-        let path = std::path::PathBuf::from(&self.model_path);
-        crate::nam_calibrate::measured_loudness(&mut self.model, &path, self.sample_rate, max_block)
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let path = std::path::PathBuf::from(&self.model_path);
+            crate::nam_calibrate::measured_loudness(
+                &mut self.model,
+                &path,
+                self.sample_rate,
+                max_block,
+            )
+        }
+        // No DI render cache in the browser: the declared loudness stands in
+        // (levels there come from the preset snapshots' own calibration).
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = max_block;
+            self.loudness()
+        }
     }
 
     /// Re-prepare the model at a new sample rate / block size. Resets
@@ -372,7 +427,9 @@ static INTERFACE_CAL: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU3
 /// level — the MiniFuse instrument input is +11.5 dBu at minimum gain), or
 /// off with `None`. Chains built afterwards are calibrated.
 pub fn set_interface_calibration_dbu(dbu: Option<f32>) {
-    let bits = dbu.filter(|d| d.is_finite()).map_or(0x7fc0_0000, f32::to_bits);
+    let bits = dbu
+        .filter(|d| d.is_finite())
+        .map_or(0x7fc0_0000, f32::to_bits);
     INTERFACE_CAL.store(bits, std::sync::atomic::Ordering::Relaxed);
 }
 
@@ -389,7 +446,11 @@ pub fn interface_calibration_dbu() -> Option<f32> {
 /// domain across every model: a model is fed what it was trained on, and
 /// hands back what it would have put out. An undeclared level is 0 dB.
 #[must_use]
-pub fn calibration_for(input_level: Option<f64>, output_level: Option<f64>, interface: f32) -> (f32, f32) {
+pub fn calibration_for(
+    input_level: Option<f64>,
+    output_level: Option<f64>,
+    interface: f32,
+) -> (f32, f32) {
     let i = f64::from(interface);
     (
         input_level.map_or(0.0, |l| (i - l) as f32),

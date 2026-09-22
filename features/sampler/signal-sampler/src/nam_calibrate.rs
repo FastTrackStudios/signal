@@ -228,7 +228,9 @@ pub fn hash_file(path: &Path) -> Result<String, String> {
     });
 
     if let Some(key) = &stamp {
-        let cache = SEEN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cache = SEEN
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(hit) = cache.as_ref().and_then(|c| c.get(key)) {
             return Ok(hit.clone());
         }
@@ -240,8 +242,12 @@ pub fn hash_file(path: &Path) -> Result<String, String> {
     let digest = hex(&h.finalize());
 
     if let Some(key) = stamp {
-        let mut cache = SEEN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        cache.get_or_insert_with(HashCache::default).insert(key, digest.clone());
+        let mut cache = SEEN
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        cache
+            .get_or_insert_with(HashCache::default)
+            .insert(key, digest.clone());
     }
     Ok(digest)
 }

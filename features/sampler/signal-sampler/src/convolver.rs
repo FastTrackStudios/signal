@@ -72,6 +72,25 @@ impl Convolver {
         })
     }
 
+    /// Load a cabinet IR from a file's bytes (any format the decoder takes;
+    /// `name` is the key the rig knows it by) — the browser path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bytes do not decode or hold no samples.
+    pub fn from_bytes(bytes: &[u8], name: &str) -> Result<Self, String> {
+        let ext = name.rsplit_once('.').map(|(_, e)| e);
+        let loaded =
+            fts_sample::decode_bytes(bytes, ext).map_err(|e| format!("decode IR {name}: {e}"))?;
+        let ir: Vec<f32> = loaded.channels.into_iter().next().unwrap_or_default();
+        if ir.is_empty() {
+            return Err(format!("IR {name} has no samples"));
+        }
+        let mut conv = Self::from_ir(ir, crate::assets::stem(name));
+        conv.ir_path = name.to_string();
+        Ok(conv)
+    }
+
     /// Build a convolver from an in-memory IR (testing / synthesized cabs).
     pub fn from_ir(ir: Vec<f32>, name: impl Into<String>) -> Self {
         let ir = if ir.is_empty() { vec![1.0] } else { ir };

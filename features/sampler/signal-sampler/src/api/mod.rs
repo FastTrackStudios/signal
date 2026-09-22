@@ -26,6 +26,7 @@ pub mod adapt;
 pub mod engine;
 pub mod model;
 pub mod prim;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod rig;
 pub mod script;
 pub mod traits;
@@ -53,6 +54,7 @@ pub use engine::EngineInstrument;
 
 pub use adapt::{CacheLoader, CacheZoneLayers, pre_delay_curve};
 
+#[cfg(not(target_arch = "wasm32"))]
 pub use rig::{
     Amp, Block, BlockId, BlockRole, BlockToggle, CabDsp, Cabinet, Chain, ChainBuilder,
     ControlEvent, Controller, DawRig, ExpressionBind, Lane, Node, ParallelMix, Param as RigParam,

@@ -81,9 +81,9 @@
 // filesystem scans, the pack CLI). The wasm32 build keeps the pure engine +
 // tree renderer + the keys lane machinery — see `keys_rig::KeysRig::
 // open_headless` and the browser worklet entry (signal-keys-worklet).
-#[cfg(not(target_arch = "wasm32"))]
 pub mod amp_blend;
 pub mod api;
+pub mod assets;
 pub mod audio_soundsource;
 pub mod bank;
 pub mod block;
@@ -116,7 +116,6 @@ pub mod loudness;
 pub mod midi;
 pub mod mixer;
 pub mod module_spec;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod nam;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod nam_calibrate;
@@ -126,11 +125,11 @@ pub mod node_render;
 pub mod nord;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pack_cli;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod patch_level;
 pub mod pack_plan;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pack_rewrite;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod patch_level;
 /// The NI Essential Pianos' Color / Dynamic Range controls, as
 /// velocity-domain transforms.
 ///
@@ -182,7 +181,6 @@ pub use mixer::{
     FxTarget, MixerLayout, MixerMeters, Send as MixerSend, SendStrip,
 };
 pub use module_spec::{ModulePort, ModuleSpec};
-#[cfg(not(target_arch = "wasm32"))]
 pub use nam::NamProcessor;
 pub use native_osc::{NativeOscillator, OscWave};
 pub use node_render::{LeafBackend, RenderNode, build_node_backend};
@@ -216,9 +214,9 @@ pub use soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
 // strings TUI) don't need a direct midicore dependency.
 pub use midicore;
 pub use midicore::MidiEvent;
-pub use midicore::PortSelector as MidiSelection;
 #[cfg(not(target_arch = "wasm32"))]
 pub use midicore::MidiInput as MidiInputHandle;
+pub use midicore::PortSelector as MidiSelection;
 pub use spec::LibrarySpec;
 pub use stats::AudioStatsSnapshot;
 

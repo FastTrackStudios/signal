@@ -72,7 +72,11 @@ pub struct BlendStage {
 impl BlendStage {
     #[must_use]
     pub fn new(inner: Box<dyn PluginInstance>, role: Role, shared: Arc<Mutex<Shared>>) -> Self {
-        Self { inner, role, shared }
+        Self {
+            inner,
+            role,
+            shared,
+        }
     }
 }
 
@@ -156,8 +160,13 @@ impl PluginInstance for BlendStage {
                     sh.wet_l[..n].copy_from_slice(&in_l[..n]);
                     sh.wet_r[..n].copy_from_slice(&in_r[..n]);
                     sh.have_wet = true;
-                    self.inner
-                        .process_block(&sh.dry_l[..n], &sh.dry_r[..n], &mut out_l[..n], &mut out_r[..n], events)
+                    self.inner.process_block(
+                        &sh.dry_l[..n],
+                        &sh.dry_r[..n],
+                        &mut out_l[..n],
+                        &mut out_r[..n],
+                        events,
+                    )
                 } else {
                     s.have_wet = false;
                     self.inner.process_block(in_l, in_r, out_l, out_r, events)
@@ -190,7 +199,9 @@ pub fn roles(names: &[&str], r_loaded: bool) -> Vec<Option<Role>> {
     }
     let cab = find(CAB_R).filter(|&c| c > r);
     out[l] = Some(Role::Tap);
-    out[r] = Some(Role::Swap { merge_here: cab.is_none() });
+    out[r] = Some(Role::Swap {
+        merge_here: cab.is_none(),
+    });
     if let Some(c) = cab {
         out[c] = Some(Role::Merge);
     }
@@ -258,7 +269,9 @@ mod tests {
         for block in chain.iter_mut() {
             let (inl, inr) = (buf, buf);
             let (mut ol, mut or) = ([0.0; 4], [0.0; 4]);
-            block.process_block(&inl, &inr, &mut ol, &mut or, &events).unwrap();
+            block
+                .process_block(&inl, &inr, &mut ol, &mut or, &events)
+                .unwrap();
             buf = ol;
         }
         buf[0]
@@ -305,6 +318,10 @@ mod tests {
     /// An empty Amp R is no stage at all — the chain stays plain series.
     #[test]
     fn an_unloaded_amp_r_is_not_a_stage() {
-        assert!(roles(&["Amp L", "Cab L", "Amp R", "Cab R"], false).iter().all(Option::is_none));
+        assert!(
+            roles(&["Amp L", "Cab L", "Amp R", "Cab R"], false)
+                .iter()
+                .all(Option::is_none)
+        );
     }
 }

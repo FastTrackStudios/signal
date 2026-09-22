@@ -138,11 +138,9 @@ impl RigNodes {
             profile = profile.with_stack(RigStack::new(&stack.name, stack.patches.clone()));
         }
         // Where the profile lands when it loads: its default scene, by name.
-        if let Some(i) = profile
-            .patches
-            .iter()
-            .position(|p| !def.default_patch.is_empty() && p.name.eq_ignore_ascii_case(&def.default_patch))
-        {
+        if let Some(i) = profile.patches.iter().position(|p| {
+            !def.default_patch.is_empty() && p.name.eq_ignore_ascii_case(&def.default_patch)
+        }) {
             profile.default_patch = i;
         }
         profile
@@ -386,20 +384,6 @@ fn drive_leaf(name: &str, path: &str) -> Node {
     node
 }
 
-/// The playable profile for a rig definition — **the path the live rig
-/// takes**.
-///
-/// Builds the node library and resolves every patch out of it, rather than
-/// building chains directly. One function so the whole session has one seam:
-/// everything that installs a profile goes through here, and what the rig
-/// plays is what the domain resolved.
-///
-/// `build_profile` is still the builder underneath — [`to_nodes`] uses it to
-/// get the chain's shape before any patch bends it — but nothing downstream
-/// of this sees its output. The two are pinned equal for the shipped rig by
-/// `to_profile_matches_the_builder_for_the_shipped_rig`, patch for patch and
-/// parameter for parameter.
-#[must_use]
 /// Give a resolved chain's amp stage what the patch definition says.
 ///
 /// The node model has one swappable amp slot and seeds everything else from
@@ -413,11 +397,21 @@ fn settle_amp_stage(
     def: &ProfileDef,
     patch: &crate::profiles::PatchDef,
 ) {
-    let preset = |name: &str| def.presets.iter().find(|p| p.name.eq_ignore_ascii_case(name));
+    let preset = |name: &str| {
+        def.presets
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(name))
+    };
     let (cab_l, nam_r, cab_r) = (
-        preset(&patch.preset).map(|p| p.cab.clone()).unwrap_or_default(),
-        preset(&patch.preset2).map(|p| p.nam.clone()).unwrap_or_default(),
-        preset(&patch.preset2).map(|p| p.cab.clone()).unwrap_or_default(),
+        preset(&patch.preset)
+            .map(|p| p.cab.clone())
+            .unwrap_or_default(),
+        preset(&patch.preset2)
+            .map(|p| p.nam.clone())
+            .unwrap_or_default(),
+        preset(&patch.preset2)
+            .map(|p| p.cab.clone())
+            .unwrap_or_default(),
     );
     // Amp R's bypass: the patch's own override if it has one, else engaged
     // exactly when something is loaded.
@@ -470,12 +464,29 @@ fn settle_drives(
             .and_then(|p| p.options.get(slot.option))
             .map(|o| o.nam.clone())
             .unwrap_or_default();
-        if let Some(block) = chain.iter_mut().find(|b| b.name.eq_ignore_ascii_case(&slot.block)) {
+        if let Some(block) = chain
+            .iter_mut()
+            .find(|b| b.name.eq_ignore_ascii_case(&slot.block))
+        {
             block.nam = nam;
         }
     }
 }
 
+/// The playable profile for a rig definition — **the path the live rig
+/// takes**.
+///
+/// Builds the node library and resolves every patch out of it, rather than
+/// building chains directly. One function so the whole session has one seam:
+/// everything that installs a profile goes through here, and what the rig
+/// plays is what the domain resolved.
+///
+/// `build_profile` is still the builder underneath — [`to_nodes`] uses it to
+/// get the chain's shape before any patch bends it — but nothing downstream
+/// of this sees its output. The two are pinned equal for the shipped rig by
+/// `to_profile_matches_the_builder_for_the_shipped_rig`, patch for patch and
+/// parameter for parameter.
+#[must_use]
 pub fn profile_from_library(
     def: &ProfileDef,
     drives: &[DrivePresetDef],
@@ -661,7 +672,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
     // How many blocks of each `(module, name)` the chain has held so far.
     let mut occurrences: std::collections::HashMap<(String, String), u32> =
         std::collections::HashMap::new();
-    let mut push_into = |module: String, id: NodeId, modules: &mut Vec<(String, Vec<NodeId>)>| {
+    let push_into = |module: String, id: NodeId, modules: &mut Vec<(String, Vec<NodeId>)>| {
         // Consecutive blocks of one purpose are one module. Non-consecutive
         // ones are separate modules of the same name — the chain's order is
         // the signal order and must not be rearranged to tidy the grouping.
@@ -715,7 +726,8 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
             // to the generic leaf path below like any other block: one leaf,
             // seeded from the first patch's chain, the same as every patch
             // until a variant-swap is added for it too.
-            if block.block_type == BlockType::Amp && block.display_name().eq_ignore_ascii_case("Amp L")
+            if block.block_type == BlockType::Amp
+                && block.display_name().eq_ignore_ascii_case("Amp L")
             {
                 if let Some((_, id)) = amps.first() {
                     push_into(module_of(block), id.clone(), &mut modules);
@@ -1524,12 +1536,24 @@ mod tests {
                     .unwrap_or_else(|| panic!("{}: no {name}", n.name))
             };
             for slot in ["Amp L", "Cab L", "Amp R", "Cab R"] {
-                assert_eq!(pick(&n.chain, slot), pick(&b.chain, slot), "{}: {slot}", n.name);
+                assert_eq!(
+                    pick(&n.chain, slot),
+                    pick(&b.chain, slot),
+                    "{}: {slot}",
+                    n.name
+                );
             }
         }
         let live = &from_nodes.patches[later];
-        let amp_r = live.chain.iter().find(|x| x.name == "Amp R").expect("Amp R");
-        assert!(!amp_r.bypassed && !amp_r.nam.is_empty(), "the second amp plays");
+        let amp_r = live
+            .chain
+            .iter()
+            .find(|x| x.name == "Amp R")
+            .expect("Amp R");
+        assert!(
+            !amp_r.bypassed && !amp_r.nam.is_empty(),
+            "the second amp plays"
+        );
     }
 
     #[test]

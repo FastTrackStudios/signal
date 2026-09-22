@@ -67,7 +67,6 @@ use signal_rig_host::{DuplexRigHost, RigProject};
 
 use crate::convolver::Convolver;
 use crate::mixer::FX_PREPARE_BLOCK;
-#[cfg(not(target_arch = "wasm32"))]
 use crate::nam::NamProcessor;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::rig_prefs::RigAudioPrefs;
@@ -75,7 +74,6 @@ use crate::rig_prefs::RigAudioPrefs;
 /// Max block size the rig prepares models / plugins for. daw's callback block is
 /// normally 64–1024 frames; preparing for [`FX_PREPARE_BLOCK`] keeps us safe
 /// against larger backend buffers without per-block re-preparation.
-#[cfg(not(target_arch = "wasm32"))]
 const MAX_BLOCK: usize = FX_PREPARE_BLOCK as usize;
 
 /// Fixed number of FX slots reserved on the rig track. Slot 0 is the
@@ -83,7 +81,6 @@ const MAX_BLOCK: usize = FX_PREPARE_BLOCK as usize;
 /// chain's blocks (identity pass-throughs fill unused ones). Reserving a
 /// constant count keeps the project's `fx_chain` (guids) immutable, so patch
 /// switches never rebuild the renderer's snapshot — the swap is pure box-insert.
-#[cfg(not(target_arch = "wasm32"))]
 const MAX_CHAIN_SLOTS: usize = 40;
 
 /// Identifies a chain resident control-side. Assigned on install; opaque
@@ -949,6 +946,18 @@ impl PreparedChain {
     pub fn display_name(&self) -> String {
         self.names.join(" → ")
     }
+
+    /// The built blocks with their ids, in chain order — for a host that
+    /// runs the chain itself rather than through [`GuitarRig`] (the browser
+    /// worklet). A slot is `None` only while a rig has it armed.
+    #[must_use]
+    pub fn into_blocks(self) -> Vec<(String, Box<dyn PluginInstance>)> {
+        self.ids
+            .into_iter()
+            .zip(self.boxes)
+            .filter_map(|(id, b)| b.map(|b| (id, b)))
+            .collect()
+    }
 }
 
 /// Build every block of a chain, off the rig.
@@ -986,8 +995,11 @@ pub fn prepare_chain(
     let mut primary_captured = false;
 
     for (i, b) in blocks.iter().enumerate() {
+        // `Instant` panics on wasm32-unknown-unknown (no clock).
+        #[cfg(not(target_arch = "wasm32"))]
         let began = std::time::Instant::now();
         let built = build_block(b, sample_rate)?;
+        #[cfg(not(target_arch = "wasm32"))]
         tracing::trace!(
             block.name = %b.name,
             block.kind = ?b.block_type,
@@ -1023,7 +1035,11 @@ pub fn prepare_chain(
         let shared = crate::amp_blend::Shared::new(MAX_BLOCK);
         for (slot, role) in boxes.iter_mut().zip(roles) {
             if let (Some(role), Some(inner)) = (role, slot.take()) {
-                *slot = Some(Box::new(crate::amp_blend::BlendStage::new(inner, role, shared.clone())));
+                *slot = Some(Box::new(crate::amp_blend::BlendStage::new(
+                    inner,
+                    role,
+                    shared.clone(),
+                )));
             } else if let Some(inner) = slot.take() {
                 *slot = Some(inner);
             }
@@ -1048,16 +1064,26 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
     // before touching a loader.
     block.validate()?;
     if block.is_nam() {
-        // wasm32: no NAM — the C++ core doesn't build there.
-        #[cfg(target_arch = "wasm32")]
-        return Err("NAM blocks are not available in the browser build".into());
-        #[cfg(not(target_arch = "wasm32"))]
         {
-            let mut nam = NamProcessor::load(&block.nam, sample_rate as f64, MAX_BLOCK)?;
+            // Installed bytes first (the browser has nothing else; a native
+            // host may pre-load too), else the file the block names.
+            let mut nam = match crate::assets::get(&block.nam) {
+                Some(bytes) => NamProcessor::from_bytes(
+                    &bytes,
+                    block.nam.clone(),
+                    sample_rate as f64,
+                    MAX_BLOCK,
+                )?,
+                #[cfg(not(target_arch = "wasm32"))]
+                None => NamProcessor::load(&block.nam, sample_rate as f64, MAX_BLOCK)?,
+                #[cfg(target_arch = "wasm32")]
+                None => return Err(format!("NAM model not loaded: {}", block.nam)),
+            };
             nam.input_gain_db = block.input_trim_db;
             nam.output_gain_db = block.output_trim_db;
             if let Some(iface) = crate::nam::interface_calibration_dbu() {
-                let (cin, cout) = crate::nam::calibration_for(nam.input_level(), nam.output_level(), iface);
+                let (cin, cout) =
+                    crate::nam::calibration_for(nam.input_level(), nam.output_level(), iface);
                 nam.calibration_in_db = cin;
                 nam.calibration_out_db = cout;
             }
@@ -1089,7 +1115,10 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
             })
         }
     } else if block.is_cab_ir() {
-        let conv = Convolver::load(&block.ir)?;
+        let conv = match crate::assets::get(&block.ir) {
+            Some(bytes) => Convolver::from_bytes(&bytes, &block.ir)?,
+            None => Convolver::load(&block.ir)?,
+        };
         let dn = conv.display_name.clone();
         Ok(BuiltBlock::plain(Box::new(conv), format!("{dn} (cab)")))
     } else if block.is_plugin() {
@@ -1769,7 +1798,10 @@ impl GuitarRig {
                     .collect()
             }
             // Bypassed, or an id the rig does not hold: clean passthrough.
-            None => chain_guids.iter().map(|_| Self::fresh_identity(sr)).collect(),
+            None => chain_guids
+                .iter()
+                .map(|_| Self::fresh_identity(sr))
+                .collect(),
         };
 
         // ── Phase 2: the swap. Engine mutations only, back to back. ──
@@ -1798,7 +1830,6 @@ impl GuitarRig {
                 }
             }
         }
-
 
         // Arm.
         for (guid, new_box) in chain_guids.iter().zip(incoming) {
@@ -2295,6 +2326,66 @@ pub use signal_rig_host::uuid_string;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A 16-bit mono WAV of `samples` — an IR as the browser would fetch it.
+    fn wav_bytes(samples: &[i16], sample_rate: u32) -> Vec<u8> {
+        let data_len = (samples.len() * 2) as u32;
+        let mut b = Vec::with_capacity(44 + samples.len() * 2);
+        b.extend_from_slice(b"RIFF");
+        b.extend_from_slice(&(36 + data_len).to_le_bytes());
+        b.extend_from_slice(b"WAVEfmt ");
+        b.extend_from_slice(&16u32.to_le_bytes());
+        b.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        b.extend_from_slice(&1u16.to_le_bytes()); // mono
+        b.extend_from_slice(&sample_rate.to_le_bytes());
+        b.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+        b.extend_from_slice(&2u16.to_le_bytes());
+        b.extend_from_slice(&16u16.to_le_bytes());
+        b.extend_from_slice(b"data");
+        b.extend_from_slice(&data_len.to_le_bytes());
+        for s in samples {
+            b.extend_from_slice(&s.to_le_bytes());
+        }
+        b
+    }
+
+    /// The browser has no filesystem: a chain whose model and IR are only
+    /// *registered bytes* (keys that are not paths) still builds and plays.
+    #[test]
+    fn a_chain_builds_from_registered_bytes_alone() {
+        let model = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../rigs/guitar/default-config/models/King of Tone both sides.nam");
+        let amp_key = "web-test://amp.nam";
+        let cab_key = "web-test://cab.wav";
+        crate::assets::install(amp_key, std::fs::read(model).unwrap());
+        let mut ir = vec![0i16; 256];
+        ir[0] = i16::MAX / 2;
+        crate::assets::install(cab_key, wav_bytes(&ir, 48_000));
+
+        let blocks = [
+            RigBlock::nam(amp_key).named("Amp L"),
+            RigBlock::cab_ir(cab_key).named("Cab L"),
+        ];
+        let ids = vec!["amp".to_string(), "cab".to_string()];
+        let mut chain = prepare_chain(&blocks, &ids, 48_000).expect("builds from bytes");
+
+        let events = signal_plugin_host::PluginEvents::default();
+        let input: Vec<f32> = (0..128).map(|i| (i as f32 * 0.05).sin() * 0.3).collect();
+        let mut buf = input.clone();
+        for slot in chain.boxes.iter_mut().flatten() {
+            let (il, ir) = (buf.clone(), buf.clone());
+            let (mut ol, mut or) = (vec![0.0; 128], vec![0.0; 128]);
+            slot.process_block(&il, &ir, &mut ol, &mut or, &events)
+                .unwrap();
+            buf = ol;
+        }
+        assert!(buf.iter().all(|s| s.is_finite()));
+        assert!(buf.iter().any(|s| s.abs() > 1e-6), "the chain made sound");
+
+        // An unregistered key that is not a file fails loudly, not silently.
+        assert!(prepare_chain(&[RigBlock::nam("web-test://missing.nam")], &[], 48_000).is_err());
+        crate::assets::clear();
+    }
 
     #[test]
     fn rig_block_kind_predicates() {
