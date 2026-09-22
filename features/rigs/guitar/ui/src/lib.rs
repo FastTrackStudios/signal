@@ -9,7 +9,6 @@
 mod chain;
 mod comp_surface;
 mod control;
-mod eq_surface;
 /// Painted delay + reverb visualisers — native only (a painted scene needs a
 /// Blitz host).
 pub mod fx_viz;
@@ -17,8 +16,7 @@ pub mod fx_viz;
 /// plugins draw the same pictures — see `modulation_ui::viz`.
 pub use modulation_ui::viz as mod_viz;
 /// The plugin's own vello EQ editor — native only (a painted scene needs a
-/// Blitz host; the wasm remote draws [`eq_surface`] instead).
-#[cfg(all(not(target_arch = "wasm32"), feature = "eq-vello"))]
+/// Blitz host natively, a canvas in a browser).
 mod eq_vello;
 mod grid;
 /// The shared audio-gui knob (moved to signal-widgets).
@@ -42,7 +40,6 @@ mod wire_param;
 pub use chain::ChainStrip;
 pub use comp_surface::CompSurface;
 pub use control::{ControlView, MidiIndicator, ZoomPanel};
-pub use eq_surface::EqProSurface;
 pub use grid::RigGraph;
 pub use icons::module_icon;
 pub use library::{Kind as LibraryKind, LibraryPicker};

@@ -1835,20 +1835,13 @@ fn reverb_lane(
     rsx! { crate::fx_viz::ReverbViz { decay, density, predelay, mix, damp, family, on, beat_ms, color } }
 }
 
-/// The EQ surface for this build: the plugin's vello editor natively, the
-/// portable SVG one on wasm.
+/// The EQ surface: the plugin's own graph, wherever the rig runs.
 ///
-/// One function rather than a `cfg` at the call site, so the panel's layout
-/// does not have to know which renderer it is inside.
-#[cfg(all(not(target_arch = "wasm32"), feature = "eq-vello"))]
+/// Natively Blitz composites the graph's scene; in a browser the same
+/// widget paints onto a canvas (vello on WebGPU), glow shader and all.
+/// There is one EQ, and this is it.
 fn eq_panel(block: LiveBlock, spectrum: Vec<f32>) -> Element {
     rsx! { crate::eq_vello::EqVelloSurface { block, spectrum } }
-}
-
-/// The wasm remote, which has no GPU surface to paint into.
-#[cfg(not(all(not(target_arch = "wasm32"), feature = "eq-vello")))]
-fn eq_panel(block: LiveBlock, spectrum: Vec<f32>) -> Element {
-    rsx! { crate::eq_surface::EqProSurface { block, spectrum } }
 }
 
 // ── The Control view ────────────────────────────────────────────────────────
