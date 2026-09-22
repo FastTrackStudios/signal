@@ -4818,6 +4818,7 @@ dependencies = [
  "parking_lot",
  "peniko 0.6.1",
  "spectrum-analyzer",
+ "web-time",
 ]
 
 [[package]]
