@@ -43,6 +43,9 @@ fx-blocks.workspace = true
 # Styx-serializable rig definitions (the runtime library files).
 facet.workspace = true
 facet-styx.workspace = true
+# `signal rig web-bundle`: rig.json, and content-addressed asset keys.
+facet-json.workspace = true
+blake3.workspace = true
 # MIDI capture for the core's monitor (native only — the headless core).
 midicore = { workspace = true, features = ["vox", "midir"] }
 tracing.workspace = true

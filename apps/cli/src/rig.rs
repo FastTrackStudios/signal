@@ -43,6 +43,14 @@ pub enum Command {
     /// Level every preset snapshot to the same loudness (writes each
     /// snapshot's `level_db` into presets.styx). The rig picks it up on the
     /// next change — no restart.
+    /// Write the rig as the browser plays it: rig.json (every patch's
+    /// resolved chain) plus its models and IRs under content-addressed keys.
+    WebBundle {
+        out: std::path::PathBuf,
+        /// Only these profiles (default: all).
+        #[arg(long = "profile")]
+        profiles: Vec<String>,
+    },
     LevelPresets {
         #[arg(long)]
         dry_run: bool,
@@ -55,21 +63,67 @@ pub enum Command {
 
 pub fn run(command: Command) -> ExitCode {
     match command {
-        Command::Recompose { profile, map, write } => {
+        Command::WebBundle { out, profiles } => {
+            match signal_guitar::web_bundle::export(&out, &profiles) {
+                Ok((bundle, skipped)) => {
+                    let patches: usize = bundle.profiles.iter().map(|p| p.patches.len()).sum();
+                    let bytes: u64 = bundle.assets.iter().map(|a| a.bytes).sum();
+                    println!(
+                        "{} profiles, {patches} patches, {} assets ({:.1} MB) → {}",
+                        bundle.profiles.len(),
+                        bundle.assets.len(),
+                        bytes as f64 / 1e6,
+                        out.display()
+                    );
+                    if skipped.plugin_blocks > 0 {
+                        eprintln!(
+                            "skipped {} plugin blocks (no plugin host in a browser)",
+                            skipped.plugin_blocks
+                        );
+                    }
+                    for m in &skipped.missing {
+                        eprintln!("missing, block dropped: {m}");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Command::Recompose {
+            profile,
+            map,
+            write,
+        } => {
             let Ok(text) = std::fs::read_to_string(&map) else {
                 eprintln!("cannot read {}", map.display());
                 return ExitCode::FAILURE;
             };
             let amp_map = signal_guitar::compose::parse_amp_map(&text);
             let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
-            let Some(mut def) = lib.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(&profile)).cloned() else {
+            let Some(mut def) = lib
+                .profiles
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&profile))
+                .cloned()
+            else {
                 eprintln!("no profile named {profile:?}");
                 return ExitCode::FAILURE;
             };
             let mut comp = signal_guitar::library::RigLibrary::load_compositions();
-            let unmapped = signal_guitar::compose::recompose(&mut def, &mut comp, &amp_map, &lib.drive_presets);
+            let unmapped = signal_guitar::compose::recompose(
+                &mut def,
+                &mut comp,
+                &amp_map,
+                &lib.drive_presets,
+            );
             if !unmapped.is_empty() {
-                eprintln!("no mapping for the amp of: {} — add them to the map", unmapped.join(", "));
+                eprintln!(
+                    "no mapping for the amp of: {} — add them to the map",
+                    unmapped.join(", ")
+                );
                 return ExitCode::FAILURE;
             }
             for p in &def.patches {
@@ -77,12 +131,23 @@ pub fn run(command: Command) -> ExitCode {
             }
             // Every pick must land on something real.
             let mut bad = 0;
-            for p in comp.presets.iter().filter(|p| p.name.starts_with(&def.name)) {
+            for p in comp
+                .presets
+                .iter()
+                .filter(|p| p.name.starts_with(&def.name))
+            {
                 for snap in &p.snapshots {
                     for pick in &snap.modules {
-                        if !comp.module(&pick.module, &pick.preset).is_some_and(|m| m.snapshots.iter().any(|s| s.name.eq_ignore_ascii_case(&pick.snapshot))) {
+                        if !comp.module(&pick.module, &pick.preset).is_some_and(|m| {
+                            m.snapshots
+                                .iter()
+                                .any(|s| s.name.eq_ignore_ascii_case(&pick.snapshot))
+                        }) {
                             bad += 1;
-                            eprintln!("  {} / {}: no {} {} / {}", p.name, snap.name, pick.module, pick.preset, pick.snapshot);
+                            eprintln!(
+                                "  {} / {}: no {} {} / {}",
+                                p.name, snap.name, pick.module, pick.preset, pick.snapshot
+                            );
                         }
                     }
                 }
@@ -99,9 +164,16 @@ pub fn run(command: Command) -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        Command::LevelPresets { dry_run, sample_rate, threads } => {
+        Command::LevelPresets {
+            dry_run,
+            sample_rate,
+            threads,
+        } => {
             let cal = signal_guitar::levelling::apply_nam_calibration();
-            println!("NAM calibration: {}", cal.map_or("off".to_string(), |c| format!("{c} dBu interface")));
+            println!(
+                "NAM calibration: {}",
+                cal.map_or("off".to_string(), |c| format!("{c} dBu interface"))
+            );
             let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
             let mut comp = signal_guitar::library::RigLibrary::load_compositions();
             if comp.presets.is_empty() {
@@ -109,8 +181,13 @@ pub fn run(command: Command) -> ExitCode {
                 return ExitCode::FAILURE;
             }
             let started = std::time::Instant::now();
-            let results =
-                signal_guitar::compose::level_presets(&mut comp, &lib.profile, &lib.drive_presets, sample_rate, threads);
+            let results = signal_guitar::compose::level_presets(
+                &mut comp,
+                &lib.profile,
+                &lib.drive_presets,
+                sample_rate,
+                threads,
+            );
             let mut failed = 0;
             let mut last = String::new();
             for r in &results {
@@ -119,10 +196,16 @@ pub fn run(command: Command) -> ExitCode {
                     last.clone_from(&r.preset);
                 }
                 match r.lufs {
-                    Some(l) => println!("  {:<20} {l:>7.1} LUFS  →  {:+.1} dB", r.snapshot, r.level_db),
+                    Some(l) => println!(
+                        "  {:<20} {l:>7.1} LUFS  →  {:+.1} dB",
+                        r.snapshot, r.level_db
+                    ),
                     None => {
                         failed += 1;
-                        println!("  {:<20} did not render — left at {:+.1} dB", r.snapshot, r.level_db);
+                        println!(
+                            "  {:<20} did not render — left at {:+.1} dB",
+                            r.snapshot, r.level_db
+                        );
                     }
                 }
             }
@@ -134,9 +217,17 @@ pub fn run(command: Command) -> ExitCode {
                 results.len(),
                 started.elapsed().as_secs_f64(),
                 failed,
-                if dry_run { " (dry run — nothing written)" } else { "" }
+                if dry_run {
+                    " (dry run — nothing written)"
+                } else {
+                    ""
+                }
             );
-            if failed > 0 { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+            if failed > 0 {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
         }
         Command::Modules => {
             let comp = signal_guitar::library::RigLibrary::load_compositions();
@@ -158,15 +249,24 @@ pub fn run(command: Command) -> ExitCode {
                 }
             }
             for b in &comp.blocks {
-                println!("Block  {:<11} {:<24} {}", b.block_type, b.name, if b.bypass { "(off)" } else { "" });
+                println!(
+                    "Block  {:<11} {:<24} {}",
+                    b.block_type,
+                    b.name,
+                    if b.bypass { "(off)" } else { "" }
+                );
             }
             let mut dangling = 0;
-            let block_ok = |c: &signal_guitar::compose::BlockChoiceDef| comp.block_preset(&c.preset).is_some();
+            let block_ok =
+                |c: &signal_guitar::compose::BlockChoiceDef| comp.block_preset(&c.preset).is_some();
             for m in &comp.modules {
                 for snap in &m.snapshots {
                     for c in snap.blocks.iter().filter(|c| !block_ok(c)) {
                         dangling += 1;
-                        eprintln!("  {} {} / {}: no block preset {} for {}", m.module, m.name, snap.name, c.preset, c.block);
+                        eprintln!(
+                            "  {} {} / {}: no block preset {} for {}",
+                            m.module, m.name, snap.name, c.preset, c.block
+                        );
                     }
                 }
             }
@@ -174,7 +274,10 @@ pub fn run(command: Command) -> ExitCode {
                 for snap in &p.snapshots {
                     for c in snap.blocks.iter().filter(|c| !block_ok(c)) {
                         dangling += 1;
-                        eprintln!("  {} / {}: no block preset {} for {}", p.name, snap.name, c.preset, c.block);
+                        eprintln!(
+                            "  {} / {}: no block preset {} for {}",
+                            p.name, snap.name, c.preset, c.block
+                        );
                     }
                 }
             }
@@ -182,11 +285,17 @@ pub fn run(command: Command) -> ExitCode {
                 for snap in &p.snapshots {
                     for pick in &snap.modules {
                         let ok = comp.module(&pick.module, &pick.preset).is_some_and(|m| {
-                            pick.snapshot.is_empty() || m.snapshots.iter().any(|s| s.name.eq_ignore_ascii_case(&pick.snapshot))
+                            pick.snapshot.is_empty()
+                                || m.snapshots
+                                    .iter()
+                                    .any(|s| s.name.eq_ignore_ascii_case(&pick.snapshot))
                         });
                         if !ok {
                             dangling += 1;
-                            eprintln!("  {} / {}: no {} preset {} / {}", p.name, snap.name, pick.module, pick.preset, pick.snapshot);
+                            eprintln!(
+                                "  {} / {}: no {} preset {} / {}",
+                                p.name, snap.name, pick.module, pick.preset, pick.snapshot
+                            );
                         }
                     }
                 }
@@ -197,71 +306,117 @@ pub fn run(command: Command) -> ExitCode {
                 comp.modules.len(),
                 missing,
                 comp.presets.len(),
-                comp.presets.iter().map(|p| p.snapshots.len()).sum::<usize>(),
+                comp.presets
+                    .iter()
+                    .map(|p| p.snapshots.len())
+                    .sum::<usize>(),
                 dangling
             );
             missing += dangling;
-            if missing > 0 { ExitCode::FAILURE } else { ExitCode::SUCCESS }
-        }
-        Command::Migrate { profile, write } => match signal_guitar::compose::migrate_profile(&profile, !write) {
-            Ok(m) => {
-                println!("Module presets:");
-                for module in &m.modules {
-                    let snaps: Vec<&str> = module.snapshots.iter().map(|s| s.name.as_str()).collect();
-                    println!("  {:<6} {:<24} {}", module.module, module.name, snaps.join(" · "));
-                }
-                println!("\nPresets:");
-                for preset in &m.presets {
-                    println!("  {}", preset.name);
-                    for snap in &preset.snapshots {
-                        let picks: Vec<String> =
-                            snap.modules.iter().map(|p| format!("{}: {} / {}", p.module, p.preset, p.snapshot)).collect();
-                        println!("    {:<22} {}  (+{} overrides)", snap.name, picks.join(", "), snap.overrides.len());
-                    }
-                }
-                let left: Vec<&str> = m
-                    .profile
-                    .patches
-                    .iter()
-                    .filter(|p| p.rig_preset.is_empty())
-                    .map(|p| p.name.as_str())
-                    .collect();
-                if !left.is_empty() {
-                    println!("\nLeft as they are (a second amp, or no pool capture): {}", left.join(", "));
-                }
-                println!("{}", if write { "\nwritten." } else { "\n(dry run — pass --write to save)" });
+            if missing > 0 {
+                ExitCode::FAILURE
+            } else {
                 ExitCode::SUCCESS
             }
-            Err(e) => {
-                eprintln!("{e}");
-                ExitCode::FAILURE
+        }
+        Command::Migrate { profile, write } => {
+            match signal_guitar::compose::migrate_profile(&profile, !write) {
+                Ok(m) => {
+                    println!("Module presets:");
+                    for module in &m.modules {
+                        let snaps: Vec<&str> =
+                            module.snapshots.iter().map(|s| s.name.as_str()).collect();
+                        println!(
+                            "  {:<6} {:<24} {}",
+                            module.module,
+                            module.name,
+                            snaps.join(" · ")
+                        );
+                    }
+                    println!("\nPresets:");
+                    for preset in &m.presets {
+                        println!("  {}", preset.name);
+                        for snap in &preset.snapshots {
+                            let picks: Vec<String> = snap
+                                .modules
+                                .iter()
+                                .map(|p| format!("{}: {} / {}", p.module, p.preset, p.snapshot))
+                                .collect();
+                            println!(
+                                "    {:<22} {}  (+{} overrides)",
+                                snap.name,
+                                picks.join(", "),
+                                snap.overrides.len()
+                            );
+                        }
+                    }
+                    let left: Vec<&str> = m
+                        .profile
+                        .patches
+                        .iter()
+                        .filter(|p| p.rig_preset.is_empty())
+                        .map(|p| p.name.as_str())
+                        .collect();
+                    if !left.is_empty() {
+                        println!(
+                            "\nLeft as they are (a second amp, or no pool capture): {}",
+                            left.join(", ")
+                        );
+                    }
+                    println!(
+                        "{}",
+                        if write {
+                            "\nwritten."
+                        } else {
+                            "\n(dry run — pass --write to save)"
+                        }
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    ExitCode::FAILURE
+                }
             }
-        },
+        }
         Command::Level {
             profile,
             dry_run,
             sample_rate,
-        } => match signal_guitar::levelling::level_profile(profile.as_deref(), sample_rate, dry_run) {
-            Ok(results) => {
-                let mut failed = false;
-                for r in &results {
-                    match r.lufs {
-                        Some(lufs) => println!("{:<24} {lufs:>7.1} LUFS  →  level {:+.1} dB", r.patch, r.level_db),
-                        None => {
-                            failed = true;
-                            println!("{:<24} did not render — level left at {:+.1} dB", r.patch, r.level_db);
+        } => {
+            match signal_guitar::levelling::level_profile(profile.as_deref(), sample_rate, dry_run)
+            {
+                Ok(results) => {
+                    let mut failed = false;
+                    for r in &results {
+                        match r.lufs {
+                            Some(lufs) => println!(
+                                "{:<24} {lufs:>7.1} LUFS  →  level {:+.1} dB",
+                                r.patch, r.level_db
+                            ),
+                            None => {
+                                failed = true;
+                                println!(
+                                    "{:<24} did not render — level left at {:+.1} dB",
+                                    r.patch, r.level_db
+                                );
+                            }
                         }
                     }
+                    if dry_run {
+                        println!("\n(dry run — nothing written)");
+                    }
+                    if failed {
+                        ExitCode::FAILURE
+                    } else {
+                        ExitCode::SUCCESS
+                    }
                 }
-                if dry_run {
-                    println!("\n(dry run — nothing written)");
+                Err(e) => {
+                    eprintln!("{e}");
+                    ExitCode::FAILURE
                 }
-                if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }
             }
-            Err(e) => {
-                eprintln!("{e}");
-                ExitCode::FAILURE
-            }
-        },
+        }
     }
 }

@@ -440,6 +440,33 @@ pub fn interface_calibration_dbu() -> Option<f32> {
     v.is_finite().then_some(v)
 }
 
+/// The size every slimmable (A2) model is built at, 0..=1 (1 = full).
+/// Stored as `f32` bits; full size by default.
+static MODEL_SIZE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3f80_0000);
+
+/// Build A2 models at `size` from now on (clamped to 0.1..=1). A host that
+/// cannot afford full-size models — the browser, when a board is too long
+/// for its threads — trades a little accuracy for a lot of speed: a quarter
+/// size runs about twice as fast.
+pub fn set_model_size(size: f64) {
+    let size = if size.is_finite() {
+        size.clamp(0.1, 1.0)
+    } else {
+        1.0
+    };
+    MODEL_SIZE.store(
+        (size as f32).to_bits(),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+}
+
+#[must_use]
+pub fn model_size() -> f64 {
+    f64::from(f32::from_bits(
+        MODEL_SIZE.load(std::sync::atomic::Ordering::Relaxed),
+    ))
+}
+
 /// `(input dB, output dB)` calibration for a capture declaring
 /// `input_level`/`output_level` (dBu at 0 dBFS), against an interface whose
 /// full scale is `interface` dBu. Keeps the signal in the interface's level

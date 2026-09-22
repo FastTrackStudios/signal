@@ -13322,7 +13322,9 @@ name = "signal-guitar"
 version = "0.1.0"
 dependencies = [
  "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
+ "blake3",
  "facet",
+ "facet-json",
  "facet-styx",
  "fx-blocks",
  "libc",
@@ -13388,6 +13390,19 @@ dependencies = [
  "uuid",
  "vello",
  "wgpu",
+]
+
+[[package]]
+name = "signal-guitar-worklet"
+version = "0.1.0"
+dependencies = [
+ "facet",
+ "facet-json",
+ "js-sys",
+ "signal-plugin-host",
+ "signal-sampler",
+ "tracing",
+ "wasm-bindgen",
 ]
 
 [[package]]

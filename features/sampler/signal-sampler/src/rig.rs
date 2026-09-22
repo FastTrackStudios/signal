@@ -974,6 +974,25 @@ pub fn prepare_chain(
     block_ids: &[String],
     sample_rate: u32,
 ) -> Result<PreparedChain, String> {
+    prepare_chain_with(blocks, block_ids, sample_rate, &mut |_, _| None)
+}
+
+/// [`prepare_chain`], letting the caller supply a block's processor itself.
+///
+/// `supply(index, block)` runs before each block is built; a `Some` is used
+/// in place of building it. The browser host uses this to put a worker
+/// proxy where a NAM model would run — before the dual-amp stage wraps the
+/// chain, so a proxied Amp R still blends in parallel with Amp L.
+///
+/// # Errors
+///
+/// As [`prepare_chain`].
+pub fn prepare_chain_with(
+    blocks: &[RigBlock],
+    block_ids: &[String],
+    sample_rate: u32,
+    supply: &mut dyn FnMut(usize, &RigBlock) -> Option<Box<dyn PluginInstance>>,
+) -> Result<PreparedChain, String> {
     if blocks.is_empty() {
         return Err("chain has no blocks".into());
     }
@@ -998,7 +1017,10 @@ pub fn prepare_chain(
         // `Instant` panics on wasm32-unknown-unknown (no clock).
         #[cfg(not(target_arch = "wasm32"))]
         let began = std::time::Instant::now();
-        let built = build_block(b, sample_rate)?;
+        let built = match supply(i, b) {
+            Some(boxed) => BuiltBlock::plain(boxed, b.name.clone()),
+            None => build_block(b, sample_rate)?,
+        };
         #[cfg(not(target_arch = "wasm32"))]
         tracing::trace!(
             block.name = %b.name,
@@ -1079,6 +1101,10 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
                 #[cfg(target_arch = "wasm32")]
                 None => return Err(format!("NAM model not loaded: {}", block.nam)),
             };
+            let size = crate::nam::model_size();
+            if size < 1.0 {
+                nam.set_slimmable_size(size);
+            }
             nam.input_gain_db = block.input_trim_db;
             nam.output_gain_db = block.output_trim_db;
             if let Some(iface) = crate::nam::interface_calibration_dbu() {

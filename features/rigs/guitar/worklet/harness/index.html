@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Guitar Rig Harness</title>
+<style>
+  :root { --bg:#111; --fg:#ddd; --mut:#888; }
+  body { background:var(--bg); color:var(--fg); font:14px system-ui; margin:16px; }
+  select, button { font:inherit; }
+  pre { color:var(--mut); white-space:pre-wrap; }
+</style>
+<h3>Signal guitar rig — browser harness</h3>
+<p>
+  <button id="start">Start (demo DI)</button>
+  <button id="mic">Use mic</button>
+  <select id="patch"></select>
+</p>
+<pre id="out">isolated: <span id="iso"></span></pre>
+<script type="module">
+import { GuitarRig } from './guitar_rig.js';
+const out = document.getElementById('out');
+const log = (s) => { out.textContent += '\n' + s; window.__log = out.textContent; };
+document.getElementById('iso').textContent = String(globalThis.crossOriginIsolated);
+const bundle = await (await fetch('rig/rig.json')).json();
+const sel = document.getElementById('patch');
+bundle.profiles.forEach((p, pi) => p.patches.forEach((x, xi) => {
+  const o = document.createElement('option'); o.value = pi + ':' + xi; o.textContent = p.name + ' — ' + x.name; sel.append(o);
+}));
+const cache = new Map();
+const fetchBytes = async (key) => {
+  if (!cache.has(key)) cache.set(key, await (await fetch('rig/' + key)).arrayBuffer());
+  return cache.get(key);
+};
+let rig = null;
+async function load() {
+  const [pi, xi] = sel.value.split(':').map(Number);
+  const patch = bundle.profiles[pi].patches[xi];
+  const t0 = performance.now();
+  const r = await rig.loadPatch(patch, fetchBytes);
+  log(`${patch.name}: budget ${rig.budgetUs} µs · ${r.plan.models.map(m => m.place).join(',')} · +${r.addedLatencyMs.toFixed(2)} ms · loaded in ${(performance.now()-t0).toFixed(0)} ms`);
+  window.__plan = r;
+}
+async function start(kind) {
+  if (!rig) {
+    rig = await GuitarRig.create({ base: './' });
+    window.__rig = rig;
+    log(`sr ${rig.ctx.sampleRate} · isolated ${rig.isolated} · device ${rig.deviceLatencyMs.toFixed(1)} ms`);
+    setInterval(async () => { window.__stats = await rig.stats(); }, 500);
+  }
+  await rig.useInput(kind, 'di-reference.wav');
+  await load();
+}
+document.getElementById('start').onclick = () => start('demo').catch(e => log('error: ' + e.message));
+document.getElementById('mic').onclick = () => start('mic').catch(e => log('error: ' + e.message));
+sel.onchange = () => rig && load().catch(e => log('error: ' + e.message));
+window.__start = start; window.__select = (v) => { sel.value = v; return load(); };
+</script>

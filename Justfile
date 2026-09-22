@@ -269,6 +269,39 @@ keys-worklet-wasm out='apps/desktop/web-dist/worklet':
     cp features/rigs/keys/worklet/keys_decoder_worker.js {{out}}/keys_decoder_worker.js
     cp features/rigs/keys/worklet/keys_streamer_worker.js {{out}}/keys_streamer_worker.js
 
+# Stage the browser guitar rig (crates/signal/docs/browser-guitar-rig.md):
+# one wasm module with two entry points — GuitarWorklet on the AudioWorklet
+# thread, NamWorker on each NAM Web Worker — plus the processor, the worker,
+# the page-side orchestrator and the worklet polyfill (shared with keys).
+# The page expects, under {{out}}:
+#   guitar_processor.js  nam_worker.js  guitar_rig.js  worklet_polyfill.js
+#   signal_guitar_worklet.js  signal_guitar_worklet_bg.wasm
+# +simd128: the NAM kernels are what decides how many models fit a quantum.
+guitar-worklet-wasm out='apps/desktop/web-dist/worklet/guitar':
+    RUSTFLAGS="-C target-feature=+simd128" \
+    cargo build -p signal-guitar-worklet --lib \
+        --target wasm32-unknown-unknown --release
+    mkdir -p {{out}}
+    wasm-bindgen --target web --out-dir {{out}} \
+        --out-name signal_guitar_worklet \
+        target/wasm32-unknown-unknown/release/signal_guitar_worklet.wasm
+    cp features/rigs/guitar/worklet/guitar_processor.js {{out}}/
+    cp features/rigs/guitar/worklet/nam_worker.js {{out}}/
+    cp features/rigs/guitar/worklet/guitar_rig.js {{out}}/
+    cp features/rigs/keys/worklet/worklet_polyfill.js {{out}}/
+
+# Try the browser guitar rig locally: stage the worklet bundle, export the
+# rig (XDG_CONFIG_HOME picks the config), copy the reference DI, and serve
+# the harness with the COOP/COEP headers SharedArrayBuffer needs:
+#   http://127.0.0.1:8765/  (Start = the demo DI through the chosen patch)
+# `node profile.mjs <profile> <patch>` in the dir prints each block's cost.
+guitar-web-harness dir='target/guitar-web' port='8765':
+    just guitar-worklet-wasm {{dir}}
+    cargo run -q -p signal-cli -- rig web-bundle {{dir}}/rig
+    cp features/rigs/guitar/worklet/harness/index.html features/rigs/guitar/worklet/harness/serve.py features/rigs/guitar/worklet/harness/profile.mjs {{dir}}/
+    cp "${XDG_CONFIG_HOME:-$HOME/.config}/signal/calibration/di-reference.wav" {{dir}}/ || echo "no di-reference.wav — the demo input needs one"
+    python3 {{dir}}/serve.py {{port}}
+
 # W13: the SHARED-MEMORY worklet build — wasm threads.
 #
 # The rig's audio thread must never decode, and copying PCM to it costs a

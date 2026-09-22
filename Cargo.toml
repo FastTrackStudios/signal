@@ -63,6 +63,7 @@ members = [
     "features/rigs/keys/proto",
     "features/rigs/keys/ui",
     "features/rigs/keys/worklet",
+    "features/rigs/guitar/worklet",
     "features/rigs/orchestra",
     "features/rigs/synth",
     "features/rigs/synth/proto",
@@ -297,6 +298,7 @@ signal-keys = { path = "features/rigs/keys" }
 signal-keys-proto = { path = "features/rigs/keys/proto" }
 signal-keys-ui = { path = "features/rigs/keys/ui" }
 signal-keys-worklet = { path = "features/rigs/keys/worklet" }
+signal-guitar-worklet = { path = "features/rigs/guitar/worklet" }
 openwurli-dsp = { path = "features/rigs/wurli/openwurli-dsp" }
 signal-orchestra = { path = "features/rigs/orchestra" }
 signal-drums = { path = "features/rigs/drums" }
