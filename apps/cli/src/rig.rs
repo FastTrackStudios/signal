@@ -28,6 +28,18 @@ pub enum Command {
     },
     /// List the module presets as the rig loads them (modules.styx).
     Modules,
+    /// Make a profile pure references: each patch becomes a snapshot of a
+    /// "<profile> <stack>" preset (its overrides, its amp mapped through
+    /// `--map`, the board as a Pedalboard snapshot); the profile keeps only
+    /// stacks and references. Dry run unless `--write`.
+    Recompose {
+        profile: String,
+        /// Lines of `old capture = Amp preset / snapshot`.
+        #[arg(long)]
+        map: std::path::PathBuf,
+        #[arg(long)]
+        write: bool,
+    },
     /// Level every preset snapshot to the same loudness (writes each
     /// snapshot's `level_db` into presets.styx). The rig picks it up on the
     /// next change — no restart.
@@ -43,6 +55,50 @@ pub enum Command {
 
 pub fn run(command: Command) -> ExitCode {
     match command {
+        Command::Recompose { profile, map, write } => {
+            let Ok(text) = std::fs::read_to_string(&map) else {
+                eprintln!("cannot read {}", map.display());
+                return ExitCode::FAILURE;
+            };
+            let amp_map = signal_guitar::compose::parse_amp_map(&text);
+            let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
+            let Some(mut def) = lib.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(&profile)).cloned() else {
+                eprintln!("no profile named {profile:?}");
+                return ExitCode::FAILURE;
+            };
+            let mut comp = signal_guitar::library::RigLibrary::load_compositions();
+            let unmapped = signal_guitar::compose::recompose(&mut def, &mut comp, &amp_map, &lib.drive_presets);
+            if !unmapped.is_empty() {
+                eprintln!("no mapping for the amp of: {} — add them to the map", unmapped.join(", "));
+                return ExitCode::FAILURE;
+            }
+            for p in &def.patches {
+                println!("  {:<22} → {} / {}", p.name, p.rig_preset, p.snapshot);
+            }
+            // Every pick must land on something real.
+            let mut bad = 0;
+            for p in comp.presets.iter().filter(|p| p.name.starts_with(&def.name)) {
+                for snap in &p.snapshots {
+                    for pick in &snap.modules {
+                        if !comp.module(&pick.module, &pick.preset).is_some_and(|m| m.snapshots.iter().any(|s| s.name.eq_ignore_ascii_case(&pick.snapshot))) {
+                            bad += 1;
+                            eprintln!("  {} / {}: no {} {} / {}", p.name, snap.name, pick.module, pick.preset, pick.snapshot);
+                        }
+                    }
+                }
+            }
+            if bad > 0 {
+                return ExitCode::FAILURE;
+            }
+            if write {
+                signal_guitar::library::RigLibrary::save_compositions(&comp);
+                signal_guitar::library::RigLibrary::save_profile(&def);
+                println!("written.");
+            } else {
+                println!("(dry run — pass --write to save)");
+            }
+            ExitCode::SUCCESS
+        }
         Command::LevelPresets { dry_run, sample_rate, threads } => {
             let cal = signal_guitar::levelling::apply_nam_calibration();
             println!("NAM calibration: {}", cal.map_or("off".to_string(), |c| format!("{c} dBu interface")));

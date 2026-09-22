@@ -679,3 +679,122 @@ pub fn level_presets(
         })
         .collect()
 }
+
+/// Read an amp map: `old capture = Amp preset / snapshot` per line, `#`
+/// comments. Keys compare case-insensitively.
+#[must_use]
+pub fn parse_amp_map(text: &str) -> Vec<(String, ModuleChoiceDef)> {
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .filter_map(|l| {
+            let (old, new) = l.split_once('=')?;
+            let (preset, snapshot) = new.rsplit_once(" / ")?;
+            Some((
+                old.trim().to_string(),
+                ModuleChoiceDef {
+                    module: "Amp".into(),
+                    preset: preset.trim().to_string(),
+                    snapshot: snapshot.trim().to_string(),
+                },
+            ))
+        })
+        .collect()
+}
+
+/// The shared pedalboard Drive preset.
+pub const PEDALBOARD: &str = "Pedalboard";
+
+/// Make a profile pure references: every uncomposed patch becomes a
+/// snapshot of a preset named "<profile> <stack>" (the patch's name, its
+/// overrides, its amp mapped through `amp_map`, the profile's board as a
+/// Pedalboard snapshot), and the patch keeps only the reference. The pool,
+/// the board, and per-patch levels leave the profile. Patches already
+/// composed keep their pick. Returns the patches it could not map.
+pub fn recompose(
+    def: &mut ProfileDef,
+    comp: &mut Compositions,
+    amp_map: &[(String, ModuleChoiceDef)],
+    drive_presets: &[crate::profiles::DrivePresetDef],
+) -> Vec<String> {
+    let mut unmapped = Vec::new();
+
+    // The board, as a Pedalboard snapshot named by what each slot runs.
+    let board_pick = (!def.drives.is_empty()).then(|| {
+        let name = def
+            .drives
+            .iter()
+            .map(|d| {
+                drive_presets
+                    .iter()
+                    .find(|p| p.name.eq_ignore_ascii_case(&d.preset))
+                    .and_then(|p| p.options.get(d.option))
+                    .map_or_else(|| d.preset.clone(), |o| format!("{} {}", d.preset, o.name))
+            })
+            .collect::<Vec<_>>()
+            .join(" + ");
+        if !comp.modules.iter().any(|m| m.module == "Drive" && m.name == PEDALBOARD) {
+            comp.modules.push(ModulePresetDef { module: "Drive".into(), name: PEDALBOARD.into(), snapshots: Vec::new() });
+        }
+        let board = comp
+            .modules
+            .iter_mut()
+            .find(|m| m.module == "Drive" && m.name == PEDALBOARD)
+            .expect("just ensured");
+        if !board.snapshots.iter().any(|s| s.name == name) {
+            board.snapshots.push(ModuleSnapshotDef { name: name.clone(), drives: def.drives.clone(), ..ModuleSnapshotDef::default() });
+        }
+        ModuleChoiceDef { module: "Drive".into(), preset: PEDALBOARD.into(), snapshot: name }
+    });
+
+    let stack_of = |patch: &str| {
+        def.stacks
+            .iter()
+            .find(|s| s.patches.iter().any(|p| p.eq_ignore_ascii_case(patch)))
+            .map_or_else(|| "Extra".to_string(), |s| s.name.clone())
+    };
+    let stacks: Vec<String> = def.patches.iter().map(|p| stack_of(&p.name)).collect();
+    for (patch, stack) in def.patches.iter_mut().zip(stacks) {
+        if patch.rig_preset.is_empty() {
+            let Some((_, amp)) = amp_map.iter().find(|(old, _)| old.eq_ignore_ascii_case(&patch.preset)) else {
+                unmapped.push(patch.name.clone());
+                continue;
+            };
+            let mut modules = vec![amp.clone()];
+            modules.extend(board_pick.clone());
+            let preset_name = format!("{} {stack}", def.name);
+            if comp.preset(&preset_name).is_none() {
+                comp.presets.push(RigPresetDef { name: preset_name.clone(), snapshots: Vec::new() });
+            }
+            let preset = comp
+                .presets
+                .iter_mut()
+                .find(|p| p.name.eq_ignore_ascii_case(&preset_name))
+                .expect("just ensured");
+            let snap = PresetSnapshotDef {
+                name: patch.name.clone(),
+                modules,
+                overrides: std::mem::take(&mut patch.overrides),
+                level_db: 0.0,
+            };
+            match preset.snapshots.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&patch.name)) {
+                Some(existing) => *existing = snap,
+                None => preset.snapshots.push(snap),
+            }
+            patch.rig_preset = preset_name;
+            patch.snapshot = patch.name.clone();
+        }
+        // What the preset now says, the patch no longer does.
+        patch.preset.clear();
+        patch.preset2.clear();
+        patch.modules.clear();
+        patch.drives.clear();
+        patch.level_db = 0.0;
+        patch.trim_db = 0.0;
+    }
+    if unmapped.is_empty() {
+        def.presets.clear();
+        def.drives.clear();
+    }
+    unmapped
+}
