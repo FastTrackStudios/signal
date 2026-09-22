@@ -200,7 +200,12 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
                 if !l.is_empty() {
                     patch.preset = l;
                 }
-                patch.preset2 = pool("R", &snap.nam2, &snap.cab2);
+                // The patch's own second amp wins over the snapshot's —
+                // patch level is the last word, as with overrides.
+                let r = pool("R", &snap.nam2, &snap.cab2);
+                if patch.preset2.is_empty() {
+                    patch.preset2 = r;
+                }
             }
             for d in &snap.drives {
                 match patch.drives.iter_mut().find(|x| x.block.eq_ignore_ascii_case(&d.block)) {

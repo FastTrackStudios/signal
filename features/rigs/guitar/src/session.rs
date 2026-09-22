@@ -3299,6 +3299,10 @@ impl Rig for GuitarRigBackend {
             };
             tracing::info!("patch '{}' → preset '{preset_name}'", p.name);
             p.preset = preset_name;
+            // Choosing a capture directly replaces the patch's Amp preset
+            // pick — otherwise the pick would keep winning and this would
+            // silently do nothing.
+            p.modules.retain(|m| !m.module.eq_ignore_ascii_case("Amp"));
             RigLibrary::save_profile(&def);
             {
                 let dps = self.drive_presets.lock_ok();
