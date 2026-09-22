@@ -962,12 +962,162 @@ fn SettingsPanel() -> Element {
             style: "display: flex; flex-direction: column; align-items: flex-start; gap: 12px; \
                     padding: 12px; font-size: 12px;",
             span { style: "color: #a1a1aa;", "Signal v{env!(\"CARGO_PKG_VERSION\")}" }
+            AccountSettings {}
             EnginesArea {}
             EngineModeSetting {}
             UpdateCheck { msg: update_msg }
             if !update_msg().is_empty() {
                 span { style: "color: #a1a1aa;", "{update_msg}" }
             }
+        }
+    }
+}
+
+/// The `FastTrackStudio` account — sign in once here, and TONE3000 (whatever
+/// else the account gathers, later) works on every machine signed in to it
+/// without a second, per-machine authorization. See `crates/signal/account`
+/// and `crates/signal/docs/tone3000.md`'s "Two ways to be authorized".
+#[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
+#[component]
+fn AccountSettings() -> Element {
+    use signal_account_proto::account::AccountAuthClient;
+    use signal_account_proto::AccountStatus;
+
+    let client = use_resource(connect_account);
+    let mut status = use_signal(AccountStatus::default);
+    let mut refreshed = use_signal(|| false);
+    let mut message = use_signal(String::new);
+
+    // Seed status once a client is in hand.
+    {
+        let client = client;
+        use_effect(move || {
+            if *refreshed.peek() {
+                return;
+            }
+            let Some(Some(c)) = client.read().clone() else { return };
+            refreshed.set(true);
+            spawn(async move {
+                if let Ok(s) = c.status().await {
+                    status.set(s);
+                }
+            });
+        });
+    }
+
+    let refresh = move |c: Option<AccountAuthClient>| {
+        spawn(async move {
+            let Some(c) = c else { return };
+            if let Ok(s) = c.status().await {
+                status.set(s);
+            }
+        });
+    };
+
+    let signed_in = status.read().signed_in;
+    let c = client.read().clone().flatten();
+    // One clone per closure below, named for which: `if`/`else` arms (and the
+    // conditional nested inside the `else`) each become their own capturing
+    // closure in the expanded `rsx!`, so a single `c` shared across them
+    // cannot be `move`d into more than one.
+    let c_sign_out = c.clone();
+    let c_sign_in = c.clone();
+    let c_refresh = c.clone();
+
+    rsx! {
+        div { style: "display: flex; flex-direction: column; gap: 6px; width: 100%;",
+            span { style: "color: #71717a; font-size: 11px;", "FastTrackStudio account" }
+            if signed_in {
+                div { style: "display: flex; align-items: center; gap: 8px;",
+                    span { style: "width: 8px; height: 8px; border-radius: 999px; background: #22c55e; flex-shrink: 0;" }
+                    span { style: "color: #e4e4e7; font-size: 12px; min-width: 0; overflow: hidden; text-overflow: clip; white-space: nowrap;",
+                        if status.read().email.is_empty() { "Signed in" } else { "{status.read().email}" }
+                    }
+                    button {
+                        style: "margin-left: auto; padding: 3px 10px; border-radius: 5px; background: transparent; \
+                                color: #a1a1aa; border: 1px solid #27272a; font-size: 11px;",
+                        onclick: move |_| {
+                            let c = c_sign_out.clone();
+                            spawn(async move {
+                                let Some(c) = c else { return };
+                                let _ = c.sign_out().await;
+                                status.set(AccountStatus::default());
+                            });
+                        },
+                        "Sign out"
+                    }
+                }
+            } else {
+                div { style: "display: flex; align-items: center; gap: 8px;",
+                    span { style: "width: 8px; height: 8px; border-radius: 999px; background: #52525b; flex-shrink: 0;" }
+                    span { style: "color: #a1a1aa; font-size: 12px;", "Not signed in" }
+                    button {
+                        style: "margin-left: auto; padding: 3px 10px; border-radius: 5px; background: #10283f; \
+                                color: #7dd3fc; border: 1px solid #38bdf8; font-size: 11px;",
+                        onclick: move |_| {
+                            let c = c_sign_in.clone();
+                            spawn(async move {
+                                let Some(c) = c else {
+                                    message.set("The rig engine is not up yet.".to_string());
+                                    return;
+                                };
+                                let Ok(request) = c.begin_sign_in().await else { return };
+                                if request.authorize_url.is_empty() {
+                                    message.set(
+                                        "No FastTrackStudio issuer configured for this build."
+                                            .to_string(),
+                                    );
+                                    return;
+                                }
+                                rig_view::open_externally(request.authorize_url);
+                                message.set(
+                                    "Finish signing in in your browser, then come back and \
+                                     press \"I've signed in\"."
+                                        .to_string(),
+                                );
+                            });
+                        },
+                        "Sign in"
+                    }
+                }
+                if !message.read().is_empty() {
+                    div { style: "display: flex; flex-direction: column; gap: 4px;",
+                        span { style: "color: #71717a; font-size: 10px; line-height: 1.4;", "{message}" }
+                        button {
+                            style: "align-self: flex-start; padding: 3px 10px; border-radius: 5px; background: transparent; \
+                                    color: #a1a1aa; border: 1px solid #27272a; font-size: 11px;",
+                            onclick: move |_| refresh(c_refresh.clone()),
+                            "I've signed in"
+                        }
+                    }
+                }
+            }
+            span { style: "color: #52525b; font-size: 10px; line-height: 1.4;",
+                "Links TONE3000 to this account once, at auth.fasttrackstudio.app — every machine \
+                 signed in here can then browse and download captures without its own TONE3000 \
+                 sign-in."
+            }
+        }
+    }
+}
+
+/// Connect to whichever engine this window is pointed at — embedded
+/// (bootstrapping it if this is the first thing to ask) or the supervised
+/// child over vox — and hand back its account client. `None` while the
+/// engine is not yet up; the sign-in button says so rather than doing
+/// nothing.
+#[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
+async fn connect_account() -> Option<signal_account_proto::account::AccountAuthClient> {
+    match rig_view::EngineMode::current() {
+        rig_view::EngineMode::Embedded => {
+            if rig_engine::engine().is_none() {
+                let _ = tokio::task::spawn_blocking(rig_engine::bootstrap_blocking).await;
+            }
+            rig_engine::engine()?.account.clone()
+        }
+        rig_view::EngineMode::Supervised => {
+            let target = remote::EngineTarget::current();
+            remote::establish(&target).await
         }
     }
 }
@@ -1029,6 +1179,12 @@ fn UpdateCheck(msg: Signal<String>) -> Element {
 #[cfg(not(all(feature = "signal", not(target_arch = "wasm32"))))]
 #[component]
 fn EngineModeSetting() -> Element {
+    rsx! {}
+}
+
+#[cfg(not(all(feature = "signal-guitar", not(target_arch = "wasm32"))))]
+#[component]
+fn AccountSettings() -> Element {
     rsx! {}
 }
 

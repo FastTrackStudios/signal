@@ -219,6 +219,14 @@ async fn async_main() {
     ))
     .with_account(account.clone());
     let router = router.merge_router(tone3000.router());
+    // The account's own sign-in RPC — a GUI's way to link this device to
+    // auth.fasttrackstudio.app, so TONE3000 (and whatever else the account
+    // gathers) works without a second, per-machine authorization. Wraps the
+    // SAME `Arc<Account>` the callback route below redeems into, so a
+    // sign-in finished in the browser is visible on the next `status()`
+    // call with nothing else to keep in step.
+    let account_rpc = signal_account::AccountBackend::new(account.clone());
+    let router = router.merge_router(account_rpc.router());
 
     // ── Sample space (similarity maps over the sample libraries, #77) ────
     let space = signal_space::service::SpaceBackend::new();

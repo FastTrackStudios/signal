@@ -12994,17 +12994,28 @@ dependencies = [
 name = "signal-account"
 version = "0.1.0"
 dependencies = [
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
  "auth-client",
  "rand 0.8.6",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "signal-account-proto",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
  "url",
  "wiremock",
+]
+
+[[package]]
+name = "signal-account-proto"
+version = "0.1.0"
+dependencies = [
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
+ "facet",
+ "vox",
 ]
 
 [[package]]
@@ -13148,6 +13159,7 @@ dependencies = [
  "session-ui",
  "sha2 0.10.9",
  "signal-account",
+ "signal-account-proto",
  "signal-bass",
  "signal-bass-proto",
  "signal-bass-ui",
@@ -13312,6 +13324,7 @@ dependencies = [
  "facet",
  "facet-styx",
  "fx-blocks",
+ "libc",
  "midicore",
  "neural-amp-modeler",
  "signal-guitar-proto",

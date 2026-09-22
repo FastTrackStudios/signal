@@ -132,7 +132,7 @@ async fn embedded_clients() -> Option<GuitarClients> {
 /// authorization page is a web application, and every surface here reaches a
 /// browser differently. Native shells hand it to the desktop environment; the
 /// web build is already in a browser and opens a tab.
-fn open_externally(url: String) {
+pub(crate) fn open_externally(url: String) {
     if url.is_empty() {
         return;
     }

@@ -27,9 +27,11 @@
 //! already there.**
 
 mod linked;
+mod rpc;
 mod session;
 
 pub use linked::LinkedToken;
+pub use rpc::AccountBackend;
 pub use session::{Account, AccountConfig, AccountError, AccountStatus, AuthStart};
 
 /// The provider id TONE3000 is linked under, and the OIDC scope that

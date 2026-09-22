@@ -15,6 +15,9 @@ workspace = true
 # subtly wrong — plus the 0600 token store.
 auth-client.workspace = true
 reqwest = { workspace = true }
+architect = { workspace = true }
+signal-account-proto = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
 rand = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true

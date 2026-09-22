@@ -34,6 +34,7 @@ members = [
     "crates/signal/space/proto",
     "crates/signal/storage",
     "crates/signal/account",
+    "crates/signal/account-proto",
     "crates/signal/tone3000",
     "crates/signal/tone3000-proto",
     "crates/signal/tone3000-ui",
@@ -115,6 +116,7 @@ neural-amp-modeler = { git = "https://github.com/FastTrackStudios/neural-amp-mod
 tone3000 = "0.1"
 signal-account = { path = "crates/signal/account" }
 signal-tone3000 = { path = "crates/signal/tone3000" }
+signal-account-proto = { path = "crates/signal/account-proto" }
 signal-tone3000-proto = { path = "crates/signal/tone3000-proto" }
 signal-tone3000-ui = { path = "crates/signal/tone3000-ui" }
 audiocore-core = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
