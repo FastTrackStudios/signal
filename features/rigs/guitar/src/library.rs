@@ -7,8 +7,9 @@
 //!
 //! ```text
 //! <config>/signal/rig/          (override: SIGNAL_RIG_DIR)
-//!   profile.styx        ProfileDef — presets pool, patches (+overrides),
-//!                       stacks, drive-slot assignments
+//!   profiles/<name>.styx  ProfileDef, one per file — presets pool, patches
+//!                       (+overrides), stacks, drive-slot assignments.
+//!                       `last-state.styx` names the active one
 //!   drive-presets.styx  DrivePresetLib — block presets (NAM option sets)
 //!   songs.styx          SongLib — the song library (key/bpm defaults)
 //!   setlists.styx       SetlistLib — dated sets with per-entry overrides
@@ -162,12 +163,18 @@ pub struct LastState {
     /// Tapped/recalled tempo; 0 = none saved.
     #[facet(default)]
     pub tempo_bpm: f32,
+    /// The active profile by name; empty = the first one.
+    #[facet(default)]
+    pub profile: String,
 }
 
 /// Everything loaded from the rig directory.
 #[derive(Clone, Debug)]
 pub struct RigLibrary {
+    /// The active profile — the one the rig plays.
     pub profile: ProfileDef,
+    /// Every profile in `profiles/`, the active one included, by name.
+    pub profiles: Vec<ProfileDef>,
     pub drive_presets: Vec<DrivePresetDef>,
     pub songs: Vec<SongDef>,
     pub setlists: Vec<SetlistDef>,
@@ -255,6 +262,70 @@ fn seed_models() {
     }
 }
 
+/// Where the profiles live, one styx file each.
+pub const PROFILES_DIR: &str = "profiles";
+
+/// The store over [`PROFILES_DIR`]. NAM paths still resolve against the rig
+/// directory (`models/…`), so resolving goes through [`store`], not this.
+fn profiles_store() -> StyxDir {
+    StyxDir::new(rig_dir().join(PROFILES_DIR))
+}
+
+/// The file a profile is saved as: its name, lowercased, with anything that
+/// is not a letter or digit folded to `-` — so "Rock (Live)" is
+/// `rock-live.styx` and a name can never climb out of the directory.
+#[must_use]
+pub fn profile_file(name: &str) -> String {
+    let mut slug = String::new();
+    for c in name.trim().chars() {
+        if c.is_alphanumeric() {
+            slug.extend(c.to_lowercase());
+        } else if !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_matches('-');
+    format!("{}.styx", if slug.is_empty() { "profile" } else { slug })
+}
+
+/// Every profile in `profiles/`, sorted by name.
+///
+/// A rig from before there were several profiles has one `profile.styx`
+/// instead. That file becomes the first profile: written into `profiles/`
+/// and renamed `profile.styx.migrated`, so a hand edit to the old file is
+/// not silently ignored — it is plainly not the file any more. A run that
+/// may not write (design, ephemeral) reads it in place and leaves it alone.
+fn load_profiles(store: &StyxDir) -> Vec<ProfileDef> {
+    let dir = profiles_store();
+    let mut files: Vec<String> = std::fs::read_dir(dir.dir())
+        .map(|rd| {
+            rd.filter_map(Result::ok)
+                .filter_map(|e| e.file_name().into_string().ok())
+                .filter(|n| n.ends_with(".styx"))
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort();
+    let mut profiles: Vec<ProfileDef> = files
+        .iter()
+        .filter_map(|f| dir.read::<ProfileDef>(f))
+        .collect();
+    if profiles.is_empty() {
+        let legacy = store.read_or_seed::<ProfileDef>("profile.styx", DEFAULT_PROFILE, worship_def);
+        if writable_store().is_some() {
+            dir.write(&profile_file(&legacy.name), &legacy);
+            let old = store.dir().join("profile.styx");
+            if let Err(e) = std::fs::rename(&old, old.with_extension("styx.migrated")) {
+                tracing::warn!("rig library: cannot retire {}: {e}", old.display());
+            }
+            tracing::info!("rig library: profile.styx moved to {PROFILES_DIR}/");
+        }
+        profiles.push(legacy);
+    }
+    profiles.sort_by_key(|p| p.name.to_lowercase());
+    profiles
+}
+
 impl RigLibrary {
     /// Load the library, bootstrapping any missing file (and the NAM
     /// models the defaults reference) from the embedded in-repo default
@@ -262,8 +333,7 @@ impl RigLibrary {
     pub fn load_or_bootstrap() -> Self {
         seed_models();
         let store = store();
-        let mut profile =
-            store.read_or_seed::<ProfileDef>("profile.styx", DEFAULT_PROFILE, worship_def);
+        let mut profiles = load_profiles(&store);
         let mut drive_presets = store
             .read_or_seed::<DrivePresetLib>("drive-presets.styx", DEFAULT_DRIVE_PRESETS, || {
                 DrivePresetLib {
@@ -288,9 +358,18 @@ impl RigLibrary {
                 bindings: default_keymap(),
             })
             .bindings;
-        for preset in &mut profile.presets {
-            store.resolve(&mut preset.nam);
+        for profile in &mut profiles {
+            for preset in &mut profile.presets {
+                store.resolve(&mut preset.nam);
+            }
         }
+        let wanted = Self::load_last_state().map(|s| s.profile).unwrap_or_default();
+        let profile = profiles
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&wanted))
+            .or_else(|| profiles.first())
+            .cloned()
+            .unwrap_or_else(worship_def);
         for dp in &mut drive_presets {
             for option in &mut dp.options {
                 store.resolve(&mut option.nam);
@@ -298,6 +377,7 @@ impl RigLibrary {
         }
         Self {
             profile,
+            profiles,
             drive_presets,
             songs,
             setlists,
@@ -324,13 +404,26 @@ impl RigLibrary {
         store.write(crate::node_store::NODE_STORE_FILE, nodes);
     }
 
+    /// Write a profile to `profiles/<file>.styx`, named for the profile.
     pub fn save_profile(profile: &ProfileDef) {
         let Some(store) = writable_store() else { return };
         let mut profile = profile.clone();
         for preset in &mut profile.presets {
             store.relativize(&mut preset.nam);
         }
-        store.write("profile.styx", &profile);
+        profiles_store().write(&profile_file(&profile.name), &profile);
+    }
+
+    /// Remove a profile's file. The caller has already decided it may go —
+    /// this does not know which profile is active.
+    pub fn delete_profile(name: &str) {
+        if writable_store().is_none() {
+            return;
+        }
+        let path = profiles_store().dir().join(profile_file(name));
+        if let Err(e) = std::fs::remove_file(&path) {
+            tracing::warn!("rig library: cannot remove {}: {e}", path.display());
+        }
     }
 
     pub fn save_drive_presets(presets: &[DrivePresetDef]) {
@@ -434,6 +527,7 @@ mod tests {
             part_index: 1,
             active_patch: "Lead Big".to_string(),
             tempo_bpm: 74.0,
+            profile: "Blues".to_string(),
         };
         super::RigLibrary::save_last_state(&state);
         let back = super::RigLibrary::load_last_state().expect("last-state.styx roundtrip");
@@ -442,5 +536,14 @@ mod tests {
         assert_eq!(back.part_index, 1);
         assert_eq!(back.active_patch, "Lead Big");
         assert_eq!(back.tempo_bpm, 74.0);
+        assert_eq!(back.profile, "Blues");
+    }
+
+    #[test]
+    fn a_profile_file_is_its_name_and_stays_in_the_directory() {
+        assert_eq!(super::profile_file("Worship"), "worship.styx");
+        assert_eq!(super::profile_file("Rock (Live)"), "rock-live.styx");
+        assert_eq!(super::profile_file("../../etc"), "etc.styx");
+        assert_eq!(super::profile_file("  "), "profile.styx");
     }
 }

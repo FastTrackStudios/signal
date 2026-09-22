@@ -114,6 +114,10 @@ pub struct GuitarRigBackend {
     /// The editable profile definition (preset pool + patch pointers) —
     /// the source the runtime profile is built from.
     profile_def: Arc<Mutex<ProfileDef>>,
+    /// Every other profile in the library — not the active one, which is
+    /// [`profile_def`](Self::profile_def) and nowhere else, so an edit to it
+    /// cannot land in a stale copy.
+    other_profiles: Arc<Mutex<Vec<ProfileDef>>>,
     /// The song library (defaults) + the setlists (per-set overrides), the
     /// active setlist, and the current song/section position. Mutable until
     /// these become service-driven entities.
@@ -180,6 +184,7 @@ impl Default for GuitarRigBackend {
 impl GuitarRigBackend {
     pub fn new() -> Self {
         let lib = RigLibrary::load_or_bootstrap();
+        let others = others_of(&lib.profiles, &lib.profile.name);
         let backend = Self {
             rig: Arc::new(Mutex::new(None)),
             boost_on: Arc::new(Mutex::new(false)),
@@ -188,6 +193,7 @@ impl GuitarRigBackend {
             tempo: Arc::new(Mutex::new(None)),
             taps: Arc::new(Mutex::new(TapTracker::default())),
             profile_def: Arc::new(Mutex::new(lib.profile)),
+            other_profiles: Arc::new(Mutex::new(others)),
             songs_lib: Arc::new(Mutex::new(lib.songs)),
             setlists: Arc::new(Mutex::new(lib.setlists)),
             setlist_index: Arc::new(Mutex::new(0)),
@@ -353,6 +359,52 @@ impl GuitarRigBackend {
 
     /// Load a rebuilt profile into the live rig, restore the active patch,
     /// and resync everything — the shared tail of every edit-time rebuild.
+    /// Every profile's name, the active one first.
+    fn profile_names(&self) -> Vec<String> {
+        let mut names = vec![self.profile_def.lock_ok().name.clone()];
+        names.extend(self.other_profiles.lock_ok().iter().map(|p| p.name.clone()));
+        names
+    }
+
+    /// Play `def` instead of the active profile, which goes back on the
+    /// shelf. Rebuilds the rig and lands on the new profile's default patch.
+    fn switch_profile(&self, def: ProfileDef) {
+        let name = def.name.clone();
+        {
+            let mut current = self.profile_def.lock_ok();
+            let old = std::mem::replace(&mut *current, def);
+            let mut others = self.other_profiles.lock_ok();
+            others.retain(|p| !p.name.eq_ignore_ascii_case(&name));
+            others.push(old);
+            others.sort_by_key(|p| p.name.to_lowercase());
+        }
+        // The patch that was up belongs to the other profile; design mode
+        // falls back to the first patch when this names none.
+        self.design_patch.lock_ok().clear();
+        let rebuilt = {
+            let def = self.profile_def.lock_ok();
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&def, &dps)
+        };
+        {
+            let mut guard = self.rig.lock_ok();
+            if let Some(prig) = guard.as_mut() {
+                if let Err(e) = prig.load_profile(rebuilt, None) {
+                    tracing::error!("profile switch: load failed: {e}");
+                }
+            }
+        }
+        self.resync_blocks();
+        self.apply_tempo_to_delays();
+        self.recall_patch_boost();
+        self.apply_boost_to_block();
+        self.apply_all_drives();
+        self.publish_state();
+        self.mark_state_dirty();
+        self.spawn_drive_calibration();
+        tracing::info!("profile switched → {name}");
+    }
+
     fn reload_rebuilt(&self, rebuilt: signal_sampler::rig_profile::RigProfile) {
         let active = {
             let guard = self.rig.lock_ok();
@@ -745,6 +797,7 @@ impl GuitarRigBackend {
             part_index: *self.part_index.lock_ok() as u32,
             active_patch,
             tempo_bpm: self.tempo.lock_ok().unwrap_or(0.0),
+            profile: self.profile_def.lock_ok().name.clone(),
         }
     }
 
@@ -1752,6 +1805,20 @@ impl GuitarRigBackend {
 /// that re-locked the rig to find that same patch deadlocked on the spot —
 /// `std::sync::Mutex` is not reentrant — and took the chain publish, the
 /// delay tempo, the boost recall and the drive calibration down with it.
+/// Every profile but `active`, by name.
+fn others_of(all: &[ProfileDef], active: &str) -> Vec<ProfileDef> {
+    all.iter()
+        .filter(|p| !p.name.eq_ignore_ascii_case(active))
+        .cloned()
+        .collect()
+}
+
+/// A name that is not blank and not already taken (case-insensitively).
+fn free_name<'a>(name: &str, mut taken: impl Iterator<Item = &'a str>) -> Option<String> {
+    let name = name.trim();
+    (!name.is_empty() && !taken.any(|t| t.eq_ignore_ascii_case(name))).then(|| name.to_string())
+}
+
 fn pool_preset_of(def: &crate::profiles::ProfileDef, patch: &str) -> Option<String> {
     def.patches
         .iter()
@@ -3259,7 +3326,17 @@ impl Rig for GuitarRigBackend {
             crate::library::rig_dir().display()
         );
         let lib = RigLibrary::load_or_bootstrap();
-        *self.profile_def.lock_ok() = lib.profile;
+        // Keep playing the profile that was up, if it is still there — the
+        // file on disk names the active one only as of the last flush.
+        let current = self.profile_def.lock_ok().name.clone();
+        let profile = lib
+            .profiles
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&current))
+            .cloned()
+            .unwrap_or(lib.profile);
+        *self.other_profiles.lock_ok() = others_of(&lib.profiles, &profile.name);
+        *self.profile_def.lock_ok() = profile;
         *self.drive_presets.lock_ok() = lib.drive_presets;
         *self.songs_lib.lock_ok() = lib.songs;
         *self.setlists.lock_ok() = lib.setlists;
@@ -3895,6 +3972,341 @@ impl Rig for GuitarRigBackend {
                 }
             }
             self.record_patch_override(&id, None, if byp { 1.0 } else { 0.0 });
+        }
+        self.publish_state();
+    }
+
+    fn library(&self) -> signal_guitar_proto::LibraryModel {
+        use signal_guitar_proto::{
+            DriveEntry, LibraryModel, ProfileEntry, SetlistEntry, SongEntry, SongSlot,
+        };
+        let entry = |p: &ProfileDef, active: bool| ProfileEntry {
+            name: p.name.clone(),
+            active,
+            stacks: p.stacks.iter().map(|s| s.name.clone()).collect(),
+            patches: p.patches.len() as u32,
+            presets: p.presets.iter().map(|p| p.name.clone()).collect(),
+        };
+        let (mut profiles, slots) = {
+            let active = self.profile_def.lock_ok();
+            let mut profiles = vec![entry(&active, true)];
+            profiles.extend(self.other_profiles.lock_ok().iter().map(|p| entry(p, false)));
+            let slots: Vec<(String, String)> = active
+                .drives
+                .iter()
+                .map(|d| (d.preset.clone(), d.block.clone()))
+                .collect();
+            (profiles, slots)
+        };
+        profiles.sort_by_key(|p| p.name.to_lowercase());
+
+        let songs_lib = self.songs_lib.lock_ok().clone();
+        let sets = self.setlists.lock_ok().clone();
+        let active_set = *self.setlist_index.lock_ok();
+        let songs = songs_lib
+            .iter()
+            .map(|s| SongEntry {
+                name: s.name.clone(),
+                key: s.key.clone(),
+                bpm: s.bpm,
+                parts: s.parts.clone(),
+                setlists: sets
+                    .iter()
+                    .filter(|set| set.entries.iter().any(|e| e.song.eq_ignore_ascii_case(&s.name)))
+                    .map(|set| set.name.clone())
+                    .collect(),
+            })
+            .collect();
+        let setlists = sets
+            .iter()
+            .enumerate()
+            .map(|(i, set)| SetlistEntry {
+                name: set.name.clone(),
+                active: i == active_set,
+                songs: set
+                    .entries
+                    .iter()
+                    .map(|e| {
+                        let song = songs_lib.iter().find(|s| s.name.eq_ignore_ascii_case(&e.song));
+                        SongSlot {
+                            name: e.song.clone(),
+                            key: if e.key.is_empty() {
+                                song.map(|s| s.key.clone()).unwrap_or_default()
+                            } else {
+                                e.key.clone()
+                            },
+                            bpm: if e.bpm == 0 { song.map_or(0, |s| s.bpm) } else { e.bpm },
+                        }
+                    })
+                    .collect(),
+            })
+            .collect();
+        let drives = self
+            .drive_presets
+            .lock_ok()
+            .iter()
+            .map(|d| DriveEntry {
+                name: d.name.clone(),
+                options: d.options.iter().map(|o| o.name.clone()).collect(),
+                slots: slots
+                    .iter()
+                    .filter(|(preset, _)| preset.eq_ignore_ascii_case(&d.name))
+                    .map(|(_, block)| block.clone())
+                    .collect(),
+            })
+            .collect();
+        LibraryModel {
+            profiles,
+            songs,
+            setlists,
+            drives,
+        }
+    }
+
+    fn select_profile(&self, name: String) {
+        if self.profile_def.lock_ok().name.eq_ignore_ascii_case(&name) {
+            return;
+        }
+        let def = self
+            .other_profiles
+            .lock_ok()
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&name))
+            .cloned();
+        match def {
+            Some(def) => self.switch_profile(def),
+            None => tracing::warn!("select_profile: no profile named '{name}'"),
+        }
+    }
+
+    fn add_profile(&self, name: String, from: String) {
+        let Some(name) = free_name(&name, self.profile_names().iter().map(String::as_str)) else {
+            tracing::warn!("add_profile: '{name}' is blank or taken");
+            return;
+        };
+        let mut def = if from.trim().is_empty() {
+            // A starter that plays: the amps and pedals already on hand, one
+            // stack holding one patch on the first amp.
+            let active = self.profile_def.lock_ok();
+            let first = active.presets.first().map(|p| p.name.clone()).unwrap_or_default();
+            ProfileDef {
+                name: String::new(),
+                drives: active.drives.clone(),
+                presets: active.presets.clone(),
+                patches: vec![crate::profiles::PatchDef {
+                    name: "Clean".to_string(),
+                    preset: first,
+                    trim_db: 0.0,
+                    level_db: 0.0,
+                    boost_db: 0.0,
+                    overrides: Vec::new(),
+                }],
+                stacks: vec![crate::profiles::StackDef {
+                    name: "Clean".to_string(),
+                    patches: vec!["Clean".to_string()],
+                }],
+            }
+        } else {
+            let active = self.profile_def.lock_ok();
+            if active.name.eq_ignore_ascii_case(&from) {
+                active.clone()
+            } else if let Some(p) = self
+                .other_profiles
+                .lock_ok()
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&from))
+            {
+                p.clone()
+            } else {
+                tracing::warn!("add_profile: no profile named '{from}' to copy");
+                return;
+            }
+        };
+        def.name = name.clone();
+        RigLibrary::save_profile(&def);
+        {
+            let mut others = self.other_profiles.lock_ok();
+            others.push(def);
+            others.sort_by_key(|p| p.name.to_lowercase());
+        }
+        tracing::info!("profile added: {name}");
+        self.publish_state();
+    }
+
+    fn rename_profile(&self, old: String, new_name: String) {
+        let taken: Vec<String> = self
+            .profile_names()
+            .into_iter()
+            .filter(|n| !n.eq_ignore_ascii_case(&old))
+            .collect();
+        let Some(new_name) = free_name(&new_name, taken.iter().map(String::as_str)) else {
+            tracing::warn!("rename_profile: '{new_name}' is blank or taken");
+            return;
+        };
+        let rename = |def: &mut ProfileDef| {
+            RigLibrary::delete_profile(&def.name);
+            def.name = new_name.clone();
+            RigLibrary::save_profile(def);
+        };
+        {
+            let mut active = self.profile_def.lock_ok();
+            if active.name.eq_ignore_ascii_case(&old) {
+                rename(&mut active);
+            } else if let Some(p) = self
+                .other_profiles
+                .lock_ok()
+                .iter_mut()
+                .find(|p| p.name.eq_ignore_ascii_case(&old))
+            {
+                rename(p);
+            } else {
+                return;
+            }
+        }
+        tracing::info!("profile renamed: {old} → {new_name}");
+        self.publish_state();
+        self.mark_state_dirty();
+    }
+
+    fn delete_profile(&self, name: String) {
+        if self.profile_def.lock_ok().name.eq_ignore_ascii_case(&name) {
+            tracing::warn!("delete_profile: '{name}' is playing — switch away first");
+            return;
+        }
+        {
+            let mut others = self.other_profiles.lock_ok();
+            let Some(i) = others.iter().position(|p| p.name.eq_ignore_ascii_case(&name)) else {
+                return;
+            };
+            let gone = others.remove(i);
+            RigLibrary::delete_profile(&gone.name);
+        }
+        tracing::info!("profile deleted: {name}");
+        self.publish_state();
+    }
+
+    fn edit_song(&self, old: String, name: String, key: String, bpm: u32) {
+        {
+            let mut songs = self.songs_lib.lock_ok();
+            let taken: Vec<String> = songs
+                .iter()
+                .filter(|s| !s.name.eq_ignore_ascii_case(&old))
+                .map(|s| s.name.clone())
+                .collect();
+            let Some(name) = free_name(&name, taken.iter().map(String::as_str)) else {
+                tracing::warn!("edit_song: '{name}' is blank or taken");
+                return;
+            };
+            let Some(song) = songs.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&old)) else {
+                return;
+            };
+            song.name = name.clone();
+            if !key.trim().is_empty() {
+                song.key = key.trim().to_string();
+            }
+            if bpm > 0 {
+                song.bpm = bpm.clamp(20, 400);
+            }
+            RigLibrary::save_songs(&songs);
+            if !name.eq(&old) {
+                let mut sets = self.setlists.lock_ok();
+                for e in sets.iter_mut().flat_map(|s| s.entries.iter_mut()) {
+                    if e.song.eq_ignore_ascii_case(&old) {
+                        e.song = name.clone();
+                    }
+                }
+                RigLibrary::save_setlists(&sets);
+            }
+        }
+        tracing::info!("song edited: {old}");
+        self.publish_state();
+    }
+
+    fn delete_song(&self, name: String) {
+        if self
+            .setlists
+            .lock_ok()
+            .iter()
+            .any(|s| s.entries.iter().any(|e| e.song.eq_ignore_ascii_case(&name)))
+        {
+            tracing::warn!("delete_song: '{name}' is in a setlist — remove it there first");
+            return;
+        }
+        {
+            let mut songs = self.songs_lib.lock_ok();
+            songs.retain(|s| !s.name.eq_ignore_ascii_case(&name));
+            RigLibrary::save_songs(&songs);
+        }
+        tracing::info!("song deleted: {name}");
+        self.publish_state();
+    }
+
+    fn rename_setlist(&self, index: u32, new_name: String) {
+        {
+            let mut sets = self.setlists.lock_ok();
+            let taken: Vec<String> = sets
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != index as usize)
+                .map(|(_, s)| s.name.clone())
+                .collect();
+            let Some(new_name) = free_name(&new_name, taken.iter().map(String::as_str)) else {
+                tracing::warn!("rename_setlist: '{new_name}' is blank or taken");
+                return;
+            };
+            let Some(set) = sets.get_mut(index as usize) else {
+                return;
+            };
+            set.name = new_name;
+            RigLibrary::save_setlists(&sets);
+        }
+        self.publish_state();
+    }
+
+    fn duplicate_setlist(&self, index: u32, new_name: String) {
+        {
+            let mut sets = self.setlists.lock_ok();
+            let Some(new_name) = free_name(&new_name, sets.iter().map(|s| s.name.as_str())) else {
+                tracing::warn!("duplicate_setlist: '{new_name}' is blank or taken");
+                return;
+            };
+            let Some(mut copy) = sets.get(index as usize).cloned() else {
+                return;
+            };
+            copy.name = new_name;
+            sets.push(copy);
+            RigLibrary::save_setlists(&sets);
+        }
+        self.publish_state();
+    }
+
+    fn delete_setlist(&self, index: u32) {
+        let index = index as usize;
+        let recall = {
+            let mut sets = self.setlists.lock_ok();
+            if sets.len() <= 1 || index >= sets.len() {
+                tracing::warn!("delete_setlist: refusing — the last setlist, or no such set");
+                return;
+            }
+            sets.remove(index);
+            RigLibrary::save_setlists(&sets);
+            let mut active = self.setlist_index.lock_ok();
+            if *active == index {
+                // The set that was playing is gone: start the one that took
+                // its place from the top.
+                *active = index.min(sets.len() - 1);
+                true
+            } else {
+                if *active > index {
+                    *active -= 1;
+                }
+                false
+            }
+        };
+        if recall {
+            *self.song_index.lock_ok() = 0;
+            self.recall_song(0);
+            self.mark_state_dirty();
         }
         self.publish_state();
     }

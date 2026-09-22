@@ -361,6 +361,64 @@ pub struct TunerReading {
     pub cents: f32,
 }
 
+/// Everything the library holds, for the browser — one fetch, re-read when
+/// [`PerformanceModel::revision`] moves.
+///
+/// Patches and presets are not here: they belong to the active profile and
+/// already have their own lists ([`rig::Rig::patches`], [`rig::Rig::presets`]),
+/// in the order their index-addressed calls expect.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct LibraryModel {
+    pub profiles: Vec<ProfileEntry>,
+    pub songs: Vec<SongEntry>,
+    pub setlists: Vec<SetlistEntry>,
+    pub drives: Vec<DriveEntry>,
+}
+
+/// One profile: a rig's worth of presets, patches and stacks.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct ProfileEntry {
+    pub name: String,
+    /// The rig is playing this one.
+    pub active: bool,
+    /// Stack names, in footswitch order.
+    pub stacks: Vec<String>,
+    pub patches: u32,
+    /// Pool preset names — the amps this profile is built on.
+    pub presets: Vec<String>,
+}
+
+/// One song in the library, with its defaults.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct SongEntry {
+    pub name: String,
+    pub key: String,
+    pub bpm: u32,
+    /// Section names, in order.
+    pub parts: Vec<String>,
+    /// Names of the setlists it appears in — why it cannot be deleted.
+    pub setlists: Vec<String>,
+}
+
+/// One setlist and its songs as the set plays them.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct SetlistEntry {
+    pub name: String,
+    /// The rig is playing from this set.
+    pub active: bool,
+    /// Entries with the set's key/tempo already resolved.
+    pub songs: Vec<SongSlot>,
+}
+
+/// One drive block preset (a pedal) and its captures.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct DriveEntry {
+    pub name: String,
+    pub options: Vec<String>,
+    /// The active profile's drive slots holding it (`Drive 1`, …).
+    pub slots: Vec<String>,
+}
+
 /// One section of the current song, and the patch selecting it recalls.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct PerfPart {
@@ -459,8 +517,8 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, LevelProgress, LiveBlock, LiveNode, PartOverride, PatchInfo, PerformanceModel,
-        PresetInfo, RigStatus, TunerReading,
+        Artwork, LevelProgress, LibraryModel, LiveBlock, LiveNode, PartOverride, PatchInfo,
+        PerformanceModel, PresetInfo, RigStatus, TunerReading,
     };
 
     /// One live rig change. Every variant carries **full state** (idempotent
@@ -716,6 +774,31 @@ pub mod rig {
         fn set_block_bypass(&self, id: String, bypassed: bool);
         /// Set a block's primary param.
         fn set_block_param(&self, id: String, param: String, value: f32);
+
+        /// Every profile, song, setlist and drive preset — the browser's
+        /// view of the library.
+        fn library(&self) -> LibraryModel;
+        /// Play a different profile. Rebuilds the rig from it (an audio gap,
+        /// like any rebuild) and remembers it across restarts.
+        fn select_profile(&self, name: String);
+        /// Create a profile. With `from` naming a profile, a copy of it;
+        /// empty, a starter holding the active profile's presets and drive
+        /// slots with one stack and one patch, so it plays from the start.
+        fn add_profile(&self, name: String, from: String);
+        /// Rename a profile (its file follows).
+        fn rename_profile(&self, old: String, new_name: String);
+        /// Delete a profile — refused for the one playing, and the last.
+        fn delete_profile(&self, name: String);
+        /// Edit a song's defaults; renaming carries its setlist entries.
+        fn edit_song(&self, old: String, name: String, key: String, bpm: u32);
+        /// Delete a song — refused while any setlist holds it.
+        fn delete_song(&self, name: String);
+        /// Rename setlist `index`.
+        fn rename_setlist(&self, index: u32, new_name: String);
+        /// Copy setlist `index` as `new_name` (next week's set from this one).
+        fn duplicate_setlist(&self, index: u32, new_name: String);
+        /// Delete setlist `index` — refused for the last one.
+        fn delete_setlist(&self, index: u32);
 
         /// Every rig change, as it happens: meters at meter rate, perf/chain
         /// on mutation. Remotes render from this stream instead of polling.
