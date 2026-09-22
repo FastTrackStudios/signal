@@ -147,7 +147,7 @@ fn painted_layer(
         scene
     });
     rsx! {
-        div { class: "absolute inset-0",
+        div { class: "absolute inset-0", style: "pointer-events: none;",
             fts_audio_ui::scene_canvas::SceneCanvas { paint }
         }
     }
