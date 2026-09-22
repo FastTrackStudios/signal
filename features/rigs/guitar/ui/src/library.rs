@@ -154,7 +154,7 @@ impl Kind {
     #[must_use]
     pub const fn for_perform_mode(mode: u32) -> Self {
         match mode {
-            0 => Self::Presets,
+            0 => Self::Compositions,
             2 => Self::Setlists,
             _ => Self::Profiles,
         }
@@ -2176,7 +2176,7 @@ mod tests {
 
     #[test]
     fn each_perform_mode_opens_on_what_it_plays_from() {
-        assert_eq!(Kind::for_perform_mode(0), Kind::Presets);
+        assert_eq!(Kind::for_perform_mode(0), Kind::Compositions);
         assert_eq!(Kind::for_perform_mode(1), Kind::Profiles);
         assert_eq!(Kind::for_perform_mode(2), Kind::Setlists);
     }
