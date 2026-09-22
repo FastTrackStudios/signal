@@ -51,7 +51,29 @@ pub fn run(command: Command) -> ExitCode {
                     }
                 }
             }
-            println!("\n{} presets, {} presets' files missing", comp.modules.len(), missing);
+            let mut dangling = 0;
+            for p in &comp.presets {
+                for snap in &p.snapshots {
+                    for pick in &snap.modules {
+                        let ok = comp.module(&pick.module, &pick.preset).is_some_and(|m| {
+                            pick.snapshot.is_empty() || m.snapshots.iter().any(|s| s.name.eq_ignore_ascii_case(&pick.snapshot))
+                        });
+                        if !ok {
+                            dangling += 1;
+                            eprintln!("  {} / {}: no {} preset {} / {}", p.name, snap.name, pick.module, pick.preset, pick.snapshot);
+                        }
+                    }
+                }
+            }
+            println!(
+                "\n{} module presets ({} files missing); {} presets, {} snapshots ({} picks dangling)",
+                comp.modules.len(),
+                missing,
+                comp.presets.len(),
+                comp.presets.iter().map(|p| p.snapshots.len()).sum::<usize>(),
+                dangling
+            );
+            missing += dangling;
             if missing > 0 { ExitCode::FAILURE } else { ExitCode::SUCCESS }
         }
         Command::Migrate { profile, write } => match signal_guitar::compose::migrate_profile(&profile, !write) {
