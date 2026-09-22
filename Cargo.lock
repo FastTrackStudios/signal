@@ -4802,6 +4802,7 @@ version = "0.1.0"
 name = "eq-ui"
 version = "0.1.0"
 dependencies = [
+ "anyrender",
  "architect-ui",
  "atomic_float",
  "blitz-dom",
@@ -4810,8 +4811,10 @@ dependencies = [
  "eq-dsp",
  "fts-audio-ui",
  "futures-timer",
+ "kurbo 0.13.1",
  "nice-plug-dioxus",
  "parking_lot",
+ "peniko 0.6.1",
  "spectrum-analyzer",
 ]
 
@@ -14304,11 +14307,10 @@ dependencies = [
 name = "spectrum-analyzer-ui"
 version = "0.1.0"
 dependencies = [
- "architect-ui",
- "audiocore-core",
+ "anyrender",
  "dioxus",
- "fts-audio-ui",
- "nice-plug-dioxus",
+ "kurbo 0.13.1",
+ "peniko 0.6.1",
  "spectrum-analyzer-dsp",
 ]
 

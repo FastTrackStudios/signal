@@ -94,6 +94,70 @@ fn send(rig: &Option<RigClient>, block_id: &str, band: usize, field: &str, value
     }
 }
 
+/// Whether the picture is painted rather than drawn as SVG.
+///
+/// In the browser the plugin's own graph paints onto a canvas, so the SVG
+/// below is the *gesture* layer; natively (with `eq-vello` off) the SVG is
+/// the picture.
+const PAINTED: bool = cfg!(target_arch = "wasm32");
+
+/// The plugin's own graph, painted onto a canvas — the same painter the
+/// plugin editor and the desktop rig use (`eq_ui::eq_graph_painter`), so the
+/// browser shows the real graph rather than a second drawing of it.
+#[cfg(target_arch = "wasm32")]
+fn painted_layer(
+    bands: &[EqBand],
+    spectrum: &[f32],
+    db_range: f64,
+    selected: Option<usize>,
+) -> Element {
+    use eq_ui::eq_graph_model::EqGraphRenderState;
+
+    let state = use_hook(EqGraphRenderState::new);
+    *state.bands.write() = bands.to_vec();
+    *state.spectrum_db.write() = spectrum.to_vec();
+    {
+        let mut cfg = state.config.write();
+        cfg.db_range = db_range;
+        cfg.min_freq = MIN_FREQ;
+        cfg.max_freq = MAX_FREQ;
+        cfg.sample_rate = SAMPLE_RATE;
+        // The rig's panel paints its own ground behind this.
+        cfg.fill_background = false;
+    }
+    state.interaction.write().selected_bands = selected.into_iter().collect();
+
+    let for_paint = state.clone();
+    let paint = use_callback(move |f: fts_audio_ui::scene_canvas::Frame| {
+        let mut scene = anyrender::Scene::new();
+        {
+            // The painter draws in the canvas's own (device) pixels.
+            let mut cfg = for_paint.config.write();
+            cfg.rect_w = f.width * f.scale;
+            cfg.rect_h = f.height * f.scale;
+            cfg.scale = f.scale;
+        }
+        eq_ui::eq_graph_painter::paint_eq_graph_scene(
+            &mut scene,
+            &for_paint,
+            kurbo::Affine::IDENTITY,
+            (f.width * f.scale) as u32,
+            (f.height * f.scale) as u32,
+        );
+        scene
+    });
+    rsx! {
+        div { class: "absolute inset-0",
+            fts_audio_ui::scene_canvas::SceneCanvas { paint }
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn painted_layer(_: &[EqBand], _: &[f32], _: f64, _: Option<usize>) -> Element {
+    rsx! {}
+}
+
 /// The detached Pro-Q surface. Drag nodes (shape-aware gain), wheel for Q,
 /// double-click to add a band (shape inferred from position), band rail for
 /// shape/enable/delete on the selection.
@@ -172,6 +236,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
 
     rsx! {
         div { class: "relative flex flex-col h-full w-full min-h-0",
+            {painted_layer(&bands, &spectrum, db_range, sel)}
             svg {
                 class: "w-full flex-1 min-h-0 touch-none select-none",
                 view_box: "0 0 {w:.0} 270",
@@ -284,11 +349,11 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                 },
 
                 // Spectrum behind everything.
-                if !spec_poly.is_empty() {
+                if !spec_poly.is_empty() && !PAINTED {
                     polygon { points: "{spec_poly}", fill: "#7dd3fc14", stroke: "#7dd3fc38", stroke_width: "1" }
                 }
-                // Grid.
-                for (i, (x1, y1, x2, y2, major)) in grid.iter().enumerate() {
+                // Grid. (The canvas paints all of this in the browser.)
+                for (i, (x1, y1, x2, y2, major)) in grid.iter().enumerate().filter(|_| !PAINTED) {
                     line {
                         key: "g{i}",
                         x1: "{x1:.1}", y1: "{y1:.1}", x2: "{x2:.1}", y2: "{y2:.1}",
@@ -296,7 +361,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                         stroke_width: "1",
                     }
                 }
-                for (i, (x, _y, label)) in freq_labels.iter().enumerate() {
+                for (i, (x, _y, label)) in freq_labels.iter().enumerate().filter(|_| !PAINTED) {
                     text {
                         key: "f{i}",
                         x: "{x:.0}", y: "{H - 5.0}",
@@ -305,7 +370,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                     }
                 }
                 // Per-band curves (selected band gets its fill).
-                for (bi, stroke, fill) in curves.band_curves.iter() {
+                for (bi, stroke, fill) in curves.band_curves.iter().filter(|_| !PAINTED) {
                     {
                         let color = freq_to_color(bands.get(*bi).map_or(1000.0, |b| f64::from(b.frequency)));
                         let is_sel = sel == Some(*bi);
@@ -324,8 +389,10 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                     }
                 }
                 // Combined response.
-                path { d: "{curves.combined_fill}", fill: "#fafafa10", stroke: "none" }
-                path { d: "{curves.combined_stroke}", fill: "none", stroke: "#fafafa", stroke_width: "2" }
+                if !PAINTED {
+                    path { d: "{curves.combined_fill}", fill: "#fafafa10", stroke: "none" }
+                    path { d: "{curves.combined_stroke}", fill: "none", stroke: "#fafafa", stroke_width: "2" }
+                }
                 // Band nodes.
                 for b in bands.iter().filter(|b| b.used) {
                     {

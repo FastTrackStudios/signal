@@ -38,10 +38,14 @@ session-ui = { workspace = true, features = ["web"] }
 # events rather than a parameter tree. Native only: a custom widget is a
 # painted scene, which needs a Blitz host. The wasm remote builds the same
 # crate without the feature and draws the portable SVG path instead.
-eq-ui.workspace = true
+eq-ui = { workspace = true, features = ["graph-paint"] }
 # The recorded scene the effects paint into — replayed by Blitz natively,
 # onto a canvas in the browser.
 anyrender.workspace = true
+kurbo.workspace = true
+# The EQ graph's painters, without the plugin stack: the browser paints the
+# real graph onto a canvas (see `eq_surface::painted_layer`).
+fts-audio-ui.workspace = true
 
 # The visualisers, from the effects that own them: Signal draws processor's
 # picture of a chorus rather than keeping a second one. Their portable cores
@@ -50,7 +54,6 @@ modulation-ui = { workspace = true, features = ["viz"] }
 delay-ui = { workspace = true, features = ["viz"] }
 reverb-ui = { workspace = true, features = ["viz"] }
 comp-ui = { workspace = true, features = ["viz"] }
-fts-audio-ui.workspace = true
 # BlockType — chain-strip coloring.
 signal-proto.workspace = true
 # The zoomable rig graph + the headless slot conversion (both wasm-clean).
@@ -135,7 +138,6 @@ image.workspace = true
 # `<canvas>` by vello_hybrid's WebGL2 renderer (see `scene_canvas`).
 vello_hybrid = { workspace = true, features = ["webgl"] }
 anyrender_vello_hybrid = { workspace = true, features = ["webgl"] }
-kurbo.workspace = true
 rustc-hash = "2"
 wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = ["Window", "Document", "Element", "HtmlCanvasElement"] }
