@@ -89,7 +89,11 @@ impl RigNodes {
     /// installed empty, and says so — a silent patch on a footswitch is
     /// worse than one that is missing from the list.
     #[must_use]
-    pub fn to_profile(&self, def: &ProfileDef) -> signal_sampler::rig_profile::RigProfile {
+    pub fn to_profile(
+        &self,
+        def: &ProfileDef,
+        drives: &[DrivePresetDef],
+    ) -> signal_sampler::rig_profile::RigProfile {
         use signal_sampler::rig_profile::{RigPatch, RigProfile, RigStack};
 
         let mut profile = RigProfile::new(&def.name);
@@ -123,6 +127,7 @@ impl RigNodes {
             let mut built = RigPatch::new(&patch.name);
             built.chain = signal_sampler::from_node::to_chain(&resolved);
             settle_amp_stage(&mut built.chain, def, patch);
+            settle_drives(&mut built.chain, def, patch, drives);
             // On the trim block inside the chain, not the scene's output —
             // see `profiles::set_patch_trim` for why a level after the
             // reverbs cannot be changed without hearing it.
@@ -445,11 +450,38 @@ fn settle_amp_stage(
     }
 }
 
+/// A patch's own drive-slot picks (from a Drive module snapshot), over the
+/// profile's board. The node model's pedal slots are profile-wide, so a
+/// patch that runs different pedals gets them set here after resolving —
+/// the same seam as the amp stage.
+fn settle_drives(
+    chain: &mut [signal_sampler::RigBlock],
+    def: &ProfileDef,
+    patch: &crate::profiles::PatchDef,
+    presets: &[DrivePresetDef],
+) {
+    if patch.drives.is_empty() {
+        return;
+    }
+    for slot in crate::compose::drives_for(def, patch) {
+        let nam = presets
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&slot.preset))
+            .and_then(|p| p.options.get(slot.option))
+            .map(|o| o.nam.clone())
+            .unwrap_or_default();
+        if let Some(block) = chain.iter_mut().find(|b| b.name.eq_ignore_ascii_case(&slot.block)) {
+            block.nam = nam;
+        }
+    }
+}
+
 pub fn profile_from_library(
     def: &ProfileDef,
     drives: &[DrivePresetDef],
 ) -> signal_sampler::rig_profile::RigProfile {
-    library_for(def, drives).to_profile(def)
+    let flat = crate::compose::flatten(def, &crate::library::RigLibrary::load_compositions());
+    to_nodes_with_store(&flat, drives).to_profile(&flat, drives)
 }
 
 /// The rig's node library: derived from the profile, then everything saved
@@ -459,6 +491,12 @@ pub fn profile_from_library(
 /// silently lose a saved preset.
 #[must_use]
 pub fn library_for(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
+    let flat = crate::compose::flatten(def, &crate::library::RigLibrary::load_compositions());
+    to_nodes_with_store(&flat, drives)
+}
+
+/// [`to_nodes`] plus the saved node overlay, for a profile already flattened.
+fn to_nodes_with_store(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
     let mut rig = to_nodes(def, drives);
     crate::library::RigLibrary::load_node_store().apply(&mut rig);
     rig
@@ -1475,7 +1513,7 @@ mod tests {
             .expect("a patch on another preset");
         def.patches[later].preset2 = first.clone();
 
-        let from_nodes = to_nodes(&def, &drives).to_profile(&def);
+        let from_nodes = to_nodes(&def, &drives).to_profile(&def, &drives);
         let from_builder = crate::profiles::build_profile(&def, &drives);
         for (n, b) in from_nodes.patches.iter().zip(&from_builder.patches) {
             let pick = |chain: &[signal_sampler::RigBlock], name: &str| {
@@ -1499,7 +1537,7 @@ mod tests {
         let (def, drives) = shipped();
         let rig = to_nodes(&def, &drives);
 
-        let from_nodes = rig.to_profile(&def);
+        let from_nodes = rig.to_profile(&def, &drives);
         let from_builder = crate::profiles::build_profile(&def, &drives);
 
         assert_eq!(from_nodes.name, from_builder.name);

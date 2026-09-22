@@ -169,6 +169,21 @@ pub struct PatchDef {
     /// realization, so it is skipped at install and costs nothing.
     #[facet(default)]
     pub preset2: String,
+    /// The preset this patch plays, and which of its snapshots — a
+    /// composition of module snapshots (see [`crate::compose`]). Empty keeps
+    /// the old shape: `preset`/`preset2`/`overrides` say it all directly.
+    #[facet(default)]
+    pub rig_preset: String,
+    #[facet(default)]
+    pub snapshot: String,
+    /// This patch's own module picks, replacing the preset snapshot's for
+    /// those modules — what choosing on the board saves.
+    #[facet(default)]
+    pub modules: Vec<ModuleChoiceDef>,
+    /// Drive-slot assignments for this patch alone, over the profile's
+    /// `drives` slot by slot. Filled by a Drive module snapshot.
+    #[facet(default)]
+    pub drives: Vec<DriveSlotDef>,
     /// The player's own level for this patch, dB, relative to every other
     /// patch after normalisation.
     ///
@@ -184,6 +199,16 @@ pub struct PatchDef {
     /// Boost level recalled with the patch (0 = boost off).
     pub boost_db: f32,
     pub overrides: Vec<OverrideDef>,
+}
+
+/// One module's pick: which module preset, and which of its snapshots.
+#[derive(Clone, Debug, PartialEq, Eq, Facet)]
+pub struct ModuleChoiceDef {
+    /// `Amp`, `Drive`, `Time`, `Modulation`, `Dynamics`.
+    pub module: String,
+    pub preset: String,
+    #[facet(default)]
+    pub snapshot: String,
 }
 
 /// One patch-level override, flat and text-friendly: which module/block it
@@ -311,6 +336,10 @@ pub fn worship_def() -> ProfileDef {
         name: name.to_string(),
         preset: preset.to_string(),
         preset2: String::new(),
+        rig_preset: String::new(),
+        snapshot: String::new(),
+        modules: Vec::new(),
+        drives: Vec::new(),
         trim_db: 0.0,
         level_db: 0.0,
         boost_db: 0.0,
@@ -443,9 +472,8 @@ pub fn worship_def() -> ProfileDef {
 /// Build a drive slot's block: NAM-backed when the profile assigns a
 /// drive preset to it, a transparent placeholder otherwise. Off by
 /// default either way — the board engages them.
-fn drive_block(def: &ProfileDef, dps: &[DrivePresetDef], block: &str) -> RigBlock {
-    let assigned = def
-        .drives
+fn drive_block(drives: &[DriveSlotDef], dps: &[DrivePresetDef], block: &str) -> RigBlock {
+    let assigned = drives
         .iter()
         .find(|d| d.block.eq_ignore_ascii_case(block))
         .and_then(|d| {
@@ -468,11 +496,11 @@ fn drive_block(def: &ProfileDef, dps: &[DrivePresetDef], block: &str) -> RigBloc
 /// slot in [`DRIVE_SLOTS`] in board order. All off until the control surface
 /// engages them, and a slot the profile has not assigned builds as a
 /// transparent placeholder so every slot stays addressable either way.
-fn drive_board(def: &ProfileDef, dps: &[DrivePresetDef], patch: RigPatch) -> RigPatch {
+fn drive_board(drives: &[DriveSlotDef], dps: &[DrivePresetDef], patch: RigPatch) -> RigPatch {
     let boosted = patch.with_block(off_fx(BlockType::Boost, "Boost", &[("drive", "0.5")]));
     DRIVE_SLOTS
         .iter()
-        .fold(boosted, |p, slot| p.with_block(drive_block(def, dps, slot)))
+        .fold(boosted, |p, slot| p.with_block(drive_block(drives, dps, slot)))
 }
 
 #[must_use]
@@ -495,7 +523,12 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
         cab_block.bypassed = bypassed;
         [amp_block, cab_block]
     };
-    let amp = |name: &str, path: String, cab: String, path2: String, cab2: String| {
+    let amp = |name: &str,
+               drives: &[DriveSlotDef],
+               path: String,
+               cab: String,
+               path2: String,
+               cab2: String| {
         // The head of the chain, up to and including the drive board. Split
         // out because the board is a fold over `DRIVE_SLOTS` rather than a
         // fixed run of `.with_block` calls.
@@ -515,7 +548,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
         let [amp_l, cab_l] = amp_stage("L", path, cab, false);
         let has_amp_r = !path2.is_empty();
         let [amp_r, cab_r] = amp_stage("R", path2, cab2, !has_amp_r);
-        drive_board(def, dps, head)
+        drive_board(drives, dps, head)
             .with_block(amp_l)
             .with_block(cab_l)
             .with_block(amp_r)
@@ -616,6 +649,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
     for p in &def.patches {
         let mut patch = amp(
             &p.name,
+            &crate::compose::drives_for(def, p),
             nam_of(&p.preset),
             cab_of(&p.preset),
             nam_of(&p.preset2),

@@ -386,6 +386,46 @@ impl RigLibrary {
         }
     }
 
+    /// The module-preset and preset libraries every profile composes from
+    /// (`modules.styx`, `presets.styx`). Missing reads as empty — a rig with
+    /// no compositions yet plays its profiles exactly as written.
+    #[must_use]
+    pub fn load_compositions() -> crate::compose::Compositions {
+        let store = store();
+        let mut modules = store
+            .read::<crate::compose::ModuleLib>(crate::compose::MODULES_FILE)
+            .unwrap_or_default()
+            .presets;
+        for m in &mut modules {
+            for snap in &mut m.snapshots {
+                store.resolve(&mut snap.nam);
+                store.resolve(&mut snap.nam2);
+            }
+        }
+        let presets = store
+            .read::<crate::compose::PresetLib>(crate::compose::PRESETS_FILE)
+            .unwrap_or_default()
+            .presets;
+        crate::compose::Compositions { modules, presets }
+    }
+
+    /// Write both composition libraries back.
+    pub fn save_compositions(comp: &crate::compose::Compositions) {
+        let Some(store) = writable_store() else { return };
+        let mut modules = comp.modules.clone();
+        for m in &mut modules {
+            for snap in &mut m.snapshots {
+                store.relativize(&mut snap.nam);
+                store.relativize(&mut snap.nam2);
+            }
+        }
+        store.write(crate::compose::MODULES_FILE, &crate::compose::ModuleLib { presets: modules });
+        store.write(
+            crate::compose::PRESETS_FILE,
+            &crate::compose::PresetLib { presets: comp.presets.clone() },
+        );
+    }
+
     /// Everything saved about nodes that the profile cannot hold — presets
     /// on a module, presets saved from a tweak, selections with no profile
     /// field. Missing or unreadable reads as empty: a rig with no saved
