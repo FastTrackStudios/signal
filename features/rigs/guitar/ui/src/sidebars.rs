@@ -71,22 +71,17 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
     let (patch_list, preset_list): (Vec<PatchInfo>, Vec<PresetInfo>) =
         data.read().clone().unwrap_or_default();
 
-    // The patch picked in the tree — the target of a preset click.
+    // The patch picked in the tree.
     let mut selected_patch = use_signal(|| None::<usize>);
     // Creation forms (toggled by the + buttons) + inline rename state.
     let mut adding_stack = use_signal(|| false);
     let mut adding_patch = use_signal(|| false);
-    let mut adding_preset = use_signal(|| false);
     let mut new_name = use_signal(String::new);
-    let mut new_path = use_signal(String::new);
     let mut new_stack_sel = use_signal(String::new);
     let mut new_preset_sel = use_signal(String::new);
     // (kind, original) — kind: "patch" | "preset"; the row shows an input.
     let mut renaming = use_signal(|| None::<(String, String)>);
     let mut rename_text = use_signal(String::new);
-    let selected_preset_name = selected_patch()
-        .and_then(|i| patch_list.get(i))
-        .map(|p| p.preset.clone());
 
     // Group patches by stack, in the stacks' own order.
     let mut groups: Vec<(String, Vec<(usize, PatchInfo)>)> = model
@@ -409,146 +404,6 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                 }
             }
 
-            // ── The preset pool ──
-            div { class: "flex items-center pr-2",
-                PanelLabel { label: "Presets" }
-                button {
-                    class: "ml-auto text-[10px] px-1 rounded border border-border text-muted-foreground hover:text-foreground",
-                    title: "Import a .nam capture as a new preset",
-                    onclick: move |_| { adding_preset.toggle(); new_name.set(String::new()); new_path.set(String::new()); },
-                    "+ import"
-                }
-            }
-            if adding_preset() {
-                div { class: "flex flex-col gap-1 px-2 py-1 flex-shrink-0",
-                    input {
-                        class: "bg-background border border-border rounded px-1.5 py-0.5 text-xs",
-                        placeholder: "Preset name",
-                        value: "{new_name}",
-                        oninput: move |e| new_name.set(e.value()),
-                    }
-                    div { class: "flex gap-1",
-                        input {
-                            class: "flex-1 min-w-0 bg-background border border-border rounded px-1.5 py-0.5 text-xs font-mono",
-                            placeholder: "/path/to/capture.nam",
-                            value: "{new_path}",
-                            oninput: move |e| new_path.set(e.value()),
-                        }
-                        button {
-                            class: "text-xs px-1.5 rounded border border-border hover:bg-accent/40",
-                            onclick: {
-                                let rig = rig.clone();
-                                move |_| {
-                                    let (name, path) = (new_name.peek().clone(), new_path.peek().clone());
-                                    if let (Some(r), false, false) =
-                                        (rig.clone(), name.trim().is_empty(), path.trim().is_empty())
-                                    {
-                                        spawn(async move { let _ = r.add_preset(name, path).await; });
-                                        adding_preset.set(false);
-                                    }
-                                }
-                            },
-                            "add"
-                        }
-                    }
-                }
-            }
-            if let Some(i) = selected_patch() {
-                if let Some(p) = patch_list.get(i) {
-                    div { class: "px-3 py-1 text-[10px] text-muted-foreground flex-shrink-0",
-                        "click a preset to assign it to "
-                        span { class: "font-bold text-foreground", "{p.name}" }
-                    }
-                }
-            }
-            div { class: "overflow-y-auto min-h-0 max-h-[40%] p-2 flex flex-col gap-0.5 flex-shrink-0",
-                for (i, preset) in preset_list.iter().enumerate() {
-                    {
-                        let name = preset.name.clone();
-                        let used = preset.used_by;
-                        let is_target = selected_preset_name.as_deref() == Some(preset.name.as_str());
-                        rsx! {
-                            button {
-                                key: "{i}",
-                                class: if preset.active {
-                                    "group flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-bold bg-accent text-accent-foreground"
-                                } else if is_target {
-                                    "group flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ring-1 ring-ring text-foreground"
-                                } else {
-                                    "group flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground hover:bg-accent/40"
-                                },
-                                onclick: {
-                                    let rig = rig.clone();
-                                    move |_| {
-                                        if let (Some(r), Some(patch)) = (rig.clone(), selected_patch()) {
-                                            spawn(async move {
-                                                let _ = r.set_patch_preset(patch as u32, i as u32).await;
-                                            });
-                                        }
-                                    }
-                                },
-                                span { class: "w-2 h-2 rounded-full flex-shrink-0 bg-current opacity-50" }
-                                if renaming() == Some(("preset".to_string(), name.clone())) {
-                                    input {
-                                        class: "flex-1 min-w-0 bg-background border border-border rounded px-1 text-xs",
-                                        value: "{rename_text}",
-                                        autofocus: true,
-                                        oninput: move |e| rename_text.set(e.value()),
-                                        onclick: move |e: MouseEvent| e.stop_propagation(),
-                                        onkeydown: {
-                                            let rig = rig.clone();
-                                            let old_name = name.clone();
-                                            move |e: KeyboardEvent| {
-                                                if e.key() == Key::Enter {
-                                                    let (old_name, new_n) = (old_name.clone(), rename_text.peek().clone());
-                                                    if let Some(r) = rig.clone() {
-                                                        spawn(async move { let _ = r.rename_preset(old_name, new_n).await; });
-                                                    }
-                                                    renaming.set(None);
-                                                } else if e.key() == Key::Escape {
-                                                    renaming.set(None);
-                                                }
-                                            }
-                                        },
-                                    }
-                                } else {
-                                    span {
-                                        class: "truncate",
-                                        ondoubleclick: {
-                                            let name = name.clone();
-                                            move |e: MouseEvent| {
-                                                e.stop_propagation();
-                                                rename_text.set(name.clone());
-                                                renaming.set(Some(("preset".to_string(), name.clone())));
-                                            }
-                                        },
-                                        "{name}"
-                                    }
-                                }
-                                span { class: "ml-auto text-[9px] font-mono opacity-50 flex-shrink-0", "×{used}" }
-                                if used == 0 {
-                                    span {
-                                        class: "text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-shrink-0 cursor-pointer",
-                                        title: "Delete preset",
-                                        onclick: {
-                                            let rig = rig.clone();
-                                            let name = name;
-                                            move |e: MouseEvent| {
-                                                e.stop_propagation();
-                                                let name = name.clone();
-                                                if let Some(r) = rig.clone() {
-                                                    spawn(async move { let _ = r.delete_preset(name).await; });
-                                                }
-                                            }
-                                        },
-                                        fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 10 }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
 
         }
     }

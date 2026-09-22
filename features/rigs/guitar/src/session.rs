@@ -1995,6 +1995,10 @@ impl GuitarRigBackend {
                                     .position(|p| p.eq_ignore_ascii_case(&current))
                                     .unwrap_or(0) as u32;
                                 (current, pool, index)
+                            } else if block.block_type == BlockType::Cabinet {
+                                // A cab is named by its IR, so the board says
+                                // which cab rather than "Cab L".
+                                (Self::asset_stem(&block.ir), Vec::new(), 0)
                             } else {
                                 <(String, Vec<String>, u32)>::default()
                             }

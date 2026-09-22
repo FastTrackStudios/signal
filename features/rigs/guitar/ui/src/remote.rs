@@ -665,7 +665,7 @@ pub fn GuitarRigRemote() -> Element {
                         crate::sidebars::LeftSidebar { model: perf_now.clone() }
                     }
                 }
-                div { class: "flex-1 min-w-0 min-h-0 overflow-hidden", style: "padding: 8px 10px 10px;",
+                div { class: "flex-1 min-w-0 min-h-0 overflow-hidden", style: "padding: 0 10px 10px;",
                 if let Some((on_press, on_toggle_fx, on_toggle_boost, on_cycle_boost, on_tap_tempo, on_prev_song, on_next_song, on_select_song)) = controls {
                         // Routing / Control / Session share the layout: the
                         // page on top (~2/3), the switch grid docked beneath.
