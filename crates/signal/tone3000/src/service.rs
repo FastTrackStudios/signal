@@ -292,6 +292,16 @@ impl Tone3000Backend {
             }
         }
 
+        // An IR tone (or any non-NAM format) counts no NAM architecture at
+        // all, so the loop above asks for nothing and the tone listed zero
+        // models. Ask once without the filter.
+        if tone.a1_models_count + tone.a2_models_count + tone.custom_models_count == 0 {
+            match client.models(tone.id).await {
+                Ok(page) => models.extend(page.data),
+                Err(e) => tracing::warn!(tone = tone_id, ?e, "tone3000: models page failed"),
+            }
+        }
+
         let picked = map::picked(&tone, &models);
         self.remember_images(&picked.images);
         self.remember_tone(&picked);
