@@ -33,6 +33,7 @@
 //! reports `min`/`max`, so this is where the two meet — the same conversion
 //! the domain does at its own boundary, for the same reason.
 
+use crate::param_writer::WriteParam;
 use std::sync::Arc;
 
 use dioxus::prelude::*;
@@ -75,7 +76,7 @@ pub fn use_wire_params() -> EditSink {
         let Some(rig) = rig.clone() else { return };
         spawn(async move {
             for (block, param, value) in edits {
-                let _ = rig.set_block_param(block, param, value).await;
+                let _ = rig.write_param(block, param, value).await;
             }
         });
     });

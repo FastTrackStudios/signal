@@ -21,8 +21,10 @@ use crate::perform::folder_color;
 // fixed right-aligned cell that clips (no `text-overflow` in Blitz).
 const PATCH_ROW: &str = "display: flex; align-items: center; gap: 8px; min-width: 0; \
                          margin-left: 16px; padding: 4px 8px; text-align: left; cursor: pointer;";
-const NAME_CELL: &str = "flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-align: left;";
-const PRESET_CELL: &str = "flex-shrink: 0; width: 76px; overflow: hidden; white-space: nowrap; text-align: right;";
+const NAME_CELL: &str =
+    "flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-align: left;";
+const PRESET_CELL: &str =
+    "flex-shrink: 0; width: 76px; overflow: hidden; white-space: nowrap; text-align: right;";
 
 #[component]
 fn PanelLabel(label: &'static str) -> Element {
@@ -486,7 +488,11 @@ pub fn LevellingChip() -> Element {
         .filter(|r| r.lufs.is_finite())
         .map(|r| r.trim_db)
         .max_by(|a, b| a.abs().total_cmp(&b.abs()));
-    let unmeasured = progress.results.iter().filter(|r| !r.lufs.is_finite()).count();
+    let unmeasured = progress
+        .results
+        .iter()
+        .filter(|r| !r.lufs.is_finite())
+        .count();
     let stamp = (progress.total, progress.results.len());
 
     if !running && (progress.results.is_empty() || dismissed() == Some(stamp)) {

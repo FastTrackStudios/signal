@@ -95,7 +95,13 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                     p.patch_list.iter().map(|x| x.name.clone()).collect(),
                     p.patch_list
                         .iter()
-                        .map(|x| if x.stack.is_empty() { x.name.clone() } else { format!("{} · {}", x.stack, x.name) })
+                        .map(|x| {
+                            if x.stack.is_empty() {
+                                x.name.clone()
+                            } else {
+                                format!("{} · {}", x.stack, x.name)
+                            }
+                        })
                         .collect(),
                 )
             })
@@ -390,7 +396,11 @@ fn Tool(
     } else {
         MUTED
     };
-    let rotate = if flip { "transform: rotate(180deg);" } else { "" };
+    let rotate = if flip {
+        "transform: rotate(180deg);"
+    } else {
+        ""
+    };
     rsx! {
         button {
             style: "display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; \
@@ -465,8 +475,13 @@ fn SongEntryEditor(
     let save = {
         let rig = rig.clone();
         move || {
-            let (k, b) = (key.peek().trim().to_string(), tempo.peek().trim().parse().unwrap_or(0));
-            send(&rig, move |r| async move { let _ = r.set_setlist_entry(index as u32, k, b).await; });
+            let (k, b) = (
+                key.peek().trim().to_string(),
+                tempo.peek().trim().parse().unwrap_or(0),
+            );
+            send(&rig, move |r| async move {
+                let _ = r.set_setlist_entry(index as u32, k, b).await;
+            });
             on_done.call(());
         }
     };

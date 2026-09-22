@@ -10,6 +10,7 @@
 //! a [`ZoomPanel`]: the card *is* the editor; zooming just gives it the
 //! whole screen.
 
+use crate::param_writer::WriteParam;
 use std::fmt::Write;
 use std::time::Duration;
 
@@ -84,7 +85,7 @@ fn send_param(rig: &Option<RigClient>, id: &str, name: &str, value: f32) {
     if let Some(r) = rig.clone() {
         let (id, name) = (id.to_string(), name.to_string());
         spawn(async move {
-            let _ = r.set_block_param(id, name, value).await;
+            let _ = r.write_param(id, name, value).await;
         });
     }
 }
@@ -335,6 +336,8 @@ const VERB_ALGOS: [&str; 15] = [
 /// moment it happens. `expanded` (the zoomed view) adds attack/release.
 #[component]
 fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> Element {
+    // Callbacks made once per site, not once per render (see `stable`).
+    let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut el = use_signal(|| None::<std::rc::Rc<MountedData>>);
     // (top_y, height) of the bar while dragging.
@@ -364,7 +367,7 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
             spawn(async move {
                 if let Some(r) = rig {
                     let _ = r
-                        .set_block_param(
+                        .write_param(
                             id,
                             "threshold".into(),
                             frac.clamp(0.0, 1.0).mul_add(90.0, -90.0),
@@ -447,10 +450,10 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
                                         min: p.min,
                                         max: p.max,
                                         size: crate::knob::KnobSize::Medium,
-                                        on_change: Callback::new(move |v: f32| {
+                                        on_change: cbs.keyed(usize::from(name == "release"), move |v: f32| {
                                             if let Some(r) = rig.clone() {
                                                 let (id, pname) = (id.clone(), pname.clone());
-                                                spawn(async move { let _ = r.set_block_param(id, pname, v).await; });
+                                                spawn(async move { let _ = r.write_param(id, pname, v).await; });
                                             }
                                         }),
                                     }
@@ -530,6 +533,8 @@ pub fn MidiIndicator(
     /// Open the audio & MIDI settings (the rig's device dialog).
     on_settings: Callback<()>,
 ) -> Element {
+    // Callbacks made once per site, not once per render (see `stable`).
+    let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut log = use_signal(Vec::<String>::new);
     // Lit while events are arriving: the log changed on a recent poll.
@@ -572,8 +577,12 @@ pub fn MidiIndicator(
     };
     let items = vec![
         crate::indicators::IndicatorItem::new(
-            if monitor() { "Hide MIDI monitor" } else { "MIDI monitor" },
-            Callback::new(move |()| monitor.toggle()),
+            if monitor() {
+                "Hide MIDI monitor"
+            } else {
+                "MIDI monitor"
+            },
+            cbs.cb(move |()| monitor.toggle()),
         ),
         crate::indicators::IndicatorItem::new("Audio & MIDI settings…", on_settings),
     ];
@@ -706,6 +715,8 @@ fn PKnob(
     #[props(default)]
     tiny: bool,
 ) -> Element {
+    // Callbacks made once per site, not once per render (see `stable`).
+    let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<RigClient>);
     rsx! {
         crate::knob::Knob {
@@ -716,10 +727,10 @@ fn PKnob(
             hide_value: tiny,
             size: if tiny { crate::knob::KnobSize::Tiny } else { crate::knob::KnobSize::Small },
             fmt,
-            on_change: Callback::new(move |v: f32| {
+            on_change: cbs.cb(move |v: f32| {
                 if let Some(r) = rig.clone() {
                     let (id, name) = (block_id.clone(), name.to_string());
-                    spawn(async move { let _ = r.set_block_param(id, name, v).await; });
+                    spawn(async move { let _ = r.write_param(id, name, v).await; });
                 }
             }),
         }
@@ -1056,7 +1067,12 @@ fn ModGroupPanel(
     let rig = use_hook(try_consume_context::<RigClient>);
     let members: Vec<LiveBlock> = kinds
         .iter()
-        .filter_map(|k| blocks.iter().find(|b| b.block_type == *k && is_pre_fx(b) == pre).cloned())
+        .filter_map(|k| {
+            blocks
+                .iter()
+                .find(|b| b.block_type == *k && is_pre_fx(b) == pre)
+                .cloned()
+        })
         .collect();
     if members.is_empty() {
         return rsx! { {empty_slot(title)} };
@@ -1096,7 +1112,11 @@ fn ModGroupPanel(
     }
     // Modulation is cyan, motion is pink — the two groups sit one above the
     // other and the colour is how you tell which you are reading.
-    let group_color = if tempo_divisions { "#f472b6" } else { "#22d3ee" };
+    let group_color = if tempo_divisions {
+        "#f472b6"
+    } else {
+        "#22d3ee"
+    };
     let color = if engaged { group_color } else { "#3f3f46" };
 
     // Motion speed: current rate expressed as the nearest tempo division.
@@ -1232,7 +1252,7 @@ fn ModGroupPanel(
                                     if let Some(r) = rig.clone() {
                                         let id = id.clone();
                                         spawn(async move {
-                                            let _ = r.set_block_param(id, "rate".into(), hz).await;
+                                            let _ = r.write_param(id, "rate".into(), hz).await;
                                         });
                                     }
                                 }
@@ -1329,7 +1349,9 @@ fn ModuleControls(
         move |e: MouseEvent| {
             e.stop_propagation();
             if let Some(r) = rig.clone() {
-                spawn(async move { let _ = r.step_module(module.to_string(), delta).await; });
+                spawn(async move {
+                    let _ = r.step_module(module.to_string(), delta).await;
+                });
             }
         }
     };
@@ -1391,7 +1413,13 @@ fn PitchStrip() -> Element {
     });
     let r = reading();
     let in_tune = r.active && r.cents.abs() <= 5.0;
-    let accent = if in_tune { "#22c55e" } else if r.active { "#eab308" } else { "#3f3f46" };
+    let accent = if in_tune {
+        "#22c55e"
+    } else if r.active {
+        "#eab308"
+    } else {
+        "#3f3f46"
+    };
     // Cents → y in a 0..100 box, sharp up.
     let y = |c: f32| 50.0 - c.clamp(-50.0, 50.0);
     let points: String = trace
@@ -1458,6 +1486,9 @@ fn GateViz(block: LiveBlock, level: Signal<f32>) -> Element {
         .iter()
         .enumerate()
         .map(|(i, db)| (i as f32 * (100.0 / N as f32), y(*db), *db >= threshold))
+        // A silent frame is a bar of no height, which usvg rejects (with a
+        // warning, on every repaint) — draw nothing for it instead.
+        .filter(|(_, top, _)| *top < 99.95)
         .collect();
     let ty = y(threshold);
     let bw = 100.0 / N as f32;
@@ -1600,7 +1631,7 @@ fn DriveChunk(
                 let frac = (coords.x / rect.width()).clamp(0.0, 1.0) as f32;
                 if let (Some(r), Some(id)) = (rig, block_id) {
                     let v = range.0 + frac * (range.1 - range.0);
-                    let _ = r.set_block_param(id, param.to_string(), v).await;
+                    let _ = r.write_param(id, param.to_string(), v).await;
                 }
             });
         }
@@ -1710,7 +1741,6 @@ fn DriveChunk(
 ///
 /// The browser build is the second case and not a lesser one — a DOM renderer
 /// cannot be handed a painted scene at all, so the stems are what it draws.
-#[cfg(not(target_arch = "wasm32"))]
 fn delay_lane(
     taps: Vec<(f32, f32, bool)>,
     win_ms: f32,
@@ -1728,44 +1758,12 @@ fn delay_lane(
     rsx! { crate::fx_viz::DelayViz { taps, win_ms, on, beat_ms, division, family, color } }
 }
 
-#[cfg(target_arch = "wasm32")]
-fn delay_lane(
-    taps: Vec<(f32, f32, bool)>,
-    win_ms: f32,
-    on: bool,
-    color: &'static str,
-    w: f32,
-    _beat_ms: f32,
-    _division: String,
-    _style: u32,
-) -> Element {
-    rsx! {
-        svg { class: "w-full h-full", view_box: "0 0 460 56", preserve_aspect_ratio: "none",
-            line { x1: "0", y1: "28", x2: "460", y2: "28", stroke: "#27272a", stroke_width: "1" }
-            rect { x: "4", y: "14", width: "2", height: "28", fill: "#e4e4e7", rx: "1" }
-            for (i, (t, amp, upv)) in taps.iter().enumerate() {
-                rect {
-                    key: "{i}",
-                    x: "{4.0 + t / win_ms * (w - 8.0):.1}",
-                    y: if *upv { format!("{:.1}", 28.0 - amp * 26.0) } else { "28".to_string() },
-                    width: "2",
-                    height: "{amp * 26.0:.1}",
-                    fill: "{color}",
-                    fill_opacity: if on { "0.9" } else { "0.25" },
-                    rx: "1",
-                }
-            }
-        }
-    }
-}
-
 /// Which of the effect's engines a rig block is.
 ///
 /// Signal's side of the join: `modulation-ui` owns the pictures and knows
 /// nothing about `BlockType`, which is the rig's vocabulary, not the
 /// effect's. Translating here is what keeps the visualiser reusable by the
 /// plugins, which have no block types at all.
-#[cfg(not(target_arch = "wasm32"))]
 /// The block types each modulation slot offers, as the effect groups them.
 ///
 /// Stated here as one list per slot so the pickers below and the visualiser
@@ -1789,7 +1787,6 @@ fn engine_of(block_type: BlockType) -> Option<crate::mod_viz::Engine> {
 
 /// One modulation lane: the engine's own painted visualiser where a renderer
 /// can composite a scene, the generic LFO trace where it cannot.
-#[cfg(not(target_arch = "wasm32"))]
 fn mod_lane(
     cur: &LiveBlock,
     rate: f32,
@@ -1809,34 +1806,12 @@ fn mod_lane(
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-fn mod_lane(
-    _cur: &LiveBlock,
-    _rate: f32,
-    _depth: f32,
-    engaged: bool,
-    _group_color: &'static str,
-    d: &str,
-    stroke: &'static str,
-) -> Element {
-    rsx! {
-        svg { class: "w-full h-full", view_box: "0 0 200 52", preserve_aspect_ratio: "none",
-            line { x1: "0", y1: "26", x2: "200", y2: "26", stroke: "#27272a", stroke_width: "1" }
-            path {
-                d: "{d}",
-                fill: "none",
-                stroke: "{stroke}",
-                stroke_width: "1.5",
-                opacity: if engaged { "1" } else { "0.35" },
-            }
-        }
-    }
-}
-
 /// One reverb lane: the painted widget where a renderer can composite a
 /// scene, the SVG tail where it cannot.
-#[cfg(not(target_arch = "wasm32"))]
-#[expect(clippy::too_many_arguments, reason = "a drawing and everything it needs")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a drawing and everything it needs"
+)]
 fn reverb_lane(
     decay: f32,
     density: f32,
@@ -1860,43 +1835,6 @@ fn reverb_lane(
     rsx! { crate::fx_viz::ReverbViz { decay, density, predelay, mix, damp, family, on, beat_ms, color } }
 }
 
-#[cfg(target_arch = "wasm32")]
-#[expect(clippy::too_many_arguments, reason = "a drawing and everything it needs")]
-fn reverb_lane(
-    _decay: f32,
-    _density: f32,
-    _predelay: f32,
-    _mix: f32,
-    _damp: f32,
-    _algorithm: u32,
-    _on: bool,
-    _beat_ms: f32,
-    markers: &[(f32, &'static str)],
-    color: &'static str,
-    dim: bool,
-    top: &str,
-    bot: &str,
-    t60_x: f32,
-) -> Element {
-    rsx! {
-        svg { class: "w-full h-full", view_box: "0 0 460 56", preserve_aspect_ratio: "none",
-            line { x1: "0", y1: "28", x2: "460", y2: "28", stroke: "#27272a", stroke_width: "1" }
-            for (mx, ml) in markers.iter() {
-                line { x1: "{mx:.1}", y1: "4", x2: "{mx:.1}", y2: "52",
-                    stroke: "#ffffff", stroke_opacity: "0.06", stroke_width: "1" }
-                text { x: "{mx + 1.5:.1}", y: "52", fill: "#52525b", font_size: "7", "{ml}" }
-            }
-            path { d: "{top}", fill: "{color}", fill_opacity: if dim { "0.08" } else { "0.25" },
-                stroke: "{color}", stroke_opacity: if dim { "0.25" } else { "0.8" }, stroke_width: "1" }
-            path { d: "{bot}", fill: "{color}", fill_opacity: if dim { "0.06" } else { "0.18" },
-                stroke: "{color}", stroke_opacity: if dim { "0.2" } else { "0.55" }, stroke_width: "1" }
-            line { x1: "{t60_x:.1}", y1: "10", x2: "{t60_x:.1}", y2: "46",
-                stroke: "{color}", stroke_opacity: if dim { "0.2" } else { "0.55" },
-                stroke_width: "1", stroke_dasharray: "2,2" }
-        }
-    }
-}
-
 /// The EQ surface for this build: the plugin's vello editor natively, the
 /// portable SVG one on wasm.
 ///
@@ -1918,6 +1856,8 @@ fn eq_panel(block: LiveBlock, spectrum: Vec<f32>) -> Element {
 /// The guitar instrument panel — see the module docs for the layout.
 #[component]
 pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
+    // Callbacks made once per site, not once per render (see `stable`).
+    let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<RigClient>);
     // Which side of the amp the dynamics row shows: POST (Post Comp, Gate,
     // Amp EQ — the Amp module) or PRE (Pre Comp and the Pre FX module).
@@ -1992,10 +1932,12 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
         }
     });
     let pick_of = |module: &str| {
-        compositions
-            .read()
-            .as_ref()
-            .and_then(|c| c.active_modules.iter().find(|m| m.module.eq_ignore_ascii_case(module)).cloned())
+        compositions.read().as_ref().and_then(|c| {
+            c.active_modules
+                .iter()
+                .find(|m| m.module.eq_ignore_ascii_case(module))
+                .cloned()
+        })
     };
     let (drive_pick, amp_pick, time_pick) = (pick_of("Drive"), pick_of("Amp"), pick_of("Time"));
     let comp = find_block(&blocks, BlockType::Compressor, "Pre Comp");
@@ -2091,7 +2033,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 left_power_on: comp.as_ref().map(|b| !b.bypassed),
                                 on_left_power: comp.as_ref().map(|b| {
                                     let (rig, id) = (rig.clone(), b.id.clone());
-                                    Callback::new(move |()| {
+                                    cbs.cb(move |()| {
                                         let (rig, id) = (rig.clone(), id.clone());
                                         spawn(async move {
                                             let Some(r) = rig else { return };
@@ -2124,7 +2066,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 left_power_on: eq.as_ref().map(|b| !b.bypassed),
                                 on_left_power: eq.as_ref().map(|b| {
                                     let (rig, id) = (rig.clone(), b.id.clone());
-                                    Callback::new(move |()| {
+                                    cbs.cb(move |()| {
                                         let (rig, id) = (rig.clone(), id.clone());
                                         spawn(async move {
                                             let Some(r) = rig else { return };
@@ -2154,7 +2096,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 left_power_on: gate.as_ref().map(|b| !b.bypassed),
                                 on_left_power: gate.as_ref().map(|b| {
                                     let (rig, id) = (rig.clone(), b.id.clone());
-                                    Callback::new(move |()| {
+                                    cbs.cb(move |()| {
                                         let (rig, id) = (rig.clone(), id.clone());
                                         spawn(async move {
                                             let Some(r) = rig else { return };
@@ -2203,7 +2145,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             ZoomPanel {
                                 title: if bpre { "Pre Delay".to_string() } else { "Delay".to_string() },
                                 power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Delay && is_pre_fx(b) == bpre && !b.bypassed)),
-                                on_power: Some(Callback::new({
+                                on_power: Some(cbs.cb({
                                     let rig = rig.clone();
                                     let blocks = blocks.clone();
                                     move |(): ()| {
@@ -2229,7 +2171,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             ZoomPanel {
                                 title: if bpre { "Pre Verb".to_string() } else { "Reverb".to_string() },
                                 power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Reverb && is_pre_fx(b) == bpre && !b.bypassed)),
-                                on_power: Some(Callback::new({
+                                on_power: Some(cbs.cb({
                                     let rig = rig.clone();
                                     let blocks = blocks.clone();
                                     move |(): ()| {
@@ -2269,7 +2211,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             left_power_on: post_comp.as_ref().map(|b| !b.bypassed),
                             on_left_power: post_comp.as_ref().map(|b| {
                                 let (rig, id) = (rig.clone(), b.id.clone());
-                                Callback::new(move |()| {
+                                cbs.cb(move |()| {
                                     let (rig, id) = (rig.clone(), id.clone());
                                     spawn(async move {
                                         let Some(r) = rig else { return };
@@ -2316,7 +2258,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             left_power_on: master_eq.as_ref().map(|b| !b.bypassed),
                             on_left_power: master_eq.as_ref().map(|b| {
                                 let (rig, id) = (rig.clone(), b.id.clone());
-                                Callback::new(move |()| {
+                                cbs.cb(move |()| {
                                     let (rig, id) = (rig.clone(), id.clone());
                                     spawn(async move {
                                         let Some(r) = rig else { return };
@@ -2337,7 +2279,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             left_power_on: limiter.as_ref().map(|b| !b.bypassed),
                             on_left_power: limiter.as_ref().map(|b| {
                                 let (rig, id) = (rig.clone(), b.id.clone());
-                                Callback::new(move |()| {
+                                cbs.cb(move |()| {
                                     let (rig, id) = (rig.clone(), id.clone());
                                     spawn(async move {
                                         let Some(r) = rig else { return };
@@ -2386,7 +2328,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         label: "Trim",
                         value: (model.master_trim_db + 24.0) / 36.0,
                         readout: format!("{:+.0}dB", model.master_trim_db),
-                        on_change: Callback::new({
+                        on_change: cbs.cb({
                             let rig = rig.clone();
                             move |v: f32| {
                                 if let Some(r) = rig.clone() {
@@ -2407,7 +2349,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         label: "Mix",
                         value: hp.volume,
                         readout: format!("{:.0}%", hp.volume * 100.0),
-                        on_change: Callback::new({
+                        on_change: cbs.cb({
                             let rig = rig.clone();
                             let self_mix = hp.self_mix;
                             move |v: f32| {
@@ -2426,7 +2368,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         label: "Gtr",
                         value: hp.self_mix,
                         readout: format!("{:.0}%", hp.self_mix * 100.0),
-                        on_change: Callback::new({
+                        on_change: cbs.cb({
                             let rig = rig.clone();
                             let vol = hp.volume;
                             move |v: f32| {
@@ -2443,6 +2385,8 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
 }
 
 #[cfg(test)]
+// These exercise the painted widgets, which are native only.
+#[cfg(not(target_arch = "wasm32"))]
 mod slot_tests {
     use super::*;
     use crate::mod_viz::{Engine, Group};

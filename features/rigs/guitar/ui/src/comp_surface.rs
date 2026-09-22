@@ -10,6 +10,7 @@
 //! ring streams from the live DSP over `RigEvent::CompWave`, and the GR
 //! readout is the detector's real `gain_reduction_db`.
 
+use crate::param_writer::WriteParam;
 use std::fmt::Write;
 
 use dioxus::prelude::*;
@@ -143,7 +144,7 @@ fn style_picker(block: &LiveBlock, rig: Option<RigClient>) -> Element {
                                     let id = id.clone();
                                     spawn(async move {
                                         let _ = r
-                                            .set_block_param(id, "style".into(), i as f32)
+                                            .write_param(id, "style".into(), i as f32)
                                             .await;
                                     });
                                 }
@@ -167,8 +168,19 @@ const GRAB_PX: f32 = 22.0;
 /// asynchronous, which is the entire point — the press that started a drag
 /// used to be decided inside an `await`, so it landed a frame late with its
 /// first movement already gone.
-fn graph_y(metrics: &comp_ui::viz::MetricsHandle, element_y: f64) -> Option<f32> {
-    let h = metrics.get().css_height();
+/// The panel's height in CSS pixels, for mapping a pointer into graph space.
+///
+/// Whichever surface paints the picture publishes its box here — the Blitz
+/// custom widget natively, the canvas in the browser — so a pointer maps
+/// into graph space the same way in both.
+type Metrics = comp_ui::viz::MetricsHandle;
+
+fn css_height(metrics: &Metrics) -> f64 {
+    f64::from(metrics.get().css_height())
+}
+
+fn graph_y(metrics: &Metrics, element_y: f64) -> Option<f32> {
+    let h = css_height(metrics);
     if h < 1.0 {
         return None;
     }
@@ -178,6 +190,42 @@ fn graph_y(metrics: &comp_ui::viz::MetricsHandle, element_y: f64) -> Option<f32>
 /// dB (0 top of range … −`RANGE_DB`) → y within the waveform area.
 fn db_to_y(db: f64, h: f64) -> f64 {
     ((-db) / RANGE_DB).clamp(0.0, 1.0) * h
+}
+
+/// Everything the picture needs, whichever way it is drawn.
+struct CompPicture {
+    threshold: f32,
+    ratio: f32,
+    knee: f32,
+    in_db: f32,
+    gr_db: f32,
+    /// `(input, gain reduction)`, each 0..1, oldest → newest.
+    wave: (Vec<f32>, Vec<f32>),
+    grabbable: bool,
+    metrics: Metrics,
+}
+
+/// The compressor's own painted widget — the same one the plugin mounts, so
+/// the rig and the plugin cannot disagree about what this block looks like.
+/// Natively Blitz composites its scene; in the browser the same scene is
+/// replayed onto a canvas (`fts_audio_ui::scene_canvas`).
+fn comp_picture(p: CompPicture) -> Element {
+    rsx! {
+        comp_ui::viz::CompViz {
+            threshold: p.threshold,
+            ratio: p.ratio,
+            knee: p.knee,
+            in_db: p.in_db,
+            gr_db: p.gr_db,
+            wave: p.wave,
+            on: true,
+            grabbable: p.grabbable,
+            metrics: p.metrics,
+            // Grey, not a hue: the input is the signal itself rather than an
+            // effect's contribution to it.
+            color: [228u8, 228u8, 231u8],
+        }
+    }
 }
 
 /// The detached FTS-Comp surface.
@@ -191,6 +239,8 @@ pub fn CompSurface(
     /// Real detector gain reduction (dB, positive).
     gr_db: f32,
 ) -> Element {
+    // Callbacks made once per site, not once per render (see `stable`).
+    let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<RigClient>);
     // The widget publishes its own box here every paint, so a pointer maps
     // into graph space synchronously. The previous arrangement measured the
@@ -254,10 +304,10 @@ pub fn CompSurface(
                     max: p.max,
                     size,
                     fmt,
-                    on_change: Callback::new(move |v: f32| {
+                    on_change: cbs.cb(move |v: f32| {
                         if let Some(r) = rig.clone() {
                             let (id, name) = (id.clone(), name.to_string());
-                            spawn(async move { let _ = r.set_block_param(id, name, v).await; });
+                            spawn(async move { let _ = r.write_param(id, name, v).await; });
                         }
                     }),
                 }
@@ -281,20 +331,16 @@ pub fn CompSurface(
             // about what this block looks like. It paints and does not
             // listen; the svg above it owns every gesture.
             div { style: "position:absolute; inset:0;",
-                comp_ui::viz::CompViz {
+                {comp_picture(CompPicture {
                     threshold,
                     ratio,
                     knee,
                     in_db,
                     gr_db,
                     wave: (wave_in_scaled.clone(), gr_scaled.clone()),
-                    on: true,
                     grabbable: hot() || dragging().is_some(),
                     metrics: metrics.clone(),
-                    // Grey, not a hue: the input is the signal itself rather
-                    // than an effect's contribution to it.
-                    color: [228u8, 228u8, 231u8],
-                }
+                })}
             }
 
             // ── The gestures — grab the threshold line to move it; grab the
@@ -355,7 +401,7 @@ pub fn CompSurface(
                             CompDrag::Threshold => {
                                 let db = (-(y / H as f32) * RANGE_DB as f32).clamp(-60.0, 0.0);
                                 spawn(async move {
-                                    let _ = r.set_block_param(id, "threshold".into(), db).await;
+                                    let _ = r.write_param(id, "threshold".into(), db).await;
                                 });
                             }
                             CompDrag::Ratio(y0, r0) => {
@@ -366,7 +412,7 @@ pub fn CompSurface(
                                 let span = H as f32 / 8.0;
                                 let ratio = (r0 * ((y - y0) / span).exp2()).clamp(1.0, 20.0);
                                 spawn(async move {
-                                    let _ = r.set_block_param(id, "ratio".into(), ratio).await;
+                                    let _ = r.write_param(id, "ratio".into(), ratio).await;
                                 });
                             }
                         }
@@ -428,6 +474,8 @@ pub fn CompSurface(
 }
 
 #[cfg(test)]
+// These exercise the painted widgets, which are native only.
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::*;
     use comp_ui::viz::{CompMetrics, MetricsHandle};
@@ -477,7 +525,10 @@ mod tests {
         let css_of = |graph_y_units: f32| f64::from(graph_y_units) / H * 500.0;
 
         let on_line = graph_y(&m, css_of(ty)).expect("measured");
-        assert!((on_line - ty).abs() < GRAB_PX, "the line itself is grabbable");
+        assert!(
+            (on_line - ty).abs() < GRAB_PX,
+            "the line itself is grabbable"
+        );
 
         let just_above = graph_y(&m, css_of(ty) - 60.0).expect("measured");
         assert!(
@@ -503,7 +554,14 @@ mod tests {
     fn every_parameter_the_block_has_is_reachable() {
         // `session::block_params` for `BlockType::Compressor`.
         const DECLARED: [&str; 8] = [
-            "threshold", "ratio", "attack", "release", "knee", "range", "fold", "style",
+            "threshold",
+            "ratio",
+            "attack",
+            "release",
+            "knee",
+            "range",
+            "fold",
+            "style",
         ];
         let src = include_str!("comp_surface.rs");
         for name in DECLARED {
@@ -539,6 +597,9 @@ mod tests {
         assert!((doubled - 8.0).abs() < 1e-3, "got {doubled}");
         // And the full useful range needs most of the panel, not a flick.
         let from_one = 1.0_f32 * ((H as f32 * 0.5) / span).exp2();
-        assert!(from_one > 15.0, "half the panel should reach the top: {from_one}");
+        assert!(
+            from_one > 15.0,
+            "half the panel should reach the top: {from_one}"
+        );
     }
 }

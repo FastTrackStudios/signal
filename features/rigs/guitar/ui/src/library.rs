@@ -25,8 +25,8 @@ use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{
-    CompositionModel, DriveEntry, LibraryModel, PatchInfo, PerformanceModel, PresetInfo, ProfileEntry, SetlistEntry,
-    SongEntry,
+    CompositionModel, DriveEntry, LibraryModel, PatchInfo, PerformanceModel, PresetInfo,
+    ProfileEntry, SetlistEntry, SongEntry,
 };
 
 /// The picker's open state, in context — so a surface deep in the rig (the
@@ -195,7 +195,12 @@ fn rows(
                 kind,
                 name: p.name.clone(),
                 idx,
-                sub: p.snapshots.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(" · "),
+                sub: p
+                    .snapshots
+                    .iter()
+                    .map(|s| s.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" · "),
                 active: comp.active_preset.eq_ignore_ascii_case(&p.name),
             })
             .collect(),
@@ -211,7 +216,8 @@ fn rows(
                     idx,
                     sub: m.snapshots.join(" · "),
                     active: comp.active_modules.iter().any(|a| {
-                        a.module.eq_ignore_ascii_case(module) && a.preset.eq_ignore_ascii_case(&m.name)
+                        a.module.eq_ignore_ascii_case(module)
+                            && a.preset.eq_ignore_ascii_case(&m.name)
                     }),
                 })
                 .collect()
@@ -239,7 +245,12 @@ fn rows(
                 sub: if s.parts.is_empty() {
                     format!("{} · {} bpm", s.key, s.bpm)
                 } else {
-                    format!("{} · {} bpm · {}", s.key, s.bpm, count(s.parts.len(), "part"))
+                    format!(
+                        "{} · {} bpm · {}",
+                        s.key,
+                        s.bpm,
+                        count(s.parts.len(), "part")
+                    )
                 },
                 active: model
                     .songs
@@ -255,7 +266,11 @@ fn rows(
                 kind,
                 name: p.name.clone(),
                 idx,
-                sub: format!("{} · {}", count(p.stacks.len(), "stack"), count(p.patches as usize, "patch")),
+                sub: format!(
+                    "{} · {}",
+                    count(p.stacks.len(), "stack"),
+                    count(p.patches as usize, "patch")
+                ),
                 active: p.active,
             })
             .collect(),
@@ -283,7 +298,11 @@ fn rows(
                 idx,
                 sub: {
                     let used = count(p.used_by as usize, "patch");
-                    if p.creator.is_empty() { used } else { format!("{used} · {}", p.creator) }
+                    if p.creator.is_empty() {
+                        used
+                    } else {
+                        format!("{used} · {}", p.creator)
+                    }
                 },
                 active: p.active,
             })
@@ -299,7 +318,11 @@ fn rows(
                 sub: if d.slots.is_empty() {
                     count(d.options.len(), "capture")
                 } else {
-                    format!("{} · {}", count(d.options.len(), "capture"), d.slots.join(", "))
+                    format!(
+                        "{} · {}",
+                        count(d.options.len(), "capture"),
+                        d.slots.join(", ")
+                    )
                 },
                 active: !d.slots.is_empty(),
             })
@@ -319,7 +342,9 @@ fn count(n: usize, what: &str) -> String {
 /// Every word of the query appears in the name or the subtitle.
 fn matches(row: &Row, query: &str) -> bool {
     let hay = format!("{} {}", row.name, row.sub).to_lowercase();
-    query.split_whitespace().all(|w| hay.contains(&w.to_lowercase()))
+    query
+        .split_whitespace()
+        .all(|w| hay.contains(&w.to_lowercase()))
 }
 
 /// Fire a rig call without waiting on it — the result arrives as the next
@@ -345,7 +370,11 @@ fn activate(rig: &Option<RigClient>, row: &Row, model: &PerformanceModel) -> boo
             let _ = r.select_setlist(idx).await;
         }),
         Kind::Songs => {
-            let Some(pos) = model.songs.iter().position(|s| s.name.eq_ignore_ascii_case(&name)) else {
+            let Some(pos) = model
+                .songs
+                .iter()
+                .position(|s| s.name.eq_ignore_ascii_case(&name))
+            else {
                 return false;
             };
             send(rig, move |r| async move {
@@ -443,15 +472,24 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
     let Some(kind) = open() else {
         return rsx! {};
     };
-    let (lib, patches, presets, comp): (LibraryModel, Vec<PatchInfo>, Vec<PresetInfo>, CompositionModel) =
-        data.read().clone().unwrap_or_default();
+    let (lib, patches, presets, comp): (
+        LibraryModel,
+        Vec<PatchInfo>,
+        Vec<PresetInfo>,
+        CompositionModel,
+    ) = data.read().clone().unwrap_or_default();
 
     let q = query();
     let per_kind: Vec<(Kind, Vec<Row>)> = Kind::RAIL
         .iter()
         .map(|&k| {
             let all = rows(k, &lib, &patches, &presets, &comp, &model);
-            (k, all.into_iter().filter(|r| q.trim().is_empty() || matches(r, &q)).collect())
+            (
+                k,
+                all.into_iter()
+                    .filter(|r| q.trim().is_empty() || matches(r, &q))
+                    .collect(),
+            )
         })
         .collect();
     let list: Vec<Row> = per_kind
@@ -466,9 +504,10 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
         .and_then(|f| list.iter().find(|r| is(r, &f)).cloned())
         .or_else(|| list.iter().find(|r| r.active).cloned())
         .or_else(|| list.first().cloned());
-    let cursor = focused
-        .as_ref()
-        .and_then(|f| list.iter().position(|r| r.kind == f.kind && r.name == f.name));
+    let cursor = focused.as_ref().and_then(|f| {
+        list.iter()
+            .position(|r| r.kind == f.kind && r.name == f.name)
+    });
 
     let mut close = move || {
         open.set(None);
@@ -485,7 +524,11 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
 
     let context = format!(
         "{} · {}",
-        if model.profile_name.is_empty() { "No profile" } else { &model.profile_name },
+        if model.profile_name.is_empty() {
+            "No profile"
+        } else {
+            &model.profile_name
+        },
         model
             .setlists
             .get(model.setlist_index as usize)
@@ -861,19 +904,23 @@ fn Detail(
     model: PerformanceModel,
     on_go: EventHandler<(Kind, String)>,
 ) -> Element {
+    // Callbacks made once per site, not once per render (see `stable`).
+    let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<RigClient>);
     let name = row.name.clone();
     let idx = row.idx as u32;
 
     // Rename, wired per kind; `None` for what cannot be renamed here.
     let rename: Option<Callback<String>> = match kind {
-        Kind::Setlists => Some(Callback::new({
+        Kind::Setlists => Some(cbs.cb({
             let rig = rig.clone();
-            move |new: String| send(&rig, move |r| async move {
-                let _ = r.rename_setlist(idx, new).await;
-            })
+            move |new: String| {
+                send(&rig, move |r| async move {
+                    let _ = r.rename_setlist(idx, new).await;
+                })
+            }
         })),
-        Kind::Profiles => Some(Callback::new({
+        Kind::Profiles => Some(cbs.cb({
             let rig = rig.clone();
             let old = name.clone();
             move |new: String| {
@@ -883,7 +930,7 @@ fn Detail(
                 });
             }
         })),
-        Kind::Patches => Some(Callback::new({
+        Kind::Patches => Some(cbs.cb({
             let rig = rig.clone();
             let old = name.clone();
             move |new: String| {
@@ -893,7 +940,7 @@ fn Detail(
                 });
             }
         })),
-        Kind::Presets => Some(Callback::new({
+        Kind::Presets => Some(cbs.cb({
             let rig = rig.clone();
             let old = name.clone();
             move |new: String| {
@@ -1124,11 +1171,7 @@ fn DeleteAct(#[props(default)] refused: Option<String>, on_delete: EventHandler<
 
 /// A name typed in place, for Duplicate: a field, a confirm and a cancel.
 #[component]
-fn NamePrompt(
-    label: String,
-    initial: String,
-    on_done: EventHandler<Option<String>>,
-) -> Element {
+fn NamePrompt(label: String, initial: String, on_done: EventHandler<Option<String>>) -> Element {
     let mut text = use_signal(|| initial.clone());
     let commit = move || {
         let t = text.peek().trim().to_string();
@@ -1254,7 +1297,11 @@ fn SetlistDetail(
     let addable: Vec<String> = lib
         .songs
         .iter()
-        .filter(|s| !set.songs.iter().any(|e| e.name.eq_ignore_ascii_case(&s.name)))
+        .filter(|s| {
+            !set.songs
+                .iter()
+                .any(|e| e.name.eq_ignore_ascii_case(&s.name))
+        })
         .filter(|s| {
             let f = filter();
             f.trim().is_empty() || s.name.to_lowercase().contains(&f.trim().to_lowercase())
@@ -1388,7 +1435,12 @@ fn SongDetail(
         .setlists
         .iter()
         .enumerate()
-        .filter(|(_, s)| !song.setlists.iter().any(|n| n.eq_ignore_ascii_case(&s.name)))
+        .filter(|(_, s)| {
+            !song
+                .setlists
+                .iter()
+                .any(|n| n.eq_ignore_ascii_case(&s.name))
+        })
         .map(|(i, s)| (i as u32, s.name.clone()))
         .collect();
 
@@ -1396,11 +1448,16 @@ fn SongDetail(
         let rig = rig.clone();
         let old = song.name.clone();
         move || {
-            let (n, k) = (name.peek().trim().to_string(), key.peek().trim().to_string());
+            let (n, k) = (
+                name.peek().trim().to_string(),
+                key.peek().trim().to_string(),
+            );
             let b = bpm.peek().trim().parse::<u32>().unwrap_or(0);
             let old = old.clone();
             let go = n.clone();
-            send(&rig, move |r| async move { let _ = r.edit_song(old, n, k, b).await; });
+            send(&rig, move |r| async move {
+                let _ = r.edit_song(old, n, k, b).await;
+            });
             on_go.call((Kind::Songs, go));
         }
     };
@@ -1874,7 +1931,10 @@ fn ModuleDetail(entry: signal_guitar_proto::ModulePresetEntry, comp: Composition
     let playing = comp
         .active_modules
         .iter()
-        .find(|a| a.module.eq_ignore_ascii_case(&entry.module) && a.preset.eq_ignore_ascii_case(&entry.name))
+        .find(|a| {
+            a.module.eq_ignore_ascii_case(&entry.module)
+                && a.preset.eq_ignore_ascii_case(&entry.name)
+        })
         .map(|a| a.snapshot.clone());
     rsx! {
         Section { label: "Snapshots",
@@ -1979,7 +2039,13 @@ fn NewForm(
     let mut path = use_signal(String::new);
     // Profiles: what to start from ("" = a starter). Patches: stack, preset.
     let mut from = use_signal(String::new);
-    let mut stack = use_signal(|| model.stacks.first().map(|s| s.name.clone()).unwrap_or_default());
+    let mut stack = use_signal(|| {
+        model
+            .stacks
+            .first()
+            .map(|s| s.name.clone())
+            .unwrap_or_default()
+    });
     let mut amp = use_signal(|| presets.first().map(|p| p.name.clone()).unwrap_or_default());
 
     let taken = |n: &str| -> bool {
@@ -1998,7 +2064,11 @@ fn NewForm(
     let problem = if n.trim().is_empty() {
         Some("Give it a name".to_string())
     } else if taken(&n) {
-        Some(format!("There is already a {} called {}", kind.one(), n.trim()))
+        Some(format!(
+            "There is already a {} called {}",
+            kind.one(),
+            n.trim()
+        ))
     } else if kind == Kind::Presets && path().trim().is_empty() {
         Some("Path to a .nam capture".to_string())
     } else if kind == Kind::Patches && (stack().is_empty() || amp().is_empty()) {
@@ -2017,25 +2087,40 @@ fn NewForm(
             let n = name.peek().trim().to_string();
             let done = n.clone();
             match kind {
-                Kind::Setlists => send(&rig, move |r| async move { let _ = r.add_setlist(n).await; }),
+                Kind::Setlists => send(&rig, move |r| async move {
+                    let _ = r.add_setlist(n).await;
+                }),
                 Kind::Songs => {
-                    let (k, b) = (key.peek().trim().to_string(), bpm.peek().trim().parse().unwrap_or(0));
-                    send(&rig, move |r| async move { let _ = r.add_song(n, k, b).await; });
+                    let (k, b) = (
+                        key.peek().trim().to_string(),
+                        bpm.peek().trim().parse().unwrap_or(0),
+                    );
+                    send(&rig, move |r| async move {
+                        let _ = r.add_song(n, k, b).await;
+                    });
                 }
                 Kind::Profiles => {
                     let f = from.peek().clone();
-                    send(&rig, move |r| async move { let _ = r.add_profile(n, f).await; });
+                    send(&rig, move |r| async move {
+                        let _ = r.add_profile(n, f).await;
+                    });
                 }
                 Kind::Patches => {
                     let (s, p) = (stack.peek().clone(), amp.peek().clone());
-                    send(&rig, move |r| async move { let _ = r.add_patch(n, s, p).await; });
+                    send(&rig, move |r| async move {
+                        let _ = r.add_patch(n, s, p).await;
+                    });
                 }
                 Kind::Presets => {
                     let p = path.peek().trim().to_string();
-                    send(&rig, move |r| async move { let _ = r.add_preset(n, p).await; });
+                    send(&rig, move |r| async move {
+                        let _ = r.add_preset(n, p).await;
+                    });
                 }
                 Kind::Drives | Kind::All => return,
-                Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules => return,
+                Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules => {
+                    return;
+                }
             }
             on_done.call(Some(done));
         }

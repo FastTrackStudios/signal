@@ -110,6 +110,8 @@ pub fn PerformGrid(
     #[props(default)]
     compact: bool,
 ) -> Element {
+    // Callbacks made once per site, not once per render (see `stable`).
+    let cbs = crate::stable::use_stable();
     let stacks = model.stacks;
     let rig = use_hook(try_consume_context::<RigClient>);
     let mode = model.perform_mode;
@@ -197,10 +199,10 @@ pub fn PerformGrid(
     // (identical to the physical footswitch): 1→Ambient, 2→FX Toggle,
     // 3→Song (reserved), 4→Boost on/off. 5→Tuner is wired on the tile.
     let hold_actions: [Option<Callback<()>>; 4] = [
-        Some(Callback::new(move |(): ()| on_press.call(4))),
-        Some(Callback::new(move |(): ()| on_toggle_fx.call(()))),
-        Some(Callback::new(move |(): ()| song_layer.set(true))),
-        Some(Callback::new(move |(): ()| on_toggle_boost.call(()))),
+        Some(cbs.cb(move |(): ()| on_press.call(4))),
+        Some(cbs.cb(move |(): ()| on_toggle_fx.call(()))),
+        Some(cbs.cb(move |(): ()| song_layer.set(true))),
+        Some(cbs.cb(move |(): ()| on_toggle_boost.call(()))),
     ];
 
     let current_song = model
@@ -355,7 +357,7 @@ pub fn PerformGrid(
                 active: song_layer(),
                 switch_no: 8,
                 compact: true,
-                onclick: Callback::new(move |(): ()| song_layer.toggle()),
+                onclick: cbs.cb(move |(): ()| song_layer.toggle()),
             }
             // Switch 9 (hold 4): Boost — tap on/off, hold rotates the level.
             BoostTile {
@@ -368,7 +370,7 @@ pub fn PerformGrid(
             // Switch 10 (hold 5): the live tuner, right in the tile.
             LiveTunerTile {
                 switch_no: 10,
-                onclick: Callback::new({
+                onclick: cbs.cb({
                     let rig = rig.clone();
                     move |(): ()| {
                         if let Some(r) = rig.clone() {
@@ -430,7 +432,7 @@ pub fn PerformGrid(
                 HoldButton {
                     class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full bg-card border border-border hover:bg-accent/40".to_string(),
                     style: String::new(),
-                    on_tap: Callback::new(move |(): ()| song_layer.set(false)),
+                    on_tap: cbs.cb(move |(): ()| song_layer.set(false)),
                     SwitchNo { no: 5 }
                     span { class: "text-xl font-bold", "Back" }
                     span { class: "text-xs text-muted-foreground", "to the rig" }
@@ -458,7 +460,7 @@ pub fn PerformGrid(
                 compact,
                 tempo_bpm: model.tempo_bpm,
                 on_tap: on_tap_tempo,
-                on_hold: Callback::new({
+                on_hold: cbs.cb({
                     let rig = rig;
                     move |(): ()| {
                         if let Some(r) = rig.clone() {
@@ -485,6 +487,8 @@ fn StackTile(
     #[props(default)] on_hold: Option<Callback<()>>,
     #[props(default)] compact: bool,
 ) -> Element {
+    // Callbacks made once per site, not once per render (see `stable`).
+    let cbs = crate::stable::use_stable();
     let (bg, text) = folder_color(&stack.name);
     let state_cls = if stack.is_active {
         "ring-2 ring-white/80 shadow-xl opacity-100"
@@ -500,7 +504,7 @@ fn StackTile(
         HoldButton {
             class: format!("{layout_cls} transition-all h-full {state_cls}"),
             style: format!("background-color: {bg}; color: {text};"),
-            on_tap: Callback::new(move |(): ()| on_press.call(index)),
+            on_tap: cbs.cb(move |(): ()| on_press.call(index)),
             on_hold,
             SwitchNo { no: switch_no }
             // Amber dot while the current patch is still loading.

@@ -30,6 +30,7 @@
 //! events, and sending seven parameters per frame would put six of them on the
 //! wire for nothing.
 
+use crate::param_writer::WriteParam;
 use dioxus::prelude::*;
 use eq_ui::eq_graph::{AnalyzerSnapshot, EqGraph};
 use eq_ui::eq_graph_model::EqBand;
@@ -74,7 +75,7 @@ pub fn EqVelloSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                 let id = block_id.clone();
                 let name = format!("b{}_{}", band + 1, field);
                 spawn(async move {
-                    let _ = r.set_block_param(id, name, value).await;
+                    let _ = r.write_param(id, name, value).await;
                 });
             }
         }

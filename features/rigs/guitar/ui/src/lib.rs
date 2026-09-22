@@ -12,11 +12,9 @@ mod control;
 mod eq_surface;
 /// Painted delay + reverb visualisers — native only (a painted scene needs a
 /// Blitz host).
-#[cfg(not(target_arch = "wasm32"))]
 pub mod fx_viz;
 /// The modulation visualisers live with the effect that owns them, so the
 /// plugins draw the same pictures — see `modulation_ui::viz`.
-#[cfg(not(target_arch = "wasm32"))]
 pub use modulation_ui::viz as mod_viz;
 /// The plugin's own vello EQ editor — native only (a painted scene needs a
 /// Blitz host; the wasm remote draws [`eq_surface`] instead).
@@ -30,12 +28,14 @@ mod indicators;
 mod library;
 mod meters;
 mod palette;
+pub mod param_writer;
 mod perform;
 mod preset_bar;
 mod remote;
-mod settings;
 mod setlist_bar;
+mod settings;
 mod sidebars;
+mod stable;
 mod state;
 mod wire_param;
 
@@ -48,10 +48,10 @@ pub use icons::module_icon;
 pub use library::{Kind as LibraryKind, LibraryPicker};
 pub use meters::{CpuMeter, DspReadout, MeterBar, MeterPair, meter_level};
 pub use perform::PerformGrid;
-pub use remote::GuitarRigRemote;
-pub use settings::{AudioSettingsBridge, AudioSettingsModal};
 pub use preset_bar::PresetSidebar;
+pub use remote::GuitarRigRemote;
 pub use setlist_bar::SetlistSidebar;
+pub use settings::{AudioSettingsBridge, AudioSettingsModal};
 pub use sidebars::{LeftSidebar, LevellingChip};
 /// The node/preset tree (moved to signal-widgets — both rigs draw it).
 pub use signal_widgets::PresetTree;

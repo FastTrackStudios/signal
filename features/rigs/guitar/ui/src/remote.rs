@@ -75,7 +75,11 @@ impl Switches {
 /// (`RigClient`, `RigStreamClient`, `AudioSettingsClient`).
 #[component]
 pub fn GuitarRigRemote() -> Element {
+    // Callbacks made once per site, not once per render (see `stable`).
+    let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<RigClient>);
+    // Every parameter write below goes through one coalescing writer.
+    crate::param_writer::use_param_writer(rig.clone());
     let settings = use_hook(try_consume_context::<AudioSettingsClient>);
     let state = use_rig_state();
 
@@ -175,12 +179,11 @@ pub fn GuitarRigRemote() -> Element {
     });
     let perf_now = perf();
 
-
     // The five rig controls, shared by the standalone Perform view and the
     // Edit view's bottom dock.
     let controls = rig.clone().map(|r| {
         (
-            Callback::new({
+            cbs.cb({
                 let r = r.clone();
                 move |i: usize| {
                     let r = r.clone();
@@ -189,7 +192,7 @@ pub fn GuitarRigRemote() -> Element {
                     });
                 }
             }),
-            Callback::new({
+            cbs.cb({
                 let r = r.clone();
                 move |(): ()| {
                     let r = r.clone();
@@ -198,7 +201,7 @@ pub fn GuitarRigRemote() -> Element {
                     });
                 }
             }),
-            Callback::new({
+            cbs.cb({
                 let r = r.clone();
                 move |(): ()| {
                     let r = r.clone();
@@ -207,7 +210,7 @@ pub fn GuitarRigRemote() -> Element {
                     });
                 }
             }),
-            Callback::new({
+            cbs.cb({
                 let r = r.clone();
                 move |(): ()| {
                     let r = r.clone();
@@ -216,7 +219,7 @@ pub fn GuitarRigRemote() -> Element {
                     });
                 }
             }),
-            Callback::new({
+            cbs.cb({
                 let r = r.clone();
                 move |(): ()| {
                     let r = r.clone();
@@ -225,7 +228,7 @@ pub fn GuitarRigRemote() -> Element {
                     });
                 }
             }),
-            Callback::new({
+            cbs.cb({
                 let r = r.clone();
                 move |(): ()| {
                     let r = r.clone();
@@ -234,7 +237,7 @@ pub fn GuitarRigRemote() -> Element {
                     });
                 }
             }),
-            Callback::new({
+            cbs.cb({
                 let r = r.clone();
                 move |(): ()| {
                     let r = r.clone();
@@ -243,7 +246,7 @@ pub fn GuitarRigRemote() -> Element {
                     });
                 }
             }),
-            Callback::new({
+            cbs.cb({
                 let r = r;
                 move |i: usize| {
                     let r = r.clone();
@@ -549,11 +552,11 @@ pub fn GuitarRigRemote() -> Element {
                             items: vec![
                                 crate::indicators::IndicatorItem::new(
                                     "Audio settings…",
-                                    Callback::new(move |()| audio_open.set(true)),
+                                    cbs.cb(move |()| audio_open.set(true)),
                                 ),
                                 crate::indicators::IndicatorItem::new(
                                     if is_running { "Stop audio" } else { "Start audio" },
-                                    Callback::new(move |()| {
+                                    cbs.cb(move |()| {
                                         if let Some(r) = rig_toggle.clone() {
                                             spawn(async move {
                                                 let _ = if is_running { r.stop().await } else { r.start().await };
@@ -565,7 +568,7 @@ pub fn GuitarRigRemote() -> Element {
                                 // library re-measures loudness against it.
                                 crate::indicators::IndicatorItem::new(
                                     "Record DI reference (15 s)",
-                                    Callback::new(move |()| {
+                                    cbs.cb(move |()| {
                                         if let Some(r) = rig_di.clone() {
                                             spawn(async move { let _ = r.capture_di_reference(15).await; });
                                         }

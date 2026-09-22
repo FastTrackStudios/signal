@@ -24,7 +24,9 @@ const LIVE: &str = "#22c55e";
 /// Every word of the query in the text.
 fn hit(text: &str, query: &str) -> bool {
     let hay = text.to_lowercase();
-    query.split_whitespace().all(|w| hay.contains(&w.to_lowercase()))
+    query
+        .split_whitespace()
+        .all(|w| hay.contains(&w.to_lowercase()))
 }
 
 /// The preset's snapshots the query keeps: all of them when the preset's

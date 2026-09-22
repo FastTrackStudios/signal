@@ -11,6 +11,7 @@
 //! Wire scheme: 24 bands × `b{i}_{used,on,freq,gain,q,shape}` on the "Pre EQ"
 //! block (shape = `EqBandShape` ordinal).
 
+use crate::param_writer::WriteParam;
 use dioxus::prelude::*;
 use signal_widgets::{Picker, PickerSize};
 use std::fmt::Write;
@@ -88,7 +89,7 @@ fn send(rig: &Option<RigClient>, block_id: &str, band: usize, field: &str, value
         let id = block_id.to_string();
         let name = format!("b{}_{}", band + 1, field);
         spawn(async move {
-            let _ = r.set_block_param(id, name, value).await;
+            let _ = r.write_param(id, name, value).await;
         });
     }
 }
@@ -217,15 +218,15 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                             if let Some(r) = rig {
                                 let id = |f: &str| (block_id.clone(), format!("b{}_{f}", i + 1));
                                 let (bid, n) = id("freq");
-                                let _ = r.set_block_param(bid, n, freq as f32).await;
+                                let _ = r.write_param(bid, n, freq as f32).await;
                                 let (bid, n) = id("gain");
-                                let _ = r.set_block_param(bid, n, gain as f32).await;
+                                let _ = r.write_param(bid, n, gain as f32).await;
                                 let (bid, n) = id("shape");
-                                let _ = r.set_block_param(bid, n, shape_index(shape)).await;
+                                let _ = r.write_param(bid, n, shape_index(shape)).await;
                                 let (bid, n) = id("on");
-                                let _ = r.set_block_param(bid, n, 1.0).await;
+                                let _ = r.write_param(bid, n, 1.0).await;
                                 let (bid, n) = id("used");
-                                let _ = r.set_block_param(bid, n, 1.0).await;
+                                let _ = r.write_param(bid, n, 1.0).await;
                             }
                         });
                         // Select it optimistically.
@@ -403,9 +404,9 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                                     drag_gain_for_shape(shape, cur_gain, mapper.y_to_db(y));
                                 if let Some(r) = rig {
                                     let n = format!("b{}_freq", i + 1);
-                                    let _ = r.set_block_param(block_id.clone(), n, freq).await;
+                                    let _ = r.write_param(block_id.clone(), n, freq).await;
                                     let n = format!("b{}_gain", i + 1);
-                                    let _ = r.set_block_param(block_id, n, gain).await;
+                                    let _ = r.write_param(block_id, n, gain).await;
                                 }
                             });
                         }

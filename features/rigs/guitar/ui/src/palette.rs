@@ -114,7 +114,11 @@ fn actions(
     out.push(cmd("Tap Tempo", "action", Effect::TapTempo));
     out.push(cmd("Next Song", "action", Effect::NextSong));
     out.push(cmd("Previous Song", "action", Effect::PrevSong));
-    out.push(cmd("Reload Library (styx files)", "action", Effect::ReloadLibrary));
+    out.push(cmd(
+        "Reload Library (styx files)",
+        "action",
+        Effect::ReloadLibrary,
+    ));
     out.push(cmd("New Song…", "create", Effect::NewSong));
     out.push(cmd("New Song Part…", "create", Effect::NewPart));
     out.push(cmd("New Patch…", "create", Effect::NewPatch));
@@ -139,7 +143,11 @@ fn actions(
     out.push(cmd("Preset Mode", "view", Effect::SetMode(0)));
     out.push(cmd("Profile Mode", "view", Effect::SetMode(1)));
     out.push(cmd("Setlist Mode", "view", Effect::SetMode(2)));
-    out.push(cmd("Switches: Full / Compact / Hidden", "view", Effect::CycleSwitches));
+    out.push(cmd(
+        "Switches: Full / Compact / Hidden",
+        "view",
+        Effect::CycleSwitches,
+    ));
     for (name, active) in profiles {
         if !active {
             out.push(Action {
@@ -163,7 +171,11 @@ fn actions(
         ));
     }
     for (i, p) in model.parts.iter().enumerate() {
-        out.push(cmd(&format!("Part: {}", p.name), "part", Effect::SelectPart(i as u32)));
+        out.push(cmd(
+            &format!("Part: {}", p.name),
+            "part",
+            Effect::SelectPart(i as u32),
+        ));
     }
     for (i, s) in model.setlists.iter().enumerate() {
         out.push(cmd(
@@ -258,11 +270,23 @@ pub fn CommandPalette(
             let _ = rev();
             let rig = rig.clone();
             async move {
-                let Some(r) = rig else { return Default::default() };
-                let patches: Vec<String> =
-                    r.patches().await.unwrap_or_default().into_iter().map(|p| p.name).collect();
-                let presets: Vec<String> =
-                    r.presets().await.unwrap_or_default().into_iter().map(|p| p.name).collect();
+                let Some(r) = rig else {
+                    return Default::default();
+                };
+                let patches: Vec<String> = r
+                    .patches()
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|p| p.name)
+                    .collect();
+                let presets: Vec<String> = r
+                    .presets()
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|p| p.name)
+                    .collect();
                 let profiles: Vec<(String, bool)> = r
                     .library()
                     .await
@@ -285,9 +309,7 @@ pub fn CommandPalette(
     let mut ranked: Vec<(i32, usize, Action)> = actions(&model, &patches, &presets, &profiles)
         .into_iter()
         .enumerate()
-        .filter_map(|(i, a)| {
-            fuzzy(&q, &format!("{} {}", a.label, a.hint)).map(|s| (s, i, a))
-        })
+        .filter_map(|(i, a)| fuzzy(&q, &format!("{} {}", a.label, a.hint)).map(|s| (s, i, a)))
         .collect();
     // Best score first; ties keep the list's own order (commands before jumps).
     ranked.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
