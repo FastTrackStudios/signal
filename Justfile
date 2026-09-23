@@ -118,6 +118,20 @@ desktop: tailwind
 
 alias d := desktop
 
+# ONE build line for the app, shared by every recipe that runs it. The
+# profile is `release-fast` (release optimisation, incremental — see the
+# root Cargo.toml) and the features are the app bundle's. Building with a
+# different feature set, or `--release` here and `release-fast` there, makes
+# cargo recompile every shared crate for the other combination: that was the
+# difference between a 2-minute rebuild and a 15-minute one.
+app_features := "signal-keys-rig"
+app_build := "cargo build --profile release-fast -p signal-desktop --features " + app_features
+app_bin := "./target/release-fast/signal-desktop"
+
+# Build the Signal app (what `Signal Rig.app` and the menu bar run).
+app:
+    {{app_build}}
+
 # No watcher and no rebuild-on-change, and the app needs no dx asset pipeline
 # (every sheet is include_str!'d, per the inline-styles rule).
 #
@@ -125,10 +139,10 @@ alias d := desktop
 desktop-run: tailwind
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build --release -p signal-desktop
+    {{app_build}}
     PIPEWIRE_PROPS='{ application.name = FTS-Signal }' \
     RUST_LOG="${RUST_LOG:-info,vox_core=warn,schema_deser=off}" \
-        ./target/release/signal-desktop
+        {{app_bin}}
 
 # ── The guitar rig ───────────────────────────────────────────────────────
 
@@ -145,14 +159,14 @@ desktop-run: tailwind
 # backend and panics before drawing a frame. WebKit never needed that, which
 # is why it is new.
 
-# The guitar rig — the desktop app, release build
+# The guitar rig — the desktop app, release-fast build
 guitar *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build --release -p signal-desktop
+    {{app_build}}
     PIPEWIRE_PROPS='{ application.name = FTS-Signal }' \
     RUST_LOG="${RUST_LOG:-info,vox_core=warn,schema_deser=off}" \
-        ./target/release/signal-desktop --guitar {{ARGS}}
+        {{app_bin}} --guitar {{ARGS}}
 
 # The rig with no audio at all: the profile loads, the meters move, and
 # nothing is opened. Several of these run side by side — an interface is

@@ -1076,6 +1076,73 @@ opt-level = 3
 [profile.dev.package.trigger-dsp]
 opt-level = 3
 
+# The render stack, at full opt in dev too. The window is Blitz: every frame
+# runs style (stylo), layout (taffy), text (parley/skrifa/swash) and paint
+# (vello/wgpu), and at the dev default of opt-level 1 a debug build drew its UI
+# slowly enough to watch. They are dependencies — compiled once and cached,
+# never rebuilt by an edit here — so this costs one slower first dev build and
+# makes `cargo build` (dev, incremental) a usable way to run the app.
+[profile.dev.package.blitz-dom]
+opt-level = 3
+[profile.dev.package.blitz-paint]
+opt-level = 3
+[profile.dev.package.blitz-shell]
+opt-level = 3
+[profile.dev.package.blitz-traits]
+opt-level = 3
+[profile.dev.package.anyrender]
+opt-level = 3
+[profile.dev.package.anyrender_vello]
+opt-level = 3
+[profile.dev.package.vello]
+opt-level = 3
+[profile.dev.package.vello_encoding]
+opt-level = 3
+[profile.dev.package.wgpu]
+opt-level = 3
+[profile.dev.package.wgpu-core]
+opt-level = 3
+[profile.dev.package.wgpu-hal]
+opt-level = 3
+[profile.dev.package.naga]
+opt-level = 3
+[profile.dev.package.stylo]
+opt-level = 3
+[profile.dev.package.selectors]
+opt-level = 3
+[profile.dev.package.taffy]
+opt-level = 3
+[profile.dev.package.parley]
+opt-level = 3
+[profile.dev.package.skrifa]
+opt-level = 3
+[profile.dev.package.read-fonts]
+opt-level = 3
+[profile.dev.package.swash]
+opt-level = 3
+[profile.dev.package.fontique]
+opt-level = 3
+[profile.dev.package.peniko]
+opt-level = 3
+[profile.dev.package.kurbo]
+opt-level = 3
+[profile.dev.package.dioxus-core]
+opt-level = 3
+[profile.dev.package.dioxus-native-dom]
+opt-level = 3
+
+# Local iteration at release speed: `--profile release-fast`. Same
+# optimisation as `release`, but incremental and split into many codegen
+# units, so an edit to one crate recompiles that crate's changed parts rather
+# than the crate whole — minutes instead of a quarter hour after touching
+# signal-sampler. The code it makes is a little slower than `release`; audio
+# does not notice. Never ship from it: distributables and CI stay on
+# `release`.
+[profile.release-fast]
+inherits = "release"
+incremental = true
+codegen-units = 256
+
 # ── LOCAL ARCHITECT OVERRIDE — DO NOT COMMIT ──────────────────────────
 #
 # W13 (browser keys rig) needs `EngineHost::cross_origin_isolated` for the
