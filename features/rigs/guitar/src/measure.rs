@@ -19,7 +19,9 @@ use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 /// Name of this renderer in the levelling cache — a measurement from a
 /// different renderer is a different measurement. Bump it when what happens
 /// between "activate" and "measure" changes.
-const ENGINE: &str = "rig-v3";
+// v4: delays and reverbs run in parallel with the dry, and build with every
+// param (algorithm, style, …) — same chains, different sound.
+const ENGINE: &str = "rig-v4";
 
 /// Settle time before a measurement: long enough for the compressors, gate
 /// and NAM state from the previous input to have gone, and for the delays and
