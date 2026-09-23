@@ -83,6 +83,8 @@
 // open_headless` and the browser worklet entry (signal-keys-worklet).
 pub mod amp_blend;
 pub mod time_stage;
+pub mod block_gate;
+pub mod tail_stage;
 pub mod api;
 pub mod assets;
 pub mod audio_soundsource;

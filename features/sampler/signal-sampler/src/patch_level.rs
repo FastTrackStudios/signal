@@ -452,10 +452,10 @@ mod tests {
             chain_hash: cache_key.to_string(),
             di_id: "di".to_string(),
             sample_rate: 48_000,
-            lufs: -24.0,
+            lufs: TARGET_LUFS - 6.0,
         });
         let hit = cache.lookup(cache_key, "di", 48_000).expect("inserted");
-        assert!((TARGET_LUFS - hit.lufs - 6.0).abs() < 1e-9, "−24 needs +6");
+        assert!((TARGET_LUFS - hit.lufs - 6.0).abs() < 1e-9, "6 dB under the target needs +6");
         // A second insert for the same chain replaces rather than accumulates.
         cache.insert(PatchLevelEntry {
             chain_hash: cache_key.to_string(),

@@ -23,7 +23,10 @@ use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 // param (algorithm, style, …) — same chains, different sound.
 // v5: the Time module's two delays, and its two reverbs, in parallel.
 // v6: the Tape delay lands on its time (it echoed 2.85× late).
-const ENGINE: &str = "rig-v6";
+// v7: blocks carry their own bypass (`block_gate`) and the patch level is
+// applied in the output stage — the same sound by design, re-measured to
+// prove it.
+const ENGINE: &str = "rig-v7";
 
 /// Settle time before a measurement: long enough for the compressors, gate
 /// and NAM state from the previous input to have gone, and for the delays and

@@ -696,7 +696,19 @@ impl ProfileRig {
             );
         }
         self.rig.set_input_trim_db(input_trim);
-        self.rig.set_output_trim_db(output_trim);
+        // The patch's level rides the switch (output stage, crossfaded, and
+        // kept by the outgoing patch's tail); the fader is the master's.
+        self.rig.set_patch_trim_db(output_trim);
+        // The chain arrives with its bypass already set — the patch's own,
+        // plus the global time bypass — rather than being corrected after it
+        // starts playing.
+        let mask: Vec<bool> = patch
+            .chain
+            .iter()
+            .filter(|b| b.has_backend())
+            .map(|b| b.bypassed || (self.fx_bypass && b.is_time_module()))
+            .collect();
+        self.rig.set_chain_bypass(id, &mask);
         self.rig.set_active(Some(id));
         self.active = Some(index);
         self.apply_fx_bypass(index);

@@ -328,13 +328,13 @@ impl BassRigBackend {
         }
     }
 
-    /// Re-apply the main-output trim: active preset base + master trim.
+    /// Re-apply the main-output fader: the master trim. (The preset's own
+    /// level is applied in the rig's output stage on activation.)
     fn apply_master_trim(&self) {
         let trim = *self.inner.master_trim.lock_ok();
         let guard = self.inner.rig.lock_ok();
         if let Some(prig) = guard.as_ref() {
-            let base = prig.active_patch().map_or(0.0, |p| p.output_trim_db);
-            prig.rig().set_output_trim_db(base + trim);
+            prig.rig().set_output_trim_db(trim);
         }
     }
 

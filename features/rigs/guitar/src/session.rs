@@ -1119,16 +1119,17 @@ impl GuitarRigBackend {
         );
     }
 
-    /// Re-apply the main-output trim: patch base + master trim + mute.
+    /// Re-apply the main-output fader: master trim + mute. (The patch's own
+    /// level is applied in the rig's output stage, where a switch crossfades
+    /// it and the outgoing patch's tail keeps its own.)
     fn apply_main_mute(&self) {
         let mute = self.headphone.lock_ok().main_mute;
         let trim = *self.master_trim.lock_ok();
         {
             let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
-                let base = prig.active_patch().map_or(0.0, |p| p.output_trim_db);
                 prig.rig()
-                    .set_output_trim_db(base + trim + if mute { -96.0 } else { 0.0 });
+                    .set_output_trim_db(trim + if mute { -96.0 } else { 0.0 });
             }
         }
     }
