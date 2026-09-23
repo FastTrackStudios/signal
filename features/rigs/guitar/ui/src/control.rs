@@ -415,9 +415,10 @@ const DELAY_COLORS: [&str; 2] = ["#3b82f6", "#6366f1"];
 const VERB_COLORS: [&str; 2] = ["#a78bfa", "#c084fc"];
 
 /// Tempo-division labels — `delay::TapDivision` order (Quarter, dotted 8th,
-/// 8th, triplet, 16th, golden ratio, silver ratio, free-running).
-const DIV_LABELS: [&str; 8] = [
-    "1/4", "1/8.", "1/8", "1/4T", "1/16", "Golden", "Silver", "Free",
+/// 8th, 8th triplet, 16th, golden ratio, silver ratio, free-running, then
+/// the long ones added after Free: dotted quarter, half, quarter triplet).
+const DIV_LABELS: [&str; 11] = [
+    "1/4", "1/8.", "1/8", "1/8T", "1/16", "Golden", "Silver", "Free", "1/4.", "1/2", "1/4T",
 ];
 
 /// What a delay block's left tap is locked to ("1/4"), or empty when it runs
@@ -433,7 +434,10 @@ fn div_label(b: &LiveBlock) -> String {
 /// Division → multiple of a quarter note, for the tap visualization
 /// (Free returns 0 → the caller falls back to the block's `time`).
 fn div_factor(idx: f32) -> f32 {
-    [1.0, 0.75, 0.5, 1.0 / 3.0, 0.25, 0.618, 0.414, 0.0][(idx as usize).min(7)]
+    [1.0, 0.75, 0.5, 1.0 / 3.0, 0.25, 0.618, 0.414, 0.0, 1.5, 2.0, 2.0 / 3.0]
+        .get(idx.max(0.0) as usize)
+        .copied()
+        .unwrap_or(0.0)
 }
 
 /// `delay::DelayStyle` order — the `TimeLine` MX machines.
@@ -1537,7 +1541,7 @@ fn ModGroupPanel(
                     div { class: "flex flex-col gap-0.5",
                         span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "Speed" }
                         Picker {
-                            options: ["1/4", "1/8.", "1/8", "1/4T", "1/16", "Golden", "Silver"]
+                            options: ["1/4", "1/8.", "1/8", "1/8T", "1/16", "Golden", "Silver"]
                                 .iter().map(|l| (*l).to_string()).collect::<Vec<String>>(),
                             selected: cur_div as u32,
                             size: PickerSize::Tiny,

@@ -26,7 +26,9 @@ use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 // v7: blocks carry their own bypass (`block_gate`) and the patch level is
 // applied in the output stage — the same sound by design, re-measured to
 // prove it.
-const ENGINE: &str = "rig-v7";
+// v8: reverb decay is a calibrated time on every engine (measured tables),
+// and the vintage spring no longer self-oscillates.
+const ENGINE: &str = "rig-v8";
 
 /// Settle time before a measurement: long enough for the compressors, gate
 /// and NAM state from the previous input to have gone, and for the delays and
