@@ -37,8 +37,7 @@ fn empty_slot(label: &str) -> Element {
     }
 }
 
-/// The one way a bypassed visualizer says so: an amber-outlined BYPASSED
-/// badge. `small` for a single lane inside a grouped panel; the full size is
+/// The one way a bypassed visualizer says so: a quiet grey BYPASSED badge. `small` for a single lane inside a grouped panel; the full size is
 /// drawn by [`ZoomPanel`] over a whole panel whose block is off.
 #[component]
 fn BypassedBadge(#[props(default)] small: bool) -> Element {
@@ -49,9 +48,9 @@ fn BypassedBadge(#[props(default)] small: bool) -> Element {
     };
     rsx! {
         span {
-            style: "{style} font-weight: 800; text-transform: uppercase; \
-                    color: #fbbf24; border: 1px solid rgba(251,191,36,0.45); \
-                    background: rgba(10,10,12,0.85); white-space: nowrap;",
+            style: "{style} font-weight: 600; text-transform: uppercase; \
+                    color: #8a8a92; border: 1px solid rgba(255,255,255,0.10); \
+                    background: rgba(10,10,12,0.7); white-space: nowrap;",
             "Bypassed"
         }
     }
