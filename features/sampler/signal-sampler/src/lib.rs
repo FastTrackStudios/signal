@@ -82,6 +82,7 @@
 // tree renderer + the keys lane machinery — see `keys_rig::KeysRig::
 // open_headless` and the browser worklet entry (signal-keys-worklet).
 pub mod amp_blend;
+pub mod time_stage;
 pub mod api;
 pub mod assets;
 pub mod audio_soundsource;

@@ -1174,6 +1174,8 @@ pub fn prepare_chain_with(
         .any(|b| b.name.eq_ignore_ascii_case(crate::amp_blend::AMP_R) && b.is_nam());
     let roles = crate::amp_blend::roles(&block_names, r_loaded);
     crate::amp_blend::wrap(&mut boxes, &roles, MAX_BLOCK);
+    // The Time module: its two delays in parallel, and its two reverbs.
+    crate::time_stage::wrap(&mut boxes, &block_names, MAX_BLOCK);
 
     Ok(PreparedChain {
         boxes,
