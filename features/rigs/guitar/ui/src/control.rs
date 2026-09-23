@@ -2271,8 +2271,13 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                 .cloned()
         })
     };
-    let (drive_pick, amp_pick, delay_pick, reverb_pick) =
-        (pick_of("Drive"), pick_of("Amp"), pick_of("Delay"), pick_of("Reverb"));
+    let (drive_pick, amp_pick, time_pick, delay_pick, reverb_pick) = (
+        pick_of("Drive"),
+        pick_of("Amp"),
+        pick_of("Time"),
+        pick_of("Delay"),
+        pick_of("Reverb"),
+    );
     let comp = find_block(&blocks, BlockType::Compressor, "Pre Comp");
     let post_comp = find_block(&blocks, BlockType::Compressor, "Post Comp");
     let comp_title = "Compressor";
@@ -2535,8 +2540,10 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                         }
                         if !bpre {
-                            // The Delay module and the Reverb module, side by side.
+                            // The Time module — a Delay pick and a Reverb pick — and
+                            // the two it references, side by side.
                             div { class: "flex gap-0", style: "height: 22px; width: 100%;",
+                                ModuleControls { kind: crate::library::Kind::TimeModules, pick: time_pick, style: "height: 22px; flex: 1 1 0%;" }
                                 ModuleControls { kind: crate::library::Kind::DelayModules, pick: delay_pick, style: "height: 22px; flex: 1 1 0%;" }
                                 ModuleControls { kind: crate::library::Kind::ReverbModules, pick: reverb_pick, style: "height: 22px; flex: 1 1 0%;" }
                             }

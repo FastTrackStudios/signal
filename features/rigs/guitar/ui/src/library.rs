@@ -51,12 +51,13 @@ pub enum Kind {
     /// Module presets, per module — what a row's ▾ on the board opens.
     AmpModules,
     DriveModules,
+    TimeModules,
     DelayModules,
     ReverbModules,
 }
 
 impl Kind {
-    const ALL: [Self; 11] = [
+    const ALL: [Self; 12] = [
         Self::Setlists,
         Self::Songs,
         Self::Profiles,
@@ -64,6 +65,7 @@ impl Kind {
         Self::Compositions,
         Self::AmpModules,
         Self::DriveModules,
+        Self::TimeModules,
         Self::DelayModules,
         Self::ReverbModules,
         Self::Presets,
@@ -71,7 +73,7 @@ impl Kind {
     ];
 
     /// The rail: no tag, then every kind.
-    const RAIL: [Self; 12] = [
+    const RAIL: [Self; 13] = [
         Self::All,
         Self::Setlists,
         Self::Songs,
@@ -80,6 +82,7 @@ impl Kind {
         Self::Compositions,
         Self::AmpModules,
         Self::DriveModules,
+        Self::TimeModules,
         Self::DelayModules,
         Self::ReverbModules,
         Self::Presets,
@@ -92,6 +95,7 @@ impl Kind {
         match self {
             Self::AmpModules => Some("Amp"),
             Self::DriveModules => Some("Drive"),
+            Self::TimeModules => Some("Time"),
             Self::DelayModules => Some("Delay"),
             Self::ReverbModules => Some("Reverb"),
             _ => None,
@@ -110,6 +114,7 @@ impl Kind {
             Self::Compositions => "Presets",
             Self::AmpModules => "Amp",
             Self::DriveModules => "Drive",
+            Self::TimeModules => "Time",
             Self::DelayModules => "Delay",
             Self::ReverbModules => "Reverb",
         }
@@ -128,6 +133,7 @@ impl Kind {
             Self::Compositions => "preset",
             Self::AmpModules => "amp preset",
             Self::DriveModules => "drive preset",
+            Self::TimeModules => "time preset",
             Self::DelayModules => "delay preset",
             Self::ReverbModules => "reverb preset",
         }
@@ -145,6 +151,7 @@ impl Kind {
             Self::Compositions => fts_chrome::Icon::Preset,
             Self::AmpModules => fts_chrome::Icon::Guitar,
             Self::DriveModules => fts_chrome::Icon::Power,
+            Self::TimeModules => fts_chrome::Icon::Refresh,
             Self::DelayModules => fts_chrome::Icon::Refresh,
             Self::ReverbModules => fts_chrome::Icon::Refresh,
         }
@@ -211,7 +218,7 @@ fn rows(
                 active: comp.active_preset.eq_ignore_ascii_case(&p.name),
             })
             .collect(),
-        Kind::AmpModules | Kind::DriveModules | Kind::DelayModules | Kind::ReverbModules => {
+        Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => {
             let module = kind.module().unwrap_or_default();
             comp.modules
                 .iter()
@@ -400,7 +407,7 @@ fn activate(rig: &Option<RigClient>, row: &Row, model: &PerformanceModel) -> boo
         Kind::Compositions => send(rig, move |r| async move {
             let _ = r.choose_preset(name, String::new()).await;
         }),
-        Kind::AmpModules | Kind::DriveModules | Kind::DelayModules | Kind::ReverbModules => {
+        Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => {
             let module = row.kind.module().unwrap_or_default().to_string();
             send(rig, move |r| async move {
                 let _ = r.choose_module(module, name, String::new()).await;
@@ -725,7 +732,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                 span { style: "font-size: 11px; color: {FAINT};", "of {model.profile_name}" }
                             }
                             div { style: "flex: 1;" }
-                            if !matches!(kind, Kind::Drives | Kind::All | Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::DelayModules | Kind::ReverbModules) {
+                            if !matches!(kind, Kind::Drives | Kind::All | Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules) {
                                 button {
                                     style: format!(
                                         "padding: 5px 11px; border-radius: 7px; cursor: pointer; font-size: 11px; \
@@ -959,7 +966,7 @@ fn Detail(
         })),
         // A song's name is edited with its key and tempo, below.
         Kind::Songs | Kind::Drives | Kind::All => None,
-        Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::DelayModules | Kind::ReverbModules => None,
+        Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => None,
     };
 
     rsx! {
@@ -1010,7 +1017,7 @@ fn Detail(
                     Some(preset) => rsx! { CompositionDetail { preset, comp: comp.clone() } },
                     None => rsx! {},
                 },
-                Kind::AmpModules | Kind::DriveModules | Kind::DelayModules | Kind::ReverbModules => match comp.modules.get(row.idx).cloned() {
+                Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => match comp.modules.get(row.idx).cloned() {
                     Some(entry) => rsx! { ModuleDetail { entry, comp: comp.clone() } },
                     None => rsx! {},
                 },
@@ -2064,7 +2071,7 @@ fn NewForm(
             Kind::Patches => patches.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
             Kind::Presets => presets.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
             Kind::Drives | Kind::All => false,
-            Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::DelayModules | Kind::ReverbModules => false,
+            Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => false,
         }
     };
     let n = name();
@@ -2125,7 +2132,7 @@ fn NewForm(
                     });
                 }
                 Kind::Drives | Kind::All => return,
-                Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::DelayModules | Kind::ReverbModules => {
+                Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => {
                     return;
                 }
             }

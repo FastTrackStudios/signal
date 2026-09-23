@@ -4823,12 +4823,23 @@ impl Rig for GuitarRigBackend {
         } else {
             snapshot
         };
+        // The modules this snapshot plays (a Time snapshot's Delay and
+        // Reverb): the patch's own picks of those go, so the pick takes.
+        let subs: Vec<String> = found
+            .snapshots
+            .iter()
+            .find(|s| s.name.eq_ignore_ascii_case(&snapshot))
+            .map(|s| s.modules.iter().map(|m| m.module.clone()).collect())
+            .unwrap_or_default();
         let choice = crate::profiles::ModuleChoiceDef {
             module: found.module.clone(),
             preset: found.name.clone(),
             snapshot,
         };
         self.edit_live_patch(move |patch| {
+            patch
+                .modules
+                .retain(|m| !subs.iter().any(|s| s.eq_ignore_ascii_case(&m.module)));
             match patch
                 .modules
                 .iter_mut()

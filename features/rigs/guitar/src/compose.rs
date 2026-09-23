@@ -108,6 +108,12 @@ pub struct ModuleSnapshotDef {
     /// Block presets on this module's blocks (applied before `overrides`).
     #[facet(default)]
     pub blocks: Vec<BlockChoiceDef>,
+    /// Other modules this snapshot plays — the Time module's snapshots are
+    /// a Delay module pick and a Reverb module pick. A patch or preset that
+    /// picks this snapshot gets these picks too, unless it picks one of
+    /// those modules itself ([`module_picks`]).
+    #[facet(default)]
+    pub modules: Vec<ModuleChoiceDef>,
     #[facet(default)]
     pub overrides: Vec<OverrideDef>,
 }
@@ -241,12 +247,16 @@ fn snapshot<'a, T>(list: &'a [T], name: &str, name_of: impl Fn(&T) -> &str) -> O
 /// patch's own picks replacing them module by module.
 #[must_use]
 pub fn module_picks(comp: &Compositions, patch: &PatchDef) -> Vec<ModuleChoiceDef> {
-    let mut picks: Vec<ModuleChoiceDef> = comp
-        .preset(&patch.rig_preset)
-        .and_then(|p| snapshot(&p.snapshots, &patch.snapshot, |s| &s.name))
-        .map(|s| s.modules.clone())
-        .unwrap_or_default();
-    for own in &patch.modules {
+    let mut picks: Vec<ModuleChoiceDef> = expand_picks(
+        comp,
+        comp.preset(&patch.rig_preset)
+            .and_then(|p| snapshot(&p.snapshots, &patch.snapshot, |s| &s.name))
+            .map(|s| s.modules.clone())
+            .unwrap_or_default(),
+    );
+    // The patch's own picks, each with the modules it plays (a Time pick
+    // brings its Delay and Reverb), over the preset's.
+    for own in &expand_picks(comp, patch.modules.clone()) {
         match picks
             .iter_mut()
             .find(|p| p.module.eq_ignore_ascii_case(&own.module))
@@ -291,6 +301,28 @@ pub fn block_picks(comp: &Compositions, patch: &PatchDef) -> Vec<BlockChoiceDef>
         snap.blocks.iter().for_each(&mut put);
     }
     patch.blocks.iter().for_each(&mut put);
+    out
+}
+
+/// A layer of module picks with the picks their snapshots play added (a
+/// Time snapshot's Delay and Reverb), except for modules the layer picks
+/// itself — an explicit pick at the same level wins.
+#[must_use]
+pub fn expand_picks(comp: &Compositions, layer: Vec<ModuleChoiceDef>) -> Vec<ModuleChoiceDef> {
+    let mut out = layer.clone();
+    for p in &layer {
+        let Some(snap) = comp
+            .module(&p.module, &p.preset)
+            .and_then(|m| snapshot(&m.snapshots, &p.snapshot, |s| &s.name))
+        else {
+            continue;
+        };
+        for sub in &snap.modules {
+            if !out.iter().any(|o| o.module.eq_ignore_ascii_case(&sub.module)) {
+                out.push(sub.clone());
+            }
+        }
+    }
     out
 }
 
@@ -513,6 +545,41 @@ mod tests {
         p.snapshot = snapshot.into();
         p.overrides.clear();
         def
+    }
+
+    /// A Time snapshot plays the Delay and Reverb picks it references; a
+    /// patch's own Delay pick still wins over the one its Time brings.
+    #[test]
+    fn a_time_pick_brings_its_delay_and_reverb() {
+        let snap = |name: &str, modules: Vec<crate::profiles::ModuleChoiceDef>| ModuleSnapshotDef {
+            name: name.into(),
+            modules,
+            ..ModuleSnapshotDef::default()
+        };
+        let c = Compositions {
+            modules: vec![ModulePresetDef {
+                module: "Time".into(),
+                name: "Rhythmic".into(),
+                snapshots: vec![snap(
+                    "Dotted",
+                    vec![choice("Delay", "Rhythmic", "Dotted Eighth"), choice("Reverb", "Hall", "Hall")],
+                )],
+            }],
+            ..Compositions::default()
+        };
+        let mut patch = crate::profiles::PatchDef {
+            modules: vec![choice("Time", "Rhythmic", "Dotted")],
+            ..snapshot_patch(&worship_def(), "", "", "p").expect("a patch")
+        };
+        let picks = module_picks(&c, &patch);
+        let of = |m: &str| picks.iter().find(|p| p.module == m).map(|p| p.snapshot.clone());
+        assert_eq!(of("Delay").as_deref(), Some("Dotted Eighth"));
+        assert_eq!(of("Reverb").as_deref(), Some("Hall"));
+        patch.modules.push(choice("Delay", "Slapback", "Slap"));
+        let picks = module_picks(&c, &patch);
+        let of = |m: &str| picks.iter().find(|p| p.module == m).map(|p| p.snapshot.clone());
+        assert_eq!(of("Delay").as_deref(), Some("Slap"), "the patch's own Delay wins");
+        assert_eq!(of("Reverb").as_deref(), Some("Hall"));
     }
 
     /// A snapshot's gain bias lifts its loudness target; one without, or a
