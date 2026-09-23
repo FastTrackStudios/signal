@@ -304,6 +304,37 @@ pub fn block_picks(comp: &Compositions, patch: &PatchDef) -> Vec<BlockChoiceDef>
     out
 }
 
+/// The chain blocks a module snapshot sets — through its block presets and
+/// overrides, and those of the modules it references (a Time snapshot's
+/// Delay and Reverb) — by block name.
+#[must_use]
+pub fn blocks_set_by(comp: &Compositions, module: &str, preset: &str, snapshot_name: &str) -> Vec<String> {
+    fn walk(comp: &Compositions, m: &str, p: &str, s: &str, depth: u8, out: &mut Vec<String>) {
+        if depth > 4 {
+            return;
+        }
+        let Some(snap) = comp
+            .module(m, p)
+            .and_then(|mp| snapshot(&mp.snapshots, s, |x| &x.name))
+        else {
+            return;
+        };
+        let mut add = |b: &str| {
+            if !b.is_empty() && !out.iter().any(|x| x.eq_ignore_ascii_case(b)) {
+                out.push(b.to_string());
+            }
+        };
+        snap.blocks.iter().for_each(|c| add(&c.block));
+        snap.overrides.iter().for_each(|o| add(&o.block));
+        for sub in &snap.modules {
+            walk(comp, &sub.module, &sub.preset, &sub.snapshot, depth + 1, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(comp, module, preset, snapshot_name, 0, &mut out);
+    out
+}
+
 /// A layer of module picks with the picks their snapshots play added (a
 /// Time snapshot's Delay and Reverb), except for modules the layer picks
 /// itself — an explicit pick at the same level wins.

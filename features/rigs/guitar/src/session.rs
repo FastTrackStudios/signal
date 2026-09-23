@@ -4831,12 +4831,20 @@ impl Rig for GuitarRigBackend {
             .find(|s| s.name.eq_ignore_ascii_case(&snapshot))
             .map(|s| s.modules.iter().map(|m| m.module.clone()).collect())
             .unwrap_or_default();
+        // Every block it sets (through the modules it references too): the
+        // patch's own block presets and hand edits on those blocks go, or
+        // they would keep winning over the module just picked — a delay's
+        // old time edit kept playing through every Time preset.
+        let blocks = crate::compose::blocks_set_by(&comp, &found.module, &found.name, &snapshot);
         let choice = crate::profiles::ModuleChoiceDef {
             module: found.module.clone(),
             preset: found.name.clone(),
             snapshot,
         };
         self.edit_live_patch(move |patch| {
+            let set_here = |b: &str| blocks.iter().any(|x| x.eq_ignore_ascii_case(b));
+            patch.overrides.retain(|o| !set_here(&o.block));
+            patch.blocks.retain(|c| !set_here(&c.block));
             patch
                 .modules
                 .retain(|m| !subs.iter().any(|s| s.eq_ignore_ascii_case(&m.module)));
