@@ -4790,6 +4790,13 @@ impl Rig for GuitarRigBackend {
             preset: found.name.clone(),
         };
         self.edit_live_patch(move |patch| {
+            // Loading a preset onto a block replaces what was dialled on it
+            // by hand: the patch's own overrides of that block go, or they
+            // would keep winning over the preset just picked (an old
+            // tap-division edit kept a "Dotted Eighth" playing eighths).
+            patch
+                .overrides
+                .retain(|o| !o.block.eq_ignore_ascii_case(&choice.block));
             match patch
                 .blocks
                 .iter_mut()
