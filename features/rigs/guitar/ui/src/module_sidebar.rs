@@ -53,11 +53,22 @@ pub fn ModuleSidebar(revision: u64) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     // Every hook before any early return: the hook order must not depend on
     // whether a module is selected.
+    //
+    // What the resource re-reads on. A prop is not reactive — a resource
+    // re-runs only on the signals it reads — so the model's revision is
+    // mirrored into one, and every pick made here bumps `refresh` once its
+    // call has landed: the lit preset follows the click.
+    let mut rev = use_signal(|| revision);
+    if *rev.peek() != revision {
+        rev.set(revision);
+    }
+    let refresh = use_signal(|| 0u32);
     let comp = use_resource({
         let rig = rig.clone();
         move || {
             let rig = rig.clone();
-            let _ = revision;
+            let _ = rev();
+            let _ = refresh();
             let _ = selected();
             async move {
                 match rig {
@@ -72,7 +83,7 @@ pub fn ModuleSidebar(revision: u64) -> Element {
     };
     let comp = comp.read().clone().flatten();
     if let Selection::Block { name, block_type } = &selection {
-        return rsx! { BlockPresets { block: name.clone(), block_type: block_type.clone(), comp, on_close: move |()| selected.set(None) } };
+        return rsx! { BlockPresets { block: name.clone(), block_type: block_type.clone(), comp, refresh, on_close: move |()| selected.set(None) } };
     }
     let Selection::Module(module) = selection else {
         return rsx! {};
@@ -152,7 +163,11 @@ pub fn ModuleSidebar(revision: u64) -> Element {
                                                     onclick: move |_| {
                                                         let (m, p, s) = (m.clone(), p.clone(), s.clone());
                                                         if let Some(r) = rig.clone() {
-                                                            spawn(async move { let _ = r.choose_module(m, p, s).await; });
+                                                            let mut refresh = refresh;
+                                                            spawn(async move {
+                                                                let _ = r.choose_module(m, p, s).await;
+                                                                refresh += 1;
+                                                            });
                                                         }
                                                     },
                                                     "{snap}"
@@ -180,6 +195,8 @@ fn BlockPresets(
     block: String,
     block_type: String,
     comp: Option<signal_guitar_proto::CompositionModel>,
+    /// Bumped once a pick has landed, so the sidebar re-reads what plays.
+    refresh: Signal<u32>,
     on_close: EventHandler<()>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -245,7 +262,11 @@ fn BlockPresets(
                                 onclick: move |_| {
                                     let (b, name) = (b.clone(), name.clone());
                                     if let Some(r) = rig.clone() {
-                                        spawn(async move { let _ = r.choose_block(b, name).await; });
+                                        let mut refresh = refresh;
+                                        spawn(async move {
+                                            let _ = r.choose_block(b, name).await;
+                                            refresh += 1;
+                                        });
                                     }
                                 },
                                 "{p.name}"
