@@ -221,14 +221,17 @@ pub fn PitchEditor(
                                     }
                                 },
                             }
-                            // The edited pitch contour through the blob.
-                            polyline {
-                                points: "{poly}",
-                                fill: "none",
-                                stroke: if is_sel { "#f0f9ff" } else { "#bae6fd" },
-                                stroke_width: "1.5",
-                                stroke_opacity: "0.9",
-                                pointer_events: "none",
+                            // The edited pitch contour through the blob (a line needs
+                            // two points; fewer is invalid SVG).
+                            if b.curve.len() >= 2 {
+                                polyline {
+                                    points: "{poly}",
+                                    fill: "none",
+                                    stroke: if is_sel { "#f0f9ff" } else { "#bae6fd" },
+                                    stroke_width: "1.5",
+                                    stroke_opacity: "0.9",
+                                    pointer_events: "none",
+                                }
                             }
                         }
                     }

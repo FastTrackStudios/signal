@@ -145,8 +145,8 @@ pub fn AutomationLane(props: AutomationLaneProps) -> Element {
                         }
                     }
 
-                    // Automation curve
-                    if !points_str.is_empty() {
+                    // Automation curve (a line needs two breakpoints).
+                    if props.lane.points.len() >= 2 {
                         polyline {
                             points: "{points_str}",
                             fill: "none",

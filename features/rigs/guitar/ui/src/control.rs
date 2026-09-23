@@ -1424,13 +1424,29 @@ fn PitchStrip() -> Element {
     };
     // Cents → y in a 0..100 box, sharp up.
     let y = |c: f32| 50.0 - c.clamp(-50.0, 50.0);
-    let points: String = trace
-        .read()
-        .iter()
-        .enumerate()
-        .filter(|(_, c)| c.is_finite())
-        .map(|(i, c)| format!("{:.1},{:.1} ", i as f32 * (40.0 / 47.0), y(*c)))
-        .collect();
+    // One line per run of readings: a gap (no note) breaks the line rather
+    // than joining across it, and a run too short to be a line is not drawn
+    // — an empty or one-point polyline is invalid SVG, and the renderer
+    // warns about it on every repaint (most of the time: the tuner is idle).
+    let segments: Vec<String> = {
+        let mut out = Vec::new();
+        let mut run: Vec<String> = Vec::new();
+        let flush = |run: &mut Vec<String>, out: &mut Vec<String>| {
+            if run.len() >= 2 {
+                out.push(run.join(" "));
+            }
+            run.clear();
+        };
+        for (i, c) in trace.read().iter().enumerate() {
+            if c.is_finite() {
+                run.push(format!("{:.1},{:.1}", i as f32 * (40.0 / 47.0), y(*c)));
+            } else {
+                flush(&mut run, &mut out);
+            }
+        }
+        flush(&mut run, &mut out);
+        out
+    };
     let needle = y(r.cents);
     rsx! {
         div { style: "display: flex; flex-direction: column; align-items: center; height: 100%; padding: 18px 4px 6px; gap: 4px; min-height: 0;",
@@ -1455,7 +1471,9 @@ fn PitchStrip() -> Element {
                     view_box: "0 0 40 100",
                     preserve_aspect_ratio: "none",
                     line { x1: "0", y1: "50", x2: "40", y2: "50", stroke: "#27272a", stroke_width: "1" }
-                    polyline { points: "{points}", fill: "none", stroke: "{accent}", stroke_width: "1.5", stroke_linejoin: "round" }
+                    for points in segments {
+                        polyline { points: "{points}", fill: "none", stroke: "{accent}", stroke_width: "1.5", stroke_linejoin: "round" }
+                    }
                 }
             }
         }
@@ -1511,8 +1529,11 @@ fn GateViz(block: LiveBlock, level: Signal<f32>) -> Element {
                 style: "flex: 1 1 0%; width: 100%; min-height: 0; background: #0a0a0d; border: 1px solid #26262b; border-radius: 4px;",
                 view_box: "0 0 100 100",
                 preserve_aspect_ratio: "none",
-                // Gated region: everything under the threshold.
-                rect { x: "0", y: "{ty}", width: "100", height: "{100.0 - ty}", fill: "rgba(113,113,122,0.10)" }
+                // Gated region: everything under the threshold (none at the
+                // −90 dB floor — a zero-height rect is invalid SVG).
+                if ty < 99.95 {
+                    rect { x: "0", y: "{ty}", width: "100", height: "{100.0 - ty}", fill: "rgba(113,113,122,0.10)" }
+                }
                 for (x, top, above) in bars {
                     rect {
                         x: "{x}", y: "{top}", width: "{bw}", height: "{100.0 - top}",
