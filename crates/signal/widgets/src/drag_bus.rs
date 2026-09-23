@@ -10,8 +10,8 @@
 //! bubbles to: a control [`begin`](DragBus::begin)s a drag with a handler, and
 //! the root forwards each move and the release to it
 //! ([`DragBus::root_move`] / [`DragBus::root_up`]) wherever in the window the
-//! pointer is. A move with no button held ends the drag too — the release
-//! happened outside the window, where nothing saw it.
+//! pointer is. Only a release ends a drag: the button state a move carries
+//! is not reliable here (a check on it ended every drag on its first move).
 
 use std::rc::Rc;
 
@@ -74,10 +74,6 @@ impl DragBus {
     pub fn root_move(self, e: &PointerEvent) {
         let handler = self.active.read().clone();
         let Some(h) = handler else { return };
-        if e.held_buttons().is_empty() {
-            self.end();
-            return;
-        }
         let p = e.client_coordinates();
         h(DragEvent::Move { x: p.x, y: p.y });
     }

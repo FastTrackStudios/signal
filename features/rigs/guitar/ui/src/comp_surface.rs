@@ -18,7 +18,6 @@ use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{BlockParam, LiveBlock};
 
-use dioxus::html::input_data::MouseButton;
 
 use crate::knob::{Knob, KnobSize};
 
@@ -179,6 +178,29 @@ fn css_height(metrics: &Metrics) -> f64 {
     f64::from(metrics.get().css_height())
 }
 
+/// Write what a drag at graph height `y` means for `mode`.
+fn drag_write(rig: Option<RigClient>, id: String, mode: CompDrag, y: f32) {
+    let Some(r) = rig else { return };
+    match mode {
+        CompDrag::Threshold => {
+            let db = (-(y / H as f32) * RANGE_DB as f32).clamp(-60.0, 0.0);
+            spawn(async move {
+                let _ = r.write_param(id, "threshold".into(), db).await;
+            });
+        }
+        CompDrag::Ratio(y0, r0) => {
+            // Drag down = more ratio (harder tilt). A doubling per eighth of
+            // the panel: at a sixth it took a twitch to cross the whole
+            // 1:1..20:1 range.
+            let span = H as f32 / 8.0;
+            let ratio = (r0 * ((y - y0) / span).exp2()).clamp(1.0, 20.0);
+            spawn(async move {
+                let _ = r.write_param(id, "ratio".into(), ratio).await;
+            });
+        }
+    }
+}
+
 fn graph_y(metrics: &Metrics, element_y: f64) -> Option<f32> {
     let h = css_height(metrics);
     if h < 1.0 {
@@ -251,6 +273,7 @@ pub fn CompSurface(
     // the drag. `eq_graph` hit the same thing and says so in its own source.
     let metrics = use_hook(comp_ui::viz::MetricsHandle::new);
     let mut dragging = use_signal(|| None::<CompDrag>);
+    let bus = signal_widgets::DragBus::try_use();
     // Whether the pointer is close enough to the threshold to take it. A
     // control you can grab should look like one before you try.
     let mut hot = use_signal(|| false);
@@ -356,19 +379,42 @@ pub fn CompSurface(
                 onpointerdown: {
                     let ratio0 = ratio;
                     let metrics = metrics.clone();
+                    let rig = rig.clone();
+                    let id = block.id.clone();
                     move |e: PointerEvent| {
                         let Some(y) = graph_y(&metrics, e.element_coordinates().y) else {
                             return;
                         };
                         let ty = db_to_y(f64::from(thr), H) as f32;
-                        if (y - ty).abs() < GRAB_PX {
-                            dragging.set(Some(CompDrag::Threshold));
+                        let mode = if (y - ty).abs() < GRAB_PX {
+                            CompDrag::Threshold
                         } else if y < ty {
                             // Above the threshold line = the compressed
                             // region — drag tilts the slope.
-                            dragging.set(Some(CompDrag::Ratio(y, ratio0)));
-                        }
+                            CompDrag::Ratio(y, ratio0)
+                        } else {
+                            return;
+                        };
+                        dragging.set(Some(mode));
                         e.prevent_default();
+                        // Follow the drag anywhere in the window: the app
+                        // root forwards moves in window coordinates, turned
+                        // back into this svg's with the offset measured now.
+                        if let Some(bus) = bus {
+                            let off = e.client_coordinates().y - e.element_coordinates().y;
+                            let (metrics, rig, id) = (metrics.clone(), rig.clone(), id.clone());
+                            bus.begin(move |ev| match ev {
+                                signal_widgets::DragEvent::Move { y, .. } => {
+                                    if let Some(gy) = graph_y(&metrics, y - off) {
+                                        drag_write(rig.clone(), id.clone(), mode, gy);
+                                    }
+                                }
+                                signal_widgets::DragEvent::End => {
+                                    let mut d = dragging;
+                                    d.set(None);
+                                }
+                            });
+                        }
                     }
                 },
                 onpointermove: {
@@ -389,32 +435,11 @@ pub fn CompSurface(
                             }
                             return;
                         };
-                        // Released outside the panel: end the gesture on
-                        // re-entry rather than resuming it (eq_graph idiom).
-                        if !e.held_buttons().contains(MouseButton::Primary) {
-                            dragging.set(None);
-                            return;
-                        }
-                        let Some(r) = rig.clone() else { return };
-                        let id = id.clone();
-                        match mode {
-                            CompDrag::Threshold => {
-                                let db = (-(y / H as f32) * RANGE_DB as f32).clamp(-60.0, 0.0);
-                                spawn(async move {
-                                    let _ = r.write_param(id, "threshold".into(), db).await;
-                                });
-                            }
-                            CompDrag::Ratio(y0, r0) => {
-                                // Drag down = more ratio (harder tilt). A
-                                // doubling per eighth of the panel: at a
-                                // sixth it took a twitch to cross the whole
-                                // 1:1..20:1 range.
-                                let span = H as f32 / 8.0;
-                                let ratio = (r0 * ((y - y0) / span).exp2()).clamp(1.0, 20.0);
-                                spawn(async move {
-                                    let _ = r.write_param(id, "ratio".into(), ratio).await;
-                                });
-                            }
+                        // With a drag bus the root drives the drag (and ends
+                        // it on release); this is the fallback for a host
+                        // without one.
+                        if bus.is_none() {
+                            drag_write(rig.clone(), id.clone(), mode, y);
                         }
                     }
                 },

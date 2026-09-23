@@ -75,6 +75,10 @@ pub fn Picker(
 ) -> Element {
     let mut open = use_signal(|| false);
     let (font, height, pad) = size.metrics();
+    // A menu drawn in here is clipped by any panel that clips its overflow;
+    // with a host above, the app root draws it instead.
+    let host = crate::popup::PopupHost::try_use();
+    let mut button_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
 
     let current = options
         .get(selected as usize)
@@ -126,15 +130,45 @@ pub fn Picker(
                         color: {label_colour}; cursor: {cursor}; \
                         text-align: left; overflow: hidden; white-space: nowrap;",
                 disabled: !interactive,
+                onmounted: move |e| button_el.set(Some(e.data())),
                 // The board's chunks are themselves draggable faders; a press
                 // on the picker must not also move the control behind it.
                 onpointerdown: move |e: PointerEvent| e.stop_propagation(),
                 onclick: move |e: MouseEvent| {
                     e.stop_propagation();
-                    if interactive {
-                        let was = *open.peek();
-                        open.set(!was);
+                    if !interactive {
+                        return;
                     }
+                    let was = *open.peek();
+                    if was {
+                        open.set(false);
+                        if let Some(h) = host {
+                            h.close();
+                        }
+                        return;
+                    }
+                    let (Some(h), Some(el)) = (host, button_el()) else {
+                        open.set(true);
+                        return;
+                    };
+                    let options = options.clone();
+                    spawn(async move {
+                        let Ok(r) = el.get_client_rect().await else { return };
+                        open.set(true);
+                        h.open(
+                            r.origin.x,
+                            r.origin.y + r.height() + 2.0,
+                            r.width(),
+                            move || menu(&options, selected, font, move |i| {
+                                h.close();
+                                on_select.call(i);
+                            }),
+                            move || {
+                                let mut o = open;
+                                o.set(false);
+                            },
+                        );
+                    });
                 },
                 span {
                     // No `text-overflow` on Blitz — a long name clips.
@@ -146,7 +180,7 @@ pub fn Picker(
                 }
             }
 
-            if open() {
+            if open() && host.is_none() {
                 div {
                     style: "position: absolute; top: calc(100% + 2px); left: 0; z-index: 91; \
                             min-width: 100%; \
@@ -175,6 +209,41 @@ pub fn Picker(
                             "{label}"
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// The open list, as the popup host draws it.
+fn menu(
+    options: &[String],
+    selected: u32,
+    font: &'static str,
+    pick: impl Fn(u32) + Clone + 'static,
+) -> Element {
+    rsx! {
+        div {
+            style: "display: flex; flex-direction: column; \
+                    border: 1px solid #3f3f46; border-radius: 4px; \
+                    background-color: #131317; \
+                    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);",
+            for (i, label) in options.iter().enumerate() {
+                button {
+                    key: "{i}",
+                    style: "appearance: none; border: none; \
+                            background-color: {row_bg(i as u32 == selected)}; \
+                            color: {row_fg(i as u32 == selected)}; \
+                            font-size: {font}; padding: 4px 9px; text-align: left; \
+                            white-space: nowrap; cursor: pointer;",
+                    onclick: {
+                        let pick = pick.clone();
+                        move |e: MouseEvent| {
+                            e.stop_propagation();
+                            pick(i as u32);
+                        }
+                    },
+                    "{label}"
                 }
             }
         }

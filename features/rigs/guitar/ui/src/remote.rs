@@ -78,6 +78,9 @@ pub fn GuitarRigRemote() -> Element {
     // Drags that outlive their control: every knob, fader and threshold
     // below routes its moves through the root (Blitz has no pointer capture).
     let drag_bus = signal_widgets::DragBus::provide();
+    // Menus drawn at the root, over everything: a panel that clips its
+    // overflow cannot cut them off (Blitz has no `fixed`, no portals).
+    signal_widgets::PopupHost::provide();
     // Callbacks made once per site, not once per render (see `stable`).
     let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -352,6 +355,9 @@ pub fn GuitarRigRemote() -> Element {
                     }
                 }
             },
+            // Where menus draw (see `PopupHost`): above everything via its
+            // z-index, so first among the children is fine.
+            signal_widgets::PopupLayer {}
             // The bar — the app's and the rig's in one: crumbs, the rig's own
             // controls, the window's drag space and controls.
             header {

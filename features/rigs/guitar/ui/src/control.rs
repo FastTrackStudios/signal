@@ -649,6 +649,10 @@ fn AlgoPicker(
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut open = use_signal(|| false);
+    // The grid is drawn by the app root when it can be: inside the panel it
+    // was clipped by the panel's edge, most of the algorithms out of sight.
+    let host = signal_widgets::PopupHost::try_use();
+    let mut button_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
     let current = options
         .get(value as usize)
         .copied()
@@ -658,10 +662,52 @@ fn AlgoPicker(
         // `position: fixed`. Closes when the pointer leaves the pair.
         div {
             style: "position: relative;",
-            onmouseleave: move |_| open.set(false),
+            onmouseleave: move |_| {
+                if host.is_none() {
+                    open.set(false);
+                }
+            },
         button {
             class: "flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 hover:bg-accent/30",
-            onclick: move |_| open.toggle(),
+            onmounted: move |e| button_el.set(Some(e.data())),
+            onclick: {
+                let rig = rig.clone();
+                let block_id = block_id.clone();
+                let options = options.clone();
+                let accent = accent.clone();
+                move |_| {
+                    let (Some(h), Some(el)) = (host, button_el()) else {
+                        open.toggle();
+                        return;
+                    };
+                    if open() {
+                        h.close();
+                        return;
+                    }
+                    let (rig, block_id, options, accent) =
+                        (rig.clone(), block_id.clone(), options.clone(), accent.clone());
+                    spawn(async move {
+                        let Ok(r) = el.get_client_rect().await else { return };
+                        open.set(true);
+                        h.open(
+                            r.origin.x,
+                            r.origin.y + r.height() + 4.0,
+                            260.0,
+                            move || algo_grid(&options, value as usize, &accent, {
+                                let (rig, block_id) = (rig.clone(), block_id.clone());
+                                move |i| {
+                                    send_param(&rig, &block_id, name, i as f32);
+                                    h.close();
+                                }
+                            }),
+                            move || {
+                                let mut o = open;
+                                o.set(false);
+                            },
+                        );
+                    });
+                }
+            },
             span {
                 class: "text-[11px] font-bold tracking-wide",
                 style: "color: {accent};",
@@ -671,7 +717,7 @@ fn AlgoPicker(
                 fts_chrome::Glyph { icon: fts_chrome::Icon::ChevronDown, size: 10 }
             }
         }
-        if open() {
+        if open() && host.is_none() {
             div {
                 style: "position: absolute; top: 100%; left: 0; z-index: 60; padding-top: 4px;",
                 div {
@@ -700,6 +746,33 @@ fn AlgoPicker(
                 }
             }
         }
+        }
+    }
+}
+
+/// The algorithm grid, as the popup host draws it.
+fn algo_grid(
+    options: &[&'static str],
+    current: usize,
+    accent: &str,
+    pick: impl Fn(usize) + Clone + 'static,
+) -> Element {
+    rsx! {
+        div {
+            class: "grid grid-cols-3 gap-1 p-2 rounded-lg border border-border bg-card",
+            style: "width: 260px; box-shadow: 0 12px 32px #000c;",
+            for (i, o) in options.iter().enumerate() {
+                button {
+                    key: "{i}",
+                    class: if i == current { "rounded px-3 py-2 text-xs font-bold" } else { "rounded px-3 py-2 text-xs text-muted-foreground border border-border hover:bg-accent/40" },
+                    style: if i == current { format!("background-color: {accent}; color: #000;") } else { String::new() },
+                    onclick: {
+                        let pick = pick.clone();
+                        move |_| pick(i)
+                    },
+                    "{o}"
+                }
+            }
         }
     }
 }
