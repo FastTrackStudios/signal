@@ -111,6 +111,10 @@ mod mobile_view;
 #[expect(dead_code)]
 #[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
 mod rig_engine;
+// `--menubar`: Signal's status item — every running engine and app, and a
+// way to stop each, whether or not a window is open.
+#[cfg(all(target_os = "macos", feature = "signal"))]
+mod menubar;
 // The macOS menu bar: audio readout + Settings… ⌘, (reads the embedded rig).
 #[cfg(all(target_os = "macos", feature = "signal-guitar"))]
 mod mac_menu;
@@ -144,6 +148,11 @@ fn main() {
     #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
     if std::env::args().skip(1).any(|a| a == "--engine") {
         engine_main::run();
+        return;
+    }
+    #[cfg(all(target_os = "macos", feature = "signal"))]
+    if std::env::args().skip(1).any(|a| a == "--menubar") {
+        menubar::run();
         return;
     }
 
