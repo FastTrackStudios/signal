@@ -1658,6 +1658,7 @@ impl GuitarRigBackend {
                     preset: Self::asset_stem(block.asset_path()),
                     options: Vec::new(),
                     option: 0,
+                    output_level_db: None,
                     overridden: false,
                 }
             })
@@ -2117,6 +2118,61 @@ impl GuitarRigBackend {
     /// Rebuild the mirror of the active patch's FX chain and (re-)apply each
     /// block's initial bypass to the engine (activation re-enables all slots,
     /// so the off-by-default blocks must be re-bypassed here).
+    /// Where a NAM block's Output Level is stored, for the active patch.
+    fn level_home(
+        comp: &crate::compose::Compositions,
+        patch: Option<&crate::profiles::PatchDef>,
+        block: &RigBlock,
+    ) -> Option<LevelHome> {
+        if block.nam.is_empty() {
+            return None;
+        }
+        match block.block_type {
+            BlockType::Drive | BlockType::Boost => Some(LevelHome::Drive {
+                nam: block.nam.clone(),
+            }),
+            BlockType::Amp => {
+                let patch = patch?;
+                let second = block.name.eq_ignore_ascii_case("Amp R");
+                if patch.rig_preset.is_empty() {
+                    let pool = if second { &patch.preset2 } else { &patch.preset };
+                    return Some(LevelHome::Pool { name: pool.clone() });
+                }
+                crate::compose::module_picks(comp, patch)
+                    .into_iter()
+                    .find(|m| m.module.eq_ignore_ascii_case("Amp"))
+                    .map(|m| LevelHome::Amp {
+                        preset: m.preset,
+                        snapshot: m.snapshot,
+                        second,
+                    })
+            }
+            _ => None,
+        }
+    }
+
+    /// The Output Level stored at `home`.
+    fn stored_level(
+        comp: &crate::compose::Compositions,
+        drives: &[crate::profiles::DrivePresetDef],
+        pool: &[crate::profiles::PresetDef],
+        home: &LevelHome,
+    ) -> Option<f32> {
+        match home {
+            LevelHome::Amp { preset, snapshot, second } => comp
+                .module("Amp", preset)?
+                .snapshots
+                .iter()
+                .find(|s| s.name.eq_ignore_ascii_case(snapshot))
+                .map(|s| if *second { s.level2_db } else { s.level_db }),
+            LevelHome::Pool { name } => pool
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(name))
+                .map(|p| p.level_db),
+            LevelHome::Drive { nam } => Some(crate::nodes::drive_option_level(drives, nam)),
+        }
+    }
+
     fn resync_blocks(&self) {
         let comp = RigLibrary::load_compositions();
         // No engine to mirror — build the chain the definition describes.
@@ -2127,6 +2183,23 @@ impl GuitarRigBackend {
         let mut out = Vec::new();
         // The active patch's overrides, read once: what the player has moved
         // away from the chain as built.
+        // What the Output Levels are read from — taken before the rig lock
+        // below (LOCK ORDER: rig before profile_def; never both at once here).
+        let (active_def, level_drives, level_pool) = {
+            let active = self
+                .rig
+                .lock_ok()
+                .as_ref()
+                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()));
+            let def = self.profile_def.lock_ok();
+            let patch = active.and_then(|name| {
+                def.patches
+                    .iter()
+                    .find(|p| p.name.eq_ignore_ascii_case(&name))
+                    .cloned()
+            });
+            (patch, self.drive_presets.lock_ok().clone(), def.presets.clone())
+        };
         let active_overrides: Vec<crate::profiles::OverrideDef> = {
             let active = self
                 .rig
@@ -2304,6 +2377,10 @@ impl GuitarRigBackend {
                             options,
                             option,
                             overridden: block_overridden,
+                            output_level_db: Self::level_home(&comp, active_def.as_ref(), block)
+                                .and_then(|h| {
+                                    Self::stored_level(&comp, &level_drives, &level_pool, &h)
+                                }),
                         });
                     }
                 }
@@ -5333,6 +5410,119 @@ impl Rig for GuitarRigBackend {
         // Chain state only — param drags shouldn't re-publish the perf model.
         self.events.publish(RigEvent::Chain(Rig::chain(self)));
     }
+
+    fn set_block_level(&self, id: String, level_db: f32, commit: bool) {
+        let level_db = level_db.clamp(-60.0, 24.0);
+        let comp = RigLibrary::load_compositions();
+        // The block as built, and the patch it is in.
+        let (built, patch_name, sr) = {
+            let guard = self.rig.lock_ok();
+            let Some(prig) = guard.as_ref() else { return };
+            let Some(patch) = prig.active_patch() else { return };
+            let ids = prig.active_block_ids();
+            let built = patch
+                .chain
+                .iter()
+                .filter(|b| b.has_backend())
+                .zip(ids.iter())
+                .find(|(_, bid)| **bid == id)
+                .map(|(b, _)| b.clone());
+            (built, patch.name.clone(), f64::from(prig.sample_rate()))
+        };
+        let Some(block) = built else { return };
+        let (patch_def, drives, pool) = {
+            let def = self.profile_def.lock_ok();
+            let patch = def
+                .patches
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&patch_name))
+                .cloned();
+            (patch, self.drive_presets.lock_ok().clone(), def.presets.clone())
+        };
+        let Some(home) = Self::level_home(&comp, patch_def.as_ref(), &block) else {
+            tracing::warn!(block = %block.name, "output level: block has no stored level");
+            return;
+        };
+        let Some(stored) = Self::stored_level(&comp, &drives, &pool, &home) else { return };
+
+        if !commit {
+            // Live: the built trim, corrected for a drive knob moved since
+            // the build (as `apply_drive` does), plus the level change.
+            let path = std::path::Path::new(&block.nam);
+            let delta = |d: f32| signal_sampler::nam_calibrate::drive_output_delta_cached(path, sr, d);
+            let built_drive = block.param_f32("drive").unwrap_or(0.5);
+            let drive_now = self
+                .blocks
+                .lock_ok()
+                .iter()
+                .find(|b| b.id == id)
+                .and_then(|b| b.params.iter().find(|p| p.name == "drive").map(|p| p.value))
+                .unwrap_or(built_drive);
+            let out = block.output_trim_db - delta(built_drive) + delta(drive_now) + (level_db - stored);
+            {
+                let guard = self.rig.lock_ok();
+                if let Some(prig) = guard.as_ref() {
+                    prig.rig().set_active_block_param(&id, "output_trim", out);
+                }
+            }
+            if let Some(b) = self.blocks.lock_ok().iter_mut().find(|b| b.id == id) {
+                b.output_level_db = Some(level_db);
+            }
+            self.events.publish(RigEvent::Chain(Rig::chain(self)));
+            return;
+        }
+
+        // Commit: store it with the gear, then rebuild so every patch playing
+        // that amp or pedal is built with it.
+        match &home {
+            LevelHome::Amp { preset, snapshot, second } => {
+                let mut comp = comp;
+                let Some(snap) = comp
+                    .modules
+                    .iter_mut()
+                    .filter(|m| {
+                        m.module.eq_ignore_ascii_case("Amp") && m.name.eq_ignore_ascii_case(preset)
+                    })
+                    .flat_map(|m| m.snapshots.iter_mut())
+                    .find(|s| s.name.eq_ignore_ascii_case(snapshot))
+                else {
+                    return;
+                };
+                if *second {
+                    snap.level2_db = level_db;
+                } else {
+                    snap.level_db = level_db;
+                }
+                RigLibrary::save_compositions(&comp);
+            }
+            LevelHome::Pool { name } => {
+                let mut def = self.profile_def.lock_ok();
+                if let Some(p) = def.presets.iter_mut().find(|p| p.name.eq_ignore_ascii_case(name)) {
+                    p.level_db = level_db;
+                }
+                RigLibrary::save_profile(&def);
+            }
+            LevelHome::Drive { nam } => {
+                let mut dps = self.drive_presets.lock_ok();
+                let file = |p: &str| std::path::Path::new(p).file_name().map(std::ffi::OsStr::to_owned);
+                if let Some(o) = dps
+                    .iter_mut()
+                    .flat_map(|p| p.options.iter_mut())
+                    .find(|o| o.nam == *nam || (file(&o.nam).is_some() && file(&o.nam) == file(nam)))
+                {
+                    o.level_db = level_db;
+                }
+                RigLibrary::save_drive_presets(&dps);
+            }
+        }
+        tracing::info!(block = %block.name, from_db = stored, to_db = level_db, "output level: stored");
+        let rebuilt = {
+            let def = self.profile_def.lock_ok();
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+    }
 }
 
 // ── shared RigCore (mounted instance-scoped as "guitar") ─────────────────────
@@ -5683,4 +5873,16 @@ mod tests {
         // first one — the board would otherwise name a tone that is not loaded.
         assert_eq!(pool_preset_of(&def, "Crunch"), None);
     }
+}
+
+/// Where a NAM block's Output Level is stored: with the gear, so every patch
+/// playing that amp or pedal has it.
+#[derive(Clone, Debug)]
+enum LevelHome {
+    /// An amp module snapshot's `level_db` (`level2_db` for Amp R).
+    Amp { preset: String, snapshot: String, second: bool },
+    /// A legacy pool preset's `level_db`.
+    Pool { name: String },
+    /// The drive option playing this capture.
+    Drive { nam: String },
 }

@@ -392,12 +392,26 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
                         let y = e.client_coordinates().y;
                         let el = el();
                         let set_thr = set_thr.clone();
+                        let bus = signal_widgets::DragBus::try_use();
                         spawn(async move {
                             let Some(el) = el else { return };
                             let Ok(rect) = el.get_client_rect().await else { return };
                             let (top, h) = (rect.origin.y, rect.height());
-                            tracking.set(Some((top, h)));
                             set_thr((1.0 - (y - top) / h) as f32);
+                            // Follow the drag across the whole window (the
+                            // app root forwards it); the local shield below
+                            // only covers this panel.
+                            match bus {
+                                Some(bus) => {
+                                    let set_thr = set_thr.clone();
+                                    bus.begin(move |ev| {
+                                        if let signal_widgets::DragEvent::Move { y, .. } = ev {
+                                            set_thr((1.0 - (y - top) / h) as f32);
+                                        }
+                                    });
+                                }
+                                None => tracking.set(Some((top, h))),
+                            }
                         });
                     }
                 },
@@ -498,12 +512,20 @@ fn VFader(
                 onpointerdown: move |e: PointerEvent| {
                     let y = e.client_coordinates().y;
                     let el = el();
+                    let bus = signal_widgets::DragBus::try_use();
                     spawn(async move {
                         let Some(el) = el else { return };
                         let Ok(rect) = el.get_client_rect().await else { return };
                         let (top, h) = (rect.origin.y, rect.height());
-                        tracking.set(Some((top, h)));
                         on_change.call((1.0 - (y - top) / h).clamp(0.0, 1.0) as f32);
+                        match bus {
+                            Some(bus) => bus.begin(move |ev| {
+                                if let signal_widgets::DragEvent::Move { y, .. } = ev {
+                                    on_change.call((1.0 - (y - top) / h).clamp(0.0, 1.0) as f32);
+                                }
+                            }),
+                            None => tracking.set(Some((top, h))),
+                        }
                     });
                 },
                 div {
@@ -1598,6 +1620,60 @@ fn CabChunk(
     }
 }
 
+/// A capture's Output Level: a readout dragged vertically. Moves the live
+/// block while dragging (`set_block_level`, uncommitted) and stores it with
+/// the gear on release — an amp's on its amp module snapshot, a pedal's on
+/// its drive option — so every patch playing it follows.
+#[component]
+fn OutputLevel(block_id: String, level_db: f32) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let bus = signal_widgets::DragBus::try_use();
+    // The value shown while a drag is live (the chain echoes it too, but a
+    // local copy keeps the readout from lagging the pointer).
+    let mut dragging = use_signal(|| None::<f32>);
+    let shown = dragging().unwrap_or(level_db);
+    rsx! {
+        div {
+            class: "ml-auto pointer-events-auto flex items-center justify-center rounded-sm border border-border/60 cursor-ns-resize touch-none select-none",
+            style: "height: 18px; min-width: 52px; padding: 0 4px; background: rgba(0,0,0,0.35); font-size: 9px; font-family: ui-monospace, monospace;",
+            title: "Output Level — drag up/down; saved with the amp or pedal",
+            onpointerdown: move |e: PointerEvent| {
+                // Not the row's fader underneath.
+                e.stop_propagation();
+                let (Some(bus), Some(r)) = (bus, rig.clone()) else { return };
+                let (y0, start) = (e.client_coordinates().y, level_db);
+                let id = block_id.clone();
+                let last = std::rc::Rc::new(std::cell::Cell::new(start));
+                dragging.set(Some(start));
+                bus.begin(move |ev| match ev {
+                    signal_widgets::DragEvent::Move { y, .. } => {
+                        let v = ((start as f64 + (y0 - y) * 0.05) * 10.0).round() as f32 / 10.0;
+                        if (v - last.get()).abs() < f32::EPSILON {
+                            return;
+                        }
+                        last.set(v);
+                        let mut shown = dragging;
+                        shown.set(Some(v));
+                        let (r, id) = (r.clone(), id.clone());
+                        spawn(async move { let _ = r.set_block_level(id, v, false).await; });
+                    }
+                    signal_widgets::DragEvent::End => {
+                        let v = last.get();
+                        let mut shown = dragging;
+                        shown.set(None);
+                        if (v - start).abs() >= f32::EPSILON {
+                            let (r, id) = (r.clone(), id.clone());
+                            spawn(async move { let _ = r.set_block_level(id, v, true).await; });
+                        }
+                    }
+                });
+            },
+            span { style: "color: #8a8a92; margin-right: 3px;", "OUT" }
+            span { style: "color: #e8e8ec; font-variant-numeric: tabular-nums;", {format!("{shown:+.1}")} }
+        }
+    }
+}
+
 /// One drive-board chunk: the whole widget is a horizontal level fader —
 /// the red gradient fills with how hard the block is pushed (default
 /// center). Tap toggles the pedal; drag sets the level. Shows the block's
@@ -1625,12 +1701,17 @@ fn DriveChunk(
     #[props(default)]
     options: Vec<String>,
     #[props(default)] option: u32,
+    /// The capture's Output Level (dB), stored with the gear; `None` hides
+    /// the control.
+    #[props(default)]
+    output_level: Option<f32>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut el = use_signal(|| None::<std::rc::Rc<MountedData>>);
     // (start_x, moved) while a pointer is down — a motionless release is a
     // tap (bypass toggle), movement is a level drag.
     let mut gesture = use_signal(|| None::<(f64, bool)>);
+    let bus = signal_widgets::DragBus::try_use();
 
     let pct = (level * 100.0).clamp(0.0, 100.0);
     let (c_hi, c_lo) = if amp_style {
@@ -1669,9 +1750,48 @@ fn DriveChunk(
             },
             style: "background: #0a0a0a;",
             onmounted: move |e| el.set(Some(e.data())),
-            onpointerdown: move |e: PointerEvent| {
-                if !empty {
-                    gesture.set(Some((e.client_coordinates().x, false)));
+            onpointerdown: {
+                let rig = rig.clone();
+                let block_id = block_id.clone();
+                move |e: PointerEvent| {
+                    if empty {
+                        return;
+                    }
+                    let x0 = e.client_coordinates().x;
+                    let Some(bus) = bus else {
+                        gesture.set(Some((x0, false)));
+                        return;
+                    };
+                    // The root follows the drag across the window: a tap
+                    // (no movement) toggles the pedal, movement sets the
+                    // level from where the pointer is along the row.
+                    let (rig, block_id, el) = (rig.clone(), block_id.clone(), el());
+                    spawn(async move {
+                        let Some(el) = el else { return };
+                        let Ok(rect) = el.get_client_rect().await else { return };
+                        let (left, width) = (rect.origin.x, rect.width().max(1.0));
+                        let moved = std::rc::Rc::new(std::cell::Cell::new(false));
+                        bus.begin(move |ev| match ev {
+                            signal_widgets::DragEvent::Move { x, .. } => {
+                                if !moved.get() && (x - x0).abs() <= 4.0 {
+                                    return;
+                                }
+                                moved.set(true);
+                                let frac = ((x - left) / width).clamp(0.0, 1.0) as f32;
+                                if let (Some(r), Some(id)) = (rig.clone(), block_id.clone()) {
+                                    let v = range.0 + frac * (range.1 - range.0);
+                                    spawn(async move { let _ = r.write_param(id, param.to_string(), v).await; });
+                                }
+                            }
+                            signal_widgets::DragEvent::End => {
+                                if !moved.get() {
+                                    if let (Some(r), Some(id)) = (rig.clone(), block_id.clone()) {
+                                        spawn(async move { let _ = r.toggle_block_bypass(id).await; });
+                                    }
+                                }
+                            }
+                        });
+                    });
                 }
             },
             onpointermove: {
@@ -1731,6 +1851,11 @@ fn DriveChunk(
                 span {
                     class: if engaged { "text-[10px] font-semibold truncate" } else { "text-[10px] truncate text-muted-foreground" },
                     "{name}"
+                }
+                // Output Level: drag up/down (0.05 dB a pixel). Live while
+                // dragging, stored with the gear on release.
+                if let (Some(db), Some(id)) = (output_level, block_id.clone()) {
+                    OutputLevel { block_id: id, level_db: db }
                 }
                 // Quick-switch: the captures within a drive's preset, or the
                 // pool presets an amp can be. Drawn rather than a `<select>`,
@@ -2001,6 +2126,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 block_id: Some(b.id.clone()),
                                 options: b.options.clone(),
                                 option: b.option,
+                                output_level: b.output_level_db,
                             }
                         }
                     }
@@ -2019,6 +2145,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             block_id: amp_l.as_ref().map(|a| a.id.clone()),
                             options: amp_l.as_ref().map(|a| a.options.clone()).unwrap_or_default(),
                             option: amp_l.as_ref().map_or(0, |a| a.option),
+                            output_level: amp_l.as_ref().and_then(|a| a.output_level_db),
                             amp_style: true,
                         }
                         CabChunk { cab: cab_l.clone(), amp_loaded: amp_l.is_some() }
@@ -2032,6 +2159,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             block_id: amp_r.as_ref().map(|a| a.id.clone()),
                             options: amp_r.as_ref().map(|a| a.options.clone()).unwrap_or_default(),
                             option: amp_r.as_ref().map_or(0, |a| a.option),
+                            output_level: amp_r.as_ref().and_then(|a| a.output_level_db),
                             amp_style: true,
                         }
                         CabChunk { cab: cab_r.clone(), amp_loaded: amp_r_preset.is_some() }

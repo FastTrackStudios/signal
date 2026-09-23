@@ -608,6 +608,12 @@ pub struct LiveBlock {
     /// [`BlockParam::overridden`], for a dot on a header.
     #[facet(default)]
     pub overridden: bool,
+    /// A NAM amp or pedal's Output Level (dB): the gain after the capture,
+    /// stored with the gear — an amp's on the amp module snapshot, a pedal's
+    /// on its drive option — so every patch playing it has it. `None` for
+    /// blocks without one. Set with [`set_block_level`](rig::Rig::set_block_level).
+    #[facet(default)]
+    pub output_level_db: Option<f32>,
 }
 
 // ── Services ──────────────────────────────────────────────────────────────
@@ -892,6 +898,11 @@ pub mod rig {
         fn set_block_bypass(&self, id: String, bypassed: bool);
         /// Set a block's primary param.
         fn set_block_param(&self, id: String, param: String, value: f32);
+        /// Set a NAM amp or pedal's Output Level (dB). `commit = false` moves
+        /// the live block only (a drag in progress); `commit = true` saves it
+        /// with the gear (amp module snapshot / drive option) and rebuilds,
+        /// so every patch playing that amp or pedal has it.
+        fn set_block_level(&self, id: String, level_db: f32, commit: bool);
 
         /// Every profile, song, setlist and drive preset — the browser's
         /// view of the library.

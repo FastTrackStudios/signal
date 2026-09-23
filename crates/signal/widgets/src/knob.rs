@@ -106,8 +106,10 @@ pub fn Knob(
     #[props(default)]
     color: Option<String>,
 ) -> Element {
-    // Drag state: (start_y, start_normalized) while a drag is live.
+    // Drag state: (start_y, start_normalized) while a drag is live — only
+    // for the local shield, when no app-root drag bus is above.
     let mut drag = use_signal(|| None::<(f64, f64)>);
+    let bus = crate::drag_bus::DragBus::try_use();
 
     let range = (max - min).max(1e-6);
     let val = f64::from(((value - min) / range).clamp(0.0, 1.0));
@@ -159,7 +161,16 @@ pub fn Knob(
                 style: "position: relative; width: {d}px; height: {d}px; \
                         display: flex; align-items: center; justify-content: center;",
                 onpointerdown: move |e: PointerEvent| {
-                    drag.set(Some((e.client_coordinates().y, val)));
+                    let y0 = e.client_coordinates().y;
+                    match bus {
+                        // The root follows the drag across the whole window.
+                        Some(bus) => bus.begin(move |ev| {
+                            if let crate::drag_bus::DragEvent::Move { y, .. } = ev {
+                                apply(val + (y0 - y) / SENSITIVITY);
+                            }
+                        }),
+                        None => drag.set(Some((y0, val))),
+                    }
                 },
                 onwheel: move |e: WheelEvent| {
                     let step = if e.delta().strip_units().y < 0.0 { 0.02 } else { -0.02 };
@@ -222,8 +233,10 @@ pub fn Knob(
                         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
                 "{label}"
             }
-            // Drag shield: while a drag is live, a fullscreen layer owns the
-            // pointer — moving off the knob no longer drops the gesture.
+            // Drag shield, for a host with no drag bus: a layer that owns the
+            // pointer while a drag is live. (Blitz lays `fixed` out as
+            // `absolute`, so it only covers the enclosing panel — which is
+            // why the rig routes drags through its root instead.)
             if drag().is_some() {
                 div {
                     class: "fixed inset-0",

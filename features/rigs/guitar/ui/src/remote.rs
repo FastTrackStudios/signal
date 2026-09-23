@@ -75,6 +75,9 @@ impl Switches {
 /// (`RigClient`, `RigStreamClient`, `AudioSettingsClient`).
 #[component]
 pub fn GuitarRigRemote() -> Element {
+    // Drags that outlive their control: every knob, fader and threshold
+    // below routes its moves through the root (Blitz has no pointer capture).
+    let drag_bus = signal_widgets::DragBus::provide();
     // Callbacks made once per site, not once per render (see `stable`).
     let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -277,6 +280,10 @@ pub fn GuitarRigRemote() -> Element {
             // The library picker covers this box (Blitz has no `fixed`).
             style: "position: relative;",
             tabindex: "0",
+            // Every pointer move bubbles here: the control holding a drag
+            // follows it anywhere in the window, and a release ends it.
+            onpointermove: move |e: PointerEvent| drag_bus.root_move(&e),
+            onpointerup: move |_| drag_bus.root_up(),
             // Cmd/Ctrl+P: the command palette. Everything else: the
             // keymap (keymap.styx) — "ctrl+1" strings → rig actions.
             onkeydown: {
