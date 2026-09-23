@@ -118,8 +118,15 @@ mod menubar;
 // The macOS menu bar: audio readout + Settings… ⌘, (reads the embedded rig).
 #[cfg(all(target_os = "macos", feature = "signal-guitar"))]
 mod mac_menu;
+// No App Nap: the rig keeps real-time behaviour in the background.
+#[cfg(target_os = "macos")]
+mod mac_activity;
 
 fn main() {
+    // Before anything starts audio: a backgrounded rig must not be throttled
+    // (it xran whenever another app had focus).
+    #[cfg(target_os = "macos")]
+    mac_activity::hold_realtime_activity();
     // NVIDIA + Wayland: force the WebKitGTK webview through XWayland before
     // tao builds the event loop (`gtk::init` reads GDK_BACKEND there). Dioxus
     // sets these itself, but only inside `App::new`, AFTER the event loop is
