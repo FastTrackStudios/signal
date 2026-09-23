@@ -24,7 +24,7 @@ use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
 #[cfg(not(target_arch = "wasm32"))]
-use signal_rig_host::DuplexRigHost;
+use signal_rig_host::OutputRigHost;
 use signal_rig_host::RigProject;
 
 use crate::MidiMonitor;
@@ -472,7 +472,7 @@ pub struct KeysRig {
     /// stop audio. `None` for a headless rig
     /// ([`open_headless`](Self::open_headless)) — the caller owns rendering.
     #[cfg(not(target_arch = "wasm32"))]
-    _host: Option<DuplexRigHost>,
+    _host: Option<OutputRigHost>,
     /// The rig project's guid — a headless caller renders it through daw's
     /// own render path (`ProjectRenderer`).
     project_guid: String,
