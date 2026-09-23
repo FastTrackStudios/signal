@@ -1,196 +1,169 @@
-# Handoff — the rig in a browser (2026-09-22)
+# Handoff — the native guitar rig, levelled (2026-09-23)
 
-Written at the end of a long session. Everything below is **committed
-locally and nothing is pushed**, in three repos on `/Volumes/dev-drive`:
-`signal`, `processor`, and a new clone `neural-amp-modeler-rs`.
+Everything is **committed locally, nothing pushed** (the user's standing
+rule: commit locally, never push/PR/tag unless asked). Branch
+`macos-signal-rig` in `signal`, `processor` and `daw`, on
+`/Volumes/dev-drive`. The previous handoff (the rig in a browser) is in git
+history at `b2df36c1`.
 
-The user's standing rule: commit locally, never push, PR or tag unless
-asked. Two pushes are queued behind their decision — see **Waiting on the
-user**.
+The user's direction for this stretch: **get the native desktop app fully
+playable first; port it to wasm after.** The browser rig (a page where any
+computer becomes the rig, all audio in the tab) is planned — see
+*Browser rig* below — but not started.
 
-## What this session did
+## Build and run — read this first
 
-Four threads, in order:
+- **One build line:** `just app` =
+  `cargo build --profile release-fast -p signal-desktop --features signal-keys-rig`.
+  `just guitar` and `just desktop-run` use the same line. Building
+  `signal-desktop` with a *different* feature set or profile makes cargo
+  recompile every shared crate (that was the 15-minute rebuilds). The CLI
+  builds alongside with no penalty:
+  `cargo build --profile release-fast -p signal-desktop -p signal-cli --features signal-desktop/signal-keys-rig`.
+- **release-fast** (root `Cargo.toml`): release opt, incremental, 256 CGUs.
+  An edit in `signal-sampler` rebuilds the app in ~15 s. Local only.
+  **dev** now has the render stack (Blitz/Stylo/Taffy/Parley/Vello/wgpu) at
+  opt-level 3, so a dev build is usable too.
+- `bin/signal-latest-bin` prints the newest of `target/{release-fast,release,debug}/signal-desktop`;
+  `Signal Rig.app`'s launcher and the menu bar's login agent hard-link it,
+  so **whatever you built last is what launches**.
+- Launch: `open "/Volumes/dev-drive/bin/Signal Rig.app"` (config
+  `XDG_CONFIG_HOME=/Volumes/dev-drive/config`). Logs:
+  `/Volumes/dev-drive/logs/signal-app-YYYYMMDD.log` — note it grows ~1 GB/day
+  from a repeating usvg "Rect has invalid height" warning (see *Open*).
+- **Never build while the user is playing** — a build takes every core and
+  causes dropouts. Never run a benchmark while a build runs.
 
-1. **The guitar rig plays in a browser** — `signal-guitar-worklet`, a NAM
-   worker pool, and `signal rig web-bundle`. Design doc:
-   `crates/signal/docs/browser-guitar-rig.md` (read it first; it is the
-   map for the audio half).
-2. **The NAM engine got 5× faster** in wasm, bit-identically.
-3. **Three faults fixed** in the desktop rig: a 100 GB overnight memory
-   leak, the vox error on an EQ drag, and a 1 GB/night log.
-4. **The painted widgets run in the browser** — the real ones, with their
-   shaders, on WebGPU. The browser's second EQ is deleted.
+## What changed (commits)
 
-### 1. The rig plays in a browser
+`processor`: `38e5259` one GPU device for every canvas · `5f52aea` comp shader
+fix for the browser · `439379a` per-thread DI sidechain + a meter channel per
+compressor.
+`signal`: `b9da6a38` menu bar · `629be64d` build profiles · `690a07f5` the rig
+work below.
 
-`features/rigs/guitar/worklet` (`signal-guitar-worklet`): an AudioWorklet
-chain runner plus a NAM Web Worker pool over `SharedArrayBuffer`.
+### Loudness — the model now
 
-Where each model runs is planned per patch (`src/plan.rs`): inline while
-the render budget lasts, Amp R on a worker beside Amp L (zero latency,
-because both hear the dry guitar), anything else one quantum behind, and
-bypassed models on standby workers that stay warm so a stomp is seamless
-(bit-exact test: `stomping_a_standby_model_on_is_seamless`).
+**Levels live on the blocks, are measured by the rig's own engine, and are
+built into the chain.** Bottom up:
 
-Measured in Chrome, M-series MacBook: **all 53 shipped patches plan to
-zero added latency**, render load 44% average / 62% worst, no misses.
+1. **Amp module snapshots** (`modules.styx`) carry `level_db` / `level2_db`:
+   the amp through its own cab, levelled to **−23 LUFS** (`TARGET_LUFS`,
+   `signal-sampler/src/patch_level.rs`).
+2. **Drive options** (`drive-presets.styx`) carry `level_db`: engaging the
+   pedal at drive 0.5 is unity.
+3. **Preset snapshots** (`presets.styx`) `level_db` balances only the effects
+   around the amp (median +2.7 dB).
+4. **Patches**: `level_db` is an *offset on its snapshot's* (compose.rs
+   `flatten` adds, it used to overwrite — which silently discarded every
+   patch-level correction). Plus the player's own `trim_db`.
 
-- `just guitar-web-harness` — builds, exports the rig, serves the harness
-  with the COOP/COEP headers `SharedArrayBuffer` needs.
-- `signal rig web-bundle <dir>` — every patch resolved as the live rig
-  resolves it; models and IRs content-addressed (no local paths in a
-  public bundle). Shipped rig: 4 profiles, 53 patches, 38 assets, 10.5 MB.
+`nodes::apply_block_levels` writes (1)/(2) into each NAM block's
+`input_trim_db`/`output_trim_db` **when the chain is built**. Nothing
+applies gain at switch time any more (`apply_all_drives` is a no-op kept as
+the switch paths' single hook). A drive knob moved live
+(`session::apply_drive`) corrects *relative* to the block's built level via
+the cached drive curve.
 
-### 2. The NAM engine
+Commands, in order: `signal rig level-modules` → `signal rig level-presets`
+→ `signal rig level <Profile>` (all `--dry-run` capable). A full cold pass is
+~7 min; unchanged chains are cache hits (seconds). The app's **Level
+patches** writes per-patch offsets the same way.
 
-`/Volumes/dev-drive/neural-amp-modeler-rs` (cloned this session, local
-commit `289e8ce`). An A2 model went **1.55 ms → ~310 µs** per 128-frame
-quantum in wasm+simd128, output bit-identical (all parity and bit-exact
-tests against the C++ core pass):
+**One code path, measured.** `GuitarRig::open_offline(sr)` builds the
+identical project/track/slots/probe/chains as `open` and renders through the
+same `ProjectRenderer`, pulled by `render_offline` (no device). Input is the
+probe's test signal (`start_test_signal`), output the new `OutputTap` after
+the chain (`measure_output`). `features/rigs/guitar/src/measure.rs`:
+`patch_lufs` (cached via `patch_level::level_cached`, engine key `rig-v3`),
+`apply_chain_bypass` (the switch-in step both live and offline call). The old
+hand-rolled `render_lufs` is no longer used by the guitar rig. Every
+divergence found on the way was a second code path: live applied drive
+compensation only to amps (a definition lookup missed composed patches'
+pedals); offline skipped chain bypass; snapshot levelling used a different
+chain builder. If live and offline ever disagree again, look for the
+second path.
 
-- register-blocked kernels for the square/1→C shapes with the channel
-  count a compile-time constant (A2 layers are 8 channels, 3 when slim);
-- the history roll was a `Vec` per column per block — now one memmove;
-- activations matched once per buffer, not per element;
-- flat passes for `z = conv + mixin`, the residual, the skip sum.
+Verified: every patch in all four profiles measures −23.0 LUFS on the
+engine; switching through a whole profile on one offline rig is repeatable
+(±1 dB of settled). The user confirms "the patches sound level now".
 
-`signal/Cargo.toml` has a `[patch]` to that clone. **It must be tagged
-before signal can be pushed** (signal's git dep still points at
-`v0.1.0`).
+### Other fixes this stretch
 
-### 3. The three desktop faults
+- **Engine deadlock** (the "wedge"): `nodes()`/`perf()` took `profile_def`
+  then `rig`; `patches()`/`resync_blocks()` the reverse. LOCK ORDER (rig
+  before profile_def) is documented on `GuitarRigBackend::rig`. Found with
+  `sample` + lldb (`__psynch_mutexwait` x3 = owner tid).
+- **Switch stalls**: a footswitch used to run a 5.5 s drive-curve sweep for
+  an uncached model inside the request. Startup now pre-measures every NAM
+  any patch plays, in parallel.
+- **Footswitches**: `midi.styx` `tap_notes (1 2 3 4 5)` — the AIRSTEP (BLE,
+  connected via Audio MIDI Setup → MIDI Studio → Bluetooth) sends Note On /
+  Note Off per switch; tap/hold from timing (`rig-host/src/gestures.rs`).
+  The user set Note On velocity to 1: midicore's CoreMIDI input *re-encodes*
+  `90 n 00` as `80`, losing the press (upstream fix pending).
+- **Preset tab = audition**: `choose_preset` plays the snapshot alone (the
+  `compose::snapshot_patch` template levelling measures), never writes the
+  profile. It used to repoint and save the live patch on every click.
+- **Presets named for gear** (`signal rig regroup-presets`): the
+  profile-named presets (Worship Clean …) were dissolved into the amp
+  presets; profiles repointed. Worship Drive → Fender Deluxe Reverb ·
+  Cranked (user asked for "more normal").
+- **Compressor panels**: a meter channel per block (Pre Comp 1, Post Comp 2,
+  Limiter 3 — `profiles::meter_channel`), `RigEvent::CompWave(CompTrace)`
+  names its block. Red on the IN/OUT strips = within 3 dB of clipping.
+- **Menu bar** (`--menubar`, `apps/desktop/src/menubar.rs`): runs from
+  `bin/signal-menubar` (NOT inside the .app — Launch Services then treats
+  the app as already running). Login agent:
+  `~/Library/LaunchAgents/com.fasttrackstudio.signal-menubar.plist`.
+- Level target −23 LUFS (was −18; peaks hit the limiter).
+- `SIGNAL_SWITCH_PROBE=1` writes `logs/switch-<patch>-<t>-{in,out}.wav` (4 s
+  after each switch) to re-render a suspicious transition offline. The app
+  is currently launched with it on.
 
-All in `features/rigs/guitar/ui`:
+## User config (not in any repo)
 
-- **Memory.** `Callback::new` in a component body is owned by the scope
-  and freed only on unmount (dioxus-core says so). The Control view makes
-  fourteen, re-renders on every meter tick, never unmounts, and two
-  captured the whole block list: 2.8 M live allocations, ~5 MB/s, 100 GB
-  overnight. `src/stable.rs` gives a component one callback per call site,
-  re-pointed each render — usable inside `if`/`match`/`map`, where
-  `use_callback` cannot go. Idle RSS now flat (203 MB over 3.5 min).
-- **The vox error.** A drag sent one spawned RPC per pointer event per
-  field and saturated vox's 64 in-flight limit; the server closes the
-  connection on the 65th. Reproduction kept, ignored:
-  `tests/param_flood.rs::an_unbounded_drag_flood_breaks_the_link` (1926
-  of 2000 writes failed). Every write now goes through
-  `src/param_writer.rs`: newest value per (block, param), ≤8 on the wire,
-  never two for one parameter. Verified native (real backend, real vox)
-  **and** on wasm (`wasm-bindgen-test`), and by hand in the browser: 400
-  rapid moves, link alive, values landed.
-- **The log.** The gate visualiser drew zero-height bars, which usvg
-  rejects with a warning *per repaint* — 7.3 M lines (1 GB) in one night.
+`/Volumes/dev-drive/config/signal/rig/`: `presets.styx`, `modules.styx`,
+`drive-presets.styx`, `profiles/*.styx`, `midi.styx` were rewritten this
+session. Every edit left a timestamped `.bak-*` beside the file.
+`calibration/di-reference.wav` is the user's own guitar (three DIs joined;
+the old GuitarLSTM DI is `di-reference.guitarlstm-ts9.wav`).
 
-### 4. The painted widgets, in the browser
+## Open — in the order I would do them
 
-The browser used to draw hand-made SVG imitations of the painted panels.
-It now runs **the widgets themselves**:
+1. **Latency (asked, not yet answered).** The user feels the limiter added
+   latency; DSP must be zero-latency. The limiter is `NativeComp` with no
+   lookahead, and the new `OutputTap` is a copy — both should be 0. Prove
+   it: an impulse through `open_offline` per block type and per patch
+   (first output sample vs input), plus `PluginInstance::latency()` of every
+   block. Suspects if it is real: the cab `Convolver` (partitioned
+   convolution block latency), the reverbs, or the device buffer.
+2. **Dual-amp blends lose 14–25 dB** (`Deluxe + AC30`, `Plexi + AC30`,
+   `JCM800 + AC30`, `5150 III + Recto`): each amp levels correctly alone,
+   but the parallel `amp_blend::BlendStage` output is far quieter than the
+   sum (cancellation or a branch dropped). Their preset levels compensate
+   (JCM800 + AC30 · Crunch hits the +24 dB Patch Trim cap, ~1 dB short). No
+   profile uses them yet.
+3. **Output Level knob in the UI** — the user asked for "an output gain
+   setting in the block". Levels are stored on modules/drive options and
+   built into the trims, but not yet shown or editable per block.
+4. midicore-macos: keep the raw status byte (a velocity-0 Note On press).
+5. The usvg warning flood (~1 GB/day of log): the gate visualiser still
+   draws zero-height rects somewhere.
+6. `signal rig level` (non-dry-run) writes `patch.level_db`; with the new
+   offset semantics that is right, but `levelling::level_profile` measures
+   with offsets zeroed, so its dry-run shows the *raw* figure, not the
+   final one — confusing when verifying.
 
-- `processor/libs/ui/fts-audio-ui/src/scene_canvas.rs` — a `<canvas>` with
-  vello on **WebGPU**, driven through anyrender's window renderer, whose
-  painter is both a `PaintScene` and a `RenderContext`. That is the whole
-  trick: `renderer_specific_context()` hands the widget a real wgpu device
-  and `try_register_custom_resource` takes the texture its shader drew
-  into, so the browser makes the same two calls Blitz does
-  (`can_create_surfaces`, then `paint`) against the same struct — shaders
-  included.
-- `CompWidget`, `DelayWidget`, `ReverbWidget`, `ModWidget` and
-  `EqGraphWidget` each implement `CanvasPanel` and the Blitz/nice-plug
-  trait over one inherent `create_surfaces` / `paint_frame`.
-- **eq-ui is now portable**: `graph-paint` (painters, no plugin host)
-  under `graph`; the component and popup take dioxus rather than the
-  nice-plug prelude; `nice-plug-dioxus` moved to a native-only table, so
-  baseview and nice-log's filesystem logging stay out of the browser.
-  `spectrum-analyzer-ui`'s painters are portable too; its settings panel
-  is behind `panel` (reached by `spectrum-analyzer/ui-panel`, which
-  eq-ui's `native` turns on).
-- **`eq_surface` is deleted** and the `eq-vello` feature with it, at the
-  user's request ("i never want to see it again"). There is one EQ.
+## Browser rig (next phase, after native is done)
 
-Three wasm32 traps found the hard way, all the same shape — *a thread or
-a std clock is not a slow path in wasm32, it is a panic that takes the
-whole subtree with it*:
-
-- `use_repaint_clock` spawned an OS thread (all four viz crates);
-- the EQ graph's own 120 Hz tick did too;
-- `std::time::Instant::now()` / `SystemTime::now()` in the widgets' clocks
-  → `web-time`.
-
-If a browser panel ever comes up empty with "RuntimeError: unreachable"
-in the console, look for one of those three before anything else.
-
-## State right now
-
-- **Verified in the browser** (the app at `127.0.0.1:8080` against the
-  engine on `:4040`): the rig loads, 14 canvases live, no console errors,
-  the real EQ graph paints, an EQ node drags and the curve follows, and a
-  400-move flood keeps the link.
-- **Native**: `rig_shot` renders correctly (no regressions from the
-  callback refactor); signal-guitar-ui 26 tests, signal-guitar 72,
-  signal-guitar-worklet 13, processor's viz crates all pass.
-- Running background processes from this session (kill when done):
-  `signal-desktop --engine` (holds the audio device), `python3 -m
-  http.server 8080` in `apps/desktop/web-dist`, and a harness server on
-  `:8765`.
-- `apps/desktop/web-dist/index.html` has a **hand-injected console-capture
-  script** (`window.__caught`) for debugging. It is not in the build —
-  it disappears on the next stage. Do not commit it.
-
-## Environment gotchas (these cost hours)
-
-- **Building for wasm32 needs a clang that targets wasm** — Apple clang
-  cannot, and `ring` fails in its build script:
-  `CC_wasm32_unknown_unknown=/nix/store/6adskryjj6g2p508xjxp2x4iwyy15gsr-clang-21.1.8/bin/clang`
-  `AR_wasm32_unknown_unknown=/nix/store/8w308r33lb6d0ijmypa802v6dvyswkcj-llvm-21.1.8/bin/llvm-ar`
-- **wasm-bindgen CLI on PATH is 0.2.114; the lockfile is 0.2.126.** The
-  dev shell has the right one but rebuilds `dx` from source (slow).
-  Workaround used:
-  `cargo install wasm-bindgen-cli --version 0.2.126 --locked --root <scratch>/tools`
-  and prepend its `bin` to PATH.
-- **`just web-stage`'s tailwind step fails** (no node_modules for
-  tailwindcss in apps/desktop). Run the `dx build --platform web` line
-  directly; the committed `assets/tailwind-signal.css` is enough.
-- Release wasm hides panic messages. For a message, build without
-  `--release` (dioxus installs the panic hook) or capture
-  `window.onerror` as above.
-- `cargo` in `processor/` needs `+1.94.0` (const `mul_add`); signal has a
-  rustup override.
-
-## Waiting on the user
-
-1. **Push + tag `neural-amp-modeler-rs` `v0.1.1`**, then repin signal off
-   the local `[patch]` and push signal. Asked, not yet answered.
-2. Whether to push processor (it carries the canvas host, the eq-ui
-   split, and the wasm fixes; signal's local `[patch]` points at it).
-
-## Next, in the order I would do it
-
-1. **One GPU device for many canvases.** Each `SceneCanvas` builds its own
-   `VelloWindowRenderer`, and the Control view mounts 14 — that is 14 wgpu
-   devices. It works, but `anyrender_vello` has no way to share a
-   `WGPUContext` (`VelloRendererOptions` has no slot for one). Either
-   patch/vendor it to accept an existing context, or render several panels
-   into one canvas.
-2. **The engine wedged** after ~30 minutes and ~10 browser reloads: HTTP
-   on `:4040` stopped answering (curl timed out), 0% CPU, main thread
-   parked in `block_on`, ~10 established connections from the page.
-   Restarting fixed it. Not diagnosed — reproduce by reloading the browser
-   remote repeatedly and watch `curl -m 5 http://127.0.0.1:4040/`. This is
-   the most suspicious loose thread left.
-3. **The browser rig's own page.** `apps/web`'s `/rigs/guitar` is still a
-   placeholder (`apps/web/src/routes/rig.rs`); the worklet stack is
-   driven only by the harness at `features/rigs/guitar/worklet/harness/`.
-   Stage 4 in `browser-guitar-rig.md`.
-4. **Patch switches build their chain on the render thread** (a worklet
-   message handler), so a switch can drop a quantum. Pre-build resident
-   chains the way native `GuitarRig` does.
-5. **`set_slimmable_size` does not change the pure engine's output** in
-   the wasm bench — the adaptive slim fallback is therefore dead code
-   until that is fixed.
-6. The two reverbs are the heaviest blocks left (~1 ms together). Their
-   wet path could run a quantum late on a worker with the dry on time; the
-   mix law is linear (`dry·(1−mix) + wet·mix`).
-7. Small: the compressor gain-reduction meter is a global slot the limiter
-   can overwrite; the pitch shifter has no DSP; `localhost:4040/account/
-   callback` is still unregistered in starcommand.
+Plan from this session (research, no code): mirror the keys rig —
+`apps/desktop/src/web_keys_rig.rs` + `web_keys_backend.rs` — as
+`web_guitar_rig.rs` (route `/rigs/guitar`) + `web_guitar_backend.rs`: an
+in-page `Rig` implementation over `rig.json` (`signal rig web-bundle`)
+driving `features/rigs/guitar/worklet`, mounting the real
+`GuitarRigRemote`. `GuitarRigBackend` itself is too native to compile for
+wasm. Phase 1: stacks into the bundle, `setParamByName` in the worklet, the
+~22 `Rig` methods the UI calls to play, web-stage wiring, COOP/COEP
+headers. Hosting (the public link's domain, which captures may be
+redistributed) is the user's decision.
