@@ -52,6 +52,8 @@ fts-audio-ui.workspace = true
 modulation-ui = { workspace = true, features = ["viz"] }
 delay-ui = { workspace = true, features = ["viz"] }
 reverb-ui = { workspace = true, features = ["viz"] }
+# The engine's own decay → seconds law, so the Time readouts are what plays.
+reverb-dsp.workspace = true
 comp-ui = { workspace = true, features = ["viz"] }
 # BlockType — chain-strip coloring.
 signal-proto.workspace = true

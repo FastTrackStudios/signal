@@ -99,8 +99,53 @@ fn decay_t60_secs(decay: f32) -> f64 {
     0.08 * (0.001f64).ln() / g.ln()
 }
 
-fn decay_seconds_label(decay: f32) -> String {
-    let t60 = decay_t60_secs(decay);
+/// A reverb's real tail (RT60, seconds) and whether it is exact: the
+/// engine's own decay → time law for the algorithms whose decay is a
+/// calibrated time (Room, Hall, Plate, Random and their variants), the
+/// Hall-law estimate otherwise. The estimate alone read 4.5 s for a Hall
+/// the engine rings for 12.
+fn verb_seconds(algorithm: f32, variant: f32, decay: f32) -> (f64, bool) {
+    let alg = reverb_dsp::algorithm::AlgorithmType::from_index(algorithm.round().max(0.0) as usize);
+    match reverb_dsp::algorithm::decay_seconds(alg, variant.round().max(0.0) as usize, f64::from(decay)) {
+        Some(t) => (t, true),
+        None => (decay_t60_secs(decay), false),
+    }
+}
+
+/// `verb_seconds` as a label: "≈" when it is the estimate.
+fn verb_seconds_label(algorithm: f32, variant: f32, decay: f32) -> String {
+    let (t, exact) = verb_seconds(algorithm, variant, decay);
+    let s = seconds_text(t);
+    if exact { s } else { format!("≈{s}") }
+}
+
+/// The Time knob's label for one algorithm/variant — a fn pointer (the knob
+/// takes no closure), one per calibrated engine.
+fn decay_fmt<const A: usize, const V: usize>(decay: f32) -> String {
+    verb_seconds_label(A as f32, V as f32, decay)
+}
+
+fn decay_fmt_for(algorithm: f32, variant: f32) -> fn(f32) -> String {
+    match (algorithm.round() as usize, variant.round() as usize) {
+        (0, 1) => decay_fmt::<0, 1>,
+        (0, 2) => decay_fmt::<0, 2>,
+        (0, _) => decay_fmt::<0, 0>,
+        (1, 1) => decay_fmt::<1, 1>,
+        (1, 2) => decay_fmt::<1, 2>,
+        (1, _) => decay_fmt::<1, 0>,
+        (2, 0) => decay_fmt::<2, 0>,
+        (15, _) => decay_fmt::<15, 0>,
+        (a, _) => match a {
+            3 => decay_fmt::<3, 0>,
+            4 => decay_fmt::<4, 0>,
+            5 => decay_fmt::<5, 0>,
+            6 => decay_fmt::<6, 0>,
+            _ => decay_fmt::<7, 0>,
+        },
+    }
+}
+
+fn seconds_text(t60: f64) -> String {
     if t60 >= 20.0 {
         "20s+".to_string()
     } else if t60 >= 10.0 {
@@ -1098,7 +1143,12 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                     // Real time axis (log, 0.1–20 s): the tail is the RT60
                     // estimate rendered in dB (straight to −60 at t60), the
                     // size opening the early bloom.
-                    let t60 = decay_t60_secs(decay) * 0.8f64.mul_add(f64::from(size), 0.6);
+                    // The engine's tail where it has one; the size-scaled
+                    // estimate for the algorithms that do not.
+                    let t60 = match verb_seconds(param_v(b, "algorithm", 1.0), param_v(b, "variant", 0.0), decay) {
+                        (t, true) => t,
+                        (t, false) => t * 0.8f64.mul_add(f64::from(size), 0.6),
+                    };
                     let x_of_t = |t: f64| -> f32 {
                         let (t_min, t_max) = (0.1f64, 20.0f64);
                         (t.max(t_min) / t_min).log(t_max / t_min).clamp(0.0, 1.0).mul_add(f64::from(W) - 8.0, 4.0) as f32
@@ -1192,9 +1242,9 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                                 div { class: "flex flex-col items-end",
                                     span { style: "font-size:7px; text-transform:uppercase; color:#8a8a92;", "Time" }
                                     span { style: "font-family:ui-monospace,monospace; font-size:10px; color:{color};",
-                                        // Seconds, as the Time knob reads — the raw 0–1
+                                        // Seconds, as the engine rings — the raw 0–1
                                         // decay here ("0.80") read as a 0.8 s tail.
-                                        {decay_seconds_label(param_v(b, "decay", 0.4))}
+                                        {verb_seconds_label(param_v(b, "algorithm", 1.0), param_v(b, "variant", 0.0), param_v(b, "decay", 0.4))}
                                     }
                                 }
                                 AlgoPicker {
@@ -1233,7 +1283,10 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                         // RT60 estimate from the Hall feedback law
                         // (g = 0.5 + 0.48·d, ~80 ms loop) — a readable tail
                         // length, not a lab measurement.
-                        fmt: Some(crate::knob::FmtFn(decay_seconds_label as fn(f32) -> String)),
+                        fmt: Some(crate::knob::FmtFn(decay_fmt_for(
+                            param_v(&cur, "algorithm", 1.0),
+                            param_v(&cur, "variant", 0.0),
+                        ))),
                     }
                 }
                 if let Some(p) = param(&cur, "tone") {
