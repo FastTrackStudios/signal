@@ -84,6 +84,15 @@ pub struct ModuleSnapshotDef {
     pub nam2: String,
     #[facet(default)]
     pub cab2: String,
+    /// Amp: the Output Level (dB) of Amp L — set by levelling the amp
+    /// through its own cab (`signal rig level-modules`) so every amp
+    /// snapshot comes out equally loud. It is the amp block's own output
+    /// gain, written into the chain when it is built.
+    #[facet(default)]
+    pub level_db: f32,
+    /// Amp: the same for Amp R (`nam2` through `cab2`).
+    #[facet(default)]
+    pub level2_db: f32,
     /// Drive: which pedal (and which of its captures) each slot runs.
     #[facet(default)]
     pub drives: Vec<DriveSlotDef>,
@@ -272,7 +281,7 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
                 continue;
             };
             if pick.module.eq_ignore_ascii_case("Amp") {
-                let mut pool = |slot: &str, nam: &str, cab: &str| -> String {
+                let mut pool = |slot: &str, nam: &str, cab: &str, level_db: f32| -> String {
                     if nam.is_empty() {
                         return String::new();
                     }
@@ -284,17 +293,18 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
                             hash: String::new(),
                             cab: cab.to_string(),
                             cab_hash: String::new(),
+                            level_db,
                         });
                     }
                     name
                 };
-                let l = pool("L", &snap.nam, &snap.cab);
+                let l = pool("L", &snap.nam, &snap.cab, snap.level_db);
                 if !l.is_empty() {
                     patch.preset = l;
                 }
                 // The patch's own second amp wins over the snapshot's —
                 // patch level is the last word, as with overrides.
-                let r = pool("R", &snap.nam2, &snap.cab2);
+                let r = pool("R", &snap.nam2, &snap.cab2, snap.level2_db);
                 if patch.preset2.is_empty() {
                     patch.preset2 = r;
                 }
@@ -322,7 +332,12 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
                 overrides.extend(comp.block_overrides(choice));
             }
             overrides.extend(snap.overrides.iter().cloned());
-            patch.level_db = snap.level_db;
+            // The snapshot's level, plus the patch's own offset on top: a
+            // snapshot is levelled on its own, and a patch that adds overrides
+            // (an EQ move, a trim) is corrected by its own `level_db` — which
+            // an overwrite here threw away, so a patch-level fix could never
+            // take.
+            patch.level_db += snap.level_db;
         }
         overrides.append(&mut patch.overrides);
         patch.overrides = overrides;
@@ -867,67 +882,49 @@ pub fn level_presets(
         .enumerate()
         .flat_map(|(p, preset)| (0..preset.snapshots.len()).map(move |s| (p, s)))
         .collect();
-    let measure = |(p, s): (usize, usize)| -> Option<f32> {
+    // A snapshot's loudness *with* `level_db` applied — built exactly as the
+    // live rig builds a patch (`nodes::profile_from_library`'s path, with
+    // this composition in place of the saved one) and measured on the rig.
+    let measure_at = |(p, s): (usize, usize), level_db: f32| -> Option<f32> {
         let preset = &comp.presets[p];
         let mut def = base.clone();
-        let mut patch = def.patches.first()?.clone();
-        patch.name = "level".into();
-        patch.rig_preset = preset.name.clone();
-        patch.snapshot = preset.snapshots[s].name.clone();
-        patch.modules.clear();
-        patch.overrides.clear();
-        patch.drives.clear();
-        patch.preset2.clear();
-        patch.level_db = 0.0;
-        patch.trim_db = 0.0;
-        patch.boost_db = 0.0;
-        def.patches = vec![patch];
+        def.patches = vec![snapshot_patch(base, &preset.name, &preset.snapshots[s].name, "level")?];
         let mut calm = comp.clone();
-        calm.presets[p].snapshots[s].level_db = 0.0;
+        calm.presets[p].snapshots[s].level_db = level_db;
         let flat = flatten(&def, &calm);
-        let built = crate::profiles::build_profile(&flat, drives);
-        let blocks: Vec<_> = built
-            .patches
-            .first()?
-            .chain
-            .iter()
-            .filter(|b| b.has_backend())
-            .cloned()
-            .collect();
-        signal_sampler::patch_level::level_of(&blocks, sample_rate)
-            .filter(|l| l.is_finite() && *l > -70.0)
-            .map(|l| l as f32)
+        let built = crate::nodes::to_nodes_with_store(&flat, drives).to_profile(&flat, drives);
+        crate::measure::patch_lufs(built.patches.first()?, sample_rate).filter(|l| *l > -70.0)
     };
-    let results = std::sync::Mutex::new(vec![None; jobs.len()]);
-    let next = std::sync::atomic::AtomicUsize::new(0);
-    std::thread::scope(|scope| {
-        for _ in 0..threads.max(1) {
-            scope.spawn(|| {
-                loop {
-                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let Some(&job) = jobs.get(i) else { break };
-                    let lufs = measure(job);
-                    results
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)[i] = lufs;
-                }
-            });
-        }
-    });
-    let results = results
-        .into_inner()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let target = signal_sampler::patch_level::TARGET_LUFS as f32;
+    // Measure raw, correct, and re-measure with the correction applied until
+    // it lands: the chain ends in the rig's limiter (the live chain does), so
+    // a hot snapshot reads quieter than it is and one subtraction undershoots.
+    // After the first step the trimmed signal sits under the limiter and the
+    // next one is exact; cached, so a re-run costs nothing.
+    let measure = |&job: &(usize, usize)| -> Option<(f32, f32)> {
+        let raw = measure_at(job, 0.0)?;
+        let mut level = (target - raw).clamp(-40.0, 40.0);
+        for _ in 0..3 {
+            let at = measure_at(job, level)?;
+            if (target - at).abs() <= 0.2 {
+                break;
+            }
+            level = (level + (target - at)).clamp(-40.0, 40.0);
+        }
+        Some((raw, level))
+    };
+    let results = crate::levelling::par_map(&jobs, threads, measure);
     jobs.iter()
         .zip(results)
-        .map(|(&(p, s), lufs)| {
+        .map(|(&(p, s), measured)| {
+            let lufs = measured.map(|(raw, _)| raw);
             let preset = comp.presets[p].name.clone();
             let snap = &mut comp.presets[p].snapshots[s];
-            if let Some(l) = lufs {
-                // Wider than a patch's ±24: a library of amps spans clean
-                // captures ~40 dB under a dimed amp-only one through an
-                // un-normalised IR, and a clamp would leave them unlevelled.
-                snap.level_db = (target - l).clamp(-40.0, 40.0);
+            // Wider than a patch's ±24: a library of amps spans clean
+            // captures ~40 dB under a dimed amp-only one through an
+            // un-normalised IR, and a clamp would leave them unlevelled.
+            if let Some((_, level)) = measured {
+                snap.level_db = level;
             }
             SnapshotLevel {
                 preset,
@@ -937,6 +934,159 @@ pub fn level_presets(
             }
         })
         .collect()
+}
+
+/// One snapshot moved by [`regroup_by_gear`].
+#[derive(Clone, Debug)]
+pub struct Regrouped {
+    pub from_preset: String,
+    pub from_snapshot: String,
+    pub to_preset: String,
+    pub to_snapshot: String,
+    /// An identical snapshot was already there, and is now shared.
+    pub reused: bool,
+}
+
+/// Name every preset for the gear it plays, never for a profile.
+///
+/// A preset is *gear* when every snapshot picks the Amp module preset of its
+/// own name (`Fender Deluxe Reverb`'s snapshots all pick the Fender Deluxe
+/// Reverb amp). Anything else — the `Worship Clean`s and `Metal Rhythm`s
+/// that recomposing a profile left behind — is dissolved: each snapshot
+/// moves into the gear preset of the amp it picks, reusing an identical one
+/// already there (same modules, blocks and overrides) or joining under its
+/// own name (numbered if that is taken). Every patch in `profiles` that
+/// pointed at a moved snapshot is repointed, so every patch plays exactly
+/// what it did. A snapshot with no Amp pick stays where it is.
+pub fn regroup_by_gear(comp: &mut Compositions, profiles: &mut [ProfileDef]) -> Vec<Regrouped> {
+    fn amp_of(snapshot: &PresetSnapshotDef) -> Option<String> {
+        snapshot
+            .modules
+            .iter()
+            .find(|m| m.module.eq_ignore_ascii_case("Amp"))
+            .map(|m| m.preset.clone())
+    }
+    // What a snapshot *is*, for spotting an identical one.
+    fn content(snapshot: &PresetSnapshotDef) -> String {
+        format!("{:?}|{:?}|{:?}", snapshot.modules, snapshot.blocks, snapshot.overrides)
+    }
+    let is_gear = |p: &RigPresetDef| {
+        !p.snapshots.is_empty()
+            && p.snapshots
+                .iter()
+                .all(|s| amp_of(s).is_some_and(|a| a.eq_ignore_ascii_case(&p.name)))
+    };
+
+    let mut moved = Vec::new();
+    let composites: Vec<RigPresetDef> = comp.presets.iter().filter(|p| !is_gear(p)).cloned().collect();
+    for composite in composites {
+        let mut kept = Vec::new();
+        for snap in composite.snapshots {
+            let Some(amp) = amp_of(&snap) else {
+                kept.push(snap);
+                continue;
+            };
+            let gear = match comp.presets.iter().position(|p| p.name.eq_ignore_ascii_case(&amp)) {
+                Some(i) => i,
+                None => {
+                    comp.presets.push(RigPresetDef {
+                        name: amp.clone(),
+                        snapshots: Vec::new(),
+                    });
+                    comp.presets.len() - 1
+                }
+            };
+            let key = content(&snap);
+            let target = &mut comp.presets[gear];
+            let (to_snapshot, reused) = if let Some(same) = target.snapshots.iter().find(|s| content(s) == key) {
+                (same.name.clone(), true)
+            } else {
+                // Its own name if free; else named by what sets it apart —
+                // the drive pedal it adds, or failing that its delay — and
+                // only then numbered.
+                let taken = |target: &RigPresetDef, name: &str| {
+                    target.snapshots.iter().any(|s| s.name.eq_ignore_ascii_case(name))
+                };
+                let pick = |module: &str| {
+                    snap.modules
+                        .iter()
+                        .find(|m| m.module.eq_ignore_ascii_case(module))
+                        .filter(|m| !m.preset.eq_ignore_ascii_case("Off"))
+                };
+                let mut name = snap.name.clone();
+                if taken(target, &name) {
+                    if let Some(drive) = pick("Drive") {
+                        name = format!("{} + {}", snap.name, drive.preset);
+                    } else if let Some(time) = pick("Time") {
+                        name = format!("{} · {}", snap.name, time.snapshot);
+                    }
+                }
+                let base = name.clone();
+                let mut n = 2;
+                while taken(target, &name) {
+                    name = format!("{base} {n}");
+                    n += 1;
+                }
+                let mut joined = snap.clone();
+                joined.name.clone_from(&name);
+                target.snapshots.push(joined);
+                (name, false)
+            };
+            moved.push(Regrouped {
+                from_preset: composite.name.clone(),
+                from_snapshot: snap.name.clone(),
+                to_preset: target.name.clone(),
+                to_snapshot,
+                reused,
+            });
+        }
+        let at = comp
+            .presets
+            .iter()
+            .position(|p| p.name.eq_ignore_ascii_case(&composite.name));
+        match (at, kept.is_empty()) {
+            (Some(i), true) => {
+                comp.presets.remove(i);
+            }
+            (Some(i), false) => comp.presets[i].snapshots = kept,
+            (None, _) => {}
+        }
+    }
+
+    for profile in profiles.iter_mut() {
+        for patch in &mut profile.patches {
+            if let Some(m) = moved.iter().find(|m| {
+                m.from_preset.eq_ignore_ascii_case(&patch.rig_preset)
+                    && m.from_snapshot.eq_ignore_ascii_case(&patch.snapshot)
+            }) {
+                patch.rig_preset.clone_from(&m.to_preset);
+                patch.snapshot.clone_from(&m.to_snapshot);
+            }
+        }
+    }
+    moved
+}
+
+/// A patch that plays one preset snapshot and nothing else of its own: no
+/// module picks, overrides, drives, second amp, level, trim or boost — the
+/// snapshot as it is. Built on the profile's first patch for the chain
+/// around it. It is what snapshot levelling measures, and what the preset
+/// tab plays when it auditions a snapshot, so an audition lands exactly at
+/// the level the snapshot was levelled to.
+#[must_use]
+pub fn snapshot_patch(base: &ProfileDef, preset: &str, snapshot: &str, name: &str) -> Option<crate::profiles::PatchDef> {
+    let mut patch = base.patches.first()?.clone();
+    patch.name = name.into();
+    patch.rig_preset = preset.into();
+    patch.snapshot = snapshot.into();
+    patch.modules.clear();
+    patch.overrides.clear();
+    patch.drives.clear();
+    patch.preset2.clear();
+    patch.level_db = 0.0;
+    patch.trim_db = 0.0;
+    patch.boost_db = 0.0;
+    Some(patch)
 }
 
 /// Read an amp map: `old capture = Amp preset / snapshot` per line, `#`

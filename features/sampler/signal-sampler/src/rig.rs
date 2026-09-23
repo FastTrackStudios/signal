@@ -602,6 +602,13 @@ struct InputMeterShared {
     /// Samples still to capture (0 = disarmed). Relaxed atomics — the probe
     /// is the only writer of `capture` while armed.
     capture_remaining: std::sync::atomic::AtomicUsize,
+    /// A test signal that replaces the instrument while set — the DI reference
+    /// looped through the live chain, for levelling patches by what they
+    /// actually output (see [`GuitarRig::start_test_signal`]).
+    inject: std::sync::Mutex<Option<Arc<Vec<f32>>>>,
+    /// Bumped when `inject` changes; the probe re-reads it (and restarts the
+    /// loop) when it sees a new value, so the audio thread only locks then.
+    inject_gen: std::sync::atomic::AtomicU64,
 }
 
 /// Mono window the tuner runs autocorrelation over. At 48 kHz this covers
@@ -718,6 +725,11 @@ struct InputProbe {
     /// Fake-DI loop + cursor (debug input; None in normal operation).
     fake: Option<Vec<f32>>,
     fake_pos: usize,
+    /// The injected test signal (see `InputMeterShared::inject`) + cursor,
+    /// and the generation it was read at.
+    inject: Option<Arc<Vec<f32>>>,
+    inject_pos: usize,
+    inject_gen: u64,
     prepared: bool,
     /// Per-block mono scratch (reused) for the tuner window push.
     mono: Vec<f32>,
@@ -732,6 +744,9 @@ impl InputProbe {
             mono: Vec::with_capacity(MAX_BLOCK),
             fake: load_fake_di(),
             fake_pos: 0,
+            inject: None,
+            inject_pos: 0,
+            inject_gen: 0,
         }
     }
 }
@@ -779,20 +794,37 @@ impl PluginInstance for InputProbe {
     ) -> Result<(), PluginError> {
         let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
         let muted = self.shared.input_muted.load(Ordering::Relaxed);
+        // A new test signal (or its removal): re-read it, from the top. Only
+        // locks when the generation moved, and never waits for the lock.
+        let generation = self.shared.inject_gen.load(Ordering::Acquire);
+        if generation != self.inject_gen {
+            if let Ok(slot) = self.shared.inject.try_lock() {
+                self.inject = slot.clone();
+                self.inject_pos = 0;
+                self.inject_gen = generation;
+            }
+        }
         let (mut pk_l, mut pk_r) = (0.0f32, 0.0f32);
         // Reused mono scratch for the tuner window push (off the steady-state
         // alloc path after the first block).
         self.mono.clear();
         self.mono.reserve(frames);
         for i in 0..frames {
-            // Fake-DI debug loop replaces the live input when armed.
-            let (src_l, src_r) = match &self.fake {
-                Some(w) => {
-                    let v = w[self.fake_pos];
-                    self.fake_pos = (self.fake_pos + 1) % w.len();
-                    (v, v)
+            // The test signal, else the fake-DI debug loop, replaces the
+            // live input when armed.
+            let (src_l, src_r) = if let Some(w) = self.inject.as_ref().filter(|w| !w.is_empty()) {
+                let v = w[self.inject_pos];
+                self.inject_pos = (self.inject_pos + 1) % w.len();
+                (v, v)
+            } else {
+                match &self.fake {
+                    Some(w) => {
+                        let v = w[self.fake_pos];
+                        self.fake_pos = (self.fake_pos + 1) % w.len();
+                        (v, v)
+                    }
+                    None => (in_l[i], in_r[i]),
                 }
-                None => (in_l[i], in_r[i]),
             };
             // Muted: the chain gets silence (trails keep ringing) while
             // the meters and the tuner still see the instrument.
@@ -809,6 +841,94 @@ impl PluginInstance for InputProbe {
         fx_blocks::sidechain::set_peak(pk_l.max(pk_r));
         self.shared.push_samples(&self.mono);
         self.shared.push_capture(&self.mono);
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+}
+
+/// What the [`OutputTap`] shares with the control thread.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Default)]
+struct OutputTapShared {
+    /// Captured output, per channel — filled while `remaining > 0`.
+    capture: std::sync::Mutex<(Vec<f32>, Vec<f32>)>,
+    /// Frames still to capture (0 = disarmed).
+    remaining: std::sync::atomic::AtomicUsize,
+    /// Silence what leaves the chain (the capture still sees it) — so a
+    /// levelling pass is not played through the speakers.
+    muted: AtomicBool,
+}
+
+/// The last FX slot on the rig track, after every chain slot: the chain's
+/// real output, captured on request — the measurement point for levelling
+/// patches by what the rig actually plays, trims and all.
+#[cfg(not(target_arch = "wasm32"))]
+struct OutputTap {
+    shared: Arc<OutputTapShared>,
+    prepared: bool,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl PluginInstance for OutputTap {
+    fn descriptor(&self) -> PluginDescriptor {
+        PluginDescriptor {
+            id: "signal.rig.output_tap".into(),
+            name: "Output".into(),
+            vendor: "Signal".into(),
+            version: String::new(),
+            format: PluginFormat::Synthetic,
+        }
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        Vec::new()
+    }
+    fn param_value(&mut self, _id: u32) -> Option<f64> {
+        None
+    }
+    fn value_to_text(&mut self, _id: u32, _v: f64) -> Option<String> {
+        None
+    }
+    fn text_to_value(&mut self, _id: u32, _t: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        0
+    }
+    fn prepare(&mut self, _sr: f64, _bs: u32) -> Result<(), PluginError> {
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        _events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
+        let remaining = self.shared.remaining.load(Ordering::Relaxed);
+        if remaining > 0 {
+            let take = remaining.min(frames);
+            // Buffers were reserved when armed; never wait on the lock.
+            if let Ok(mut cap) = self.shared.capture.try_lock() {
+                cap.0.extend_from_slice(&in_l[..take]);
+                cap.1.extend_from_slice(&in_r[..take]);
+                self.shared.remaining.store(remaining - take, Ordering::Relaxed);
+            }
+        }
+        if self.shared.muted.load(Ordering::Relaxed) {
+            out_l[..frames].fill(0.0);
+            out_r[..frames].fill(0.0);
+        } else {
+            out_l[..frames].copy_from_slice(&in_l[..frames]);
+            out_r[..frames].copy_from_slice(&in_r[..frames]);
+        }
         Ok(())
     }
     fn deactivate(&mut self) {
@@ -1435,8 +1555,12 @@ struct SwapState {
 pub struct GuitarRig {
     daw: Standalone,
     // The shared daw host (project + realtime engine + transport); drop =
-    // stop audio.
-    _host: DuplexRigHost,
+    // stop audio. `None` for an offline rig (see `open_offline`).
+    _host: Option<DuplexRigHost>,
+    /// The offline rig's renderer and playhead — the same `ProjectRenderer`
+    /// the realtime callback drives, pulled here by `render_offline` instead
+    /// of by an audio device. `None` for a live rig.
+    offline: Option<std::sync::Mutex<(daw::standalone::audio_engine::render::ProjectRenderer, u64)>>,
     /// Live realtime metrics (render time / block size) from the duplex engine,
     /// driving the rig's DSP-load meter. `None` under the cpal fallback.
     engine_stats: Option<Arc<EngineStats>>,
@@ -1446,6 +1570,8 @@ pub struct GuitarRig {
     slot_guids: Vec<String>,
     /// Input-meter atomic written by the `InputProbe` at slot 0.
     input_meter: Arc<InputMeterShared>,
+    /// The chain's real output (the `OutputTap` after every chain slot).
+    output_tap: Arc<OutputTapShared>,
 
     pub sample_rate: u32,
     /// Mutable swap state (resident chains + active selection + trims/bypass).
@@ -1511,18 +1637,8 @@ impl GuitarRig {
     ///
     /// Returns an error if the audio engine cannot be started or the project cannot be set up.
     pub fn open(prefs: &RigAudioPrefs) -> eyre::Result<Self> {
-        // 1. Seed a one-track project (current, so the FX-chain service
-        //    targets it); arm the track to monitor the hardware input channel.
-        let project = RigProject::new(RIG_PROJECT_NAME);
-        let track_guid = project.add_track(RIG_TRACK_NAME)?;
-        project.arm_input(&track_guid, prefs.input_channel as u32)?;
-
-        // 2. Reserve the fixed FX slots on the track (constant guids). Slot 0
-        //    is the input probe; the rest start as identity pass-throughs.
-        let mut slot_guids = Vec::with_capacity(MAX_CHAIN_SLOTS + 1);
-        for i in 0..=MAX_CHAIN_SLOTS {
-            slot_guids.push(project.add_fx_slot(&track_guid, &format!("rig-slot-{i}"))?);
-        }
+        let (project, track_guid, slot_guids, output_tap_guid) =
+            Self::seed(prefs.input_channel as u32)?;
 
         // 3. Open the duplex realtime engine (`prefs.into()` carries the
         //    device/routing config; the host forces `want_input` on) and the
@@ -1533,18 +1649,8 @@ impl GuitarRig {
         let meters = host.install_meters(1);
         let daw = host.daw().clone();
 
-        // 4. Populate the reserved slots: input probe at 0, identities elsewhere.
-        let input_meter = Arc::new(InputMeterShared::default());
-        {
-            let mut probe = InputProbe::new(input_meter.clone());
-            let _ = probe.prepare(sample_rate as f64, FX_PREPARE_BLOCK);
-            daw.insert_plugin_instance(slot_guids[0].clone(), Box::new(probe));
-            for guid in &slot_guids[1..] {
-                let mut id = Identity::new();
-                let _ = id.prepare(sample_rate as f64, FX_PREPARE_BLOCK);
-                daw.insert_plugin_instance(guid.clone(), Box::new(id));
-            }
-        }
+        let (input_meter, output_tap) =
+            Self::populate(&daw, sample_rate, &slot_guids, output_tap_guid);
 
         // 5. Roll the transport so the renderer runs (and the live input flows
         //    through the chain to master) every block.
@@ -1580,14 +1686,142 @@ impl GuitarRig {
             nam_calibration_off: prefs.nam_calibration_off,
         };
 
-        Ok(Self {
+        Ok(Self::assemble(
             daw,
-            _host: host,
+            Some(host),
+            None,
             engine_stats,
             meters,
             track_guid,
             slot_guids,
             input_meter,
+            output_tap,
+            sample_rate,
+            effective,
+        ))
+    }
+
+    /// The rig with no audio device: the identical project, track, slots,
+    /// probe, output tap and — once chains are installed — chains as
+    /// [`open`](Self::open), rendered by the same `ProjectRenderer` the
+    /// realtime callback drives, only pulled by
+    /// [`render_offline`](Self::render_offline) as fast as the CPU allows.
+    ///
+    /// This is how a patch is measured *offline*: not by a second chain
+    /// runner that has to be kept in step with the live one (the old one
+    /// drifted by up to 18 dB on a dimed amp through an IR), but by this one.
+    /// Input comes from [`start_test_signal`](Self::start_test_signal),
+    /// output from the output tap — both exactly where the live rig has them.
+    ///
+    /// # Errors
+    ///
+    /// If the project or its slots cannot be set up.
+    pub fn open_offline(sample_rate: u32) -> eyre::Result<Self> {
+        let (project, track_guid, slot_guids, output_tap_guid) = Self::seed(0)?;
+        let daw = project.daw().clone();
+        let meters = Meters::new(1);
+        daw.set_meters(meters.clone());
+        let (input_meter, output_tap) =
+            Self::populate(&daw, sample_rate, &slot_guids, output_tap_guid);
+        let renderer = daw::standalone::audio_engine::render::ProjectRenderer::new(
+            &daw,
+            project.project_guid(),
+            sample_rate,
+        );
+        let prefs = RigAudioPrefs {
+            sample_rate,
+            ..RigAudioPrefs::default()
+        };
+        Ok(Self::assemble(
+            daw,
+            None,
+            Some(std::sync::Mutex::new((renderer, 0))),
+            None,
+            meters,
+            track_guid,
+            slot_guids,
+            input_meter,
+            output_tap,
+            sample_rate,
+            prefs,
+        ))
+    }
+
+    /// Steps 1–2, shared by both engines: the one-track project, armed, with
+    /// its fixed FX slots.
+    fn seed(input_channel: u32) -> eyre::Result<(RigProject, String, Vec<String>, String)> {
+        // 1. Seed a one-track project (current, so the FX-chain service
+        //    targets it); arm the track to monitor the hardware input channel.
+        let project = RigProject::new(RIG_PROJECT_NAME);
+        let track_guid = project.add_track(RIG_TRACK_NAME)?;
+        project.arm_input(&track_guid, input_channel)?;
+
+        // 2. Reserve the fixed FX slots on the track (constant guids). Slot 0
+        //    is the input probe; the rest start as identity pass-throughs.
+        let mut slot_guids = Vec::with_capacity(MAX_CHAIN_SLOTS + 1);
+        for i in 0..=MAX_CHAIN_SLOTS {
+            slot_guids.push(project.add_fx_slot(&track_guid, &format!("rig-slot-{i}"))?);
+        }
+        // After every chain slot, and kept out of `slot_guids` so nothing that
+        // walks the chain slots ever sees it.
+        let output_tap_guid = project.add_fx_slot(&track_guid, "rig-output-tap")?;
+        Ok((project, track_guid, slot_guids, output_tap_guid))
+    }
+
+    /// Step 4, shared by both engines: input probe at 0, identities in the
+    /// chain slots, the output tap after them.
+    fn populate(
+        daw: &Standalone,
+        sample_rate: u32,
+        slot_guids: &[String],
+        output_tap_guid: String,
+    ) -> (Arc<InputMeterShared>, Arc<OutputTapShared>) {
+        let input_meter = Arc::new(InputMeterShared::default());
+        {
+            let mut probe = InputProbe::new(input_meter.clone());
+            let _ = probe.prepare(sample_rate as f64, FX_PREPARE_BLOCK);
+            daw.insert_plugin_instance(slot_guids[0].clone(), Box::new(probe));
+            for guid in &slot_guids[1..] {
+                let mut id = Identity::new();
+                let _ = id.prepare(sample_rate as f64, FX_PREPARE_BLOCK);
+                daw.insert_plugin_instance(guid.clone(), Box::new(id));
+            }
+        }
+        let output_tap = Arc::new(OutputTapShared::default());
+        daw.insert_plugin_instance(
+            output_tap_guid,
+            Box::new(OutputTap {
+                shared: output_tap.clone(),
+                prepared: true,
+            }),
+        );
+        (input_meter, output_tap)
+    }
+
+    #[expect(clippy::too_many_arguments, reason = "one constructor, two engines")]
+    fn assemble(
+        daw: Standalone,
+        host: Option<DuplexRigHost>,
+        offline: Option<std::sync::Mutex<(daw::standalone::audio_engine::render::ProjectRenderer, u64)>>,
+        engine_stats: Option<Arc<EngineStats>>,
+        meters: Arc<Meters>,
+        track_guid: String,
+        slot_guids: Vec<String>,
+        input_meter: Arc<InputMeterShared>,
+        output_tap: Arc<OutputTapShared>,
+        sample_rate: u32,
+        prefs: RigAudioPrefs,
+    ) -> Self {
+        Self {
+            daw,
+            _host: host,
+            offline,
+            engine_stats,
+            meters,
+            track_guid,
+            slot_guids,
+            input_meter,
+            output_tap,
             sample_rate,
             swap: std::sync::Mutex::new(SwapState {
                 chains: std::collections::HashMap::new(),
@@ -1598,8 +1832,47 @@ impl GuitarRig {
             }),
             slots: Vec::new(),
             next_id: 0,
-            prefs: effective,
-        })
+            prefs,
+        }
+    }
+
+    /// Whether this rig renders offline (no audio device).
+    #[must_use]
+    pub fn is_offline(&self) -> bool {
+        self.offline.is_some()
+    }
+
+    /// Render `frames` through the offline rig (no-op for a live one).
+    pub fn render_offline(&self, frames: usize) {
+        /// Well under the slots' prepared maximum (`FX_PREPARE_BLOCK`), and
+        /// the size a realtime callback would plausibly use.
+        const BLOCK: usize = 512;
+        let Some(offline) = &self.offline else { return };
+        let Ok(mut guard) = offline.lock() else { return };
+        let (renderer, playhead) = &mut *guard;
+        let mut left = frames;
+        while left > 0 {
+            let n = left.min(BLOCK);
+            let _ = renderer.render_block(*playhead, n);
+            *playhead += n as u64;
+            left -= n;
+        }
+    }
+
+    /// The next `frames` of the chain's real output, `(left, right)` — the
+    /// one measurement both engines share. Offline, rendered on the spot;
+    /// live, captured as the device plays (blocks until it is, or `timeout`).
+    pub fn measure_output(&self, frames: usize, timeout: std::time::Duration) -> (Vec<f32>, Vec<f32>) {
+        self.arm_output_capture(frames);
+        if self.is_offline() {
+            self.render_offline(frames);
+        } else {
+            let deadline = std::time::Instant::now() + timeout;
+            while self.output_capture_remaining() > 0 && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        }
+        self.take_output_capture()
     }
 
     /// List available input devices (name + channel count + native rate).
@@ -2041,6 +2314,55 @@ impl GuitarRig {
     /// Take the finished capture buffer (empties it).
     pub fn take_di_capture(&self) -> Vec<f32> {
         self.input_meter.take_capture()
+    }
+
+    /// Replace the instrument with `samples` (mono, at the rig's rate),
+    /// looped from the top, until [`stop_test_signal`](Self::stop_test_signal).
+    /// The whole live chain — the patch as switched, every trim the backend
+    /// applied — hears it exactly as it would the guitar.
+    pub fn start_test_signal(&self, samples: Arc<Vec<f32>>) {
+        if let Ok(mut slot) = self.input_meter.inject.lock() {
+            *slot = Some(samples);
+        }
+        self.input_meter.inject_gen.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// Back to the instrument.
+    pub fn stop_test_signal(&self) {
+        if let Ok(mut slot) = self.input_meter.inject.lock() {
+            *slot = None;
+        }
+        self.input_meter.inject_gen.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// Silence the rig's output (the output capture still hears the chain).
+    pub fn set_output_muted(&self, muted: bool) {
+        self.output_tap.muted.store(muted, Ordering::Relaxed);
+    }
+
+    /// Capture the next `frames` of the chain's output (per channel).
+    pub fn arm_output_capture(&self, frames: usize) {
+        if let Ok(mut cap) = self.output_tap.capture.lock() {
+            cap.0.clear();
+            cap.1.clear();
+            cap.0.reserve(frames);
+            cap.1.reserve(frames);
+        }
+        self.output_tap.remaining.store(frames, Ordering::Relaxed);
+    }
+
+    /// Frames still to capture (0 once the capture is complete).
+    pub fn output_capture_remaining(&self) -> usize {
+        self.output_tap.remaining.load(Ordering::Relaxed)
+    }
+
+    /// Take the captured output, `(left, right)`.
+    pub fn take_output_capture(&self) -> (Vec<f32>, Vec<f32>) {
+        self.output_tap
+            .capture
+            .lock()
+            .map(|mut c| std::mem::take(&mut *c))
+            .unwrap_or_default()
     }
 
     /// A snapshot of the most-recent mono input samples (post-input-trim,

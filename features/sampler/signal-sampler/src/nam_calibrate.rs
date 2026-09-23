@@ -399,37 +399,52 @@ pub fn measured_loudness(
         }
     };
 
-    let guard = context();
-    let mut slot = guard
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    // (Re)initialise the context if absent or the DI sample rate changed.
-    if slot
-        .as_ref()
-        .map_or(true, |c| (c.di.sample_rate - sample_rate).abs() > 1.0)
-    {
-        *slot = Some(Context {
-            di: DiReference::load_or_synthetic(sample_rate),
-            cache: LoudnessCache::load(),
-        });
-    }
-    let ctx = slot.as_mut().unwrap();
-    let di_id = ctx.di.id.clone();
+    // The context lock covers the cache and the DI, never the render: a
+    // measurement is seconds of NAM, and holding the lock across it turned
+    // every parallel levelling pass into one render at a time.
+    let (di, di_id) = {
+        let mut slot = context()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // (Re)initialise the context if absent or the DI sample rate changed.
+        if slot
+            .as_ref()
+            .map_or(true, |c| (c.di.sample_rate - sample_rate).abs() > 1.0)
+        {
+            *slot = Some(Context {
+                di: DiReference::load_or_synthetic(sample_rate),
+                cache: LoudnessCache::load(),
+            });
+        }
+        let ctx = slot.as_mut().unwrap();
+        let di_id = ctx.di.id.clone();
+        if let Some(lufs) = ctx.cache.lookup(&model_hash, &di_id, sr_key) {
+            drop(slot);
+            // Re-reset for live use (load() already prepared it, but stay explicit).
+            model.reset(sample_rate, max_block);
+            return (lufs > FAILED_LUFS).then_some(lufs);
+        }
+        (ctx.di.clone(), di_id)
+    };
 
-    if let Some(lufs) = ctx.cache.lookup(&model_hash, &di_id, sr_key) {
-        // Re-reset for live use (load() already prepared it, but stay explicit).
-        model.reset(sample_rate, max_block);
-        return (lufs > FAILED_LUFS).then_some(lufs);
-    }
-
-    let measured = measure_model_lufs(model, &ctx.di, max_block);
+    let measured = measure_model_lufs(model, &di, max_block);
     let stored = if measured == SILENCE_LUFS || !measured.is_finite() {
         FAILED_LUFS
     } else {
         measured
     };
-    ctx.cache.insert(model_hash, di_id, sr_key, stored);
-    ctx.cache.save();
+    {
+        let mut slot = context()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // The DI may have been replaced while this rendered; a measurement
+        // against the old one is keyed by the old id, so it is still true —
+        // just not one the new DI will look up.
+        if let Some(ctx) = slot.as_mut() {
+            ctx.cache.insert(model_hash, di_id, sr_key, stored);
+            ctx.cache.save();
+        }
+    }
 
     // Restore the model to the live block size after measurement.
     model.reset(sample_rate, max_block);
@@ -677,6 +692,22 @@ pub fn measure_thd(model: &mut NamModel, sample_rate: f64, input_gain_db: f64) -
 
 /// The cached drive curve for a model file, measuring on first sight (the
 /// "import-time test"). Returns `None` if the model can't be loaded/hashed.
+/// [`drive_curve`] if it is already measured — never measures.
+///
+/// For the switch path: a patch change must not wait seconds on a sweep, so
+/// it asks this and, on a miss, has the measurement done elsewhere.
+#[must_use]
+pub fn drive_curve_cached(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntry> {
+    let sr_key = sample_rate.round() as u32;
+    let model_hash = hash_file(model_path).ok()?;
+    let di = DiReference::load_or_synthetic(sample_rate);
+    drive_cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .lookup(&model_hash, &di.id, sr_key)
+        .cloned()
+}
+
 pub fn drive_curve(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntry> {
     let sr_key = sample_rate.round() as u32;
     let model_hash = hash_file(model_path).ok()?;
@@ -727,7 +758,48 @@ pub fn drive_curve(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntr
 /// the knob never moves the volume.
 #[must_use]
 pub fn drive_compensation(model_path: &Path, sample_rate: f64, drive: f32) -> Option<(f32, f32)> {
-    let entry = drive_curve(model_path, sample_rate)?;
+    compensation_from(&drive_curve(model_path, sample_rate)?, drive)
+}
+
+/// [`drive_compensation`] from the cache alone — `None` when the model has
+/// not been measured yet (see [`drive_curve_cached`]).
+#[must_use]
+pub fn drive_compensation_cached(
+    model_path: &Path,
+    sample_rate: f64,
+    drive: f32,
+) -> Option<(f32, f32)> {
+    compensation_from(&drive_curve_cached(model_path, sample_rate)?, drive)
+}
+
+/// The input trim (dB) a drive position stands for: 0.5 is the capture at
+/// unity, the ends are the ends of the measured sweep.
+#[must_use]
+pub fn drive_input_db(drive: f32) -> f32 {
+    let lo = DRIVE_SWEEP_DB[0];
+    let hi = DRIVE_SWEEP_DB[DRIVE_SWEEP_DB.len() - 1];
+    (lo + f64::from(drive.clamp(0.0, 1.0)) * (hi - lo)) as f32
+}
+
+/// How far the output must move (dB) to hold a capture's loudness when its
+/// drive goes from 0.5 to `drive` — from the cached curve, 0 when there is
+/// none (or at 0.5). A block's stored Output Level is set at 0.5; this is the
+/// correction on top when its knob sits elsewhere.
+#[must_use]
+pub fn drive_output_delta_cached(model_path: &Path, sample_rate: f64, drive: f32) -> f32 {
+    if (drive - 0.5).abs() < 1e-4 {
+        return 0.0;
+    }
+    let Some(entry) = drive_curve_cached(model_path, sample_rate) else {
+        return 0.0;
+    };
+    match (compensation_from(&entry, drive), compensation_from(&entry, 0.5)) {
+        (Some((_, at)), Some((_, unity))) => at - unity,
+        _ => 0.0,
+    }
+}
+
+fn compensation_from(entry: &DriveCurveEntry, drive: f32) -> Option<(f32, f32)> {
     let lo = DRIVE_SWEEP_DB[0];
     let hi = DRIVE_SWEEP_DB[DRIVE_SWEEP_DB.len() - 1];
     let in_db = lo + (drive.clamp(0.0, 1.0) as f64) * (hi - lo);

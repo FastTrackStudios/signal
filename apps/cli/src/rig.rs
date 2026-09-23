@@ -26,6 +26,24 @@ pub enum Command {
         #[arg(long)]
         write: bool,
     },
+    /// Level the building blocks on their own: every amp module snapshot
+    /// through its own cab (to the rig's target), every drive option to unity
+    /// at drive 0.5. Writes each block's Output Level. Run before
+    /// `level-presets` and `level`.
+    LevelModules {
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long, default_value_t = 48_000)]
+        sample_rate: u32,
+    },
+    /// Name every preset for the gear it plays: dissolve the profile-named
+    /// presets (`Worship Clean`, `Metal Rhythm`, …) into the amp presets
+    /// their snapshots play, and repoint every profile at them. Sounds are
+    /// unchanged. Dry run unless `--write`.
+    RegroupPresets {
+        #[arg(long)]
+        write: bool,
+    },
     /// List the module presets as the rig loads them (modules.styx).
     Modules,
     /// Make a profile pure references: each patch becomes a snapshot of a
@@ -56,7 +74,8 @@ pub enum Command {
         dry_run: bool,
         #[arg(long, default_value_t = 48_000)]
         sample_rate: u32,
-        #[arg(long, default_value_t = 8)]
+        /// Render threads (0 = every core).
+        #[arg(long, default_value_t = 0)]
         threads: usize,
     },
 }
@@ -158,6 +177,64 @@ pub fn run(command: Command) -> ExitCode {
             if write {
                 signal_guitar::library::RigLibrary::save_compositions(&comp);
                 signal_guitar::library::RigLibrary::save_profile(&def);
+                println!("written.");
+            } else {
+                println!("(dry run — pass --write to save)");
+            }
+            ExitCode::SUCCESS
+        }
+        Command::LevelModules { dry_run, sample_rate } => {
+            let started = std::time::Instant::now();
+            let results = signal_guitar::levelling::level_modules(sample_rate, dry_run);
+            let mut failed = 0;
+            for r in &results {
+                match r.lufs {
+                    Some(l) => println!("{:<60} {l:>7.1} LUFS  →  {:+.1} dB", r.what, r.level_db),
+                    None => {
+                        failed += 1;
+                        println!("{:<60} did not render", r.what);
+                    }
+                }
+            }
+            println!(
+                "\n{} modules in {:.0}s, {failed} failed{}",
+                results.len(),
+                started.elapsed().as_secs_f32(),
+                if dry_run { " (dry run — nothing written)" } else { "" }
+            );
+            ExitCode::SUCCESS
+        }
+        Command::RegroupPresets { write } => {
+            let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
+            let mut comp = signal_guitar::library::RigLibrary::load_compositions();
+            let mut profiles = lib.profiles.clone();
+            let moved = signal_guitar::compose::regroup_by_gear(&mut comp, &mut profiles);
+            let mut last = String::new();
+            for m in &moved {
+                if m.from_preset != last {
+                    println!("{}", m.from_preset);
+                    last.clone_from(&m.from_preset);
+                }
+                println!(
+                    "  {:<22} → {} · {}{}",
+                    m.from_snapshot,
+                    m.to_preset,
+                    m.to_snapshot,
+                    if m.reused { "  (same as existing)" } else { "" }
+                );
+            }
+            println!("\nPatches:");
+            for p in &profiles {
+                for patch in &p.patches {
+                    println!("  {:<8} {:<22} → {} · {}", p.name, patch.name, patch.rig_preset, patch.snapshot);
+                }
+            }
+            println!("\nPresets now: {}", comp.presets.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", "));
+            if write {
+                signal_guitar::library::RigLibrary::save_compositions(&comp);
+                for p in &profiles {
+                    signal_guitar::library::RigLibrary::save_profile(p);
+                }
                 println!("written.");
             } else {
                 println!("(dry run — pass --write to save)");

@@ -233,7 +233,9 @@ fn StereoMeter(
         let pct = ((db + 60.0) / 60.0 * 100.0).clamp(0.0, 100.0);
         let color = if muted {
             "#3f3f46"
-        } else if db > -6.0 {
+        // Red means near clipping, not "loud": at −6 it lit on every hard
+        // strum of a patch peaking with 6 dB of clean headroom left.
+        } else if db > -3.0 {
             "#ef4444"
         } else if db > -18.0 {
             "#eab308"
@@ -1863,9 +1865,14 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     let in_db = state.in_peak_db.cloned();
     let out_db = state.out_peak_db.cloned();
     let (in_l, in_r, out_l, out_r) = state.stereo_db.cloned();
-    let gr_db = state.comp_gr_db.cloned();
     let spectrum = state.spectrum.cloned();
     let comp_wave = state.comp_wave.cloned();
+    // Each compressor panel draws its own block's trace and gain reduction.
+    let trace_of = |name: &str| -> ((Vec<f32>, Vec<f32>), f32) {
+        comp_wave
+            .get(name)
+            .map_or_else(|| ((Vec::new(), Vec::new()), 0.0), |(i, g, gr)| ((i.clone(), g.clone()), *gr))
+    };
 
     let eq = find_block(&blocks, BlockType::Eq, "Amp EQ");
     // The drive board: Boost + the three drives, plus the amps.
@@ -2036,10 +2043,10 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 }),
                                 if let Some(comp) = comp {
                                     crate::comp_surface::CompSurface {
-                                        block: comp,
-                                        wave: comp_wave.clone(),
+                                        block: comp.clone(),
+                                        wave: trace_of(&comp.name).0,
                                         in_db,
-                                        gr_db,
+                                        gr_db: trace_of(&comp.name).1,
                                     }
                                 } else {
                                     {empty_slot(comp_title)}
@@ -2213,7 +2220,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 })
                             }),
                             if let Some(pc) = post_comp.clone() {
-                                crate::comp_surface::CompSurface { block: pc, wave: comp_wave.clone(), in_db, gr_db }
+                                crate::comp_surface::CompSurface { block: pc.clone(), wave: trace_of(&pc.name).0, in_db, gr_db: trace_of(&pc.name).1 }
                             } else {
                                 {empty_slot("Post Comp")}
                             }
@@ -2281,7 +2288,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 })
                             }),
                             if let Some(lim) = limiter.clone() {
-                                crate::comp_surface::CompSurface { block: lim, wave: comp_wave.clone(), in_db, gr_db }
+                                crate::comp_surface::CompSurface { block: lim.clone(), wave: trace_of(&lim.name).0, in_db, gr_db: trace_of(&lim.name).1 }
                             } else {
                                 {empty_slot("Limiter")}
                             }

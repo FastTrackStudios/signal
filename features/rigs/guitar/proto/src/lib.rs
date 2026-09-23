@@ -155,6 +155,19 @@ pub struct RigStatus {
     pub perf: RigPerf,
 }
 
+/// A compressor block's rolling telemetry.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct CompTrace {
+    /// The compressor block this is (`LiveBlock::name`).
+    pub block: String,
+    /// Input peaks, 0..1, oldest → newest, a ~4-second window.
+    pub input: Vec<f32>,
+    /// Gain reduction, 0..1 of 30 dB, same window.
+    pub gr: Vec<f32>,
+    /// Current gain reduction, dB (positive = reducing).
+    pub gr_db: f32,
+}
+
 /// How a patch-levelling pass is going.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct LevelProgress {
@@ -605,7 +618,7 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode, PartOverride,
+        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode, PartOverride,
         PatchInfo, PerformanceModel, PresetInfo, RigStatus, TunerReading,
     };
 
@@ -625,9 +638,10 @@ pub mod rig {
         /// Input spectrum, ~15 Hz: dB magnitudes (−90..0) over log-spaced
         /// bins 20 Hz–20 kHz.
         Spectrum(Vec<f32>),
-        /// Compressor rolling telemetry, ~15 Hz: `(input_peaks, gain_reduction)`
-        /// — both 0..1, oldest → newest, a ~4-second window.
-        CompWave(Vec<f32>, Vec<f32>),
+        /// One compressor block's rolling telemetry, ~15 Hz — sent per
+        /// compressor, each from its own meter channel, so every compressor
+        /// panel draws its own block.
+        CompWave(CompTrace),
         /// Progress of a patch-levelling pass. Levelling renders every patch
         /// offline and a NAM block is far from realtime, so this can run for a
         /// minute: without progress a player cannot tell it from a hang.

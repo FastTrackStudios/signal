@@ -18,6 +18,8 @@ workspace = true
 pipewire = []
 
 [dependencies]
+# WAV output for the switch probe (`SIGNAL_SWITCH_PROBE`, session.rs).
+hound = "3.5"
 uuid.workspace = true
 # getrusage — the process's own CPU time, for the bar's CPU meter.
 libc.workspace = true

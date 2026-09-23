@@ -22,6 +22,7 @@ use std::path::Path;
 pub mod compose;
 pub mod design;
 pub mod levelling;
+pub mod measure;
 pub mod library;
 pub mod node_store;
 pub mod nodes;

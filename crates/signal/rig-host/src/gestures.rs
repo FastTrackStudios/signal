@@ -12,11 +12,17 @@
 
 use std::time::{Duration, Instant};
 
-/// Which CCs mean what — the rig's `midi.styx` projection.
+/// Which CCs and notes mean what — the rig's `midi.styx` projection.
 #[derive(Clone, Debug, Default)]
 pub struct FootswitchMap {
     /// Gesture switches, in switch order: `tap_ccs[i]` is switch `i`.
     pub tap_ccs: Vec<u32>,
+    /// The same switches as notes: `tap_notes[i]` is switch `i` — Note On
+    /// presses it, Note Off (or Note On at velocity 0) releases it. For
+    /// pedals that send a note per switch (an AIRSTEP set to Note On on
+    /// press, Note Off on release); tap and hold come from the timing, the
+    /// same as for CCs.
+    pub tap_notes: Vec<u32>,
     /// Direct slots: `(cc, slot)` — pressing `cc` fires `Direct(slot)`.
     pub direct: Vec<(u32, u32)>,
 }
@@ -70,9 +76,39 @@ impl FootswitchEngine {
             .iter()
             .find(|(dc, _)| *dc == u32::from(cc))
             .map(|(_, slot)| *slot);
+        self.edge(gesture, direct, value > 0)
+    }
+
+    /// Feed one note: `down` for Note On, `false` for Note Off (a Note On at
+    /// velocity 0 is a Note Off — the caller folds that in). Same gestures as
+    /// [`on_cc`](Self::on_cc): tap on a short release, hold at the threshold.
+    pub fn on_note(&mut self, map: &FootswitchMap, note: u8, down: bool) -> Option<FootswitchAction> {
+        let gesture = map.tap_notes.iter().position(|n| *n == u32::from(note));
+        self.edge(gesture, None, down)
+    }
+
+    /// Whether the switch `note` maps to is down — for resolving a Note On at
+    /// velocity 0, which pedals send both as a *press* (an AIRSTEP set to
+    /// Note On/Note Off with velocity 0 sends `90 n 00` then `80 n 00`) and,
+    /// per the MIDI spec, as a *release*. Read against the switch's own
+    /// state, it is a press when up and a release when down — right for both.
+    #[must_use]
+    pub fn note_switch_is_down(&self, map: &FootswitchMap, note: u8) -> bool {
+        map.tap_notes
+            .iter()
+            .position(|n| *n == u32::from(note))
+            .is_some_and(|i| self.cc_down.get(i).copied().unwrap_or(false))
+    }
+
+    /// A press or release of gesture switch `gesture` / direct slot `direct`.
+    fn edge(
+        &mut self,
+        gesture: Option<usize>,
+        direct: Option<u32>,
+        down: bool,
+    ) -> Option<FootswitchAction> {
         let idx = gesture.or_else(|| direct.map(|s| self.switches + s as usize))?;
         let idx = idx.min(self.cc_down.len().saturating_sub(1));
-        let down = value > 0;
         if down == self.cc_down[idx] {
             return None; // momentary repeat — not an edge
         }
@@ -116,6 +152,7 @@ mod tests {
     fn map() -> FootswitchMap {
         FootswitchMap {
             tap_ccs: vec![101, 102, 103, 104, 105],
+            tap_notes: vec![1, 2, 3, 4, 5],
             direct: (0..5).map(|i| (106 + i, i)).collect(),
         }
     }
@@ -159,6 +196,49 @@ mod tests {
         let (m, mut e) = (map(), engine());
         assert_eq!(e.on_cc(&m, 108, 127), Some(FootswitchAction::Direct(2)));
         assert_eq!(e.on_cc(&m, 108, 0), None);
+    }
+
+    #[test]
+    fn a_note_pedal_taps_and_holds_like_a_cc_pedal() {
+        let m = map();
+        let mut e = engine();
+        assert_eq!(e.on_note(&m, 2, true), None);
+        assert_eq!(e.on_note(&m, 2, false), Some(FootswitchAction::Tap(1)));
+
+        let mut e = FootswitchEngine::new(5, 5, Duration::from_millis(0));
+        assert_eq!(e.on_note(&m, 5, true), None);
+        assert_eq!(e.poll_holds(), vec![FootswitchAction::Hold(4)]);
+        assert_eq!(e.on_note(&m, 5, false), None);
+    }
+
+    #[test]
+    fn a_note_and_its_cc_are_the_same_switch() {
+        // Note 1 pressed, CC 101 released: one switch, one tap — a pedal
+        // mapped both ways cannot double-fire.
+        let (m, mut e) = (map(), engine());
+        assert_eq!(e.on_note(&m, 1, true), None);
+        assert_eq!(e.on_cc(&m, 101, 0), Some(FootswitchAction::Tap(0)));
+    }
+
+    #[test]
+    fn a_velocity_zero_note_on_presses_when_up_and_releases_when_down() {
+        // AIRSTEP with velocity 0: `90 02 00` then `80 02 00`.
+        let (m, mut e) = (map(), engine());
+        let down = !e.note_switch_is_down(&m, 2);
+        assert!(down, "an up switch takes a velocity-0 Note On as a press");
+        assert_eq!(e.on_note(&m, 2, down), None);
+        assert_eq!(e.on_note(&m, 2, false), Some(FootswitchAction::Tap(1)));
+        // And the spec's convention — velocity 0 *is* the release.
+        assert_eq!(e.on_note(&m, 3, true), None);
+        let down = !e.note_switch_is_down(&m, 3);
+        assert!(!down, "a down switch takes it as the release");
+        assert_eq!(e.on_note(&m, 3, down), Some(FootswitchAction::Tap(2)));
+    }
+
+    #[test]
+    fn unmapped_notes_are_ignored() {
+        let (m, mut e) = (map(), engine());
+        assert_eq!(e.on_note(&m, 60, true), None);
     }
 
     #[test]

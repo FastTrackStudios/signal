@@ -30,7 +30,9 @@ pub struct RigViewState {
     /// Input spectrum (dB per log bin, 20 Hz–20 kHz), ~15 Hz.
     pub spectrum: Signal<Vec<f32>>,
     /// Compressor rolling telemetry `(input 0..1, gr 0..1)`, oldest→newest.
-    pub comp_wave: Signal<(Vec<f32>, Vec<f32>)>,
+    /// Each compressor block's rolling trace, by block name:
+    /// `(input_peaks, gain_reduction, gr_db)` — see `RigEvent::CompWave`.
+    pub comp_wave: Signal<std::collections::HashMap<String, (Vec<f32>, Vec<f32>, f32)>>,
     /// Live performance model (stacks, fx bypass, boost, tempo).
     pub perf: Signal<PerformanceModel>,
     /// The active patch's FX chain.
@@ -67,7 +69,7 @@ pub fn use_rig_state() -> RigViewState {
     let mut stereo_db = use_signal(|| (-90.0f32, -90.0f32, -90.0f32, -90.0f32));
     let mut comp_gr_db = use_signal(|| 0.0f32);
     let spectrum = use_signal(Vec::<f32>::new);
-    let comp_wave = use_signal(|| (Vec::<f32>::new(), Vec::<f32>::new()));
+    let comp_wave = use_signal(std::collections::HashMap::<String, (Vec<f32>, Vec<f32>, f32)>::new);
     let mut perf = use_signal(PerformanceModel::default);
     let mut blocks = use_signal(Vec::<LiveBlock>::new);
     let mut nodes = use_signal(Vec::<LiveNode>::new);
@@ -214,7 +216,7 @@ pub fn use_rig_state() -> RigViewState {
                             }
                             spectrum.set(out);
                         }
-                        RigEvent::CompWave(i, g) => {
+                        RigEvent::CompWave(trace) => {
                             // A soft 3-tap along time keeps the rolling traces
                             // fluid without hiding transients.
                             let smooth = |v: &[f32]| -> Vec<f32> {
@@ -227,7 +229,10 @@ pub fn use_rig_state() -> RigViewState {
                                     })
                                     .collect()
                             };
-                            comp_wave.set((smooth(&i), smooth(&g)));
+                            let entry = (smooth(&trace.input), smooth(&trace.gr), trace.gr_db);
+                            comp_wave.with_mut(|m| {
+                                m.insert(trace.block, entry);
+                            });
                         }
                     }
                 }

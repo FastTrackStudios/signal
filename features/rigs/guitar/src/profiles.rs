@@ -72,6 +72,10 @@ pub struct PresetDef {
     /// SHA-256 of the IR. See [`hash`](Self::hash).
     #[facet(default)]
     pub cab_hash: String,
+    /// The amp's Output Level (dB), from its module snapshot (see
+    /// `compose::ModuleSnapshotDef::level_db`).
+    #[facet(default)]
+    pub level_db: f32,
 }
 
 /// One NAM option inside a drive block preset — pedals are commonly
@@ -83,6 +87,11 @@ pub struct DriveOptionDef {
     /// SHA-256 of the capture. See [`PresetDef::hash`].
     #[facet(default)]
     pub hash: String,
+    /// The pedal's Output Level (dB) at its unity point — set by levelling
+    /// (`signal rig level-modules`) so that engaging it at drive 0.5 does not
+    /// change the loudness. The drive block's own output gain.
+    #[facet(default)]
+    pub level_db: f32,
 }
 
 /// A **Drive Block Preset**: the thing a drive slot loads. Wraps one or
@@ -120,6 +129,7 @@ pub fn drive_presets() -> Vec<DrivePresetDef> {
         name: name.to_string(),
         nam: nam.to_string(),
         hash: String::new(),
+        level_db: 0.0,
     };
     vec![
         DrivePresetDef {
@@ -325,6 +335,7 @@ pub fn worship_def() -> ProfileDef {
         hash: String::new(),
         cab: String::new(),
         cab_hash: String::new(),
+        level_db: 0.0,
     };
     let stack = |name: &str, patches: &[&str]| StackDef {
         name: name.to_string(),
@@ -746,6 +757,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             cab_of(&p.preset2),
         );
         set_patch_trim(&mut patch, p.level_db + p.trim_db);
+        assign_meters(&mut patch);
         apply_overrides(&mut patch, &p.overrides);
         profile = profile.with_patch(patch);
     }
@@ -757,6 +769,41 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
 
 /// The block a patch's level lands on.
 pub const TRIM_BLOCK: &str = "Patch Trim";
+
+/// The `comp_meter` channel each compressor block draws its panel's trace
+/// on — one each, so the pre compressor, the post compressor and the limiter
+/// each show their own input and gain reduction rather than one shared trace
+/// every compressor in the chain wrote to. 0 = no meter.
+#[must_use]
+pub fn meter_channel(block_name: &str) -> usize {
+    if block_name.eq_ignore_ascii_case(PRE_COMP) {
+        1
+    } else if block_name.eq_ignore_ascii_case(POST_COMP) {
+        2
+    } else if block_name.eq_ignore_ascii_case(LIMITER) {
+        3
+    } else {
+        0
+    }
+}
+
+/// Stamp every compressor block of `patch` with its meter channel (see
+/// [`meter_channel`]). Applied where a patch's chain is finished, next to its
+/// level, so no path that builds a chain can miss it.
+pub fn assign_meters(patch: &mut RigPatch) {
+    for block in &mut patch.chain {
+        if block.block_type == BlockType::Compressor {
+            let ch = meter_channel(&block.name).to_string();
+            match block.params.iter_mut().find(|p| p.name == "meter") {
+                Some(p) => p.value = ch,
+                None => block.params.push(signal_sampler::rig_node::Param {
+                    name: "meter".to_string(),
+                    value: ch,
+                }),
+            }
+        }
+    }
+}
 /// The pedal-style compressor at the head of the chain.
 pub const PRE_COMP: &str = "Pre Comp";
 /// The studio-style compressor after the amp, in the Amp module.
@@ -1123,6 +1170,12 @@ pub fn default_setlists() -> Vec<SetlistDef> {
 #[derive(Clone, Debug, Facet)]
 pub struct MidiMapDef {
     pub tap_ccs: Vec<u32>,
+    /// The footswitches as notes (switch `i` = `tap_notes[i]`): Note On
+    /// presses, Note Off releases, tap/hold from the timing — for pedals set
+    /// to send a note per switch. Defaults to notes 1–5 so a `midi.styx`
+    /// written before this field still maps a note pedal.
+    #[facet(default = vec![1, 2, 3, 4, 5])]
+    pub tap_notes: Vec<u32>,
     pub direct: Vec<DirectCcDef>,
 }
 
@@ -1136,6 +1189,7 @@ pub struct DirectCcDef {
 pub fn default_midi_map() -> MidiMapDef {
     MidiMapDef {
         tap_ccs: vec![101, 102, 103, 104, 105],
+        tap_notes: vec![1, 2, 3, 4, 5],
         direct: (0..5)
             .map(|i| DirectCcDef {
                 cc: 106 + i,
@@ -1238,6 +1292,7 @@ pub fn import_drive_capture(
         name: option.to_string(),
         nam: nam_path.to_string(),
         hash: hash.to_string(),
+        level_db: 0.0,
     });
     if !fresh {
         return DriveImport::Option {

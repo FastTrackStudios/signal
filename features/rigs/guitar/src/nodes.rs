@@ -128,10 +128,12 @@ impl RigNodes {
             built.chain = signal_sampler::from_node::to_chain(&resolved);
             settle_amp_stage(&mut built.chain, def, patch);
             settle_drives(&mut built.chain, def, patch, drives);
+            apply_block_levels(&mut built.chain, def, patch, drives);
             // On the trim block inside the chain, not the scene's output —
             // see `profiles::set_patch_trim` for why a level after the
             // reverbs cannot be changed without hearing it.
             crate::profiles::set_patch_trim(&mut built, patch.level_db + patch.trim_db);
+            crate::profiles::assign_meters(&mut built);
             profile = profile.with_patch(built);
         }
         for stack in &def.stacks {
@@ -473,6 +475,60 @@ fn settle_drives(
     }
 }
 
+/// The rig's sample rate the drive curves are cached at — levels are set
+/// at build time, before any rig says what rate it runs.
+const LEVEL_SAMPLE_RATE: f64 = 48_000.0;
+
+/// Every amp and drive block's Output Level, written into its trims as the
+/// chain is built: the amp's from its module snapshot (via the pool preset),
+/// a pedal's from its drive option — each levelled on its own by
+/// `signal rig level-modules`. Its input trim is what its drive knob stands
+/// for; a knob away from 0.5 adds the cached curve's correction to the
+/// level, so the pedal stays as loud as it was levelled.
+///
+/// Built into the chain, not applied when a patch is switched in: a level
+/// set after the chain was already playing was a gain stage only the live
+/// rig had, and the first thing to drift.
+fn apply_block_levels(
+    chain: &mut [signal_sampler::RigBlock],
+    def: &ProfileDef,
+    patch: &crate::profiles::PatchDef,
+    drives: &[DrivePresetDef],
+) {
+    let pool_level = |name: &str| {
+        def.presets
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(name))
+            .map_or(0.0, |p| p.level_db)
+    };
+    for block in chain.iter_mut() {
+        if block.nam.is_empty() {
+            continue;
+        }
+        let level = match block.block_type {
+            BlockType::Amp if block.name.eq_ignore_ascii_case("Amp R") => pool_level(&patch.preset2),
+            BlockType::Amp => pool_level(&patch.preset),
+            BlockType::Drive | BlockType::Boost => drive_option_level(drives, &block.nam),
+            _ => continue,
+        };
+        let drive = block.param_f32("drive").unwrap_or(0.5);
+        let path = std::path::Path::new(&block.nam);
+        block.input_trim_db = signal_sampler::nam_calibrate::drive_input_db(drive);
+        block.output_trim_db = level
+            + signal_sampler::nam_calibrate::drive_output_delta_cached(path, LEVEL_SAMPLE_RATE, drive);
+    }
+}
+
+/// A drive capture's Output Level: the option whose capture it is.
+pub(crate) fn drive_option_level(drives: &[DrivePresetDef], nam: &str) -> f32 {
+    let file = |p: &str| std::path::Path::new(p).file_name().map(std::ffi::OsStr::to_owned);
+    drives
+        .iter()
+        .flat_map(|p| &p.options)
+        .find(|o| o.nam == nam || (file(&o.nam).is_some() && file(&o.nam) == file(nam)))
+        .map_or(0.0, |o| o.level_db)
+}
+
 /// The playable profile for a rig definition — **the path the live rig
 /// takes**.
 ///
@@ -507,7 +563,7 @@ pub fn library_for(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
 }
 
 /// [`to_nodes`] plus the saved node overlay, for a profile already flattened.
-fn to_nodes_with_store(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
+pub(crate) fn to_nodes_with_store(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
     let mut rig = to_nodes(def, drives);
     crate::library::RigLibrary::load_node_store().apply(&mut rig);
     rig

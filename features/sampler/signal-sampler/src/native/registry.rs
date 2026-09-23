@@ -137,6 +137,9 @@ fn build_comp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
         "range",
         "fold",
         "style",
+        // Which compressor-panel trace this block draws on (0 = none) — see
+        // `fx_blocks::comp_meter`.
+        "meter",
     ] {
         if let Some(v) = block.param_f32(name) {
             fx.set_named(name, v as f64);
