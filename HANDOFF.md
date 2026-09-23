@@ -131,13 +131,19 @@ the old GuitarLSTM DI is `di-reference.guitarlstm-ts9.wav`).
 
 ## Open — in the order I would do them
 
-1. **Latency (asked, not yet answered).** The user feels the limiter added
-   latency; DSP must be zero-latency. The limiter is `NativeComp` with no
-   lookahead, and the new `OutputTap` is a copy — both should be 0. Prove
-   it: an impulse through `open_offline` per block type and per patch
-   (first output sample vs input), plus `PluginInstance::latency()` of every
-   block. Suspects if it is real: the cab `Convolver` (partitioned
-   convolution block latency), the reverbs, or the device buffer.
+1. ~~**Latency.**~~ DONE (`673dac53`, daw `51d4b1c8`). Cause: on macOS
+   `rig-host` aliased `DuplexEngine` to the cpal engine — input and output
+   as two streams bridged by a ring that drained one block per callback and
+   never shed backlog, so every stall added latency for the rest of the
+   session. The guitar rig now runs on daw's CoreAudio HAL IOProc (log line
+   `coreaudio duplex: started … round_trip_ms=6.33` at 64 frames on the
+   MiniFuse; the rest is the interface's own converters). The keys rig stays
+   on cpal (CoreAudio buffer size is per process per device). The cpal ring
+   now drops backlog past one spare block. DSP proven zero-latency by
+   `cargo run --profile release-fast -p signal-guitar --example latency_probe
+   [-- <Profile>] [--per-block]`: every block answers on the impulse's own
+   sample except NAM amps / cab IRs (0–47 samples: the captured gear's own
+   response, not buffering).
 2. **Dual-amp blends lose 14–25 dB** (`Deluxe + AC30`, `Plexi + AC30`,
    `JCM800 + AC30`, `5150 III + Recto`): each amp levels correctly alone,
    but the parallel `amp_blend::BlendStage` output is far quieter than the
