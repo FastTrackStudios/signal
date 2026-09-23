@@ -37,6 +37,37 @@ fn empty_slot(label: &str) -> Element {
     }
 }
 
+/// The one way a bypassed visualizer says so: an amber-outlined BYPASSED
+/// badge. `small` for a single lane inside a grouped panel; the full size is
+/// drawn by [`ZoomPanel`] over a whole panel whose block is off.
+#[component]
+fn BypassedBadge(#[props(default)] small: bool) -> Element {
+    let style = if small {
+        "font-size: 7px; letter-spacing: 0.12em; padding: 1px 4px; border-radius: 3px;"
+    } else {
+        "font-size: 10px; letter-spacing: 0.22em; padding: 4px 10px; border-radius: 4px;"
+    };
+    rsx! {
+        span {
+            style: "{style} font-weight: 800; text-transform: uppercase; \
+                    color: #fbbf24; border: 1px solid rgba(251,191,36,0.45); \
+                    background: rgba(10,10,12,0.85); white-space: nowrap;",
+            "Bypassed"
+        }
+    }
+}
+
+/// Every member of a grouped panel (Mod, Motion) is bypassed — the group is
+/// off. False for a group with no members: that is an empty slot, not a
+/// bypass.
+fn group_bypassed(blocks: &[LiveBlock], kinds: &[BlockType], pre: bool) -> bool {
+    let mut members = blocks
+        .iter()
+        .filter(|b| kinds.contains(&b.block_type) && is_pre_fx(b) == pre)
+        .peekable();
+    members.peek().is_some() && members.all(|b| b.bypassed)
+}
+
 /// Find a chain block by (type, name).
 fn find_block(blocks: &[LiveBlock], bt: BlockType, name: &str) -> Option<LiveBlock> {
     blocks
@@ -114,11 +145,27 @@ pub fn ZoomPanel(
     #[props(default)]
     left_power_on: Option<bool>,
     #[props(default)] on_left_power: Option<Callback<()>>,
+    /// The panel's block is off, for a panel with no power control of its
+    /// own here (Mod, Motion). A panel with `power_on`/`left_power_on` is
+    /// bypassed exactly when that reads off.
+    #[props(default)]
+    bypassed: bool,
 ) -> Element {
     let mut zoomed = use_signal(|| false);
+    // One bypass look for every visualizer: the content dimmed (still
+    // editable) under a BYPASSED badge that lets clicks through.
+    let off = bypassed || power_on == Some(false) || left_power_on == Some(false);
+    let dim = if off { "opacity: 0.3;" } else { "" };
     rsx! {
         div { class: "relative flex flex-col flex-1 border border-border bg-card min-h-0 overflow-hidden",
-            div { class: "flex-1 min-h-0", {children.clone()} }
+            div { class: "flex-1 min-h-0", style: "{dim}", {children.clone()} }
+            if off {
+                div {
+                    class: "absolute inset-0 flex items-center justify-center",
+                    style: "pointer-events: none;",
+                    BypassedBadge {}
+                }
+            }
             if let (Some(on), Some(cb)) = (left_power_on, on_left_power) {
                 div { class: "absolute top-1 left-1.5 flex items-center gap-1.5",
                     button {
@@ -156,7 +203,16 @@ pub fn ZoomPanel(
                     onclick: move |_| zoomed.set(false),
                     fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 16 }
                 }
-                div { class: "flex-1 min-h-0", {zoomed_view.unwrap_or(children)} }
+                div { class: "relative flex-1 min-h-0",
+                    div { class: "h-full", style: "{dim}", {zoomed_view.unwrap_or(children)} }
+                    if off {
+                        div {
+                            class: "absolute inset-0 flex items-center justify-center",
+                            style: "pointer-events: none;",
+                            BypassedBadge {}
+                        }
+                    }
+                }
             }
         }
     }
@@ -910,7 +966,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                                 }
                                 span { style: "font-size:8px; font-weight:700; color:{color};", "{di + 1}" }
                                 if dim {
-                                    span { style: "font-size:8px; color:#52525b;", "bypassed" }
+                                    BypassedBadge { small: true }
                                 }
                             }
                             // Per-lane machine + timing, embedded at the
@@ -1078,7 +1134,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                                 }
                                 span { style: "font-size:8px; font-weight:700; color:{color};", "{vi + 1}" }
                                 if dim {
-                                    span { style: "font-size:8px; color:#52525b;", "bypassed" }
+                                    BypassedBadge { small: true }
                                 }
                             }
                             // Per-lane algorithm + decay-time readout at the
@@ -1313,16 +1369,10 @@ fn ModGroupPanel(
                     _ => rsx! {},
                 }
             }
-            // LFO trace — flat and labeled while the group is bypassed.
+            // LFO trace — flat while the group is bypassed (the panel's
+            // BYPASSED badge says so).
             div { class: "relative flex-1", style: "min-height: 14px;",
                 {mod_lane(&cur, rate, depth, engaged, group_color, &d, color)}
-                if !engaged {
-                    span {
-                        class: "absolute inset-0 flex items-center justify-center text-[8px] uppercase tracking-[2px]",
-                        style: "color: #3f3f46;",
-                        "bypassed"
-                    }
-                }
             }
             // Mix + Speed.
             div { class: "flex items-end justify-around px-1 pb-0.5 flex-shrink-0 gap-1",
@@ -1616,7 +1666,8 @@ fn GateViz(block: LiveBlock, level: Signal<f32>) -> Element {
                     } else {
                         "font-size: 9px; font-weight: 800; letter-spacing: 0.08em; color: #71717a;"
                     },
-                    if block.bypassed { "OFF" } else if open { "OPEN" } else { "CLOSED" }
+                    // Bypassed says itself on the panel's badge.
+                    if block.bypassed { "" } else if open { "OPEN" } else { "CLOSED" }
                 }
                 span { style: "font-size: 9px; font-family: monospace; color: #a1a1aa;", {format!("{threshold:.0} dB")} }
             }
@@ -2340,6 +2391,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "min-h-0 h-full flex flex-col gap-0", style: "flex: 1 1 0%;",
                             if !bpre {
                                 ZoomPanel { title: "Modulation".to_string(),
+                                    bypassed: group_bypassed(&blocks, &MOD_KINDS, false),
                                     ModGroupPanel {
                                         title: "Mod",
                                         kinds: MOD_KINDS.to_vec(),
@@ -2349,6 +2401,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 }
                             }
                             ZoomPanel { title: if bpre { "Pre Motion".to_string() } else { "Motion".to_string() },
+                                bypassed: group_bypassed(&blocks, &MOTION_KINDS, bpre),
                                 ModGroupPanel {
                                     title: "Motion",
                                     kinds: MOTION_KINDS.to_vec(),
@@ -2450,6 +2503,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                     div { class: "min-h-0 h-full flex flex-col", style: "flex: 1 1 0%;",
                         ZoomPanel { title: "Pre Motion".to_string(),
+                            bypassed: group_bypassed(&blocks, &MOTION_KINDS, true),
                             ModGroupPanel {
                                 title: "Motion",
                                 kinds: MOTION_KINDS.to_vec(),
@@ -2462,11 +2516,13 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                     div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                         ZoomPanel { title: "Pre Delay".to_string(),
+                            bypassed: group_bypassed(&blocks, &[BlockType::Delay], true),
                             DelayPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm, pre: true }
                         }
                     }
                     div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                         ZoomPanel { title: "Pre Verb".to_string(),
+                            bypassed: group_bypassed(&blocks, &[BlockType::Reverb], true),
                             ReverbPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm, pre: true }
                         }
                     }
