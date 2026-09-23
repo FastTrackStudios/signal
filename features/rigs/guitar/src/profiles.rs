@@ -287,6 +287,36 @@ impl OverrideDef {
     }
 }
 
+/// The chain's delays and reverbs. Each runs in parallel with the dry — the
+/// dry at the block's `dry`, the effect added on top — so each runs fully
+/// wet (`mix` pinned at 1 in the chain) and how loud the effect sits is its
+/// `level`, in dB.
+pub const PARALLEL_FX: [&str; 6] = ["Pre Verb", "Pre Delay", "DLY 1", "DLY 2", "VERB 1", "VERB 2"];
+
+#[must_use]
+pub fn is_parallel_fx(block: &str) -> bool {
+    PARALLEL_FX.iter().any(|b| b.eq_ignore_ascii_case(block))
+}
+
+/// A parallel effect's wet gain as a `level`: `20·log10(mix)`, floored at
+/// the level's −60 dB (off).
+#[must_use]
+pub fn mix_to_level_db(mix: f32) -> f32 {
+    if mix <= 0.001 { -60.0 } else { (20.0 * mix.log10()).max(-60.0) }
+}
+
+impl OverrideDef {
+    /// A `mix` written to a delay or reverb, as the `level` that plays the
+    /// same: before the effects ran fully wet, their amount was `mix`, and
+    /// stored presets, patches and sections still say so.
+    pub fn pin_parallel_mix(&mut self) {
+        if self.op == "set" && self.param.eq_ignore_ascii_case("mix") && is_parallel_fx(&self.block) {
+            self.param = "level".into();
+            self.value = mix_to_level_db(self.value);
+        }
+    }
+}
+
 impl PatchDef {
     /// The unique module names this patch overrides (for the UI's
     /// override badges).
@@ -413,7 +443,7 @@ pub fn worship_def() -> ProfileDef {
             patch("Clean Dry", "Fender DI"),
             with_ovr(
                 patch("Clean Verb", "Fender Clean"),
-                vec![time_param("VERB 1", "mix", 0.22)],
+                vec![time_param("VERB 1", "level", -13.0)],
             ),
             // Crunch
             patch("Crunch", "AA Crunch"),
@@ -425,7 +455,7 @@ pub fn worship_def() -> ProfileDef {
                     OverrideDef::bypass("Utility", "Gate", true),
                     time_param("DLY 1", "tap_div_l", 1.0),
                     time_param("DLY 1", "tap_div_r", 1.0),
-                    time_param("DLY 1", "mix", 0.45),
+                    time_param("DLY 1", "level", -7.0),
                     time_param("DLY 1", "feedback", 0.4),
                 ],
             ),
@@ -433,7 +463,7 @@ pub fn worship_def() -> ProfileDef {
             patch("Drive", "AA Drive"),
             with_ovr(
                 patch("Drive Edge", "AA Drive"),
-                vec![time_param("DLY 1", "mix", 0.12)],
+                vec![time_param("DLY 1", "level", -18.5)],
             ),
             // Lead
             {
@@ -443,7 +473,7 @@ pub fn worship_def() -> ProfileDef {
             },
             with_ovr(
                 patch("Lead POG", "Arena Lead"),
-                vec![time_param("VERB 1", "mix", 0.12)],
+                vec![time_param("VERB 1", "level", -18.5)],
             ),
             // Ambient
             with_ovr(
@@ -451,16 +481,16 @@ pub fn worship_def() -> ProfileDef {
                 // Cloud verb, long and dark; delay a touch hotter.
                 vec![
                     time_param("VERB 1", "algorithm", 4.0),
-                    time_param("VERB 1", "mix", 0.35),
+                    time_param("VERB 1", "level", -9.0),
                     time_param("VERB 1", "decay", 0.63),
                     time_param("VERB 1", "tone", -0.5),
-                    time_param("DLY 1", "mix", 0.25),
+                    time_param("DLY 1", "level", -12.0),
                 ],
             ),
             with_ovr(
                 patch("Ambient Swells", "AC30 Clean"),
                 vec![
-                    time_param("VERB 1", "mix", 0.18),
+                    time_param("VERB 1", "level", -15.0),
                     time_param("VERB 1", "decay", 0.8),
                 ],
             ),
@@ -468,7 +498,7 @@ pub fn worship_def() -> ProfileDef {
                 patch("Ambient Delay Craze", "AC30 Clean"),
                 vec![
                     OverrideDef::bypass("Time", "DLY 2", false),
-                    time_param("DLY 2", "mix", 0.16),
+                    time_param("DLY 2", "level", -16.0),
                 ],
             ),
         ],
@@ -592,7 +622,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 off_fx(
                     BlockType::Reverb,
                     "Pre Verb",
-                    &[("algorithm", "3"), ("mix", "0.15"), ("decay", "0.35")],
+                    &[("algorithm", "3"), ("mix", "1"), ("level", "-16.5"), ("decay", "0.35")],
                 ),
                 PRE_FX,
             ))
@@ -605,7 +635,8 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                         ("tap_div_l", "7"),
                         ("tap_div_r", "7"),
                         ("time", "120"),
-                        ("mix", "0.15"),
+                        ("mix", "1"),
+                        ("level", "-16.5"),
                         ("feedback", "0.15"),
                     ],
                 ),
@@ -680,7 +711,8 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     BlockType::Delay,
                     "DLY 1",
                     &[
-                        ("mix", "0.2"),
+                        ("mix", "1"),
+                        ("level", "-14"),
                         ("style", "0"),
                         ("time", "350"),
                         ("feedback", "0.28"),
@@ -695,7 +727,8 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     BlockType::Delay,
                     "DLY 2",
                     &[
-                        ("mix", "0.10"),
+                        ("mix", "1"),
+                        ("level", "-20"),
                         ("time", "600"),
                         ("feedback", "0.62"),
                         ("tap_div_l", "1"),
@@ -708,7 +741,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 on_fx(
                     BlockType::Reverb,
                     "VERB 1",
-                    &[("mix", "0.08"), ("decay", "0.42"), ("size", "0.45")],
+                    &[("mix", "1"), ("level", "-22"), ("decay", "0.42"), ("size", "0.45")],
                 ),
                 "Time",
             ))
@@ -716,7 +749,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 off_fx(
                     BlockType::Reverb,
                     "VERB 2",
-                    &[("mix", "0.10"), ("decay", "0.85"), ("size", "0.92")],
+                    &[("mix", "1"), ("level", "-20"), ("decay", "0.85"), ("size", "0.92")],
                 ),
                 "Time",
             ))

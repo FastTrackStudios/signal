@@ -373,6 +373,7 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
     let mut out = def.clone();
     let mut synthesised: Vec<PresetDef> = Vec::new();
     for patch in &mut out.patches {
+        patch.overrides.iter_mut().for_each(OverrideDef::pin_parallel_mix);
         if patch.rig_preset.is_empty() && patch.modules.is_empty() && patch.blocks.is_empty() {
             continue;
         }
@@ -460,6 +461,7 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
             overrides.extend(comp.block_overrides(choice));
         }
         overrides.append(&mut patch.overrides);
+        overrides.iter_mut().for_each(OverrideDef::pin_parallel_mix);
         patch.overrides = overrides;
     }
     out.presets.extend(synthesised);
@@ -643,22 +645,26 @@ mod tests {
         let mut def = composed("Clean");
         def.patches[0].overrides = vec![OverrideDef::set("Time", "VERB 1", "mix", 0.5)];
         let flat = flatten(&def, &comp());
-        let mixes: Vec<f32> = flat.patches[0]
+        let levels: Vec<f32> = flat.patches[0]
             .overrides
             .iter()
-            .filter(|o| o.block == "VERB 1" && o.param == "mix")
+            .filter(|o| o.block == "VERB 1" && o.param == "level")
             .map(|o| o.value)
             .collect();
         // Time module 0.2, then the preset snapshot 0.3, then the patch 0.5 —
-        // applied in order, so the patch wins.
-        assert_eq!(mixes, vec![0.2, 0.3, 0.5]);
+        // applied in order, so the patch wins. Each is a `mix` written before
+        // the reverbs ran fully wet: it arrives as the `level` that plays
+        // the same.
+        let db = crate::profiles::mix_to_level_db;
+        assert_eq!(levels, vec![db(0.2), db(0.3), db(0.5)]);
         let built = crate::profiles::build_profile(&flat, &drive_presets());
         let verb = built.patches[0]
             .chain
             .iter()
             .find(|b| b.name == "VERB 1")
             .unwrap();
-        assert_eq!(verb.param_f32("mix"), Some(0.5));
+        assert_eq!(verb.param_f32("level"), Some(db(0.5)));
+        assert_eq!(verb.param_f32("mix"), Some(1.0), "fully wet");
     }
 
     #[test]

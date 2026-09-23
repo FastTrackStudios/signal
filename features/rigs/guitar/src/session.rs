@@ -2472,7 +2472,9 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
         // panel drives): style, per-side tempo divisions, high-pass,
         // repeat dynamics (ducking), mix, feedback.
         BlockType::Delay => owned(&[
-            ("mix", 0.0, 1.0, 0.08),
+            // Fully wet, always (`mix` pinned at 1 — see
+            // `profiles::pin_parallel_mix`): how loud the delay sits is this.
+            ("level", -60.0, 12.0, -16.0),
             ("time", 20.0, 2500.0, 350.0),
             ("feedback", 0.0, 0.95, 0.3),
             ("style", 0.0, 12.0, 1.0),
@@ -2482,13 +2484,14 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("repeat_dyn", 0.0, 1.0, 0.0),
             ("pan", -1.0, 1.0, 0.0),
             // The dry guitar through the block; the delay is added in
-            // parallel at `mix`.
+            // parallel at `level`.
             ("dry", 0.0, 1.0, 1.0),
         ]),
         // Reverb surface — algorithm + mix/time/damping/tone/modulation +
         // wet pan (MX chain-A pan).
         BlockType::Reverb => owned(&[
-            ("mix", 0.0, 1.0, 0.08),
+            // Fully wet, always, as the delay: the reverb's level.
+            ("level", -60.0, 12.0, -16.0),
             ("decay", 0.0, 1.0, 0.4),
             ("size", 0.0, 1.0, 0.5),
             ("algorithm", 0.0, 14.0, 1.0),
@@ -2497,7 +2500,7 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("tone", -1.0, 1.0, 0.0),
             ("pan_a", -1.0, 1.0, 0.0),
             // The dry guitar through the block; the reverb is added in
-            // parallel at `mix`.
+            // parallel at `level`.
             ("dry", 0.0, 1.0, 1.0),
         ]),
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => owned(&[
@@ -5447,6 +5450,21 @@ impl Rig for GuitarRigBackend {
     }
 
     fn set_block_param(&self, id: String, param: String, value: f32) {
+        // A delay or reverb runs fully wet: a `mix` from an older surface
+        // is its `level` (see `profiles::PARALLEL_FX`).
+        let (param, value) = {
+            let blocks = self.blocks.lock_ok();
+            match blocks.iter().find(|b| b.id == id) {
+                Some(b)
+                    if param == "mix"
+                        && matches!(b.block_type, BlockType::Delay | BlockType::Reverb)
+                        && crate::profiles::is_parallel_fx(&b.name) =>
+                {
+                    ("level".to_string(), crate::profiles::mix_to_level_db(value))
+                }
+                _ => (param, value),
+            }
+        };
         self.record_patch_override(&id, Some(&param), value);
         // Constant-loudness drive: on NAM board blocks the drive knob is
         // realised as a compensated input/output trim pair.

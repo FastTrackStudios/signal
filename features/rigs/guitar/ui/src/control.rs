@@ -121,6 +121,17 @@ fn verb_seconds_label(algorithm: f32, variant: f32, decay: f32) -> String {
 
 /// The Time knob's label for one algorithm/variant — a fn pointer (the knob
 /// takes no closure), one per calibrated engine.
+/// A delay's or reverb's level: it runs fully wet in parallel with the dry,
+/// so how loud the effect sits is its `level`, in dB.
+fn level_fmt(db: f32) -> String {
+    if db <= -59.5 { "Off".into() } else { format!("{db:+.1} dB") }
+}
+
+/// The wet's gain (linear) — what the lanes draw the repeats and tail at.
+fn level_gain(b: &LiveBlock) -> f32 {
+    10f32.powf(param_v(b, "level", -16.0) / 20.0)
+}
+
 fn decay_fmt<const A: usize, const V: usize>(decay: f32) -> String {
     verb_seconds_label(A as f32, V as f32, decay)
 }
@@ -973,7 +984,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
             for (di, b) in delays.iter().enumerate() {
                 {
                     let fb = param_v(b, "feedback", 0.3).clamp(0.0, 0.98);
-                    let mix = param_v(b, "mix", 0.08).clamp(0.02, 1.0);
+                    let mix = level_gain(b).clamp(0.02, 1.0);
                     let time_ms = param_v(b, "time", 350.0);
                     let f_l = div_factor(param_v(b, "tap_div_l", 0.0));
                     let f_r = div_factor(param_v(b, "tap_div_r", 0.0));
@@ -1091,11 +1102,11 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                 if let Some(p) = param(&cur, "pan") {
                     PKnob { block_id: cur_id.clone(), name: "pan", label: "Pan", p }
                 }
-                if let Some(p) = param(&cur, "mix") {
-                    PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
+                if let Some(p) = param(&cur, "level") {
+                    PKnob { block_id: cur_id.clone(), name: "level", label: "Level", p, fmt: Some(crate::knob::FmtFn(level_fmt as fn(f32) -> String)) }
                 }
                 // The delay stage splits three ways — Delay 1, Dry, Delay 2
-                // (`time_stage`): Mix is this delay's share, Dry the guitar's,
+                // (`time_stage`): Level is this delay's (it runs fully wet), Dry the guitar's,
                 // and the Dry lives on the stage's first delay whichever lane
                 // is selected.
                 if let Some(tap) = delays.first() {
@@ -1135,7 +1146,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                 {
                     let decay = param_v(b, "decay", 0.4).clamp(0.02, 1.0);
                     let size = param_v(b, "size", 0.5);
-                    let mix = param_v(b, "mix", 0.08).clamp(0.02, 1.0).max(0.15);
+                    let mix = level_gain(b).clamp(0.02, 1.0).max(0.15);
                     let md = param_v(b, "modulation", 0.2);
                     let color = VERB_COLORS[vi % 2];
                     let dim = b.bypassed;
@@ -1264,8 +1275,8 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
             // ── Knobs for the selected reverb (algorithm lives on the lanes) ──
             div { class: "flex items-end justify-around gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0",
                 style: if cur.bypassed { "order: 1; opacity: 0.4;" } else { "order: 1;" },
-                if let Some(p) = param(&cur, "mix") {
-                    PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
+                if let Some(p) = param(&cur, "level") {
+                    PKnob { block_id: cur_id.clone(), name: "level", label: "Level", p, fmt: Some(crate::knob::FmtFn(level_fmt as fn(f32) -> String)) }
                 }
                 // Reverb 1, Dry, Reverb 2 in parallel, as the delays: the
                 // stage's Dry lives on its first reverb.
@@ -1541,8 +1552,8 @@ fn PreFxPanel(blocks: Vec<LiveBlock>) -> Element {
             for b in blocks {
                 {
                     let knobs: &[(&'static str, &'static str)] = match b.block_type {
-                        BlockType::Reverb => &[("mix", "Mix"), ("decay", "Decay"), ("size", "Size"), ("tone", "Tone")],
-                        BlockType::Delay => &[("mix", "Mix"), ("time", "Time"), ("feedback", "Fdbk")],
+                        BlockType::Reverb => &[("level", "Level"), ("decay", "Decay"), ("size", "Size"), ("tone", "Tone")],
+                        BlockType::Delay => &[("level", "Level"), ("time", "Time"), ("feedback", "Fdbk")],
                         _ => &[("depth", "Depth"), ("rate", "Rate"), ("mix", "Mix")],
                     };
                     let (rig, id) = (rig.clone(), b.id.clone());

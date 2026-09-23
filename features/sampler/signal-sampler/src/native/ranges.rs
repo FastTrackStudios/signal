@@ -267,7 +267,7 @@ fn taper_and_unit(param: &str) -> (Taper, Unit) {
         return (Taper::Logarithmic, Unit::Ratio);
     }
     // Decibels — linear taper on purpose (see the doc comment).
-    if ends("gain") || ends("threshold") || ends("thr") || param.starts_with("gain_db") {
+    if ends("gain") || ends("threshold") || ends("thr") || param.starts_with("gain_db") || param == "level" {
         return (Taper::Linear, Unit::Decibels);
     }
     // Times. The natives are in milliseconds except `decay_time`, which the
