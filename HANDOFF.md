@@ -151,12 +151,16 @@ the old GuitarLSTM DI is `di-reference.guitarlstm-ts9.wav`).
    nothing else (no gate/comps/trim/FX/limiter). Levelling could never
    converge, which is where +14–25 dB came from. Now `amp_blend::wrap`,
    tested; blends level at +5–9 dB. `examples/blend_probe`.
-3. **Output Level knob in the UI** — the user asked for "an output gain
-   setting in the block". Levels are stored on modules/drive options and
-   built into the trims, but not yet shown or editable per block.
-4. midicore-macos: keep the raw status byte (a velocity-0 Note On press).
-5. The usvg warning flood (~1 GB/day of log): the gate visualiser still
-   draws zero-height rects somewhere.
+3. ~~**Output Level knob.**~~ DONE: the OUT readout on each amp/pedal row
+   (drag up/down), `Rig::set_block_level`, stored with the gear. Also
+   `signal_widgets::DragBus`: drags follow the pointer anywhere in the
+   window (Blitz has no pointer capture). Not yet on the bus: the
+   compressor surface (`comp_surface.rs`) and the keys rig's knobs/faders.
+4. ~~midicore velocity-0 Note On.~~ Won't fix: decoding it as Note Off is
+   the MIDI spec; the AIRSTEP is set to send velocity 1 (user's call).
+5. ~~Log flood.~~ DONE (signal `24ca794a`, processor `eb06151`): the
+   tuner's empty pitch trace, zero-size reverb/saturate face rects, the
+   gate band at the floor.
 6. `signal rig level` (non-dry-run) writes `patch.level_db`; with the new
    offset semantics that is right, but `levelling::level_profile` measures
    with offsets zeroed, so its dry-run shows the *raw* figure, not the
