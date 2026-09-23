@@ -152,9 +152,13 @@ fn build_comp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
 
 fn build_reverb(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeReverb::new(sample_rate as f64);
-    for name in ["mix", "decay", "size"] {
-        if let Some(v) = block.param_f32(name) {
-            fx.set_named(name, v as f64);
+    // Every numeric param the block carries (the block ignores names it does
+    // not have). A fixed list here dropped the algorithm, tone, damping and
+    // modulation a preset set, and the new `dry`: a reverb built as the
+    // default Hall until someone touched a knob live.
+    for p in &block.params {
+        if let Ok(v) = p.value.parse::<f64>() {
+            fx.set_named(&p.name, v);
         }
     }
     if let Some(path) = block.param_str("ir_path") {
@@ -167,9 +171,11 @@ fn build_reverb(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
 
 fn build_delay(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeDelay::new(sample_rate as f64);
-    for name in ["mix", "time", "feedback", "pan", "tap_div_l", "tap_div_r"] {
-        if let Some(v) = block.param_f32(name) {
-            fx.set_named(name, v as f64);
+    // Every numeric param the block carries — a fixed list dropped the style,
+    // high-pass and repeat dynamics a preset set (and `dry`).
+    for p in &block.params {
+        if let Ok(v) = p.value.parse::<f64>() {
+            fx.set_named(&p.name, v);
         }
     }
     Box::new(fx)

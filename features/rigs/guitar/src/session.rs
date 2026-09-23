@@ -2481,6 +2481,9 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("high_pass", 0.0, 900.0, 0.0),
             ("repeat_dyn", 0.0, 1.0, 0.0),
             ("pan", -1.0, 1.0, 0.0),
+            // The dry guitar through the block; the delay is added in
+            // parallel at `mix`.
+            ("dry", 0.0, 1.0, 1.0),
         ]),
         // Reverb surface — algorithm + mix/time/damping/tone/modulation +
         // wet pan (MX chain-A pan).
@@ -2493,6 +2496,9 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("damping", 0.0, 1.0, 0.3),
             ("tone", -1.0, 1.0, 0.0),
             ("pan_a", -1.0, 1.0, 0.0),
+            // The dry guitar through the block; the reverb is added in
+            // parallel at `mix`.
+            ("dry", 0.0, 1.0, 1.0),
         ]),
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => owned(&[
             ("mix", 0.0, 1.0, 0.4),

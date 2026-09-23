@@ -1023,7 +1023,12 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                     PKnob { block_id: cur_id.clone(), name: "pan", label: "Pan", p }
                 }
                 if let Some(p) = param(&cur, "mix") {
-                    PKnob { block_id: cur_id, name: "mix", label: "Mix", p }
+                    PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
+                }
+                // The delay runs in parallel with the guitar: Mix adds the
+                // repeats, Dry turns the guitar itself down (to mute it).
+                if let Some(p) = param(&cur, "dry") {
+                    PKnob { block_id: cur_id, name: "dry", label: "Dry", p }
                 }
             }
 
@@ -1167,6 +1172,10 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                 style: if cur.bypassed { "order: 1; opacity: 0.4;" } else { "order: 1;" },
                 if let Some(p) = param(&cur, "mix") {
                     PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
+                }
+                // Parallel with the guitar, as the delay: Dry turns it down.
+                if let Some(p) = param(&cur, "dry") {
+                    PKnob { block_id: cur_id.clone(), name: "dry", label: "Dry", p }
                 }
                 if let Some(p) = param(&cur, "decay") {
                     PKnob {
