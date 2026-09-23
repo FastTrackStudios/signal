@@ -1192,7 +1192,9 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                                 div { class: "flex flex-col items-end",
                                     span { style: "font-size:7px; text-transform:uppercase; color:#8a8a92;", "Time" }
                                     span { style: "font-family:ui-monospace,monospace; font-size:10px; color:{color};",
-                                        {format!("{:.2}", param_v(b, "decay", 0.4))}
+                                        // Seconds, as the Time knob reads — the raw 0–1
+                                        // decay here ("0.80") read as a 0.8 s tail.
+                                        {decay_seconds_label(param_v(b, "decay", 0.4))}
                                     }
                                 }
                                 AlgoPicker {
