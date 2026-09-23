@@ -187,6 +187,22 @@ the old GuitarLSTM DI is `di-reference.guitarlstm-ts9.wav`).
   presets ~4 min).
 - Sidebar shows each patch's variation under its preset.
 
+## Worship profile = Deluxe + AC30 (config only, 2026-09-23)
+
+The profile only *picks*: every patch plays a variation of the rig preset
+**Deluxe + AC30** (Clean, Edge, Crunch, Drive, Lead, Swells — amp module
+"Deluxe + AC30" snapshots + Drive module "King of Tone + Morning Glory":
+King of Tone / Stacked / Lead) and overrides only the Time module. Presets
+are named for gear, never for a profile. Time module **"Slap + Room"**:
+DLY 2 slap (BBD, 100 ms, fb 0.08, mix 0.15) and VERB 2 room (mix 0.2) stay
+on; DLY 1 / VERB 1 are the main layers (Foundation, Dotted Eighth, Dotted
+Eighth Low, Quarter, Hall, Lead, Swells). Chain order is DLY 1 → DLY 2 →
+VERB 1 → VERB 2. Reverb `decay` is a 0–1 knob whose curve is per
+algorithm — the room/hall decays want a listen. The Lead variation needs
++12 dB of level (pedal stack into the pushed amps reads quiet). Every
+"Cranked" amp variation in the library is classed as edge (+1 dB, Drive
+Tighten). Backups: `*.bak-pre-worship-*`.
+
 ## Browser rig (next phase, after native is done)
 
 Plan from this session (research, no code): mirror the keys rig —
