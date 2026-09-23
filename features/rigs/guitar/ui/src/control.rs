@@ -652,7 +652,6 @@ fn AlgoPicker(
     // The grid is drawn by the app root when it can be: inside the panel it
     // was clipped by the panel's edge, most of the algorithms out of sight.
     let host = signal_widgets::PopupHost::try_use();
-    let mut button_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
     let current = options
         .get(value as usize)
         .copied()
@@ -669,14 +668,13 @@ fn AlgoPicker(
             },
         button {
             class: "flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 hover:bg-accent/30",
-            onmounted: move |e| button_el.set(Some(e.data())),
             onclick: {
                 let rig = rig.clone();
                 let block_id = block_id.clone();
                 let options = options.clone();
                 let accent = accent.clone();
-                move |_| {
-                    let (Some(h), Some(el)) = (host, button_el()) else {
+                move |e: MouseEvent| {
+                    let Some(h) = host else {
                         open.toggle();
                         return;
                     };
@@ -684,28 +682,29 @@ fn AlgoPicker(
                         h.close();
                         return;
                     }
+                    // The button's top-left in the window, from the click
+                    // itself — synchronous, nothing stored to go stale.
+                    let (c, el) = (e.client_coordinates(), e.element_coordinates());
+                    let (x, y) = (c.x - el.x, c.y - el.y);
                     let (rig, block_id, options, accent) =
                         (rig.clone(), block_id.clone(), options.clone(), accent.clone());
-                    spawn(async move {
-                        let Ok(r) = el.get_client_rect().await else { return };
-                        open.set(true);
-                        h.open(
-                            r.origin.x,
-                            r.origin.y + r.height() + 4.0,
-                            260.0,
-                            move || algo_grid(&options, value as usize, &accent, {
-                                let (rig, block_id) = (rig.clone(), block_id.clone());
-                                move |i| {
-                                    send_param(&rig, &block_id, name, i as f32);
-                                    h.close();
-                                }
-                            }),
-                            move || {
-                                let mut o = open;
-                                o.set(false);
-                            },
-                        );
-                    });
+                    open.set(true);
+                    h.open(
+                        x,
+                        y + 26.0,
+                        260.0,
+                        move || algo_grid(&options, value as usize, &accent, {
+                            let (rig, block_id) = (rig.clone(), block_id.clone());
+                            move |i| {
+                                send_param(&rig, &block_id, name, i as f32);
+                                h.close();
+                            }
+                        }),
+                        move || {
+                            let mut o = open;
+                            o.set(false);
+                        },
+                    );
                 }
             },
             span {

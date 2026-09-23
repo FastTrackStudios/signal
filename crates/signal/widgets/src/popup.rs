@@ -116,9 +116,12 @@ pub fn PopupLayer() -> Element {
         };
     };
     let (ox, oy, ow, _oh) = origin();
-    // Keep the menu's left edge on screen; it is at least as wide as its
-    // button, so pull it in by that much from the right edge.
-    let left = (p.x - ox).clamp(0.0, (ow - p.min_width).max(0.0));
+    // Keep the menu on screen — but only against a width actually measured:
+    // clamping to an unmeasured (zero) width pinned every menu to the left.
+    let mut left = (p.x - ox).max(0.0);
+    if ow > p.min_width {
+        left = left.min(ow - p.min_width);
+    }
     let top = (p.y - oy).max(0.0);
     let min_w = p.min_width;
     rsx! {

@@ -78,7 +78,6 @@ pub fn Picker(
     // A menu drawn in here is clipped by any panel that clips its overflow;
     // with a host above, the app root draws it instead.
     let host = crate::popup::PopupHost::try_use();
-    let mut button_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
 
     let current = options
         .get(selected as usize)
@@ -130,7 +129,6 @@ pub fn Picker(
                         color: {label_colour}; cursor: {cursor}; \
                         text-align: left; overflow: hidden; white-space: nowrap;",
                 disabled: !interactive,
-                onmounted: move |e| button_el.set(Some(e.data())),
                 // The board's chunks are themselves draggable faders; a press
                 // on the picker must not also move the control behind it.
                 onpointerdown: move |e: PointerEvent| e.stop_propagation(),
@@ -147,28 +145,30 @@ pub fn Picker(
                         }
                         return;
                     }
-                    let (Some(h), Some(el)) = (host, button_el()) else {
+                    let Some(h) = host else {
                         open.set(true);
                         return;
                     };
+                    // The button's top-left in the window, from the click
+                    // itself (window point minus point within the button) —
+                    // no stored element handle to go stale, no await.
+                    let (c, el) = (e.client_coordinates(), e.element_coordinates());
+                    let (x, y) = (c.x - el.x, c.y - el.y);
                     let options = options.clone();
-                    spawn(async move {
-                        let Ok(r) = el.get_client_rect().await else { return };
-                        open.set(true);
-                        h.open(
-                            r.origin.x,
-                            r.origin.y + r.height() + 2.0,
-                            r.width(),
-                            move || menu(&options, selected, font, move |i| {
-                                h.close();
-                                on_select.call(i);
-                            }),
-                            move || {
-                                let mut o = open;
-                                o.set(false);
-                            },
-                        );
-                    });
+                    open.set(true);
+                    h.open(
+                        x,
+                        y + button_height(size) + 2.0,
+                        0.0,
+                        move || menu(&options, selected, font, move |i| {
+                            h.close();
+                            on_select.call(i);
+                        }),
+                        move || {
+                            let mut o = open;
+                            o.set(false);
+                        },
+                    );
                 },
                 span {
                     // No `text-overflow` on Blitz — a long name clips.
@@ -212,6 +212,14 @@ pub fn Picker(
                 }
             }
         }
+    }
+}
+
+/// The closed button's height, px (see [`PickerSize::metrics`]).
+const fn button_height(size: PickerSize) -> f64 {
+    match size {
+        PickerSize::Tiny => 14.0,
+        PickerSize::Normal => 22.0,
     }
 }
 
