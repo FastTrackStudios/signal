@@ -149,14 +149,26 @@ pub fn ZoomPanel(
     /// bypassed exactly when that reads off.
     #[props(default)]
     bypassed: bool,
+    /// The module this panel belongs to: clicking the panel shows that
+    /// module's presets in the right sidebar.
+    #[props(default)]
+    module: Option<&'static str>,
 ) -> Element {
     let mut zoomed = use_signal(|| false);
+    let select = try_use_context::<crate::module_sidebar::SelectedModule>();
     // One bypass look for every visualizer: the content dimmed (still
     // editable) under a BYPASSED badge that lets clicks through.
     let off = bypassed || power_on == Some(false) || left_power_on == Some(false);
     let dim = if off { "opacity: 0.3;" } else { "" };
     rsx! {
         div { class: "relative flex flex-col flex-1 border border-border bg-card min-h-0 overflow-hidden",
+            onclick: move |_| {
+                if let (Some(m), Some(crate::module_sidebar::SelectedModule(mut s))) = (module, select) {
+                    if s.peek().as_deref() != Some(m) {
+                        s.set(Some(m.to_string()));
+                    }
+                }
+            },
             div { class: "flex-1 min-h-0", style: "{dim}", {children.clone()} }
             if off {
                 div {
@@ -1501,6 +1513,7 @@ fn ModuleControls(
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let open = try_use_context::<crate::library::OpenLibrary>();
+    let select = try_use_context::<crate::module_sidebar::SelectedModule>();
     let module = kind.module().unwrap_or_default();
     let (preset, snapshot) = pick
         .as_ref()
@@ -1533,7 +1546,15 @@ fn ModuleControls(
                 },
                 fts_chrome::Glyph { icon: fts_chrome::Icon::ChevronDown, size: 10 }
             }
-            div { class: "flex flex-col justify-center min-w-0 flex-1 px-1 leading-none",
+            div { class: "flex flex-col justify-center min-w-0 flex-1 px-1 leading-none cursor-pointer hover:bg-accent/30",
+                title: "Show {module} presets",
+                // Selecting the module opens its presets in the right sidebar.
+                onclick: move |e: MouseEvent| {
+                    e.stop_propagation();
+                    if let Some(crate::module_sidebar::SelectedModule(mut s)) = select {
+                        s.set(Some(module.to_string()));
+                    }
+                },
                 span { class: "text-[8px] uppercase tracking-wider text-muted-foreground", "{module}" }
                 span { class: "text-[10px] font-semibold truncate",
                     if preset.is_empty() { "—" } else { "{preset}" }
@@ -2434,6 +2455,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
                                 title: if bpre { "Pre Delay".to_string() } else { "Delay".to_string() },
+                                module: if bpre { None } else { Some("Time") },
                                 power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Delay && is_pre_fx(b) == bpre && !b.bypassed)),
                                 on_power: Some(cbs.cb({
                                     let rig = rig.clone();
@@ -2460,6 +2482,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
                                 title: if bpre { "Pre Verb".to_string() } else { "Reverb".to_string() },
+                                module: if bpre { None } else { Some("Time") },
                                 power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Reverb && is_pre_fx(b) == bpre && !b.bypassed)),
                                 on_power: Some(cbs.cb({
                                     let rig = rig.clone();

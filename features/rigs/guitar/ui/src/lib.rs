@@ -24,6 +24,7 @@ pub use signal_widgets::knob;
 mod icons;
 mod indicators;
 mod library;
+mod module_sidebar;
 mod meters;
 mod palette;
 pub mod param_writer;

@@ -102,6 +102,9 @@ pub fn GuitarRigRemote() -> Element {
     // The library picker, open on a kind — or closed.
     let library_open = use_signal(|| None::<crate::library::Kind>);
     use_context_provider(|| crate::library::OpenLibrary(library_open));
+    // The module the right sidebar lists presets for (None: closed).
+    let selected_module = use_signal(|| None::<String>);
+    use_context_provider(|| crate::module_sidebar::SelectedModule(selected_module));
     // The view actions the palette and the keymap can ask for.
     let on_local = use_callback(move |e: crate::palette::Effect| {
         let mut library_open = library_open;
@@ -743,6 +746,11 @@ pub fn GuitarRigRemote() -> Element {
                         span { class: "text-sm text-muted-foreground italic", "Connecting to rig…" }
                     }
                 }
+                }
+                // Right: the selected module's presets and variations, for
+                // dialling a patch in on the Control surface.
+                if mode() == Mode::Control {
+                    crate::module_sidebar::ModuleSidebar { revision: perf_now.revision }
                 }
             }
             // Last, so they paint over the bar and the body.
