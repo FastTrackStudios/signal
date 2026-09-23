@@ -104,30 +104,34 @@ pub fn PopupLayer() -> Element {
             }
         });
     });
-    let Some(p) = popup else {
-        // Mounted but empty, so the next open can measure without waiting.
-        return rsx! {
-            div {
-                // Full size (so its measurement is the layer's), and
-                // transparent to the pointer while nothing is open.
-                style: "position: absolute; inset: 0; pointer-events: none;",
-                onmounted: move |e| layer.set(Some(e.data())),
-            }
-        };
-    };
+    // One element, always: only its style and children change. Swapping the
+    // layer's root between an idle box and a backdrop, while the panels
+    // around it re-render, is the kind of replacement the renderer's tree
+    // updates have tripped on.
     let (ox, oy, ow, _oh) = origin();
-    // Keep the menu on screen — but only against a width actually measured:
-    // clamping to an unmeasured (zero) width pinned every menu to the left.
-    let mut left = (p.x - ox).max(0.0);
-    if ow > p.min_width {
-        left = left.min(ow - p.min_width);
-    }
-    let top = (p.y - oy).max(0.0);
-    let min_w = p.min_width;
+    let (left, top, min_w) = match &popup {
+        Some(p) => {
+            // Keep the menu on screen — only against a width actually
+            // measured (clamping to an unmeasured zero pinned it left).
+            let mut left = (p.x - ox).max(0.0);
+            if ow > p.min_width {
+                left = left.min(ow - p.min_width);
+            }
+            (left, (p.y - oy).max(0.0), p.min_width)
+        }
+        None => (0.0, 0.0, 0.0),
+    };
+    let layer_style = if showing {
+        // Backdrop: the whole app, so a click anywhere else closes the menu.
+        "position: absolute; inset: 0; z-index: 900;"
+    } else {
+        // Full size (so its measurement is the layer's), and transparent to
+        // the pointer while nothing is open.
+        "position: absolute; inset: 0; pointer-events: none;"
+    };
     rsx! {
-        // Backdrop: the whole app, so a press anywhere else closes the menu.
         div {
-            style: "position: absolute; inset: 0; z-index: 900;",
+            style: "{layer_style}",
             tabindex: "-1",
             onmounted: move |e| layer.set(Some(e.data())),
             // On click — the last event of the press — and on the next tick:
@@ -135,14 +139,16 @@ pub fn PopupLayer() -> Element {
             // handling its press left it tracking a node that no longer
             // existed, and the release that followed crashed the app.
             onclick: move |_| {
-                spawn(async move { host.close() });
+                if showing {
+                    spawn(async move { host.close() });
+                }
             },
             onkeydown: move |e: KeyboardEvent| {
                 if e.key() == Key::Escape {
                     host.close();
                 }
             },
-            if showing {
+            if let Some(p) = popup {
                 div {
                     style: "position: absolute; left: {left}px; top: {top}px; min-width: {min_w}px;",
                     // Presses inside the menu are the menu's.
