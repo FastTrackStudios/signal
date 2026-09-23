@@ -2271,7 +2271,8 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                 .cloned()
         })
     };
-    let (drive_pick, amp_pick, time_pick) = (pick_of("Drive"), pick_of("Amp"), pick_of("Time"));
+    let (drive_pick, amp_pick, delay_pick, reverb_pick) =
+        (pick_of("Drive"), pick_of("Amp"), pick_of("Delay"), pick_of("Reverb"));
     let comp = find_block(&blocks, BlockType::Compressor, "Pre Comp");
     let post_comp = find_block(&blocks, BlockType::Compressor, "Post Comp");
     let comp_title = "Compressor";
@@ -2481,7 +2482,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
                                 title: if bpre { "Pre Delay".to_string() } else { "Delay".to_string() },
-                                module: if bpre { None } else { Some("Time") },
+                                module: if bpre { None } else { Some("Delay") },
                                 power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Delay && is_pre_fx(b) == bpre && !b.bypassed)),
                                 on_power: Some(cbs.cb({
                                     let rig = rig.clone();
@@ -2508,7 +2509,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
                                 title: if bpre { "Pre Verb".to_string() } else { "Reverb".to_string() },
-                                module: if bpre { None } else { Some("Time") },
+                                module: if bpre { None } else { Some("Reverb") },
                                 power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Reverb && is_pre_fx(b) == bpre && !b.bypassed)),
                                 on_power: Some(cbs.cb({
                                     let rig = rig.clone();
@@ -2534,7 +2535,11 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                         }
                         if !bpre {
-                            ModuleControls { kind: crate::library::Kind::TimeModules, pick: time_pick, style: "height: 22px; width: 100%;" }
+                            // The Delay module and the Reverb module, side by side.
+                            div { class: "flex gap-0", style: "height: 22px; width: 100%;",
+                                ModuleControls { kind: crate::library::Kind::DelayModules, pick: delay_pick, style: "height: 22px; flex: 1 1 0%;" }
+                                ModuleControls { kind: crate::library::Kind::ReverbModules, pick: reverb_pick, style: "height: 22px; flex: 1 1 0%;" }
+                            }
                         }
                         }
                     }

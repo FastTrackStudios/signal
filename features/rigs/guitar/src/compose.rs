@@ -32,7 +32,8 @@ pub const MODULES_FILE: &str = "modules.styx";
 pub const PRESETS_FILE: &str = "presets.styx";
 
 /// The modules a preset composes, in signal order.
-pub const MODULES: [&str; 5] = ["Dynamics", "Drive", "Amp", "Modulation", "Time"];
+pub const MODULES: [&str; 7] =
+    ["Dynamics", "Drive", "Amp", "Modulation", "Time", "Delay", "Reverb"];
 
 /// One parameter a block preset sets.
 #[derive(Clone, Debug, Default, Facet)]
@@ -1089,7 +1090,7 @@ pub fn regroup_by_gear(comp: &mut Compositions, profiles: &mut [ProfileDef]) -> 
                 if taken(target, &name) {
                     if let Some(drive) = pick("Drive") {
                         name = format!("{} + {}", snap.name, drive.preset);
-                    } else if let Some(time) = pick("Time") {
+                    } else if let Some(time) = pick("Delay").or_else(|| pick("Time")) {
                         name = format!("{} · {}", snap.name, time.snapshot);
                     }
                 }
