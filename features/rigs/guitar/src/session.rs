@@ -2486,6 +2486,13 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             // The dry guitar through the block; the delay is added in
             // parallel at `level`.
             ("dry", 0.0, 1.0, 1.0),
+            // Each repeat darker than the last (in the loop), 20 kHz open.
+            ("high_cut", 500.0, 20000.0, 8000.0),
+            // Ducking: repeats drop by up to 18 dB while you play.
+            ("duck_sens", 0.0, 18.0, 0.0),
+            ("duck_release", 0.05, 1.0, 0.2),
+            ("mod_rate", 0.05, 8.0, 0.6),
+            ("mod_depth", 0.0, 1.0, 0.0),
         ]),
         // Reverb surface — algorithm + mix/time/damping/tone/modulation +
         // wet pan (MX chain-A pan).
@@ -2502,6 +2509,14 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             // The dry guitar through the block; the reverb is added in
             // parallel at `level`.
             ("dry", 0.0, 1.0, 1.0),
+            ("predelay", 0.0, 200.0, 0.0),
+            // The wet's band (20 Hz / 20 kHz open).
+            ("low_cut", 20.0, 2000.0, 20.0),
+            ("high_cut", 1000.0, 20000.0, 20000.0),
+            // Ducking: the tail drops while you play, blooms in the gaps.
+            ("duck", 0.0, 1.0, 0.0),
+            ("duck_threshold", -60.0, 0.0, -20.0),
+            ("duck_release", 20.0, 2000.0, 120.0),
         ]),
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => owned(&[
             ("mix", 0.0, 1.0, 0.4),

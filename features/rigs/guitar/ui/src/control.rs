@@ -121,6 +121,17 @@ fn verb_seconds_label(algorithm: f32, variant: f32, decay: f32) -> String {
 
 /// The Time knob's label for one algorithm/variant — a fn pointer (the knob
 /// takes no closure), one per calibrated engine.
+/// A cut filter's corner: "Off" at the open end, Hz below 1 kHz, kHz above.
+fn cut_fmt(hz: f32) -> String {
+    if hz <= 20.5 || hz >= 19_999.0 {
+        "Off".into()
+    } else if hz < 1000.0 {
+        format!("{hz:.0} Hz")
+    } else {
+        format!("{:.1}k", hz / 1000.0)
+    }
+}
+
 /// A delay's or reverb's level: it runs fully wet in parallel with the dry,
 /// so how loud the effect sits is its `level`, in dB.
 fn level_fmt(db: f32) -> String {
@@ -1090,11 +1101,21 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
             // the lanes) ──
             div { class: "flex items-end justify-around gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0",
                 style: if cur.bypassed { "order: 1; opacity: 0.4;" } else { "order: 1;" },
+                // The repeats' band: low cut on the wet, high cut in the
+                // loop (each repeat darker than the last).
                 if let Some(p) = param(&cur, "high_pass") {
-                    PKnob { block_id: cur_id.clone(), name: "high_pass", label: "HP", p }
+                    PKnob { block_id: cur_id.clone(), name: "high_pass", label: "Lo Cut", p, fmt: Some(crate::knob::FmtFn(cut_fmt as fn(f32) -> String)) }
                 }
-                if let Some(p) = param(&cur, "repeat_dyn") {
-                    PKnob { block_id: cur_id.clone(), name: "repeat_dyn", label: "Duck", p }
+                if let Some(p) = param(&cur, "high_cut") {
+                    PKnob { block_id: cur_id.clone(), name: "high_cut", label: "Hi Cut", p, fmt: Some(crate::knob::FmtFn(cut_fmt as fn(f32) -> String)) }
+                }
+                // Ducking: the repeats drop while you play (dB), and
+                // swell back in the gaps.
+                if let Some(p) = param(&cur, "duck_sens") {
+                    PKnob { block_id: cur_id.clone(), name: "duck_sens", label: "Duck", p, fmt: Some(crate::knob::FmtFn((|v| if v < 0.1 { "Off".into() } else { format!("−{v:.0} dB") }) as fn(f32) -> String)) }
+                }
+                if let Some(p) = param(&cur, "mod_depth") {
+                    PKnob { block_id: cur_id.clone(), name: "mod_depth", label: "Mod", p }
                 }
                 if let Some(p) = param(&cur, "feedback") {
                     PKnob { block_id: cur_id.clone(), name: "feedback", label: "FB", p }
@@ -1291,14 +1312,25 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                         name: "decay",
                         label: "Time",
                         p,
-                        // RT60 estimate from the Hall feedback law
-                        // (g = 0.5 + 0.48·d, ~80 ms loop) — a readable tail
-                        // length, not a lab measurement.
+                        // The tail in seconds, as the engine maps decay
+                        // for this algorithm (`verb_seconds`).
                         fmt: Some(crate::knob::FmtFn(decay_fmt_for(
                             param_v(&cur, "algorithm", 1.0),
                             param_v(&cur, "variant", 0.0),
                         ))),
                     }
+                }
+                if let Some(p) = param(&cur, "predelay") {
+                    PKnob { block_id: cur_id.clone(), name: "predelay", label: "Pre", p, fmt: Some(crate::knob::FmtFn((|v| format!("{v:.0} ms")) as fn(f32) -> String)) }
+                }
+                if let Some(p) = param(&cur, "low_cut") {
+                    PKnob { block_id: cur_id.clone(), name: "low_cut", label: "Lo Cut", p, fmt: Some(crate::knob::FmtFn(cut_fmt as fn(f32) -> String)) }
+                }
+                if let Some(p) = param(&cur, "high_cut") {
+                    PKnob { block_id: cur_id.clone(), name: "high_cut", label: "Hi Cut", p, fmt: Some(crate::knob::FmtFn(cut_fmt as fn(f32) -> String)) }
+                }
+                if let Some(p) = param(&cur, "duck") {
+                    PKnob { block_id: cur_id.clone(), name: "duck", label: "Duck", p, fmt: Some(crate::knob::FmtFn((|v| if v < 0.01 { "Off".into() } else { format!("{:.0}%", v * 100.0) }) as fn(f32) -> String)) }
                 }
                 if let Some(p) = param(&cur, "tone") {
                     PKnob { block_id: cur_id.clone(), name: "tone", label: "Tone", p }
