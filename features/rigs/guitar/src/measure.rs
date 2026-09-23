@@ -22,7 +22,8 @@ use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 // v4: delays and reverbs run in parallel with the dry, and build with every
 // param (algorithm, style, …) — same chains, different sound.
 // v5: the Time module's two delays, and its two reverbs, in parallel.
-const ENGINE: &str = "rig-v5";
+// v6: the Tape delay lands on its time (it echoed 2.85× late).
+const ENGINE: &str = "rig-v6";
 
 /// Settle time before a measurement: long enough for the compressors, gate
 /// and NAM state from the previous input to have gone, and for the delays and
