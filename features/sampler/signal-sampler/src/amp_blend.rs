@@ -208,6 +208,26 @@ pub fn roles(names: &[&str], r_loaded: bool) -> Vec<Option<Role>> {
     out
 }
 
+/// Wrap the stage's blocks of a built chain in [`BlendStage`]s, in place;
+/// every other block is left exactly where it is.
+pub fn wrap(boxes: &mut [Option<Box<dyn PluginInstance>>], roles: &[Option<Role>], max_block: usize) {
+    if roles.iter().all(Option::is_none) {
+        return;
+    }
+    let shared = Shared::new(max_block);
+    for (slot, role) in boxes.iter_mut().zip(roles) {
+        // Only a block with a role is taken out. (This once read
+        // `if let (Some(role), Some(inner)) = (role, slot.take())`, which
+        // takes every box before matching — and dropped each one without a
+        // role: a blend patch played its two amps and nothing else.)
+        if let Some(role) = *role
+            && let Some(inner) = slot.take()
+        {
+            *slot = Some(Box::new(BlendStage::new(inner, role, shared.clone())));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,6 +333,22 @@ mod tests {
     fn without_cab_r_amp_r_merges() {
         let mut chain = stage(false);
         assert!((run(&mut chain, 0.0) - 55.5).abs() < 1e-4);
+    }
+
+    /// The blocks around the stage stay in the chain: a gain after the
+    /// merge still applies. (L = 0+10+1, R = 0+100, merged at Amp R, then +5.)
+    #[test]
+    fn wrap_keeps_every_block_without_a_role() {
+        let names = ["Gate", "Amp L", "Cab L", "Amp R", "Patch Trim"];
+        let adds = [0.0, 10.0, 1.0, 100.0, 5.0];
+        let mut boxes: Vec<Option<Box<dyn PluginInstance>>> = adds
+            .iter()
+            .map(|&a| Some(Box::new(Add(a)) as Box<dyn PluginInstance>))
+            .collect();
+        wrap(&mut boxes, &roles(&names, true), 8);
+        assert!(boxes.iter().all(Option::is_some));
+        let mut chain: Vec<Box<dyn PluginInstance>> = boxes.into_iter().flatten().collect();
+        assert!((run(&mut chain, 0.0) - (55.5 + 5.0)).abs() < 1e-4);
     }
 
     /// An empty Amp R is no stage at all — the chain stays plain series.
