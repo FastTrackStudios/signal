@@ -234,7 +234,12 @@ frames, and after `poll` applies mutations the tree still holds
 `dioxus-native-dom` (vendored in signal) marks layout stale in `poll` and
 `handle_ui_event` resolves first (`BaseDocument::resolve_at_last_time`,
 blitz fork `fts-focus` `45fba011`). The per-site guards (`b98dda16`,
-`da8bc781`, `a24cbf1a`) stay as a second net. Menus draw at the rig root
+`da8bc781`, `a24cbf1a`, `e7a452c1`) stay as a second net — and are needed:
+a crash in `absolute_position` came back after a delay-timing dropdown
+change *with* the resolve in place, so a rebuild itself can leave a
+`layout_parent` pointing at a freed anonymous box. **Open:** find where
+blitz-dom's layout construction frees anonymous boxes without updating
+their children's `layout_parent`. Menus draw at the rig root
 (`signal_widgets::PopupHost`/`PopupLayer`), drags go through
 `signal_widgets::DragBus` — both because Blitz has no `fixed`, no portals,
 no pointer capture.
