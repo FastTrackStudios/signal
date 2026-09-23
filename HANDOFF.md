@@ -144,12 +144,13 @@ the old GuitarLSTM DI is `di-reference.guitarlstm-ts9.wav`).
    [-- <Profile>] [--per-block]`: every block answers on the impulse's own
    sample except NAM amps / cab IRs (0–47 samples: the captured gear's own
    response, not buffering).
-2. **Dual-amp blends lose 14–25 dB** (`Deluxe + AC30`, `Plexi + AC30`,
-   `JCM800 + AC30`, `5150 III + Recto`): each amp levels correctly alone,
-   but the parallel `amp_blend::BlendStage` output is far quieter than the
-   sum (cancellation or a branch dropped). Their preset levels compensate
-   (JCM800 + AC30 · Crunch hits the +24 dB Patch Trim cap, ~1 dB short). No
-   profile uses them yet.
+2. ~~**Dual-amp blends.**~~ DONE (`9fc659b4`). Not a loudness problem:
+   `prepare_chain` wrapped the blend stage with
+   `if let (Some(role), Some(inner)) = (role, slot.take())`, which takes
+   every box before matching, so a blend patch played its two amps and
+   nothing else (no gate/comps/trim/FX/limiter). Levelling could never
+   converge, which is where +14–25 dB came from. Now `amp_blend::wrap`,
+   tested; blends level at +5–9 dB. `examples/blend_probe`.
 3. **Output Level knob in the UI** — the user asked for "an output gain
    setting in the block". Levels are stored on modules/drive options and
    built into the trims, but not yet shown or editable per block.
@@ -160,6 +161,31 @@ the old GuitarLSTM DI is `di-reference.guitarlstm-ts9.wav`).
    offset semantics that is right, but `levelling::level_profile` measures
    with offsets zeroed, so its dry-run shows the *raw* figure, not the
    final one — confusing when verifying.
+
+## Compressors and the gain bias (2026-09-23, `eea9e0e3`, processor `f897de7`)
+
+- Compressor block: `makeup` (dB, output level after the blend) and `mix`
+  (parallel blend), both zero-latency.
+- **Pre Comp** presets hear only the guitar: dialled once to the DI
+  reference (`examples/comp_dial`) and valid everywhere — Clean Sustain,
+  Funk Squash, Country Squash, Swell Sustain, Drive Tighten. Never re-dial
+  unless the guitar/interface gain changes.
+- **Post Comp** presets (Live Glue 2 dB, Clean Punch 4, Lead Sustain 5,
+  Rhythm Catch 1 — `target_gr_db` in blocks.styx) carry the character; each
+  preset snapshot's threshold is its own override, dialled on its own chain
+  by `signal rig dial-post-comp` (all 113 within ±0.2 dB; thresholds span
+  8 dB between amps). `examples/comp_verify` checks them.
+- Every snapshot picks a Pre and Post Comp in presets.styx by gain class
+  (Amp modules no longer set Post Comp). New variations: Twin Reverb ·
+  Funk, Deluxe Reverb · Country (not in any profile yet).
+- `gain_bias_db` per snapshot: loudness target = −23 + bias (clean 0, edge
+  +1, crunch +2, high-gain rhythm +2.5, lead +3). All three levelling paths
+  use `compose::loudness_target`. Measuring it (peak-to-loudness of the gain
+  stages) was tried and does not sort by gain.
+- **Order after changing a comp preset or an amp:** `signal rig
+  dial-post-comp` → `level-presets` → `level <Profile>` ×4 (dial ~18 min,
+  presets ~4 min).
+- Sidebar shows each patch's variation under its preset.
 
 ## Browser rig (next phase, after native is done)
 
