@@ -161,6 +161,22 @@ the old GuitarLSTM DI is `di-reference.guitarlstm-ts9.wav`).
    offset semantics that is right, but `levelling::level_profile` measures
    with offsets zeroed, so its dry-run shows the *raw* figure, not the
    final one — confusing when verifying.
+7. **Other profiles onto the Worship model.** Blues / Metal / Rock still
+   point at assorted amp presets; Worship plays one rig preset (Deluxe +
+   AC30) through its variations and overrides only Time. Give each profile
+   a core rig preset the same way if the player likes it.
+8. **`dial-post-comp` is slow** (~18 min for 116 snapshots): an 8-step
+   serial bisection per snapshot, each step a full render. Fewer steps (a
+   secant step from the first two readings), a shorter render, or running
+   only changed snapshots would cut it — it reruns whenever a comp preset
+   changes.
+9. **Rig config under git.** `/Volumes/dev-drive/config` (presets,
+   modules, blocks, profiles) had only `.bak-*` copies (see the repo now
+   started there — items below).
+10. **Tone loose ends:** Twin Reverb · Funk and Deluxe Reverb · Country are
+    in no profile; Deluxe + AC30 · Lead needs +12 dB (KoT Both Sides → MG
+    into the pushed amps reads quiet — understand why); the reverb `decay`
+    knob's curve per algorithm is undocumented.
 
 ## Compressors and the gain bias (2026-09-23, `eea9e0e3`, processor `f897de7`)
 
