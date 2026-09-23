@@ -69,6 +69,20 @@ pub enum Command {
         #[arg(long = "profile")]
         profiles: Vec<String>,
     },
+    /// Dial each preset snapshot's Post Comp threshold to its compressor
+    /// preset's target gain reduction, on that snapshot's own amp (writes a
+    /// `Post Comp threshold` override per snapshot into presets.styx). The
+    /// Pre Comp is never dialled: it hears only the guitar. Run
+    /// `level-presets` after.
+    DialPostComp {
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long, default_value_t = 48_000)]
+        sample_rate: u32,
+        /// Render threads (0 = every core).
+        #[arg(long, default_value_t = 0)]
+        threads: usize,
+    },
     LevelPresets {
         #[arg(long)]
         dry_run: bool,
@@ -240,6 +254,52 @@ pub fn run(command: Command) -> ExitCode {
                 println!("(dry run — pass --write to save)");
             }
             ExitCode::SUCCESS
+        }
+        Command::DialPostComp {
+            dry_run,
+            sample_rate,
+            threads,
+        } => {
+            signal_guitar::levelling::apply_nam_calibration();
+            let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
+            let mut comp = signal_guitar::library::RigLibrary::load_compositions();
+            let started = std::time::Instant::now();
+            let results = signal_guitar::compose::dial_post_comp(
+                &mut comp,
+                &lib.profile,
+                &lib.drive_presets,
+                sample_rate,
+                threads,
+            );
+            let mut failed = 0;
+            let mut last = String::new();
+            for r in &results {
+                if r.preset != last {
+                    println!("{}", r.preset);
+                    last.clone_from(&r.preset);
+                }
+                match r.dialled {
+                    Some((t, gr)) => println!(
+                        "  {:<22} {:<13} threshold {t:>6.1} dB  GR {gr:>4.1} dB (target {:.1})",
+                        r.snapshot, r.comp, r.target_gr_db
+                    ),
+                    None => {
+                        failed += 1;
+                        println!("  {:<22} did not render — left as it was", r.snapshot);
+                    }
+                }
+            }
+            if !dry_run {
+                signal_guitar::library::RigLibrary::save_compositions(&comp);
+            }
+            println!(
+                "\n{} snapshots in {:.0}s, {} failed{}",
+                results.len(),
+                started.elapsed().as_secs_f64(),
+                failed,
+                if dry_run { " (dry run — nothing written)" } else { "" }
+            );
+            if failed == 0 { ExitCode::SUCCESS } else { ExitCode::FAILURE }
         }
         Command::LevelPresets {
             dry_run,

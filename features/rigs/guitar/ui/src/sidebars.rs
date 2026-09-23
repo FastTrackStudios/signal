@@ -17,14 +17,31 @@ use crate::perform::folder_color;
 /// Section eyebrow shared by every sidebar group.
 
 // Profile-list row layout, as inline styles Blitz honours (see the
-// `blitz-design` skill): the name takes the slack and clips; the preset is a
-// fixed right-aligned cell that clips (no `text-overflow` in Blitz).
+// `blitz-design` skill): the name takes the slack and clips; the preset and
+// its variation are a fixed right-aligned cell that clips (no
+// `text-overflow` in Blitz).
 const PATCH_ROW: &str = "display: flex; align-items: center; gap: 8px; min-width: 0; \
                          margin-left: 16px; padding: 4px 8px; text-align: left; cursor: pointer;";
 const NAME_CELL: &str =
     "flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-align: left;";
-const PRESET_CELL: &str =
-    "flex-shrink: 0; width: 76px; overflow: hidden; white-space: nowrap; text-align: right;";
+// Preset over its variation, right-aligned: two short lines instead of one
+// "Preset · Variation" that the cell clipped before the variation began.
+const PRESET_STACK: &str = "flex-shrink: 0; width: 96px; display: flex; flex-direction: column; \
+                            align-items: flex-end; overflow: hidden; line-height: 1.15;";
+const PRESET_LINE: &str = "max-width: 96px; overflow: hidden; white-space: nowrap;";
+
+/// A patch's preset and the variation of it that it plays.
+#[component]
+fn PresetCell(preset: String, variation: String) -> Element {
+    rsx! {
+        div { style: "{PRESET_STACK}",
+            span { class: "text-[9px] font-mono opacity-50", style: "{PRESET_LINE}", "{preset}" }
+            if !variation.is_empty() {
+                span { class: "text-[9px] font-mono opacity-80", style: "{PRESET_LINE}", "{variation}" }
+            }
+        }
+    }
+}
 
 #[component]
 fn PanelLabel(label: &'static str) -> Element {
@@ -230,7 +247,8 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                 let main = patches.first().cloned();
                                 let main_active = main.as_ref().is_some_and(|(_, p)| p.active);
                                 let main_idx = main.as_ref().map(|(i, _)| *i);
-                                let main_preset = main.as_ref().map(|(_, p)| p.preset.clone()).unwrap_or_default();
+                                let main_preset = main.as_ref().map(|(_, p)| p.rig_preset.clone()).unwrap_or_default();
+                                let main_variation = main.as_ref().map(|(_, p)| p.variation.clone()).unwrap_or_default();
                                 rsx! {
                             div {
                                 class: if main_active {
@@ -253,7 +271,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                     style: "{NAME_CELL}",
                                     "{stack_label}"
                                 }
-                                span { class: "text-[9px] font-mono opacity-50", style: "{PRESET_CELL}", "{main_preset}" }
+                                PresetCell { preset: main_preset.clone(), variation: main_variation.clone() }
                                 span {
                                     class: "text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 cursor-pointer",
                                     style: "flex-shrink: 0;",
@@ -291,7 +309,8 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                             p.name.clone()
                                         }
                                     };
-                                    let preset = p.preset.clone();
+                                    let preset = p.rig_preset.clone();
+                                    let variation = p.variation.clone();
                                     let is_default = p.default_in_stack;
                                     let is_sel = selected_patch() == Some(i);
                                     rsx! {
@@ -378,9 +397,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                             }
                                             // Preset last (fixed, right-aligned) so it lines
                                             // up down the list; icons sit to its left.
-                                            span { class: "text-[9px] font-mono opacity-50", style: "{PRESET_CELL}",
-                                                "{preset}"
-                                            }
+                                            PresetCell { preset: preset.clone(), variation: variation.clone() }
                                             span {
                                                 class: "text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-shrink-0 cursor-pointer",
                                                 title: "Delete patch",

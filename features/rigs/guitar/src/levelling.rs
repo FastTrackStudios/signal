@@ -124,13 +124,14 @@ pub fn level_profile(
             .and_then(|p| crate::measure::patch_lufs(p, sample_rate))
     });
 
+    let comp = RigLibrary::load_compositions();
     let mut out = Vec::with_capacity(def.patches.len());
     for (patch, lufs) in def.patches.iter_mut().zip(measured) {
         if let Some(l) = lufs {
+            let target = crate::compose::loudness_target(&comp, &patch.rig_preset, &patch.snapshot);
             // Same clamp as the rig's pass: more than this is a patch built
             // wrong, and the makeup would only amplify noise.
-            patch.level_db =
-                ((signal_sampler::patch_level::TARGET_LUFS as f32) - l).clamp(-24.0, 24.0);
+            patch.level_db = (target - l).clamp(-24.0, 24.0);
         }
         out.push(Levelled {
             patch: patch.name.clone(),

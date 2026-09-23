@@ -855,7 +855,17 @@ impl GuitarRigBackend {
             .lock_ok()
             .as_ref()
             .map_or(48_000, signal_sampler::rig_profile::ProfileRig::sample_rate);
-        let target = signal_sampler::patch_level::TARGET_LUFS as f32;
+        // Each patch's own target: the rig's, plus its snapshot's gain bias.
+        let comp = RigLibrary::load_compositions();
+        let target_of = |name: &str| {
+            let def = self.profile_def.lock_ok();
+            def.patches
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(name))
+                .map_or(signal_sampler::patch_level::TARGET_LUFS as f32, |p| {
+                    crate::compose::loudness_target(&comp, &p.rig_preset, &p.snapshot)
+                })
+        };
         tracing::info!(sample_rate, "patch levelling: begin");
 
         for pass in 0..PASSES {
@@ -889,7 +899,7 @@ impl GuitarRigBackend {
                         progress.results.push(signal_guitar_proto::PatchLevel {
                             patch: patch.name.clone(),
                             lufs: lufs.unwrap_or(f32::NEG_INFINITY),
-                            trim_db: lufs.map_or(f32::NAN, |l| target - l),
+                            trim_db: lufs.map_or(f32::NAN, |l| target_of(&patch.name) - l),
                         });
                     }
                     self.publish_levelling();
@@ -901,7 +911,7 @@ impl GuitarRigBackend {
                 .zip(&measured)
                 .filter_map(|(p, l)| {
                     l.filter(|l| *l > signal_sampler::loudness::SILENCE_LUFS as f32)
-                        .map(|l| (p.name.clone(), target - l))
+                        .map(|l| (p.name.clone(), target_of(&p.name) - l))
                 })
                 .collect();
             if errors.iter().all(|(_, e)| e.abs() <= GOOD_ENOUGH_DB) {
@@ -916,7 +926,7 @@ impl GuitarRigBackend {
             progress.patch.clear();
         }
         self.publish_levelling();
-        tracing::info!(target_lufs = target, "patch levelling: done");
+        tracing::info!("patch levelling: done");
     }
 
     /// Move each patch's level by its measured error (dB). A patch's
@@ -1463,7 +1473,7 @@ impl GuitarRigBackend {
                 let default_in_stack = stack_entry
                     .and_then(|st| st.patches.first())
                     .is_some_and(|first| first.eq_ignore_ascii_case(&p.name));
-                let (preset, override_modules) = def
+                let (preset, rig_preset, variation, override_modules) = def
                     .patches
                     .iter()
                     .find(|d| d.name.eq_ignore_ascii_case(&p.name))
@@ -1479,11 +1489,18 @@ impl GuitarRigBackend {
                         } else {
                             format!("{} · {}", d.rig_preset, d.snapshot)
                         };
-                        (points_at, d.override_modules())
+                        let rig_preset = if d.rig_preset.is_empty() {
+                            d.preset.clone()
+                        } else {
+                            d.rig_preset.clone()
+                        };
+                        (points_at, rig_preset, d.snapshot.clone(), d.override_modules())
                     })
                     .unwrap_or_default();
                 PatchInfo {
                     preset,
+                    rig_preset,
+                    variation,
                     override_modules,
                     default_in_stack,
                     name: p.name.clone(),

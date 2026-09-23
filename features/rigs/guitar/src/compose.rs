@@ -53,6 +53,14 @@ pub struct BlockPresetDef {
     /// The preset is "off": picking it bypasses the block.
     #[facet(default)]
     pub bypass: bool,
+    /// A compressor preset that sits after the amp: the gain reduction (dB,
+    /// averaged over playing) it is meant to apply. Each snapshot's own
+    /// threshold is dialled to it on that snapshot's amp
+    /// ([`dial_post_comp`]), because what reaches a post comp differs from
+    /// amp to amp. 0 = a preset whose threshold is used as written — a pre
+    /// comp, which only ever hears the guitar.
+    #[facet(default)]
+    pub target_gr_db: f32,
 }
 
 /// Put a block preset on a named chain block.
@@ -129,6 +137,14 @@ pub struct PresetSnapshotDef {
     /// every snapshot of one arrives at the same loudness.
     #[facet(default)]
     pub level_db: f32,
+    /// How far above the loudness target this snapshot is levelled, dB. An
+    /// overdriven amp has no peaks left, so at equal measured loudness it
+    /// sounds *smaller* than a clean one; a crunch or a lead sitting 1–3 dB
+    /// over the cleans is what a real amp turned up does, and reads as level.
+    /// Every levelling pass aims a snapshot, and each patch that plays it, at
+    /// the target plus this ([`loudness_target`]).
+    #[facet(default)]
+    pub gain_bias_db: f32,
 }
 
 /// A preset: a composition of module presets, with snapshots.
@@ -434,6 +450,7 @@ mod tests {
                         ],
                         overrides: vec![OverrideDef::set("Time", "VERB 1", "mix", 0.3)],
                         level_db: 0.0,
+                        gain_bias_db: 0.0,
                     },
                     PresetSnapshotDef {
                         blocks: Vec::new(),
@@ -441,6 +458,7 @@ mod tests {
                         modules: vec![choice("Amp", "Deluxe", "Edge")],
                         overrides: Vec::new(),
                         level_db: 0.0,
+                        gain_bias_db: 2.0,
                     },
                 ],
             }],
@@ -454,6 +472,17 @@ mod tests {
         p.snapshot = snapshot.into();
         p.overrides.clear();
         def
+    }
+
+    /// A snapshot's gain bias lifts its loudness target; one without, or a
+    /// patch with no snapshot, levels to the rig's target.
+    #[test]
+    fn loudness_target_adds_the_snapshot_gain_bias() {
+        let c = comp();
+        let base = signal_sampler::patch_level::TARGET_LUFS as f32;
+        assert!((loudness_target(&c, "Fender", "Edge") - (base + 2.0)).abs() < 1e-6);
+        assert!((loudness_target(&c, "Fender", "Clean") - base).abs() < 1e-6);
+        assert!((loudness_target(&c, "", "") - base).abs() < 1e-6);
     }
 
     #[test]
@@ -594,6 +623,7 @@ mod tests {
                 },
             ],
             bypass: false,
+            target_gr_db: 0.0,
         });
         c.modules[0].snapshots[0].blocks.push(BlockChoiceDef {
             block: crate::profiles::POST_COMP.into(),
@@ -752,6 +782,7 @@ pub fn propose(def: &ProfileDef) -> Migration {
             modules: std::mem::take(&mut picks),
             overrides: std::mem::take(&mut patch.overrides),
             level_db: 0.0,
+            gain_bias_db: 0.0,
         });
         patch.rig_preset = preset_name;
         patch.snapshot = patch.name.clone();
@@ -895,13 +926,14 @@ pub fn level_presets(
         let built = crate::nodes::to_nodes_with_store(&flat, drives).to_profile(&flat, drives);
         crate::measure::patch_lufs(built.patches.first()?, sample_rate).filter(|l| *l > -70.0)
     };
-    let target = signal_sampler::patch_level::TARGET_LUFS as f32;
     // Measure raw, correct, and re-measure with the correction applied until
     // it lands: the chain ends in the rig's limiter (the live chain does), so
     // a hot snapshot reads quieter than it is and one subtraction undershoots.
     // After the first step the trimmed signal sits under the limiter and the
     // next one is exact; cached, so a re-run costs nothing.
     let measure = |&job: &(usize, usize)| -> Option<(f32, f32)> {
+        let target = signal_sampler::patch_level::TARGET_LUFS as f32
+            + comp.presets[job.0].snapshots[job.1].gain_bias_db;
         let raw = measure_at(job, 0.0)?;
         let mut level = (target - raw).clamp(-40.0, 40.0);
         for _ in 0..3 {
@@ -1067,6 +1099,144 @@ pub fn regroup_by_gear(comp: &mut Compositions, profiles: &mut [ProfileDef]) -> 
     moved
 }
 
+/// One snapshot's dialled Post Comp.
+#[derive(Clone, Debug)]
+pub struct PostCompDial {
+    pub preset: String,
+    pub snapshot: String,
+    /// The block preset on its Post Comp.
+    pub comp: String,
+    pub target_gr_db: f32,
+    /// The threshold found, and the gain reduction it measured; `None` when
+    /// the chain did not render.
+    pub dialled: Option<(f32, f32)>,
+}
+
+/// The block every post-comp dial works on.
+const POST_COMP: &str = crate::profiles::POST_COMP;
+
+/// Dial each snapshot's Post Comp threshold to its preset's
+/// [`target_gr_db`](BlockPresetDef::target_gr_db), on that snapshot's own
+/// chain: built as the rig builds it (drives, Pre Comp, amps), cut after the
+/// Post Comp, and rendered with it engaged and bypassed at no makeup — the
+/// loudness difference is the gain reduction. The threshold is written as
+/// the snapshot's own override, so the block preset still carries the
+/// character (ratio, attack, release, knee, style) for every snapshot that
+/// uses it. Snapshots whose Post Comp preset has no target are left alone.
+///
+/// Changes each snapshot's level; run [`level_presets`] after.
+#[must_use]
+pub fn dial_post_comp(
+    comp: &mut Compositions,
+    base: &ProfileDef,
+    drives: &[crate::profiles::DrivePresetDef],
+    sample_rate: u32,
+    threads: usize,
+) -> Vec<PostCompDial> {
+    let jobs: Vec<(usize, usize, String, f32)> = comp
+        .presets
+        .iter()
+        .enumerate()
+        .flat_map(|(p, preset)| {
+            let comp = &*comp;
+            preset.snapshots.iter().enumerate().filter_map(move |(s, snap)| {
+                let choice = snap
+                    .blocks
+                    .iter()
+                    .rev()
+                    .find(|b| b.block.eq_ignore_ascii_case(POST_COMP))?;
+                let target = comp.block_preset(&choice.preset)?.target_gr_db;
+                (target > 0.0).then(|| (p, s, choice.preset.clone(), target))
+            })
+        })
+        .collect();
+
+    // The snapshot's chain up to its Post Comp, with the comp at `threshold`
+    // and engaged or not.
+    let render = |p: usize, s: usize, threshold: f32, engaged: bool| -> Option<f32> {
+        let preset = &comp.presets[p];
+        let mut def = base.clone();
+        def.patches = vec![snapshot_patch(base, &preset.name, &preset.snapshots[s].name, "dial")?];
+        let mut trial = comp.clone();
+        let snap = &mut trial.presets[p].snapshots[s];
+        snap.overrides.retain(|o| {
+            !(o.block.eq_ignore_ascii_case(POST_COMP) && o.param.eq_ignore_ascii_case("threshold"))
+        });
+        snap.overrides.push(OverrideDef::set("", POST_COMP, "threshold", threshold));
+        snap.overrides.push(OverrideDef::set("", POST_COMP, "makeup", 0.0));
+        let flat = flatten(&def, &trial);
+        let mut patch = crate::nodes::to_nodes_with_store(&flat, drives)
+            .to_profile(&flat, drives)
+            .patches
+            .into_iter()
+            .next()?;
+        let mut after = false;
+        for b in &mut patch.chain {
+            if after {
+                b.bypassed = true;
+            } else if b.name.eq_ignore_ascii_case(POST_COMP) {
+                after = true;
+                b.bypassed = !engaged;
+            }
+        }
+        crate::measure::patch_lufs(&patch, sample_rate).filter(|l| *l > -70.0)
+    };
+
+    let dialled = crate::levelling::par_map(&jobs, threads, |&(p, s, _, target)| {
+        let dry = render(p, s, 0.0, false)?;
+        let gr = |t: f32| render(p, s, t, true).map(|wet| dry - wet);
+        // Gain reduction falls as the threshold rises: bisect on it.
+        let (mut lo, mut hi) = (-50.0f32, 0.0f32);
+        for _ in 0..8 {
+            let mid = 0.5 * (lo + hi);
+            if gr(mid)? > target {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        let threshold = (lo + hi).round() / 2.0;
+        Some((threshold, gr(threshold)?))
+    });
+
+    jobs.iter()
+        .zip(dialled)
+        .map(|(&(p, s, ref name, target), dialled)| {
+            let snap = &mut comp.presets[p].snapshots[s];
+            if let Some((threshold, _)) = dialled {
+                snap.overrides.retain(|o| {
+                    !(o.block.eq_ignore_ascii_case(POST_COMP)
+                        && o.param.eq_ignore_ascii_case("threshold"))
+                });
+                snap.overrides.push(OverrideDef::set("", POST_COMP, "threshold", threshold));
+            }
+            PostCompDial {
+                preset: comp.presets[p].name.clone(),
+                snapshot: comp.presets[p].snapshots[s].name.clone(),
+                comp: name.clone(),
+                target_gr_db: target,
+                dialled,
+            }
+        })
+        .collect()
+}
+
+/// The loudness (LUFS) a patch playing `preset` / `snapshot` is levelled to:
+/// the rig's target plus that snapshot's [`gain_bias_db`](PresetSnapshotDef::gain_bias_db).
+/// A patch with no preset snapshot (the legacy pool shape) gets the target.
+#[must_use]
+pub fn loudness_target(comp: &Compositions, preset: &str, snapshot: &str) -> f32 {
+    let bias = comp
+        .preset(preset)
+        .and_then(|p| {
+            p.snapshots
+                .iter()
+                .find(|s| s.name.eq_ignore_ascii_case(snapshot))
+        })
+        .map_or(0.0, |s| s.gain_bias_db);
+    signal_sampler::patch_level::TARGET_LUFS as f32 + bias
+}
+
 /// A patch that plays one preset snapshot and nothing else of its own: no
 /// module picks, overrides, drives, second amp, level, trim or boost — the
 /// snapshot as it is. Built on the profile's first patch for the chain
@@ -1208,6 +1378,7 @@ pub fn recompose(
                 modules,
                 overrides: std::mem::take(&mut patch.overrides),
                 level_db: 0.0,
+                gain_bias_db: 0.0,
             };
             match preset
                 .snapshots

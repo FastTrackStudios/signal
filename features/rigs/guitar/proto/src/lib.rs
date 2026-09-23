@@ -290,8 +290,13 @@ pub struct PatchInfo {
     pub available: bool,
     /// This is the active patch.
     pub active: bool,
-    /// The preset this patch points at.
+    /// The preset this patch points at (`Preset · Variation` for a patch
+    /// that plays a preset snapshot).
     pub preset: String,
+    /// The same, apart: the preset's name, and which of its variations
+    /// (snapshot) the patch plays — empty for a legacy pool patch.
+    pub rig_preset: String,
+    pub variation: String,
     /// This patch is its stack's default (first in the rotation — where the
     /// footswitch lands after a reset).
     pub default_in_stack: bool,

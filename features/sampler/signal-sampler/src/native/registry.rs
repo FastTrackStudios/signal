@@ -137,6 +137,8 @@ fn build_comp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
         "range",
         "fold",
         "style",
+        "makeup",
+        "mix",
         // Which compressor-panel trace this block draws on (0 = none) — see
         // `fx_blocks::comp_meter`.
         "meter",

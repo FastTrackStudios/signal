@@ -1378,7 +1378,9 @@ mod tests {
         for patch in &built.patches {
             for block in &patch.chain {
                 let (_, report) = signal_sampler::to_node::lift_one_block(block);
-                unranged.extend(report.unranged);
+                // A compressor's `meter` is which panel trace it draws on —
+                // wiring set at build time, deliberately not a knob.
+                unranged.extend(report.unranged.into_iter().filter(|(_, p)| p != "meter"));
             }
         }
         unranged.sort();
@@ -1537,7 +1539,14 @@ mod tests {
         for patch in &built.patches {
             for block in &patch.chain {
                 let (_, report) = signal_sampler::to_node::lift_one_block(block);
-                unranged.extend(report.unranged.into_iter().map(|(_, param)| param));
+                // `meter` is a compressor's panel-trace wiring, not a knob.
+                unranged.extend(
+                    report
+                        .unranged
+                        .into_iter()
+                        .map(|(_, param)| param)
+                        .filter(|p| p != "meter"),
+                );
             }
         }
         unranged.sort();
