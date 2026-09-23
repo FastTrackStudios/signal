@@ -130,7 +130,13 @@ pub fn PopupLayer() -> Element {
             style: "position: absolute; inset: 0; z-index: 900;",
             tabindex: "-1",
             onmounted: move |e| layer.set(Some(e.data())),
-            onpointerdown: move |_| host.close(),
+            // On click — the last event of the press — and on the next tick:
+            // removing the node under the pointer while the renderer is still
+            // handling its press left it tracking a node that no longer
+            // existed, and the release that followed crashed the app.
+            onclick: move |_| {
+                spawn(async move { host.close() });
+            },
             onkeydown: move |e: KeyboardEvent| {
                 if e.key() == Key::Escape {
                     host.close();
@@ -141,6 +147,7 @@ pub fn PopupLayer() -> Element {
                     style: "position: absolute; left: {left}px; top: {top}px; min-width: {min_w}px;",
                     // Presses inside the menu are the menu's.
                     onpointerdown: move |e: PointerEvent| e.stop_propagation(),
+                    onclick: move |e: MouseEvent| e.stop_propagation(),
                     {(p.render)()}
                 }
             }

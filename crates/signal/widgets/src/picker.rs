@@ -161,8 +161,9 @@ pub fn Picker(
                         y + button_height(size) + 2.0,
                         0.0,
                         move || menu(&options, selected, font, move |i| {
-                            h.close();
                             on_select.call(i);
+                            // After the click is done with the row.
+                            spawn(async move { h.close() });
                         }),
                         move || {
                             let mut o = open;

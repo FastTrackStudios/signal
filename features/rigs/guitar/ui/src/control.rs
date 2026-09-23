@@ -697,7 +697,8 @@ fn AlgoPicker(
                             let (rig, block_id) = (rig.clone(), block_id.clone());
                             move |i| {
                                 send_param(&rig, &block_id, name, i as f32);
-                                h.close();
+                                // After the click is done with the button.
+                                spawn(async move { h.close() });
                             }
                         }),
                         move || {
