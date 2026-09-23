@@ -448,6 +448,29 @@ pub struct CompositionModel {
     /// The active patch's effective module picks — its preset snapshot's,
     /// with its own over them.
     pub active_modules: Vec<ModulePick>,
+    /// Every block preset (`blocks.styx`): a delay, a reverb, a compressor…
+    /// Module snapshots point at these, so editing one changes everywhere.
+    #[facet(default)]
+    pub block_presets: Vec<BlockPresetEntry>,
+    /// The active patch's effective block picks, one per block.
+    #[facet(default)]
+    pub active_blocks: Vec<BlockPick>,
+}
+
+/// A block preset: its block type's storage key (`delay`, `reverb`, …).
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct BlockPresetEntry {
+    pub block_type: String,
+    pub name: String,
+    /// Picking it bypasses the block.
+    pub bypass: bool,
+}
+
+/// A block preset on a chain block, by the block's name (`DLY 1`, `VERB 2`).
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct BlockPick {
+    pub block: String,
+    pub preset: String,
 }
 
 /// Patches and presets are not here: they belong to the active profile and
@@ -914,6 +937,9 @@ pub mod rig {
         /// first) on the active patch — saved as the patch's own pick, over
         /// whatever its preset snapshot chose.
         fn choose_module(&self, module: String, preset: String, snapshot: String);
+        /// Put block preset `preset` on the active patch's block `block`
+        /// (`DLY 1`, `VERB 2`, …) — the patch's own pick, saved and rebuilt.
+        fn choose_block(&self, block: String, preset: String);
         /// Step the active patch's `module` pick through its preset's
         /// snapshots (`delta` −1 / +1, wrapping). With no pick yet, takes
         /// the module's first preset.

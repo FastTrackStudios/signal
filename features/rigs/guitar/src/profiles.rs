@@ -191,6 +191,12 @@ pub struct PatchDef {
     /// those modules — what choosing on the board saves.
     #[facet(default)]
     pub modules: Vec<ModuleChoiceDef>,
+    /// This patch's own block presets — a single delay, a reverb — over
+    /// the ones its preset snapshot and module snapshots pick: what picking
+    /// a block preset on the board saves. Applied after them and before the
+    /// patch's `overrides`, so a knob moved by hand still wins.
+    #[facet(default)]
+    pub blocks: Vec<crate::compose::BlockChoiceDef>,
     /// Drive-slot assignments for this patch alone, over the profile's
     /// `drives` slot by slot. Filled by a Drive module snapshot.
     #[facet(default)]
@@ -351,6 +357,7 @@ pub fn worship_def() -> ProfileDef {
         rig_preset: String::new(),
         snapshot: String::new(),
         modules: Vec::new(),
+        blocks: Vec::new(),
         drives: Vec::new(),
         trim_db: 0.0,
         level_db: 0.0,

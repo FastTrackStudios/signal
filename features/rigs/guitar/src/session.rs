@@ -3927,6 +3927,7 @@ impl Rig for GuitarRigBackend {
                 rig_preset: String::new(),
                 snapshot: String::new(),
                 modules: Vec::new(),
+                blocks: Vec::new(),
                 drives: Vec::new(),
                 trim_db: 0.0,
                 level_db: 0.0,
@@ -4706,6 +4707,19 @@ impl Rig for GuitarRigBackend {
             .lock_ok()
             .clone()
             .filter(|_| self.live_patch_name().as_deref() == Some(AUDITION_PATCH));
+        let active_blocks: Vec<signal_guitar_proto::BlockPick> = self
+            .live_patch_name()
+            .and_then(|name| {
+                let def = self.profile_def.lock_ok();
+                def.patches
+                    .iter()
+                    .find(|p| p.name.eq_ignore_ascii_case(&name))
+                    .map(|p| crate::compose::block_picks(&comp, p))
+            })
+            .unwrap_or_default()
+            .into_iter()
+            .map(|c| signal_guitar_proto::BlockPick { block: c.block, preset: c.preset })
+            .collect();
         let (active_preset, active_snapshot, active_modules) = auditioning
             .map(|(preset, snapshot)| (preset, snapshot, Vec::new()))
             .or_else(|| self.live_patch_name().and_then(|name| {
@@ -4752,7 +4766,39 @@ impl Rig for GuitarRigBackend {
             active_preset,
             active_snapshot,
             active_modules,
+            block_presets: comp
+                .blocks
+                .iter()
+                .map(|b| signal_guitar_proto::BlockPresetEntry {
+                    block_type: b.block_type.clone(),
+                    name: b.name.clone(),
+                    bypass: b.bypass,
+                })
+                .collect(),
+            active_blocks,
         }
+    }
+
+    fn choose_block(&self, block: String, preset: String) {
+        let comp = RigLibrary::load_compositions();
+        let Some(found) = comp.block_preset(&preset) else {
+            tracing::warn!(%block, %preset, "choose_block: no such block preset");
+            return;
+        };
+        let choice = crate::compose::BlockChoiceDef {
+            block,
+            preset: found.name.clone(),
+        };
+        self.edit_live_patch(move |patch| {
+            match patch
+                .blocks
+                .iter_mut()
+                .find(|b| b.block.eq_ignore_ascii_case(&choice.block))
+            {
+                Some(b) => *b = choice,
+                None => patch.blocks.push(choice),
+            }
+        });
     }
 
     fn choose_module(&self, module: String, preset: String, snapshot: String) {
@@ -5037,6 +5083,7 @@ impl Rig for GuitarRigBackend {
                     rig_preset: String::new(),
                     snapshot: String::new(),
                     modules: Vec::new(),
+                    blocks: Vec::new(),
                     drives: Vec::new(),
                     trim_db: 0.0,
                     level_db: 0.0,
@@ -5838,6 +5885,7 @@ mod tests {
             rig_preset: String::new(),
             snapshot: String::new(),
             modules: Vec::new(),
+            blocks: Vec::new(),
             drives: Vec::new(),
             trim_db: 0.0,
             level_db: 0.0,

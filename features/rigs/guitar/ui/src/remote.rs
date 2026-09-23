@@ -103,7 +103,7 @@ pub fn GuitarRigRemote() -> Element {
     let library_open = use_signal(|| None::<crate::library::Kind>);
     use_context_provider(|| crate::library::OpenLibrary(library_open));
     // The module the right sidebar lists presets for (None: closed).
-    let selected_module = use_signal(|| None::<String>);
+    let selected_module = use_signal(|| None::<crate::module_sidebar::Selection>);
     use_context_provider(|| crate::module_sidebar::SelectedModule(selected_module));
     // The view actions the palette and the keymap can ask for.
     let on_local = use_callback(move |e: crate::palette::Effect| {

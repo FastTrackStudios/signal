@@ -163,10 +163,8 @@ pub fn ZoomPanel(
     rsx! {
         div { class: "relative flex flex-col flex-1 border border-border bg-card min-h-0 overflow-hidden",
             onclick: move |_| {
-                if let (Some(m), Some(crate::module_sidebar::SelectedModule(mut s))) = (module, select) {
-                    if s.peek().as_deref() != Some(m) {
-                        s.set(Some(m.to_string()));
-                    }
+                if let (Some(m), Some(sel)) = (module, select) {
+                    sel.set(crate::module_sidebar::Selection::Module(m.to_string()));
                 }
             },
             div { class: "flex-1 min-h-0", style: "{dim}", {children.clone()} }
@@ -907,6 +905,7 @@ fn PKnob(
 #[component]
 fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let pick_block = try_use_context::<crate::module_sidebar::SelectedModule>();
     let mut sel = use_signal(|| 0usize);
     const W: f32 = 460.0;
     let delays: Vec<LiveBlock> = blocks
@@ -955,7 +954,20 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                             key: "lane{di}",
                             class: if is_sel { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
                             style: if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", di * 2) } else { format!("order: {}; border-left: 2px solid transparent;", di * 2) },
-                            onclick: move |_| sel.set(di),
+                            onclick: {
+                                let name = b.name.clone();
+                                move |e: MouseEvent| {
+                                    sel.set(di);
+                                    // This delay's own presets, not the Time module's.
+                                    e.stop_propagation();
+                                    if let Some(s) = pick_block {
+                                        s.set(crate::module_sidebar::Selection::Block {
+                                            name: name.clone(),
+                                            block_type: "delay".into(),
+                                        });
+                                    }
+                                }
+                            },
                             {delay_lane(taps.clone(), win_ms, !dim, color, W, quarter, div_label(b),
                                 param_v(b, "style", 1.0) as u32)}
                             div { class: "absolute top-0.5 left-1.5 flex items-center gap-1.5",
@@ -1058,6 +1070,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
 #[component]
 fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let pick_block = try_use_context::<crate::module_sidebar::SelectedModule>();
     let mut sel = use_signal(|| 0usize);
     const W: f32 = 460.0;
     let verbs: Vec<LiveBlock> = blocks
@@ -1118,7 +1131,20 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                             key: "lane{vi}",
                             class: if is_sel { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
                             style: if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", vi * 2) } else { format!("order: {}; border-left: 2px solid transparent;", vi * 2) },
-                            onclick: move |_| sel.set(vi),
+                            onclick: {
+                                let name = b.name.clone();
+                                move |e: MouseEvent| {
+                                    sel.set(vi);
+                                    // This reverb's own presets, not the Time module's.
+                                    e.stop_propagation();
+                                    if let Some(s) = pick_block {
+                                        s.set(crate::module_sidebar::Selection::Block {
+                                            name: name.clone(),
+                                            block_type: "reverb".into(),
+                                        });
+                                    }
+                                }
+                            },
                             {reverb_lane(
                                 t60 as f32,
                                 size,
@@ -1551,8 +1577,8 @@ fn ModuleControls(
                 // Selecting the module opens its presets in the right sidebar.
                 onclick: move |e: MouseEvent| {
                     e.stop_propagation();
-                    if let Some(crate::module_sidebar::SelectedModule(mut s)) = select {
-                        s.set(Some(module.to_string()));
+                    if let Some(sel) = select {
+                        sel.set(crate::module_sidebar::Selection::Module(module.to_string()));
                     }
                 },
                 span { class: "text-[8px] uppercase tracking-wider text-muted-foreground", "{module}" }

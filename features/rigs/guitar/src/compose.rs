@@ -257,6 +257,42 @@ pub fn module_picks(comp: &Compositions, patch: &PatchDef) -> Vec<ModuleChoiceDe
     picks
 }
 
+/// The block presets a patch ends up with, one per block: its module
+/// snapshots' (in signal order), then its preset snapshot's, then its own —
+/// the last word per block, as `flatten` applies them.
+#[must_use]
+pub fn block_picks(comp: &Compositions, patch: &PatchDef) -> Vec<BlockChoiceDef> {
+    let mut out: Vec<BlockChoiceDef> = Vec::new();
+    let mut put = |c: &BlockChoiceDef| match out
+        .iter_mut()
+        .find(|x| x.block.eq_ignore_ascii_case(&c.block))
+    {
+        Some(x) => *x = c.clone(),
+        None => out.push(c.clone()),
+    };
+    let picks = module_picks(comp, patch);
+    for m in MODULES
+        .iter()
+        .filter_map(|m| picks.iter().find(|p| p.module.eq_ignore_ascii_case(m)))
+        .chain(picks.iter().filter(|p| !MODULES.iter().any(|m| p.module.eq_ignore_ascii_case(m))))
+    {
+        if let Some(snap) = comp
+            .module(&m.module, &m.preset)
+            .and_then(|mp| snapshot(&mp.snapshots, &m.snapshot, |s| &s.name))
+        {
+            snap.blocks.iter().for_each(&mut put);
+        }
+    }
+    if let Some(snap) = comp
+        .preset(&patch.rig_preset)
+        .and_then(|p| snapshot(&p.snapshots, &patch.snapshot, |s| &s.name))
+    {
+        snap.blocks.iter().for_each(&mut put);
+    }
+    patch.blocks.iter().for_each(&mut put);
+    out
+}
+
 /// The pool name a synthesised amp preset gets. Distinct from anything a
 /// person would type, so it cannot collide with a hand-made pool preset.
 #[must_use]
@@ -273,7 +309,7 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
     let mut out = def.clone();
     let mut synthesised: Vec<PresetDef> = Vec::new();
     for patch in &mut out.patches {
-        if patch.rig_preset.is_empty() && patch.modules.is_empty() {
+        if patch.rig_preset.is_empty() && patch.modules.is_empty() && patch.blocks.is_empty() {
             continue;
         }
         let picks = module_picks(comp, patch);
@@ -354,6 +390,10 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
             // an overwrite here threw away, so a patch-level fix could never
             // take.
             patch.level_db += snap.level_db;
+        }
+        // The patch's own block presets, over everything above.
+        for choice in &patch.blocks {
+            overrides.extend(comp.block_overrides(choice));
         }
         overrides.append(&mut patch.overrides);
         patch.overrides = overrides;
