@@ -602,6 +602,8 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
                                         min: p.min,
                                         max: p.max,
                                         size: crate::knob::KnobSize::Medium,
+                                        // Times sweep logarithmically (see the comp surface).
+                                        log: true,
                                         on_change: cbs.keyed(usize::from(name == "release"), move |v: f32| {
                                             if let Some(r) = rig.clone() {
                                                 let (id, pname) = (id.clone(), pname.clone());

@@ -315,6 +315,9 @@ pub fn CompSurface(
                 size: KnobSize,
                 fmt: Option<crate::knob::FmtFn>|
      -> Element {
+        // Times sweep logarithmically: the musical attacks (1–30 ms) and
+        // releases (40–400 ms) get the knob's travel, not its first few %.
+        let log = matches!(name, "attack" | "release");
         let p = param(&block, name);
         let rig = rig.clone();
         let id = block.id.clone();
@@ -327,6 +330,7 @@ pub fn CompSurface(
                     max: p.max,
                     size,
                     fmt,
+                    log,
                     on_change: cbs.cb(move |v: f32| {
                         if let Some(r) = rig.clone() {
                             let (id, name) = (id.clone(), name.to_string());

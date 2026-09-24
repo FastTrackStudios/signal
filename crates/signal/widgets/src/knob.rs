@@ -105,6 +105,11 @@ pub fn Knob(
     /// Accent color override.
     #[props(default)]
     color: Option<String>,
+    /// A logarithmic sweep (for times and frequencies, `min > 0`): each part
+    /// of the travel covers the same *ratio*, so 1–30 ms of attack is not
+    /// crammed into the bottom sliver of a 0.1–200 ms knob.
+    #[props(default)]
+    log: bool,
 ) -> Element {
     // Drag state: (start_y, start_normalized) while a drag is live — only
     // for the local shield, when no app-root drag bus is above.
@@ -112,7 +117,12 @@ pub fn Knob(
     let bus = crate::drag_bus::DragBus::try_use();
 
     let range = (max - min).max(1e-6);
-    let val = f64::from(((value - min) / range).clamp(0.0, 1.0));
+    let log = log && min > 0.0 && max > min;
+    let val = if log {
+        f64::from((value.max(min) / min).ln() / (max / min).ln()).clamp(0.0, 1.0)
+    } else {
+        f64::from(((value - min) / range).clamp(0.0, 1.0))
+    };
 
     let d = size.diameter();
     let body_d = size.body_diameter();
@@ -149,7 +159,8 @@ pub fn Knob(
     };
 
     let apply = move |norm: f64| {
-        on_change.call((norm.clamp(0.0, 1.0) as f32).mul_add(range, min));
+        let n = norm.clamp(0.0, 1.0) as f32;
+        on_change.call(if log { min * (max / min).powf(n) } else { n.mul_add(range, min) });
     };
 
     rsx! {
