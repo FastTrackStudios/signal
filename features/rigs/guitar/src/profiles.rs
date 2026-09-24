@@ -1138,6 +1138,57 @@ pub struct SongDef {
     /// instead of tapping tempo, say.
     #[facet(default)]
     pub switch_actions: Vec<SwitchActionDef>,
+    /// Changes made to the profile's patches while this song is up: dialled
+    /// in the song, they stay the song's (the profile keeps its defaults)
+    /// until saved back to the profile.
+    #[facet(default)]
+    pub patch_overrides: Vec<SongPatchOverridesDef>,
+}
+
+/// One profile patch's changes within a song.
+#[derive(Clone, Debug, Default, Facet)]
+pub struct SongPatchOverridesDef {
+    /// The profile patch, by name.
+    pub patch: String,
+    pub overrides: Vec<OverrideDef>,
+}
+
+impl SongDef {
+    /// Record `ov` on `patch` for this song (replacing the same block /
+    /// param / op).
+    pub fn set_patch_override(&mut self, patch: &str, ov: OverrideDef) {
+        let entry = match self.patch_overrides.iter().position(|e| e.patch.eq_ignore_ascii_case(patch)) {
+            Some(i) => &mut self.patch_overrides[i],
+            None => {
+                self.patch_overrides.push(SongPatchOverridesDef { patch: patch.to_string(), overrides: Vec::new() });
+                self.patch_overrides.last_mut().expect("just pushed")
+            }
+        };
+        match entry.overrides.iter_mut().find(|o| {
+            o.block.eq_ignore_ascii_case(&ov.block) && o.op == ov.op && o.param == ov.param
+        }) {
+            Some(o) => o.value = ov.value,
+            None => entry.overrides.push(ov),
+        }
+    }
+
+    /// The song's changes to `patch` (empty when it has none).
+    #[must_use]
+    pub fn patch_overrides_for(&self, patch: &str) -> Vec<OverrideDef> {
+        self.patch_overrides
+            .iter()
+            .find(|e| e.patch.eq_ignore_ascii_case(patch))
+            .map(|e| e.overrides.clone())
+            .unwrap_or_default()
+    }
+
+    /// Take the song's changes to `patch` out of it.
+    pub fn take_patch_overrides(&mut self, patch: &str) -> Vec<OverrideDef> {
+        match self.patch_overrides.iter().position(|e| e.patch.eq_ignore_ascii_case(patch)) {
+            Some(i) => self.patch_overrides.remove(i).overrides,
+            None => Vec::new(),
+        }
+    }
 }
 
 impl SongDef {
@@ -1424,6 +1475,7 @@ pub fn song_library() -> Vec<SongDef> {
             stack_defaults: Vec::new(),
             part_recalls: Vec::new(),
             switch_actions: Vec::new(),
+            patch_overrides: Vec::new(),
         }
     }
     vec![
@@ -1766,6 +1818,7 @@ mod song_tests {
             ],
             stack_defaults: Vec::new(),
             switch_actions: Vec::new(),
+            patch_overrides: Vec::new(),
             part_recalls: vec![
                 PartRecallDef {
                     profile: String::new(),
@@ -1811,6 +1864,30 @@ mod song_tests {
     fn a_recall_matches_its_section_whatever_the_case() {
         let pairs = song().parts_with_recalls();
         assert_eq!(pairs[2].1, "Ambient");
+    }
+
+    /// A song keeps its changes to a profile patch per setting, the last
+    /// value winning, and gives them up whole.
+    #[test]
+    fn song_changes_to_a_patch() {
+        let mut s = song();
+        let ov = |p: &str, v: f32| OverrideDef {
+            module: "Time".into(),
+            block: "DLY 1".into(),
+            param: p.into(),
+            op: "set".into(),
+            value: v,
+            text: String::new(),
+        };
+        s.set_patch_override("Drive", ov("feedback", 0.4));
+        s.set_patch_override("Drive", ov("feedback", 0.5));
+        s.set_patch_override("Drive", ov("level", -8.0));
+        let got = s.patch_overrides_for("drive");
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].value, 0.5);
+        assert!(s.patch_overrides_for("Clean").is_empty());
+        assert_eq!(s.take_patch_overrides("Drive").len(), 2);
+        assert!(s.patch_overrides_for("Drive").is_empty());
     }
 
     /// Consecutive parts with one section name make one section.
@@ -2059,6 +2136,7 @@ mod section_tests {
             parts: vec!["Verse".into(), "Chorus".into(), "Bridge".into()],
             stack_defaults: Vec::new(),
             switch_actions: Vec::new(),
+            patch_overrides: Vec::new(),
             part_recalls: vec![
                 // A section that only changes things — no patch of its own.
                 PartRecallDef {

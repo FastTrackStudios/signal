@@ -296,6 +296,10 @@ pub struct PerformanceModel {
     /// The patch the current song opens on when it has no start part.
     #[facet(default)]
     pub start_patch: String,
+    /// The profile patches the current song has changed (patch, changes) —
+    /// dialled in the song, kept by the song until saved back.
+    #[facet(default)]
+    pub song_changes: Vec<SongChange>,
     /// What footswitches 1–5 do right now: a `SWITCH_ACTIONS` key per
     /// switch (`stack`, `tap_tempo`, `parts`, …) — the song's and the part's
     /// assignments resolved.
@@ -624,6 +628,14 @@ pub struct DriveEntry {
     pub slots: Vec<String>,
 }
 
+/// A profile patch the song that is up has changed.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct SongChange {
+    pub patch: String,
+    /// How many settings it changes.
+    pub count: u32,
+}
+
 /// How a stack switch is tuned (see `Rig::tune_switch`).
 #[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct SwitchTuning {
@@ -944,7 +956,7 @@ pub mod rig {
     use super::{
         Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode, MacroKnobView, MacroResult,
         MacroSave, MacroTune,
-        PartOverride, PatchInfo, PerformanceModel, PresetInfo, RigStatus, SwitchTuning, TunerReading,
+        PartOverride, PatchInfo, PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
     };
 
     /// One live rig change. Every variant carries **full state** (idempotent
@@ -1019,6 +1031,12 @@ pub mod rig {
         fn set_part_section(&self, part: String, section: String);
         /// Whether `part` plays the profile's own switches.
         fn set_part_profile_switches(&self, part: String, on: bool);
+        /// Save the song's changes to profile patch `patch` back into the
+        /// profile (its new default) and clear them from the song. Returns
+        /// what happened.
+        fn save_song_changes(&self, patch: String) -> String;
+        /// Drop the song's changes to `patch`: it plays as the profile has it.
+        fn discard_song_changes(&self, patch: String) -> String;
         /// Toggle the global time/FX bypass.
         fn toggle_fx(&self);
         /// Boost pedal tap: on/off at the remembered level (default +1 dB).

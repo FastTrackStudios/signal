@@ -298,6 +298,7 @@ pub fn PerformGrid(
         })
         .collect();
     let in_song = mode == 2;
+    let song_changes: Vec<(String, u32)> = model.song_changes.iter().map(|c| (c.patch.clone(), c.count)).collect();
     let song_parts: Vec<(String, String)> = if in_song {
         model.parts.iter().map(|p| (p.name.clone(), p.patch.clone())).collect()
     } else {
@@ -518,7 +519,7 @@ pub fn PerformGrid(
                 // same feet as Profile mode — parts are chosen from the sidebar,
                 // the palette or the keymap. ──
                 if let Some(stack) = stacks.get(4).cloned() {
-                    StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true, part: part_name.clone(), in_song, parts: song_parts.clone() }
+                    StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true, part: part_name.clone(), in_song, parts: song_parts.clone(), changes: song_changes.clone() }
                 } else {
                     div { class: "relative rounded-lg border border-dashed border-border/30",
                         SwitchNo { no: 6 }
@@ -666,6 +667,7 @@ pub fn PerformGrid(
                             part: part_name.clone(),
                             in_song,
                             parts: song_parts.clone(),
+                            changes: song_changes.clone(),
                         }
                     } else {
                         div { key: "s{i}", class: "relative rounded-xl border-2 border-dashed border-border/30",
@@ -792,6 +794,8 @@ fn StackTile(
     #[props(default)] in_song: bool,
     /// The song's parts `(name, patch)` (Setlist mode), for the part menu.
     #[props(default)] parts: Vec<(String, String)>,
+    /// The song's changes to profile patches `(patch, count)`.
+    #[props(default)] changes: Vec<(String, u32)>,
 ) -> Element {
     // Callbacks made once per site, not once per render (see `stable`).
     let cbs = crate::stable::use_stable();
@@ -918,6 +922,7 @@ fn StackTile(
                     part,
                     in_song,
                     parts: parts.clone(),
+                    changes: changes.clone(),
                     on_close: move |()| menu.set(false),
                 }
             }
@@ -1029,6 +1034,9 @@ fn SwitchMenu(
     /// The song's parts `(name, patch)`, for the switch's part menu.
     #[props(default)]
     parts: Vec<(String, String)>,
+    /// The song's changes to profile patches `(patch, count)`.
+    #[props(default)]
+    changes: Vec<(String, u32)>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let host = signal_widgets::PopupHost::try_use();
@@ -1110,8 +1118,14 @@ fn SwitchMenu(
                 {
                     let patch = crate::part_menu::stack_patch(&st);
                     let is_part = parts.iter().any(|(_, p)| !patch.is_empty() && p.eq_ignore_ascii_case(&patch));
-                    let label = if is_part { "Part…".to_string() } else { format!("Make a part from {patch}…") };
+                    let changed = changes.iter().any(|(p, _)| p.eq_ignore_ascii_case(&patch));
+                    let label = match (is_part, changed) {
+                        (_, true) => "Part & song changes…".to_string(),
+                        (true, false) => "Part…".to_string(),
+                        (false, false) => format!("Make a part from {patch}…"),
+                    };
                     let parts = parts.clone();
+                    let changes = changes.clone();
                     let rig = rig.clone();
                     rsx! {
                         if !patch.is_empty() {
@@ -1119,7 +1133,7 @@ fn SwitchMenu(
                                 class: "hover:bg-accent/40",
                                 style: "{row}",
                                 onclick: move |e: MouseEvent| {
-                                    let items = crate::part_menu::items(&parts, &patch);
+                                    let items = crate::part_menu::items_with_changes(&parts, &changes, &patch);
                                     let (rig, parts, patch) = (rig.clone(), parts.clone(), patch.clone());
                                     crate::kit::context_menu(host, &e, items, EventHandler::new(move |p: crate::kit::Picked| {
                                         crate::part_menu::act(&rig, &parts, &patch, p);

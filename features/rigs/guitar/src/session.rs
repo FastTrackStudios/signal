@@ -232,6 +232,9 @@ pub struct GuitarRigBackend {
     /// start a second pass over the same patches.
     levelling_busy: Arc<std::sync::atomic::AtomicBool>,
     library_dirty: Arc<std::sync::atomic::AtomicBool>,
+    /// Song edits made live (a song's changes to a profile patch), flushed
+    /// with the profile's by the pump.
+    songs_dirty: Arc<std::sync::atomic::AtomicBool>,
     /// Deferred last-active-state save (`last-state.styx`) — marked on
     /// patch/song/part/setlist/tempo changes; the pump flushes it so a
     /// crash restart lands back where the set was.
@@ -372,6 +375,7 @@ impl GuitarRigBackend {
             macros: Arc::new(Mutex::new(crate::macros::MacroEngine::default())),
             levelling_busy: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             library_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            songs_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             state_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             opening: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             wants_audio: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -524,6 +528,13 @@ impl GuitarRigBackend {
                 let def = self.profile_def.lock_ok();
                 RigLibrary::save_profile(&def);
                 tracing::debug!("auto-saved live edits to profile.styx");
+            }
+            if self
+                .songs_dirty
+                .swap(false, std::sync::atomic::Ordering::Relaxed)
+            {
+                RigLibrary::save_songs(&self.songs_lib.lock_ok());
+                tracing::debug!("auto-saved song edits to songs.styx");
             }
             if self
                 .state_dirty
@@ -1957,6 +1968,42 @@ impl GuitarRigBackend {
         };
         let Some(patch_name) = active else { return };
         let module = format!("{:?}", bt.category());
+        // In a song, a change to one of the profile's patches is the song's:
+        // the profile keeps its default until the change is saved back.
+        // (A song's own patch is the song's already, and saves as one.)
+        if let Some(song) = self.current_song_name() {
+            let profile_patch = self
+                .profile_def
+                .lock_ok()
+                .patches
+                .iter()
+                .any(|p| p.name.eq_ignore_ascii_case(&patch_name) && p.song.is_empty());
+            if profile_patch {
+                let (param_name, op) = match param {
+                    Some(n) => (n.to_string(), "set"),
+                    None => (String::new(), "bypass"),
+                };
+                {
+                    let mut songs = self.songs_lib.lock_ok();
+                    if let Some(sd) = songs.iter_mut().find(|x| x.name.eq_ignore_ascii_case(&song)) {
+                        sd.set_patch_override(
+                            &patch_name,
+                            crate::profiles::OverrideDef {
+                                module,
+                                block: block_name,
+                                param: param_name,
+                                op: op.to_string(),
+                                value,
+                                text: String::new(),
+                            },
+                        );
+                    }
+                }
+                self.songs_dirty
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                return;
+            }
+        }
         {
             let mut def = self.profile_def.lock_ok();
             let Some(p) = def
@@ -3355,8 +3402,146 @@ impl GuitarRigBackend {
             }
         }
         *self.blocks.lock_ok() = out;
+        self.apply_song_patch_overrides();
         self.label_board();
         self.macros_rebase();
+    }
+
+    /// The song's changes to the patch that is up, put on the live chain
+    /// (and marked as overridden) — so in the song the patch plays as the
+    /// song has it. Called whenever the chain mirror is rebuilt: every
+    /// switch and reload.
+    fn apply_song_patch_overrides(&self) {
+        let Some(song) = self.current_song_def() else { return };
+        let Some(patch) = self.live_patch_name() else { return };
+        let ovs = song.patch_overrides_for(&patch);
+        if ovs.is_empty() {
+            return;
+        }
+        for ov in &ovs {
+            let id = {
+                let mut blocks = self.blocks.lock_ok();
+                let Some(b) = blocks.iter_mut().find(|b| b.name.eq_ignore_ascii_case(&ov.block)) else {
+                    continue;
+                };
+                match ov.op.as_str() {
+                    "bypass" => b.bypassed = ov.value >= 0.5,
+                    _ => {
+                        if let Some(p) = b.params.iter_mut().find(|p| p.name == ov.param) {
+                            p.value = ov.value;
+                            p.overridden = true;
+                        }
+                        if b.param_name.as_deref() == Some(ov.param.as_str()) {
+                            b.param_value = ov.value;
+                        }
+                    }
+                }
+                b.id.clone()
+            };
+            match ov.op.as_str() {
+                "bypass" => {
+                    let byp = ov.value >= 0.5;
+                    let mut guard = self.rig.lock_ok();
+                    if let Some(prig) = guard.as_mut() {
+                        prig.set_block_config_bypass(&id, byp);
+                        prig.set_block_bypass(&id, byp);
+                    }
+                }
+                _ if !ov.param.is_empty() => self.write_live_param(&id, &ov.param, ov.value),
+                _ => {}
+            }
+        }
+        tracing::info!(song = %song.name, patch = %patch, changes = ovs.len(), "song changes on the patch");
+    }
+
+    /// The song's changes to `patch` saved back into the profile's patch —
+    /// the new default everywhere — and cleared from the song.
+    fn save_song_changes_impl(&self, patch: &str) -> String {
+        let Some(song) = self.current_song_name() else {
+            return "No song is up (Setlist mode).".into();
+        };
+        let taken = {
+            let mut songs = self.songs_lib.lock_ok();
+            songs
+                .iter_mut()
+                .find(|x| x.name.eq_ignore_ascii_case(&song))
+                .map(|sd| sd.take_patch_overrides(patch))
+                .unwrap_or_default()
+        };
+        if taken.is_empty() {
+            return format!("{song} has no changes to {patch}.");
+        }
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let Some(p) = def.patches.iter_mut().find(|p| p.name.eq_ignore_ascii_case(patch)) else {
+                return format!("The profile has no patch {patch}.");
+            };
+            for ov in &taken {
+                match p.overrides.iter_mut().find(|o| {
+                    o.block.eq_ignore_ascii_case(&ov.block) && o.op == ov.op && o.param == ov.param
+                }) {
+                    Some(o) => o.value = ov.value,
+                    None => p.overrides.push(ov.clone()),
+                }
+            }
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&def, &dps)
+        };
+        RigLibrary::save_songs(&self.songs_lib.lock_ok());
+        self.reload_rebuilt(rebuilt);
+        let msg = format!("{} change(s) to {patch} saved to the profile from {song}.", taken.len());
+        tracing::info!(%song, %patch, changes = taken.len(), "song changes saved back to the profile");
+        self.publish_state();
+        msg
+    }
+
+    /// The song's changes to `patch` dropped: back to the profile's patch.
+    fn discard_song_changes_impl(&self, patch: &str) -> String {
+        let Some(song) = self.current_song_name() else {
+            return "No song is up (Setlist mode).".into();
+        };
+        let taken = {
+            let mut songs = self.songs_lib.lock_ok();
+            songs
+                .iter_mut()
+                .find(|x| x.name.eq_ignore_ascii_case(&song))
+                .map(|sd| sd.take_patch_overrides(patch))
+                .unwrap_or_default()
+        };
+        if taken.is_empty() {
+            return format!("{song} has no changes to {patch}.");
+        }
+        RigLibrary::save_songs(&self.songs_lib.lock_ok());
+        // Put the patch's own values back on the live chain.
+        let built = self.rig.lock_ok().as_ref().and_then(|prig| {
+            prig.patches().iter().find(|p| p.name.eq_ignore_ascii_case(patch)).cloned()
+        });
+        if let (Some(built), true) = (built, self.live_patch_name().is_some_and(|n| n.eq_ignore_ascii_case(patch))) {
+            for ov in &taken {
+                let Some(b) = built.chain.iter().find(|b| b.name.eq_ignore_ascii_case(&ov.block)) else { continue };
+                let id = self.blocks.lock_ok().iter().find(|x| x.name.eq_ignore_ascii_case(&ov.block)).map(|x| x.id.clone());
+                let Some(id) = id else { continue };
+                match ov.op.as_str() {
+                    "bypass" => {
+                        let mut guard = self.rig.lock_ok();
+                        if let Some(prig) = guard.as_mut() {
+                            prig.set_block_config_bypass(&id, b.bypassed);
+                            prig.set_block_bypass(&id, b.bypassed);
+                        }
+                    }
+                    _ => {
+                        if let Some(v) = b.param_f32(&ov.param) {
+                            self.write_live_param(&id, &ov.param, v);
+                        }
+                    }
+                }
+            }
+            self.resync_blocks();
+        }
+        tracing::info!(%song, %patch, changes = taken.len(), "song changes discarded");
+        self.publish_state();
+        format!("{} change(s) to {patch} in {song} discarded.", taken.len())
     }
 }
 
@@ -3678,6 +3863,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         song_profile: String::new(),
         start_part: String::new(),
         start_patch: String::new(),
+        song_changes: Vec::new(),
         switch_actions: Vec::new(),
     }
 }
@@ -4027,6 +4213,17 @@ impl Rig for GuitarRigBackend {
                 m.song_profile = def.profile.clone();
                 m.start_part = def.start_part.clone();
                 m.start_patch = def.start_patch.clone();
+                if *self.perform_mode.lock_ok() == PERFORM_SETLIST {
+                    m.song_changes = def
+                        .patch_overrides
+                        .iter()
+                        .filter(|e| !e.overrides.is_empty())
+                        .map(|e| signal_guitar_proto::SongChange {
+                            patch: e.patch.clone(),
+                            count: e.overrides.len() as u32,
+                        })
+                        .collect();
+                }
                 // The switches the song tunes (unless the part that is up
                 // plays the profile's own).
                 let plain = self.current_part_def().is_some_and(|(_, r)| r.profile_switches);
@@ -4472,6 +4669,14 @@ impl Rig for GuitarRigBackend {
             part_recall_mut(song, &part).section = section.clone();
             true
         });
+    }
+
+    fn save_song_changes(&self, patch: String) -> String {
+        self.save_song_changes_impl(&patch)
+    }
+
+    fn discard_song_changes(&self, patch: String) -> String {
+        self.discard_song_changes_impl(&patch)
     }
 
     fn set_part_profile_switches(&self, part: String, on: bool) {
@@ -5325,6 +5530,7 @@ impl Rig for GuitarRigBackend {
                 stack_defaults: Vec::new(),
                 part_recalls: Vec::new(),
                 switch_actions: Vec::new(),
+                patch_overrides: Vec::new(),
             });
             RigLibrary::save_songs(&songs);
         }

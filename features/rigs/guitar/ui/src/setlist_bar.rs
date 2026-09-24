@@ -516,11 +516,12 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                             title: "Right-click: make this switch's patch a part, or rename it",
                                                                             oncontextmenu: {
                                                                                 let parts = crate::part_menu::parts_of(&model);
+                                                                                let changes = crate::part_menu::changes_of(&model);
                                                                                 let patch = crate::part_menu::stack_patch(st);
                                                                                 let rig = rig.clone();
                                                                                 move |e: MouseEvent| {
                                                                                     e.prevent_default();
-                                                                                    let items = crate::part_menu::items(&parts, &patch);
+                                                                                    let items = crate::part_menu::items_with_changes(&parts, &changes, &patch);
                                                                                     let (rig, parts, patch) = (rig.clone(), parts.clone(), patch.clone());
                                                                                     crate::kit::context_menu(popup_host, &e, items, EventHandler::new(move |p: crate::kit::Picked| {
                                                                                         crate::part_menu::act(&rig, &parts, &patch, p);
@@ -536,6 +537,44 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                             if !tags.is_empty() {
                                                                                 span { style: "flex-shrink: 0; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; color: {FAINT};", "{tags}" }
                                                                             }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    // The song's changes to the profile's patches — kept by
+                                                    // the song; right-click to save one back to the profile
+                                                    // or drop it.
+                                                    if !model.song_changes.is_empty() {
+                                                        div { style: "display: flex; flex-direction: column; gap: 2px; padding: 8px 6px 4px 0;",
+                                                            span { style: "{crate::theme::EYEBROW}", "Song changes" }
+                                                            for ch in model.song_changes.iter() {
+                                                                {
+                                                                    let patch = ch.patch.clone();
+                                                                    let n = ch.count;
+                                                                    let chip = patch_chip(&patch);
+                                                                    let changes = crate::part_menu::changes_of(&model);
+                                                                    let rig = rig.clone();
+                                                                    rsx! {
+                                                                        div { key: "chg-{patch}",
+                                                                            class: "hover:bg-accent/30",
+                                                                            style: "display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 4px 2px 0; border-radius: 4px; cursor: context-menu;",
+                                                                            title: "Right-click: save back to the profile, or discard",
+                                                                            oncontextmenu: {
+                                                                                let patch = patch.clone();
+                                                                                move |e: MouseEvent| {
+                                                                                    e.prevent_default();
+                                                                                    let items = crate::part_menu::change_items(&changes, &patch);
+                                                                                    let (rig, patch) = (rig.clone(), patch.clone());
+                                                                                    crate::kit::context_menu(popup_host, &e, items, EventHandler::new(move |p: crate::kit::Picked| {
+                                                                                        crate::part_menu::act(&rig, &[], &patch, p);
+                                                                                    }));
+                                                                                }
+                                                                            },
+                                                                            PatchChip { label: chip.0.clone(), colour: chip.1, lit: false }
+                                                                            span { style: "flex: 1;" }
+                                                                            span { style: "flex-shrink: 0; font-size: 10px; font-family: monospace; color: {FAINT};", "±{n}" }
                                                                         }
                                                                     }
                                                                 }

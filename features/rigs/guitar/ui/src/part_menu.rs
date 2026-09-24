@@ -36,9 +36,48 @@ fn part_for<'a>(parts: &'a [(String, String)], patch: &str) -> Option<(usize, &'
         .map(|i| (i, parts[i].0.as_str()))
 }
 
-/// The items for a switch on `patch`.
+/// The song's changes to `patch`, as the menu's own items: save them back
+/// to the profile (its new default), or drop them.
+#[must_use]
+pub fn change_items(changes: &[(String, u32)], patch: &str) -> Vec<MenuItem> {
+    match changes.iter().find(|(p, _)| p.eq_ignore_ascii_case(patch)) {
+        Some((_, n)) => vec![
+            MenuItem::head(format!("Song changes · {n}")),
+            MenuItem::run("changes-save", format!("Save back to profile ({patch})")),
+            MenuItem::delete("changes-discard", "Discard the song's changes", None),
+        ],
+        None => Vec::new(),
+    }
+}
+
+/// The song's changes, `(patch, count)`.
+#[must_use]
+pub fn changes_of(model: &PerformanceModel) -> Vec<(String, u32)> {
+    model.song_changes.iter().map(|c| (c.patch.clone(), c.count)).collect()
+}
+
+/// The items for a switch on `patch`: its part, then the song's changes to
+/// it.
 #[must_use]
 pub fn items(parts: &[(String, String)], patch: &str) -> Vec<MenuItem> {
+    items_with_changes(parts, &[], patch)
+}
+
+/// [`items`] with the song's changes to the patch.
+#[must_use]
+pub fn items_with_changes(parts: &[(String, String)], changes: &[(String, u32)], patch: &str) -> Vec<MenuItem> {
+    let mut out = part_items(parts, patch);
+    let ch = change_items(changes, patch);
+    if !ch.is_empty() {
+        if !out.is_empty() {
+            out.push(MenuItem::sep());
+        }
+        out.extend(ch);
+    }
+    out
+}
+
+fn part_items(parts: &[(String, String)], patch: &str) -> Vec<MenuItem> {
     if patch.is_empty() {
         return Vec::new();
     }
@@ -73,6 +112,8 @@ pub fn act(rig: &Option<RigClient>, parts: &[(String, String)], patch: &str, p: 
     let patch = patch.to_string();
     spawn(async move {
         match (p.id, existing) {
+            ("changes-save", _) => drop(r.save_song_changes(patch).await),
+            ("changes-discard", _) => drop(r.discard_song_changes(patch).await),
             ("part-go", Some((i, _))) => drop(r.select_part(i as u32).await),
             ("part-rename", Some((_, old))) => {
                 let new = p.text.trim().to_string();
