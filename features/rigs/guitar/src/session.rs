@@ -3153,7 +3153,16 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("mix", 0.0, 1.0, 0.4),
             ("depth", 0.0, 1.0, 0.5),
             ("rate", 0.05, 10.0, 1.0),
-            ("engine", 0.0, 4.0, 0.0),
+            // `chorus::EngineType` order (persisted, append-only): Cubic,
+            // BBD, Tape, Orbit, Juno, CE-2, Dimension, Clone, Tri-Chorus,
+            // SCF, Julia.
+            ("engine", 0.0, 10.0, 0.0),
+            // The engine's own colour — the wet's tone on most (0.5 = the
+            // unit as built), pre-delay on the SCF, Lag on the Julia.
+            ("color", 0.0, 1.0, 0.5),
+            ("feedback", 0.0, 1.0, 0.0),
+            // 0 = the engine's mono output, 1 = its full stereo spread.
+            ("width", 0.0, 1.0, 1.0),
         ]),
         BlockType::Trem => owned(&[
             ("depth", 0.0, 1.0, 0.5),

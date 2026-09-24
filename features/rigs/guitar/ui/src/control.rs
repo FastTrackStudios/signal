@@ -442,7 +442,10 @@ fn div_factor(idx: f32) -> f32 {
 
 /// `delay::DelayStyle` order — the `TimeLine` MX machines.
 /// `chorus::EngineType` order — the modulation algorithms.
-const MOD_ENGINES: [&str; 5] = ["Cubic", "BBD", "Tape", "Orbit", "Juno"];
+const MOD_ENGINES: [&str; 11] = [
+    "Cubic", "BBD", "Tape", "Orbit", "Juno", "CE-2", "Dimension", "Clone", "Tri-Chorus", "SCF",
+    "Julia",
+];
 /// `TremMode` order.
 const TREM_MODES: [&str; 3] = ["Mono", "Stereo", "Harmonic"];
 
@@ -949,6 +952,9 @@ fn PKnob(
     /// Strip-embedded: tiny body, no numeric readout.
     #[props(default)]
     tiny: bool,
+    /// A logarithmic sweep (rates, times, frequencies; `min > 0`).
+    #[props(default)]
+    log: bool,
 ) -> Element {
     // Callbacks made once per site, not once per render (see `stable`).
     let cbs = crate::stable::use_stable();
@@ -962,6 +968,7 @@ fn PKnob(
             hide_value: tiny,
             size: if tiny { crate::knob::KnobSize::Tiny } else { crate::knob::KnobSize::Small },
             fmt,
+            log,
             on_change: cbs.cb(move |v: f32| {
                 if let Some(r) = rig.clone() {
                     let (id, name) = (block_id.clone(), name.to_string());
@@ -1570,6 +1577,9 @@ fn ModGroupPanel(
                         label: "Speed",
                         p,
                         tiny: true,
+                        // 0.05–10 Hz heard in ratios: linear put 0.05–2 Hz,
+                        // where a chorus lives, in the first fifth.
+                        log: true,
                         fmt: Some(crate::knob::FmtFn((|v| format!("{v:.2}Hz")) as fn(f32) -> String)),
                     }
                 }
@@ -1617,7 +1627,7 @@ fn PreFxPanel(blocks: Vec<LiveBlock>) -> Element {
                             div { class: "flex items-center gap-1 flex-1 min-w-0",
                                 for (pname, label) in knobs.iter().copied() {
                                     if let Some(p) = param(&b, pname) {
-                                        PKnob { key: "{pname}", block_id: b.id.clone(), name: pname, label, p, tiny: true }
+                                        PKnob { key: "{pname}", block_id: b.id.clone(), name: pname, label, p, tiny: true, log: pname == "rate" }
                                     }
                                 }
                             }
