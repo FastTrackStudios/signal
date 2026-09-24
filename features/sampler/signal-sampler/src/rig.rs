@@ -3184,9 +3184,9 @@ mod tests {
         assert!(native.is_native());
         assert!(native.has_backend());
 
-        // …while a Native type with no registry entry (Pitch) has no backend
+        // …while a Native type with no registry entry (Wah) has no backend
         // yet, so it's skipped at install.
-        let pending = RigBlock::effect(BlockType::Pitch, "Shifter");
+        let pending = RigBlock::effect(BlockType::Wah, "Wah");
         assert_eq!(pending.implementation(), BlockImpl::Native);
         assert!(!pending.has_backend());
     }
