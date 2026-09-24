@@ -717,6 +717,16 @@ pub fn GuitarRigRemote() -> Element {
                                     }
                                 }
                             }
+                            // The macro bar: a strip across the stage view,
+                            // directly above the switches, in Profile and
+                            // Setlist modes. Its panels drop over the grid,
+                            // or rise over the page when the grid is short.
+                            if perf_now.perform_mode != 0 {
+                                crate::macro_bar::MacroBar {
+                                    macros: state.macros,
+                                    drop_up: switches() != Switches::Full,
+                                }
+                            }
                             if switches() != Switches::Hidden {
                             div {
                                 // A whisker of padding so tile rings render

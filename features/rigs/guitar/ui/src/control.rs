@@ -122,7 +122,7 @@ fn verb_seconds_label(algorithm: f32, variant: f32, decay: f32) -> String {
 /// The Time knob's label for one algorithm/variant — a fn pointer (the knob
 /// takes no closure), one per calibrated engine.
 /// A cut filter's corner: "Off" at the open end, Hz below 1 kHz, kHz above.
-fn cut_fmt(hz: f32) -> String {
+pub(crate) fn cut_fmt(hz: f32) -> String {
     if hz <= 20.5 || hz >= 19_999.0 {
         "Off".into()
     } else if hz < 1000.0 {
@@ -134,7 +134,7 @@ fn cut_fmt(hz: f32) -> String {
 
 /// A delay's or reverb's level: it runs fully wet in parallel with the dry,
 /// so how loud the effect sits is its `level`, in dB.
-fn level_fmt(db: f32) -> String {
+pub(crate) fn level_fmt(db: f32) -> String {
     if db <= -59.5 { "Off".into() } else { format!("{db:+.1} dB") }
 }
 
@@ -147,7 +147,7 @@ fn decay_fmt<const A: usize, const V: usize>(decay: f32) -> String {
     verb_seconds_label(A as f32, V as f32, decay)
 }
 
-fn decay_fmt_for(algorithm: f32, variant: f32) -> fn(f32) -> String {
+pub(crate) fn decay_fmt_for(algorithm: f32, variant: f32) -> fn(f32) -> String {
     match (algorithm.round() as usize, variant.round() as usize) {
         (0, 1) => decay_fmt::<0, 1>,
         (0, 2) => decay_fmt::<0, 2>,

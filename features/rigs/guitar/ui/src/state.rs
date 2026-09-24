@@ -4,7 +4,7 @@
 use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::{RigClient, RigEvent, RigStreamClient};
-use signal_guitar_proto::{LevelProgress, LiveBlock, LiveNode, PerformanceModel, RigPerf};
+use signal_guitar_proto::{LevelProgress, LiveBlock, LiveNode, MacroKnobView, PerformanceModel, RigPerf};
 
 use crate::meters::meter_level;
 
@@ -49,6 +49,8 @@ pub struct RigViewState {
     /// The last patch-levelling pass. Seeded from the backend so a remote that
     /// connects after a pass still sees its results.
     pub levelling: Signal<LevelProgress>,
+    /// The active patch's macro bar, values included.
+    pub macros: Signal<Vec<MacroKnobView>>,
 }
 
 /// Seed the rig view-state with one `status`/`perf`/`chain` fetch, then fold
@@ -76,6 +78,7 @@ pub fn use_rig_state() -> RigViewState {
     let mut active_patch = use_signal(|| None::<String>);
     let mut dsp = use_signal(RigPerf::default);
     let mut levelling = use_signal(LevelProgress::default);
+    let mut macros = use_signal(Vec::<MacroKnobView>::new);
 
     // Seed once — the event stream only carries *changes*; a fresh
     // subscriber needs the current state to start from.
@@ -112,6 +115,9 @@ pub fn use_rig_state() -> RigViewState {
                 }
                 if let Ok(l) = rig.level_progress().await {
                     levelling.set(l);
+                }
+                if let Ok(m) = rig.macros().await {
+                    macros.set(m);
                 }
             }
         });
@@ -150,6 +156,7 @@ pub fn use_rig_state() -> RigViewState {
                         mut active_patch,
                         mut dsp,
                         mut levelling,
+                        mut macros,
                     ) = (
                         running,
                         in_level,
@@ -166,6 +173,7 @@ pub fn use_rig_state() -> RigViewState {
                         active_patch,
                         dsp,
                         levelling,
+                        macros,
                     );
                     match ev {
                         RigEvent::Status(s) => {
@@ -185,6 +193,7 @@ pub fn use_rig_state() -> RigViewState {
                             dsp.set(s.perf);
                         }
                         RigEvent::Levelling(l) => levelling.set(l),
+                        RigEvent::Macros(m) => macros.set(m),
                         RigEvent::Perf(p) => perf.set(p),
                         RigEvent::Chain(c) => {
                             blocks.set(c);
@@ -256,6 +265,7 @@ pub fn use_rig_state() -> RigViewState {
         active_patch,
         dsp,
         levelling,
+        macros,
     }
 }
 

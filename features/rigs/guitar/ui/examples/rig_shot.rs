@@ -124,6 +124,18 @@ fn main() {
             }
         });
     }
+    // `RIG_SHOT_MACROS=width=0,drive=0.8`: macro knobs moved before the
+    // picture (bar or panel knobs, 0..1).
+    if let Ok(moves) = std::env::var("RIG_SHOT_MACROS") {
+        let rig = wired.rig.clone();
+        runtime.block_on(async move {
+            for (id, v) in moves.split(',').filter_map(|m| m.split_once('=')) {
+                if let Ok(v) = v.trim().parse::<f32>() {
+                    let _ = rig.set_macro(id.trim().to_string(), v).await;
+                }
+            }
+        });
+    }
     let _ = WIRED.set(wired);
 
     let _guard = runtime.enter();
@@ -174,6 +186,8 @@ fn Shot() -> Element {
         // `RIG_SHOT_SELECT=Amp` (a module) or `RIG_SHOT_SELECT=DLY 1:delay`
         // (a block and its type): the right sidebar, open on it.
         let _ = provide_context(signal_guitar_ui::InitialSelection(shot_selection()));
+        // `RIG_SHOT_MACRO=drive`: that macro's hover panel, held open.
+        let _ = provide_context(signal_guitar_ui::MacroPanelOpen(std::env::var("RIG_SHOT_MACRO").ok()));
     });
     rsx! {
         // The same two stylesheets the window mounts. Without them the shot is
