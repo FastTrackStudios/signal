@@ -43,6 +43,10 @@ pub struct GateCtl {
     /// Take the new state at once, without the ramp — for a chain that is
     /// not playing, so the next time it does it starts in its state.
     snap: AtomicBool,
+    /// Trails: ramp the block's input in from nothing — a delay or reverb
+    /// just cleared and switched in, so its first repeat or reflection
+    /// arrives faded in rather than as a step.
+    fade_in: AtomicBool,
 }
 
 impl GateCtl {
@@ -51,7 +55,15 @@ impl GateCtl {
         Arc::new(Self {
             bypass: AtomicBool::new(bypassed),
             snap: AtomicBool::new(true),
+            fade_in: AtomicBool::new(false),
         })
+    }
+
+    /// A time effect armed empty: ramp its input in (over the gate's ramp)
+    /// instead of starting it at full level. Does nothing to a bypassed or
+    /// a [`GateMode::Hard`] block.
+    pub fn fade_in(&self) {
+        self.fade_in.store(true, Ordering::Release);
     }
 
     /// Bypass (or engage) the block, ramped.
@@ -210,6 +222,12 @@ impl PluginInstance for BlockGate {
             self.g = target;
             self.quiet = 0;
             self.idle = false;
+        }
+        if self.ctl.fade_in.swap(false, Ordering::Acquire)
+            && self.mode == GateMode::Trails
+            && !bypassed
+        {
+            self.g = 0.0;
         }
         if !bypassed {
             self.idle = false;

@@ -206,3 +206,80 @@ fn the_counter_counts() {
     assert!(n >= 1, "an allocation inside `audio` is seen");
     let _ = Arc::new(());
 }
+
+/// A reload committed while the rig plays: the rendering that follows —
+/// the new chain crossfading in, the old one ringing out as a tail, the
+/// tail finishing — allocates nothing. The commit itself (installing,
+/// swapping, retiring) is control-thread work: the swap happens under the
+/// renderer's lock, but on the thread that commits.
+#[test]
+fn rendering_through_reload_commits_allocates_nothing() {
+    use signal_proto::block::BlockType;
+    use signal_sampler::{GuitarRig, ProfileRig, RigBlock, RigPatch, RigProfile};
+
+    const SR: u32 = 48_000;
+    const BLOCK: usize = 128;
+    let verb = |decay: f32| {
+        RigBlock::effect(BlockType::Reverb, "VERB 1")
+            .with_param("mix", "1")
+            .with_param("level", "-6")
+            .with_param("decay", decay.to_string())
+    };
+    let delay = |ms: f32| {
+        RigBlock::effect(BlockType::Delay, "DLY 1")
+            .with_param("mix", "1")
+            .with_param("time", ms.to_string())
+            .with_param("feedback", "0.4")
+    };
+    let gain = || RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "3");
+    let profile = |decay: f32, ms: f32| {
+        RigProfile::new("Rt")
+            .with_patch(RigPatch::new("Lead").with_block(gain()).with_block(verb(decay)))
+            .with_patch(RigPatch::new("Clean").with_block(gain()).with_block(delay(ms)))
+    };
+    let mut prig = ProfileRig::new(GuitarRig::open_offline(SR).expect("offline rig"));
+    prig.set_level_match(false);
+    prig.load_profile(profile(0.8, 300.0), None).expect("loads");
+    let sine: Vec<f32> = (0..SR as usize)
+        .map(|i| 0.2 * (std::f32::consts::TAU * 110.0 * i as f32 / SR as f32).sin())
+        .collect();
+    prig.rig().start_test_signal(Arc::new(sine));
+    // Warm up: first-use setup (lazy statics, the first render) is not the
+    // steady state being checked.
+    prig.rig().render_offline(SR as usize / 2);
+
+    // Allocations per block. daw's `ProjectRenderer::render_block` returns
+    // its mix as a fresh buffer — a fixed allocation every block, live and
+    // offline alike, and daw's to remove — so what is checked is that no
+    // block allocates beyond that fixed floor.
+    let render = |prig: &ProfileRig, blocks: usize, out: &mut Vec<usize>| {
+        for _ in 0..blocks {
+            let ((), a) = audio(|| prig.rig().render_offline(BLOCK));
+            out.push(a);
+        }
+    };
+    let mut baseline = Vec::new();
+    render(&prig, 400, &mut baseline);
+    let floor = baseline[0];
+    assert!(baseline.iter().all(|&a| a == floor), "a steady floor: {baseline:?}");
+    let mut through = Vec::new();
+    // The playing patch rebuilt (a switch, a tail), another patch rebuilt
+    // (no switch), and the playing patch rebuilt again while the first
+    // tail still rings; then every tail runs out and is collected.
+    for (decay, ms) in [(0.5, 300.0), (0.5, 450.0), (0.3, 450.0), (0.9, 200.0)] {
+        let report = prig.reload_profile(profile(decay, ms), None);
+        assert!(report.is_committed());
+        render(&prig, 200, &mut through);
+    }
+    render(&prig, SR as usize * 3 / BLOCK, &mut through);
+    let worst = through.iter().copied().max().unwrap_or(0);
+    println!(
+        "{} blocks through 4 reload commits: at most {worst} allocations a block \
+         (daw's render_block floor: {floor})",
+        through.len()
+    );
+    assert!(
+        worst <= floor,
+        "rendering through reload commits allocated on the audio thread: {worst} > {floor}"
+    );
+}

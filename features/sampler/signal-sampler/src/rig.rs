@@ -1636,6 +1636,13 @@ struct ResidentChain {
     time_start: usize,
 }
 
+/// A chain taken out of the rig by [`GuitarRig::retire_chain`]: whatever of
+/// its blocks were resident, freed when this drops.
+#[cfg(not(target_arch = "wasm32"))]
+pub struct RetiredChain {
+    _chain: ResidentChain,
+}
+
 /// Mutable swap state shared behind a [`Mutex`] so the patch-switch surface
 /// ([`set_active`](GuitarRig::set_active) / bypass / trims) can stay `&self`
 /// (the original API), while installs (`&mut self`) lock it briefly. The
@@ -2146,6 +2153,48 @@ impl GuitarRig {
         self.slots.retain(|s| s.id != id);
     }
 
+    /// Take a chain out of the rig without a gap — the gapless counterpart
+    /// of [`uninstall_model`](Self::uninstall_model), for a chain a reload no
+    /// longer references.
+    ///
+    /// Refuses (returns `None`, keeps it) the chain in the engine now:
+    /// switch away from it first, and it rings out as a tail. A chain still
+    /// ringing is safe to retire — its blocks are not here but in the output
+    /// stage's voice, which owns them until the tail is quiet; the next
+    /// switch collects that voice on the control thread and, the chain being
+    /// gone, drops it there. So nothing a tail voice is rendering is dropped,
+    /// and nothing is dropped on the audio thread.
+    ///
+    /// The returned chain holds whatever blocks were resident; drop it
+    /// wherever freeing them is cheapest (off any lock the caller holds).
+    pub fn retire_chain(&mut self, id: ModelId) -> Option<RetiredChain> {
+        let chain = {
+            let mut swap = self
+                .swap
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if swap.live == Some(id) {
+                return None;
+            }
+            if swap.active == Some(id) {
+                // Bypassed rig remembering this chain: forget it.
+                swap.active = None;
+            }
+            swap.chains.remove(&id)?
+        };
+        self.slots.retain(|s| s.id != id);
+        Some(RetiredChain { _chain: chain })
+    }
+
+    /// The chain in the engine now (`None`: passthrough or bypassed).
+    #[must_use]
+    pub fn live(&self) -> Option<ModelId> {
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .live
+    }
+
     /// Select the active chain — swaps the chain's pre-prepared boxes into the
     /// track's fixed slot guids under daw's renderer per-block lock
     /// (glitch-free), filling unused slots with identity pass-throughs. `None`
@@ -2215,6 +2264,13 @@ impl GuitarRig {
                         // Only where a tail could survive; see `prepare_on_arm`.
                         if chain.prepare_on_arm.get(slot).copied().unwrap_or(true) {
                             let _ = new_box.prepare(sr, FX_PREPARE_BLOCK);
+                            // Cleared, it would hear the guitar from the
+                            // first sample at full level: its first repeat
+                            // or reflection lands as a step after the
+                            // crossfade is over. Ramp its input in instead.
+                            if let Some(gate) = chain.gates.get(slot) {
+                                gate.fade_in();
+                            }
                         }
                         Some(new_box)
                     })

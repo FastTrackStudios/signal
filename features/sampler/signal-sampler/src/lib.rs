@@ -194,7 +194,7 @@ pub use preset_spec::{
 };
 pub use rig::{BlockImpl, ModelId, RigBlock, SlotInfo};
 #[cfg(not(target_arch = "wasm32"))]
-pub use rig::{DeviceInfo, GuitarRig};
+pub use rig::{DeviceInfo, GuitarRig, RetiredChain};
 pub use rig_library::{Library, RigPreset, RigScene, RigSection, RigSong};
 #[cfg(not(target_arch = "wasm32"))]
 pub use rig_manager::RigManager;
@@ -202,7 +202,9 @@ pub use rig_node::{Combine, Container, Param, RigNode, Role, Send, Zone};
 #[cfg(not(target_arch = "wasm32"))]
 pub use rig_prefs::RigAudioPrefs;
 #[cfg(not(target_arch = "wasm32"))]
-pub use rig_profile::ProfileRig;
+pub use rig_profile::{
+    CommitStatus, PreparedReload, ProfileRig, ReloadCommit, ReloadMode, ReloadPlan, ReloadTicket,
+};
 pub use rig_profile::{RigPatch, RigProfile};
 pub use runtime::{
     BufferRef, EngineInstance, LayerRuntime, ModuleInstance, PortRuntime, PresetRuntime,
