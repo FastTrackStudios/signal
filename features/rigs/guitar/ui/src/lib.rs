@@ -29,6 +29,7 @@ mod macro_bar;
 mod module_sidebar;
 mod meters;
 mod palette;
+mod part_menu;
 pub mod param_writer;
 mod perform;
 mod preset_bar;

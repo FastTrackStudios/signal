@@ -298,6 +298,11 @@ pub fn PerformGrid(
         })
         .collect();
     let in_song = mode == 2;
+    let song_parts: Vec<(String, String)> = if in_song {
+        model.parts.iter().map(|p| (p.name.clone(), p.patch.clone())).collect()
+    } else {
+        Vec::new()
+    };
     let part_name = if in_song {
         model.parts.get(model.part_index as usize).map(|p| p.name.clone())
     } else {
@@ -513,7 +518,7 @@ pub fn PerformGrid(
                 // same feet as Profile mode — parts are chosen from the sidebar,
                 // the palette or the keymap. ──
                 if let Some(stack) = stacks.get(4).cloned() {
-                    StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true, part: part_name.clone(), in_song }
+                    StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true, part: part_name.clone(), in_song, parts: song_parts.clone() }
                 } else {
                     div { class: "relative rounded-lg border border-dashed border-border/30",
                         SwitchNo { no: 6 }
@@ -660,6 +665,7 @@ pub fn PerformGrid(
                             footswitch: Some(i),
                             part: part_name.clone(),
                             in_song,
+                            parts: song_parts.clone(),
                         }
                     } else {
                         div { key: "s{i}", class: "relative rounded-xl border-2 border-dashed border-border/30",
@@ -784,6 +790,8 @@ fn StackTile(
     /// The part that is up (Setlist mode).
     #[props(default)] part: Option<String>,
     #[props(default)] in_song: bool,
+    /// The song's parts `(name, patch)` (Setlist mode), for the part menu.
+    #[props(default)] parts: Vec<(String, String)>,
 ) -> Element {
     // Callbacks made once per site, not once per render (see `stable`).
     let cbs = crate::stable::use_stable();
@@ -909,6 +917,7 @@ fn StackTile(
                     job: "stack".to_string(),
                     part,
                     in_song,
+                    parts: parts.clone(),
                     on_close: move |()| menu.set(false),
                 }
             }
@@ -1017,8 +1026,12 @@ fn SwitchMenu(
     part: Option<String>,
     in_song: bool,
     on_close: Callback<()>,
+    /// The song's parts `(name, patch)`, for the switch's part menu.
+    #[props(default)]
+    parts: Vec<(String, String)>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let host = signal_widgets::PopupHost::try_use();
     // Per part when a part is up — the reason to open this in a song.
     let mut for_part = use_signal(|| part.is_some());
     let mut show_patches = use_signal(|| false);
@@ -1091,6 +1104,35 @@ fn SwitchMenu(
                     border: 1px solid #2b2b31; border-radius: 10px; \
                     background: #0d0d10; box-shadow: 0 12px 32px #000c;",
             div { style: "{head}", "Switch {switch_no} · {scope}" }
+            // The patch this switch is on, as a part of the song: make one
+            // of it, or go to / rename / remove the one it is.
+            if let Some((_, st)) = stack.clone().filter(|_| in_song) {
+                {
+                    let patch = crate::part_menu::stack_patch(&st);
+                    let is_part = parts.iter().any(|(_, p)| !patch.is_empty() && p.eq_ignore_ascii_case(&patch));
+                    let label = if is_part { "Part…".to_string() } else { format!("Make a part from {patch}…") };
+                    let parts = parts.clone();
+                    let rig = rig.clone();
+                    rsx! {
+                        if !patch.is_empty() {
+                            div {
+                                class: "hover:bg-accent/40",
+                                style: "{row}",
+                                onclick: move |e: MouseEvent| {
+                                    let items = crate::part_menu::items(&parts, &patch);
+                                    let (rig, parts, patch) = (rig.clone(), parts.clone(), patch.clone());
+                                    crate::kit::context_menu(host, &e, items, EventHandler::new(move |p: crate::kit::Picked| {
+                                        crate::part_menu::act(&rig, &parts, &patch, p);
+                                    }));
+                                    on_close.call(());
+                                },
+                                span { style: "width: 12px; text-align: center; color: #a78bfa;", "◆" }
+                                "{label}"
+                            }
+                        }
+                    }
+                }
+            }
             // Whole song ↔ the part that is up.
             if let Some(p) = part.clone() {
                 div { style: "display: flex; gap: 4px; padding: 2px 6px 6px;",

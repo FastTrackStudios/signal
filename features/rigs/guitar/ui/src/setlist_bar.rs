@@ -85,6 +85,7 @@ where
 #[component]
 pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let popup_host = signal_widgets::PopupHost::try_use();
 
     // The patch list, for telling a part what to recall — re-read when
     // the rig's state moves.
@@ -509,7 +510,23 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                     if st.no_rotate { tags.push("NO ROTATE"); }
                                                                     let tags = tags.join(" · ");
                                                                     rsx! {
-                                                                        div { key: "sw-{st.name}", style: "display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 0;",
+                                                                        div { key: "sw-{st.name}",
+                                                                            class: "hover:bg-accent/30",
+                                                                            style: "display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 4px 2px 0; border-radius: 4px; cursor: context-menu;",
+                                                                            title: "Right-click: make this switch's patch a part, or rename it",
+                                                                            oncontextmenu: {
+                                                                                let parts = crate::part_menu::parts_of(&model);
+                                                                                let patch = crate::part_menu::stack_patch(st);
+                                                                                let rig = rig.clone();
+                                                                                move |e: MouseEvent| {
+                                                                                    e.prevent_default();
+                                                                                    let items = crate::part_menu::items(&parts, &patch);
+                                                                                    let (rig, parts, patch) = (rig.clone(), parts.clone(), patch.clone());
+                                                                                    crate::kit::context_menu(popup_host, &e, items, EventHandler::new(move |p: crate::kit::Picked| {
+                                                                                        crate::part_menu::act(&rig, &parts, &patch, p);
+                                                                                    }));
+                                                                                }
+                                                                            },
                                                                             span { style: "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; background: {colour};" }
                                                                             span { style: "flex-shrink: 0; font-size: 11px; font-weight: 600; color: {TEXT};", "{st.name}" }
                                                                             span { style: "flex: 1 1 auto; min-width: 0; font-size: 10px; color: {MUTED}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
