@@ -418,6 +418,41 @@ impl RigLibrary {
     /// no compositions yet plays its profiles exactly as written.
     #[must_use]
     pub fn load_compositions() -> crate::compose::Compositions {
+        // Cached by the three files' modification stamps: the macro bar
+        // resolves its responses on every patch switch, and a switch's
+        // follow-up must not parse three styx files to find nothing changed.
+        // A save (here or by hand) moves a stamp and the next call re-reads.
+        type Stamp = Vec<Option<(std::time::SystemTime, u64)>>;
+        static CACHE: std::sync::Mutex<Option<(std::path::PathBuf, Stamp, crate::compose::Compositions)>> =
+            std::sync::Mutex::new(None);
+        let dir = rig_dir();
+        let stamp: Stamp = [
+            crate::compose::MODULES_FILE,
+            crate::compose::PRESETS_FILE,
+            crate::compose::BLOCKS_FILE,
+        ]
+        .iter()
+        .map(|f| {
+            std::fs::metadata(dir.join(f))
+                .ok()
+                .and_then(|m| Some((m.modified().ok()?, m.len())))
+        })
+        .collect();
+        if let Ok(cache) = CACHE.lock() {
+            if let Some((d, st, comp)) = cache.as_ref() {
+                if *d == dir && *st == stamp {
+                    return comp.clone();
+                }
+            }
+        }
+        let comp = Self::read_compositions();
+        if let Ok(mut cache) = CACHE.lock() {
+            *cache = Some((dir, stamp, comp.clone()));
+        }
+        comp
+    }
+
+    fn read_compositions() -> crate::compose::Compositions {
         let store = store();
         let mut modules = store
             .read::<crate::compose::ModuleLib>(crate::compose::MODULES_FILE)
