@@ -284,7 +284,7 @@ fn taper_and_unit(param: &str) -> (Taper, Unit) {
         return (Taper::Logarithmic, Unit::Milliseconds);
     }
     // Pitch offsets, in semitones.
-    if param.contains("shift") || ends("detune") || ends("semis") {
+    if param.contains("shift") || ends("detune") || ends("semis") || ends("semitones") {
         return (Taper::Linear, Unit::Semitones);
     }
     // Everything else: a mix, a depth, a mode index, a style. Linear and

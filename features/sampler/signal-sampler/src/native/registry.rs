@@ -40,6 +40,7 @@ const REGISTRY: &[(BlockType, Ctor)] = &[
     (BlockType::Delay, build_delay),
     // Modulation — chorus/flanger/vibrato share chorus-dsp; tremolo is trem-dsp.
     (BlockType::Chorus, build_chorus),
+    (BlockType::Pitch, build_pitch),
     (BlockType::Flanger, build_flanger),
     (BlockType::Vibrato, build_vibrato),
     (BlockType::Trem, build_trem),
@@ -55,6 +56,19 @@ const REGISTRY: &[(BlockType, Ctor)] = &[
 fn build_chorus(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeMod::chorus(sample_rate as f64);
     apply_mod_params(block, &mut fx);
+    Box::new(fx)
+}
+/// The octaver / harmony: two shifted voices over the dry (fx-blocks
+/// `NativePitch`, the phase-vocoder shifter).
+fn build_pitch(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativePitch::new(sample_rate as f64);
+    for name in [
+        "semitones", "cents", "mix", "engine", "live", "a_level", "b_semitones", "b_level", "dry",
+    ] {
+        if let Some(v) = block.param_f32(name) {
+            fx.set_named(name, v as f64);
+        }
+    }
     Box::new(fx)
 }
 fn build_flanger(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
@@ -407,7 +421,7 @@ mod tests {
         assert!(native_dsp_available(BlockType::Rotary));
         assert!(build_native(&RigBlock::of_type(BlockType::Rotary), 48_000).is_some());
         // Pitch has no entry at all — no placeholder, no DSP.
-        assert!(!native_dsp_available(BlockType::Pitch));
-        assert!(build_native(&RigBlock::of_type(BlockType::Pitch), 48_000).is_none());
+        assert!(native_dsp_available(BlockType::Pitch));
+        assert!(build_native(&RigBlock::of_type(BlockType::Pitch), 48_000).is_some());
     }
 }

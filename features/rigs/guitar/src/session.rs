@@ -3086,6 +3086,17 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("release", 5.0, 500.0, 120.0),
         ]),
         BlockType::Volume => owned(&[("gain_db", -24.0, 24.0, 0.0), ("pan", -1.0, 1.0, 0.0)]),
+        // The octaver / harmony: voice A (semitones + cents at a_level),
+        // voice B (b_semitones at b_level, off at 0), blended with the dry.
+        BlockType::Pitch => owned(&[
+            ("semitones", -24.0, 24.0, 12.0),
+            ("b_semitones", -24.0, 24.0, -12.0),
+            ("mix", 0.0, 1.0, 0.5),
+            ("a_level", 0.0, 1.0, 0.7),
+            ("b_level", 0.0, 1.0, 0.7),
+            ("dry", 0.0, 1.0, 1.0),
+            ("cents", -100.0, 100.0, 0.0),
+        ]),
         // Level-matched single drive control (DSP lands with drive-dsp).
         BlockType::Drive | BlockType::Boost => owned(&[("drive", 0.0, 1.0, 0.5)]),
         // NAM amp trims — input trim is "how hard the amp is pushed".
@@ -3179,6 +3190,7 @@ const fn primary_param(bt: BlockType) -> Option<(&'static str, f32, f32, f32)> {
         BlockType::Reverb | BlockType::Delay => Some(("level", -60.0, 12.0, -16.0)),
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => Some(("mix", 0.0, 1.0, 0.4)),
         BlockType::Trem => Some(("depth", 0.0, 1.0, 0.5)),
+        BlockType::Pitch => Some(("mix", 0.0, 1.0, 0.5)),
         BlockType::Volume => Some(("gain_db", -12.0, 12.0, 0.0)),
         BlockType::Gate => Some(("threshold", -90.0, 0.0, -50.0)),
         _ => None,
