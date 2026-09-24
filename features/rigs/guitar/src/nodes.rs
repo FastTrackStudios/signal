@@ -740,20 +740,31 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
     {
         for block in base_chain {
             // A drive slot: the block's name is one of the board's slots.
-            let drive_slot = crate::profiles::DRIVE_SLOTS
+            // (A board pedal, by type: the post-amp gain block is also
+            // called "Boost".)
+            let drive_slot = crate::profiles::BOARD_SLOTS
                 .iter()
-                .find(|slot| block.display_name().eq_ignore_ascii_case(slot));
+                .find(|slot| block.display_name().eq_ignore_ascii_case(slot))
+                .filter(|_| matches!(block.block_type, BlockType::Drive | BlockType::Boost));
             if let Some(slot) = drive_slot {
-                let assigned = def
+                // The boost slot unassigned plays the library's boost
+                // capture (see `profiles::boost_block`) — the same pedal here.
+                let assignment = def
                     .drives
                     .iter()
                     .find(|d| d.block.eq_ignore_ascii_case(slot))
-                    .and_then(|d| {
-                        pedals
-                            .iter()
-                            .find(|(name, _, _)| name.eq_ignore_ascii_case(&d.preset))
-                            .map(|(_, id, options)| (id, options, d.option))
+                    .map(|d| (d.preset.clone(), d.option))
+                    .or_else(|| {
+                        slot.eq_ignore_ascii_case(crate::profiles::BOOST_SLOT)
+                            .then(|| crate::profiles::default_boost(drives))
+                            .flatten()
                     });
+                let assigned = assignment.and_then(|(preset, option)| {
+                    pedals
+                        .iter()
+                        .find(|(name, _, _)| name.eq_ignore_ascii_case(&preset))
+                        .map(|(_, id, options)| (id, options, option))
+                });
                 if let Some((id, options, option)) = assigned {
                     push_into(module_of(block), id.clone(), &mut modules);
                     // Which of the pedal's captures this slot runs. Without

@@ -109,6 +109,16 @@ pub struct DrivePresetDef {
 /// which claims the first slot no profile has assigned yet.
 pub const DRIVE_SLOTS: [&str; 3] = ["Drive 1", "Drive 2", "Drive 3"];
 
+/// The boost slot at the head of the board — a slot like the drives (a
+/// profile or module snapshot assigns it a captured pedal), but an import
+/// never claims it: a new capture is a drive until someone makes it the
+/// boost.
+pub const BOOST_SLOT: &str = "Boost";
+
+/// Every slot of the drive board, in board order: the boost, then the
+/// drives.
+pub const BOARD_SLOTS: [&str; 4] = [BOOST_SLOT, "Drive 1", "Drive 2", "Drive 3"];
+
 /// A drive slot in the chain: which preset it runs and which of the
 /// preset's NAM options is selected.
 #[derive(Clone, Debug, Facet)]
@@ -144,6 +154,15 @@ pub fn drive_presets() -> Vec<DrivePresetDef> {
                     "/home/cody/Downloads/King of Tone/red-boost/King of Tone ver4 Red channel set to Boost.nam",
                 ),
             ],
+        },
+        // The boost slot's pedal: the King of Tone's red side set as a
+        // clean boost, as a pedal of its own.
+        DrivePresetDef {
+            name: "Clean Boost".to_string(),
+            options: vec![opt(
+                "King of Tone Red",
+                "/home/cody/Downloads/King of Tone/red-boost/King of Tone ver4 Red channel set to Boost.nam",
+            )],
         },
         DrivePresetDef {
             name: "JHS Morning Glory".to_string(),
@@ -588,12 +607,58 @@ fn drive_block(drives: &[DriveSlotDef], dps: &[DrivePresetDef], block: &str) -> 
     b
 }
 
-/// Append the drive board to a patch under construction: a boost, then every
-/// slot in [`DRIVE_SLOTS`] in board order. All off until the control surface
-/// engages them, and a slot the profile has not assigned builds as a
-/// transparent placeholder so every slot stays addressable either way.
+/// The library's boost pedal — the first drive preset named for boosting
+/// ("Clean Boost") — as `(preset, option)`: what the boost slot plays when
+/// nothing is assigned to it. A pedal of its own, not an option of a drive
+/// on the board: one pedal is one node, and the King of Tone cannot be both
+/// the boost and Drive 1.
+#[must_use]
+pub fn default_boost(dps: &[DrivePresetDef]) -> Option<(String, usize)> {
+    dps.iter()
+        .find(|p| p.name.to_ascii_lowercase().contains("boost") && !p.options.is_empty())
+        .map(|p| (p.name.clone(), 0))
+}
+
+/// Build the boost slot: the captured pedal assigned to it; unassigned, the
+/// library's boost capture (a drive preset option named for boosting, e.g.
+/// King of Tone "Red = Boost"); with none in the library, the native clean
+/// boost. Off by default, like every board slot.
+fn boost_block(drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -> RigBlock {
+    let assigned = drives
+        .iter()
+        .find(|d| d.block.eq_ignore_ascii_case(BOOST_SLOT))
+        .and_then(|d| {
+            dps.iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&d.preset))
+                .and_then(|p| p.options.get(d.option).cloned())
+        })
+        .or_else(|| {
+            let (preset, i) = default_boost(dps)?;
+            dps.iter()
+                .find(|p| p.name == preset)
+                .and_then(|p| p.options.get(i).cloned())
+        });
+    // A captured boost is a pedal like the drives (a NAM Drive block, as
+    // the library's pedal nodes resolve); only the native fallback is a
+    // Boost block.
+    let mut b = match assigned {
+        Some(opt) => RigBlock::of_type(BlockType::Drive)
+            .with_nam(opt.nam)
+            .with_param("drive", "0.5"),
+        None => RigBlock::of_type(BlockType::Boost).with_param("drive", "0.5"),
+    };
+    b = b.named(BOOST_SLOT);
+    b.bypassed = true;
+    b
+}
+
+/// Append the drive board to a patch under construction: the boost slot,
+/// then every slot in [`DRIVE_SLOTS`] in board order. All off until the
+/// control surface engages them, and a slot the profile has not assigned
+/// builds as a transparent placeholder so every slot stays addressable
+/// either way.
 fn drive_board(drives: &[DriveSlotDef], dps: &[DrivePresetDef], patch: RigPatch) -> RigPatch {
-    let boosted = patch.with_block(off_fx(BlockType::Boost, "Boost", &[("drive", "0.5")]));
+    let boosted = patch.with_block(boost_block(drives, dps));
     DRIVE_SLOTS.iter().fold(boosted, |p, slot| {
         p.with_block(drive_block(drives, dps, slot))
     })
