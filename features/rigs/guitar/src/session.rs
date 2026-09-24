@@ -1242,6 +1242,7 @@ impl GuitarRigBackend {
             active_patch,
             tempo_bpm: self.tempo.lock_ok().unwrap_or(0.0),
             profile: self.profile_def.lock_ok().name.clone(),
+            perform_mode: *self.perform_mode.lock_ok(),
         }
     }
 
@@ -1255,6 +1256,7 @@ impl GuitarRigBackend {
         let Some(st) = RigLibrary::load_last_state() else {
             return;
         };
+        *self.perform_mode.lock_ok() = st.perform_mode.min(2);
         {
             let sets = self.setlists.lock_ok();
             if !sets.is_empty() {
@@ -1873,8 +1875,13 @@ impl GuitarRigBackend {
         self.switch_modes.lock_ok().get(index).copied().unwrap_or_default()
     }
 
-    /// The song that is up, when the setlist has one.
+    /// The song that is up — only in Setlist mode: in Profile (or Preset)
+    /// mode the profile plays as itself, with no song's switch tuning or
+    /// patches in play.
     fn current_song_name(&self) -> Option<String> {
+        if *self.perform_mode.lock_ok() != PERFORM_SETLIST {
+            return None;
+        }
         let idx = *self.song_index.lock_ok();
         self.resolved_setlist().get(idx).map(|(name, ..)| name.clone())
     }
@@ -2806,6 +2813,9 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
         _ => Vec::new(),
     }
 }
+
+/// `perform_mode` for Setlist mode — the only one in which songs are live.
+const PERFORM_SETLIST: u32 = 2;
 
 /// The primary dialable param for a block type: `(name, min, max, default)`.
 const fn primary_param(bt: BlockType) -> Option<(&'static str, f32, f32, f32)> {
@@ -4756,10 +4766,31 @@ impl Rig for GuitarRigBackend {
 
     fn set_perform_mode(&self, mode: u32) {
         *self.perform_mode.lock_ok() = mode.min(2);
+        self.mark_state_dirty();
         tracing::info!(
             "perform mode → {}",
             ["preset", "profile", "setlist"][mode.min(2) as usize]
         );
+        // Songs are live only in Setlist mode: entering it tunes the
+        // switches for the song that is up, leaving it gives the profile its
+        // own back — and a song's patch playing then gives way to the
+        // profile's default.
+        self.apply_song_stacks();
+        if mode.min(2) != PERFORM_SETLIST {
+            let on_song_patch = self.active_patch_name().is_some_and(|name| {
+                self.profile_def
+                    .lock_ok()
+                    .patches
+                    .iter()
+                    .any(|p| p.name.eq_ignore_ascii_case(&name) && !p.song.is_empty())
+            });
+            if on_song_patch {
+                let default = self.default_patch_name();
+                if self.activate_named(&default) {
+                    self.sync_after_switch(std::time::Duration::ZERO, "mode");
+                }
+            }
+        }
         self.publish_state();
     }
 

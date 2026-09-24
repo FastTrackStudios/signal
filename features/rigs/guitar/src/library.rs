@@ -166,6 +166,10 @@ pub struct LastState {
     /// The active profile by name; empty = the first one.
     #[facet(default)]
     pub profile: String,
+    /// The perform mode (0 Preset, 1 Profile, 2 Setlist) — songs are live
+    /// only in Setlist, so a restart mid-set must land back in it.
+    #[facet(default = 1)]
+    pub perform_mode: u32,
 }
 
 /// Everything loaded from the rig directory.
@@ -658,10 +662,12 @@ mod tests {
             active_patch: "Lead Big".to_string(),
             tempo_bpm: 74.0,
             profile: "Blues".to_string(),
+            perform_mode: 2,
         };
         super::RigLibrary::save_last_state(&state);
         let back = super::RigLibrary::load_last_state().expect("last-state.styx roundtrip");
         assert_eq!(back.setlist_index, 2);
+        assert_eq!(back.perform_mode, 2, "setlist mode survives a restart");
         assert_eq!(back.song_index, 5);
         assert_eq!(back.part_index, 1);
         assert_eq!(back.active_patch, "Lead Big");
