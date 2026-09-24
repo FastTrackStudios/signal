@@ -2650,6 +2650,17 @@ impl GuitarRig {
             .map_or(0, |s| (s.mean_render_ms() * 1000.0) as u32)
     }
 
+    /// Whether the audio device reported itself gone (unplugged, powered
+    /// off): the engine is dead and only a reopen brings it back. Always
+    /// false for an offline rig.
+    pub fn stream_failed(&self) -> bool {
+        /// `EngineStats::stream_state`'s error code (both backends).
+        const STATE_ERROR: i32 = -1;
+        self.engine_stats.as_ref().is_some_and(|s| {
+            s.stream_state.load(std::sync::atomic::Ordering::Relaxed) == STATE_ERROR
+        })
+    }
+
     /// Blocks rendered since the device opened — the sample count behind
     /// [`mean_render_us`](Self::mean_render_us).
     pub fn blocks_rendered(&self) -> u64 {

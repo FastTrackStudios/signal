@@ -70,6 +70,12 @@ pub struct MeterPump {
     tick: u64,
     /// Footswitch tap/hold/edge state (the shared gesture engine).
     switches: FootswitchEngine,
+    /// The audio watchdog (see `audio_watchdog`): blocks rendered at the
+    /// last look, since when they have not moved, and when to look for a
+    /// lost device next.
+    audio_calls: u64,
+    audio_stalled_since: Option<std::time::Instant>,
+    audio_retry_at: Option<std::time::Instant>,
 }
 
 impl Default for MeterPump {
@@ -80,6 +86,9 @@ impl Default for MeterPump {
             // 5 gesture switches + 5 direct slots, holds at the 500 ms
             // pedalboard convention (mirrors the UI's hold threshold).
             switches: FootswitchEngine::new(5, 5, std::time::Duration::from_millis(500)),
+            audio_calls: 0,
+            audio_stalled_since: None,
+            audio_retry_at: None,
         }
     }
 }
@@ -167,6 +176,9 @@ pub struct GuitarRigBackend {
     /// [`Rig::start`] re-entrancy guard: one open at a time (concurrent
     /// opens race the drop/sleep/reopen dance into audible gaps).
     opening: Arc<std::sync::atomic::AtomicBool>,
+    /// The rig is meant to be playing (started, not stopped): the audio
+    /// watchdog brings it back when its device drops out and returns.
+    wants_audio: Arc<std::sync::atomic::AtomicBool>,
     /// Debug-formatted audio prefs the live rig was opened with — a repeat
     /// `start` with unchanged prefs is a no-op instead of an audio gap.
     open_prefs: Arc<Mutex<Option<String>>>,
@@ -283,6 +295,7 @@ impl GuitarRigBackend {
             library_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             state_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             opening: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            wants_audio: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             open_prefs: Arc::new(Mutex::new(None)),
             midi_map: Arc::new(Mutex::new(lib.midi_map)),
             keymap: Arc::new(Mutex::new(lib.keymap)),
@@ -304,6 +317,70 @@ impl GuitarRigBackend {
     /// shared `architect::rig` pump — which supplies the interval, the
     /// once-start guard, and the per-tick `catch_unwind` survival — while
     /// the guitar-specific control heartbeat lives here.
+    /// Bring the rig back after its audio device drops out.
+    ///
+    /// An interface unplugged or powered off kills the engine — the device
+    /// reports itself gone, or simply stops calling back — and nothing used to
+    /// reopen it: the rig stayed silent until the app restarted. Here a dead
+    /// engine is released, and once the configured device is enumerable again
+    /// the rig reopens through the normal start path, landing back on the
+    /// same patch (`open_blocking` restores the last state). The same retry
+    /// covers a rig whose device was not there when the app launched.
+    fn audio_watchdog(&self, pump: &mut MeterPump) {
+        use std::sync::atomic::Ordering;
+        /// No blocks for this long on a live engine is a dead one.
+        const STALL: std::time::Duration = std::time::Duration::from_secs(2);
+        /// How often to look for a lost device.
+        const RETRY: std::time::Duration = std::time::Duration::from_secs(2);
+        if !self.wants_audio.load(Ordering::Relaxed) || self.opening.load(Ordering::Relaxed) {
+            pump.audio_stalled_since = None;
+            return;
+        }
+        let now = std::time::Instant::now();
+        let health = self
+            .rig
+            .lock_ok()
+            .as_ref()
+            .map(|p| (p.rig().stream_failed(), p.rig().blocks_rendered()));
+        match health {
+            Some((failed, calls)) => {
+                let stalled = if calls == pump.audio_calls {
+                    now.duration_since(*pump.audio_stalled_since.get_or_insert(now)) >= STALL
+                } else {
+                    pump.audio_calls = calls;
+                    pump.audio_stalled_since = None;
+                    false
+                };
+                if failed || stalled {
+                    tracing::warn!(
+                        audio.device_gone = failed,
+                        audio.stalled = stalled,
+                        "audio device lost — releasing it; the rig reopens when it returns"
+                    );
+                    // Dropping the dead engine releases the device; the
+                    // retry below reopens it.
+                    let dead = self.rig.lock_ok().take();
+                    drop(dead);
+                    *self.open_prefs.lock_ok() = None;
+                    pump.audio_stalled_since = None;
+                    pump.audio_calls = 0;
+                    pump.audio_retry_at = Some(now + RETRY);
+                    self.publish_state();
+                }
+            }
+            None => {
+                if pump.audio_retry_at.is_some_and(|t| now < t) {
+                    return;
+                }
+                pump.audio_retry_at = Some(now + RETRY);
+                if audio_device_present() {
+                    tracing::info!("audio device present — reopening the rig");
+                    Rig::start(self);
+                }
+            }
+        }
+    }
+
     fn pump_tick(&self, pump: &mut MeterPump) {
         pump.tick += 1;
         // MIDI hot-plug: (re)open when the stream is missing or the set of
@@ -324,6 +401,10 @@ impl GuitarRigBackend {
                 pump.midi = Some(hub.subscribe_drain("guitar", None));
             }
             hub.rescan();
+        }
+        // Audio device drop-outs: twice a second.
+        if !crate::library::rig_is_design() && pump.tick.is_multiple_of(15) {
+            self.audio_watchdog(pump);
         }
         // Flush pending auto-saves (live edits + position) about once a second.
         if pump.tick.is_multiple_of(30) {
@@ -2865,6 +2946,8 @@ impl RigBackend for GuitarRigBackend {
 
 impl Rig for GuitarRigBackend {
     fn start(&self) {
+        self.wants_audio
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         // One open at a time: concurrent starts would race the
         // drop → 250 ms sleep → reopen dance into audible gaps.
         if self.opening.swap(true, std::sync::atomic::Ordering::SeqCst) {
@@ -2903,6 +2986,8 @@ impl Rig for GuitarRigBackend {
     }
 
     fn stop(&self) {
+        self.wants_audio
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         *self.rig.lock_ok() = None;
         *self.open_prefs.lock_ok() = None;
         tracing::info!("rig stopped");
@@ -5999,4 +6084,20 @@ enum LevelHome {
     Pool { name: String },
     /// The drive option playing this capture.
     Drive { nam: String },
+}
+
+/// Whether the rig's configured interface can be opened right now: its input
+/// and output devices are both enumerable (an empty name is the system
+/// default, present whenever any device is).
+fn audio_device_present() -> bool {
+    let prefs = RigManager::load(AUDIO_RIG_NAME).audio;
+    let has = |want: &str, list: Vec<signal_sampler::DeviceInfo>| {
+        if want.is_empty() {
+            !list.is_empty()
+        } else {
+            list.iter().any(|d| d.name == want)
+        }
+    };
+    has(&prefs.input_device, GuitarRig::input_devices())
+        && has(&prefs.output_device, GuitarRig::output_devices())
 }
