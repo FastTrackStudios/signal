@@ -401,6 +401,10 @@ pub fn PresetRow(
     /// Extra pieces at the right, before the value (a Time snapshot's picks).
     #[props(default)]
     children: Element,
+    /// The children *are* the row's values (a Time snapshot's Delay and
+    /// Reverb picks): no value or picture of its own, a compact row.
+    #[props(default)]
+    picks: bool,
     /// The macro knobs it tunes (`delay`, `space`) — a quiet glyph by the
     /// name, the knobs in its tooltip.
     #[props(default)]
@@ -415,7 +419,7 @@ pub fn PresetRow(
     let edge = if live { LIVE } else { "transparent" };
     let bg = if live { crate::theme::LIVE_BG } else { "transparent" };
     let ink = if off && !live { MUTED } else { TEXT };
-    let pad = if off { "4px" } else { "6px" };
+    let pad = if off || picks { "4px" } else { "6px" };
     // The engine chip, unless the group already says it (a Room among Rooms).
     let engine = if look.group.starts_with(look.engine.as_str()) { String::new() } else { look.engine.clone() };
     rsx! {
@@ -439,12 +443,14 @@ pub fn PresetRow(
             if !off && !look.engine.is_empty() {
                 span { style: "width: 3px; height: 22px; border-radius: 2px; flex-shrink: 0; background: {engine_swatch(&look.block_type, &look.engine)};" }
             }
-            div { style: "flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px;",
+            div { style: "flex: 1 1 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; gap: 2px;",
                 div { style: "display: flex; align-items: center; gap: 5px; min-width: 0;",
                     if modified {
                         crate::kit::Dot { modified: true, size: 6 }
                     }
-                    span { style: "font-size: 12px; font-weight: 600; color: {ink}; white-space: nowrap; overflow: hidden; min-width: 0;",
+                    span { style: "flex: 1 1 auto; font-size: 12px; font-weight: 600; color: {ink}; white-space: nowrap; overflow: hidden; \
+                                   text-overflow: ellipsis; min-width: 0;",
+                        title: "{name}",
                         "{name}"
                     }
                     if !macros.is_empty() {
@@ -465,7 +471,7 @@ pub fn PresetRow(
                 }
             }
             {children}
-            if !off {
+            if !off && !picks {
                 ValueChip { value: look.value.clone(), lit: live }
                 ShapeView { shape: look.shape.clone(), w: 52, h: 14, lit: live }
             }

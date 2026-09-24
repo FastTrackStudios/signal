@@ -520,6 +520,7 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
                                                     modified: lit && modified,
                                                     subline: info.captures.iter().take(2).cloned().collect::<Vec<_>>().join(" · "),
                                                     macros: info.macros.clone(),
+                                                    picks: !subs.is_empty(),
                                                     onclick: {
                                                         let (p, s) = (preset.clone(), snap.clone());
                                                         move |()| choose(p.clone(), s.clone())
@@ -600,23 +601,27 @@ fn PresetHeader(
     }
 }
 
-/// A Time snapshot's Delay or Reverb pick, as a chip: the picture and the
-/// value, small.
+/// A Time snapshot's Delay or Reverb pick, compact: a dot in its engine's
+/// family colour (delay blue, reverb purple) and its one value, in a
+/// fixed-width slot so the values line up down the list and the name keeps
+/// the room.
 #[component]
 fn SubPick(module: String, look: Look, lit: bool) -> Element {
+    let slot = "flex-shrink: 0; width: 46px; display: flex; align-items: center; gap: 4px; overflow: hidden;";
     if look.group == crate::preset_look::OFF {
         return rsx! {
-            span { style: "flex-shrink: 0; width: 60px; font-size: 9px; color: {crate::theme::DIM}; text-align: center;",
-                title: "{module}: off", "—"
+            span { style: "{slot}", title: "{module}: off",
+                span { style: "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; border: 1px solid {crate::theme::DIM};" }
+                span { style: "font-size: 10px; color: {crate::theme::DIM};", "off" }
             }
         };
     }
+    let dot = crate::preset_look::engine_swatch(&look.block_type, &look.engine);
+    let ink = if lit { TEXT } else { MUTED };
     rsx! {
-        span {
-            style: "flex-shrink: 0; display: flex; align-items: center; gap: 3px; width: 60px; overflow: hidden;",
-            title: "{module}: {look.engine} {look.value}",
-            crate::preset_look::ShapeView { shape: look.shape.clone(), w: 20, h: 10, lit }
-            span { style: "font-size: 9px; font-family: monospace; color: {MUTED}; white-space: nowrap;", "{look.value}" }
+        span { style: "{slot}", title: "{module}: {look.engine} {look.value}",
+            span { style: "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; background: {dot};" }
+            span { style: "font-size: 10px; font-family: monospace; color: {ink}; white-space: nowrap;", "{look.value}" }
         }
     }
 }
