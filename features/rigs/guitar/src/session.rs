@@ -5649,6 +5649,7 @@ impl Rig for GuitarRigBackend {
                     snapshots: m.snapshots.iter().map(|s| s.name.clone()).collect(),
                     used_by,
                     snapshot_used_by,
+                    snapshot_info: m.snapshots.iter().map(snapshot_info).collect(),
                 })
                 .collect(),
             presets: comp
@@ -5681,6 +5682,11 @@ impl Rig for GuitarRigBackend {
                     name: b.name.clone(),
                     bypass: b.bypass,
                     used_by,
+                    params: b
+                        .params
+                        .iter()
+                        .map(|p| signal_guitar_proto::PresetParam { name: p.param.clone(), value: p.value })
+                        .collect(),
                 })
                 .collect(),
             active_blocks,
@@ -7142,6 +7148,39 @@ fn audio_device_present() -> bool {
     };
     has(&prefs.input_device, GuitarRig::input_devices())
         && has(&prefs.output_device, GuitarRig::output_devices())
+}
+
+/// What a module snapshot holds, for a list row: its module picks, its block
+/// presets, and its captures by file stem.
+fn snapshot_info(s: &crate::compose::ModuleSnapshotDef) -> signal_guitar_proto::ModuleSnapshotInfo {
+    let stem = |p: &str| {
+        std::path::Path::new(p)
+            .file_stem()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
+    signal_guitar_proto::ModuleSnapshotInfo {
+        modules: s
+            .modules
+            .iter()
+            .map(|c| signal_guitar_proto::ModulePick {
+                module: c.module.clone(),
+                preset: c.preset.clone(),
+                snapshot: c.snapshot.clone(),
+                blocks: Vec::new(),
+            })
+            .collect(),
+        blocks: s
+            .blocks
+            .iter()
+            .map(|c| signal_guitar_proto::BlockPick { block: c.block.clone(), preset: c.preset.clone() })
+            .collect(),
+        captures: [&s.nam, &s.cab, &s.nam2, &s.cab2]
+            .into_iter()
+            .filter(|p| !p.is_empty())
+            .map(|p| stem(p))
+            .collect(),
+    }
 }
 
 /// A pick of `module` that names no preset — what a module owns by block

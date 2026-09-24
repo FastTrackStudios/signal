@@ -449,6 +449,30 @@ pub struct ModulePresetEntry {
     /// joined ("" = nothing does).
     #[facet(default)]
     pub snapshot_used_by: Vec<String>,
+    /// What each snapshot holds, parallel to `snapshots` — so a list can
+    /// show a Time snapshot's Delay and Reverb, or an Amp's captures,
+    /// without a fetch per row.
+    #[facet(default)]
+    pub snapshot_info: Vec<ModuleSnapshotInfo>,
+}
+
+/// What one module snapshot holds.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct ModuleSnapshotInfo {
+    /// The module picks it plays (a Time snapshot's Delay and Reverb).
+    pub modules: Vec<ModulePick>,
+    /// The block presets it puts on blocks (a Delay snapshot's DLY 1).
+    pub blocks: Vec<BlockPick>,
+    /// Its captures, by file name without the extension: amp, then cab,
+    /// then the second amp and cab (empty ones left out).
+    pub captures: Vec<String>,
+}
+
+/// One parameter a block preset sets.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct PresetParam {
+    pub name: String,
+    pub value: f32,
 }
 
 /// One snapshot of a preset: its module picks.
@@ -471,7 +495,7 @@ pub struct PresetEntry {
 }
 
 /// The composition libraries, and what the active patch plays from them.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct CompositionModel {
     pub modules: Vec<ModulePresetEntry>,
     pub presets: Vec<PresetEntry>,
@@ -491,7 +515,7 @@ pub struct CompositionModel {
 }
 
 /// A block preset: its block type's storage key (`delay`, `reverb`, …).
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct BlockPresetEntry {
     pub block_type: String,
     pub name: String,
@@ -501,6 +525,10 @@ pub struct BlockPresetEntry {
     /// cannot be deleted.
     #[facet(default)]
     pub used_by: Vec<String>,
+    /// What it sets, as saved — so a list can draw and sort it (a delay's
+    /// time and feedback, a reverb's algorithm and decay).
+    #[facet(default)]
+    pub params: Vec<PresetParam>,
 }
 
 /// A block preset on a chain block, by the block's name (`DLY 1`, `VERB 2`).
