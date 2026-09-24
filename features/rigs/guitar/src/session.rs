@@ -1550,7 +1550,14 @@ impl GuitarRigBackend {
             (cur as i32 + dir).clamp(0, n as i32 - 1) as usize
         };
         if target == cur {
-            tracing::info!(part = cur, "part step: at the end of the song");
+            // Past the last section: on to the next song (the set carries
+            // on under the same foot).
+            if dir > 0 {
+                tracing::info!(part = cur, "part step: end of the song → next song");
+                Rig::next_song(self);
+            } else {
+                tracing::info!(part = cur, "part step: at the start of the song");
+            }
             return;
         }
         tracing::info!(from = cur, to = target, sections, "part step");

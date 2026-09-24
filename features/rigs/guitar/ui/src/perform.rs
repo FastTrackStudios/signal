@@ -305,11 +305,18 @@ pub fn PerformGrid(
     };
     // Where a stepping switch goes on a tap (next) and a hold (back) — its
     // tile says so.
+    // Past a song's last section the step goes on to the next song.
+    let next_song = || {
+        model
+            .songs
+            .get(model.song_index as usize + 1)
+            .map_or("end of the set".to_string(), |s| format!("{} ›", s.name))
+    };
     let step_hint = |job: &str| -> (String, String) {
         let at = model.part_index as usize;
         match job {
             "parts" => (
-                model.parts.get(at + 1).map_or("end of the song".into(), |p| p.name.clone()),
+                model.parts.get(at + 1).map_or_else(next_song, |p| p.name.clone()),
                 at.checked_sub(1).and_then(|i| model.parts.get(i)).map_or(String::new(), |p| p.name.clone()),
             ),
             "sections" => {
@@ -320,7 +327,7 @@ pub fn PerformGrid(
                     .iter()
                     .skip(at + 1)
                     .find(|p| !p.section.eq_ignore_ascii_case(&cur))
-                    .map_or("end of the song".into(), |p| p.section.clone());
+                    .map_or_else(next_song, |p| p.section.clone());
                 // Back: to this section's start from a later part of it, else
                 // the section before.
                 let first = (0..=at).rev().take_while(|&i| sec(i).eq_ignore_ascii_case(&cur)).last().unwrap_or(at);
