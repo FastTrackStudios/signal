@@ -1650,10 +1650,26 @@ impl GuitarRigBackend {
             // The audition is not one of the profile's patches.
             .filter(|(_, p)| p.name != AUDITION_PATCH && !hidden(&p.name))
             .map(|(i, p)| {
-                let stack_entry = stacks
+                // Grouped by the profile's own stacks — not the live
+                // rotations, which a song re-tunes (WASHED's switch 1 is not
+                // Worship's Clean stack). A song's patches group under the
+                // song.
+                let _ = stacks;
+                let song_of = def
+                    .patches
+                    .iter()
+                    .find(|d| d.name.eq_ignore_ascii_case(&p.name))
+                    .map(|d| d.song.clone())
+                    .unwrap_or_default();
+                let stack_entry = def
+                    .stacks
                     .iter()
                     .find(|st| st.patches.iter().any(|n| n.eq_ignore_ascii_case(&p.name)));
-                let stack = stack_entry.map(|st| st.name.clone()).unwrap_or_default();
+                let stack = if song_of.is_empty() {
+                    stack_entry.map(|st| st.name.clone()).unwrap_or_default()
+                } else {
+                    song_of
+                };
                 let default_in_stack = stack_entry
                     .and_then(|st| st.patches.first())
                     .is_some_and(|first| first.eq_ignore_ascii_case(&p.name));
