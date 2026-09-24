@@ -896,6 +896,10 @@ pub fn PresetBar(
     #[props(default)]
     on_label: Option<EventHandler<()>>,
     #[props(default)] compact: bool,
+    /// A surface's heading: the name large, no box around the bar — the
+    /// region's own edges hold it (the setlist sidebar's set).
+    #[props(default)]
+    large: bool,
     #[props(default)] placeholder: String,
     /// Extra inline style for the bar (width, flex).
     #[props(default)]
@@ -905,10 +909,34 @@ pub fn PresetBar(
     let mut open = use_signal(|| false);
     // Compact fills its row (22–30px on the control surface); the list drops
     // below whichever it is.
-    let (h, height): (u32, &str) = if compact { (30, "100%") } else { (54, "54px") };
+    let (h, height): (u32, &str) = if compact {
+        (30, "100%")
+    } else if large {
+        (52, "52px")
+    } else {
+        (54, "54px")
+    };
     let side = if compact { 18 } else { 26 };
-    let (eyebrow, title) = if compact { ("8px", "10px") } else { ("9px", "13px") };
-    let (radius, name_pad, menu_pad) = if compact { ("4px", "5px", "0px") } else { ("8px", "9px", "3px") };
+    let (eyebrow, title) = if compact {
+        ("8px", "10px")
+    } else if large {
+        ("9px", "17px")
+    } else {
+        ("9px", "13px")
+    };
+    // The box, and the hairlines between its parts: none on a heading.
+    let (frame, sep) = if large {
+        ("border: none; background: transparent;".to_string(), "transparent")
+    } else {
+        (format!("border: 1px solid {LINE_STRONG}; background: {FIELD};"), LINE)
+    };
+    let (radius, name_pad, menu_pad) = if compact {
+        ("4px", "5px", "0px")
+    } else if large {
+        ("8px", "0px", "0px")
+    } else {
+        ("8px", "9px", "3px")
+    };
     let drop_bg = if open() { FOCUS_BG } else { "transparent" };
     let empty = if placeholder.is_empty() { "—".to_string() } else { placeholder.clone() };
     let toggle = {
@@ -951,7 +979,7 @@ pub fn PresetBar(
         rsx! {
             button {
                 style: "display: flex; align-items: center; justify-content: center; width: {side}px; \
-                        height: 100%; flex-shrink: 0; padding: 0; border: none; border-left: 1px solid {LINE}; \
+                        height: 100%; flex-shrink: 0; padding: 0; border: none; border-left: 1px solid {sep}; \
                         background: transparent; color: {MUTED}; cursor: pointer; font-size: {title};",
                 title: "{tip}",
                 onpointerdown: move |e: PointerEvent| e.stop_propagation(),
@@ -968,24 +996,26 @@ pub fn PresetBar(
     rsx! {
         div {
             style: "position: relative; display: flex; align-items: stretch; height: {height}; min-width: 0; \
-                    border: 1px solid {LINE_STRONG}; border-radius: {radius}; \
-                    background: {FIELD}; overflow: visible; {style}",
+                    {frame} border-radius: {radius}; overflow: visible; {style}",
             onclick: move |e: MouseEvent| e.stop_propagation(),
-            // ▾ — the list.
-            button {
-                style: "display: flex; align-items: center; justify-content: center; width: {side}px; \
-                        flex-shrink: 0; padding: 0; border: none; border-right: 1px solid {LINE}; \
-                        background: {drop_bg}; color: {MUTED}; cursor: pointer;",
-                title: "Choose {label}",
-                onpointerdown: move |e: PointerEvent| e.stop_propagation(),
-                onclick: {
-                    let mut toggle = toggle.clone();
-                    move |e: MouseEvent| {
-                        e.stop_propagation();
-                        toggle(&e);
-                    }
-                },
-                fts_chrome::Glyph { icon: fts_chrome::Icon::ChevronDown, size: if compact { 10 } else { 12 } }
+            // ▾ — the list. A heading's name opens it instead, so the name
+            // keeps the left edge.
+            if !large {
+                button {
+                    style: "display: flex; align-items: center; justify-content: center; width: {side}px; \
+                            flex-shrink: 0; padding: 0; border: none; border-right: 1px solid {sep}; \
+                            background: {drop_bg}; color: {MUTED}; cursor: pointer;",
+                    title: "Choose {label}",
+                    onpointerdown: move |e: PointerEvent| e.stop_propagation(),
+                    onclick: {
+                        let mut toggle = toggle.clone();
+                        move |e: MouseEvent| {
+                            e.stop_propagation();
+                            toggle(&e);
+                        }
+                    },
+                    fts_chrome::Glyph { icon: fts_chrome::Icon::ChevronDown, size: if compact { 10 } else { 12 } }
+                }
             }
             // The name: what plays, and whether it is edited.
             div {
@@ -1032,7 +1062,7 @@ pub fn PresetBar(
             }
             if let Some(h) = on_menu.filter(|_| !menu.is_empty()) {
                 div { style: "display: flex; align-items: center; justify-content: center; flex-shrink: 0; \
-                              border-left: 1px solid {LINE}; padding: 0 {menu_pad};",
+                              border-left: 1px solid {sep}; padding: 0 {menu_pad};",
                     ActionMenu { items: menu.clone(), on_pick: h, size: if compact { 18 } else { 26 }, bare: true, title: "{label} actions" }
                 }
             }

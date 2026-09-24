@@ -40,8 +40,6 @@ pub const DIM: &str = "#3f3f46";
 /// The selected row (focus, the song that is up).
 pub const FOCUS_BG: &str = "#1b2331";
 pub const FOCUS_FG: &str = "#bfdbfe";
-/// A stronger selected ground, inside a selected region (the part that is up).
-pub const FOCUS_BG_HI: &str = "#26324a";
 /// Playing.
 pub const LIVE: &str = "#22c55e";
 pub const LIVE_BG: &str = "rgba(34,197,94,0.12)";
@@ -70,7 +68,7 @@ pub const R_MD: &str = "8px";
 /// A left sidebar's width.
 pub const SIDEBAR_W: &str = "272px";
 /// The right (module) sidebar's width.
-pub const INSPECTOR_W: &str = "260px";
+pub const INSPECTOR_W: &str = "300px";
 
 // ── Fragments ──────────────────────────────────────────────────────────────
 

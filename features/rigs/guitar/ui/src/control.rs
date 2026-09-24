@@ -104,7 +104,7 @@ fn decay_t60_secs(decay: f32) -> f64 {
 /// calibrated time (Room, Hall, Plate, Random and their variants), the
 /// Hall-law estimate otherwise. The estimate alone read 4.5 s for a Hall
 /// the engine rings for 12.
-fn verb_seconds(algorithm: f32, variant: f32, decay: f32) -> (f64, bool) {
+pub(crate) fn verb_seconds(algorithm: f32, variant: f32, decay: f32) -> (f64, bool) {
     let alg = reverb_dsp::algorithm::AlgorithmType::from_index(algorithm.round().max(0.0) as usize);
     match reverb_dsp::algorithm::decay_seconds(alg, variant.round().max(0.0) as usize, f64::from(decay)) {
         Some(t) => (t, true),
@@ -417,7 +417,7 @@ const VERB_COLORS: [&str; 2] = ["#a78bfa", "#c084fc"];
 /// Tempo-division labels — `delay::TapDivision` order (Quarter, dotted 8th,
 /// 8th, 8th triplet, 16th, golden ratio, silver ratio, free-running, then
 /// the long ones added after Free: dotted quarter, half, quarter triplet).
-const DIV_LABELS: [&str; 11] = [
+pub(crate) const DIV_LABELS: [&str; 11] = [
     "1/4", "1/8.", "1/8", "1/8T", "1/16", "Golden", "Silver", "Free", "1/4.", "1/2", "1/4T",
 ];
 
@@ -433,7 +433,7 @@ fn div_label(b: &LiveBlock) -> String {
 
 /// Division → multiple of a quarter note, for the tap visualization
 /// (Free returns 0 → the caller falls back to the block's `time`).
-fn div_factor(idx: f32) -> f32 {
+pub(crate) fn div_factor(idx: f32) -> f32 {
     [1.0, 0.75, 0.5, 1.0 / 3.0, 0.25, 0.618, 0.414, 0.0, 1.5, 2.0, 2.0 / 3.0]
         .get(idx.max(0.0) as usize)
         .copied()
@@ -442,19 +442,19 @@ fn div_factor(idx: f32) -> f32 {
 
 /// `delay::DelayStyle` order — the `TimeLine` MX machines.
 /// `chorus::EngineType` order — the modulation algorithms.
-const MOD_ENGINES: [&str; 11] = [
+pub(crate) const MOD_ENGINES: [&str; 11] = [
     "Cubic", "BBD", "Tape", "Orbit", "Juno", "CE-2", "Dimension", "Clone", "Tri-Chorus", "SCF",
     "Julia",
 ];
 /// `TremMode` order.
 const TREM_MODES: [&str; 3] = ["Mono", "Stereo", "Harmonic"];
 
-const DELAY_ALGOS: [&str; 13] = [
+pub(crate) const DELAY_ALGOS: [&str; 13] = [
     "Tape", "Digital", "dBucket", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum",
     "Oil Can", "MultiTap", "Spectral", "Filter",
 ];
 /// `reverb::AlgorithmType::ALL` order.
-const VERB_ALGOS: [&str; 15] = [
+pub(crate) const VERB_ALGOS: [&str; 15] = [
     "Room",
     "Hall",
     "Plate",

@@ -108,6 +108,22 @@ fn main() {
             let _ = rig.set_perform_mode(mode).await;
         });
     }
+    // `RIG_SHOT_SONG=WASHED` (a song of the set that plays) and
+    // `RIG_SHOT_PART=2` (its part, 0-based): the song and part that are up.
+    if let Ok(song) = std::env::var("RIG_SHOT_SONG") {
+        let rig = wired.rig.clone();
+        let part = std::env::var("RIG_SHOT_PART").ok().and_then(|p| p.parse::<u32>().ok());
+        runtime.block_on(async move {
+            if let Ok(perf) = rig.perf().await {
+                if let Some(i) = perf.songs.iter().position(|s| s.name.eq_ignore_ascii_case(&song)) {
+                    let _ = rig.select_song(i as u32).await;
+                    if let Some(p) = part {
+                        let _ = rig.select_part(p).await;
+                    }
+                }
+            }
+        });
+    }
     let _ = WIRED.set(wired);
 
     let _guard = runtime.enter();

@@ -31,6 +31,7 @@ mod palette;
 pub mod param_writer;
 mod perform;
 mod preset_bar;
+mod preset_look;
 mod remote;
 mod setlist_bar;
 mod settings;

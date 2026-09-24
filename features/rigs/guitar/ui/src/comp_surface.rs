@@ -114,7 +114,7 @@ fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bool) 
 /// Named here rather than derived because the rig takes the DSP as a tagged
 /// git dep and these are wire values — a list that drifts would silently
 /// select a different circuit, so the test below pins it to the enum.
-const COMP_STYLES: [&str; 4] = ["Clean", "FET", "VCA", "Opto"];
+pub(crate) const COMP_STYLES: [&str; 4] = ["Clean", "FET", "VCA", "Opto"];
 
 /// The circuit selector. A compressor's style changes its whole character —
 /// an opto and a FET at identical settings are different machines — so it

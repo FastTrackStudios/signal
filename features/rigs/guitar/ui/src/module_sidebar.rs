@@ -20,8 +20,9 @@ use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{BlockPresetEntry, CompositionModel, ModulePick, ModulePresetEntry};
 
-use crate::kit::{Button, ListRow, MenuItem, PickOption, Picked, PresetBar, SectionHeader};
-use crate::theme::{FAINT, INSPECTOR_W, LINE, MUTED, SIDEBAR, TEXT};
+use crate::kit::{Button, MenuItem, PickOption, Picked, PresetBar, SectionHeader};
+use crate::preset_look::Look;
+use crate::theme::{FAINT, FIELD, INSPECTOR_W, LINE, LINE_STRONG, MUTED, SIDEBAR, TEXT};
 
 /// What the right sidebar shows presets for.
 #[derive(Clone, PartialEq, Debug)]
@@ -288,8 +289,7 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
         rev.set(revision);
     }
     let refresh = use_signal(|| 0u32);
-    // Presets opened by hand, beyond the one playing.
-    let mut opened = use_signal(Vec::<String>::new);
+    let mut query = use_signal(String::new);
     let comp = use_resource({
         let rig = rig.clone();
         move || {
@@ -408,6 +408,13 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
                         move |p: Picked| module_act(&rig, library, &module, &preset, &played, p)
                     },
                 }
+                PickPicture {
+                    look: comp
+                        .as_ref()
+                        .zip(pick.as_ref())
+                        .and_then(|(c, p)| pick_look(c, p))
+                        .unwrap_or_default(),
+                }
                 // Edited: the two things to do about it, on the bar's edge
                 // rather than in its menu.
                 if modified && pick.is_some() {
@@ -436,62 +443,82 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
                     }
                 }
             }
-            div { style: "padding: 10px 12px 4px; flex-shrink: 0;",
-                SectionHeader { label: format!("{module} presets"), count: format!("{}", presets.len()) }
+            // Find: every preset of the module, searchable by preset or
+            // snapshot name.
+            div { style: "display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 4px; flex-shrink: 0;",
+                SearchField {
+                    value: query(),
+                    placeholder: format!("Search {} {module} presets…", presets.len()),
+                    on_input: move |v: String| query.set(v),
+                }
             }
             if presets.is_empty() {
                 span { style: "padding: 4px 12px 12px; font-size: 11px; color: {FAINT}; line-height: 1.5;",
                     "No {module} presets yet — dial one in and use ⋯ › Save as new preset."
                 }
             }
-            // The presets, each with its snapshots. Scrolls when long.
-            div { style: "flex: 1 1 0%; min-height: 0; overflow-y: scroll; padding: 0 8px 12px; \
+            // One group per preset, its snapshots as rows that show what
+            // they hold: a Delay or Reverb snapshot its block's picture, a
+            // Time snapshot its Delay and Reverb, an Amp snapshot its
+            // captures.
+            div { style: "flex: 1 1 0%; min-height: 0; overflow-y: scroll; padding: 0 6px 12px 4px; \
                           display: flex; flex-direction: column; gap: 1px;",
                 for entry in presets.iter().cloned() {
                     {
                         let here = pick.as_ref().is_some_and(|p| p.preset.eq_ignore_ascii_case(&entry.name));
-                        let open = here || opened().iter().any(|o| o.eq_ignore_ascii_case(&entry.name));
-                        let n = entry.snapshots.len();
+                        let words: Vec<String> = query().split_whitespace().map(str::to_lowercase).collect();
+                        let snaps: Vec<(usize, String)> = entry
+                            .snapshots
+                            .iter()
+                            .cloned()
+                            .enumerate()
+                            .filter(|(_, s)| hit(&words, &[&entry.name, s]))
+                            .collect();
+                        let comp_all = comp.clone().unwrap_or_default();
                         rsx! {
-                            div { key: "{entry.name}", style: "display: flex; flex-direction: column; gap: 1px;",
-                                ListRow {
-                                    title: entry.name.clone(),
-                                    note: format!("{n}"),
-                                    live: here,
-                                    modified: here && modified,
-                                    onclick: {
-                                        let name = entry.name.clone();
-                                        move |()| {
-                                            let mut o = opened.write();
-                                            match o.iter().position(|x| x.eq_ignore_ascii_case(&name)) {
-                                                Some(i) => { o.remove(i); }
-                                                None => o.push(name.clone()),
-                                            }
-                                        }
-                                    },
-                                    menu: preset_items(&entry, &names, None),
-                                    on_menu: {
-                                        let rig = rig.clone();
-                                        let (module, preset) = (module.clone(), entry.name.clone());
-                                        move |p: Picked| module_act(&rig, library, &module, &preset, "", p)
-                                    },
-                                }
-                                if open {
-                                    for (i, snap) in entry.snapshots.iter().cloned().enumerate() {
+                            if !snaps.is_empty() {
+                                div { key: "{entry.name}", style: "display: flex; flex-direction: column; gap: 1px;",
+                                    PresetHeader {
+                                        name: entry.name.clone(),
+                                        count: entry.snapshots.len(),
+                                        live: here,
+                                        menu: preset_items(&entry, &names, None),
+                                        on_menu: {
+                                            let rig = rig.clone();
+                                            let (module, preset) = (module.clone(), entry.name.clone());
+                                            move |p: Picked| module_act(&rig, library, &module, &preset, "", p)
+                                        },
+                                    }
+                                    for (i, snap) in snaps {
                                         {
                                             let lit = here && pick.as_ref().is_some_and(|p| {
                                                 p.snapshot.eq_ignore_ascii_case(&snap) || (p.snapshot.is_empty() && i == 0)
                                             });
+                                            let info = entry.snapshot_info.get(i).cloned().unwrap_or_default();
+                                            let look = info
+                                                .blocks
+                                                .first()
+                                                .and_then(|b| block_look(&comp_all, &b.preset))
+                                                .unwrap_or_default();
+                                            // A Time snapshot: its Delay and Reverb picks.
+                                            let subs: Vec<(String, Look)> = info
+                                                .modules
+                                                .iter()
+                                                .filter_map(|m| {
+                                                    pick_look(&comp_all, m).map(|l| (m.module.clone(), l))
+                                                })
+                                                .collect();
                                             let choose = choose.clone();
                                             let preset = entry.name.clone();
                                             rsx! {
-                                                ListRow {
+                                                crate::preset_look::PresetRow {
                                                     key: "{snap}",
-                                                    title: snap.clone(),
-                                                    small: true,
-                                                    indent: 18,
+                                                    name: snap.clone(),
+                                                    look,
+                                                    indent: 8,
                                                     live: lit,
                                                     modified: lit && modified,
+                                                    subline: info.captures.iter().take(2).cloned().collect::<Vec<_>>().join(" · "),
                                                     onclick: {
                                                         let (p, s) = (preset.clone(), snap.clone());
                                                         move |()| choose(p.clone(), s.clone())
@@ -502,6 +529,9 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
                                                         let (module, preset, snap) = (module.clone(), preset.clone(), snap.clone());
                                                         move |p: Picked| module_act(&rig, library, &module, &preset, &snap, p)
                                                     },
+                                                    for (m, l) in subs {
+                                                        SubPick { key: "{m}", module: m, look: l, lit }
+                                                    }
                                                 }
                                             }
                                         }
@@ -515,6 +545,77 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             span { style: "padding: 8px 12px; border-top: 1px solid {LINE}; font-size: 10px; color: {FAINT}; line-height: 1.5; flex-shrink: 0;",
                 "Picks play on this patch. Saving into a preset changes every patch that plays it."
             }
+        }
+    }
+}
+
+/// How block preset `name` reads, when the library has it.
+fn block_look(comp: &CompositionModel, name: &str) -> Option<Look> {
+    comp.block_presets
+        .iter()
+        .find(|b| b.name.eq_ignore_ascii_case(name))
+        .map(crate::preset_look::look)
+}
+
+/// How a module pick reads: its snapshot's first block preset (a Delay
+/// pick's DLY 1).
+fn pick_look(comp: &CompositionModel, pick: &ModulePick) -> Option<Look> {
+    let entry = comp
+        .modules
+        .iter()
+        .find(|m| m.module.eq_ignore_ascii_case(&pick.module) && m.name.eq_ignore_ascii_case(&pick.preset))?;
+    let i = entry
+        .snapshots
+        .iter()
+        .position(|s| s.eq_ignore_ascii_case(&pick.snapshot))
+        .unwrap_or(0);
+    let block = entry.snapshot_info.get(i)?.blocks.first()?;
+    block_look(comp, &block.preset)
+}
+
+/// A preset's header in the module list: its name in small caps, hard left,
+/// with how many snapshots it has; its menu hard right.
+#[component]
+fn PresetHeader(
+    name: String,
+    count: usize,
+    live: bool,
+    menu: Vec<MenuItem>,
+    on_menu: EventHandler<Picked>,
+) -> Element {
+    let ink = if live { crate::theme::LIVE } else { FAINT };
+    rsx! {
+        div { class: "group", style: "display: flex; align-items: center; gap: 6px; padding: 12px 6px 3px 10px;",
+            span { style: "font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; \
+                           color: {ink}; white-space: nowrap; overflow: hidden; min-width: 0;",
+                "{name}"
+            }
+            span { style: "font-size: 10px; font-family: monospace; color: {crate::theme::DIM};", "{count}" }
+            div { style: "flex: 1 1 0;" }
+            div { class: "opacity-25 group-hover:opacity-100", style: "display: flex; flex-shrink: 0;",
+                crate::kit::ActionMenu { items: menu, on_pick: on_menu, size: 18, bare: true, title: "Preset actions" }
+            }
+        }
+    }
+}
+
+/// A Time snapshot's Delay or Reverb pick, as a chip: the picture and the
+/// value, small.
+#[component]
+fn SubPick(module: String, look: Look, lit: bool) -> Element {
+    if look.group == crate::preset_look::OFF {
+        return rsx! {
+            span { style: "flex-shrink: 0; width: 60px; font-size: 9px; color: {crate::theme::DIM}; text-align: center;",
+                title: "{module}: off", "—"
+            }
+        };
+    }
+    rsx! {
+        span {
+            style: "flex-shrink: 0; display: flex; align-items: center; gap: 3px; width: 60px; overflow: hidden;",
+            title: "{module}: {look.engine} {look.value}",
+            crate::preset_look::ShapeView { shape: look.shape.clone(), w: 20, h: 10, lit }
+            span { style: "font-size: 9px; font-family: monospace; color: {MUTED}; white-space: nowrap;", "{look.value}" }
         }
     }
 }
@@ -563,8 +664,69 @@ fn block_act(rig: &Option<RigClient>, block: &str, block_id: &str, preset: &str,
     }
 }
 
-/// A block's presets (every block preset of its type), the one it plays lit;
-/// a tap puts another on the active patch's block (`choose_block`).
+/// Whether a preset matches every word of a search, over its name, group
+/// and engine.
+fn hit(words: &[String], parts: &[&str]) -> bool {
+    let hay = parts.join(" ").to_lowercase();
+    words.iter().all(|w| hay.contains(w))
+}
+
+/// The search field of a sidebar list.
+#[component]
+pub(crate) fn SearchField(value: String, placeholder: String, on_input: EventHandler<String>) -> Element {
+    // The hint is drawn under the field rather than as its `placeholder`,
+    // which the renderer does not paint.
+    let empty = value.is_empty();
+    rsx! {
+        div { style: "position: relative; display: flex;",
+        if empty {
+            span {
+                style: "position: absolute; left: 10px; top: 0; bottom: 0; display: flex; align-items: center; \
+                        font-size: 12px; color: {FAINT}; pointer-events: none; white-space: nowrap; overflow: hidden;",
+                "{placeholder}"
+            }
+        }
+        input {
+            style: "width: 100%; font-size: 12px; color: {TEXT}; background: {FIELD}; border: 1px solid {LINE_STRONG}; \
+                    border-radius: 6px; padding: 6px 9px; outline: none;",
+            placeholder: "{placeholder}",
+            value: "{value}",
+            oninput: move |e| on_input.call(e.value()),
+            onkeydown: move |e: KeyboardEvent| {
+                e.stop_propagation();
+                if e.key() == Key::Escape {
+                    on_input.call(String::new());
+                }
+            },
+        }
+        }
+    }
+}
+
+/// The current pick, large: its picture across the sidebar's width, the
+/// value and engine under it.
+#[component]
+fn PickPicture(look: Look) -> Element {
+    if look.group == crate::preset_look::OFF || look.shape == crate::preset_look::Shape::None {
+        return rsx! {};
+    }
+    rsx! {
+        div { style: "display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0;",
+            crate::preset_look::ShapeView { shape: look.shape.clone(), w: 268, h: 28, lit: true }
+            div { style: "display: flex; align-items: center; gap: 6px;",
+                crate::preset_look::EngineChip { engine: look.engine.clone(), default: look.engine_default }
+                span { style: "font-size: 10px; color: {FAINT};", "{look.group}" }
+                div { style: "flex: 1 1 0;" }
+                crate::preset_look::ValueChip { value: look.value.clone(), lit: true }
+            }
+        }
+    }
+}
+
+/// A block's presets (every block preset of its type), grouped by what they
+/// do and drawn: the one playing on top, large, with the bar's actions;
+/// then a search and the group chips; then the groups. A tap puts another
+/// on the active patch's block (`choose_block`).
 #[component]
 fn BlockPresets(
     block: String,
@@ -576,6 +738,8 @@ fn BlockPresets(
     on_close: EventHandler<()>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let mut query = use_signal(String::new);
+    let mut only = use_signal(String::new);
     let presets: Vec<BlockPresetEntry> = comp
         .as_ref()
         .map(|c| {
@@ -597,11 +761,13 @@ fn BlockPresets(
     let modified = live.as_ref().is_some_and(|(_, _, e)| *e);
     let block_id = live.map(|(_, id, _)| id).unwrap_or_default();
     let kind = match block_type.as_str() {
-        "delay" => "Delay",
-        "reverb" => "Reverb",
-        other => other,
-    }
-    .to_string();
+        "delay" => "Delay".to_string(),
+        "reverb" => "Reverb".to_string(),
+        other => {
+            let mut c = other.chars();
+            c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+        }
+    };
     let choose = {
         let rig = rig.clone();
         let block = block.clone();
@@ -619,6 +785,7 @@ fn BlockPresets(
     let at = playing
         .as_ref()
         .and_then(|p| names.iter().position(|n| n.eq_ignore_ascii_case(p)));
+    let current_look = at.and_then(|i| presets.get(i)).map(crate::preset_look::look).unwrap_or_default();
     let no_edits = (!modified).then(|| "No edits on this block".to_string());
     let mut menu = vec![MenuItem::head(format!("{block} on this patch"))];
     if let Some(p) = &playing {
@@ -637,26 +804,47 @@ fn BlockPresets(
         menu.extend(block_preset_items(entry, &names));
     }
 
+    // The list: grouped, then narrowed by the chip and the search.
+    let groups = crate::preset_look::grouped(&presets);
+    let chips: Vec<(String, usize)> = groups
+        .iter()
+        .filter(|(g, _)| !g.is_empty() && g != crate::preset_look::OFF)
+        .map(|(g, v)| (g.clone(), v.len()))
+        .collect();
+    let words: Vec<String> = query().split_whitespace().map(str::to_lowercase).collect();
+    let shown: Vec<(String, Vec<(BlockPresetEntry, Look)>)> = groups
+        .into_iter()
+        .filter(|(g, _)| only().is_empty() || *g == only() || g == crate::preset_look::OFF)
+        .map(|(g, v)| {
+            let v: Vec<_> = v
+                .into_iter()
+                .filter(|(p, l)| hit(&words, &[&p.name, &l.group, &l.engine]))
+                .collect();
+            (g, v)
+        })
+        .filter(|(_, v)| !v.is_empty())
+        .collect();
+
     rsx! {
         div {
             style: "width: {INSPECTOR_W}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
                     border-left: 1px solid {LINE}; background: {SIDEBAR}; color: {TEXT};",
+            // What plays, large, and every way to change or keep it.
             div { style: "display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; \
                           border-bottom: 1px solid {LINE}; flex-shrink: 0;",
-                SectionHeader { label: "{kind} block",
+                SectionHeader { label: format!("{kind} · {block}"),
                     CloseButton { on_close: move |()| on_close.call(()) }
                 }
                 PresetBar {
                     label: block.clone(),
                     name: playing.clone().unwrap_or_default(),
                     modified,
-                    live: playing.is_some(),
                     placeholder: "As the module sets it",
                     options: presets
                         .iter()
                         .map(|p| PickOption {
                             label: p.name.clone(),
-                            note: if p.bypass { "off".to_string() } else { String::new() },
+                            group: crate::preset_look::look(p).group,
                             live: playing.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(&p.name)),
                             ..Default::default()
                         })
@@ -689,6 +877,7 @@ fn BlockPresets(
                         move |p: Picked| block_act(&rig, &block, &id, &preset, p)
                     },
                 }
+                PickPicture { look: current_look }
                 if modified {
                     div { style: "display: flex; gap: 6px;",
                         if let Some(p) = playing.clone() {
@@ -716,44 +905,61 @@ fn BlockPresets(
                     }
                 }
             }
-            div { style: "padding: 10px 12px 4px; flex-shrink: 0;",
-                SectionHeader { label: format!("{kind} presets"), count: format!("{}", presets.len()) }
-            }
-            if presets.is_empty() {
-                span { style: "padding: 4px 12px 12px; font-size: 11px; color: {FAINT}; line-height: 1.5;",
-                    "No {kind} presets yet — dial the block in and use ⋯ › Save as new preset."
+            // Find: a search and the groups as chips.
+            div { style: "display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 4px; flex-shrink: 0;",
+                SearchField {
+                    value: query(),
+                    placeholder: format!("Search {} {} presets…", presets.len(), kind.to_lowercase()),
+                    on_input: move |v: String| query.set(v),
+                }
+                if chips.len() > 1 {
+                    crate::preset_look::GroupChips {
+                        groups: chips,
+                        selected: only(),
+                        on_pick: move |g: String| only.set(if only() == g { String::new() } else { g }),
+                    }
                 }
             }
-            div { style: "flex: 1 1 0%; min-height: 0; overflow-y: scroll; padding: 0 8px 12px; display: flex; flex-direction: column; gap: 1px;",
-                for p in presets.iter().cloned() {
-                    {
-                        let lit = playing.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(&p.name));
-                        let choose = choose.clone();
-                        rsx! {
-                            ListRow {
-                                key: "{p.name}",
-                                title: p.name.clone(),
-                                sub: if p.bypass { "off".to_string() } else { String::new() },
-                                note: if p.used_by.is_empty() { String::new() } else { format!("{}", p.used_by.len()) },
-                                live: lit,
-                                modified: lit && modified,
-                                onclick: {
-                                    let name = p.name.clone();
-                                    move |()| choose(name.clone())
-                                },
-                                menu: block_preset_items(&p, &names),
-                                on_menu: {
-                                    let rig = rig.clone();
-                                    let (block, id, preset) = (block.clone(), block_id.clone(), p.name.clone());
-                                    move |x: Picked| block_act(&rig, &block, &id, &preset, x)
-                                },
+            div { style: "flex: 1 1 0%; min-height: 0; overflow-y: scroll; padding: 0 6px 12px 4px; display: flex; flex-direction: column; gap: 1px;",
+                if shown.is_empty() {
+                    span { style: "padding: 12px 10px; font-size: 11px; color: {FAINT}; line-height: 1.5;",
+                        if presets.is_empty() { "No {kind} presets yet — dial the block in and use ⋯ › Save as new preset." } else { "No preset matches." }
+                    }
+                }
+                for (group, rows) in shown {
+                    div { key: "{group}", style: "display: flex; flex-direction: column; gap: 1px;",
+                        // Off sits alone at the top, without a header.
+                        if group != crate::preset_look::OFF && !group.is_empty() {
+                            crate::preset_look::GroupHeader { label: group.clone(), count: rows.len() }
+                        }
+                        for (p, look) in rows {
+                            {
+                                let lit = playing.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(&p.name));
+                                let choose = choose.clone();
+                                rsx! {
+                                    crate::preset_look::PresetRow {
+                                        key: "{p.name}",
+                                        name: p.name.clone(),
+                                        look,
+                                        used_by: p.used_by.clone(),
+                                        live: lit,
+                                        modified: lit && modified,
+                                        onclick: {
+                                            let name = p.name.clone();
+                                            move |()| choose(name.clone())
+                                        },
+                                        menu: block_preset_items(&p, &names),
+                                        on_menu: {
+                                            let rig = rig.clone();
+                                            let (block, id, preset) = (block.clone(), block_id.clone(), p.name.clone());
+                                            move |x: Picked| block_act(&rig, &block, &id, &preset, x)
+                                        },
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
-            span { style: "padding: 8px 12px; border-top: 1px solid {LINE}; font-size: 10px; color: {FAINT}; line-height: 1.5; flex-shrink: 0;",
-                "Picks play on this patch. Saving into a preset changes everything that uses it."
             }
         }
     }
@@ -798,6 +1004,7 @@ mod tests {
             snapshots: vec!["Short".into()],
             used_by: vec!["Preset Fender".into()],
             snapshot_used_by: vec![String::new()],
+            snapshot_info: Vec::new(),
         }];
         let p = pick(&[]);
         let items = module_menu("Delay", Some(&p), &presets, false);

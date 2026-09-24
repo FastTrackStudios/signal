@@ -135,10 +135,19 @@ pub fn PresetSidebar(
                     label: "Presets",
                     count: if searching { format!("{}/{total}", hits.len()) } else { format!("{total}") },
                 }
+                // The hint is drawn over the field: the renderer does not
+                // paint a `placeholder`.
+                div { style: "position: relative; display: flex;",
+                if q.is_empty() {
+                    span {
+                        style: "position: absolute; left: 10px; top: 0; bottom: 0; display: flex; align-items: center; \
+                                font-size: 12px; color: {FAINT}; pointer-events: none;",
+                        "Search presets and snapshots…"
+                    }
+                }
                 input {
                     style: "width: 100%; font-size: 12px; color: {TEXT}; background: {FIELD}; \
-                            border: 1px solid {LINE_STRONG}; border-radius: 7px; padding: 6px 9px; outline: none;",
-                    placeholder: "Search presets and snapshots…",
+                            border: 1px solid {LINE_STRONG}; border-radius: 6px; padding: 6px 9px; outline: none;",
                     value: "{q}",
                     oninput: move |e| query.set(e.value()),
                     onkeydown: {
@@ -154,6 +163,7 @@ pub fn PresetSidebar(
                             _ => {}
                         }
                     },
+                }
                 }
             }
             div { style: "flex: 1 1 0; min-height: 0; overflow-y: scroll; padding: 6px 8px; display: flex; flex-direction: column; gap: 1px;",
