@@ -733,6 +733,16 @@ pub struct LiveBlock {
     /// blocks without one. Set with [`set_block_level`](rig::Rig::set_block_level).
     #[facet(default)]
     pub output_level_db: Option<f32>,
+    /// A drive board slot: which capture of its pedal it plays ("Both
+    /// Sides") — the pedal itself is [`preset`](Self::preset).
+    #[facet(default)]
+    pub detail: String,
+    /// The capture file it plays, for a tooltip.
+    #[facet(default)]
+    pub asset: String,
+    /// A drive board slot with nothing in it: it does nothing.
+    #[facet(default)]
+    pub empty: bool,
 }
 
 /// One knob of the macro bar, as the bar draws it — see
@@ -770,6 +780,17 @@ pub struct MacroKnobView {
     /// The cell the panel hangs under, when it is not the knob's own
     /// (Clarity's panel sits under Delay). Empty = its own cell.
     pub anchor: String,
+    /// Every param the knob and its panel move, for its tune mode (and a
+    /// single knob's panel) — grouped by block, in panel order.
+    #[facet(default)]
+    pub tune: Vec<MacroTuneView>,
+    /// Something on its panel is tuned and not saved.
+    #[facet(default)]
+    pub tuned: bool,
+    /// The preset snapshot the patch plays (`Fender · Clean`), where the
+    /// bar's positions can be kept — empty when it plays none.
+    #[facet(default)]
+    pub snapshot: String,
     pub children: Vec<MacroChildView>,
 }
 
@@ -802,16 +823,39 @@ pub struct MacroChildView {
     /// An absolute choice (Type, Interval) rather than an offset: how many
     /// choices. 0 for a relative knob.
     pub steps: u32,
-    /// How the knob moves its param, for the panel's tune mode. `None` for
-    /// a choice.
+    /// A drive stage: its slot ("Drive 1"), shown small above the pedal —
+    /// the label is the pedal.
     #[facet(default)]
-    pub tune: Option<MacroTuneView>,
+    pub slot: String,
+    /// A line under the label: the pedal's capture ("Both Sides").
+    #[facet(default)]
+    pub subtitle: String,
+    /// A tooltip: the capture file.
+    #[facet(default)]
+    pub tooltip: String,
+    /// Plays nothing (an empty drive slot): drawn dimmed, not turnable.
+    #[facet(default)]
+    pub empty: bool,
 }
 
-/// A panel knob's response, as tune mode draws it — all in the param's
+/// One param a macro moves, as tune mode draws it — values in the param's
 /// units.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct MacroTuneView {
+    /// The knob that moves it (`space`, `delay-fb1`), the block (id and
+    /// name) and the param — the address of a [`MacroTune`].
+    pub knob: String,
+    pub block: String,
+    pub group: String,
+    pub param: String,
+    pub label: String,
+    pub color: String,
+    /// How to print it (as [`MacroChildView::fmt`]), and a reverb's
+    /// algorithm for its time.
+    pub fmt: String,
+    pub aux: f32,
+    /// Its value now, every macro applied.
+    pub live: f32,
     /// The patch's own value: where the knob at rest leaves it.
     pub base: f32,
     /// Where the param lands with the knob all the way down, and up.
@@ -830,18 +874,52 @@ pub struct MacroTuneView {
     pub enter: f32,
     /// Draw the range by ratio (times, frequencies).
     pub log: bool,
+    /// Kept off this param (the `off` flag).
+    pub off: bool,
+    /// Who shapes it below the tuning: `module`, `block`, `seed`, `stage`,
+    /// or empty (the engine's own) — where a reset goes back to.
+    pub inherited: String,
+    /// The tuning sets its bottom / its top / anything.
+    pub min_set: bool,
+    pub max_set: bool,
+    pub edited: bool,
 }
 
-/// A tuned response for one panel knob — [`rig::Rig::tune_macro`].
+/// One tune-mode edit — [`rig::Rig::tune_macro`]. `op`: `min`, `max`,
+/// `enter` (`value`), `curve` (`text`), `off` (`value` ≥ 0.5 = off), or back
+/// to what the presets say: `reset_min`, `reset_max`, `reset_curve`,
+/// `reset_off`, `reset_enter`, `reset`.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct MacroTune {
-    pub id: String,
-    pub min: f32,
-    pub max: f32,
-    pub curve: String,
-    /// A drive stage's entry point (0..1 of the knob's upper half); < 0
-    /// leaves it as it is.
-    pub enter: f32,
+    pub knob: String,
+    pub block: String,
+    pub param: String,
+    pub op: String,
+    pub value: f32,
+    pub text: String,
+}
+
+/// Save what is tuned on a bar knob's panel — [`rig::Rig::save_macro_tune`].
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct MacroSave {
+    pub knob: String,
+    /// `block` (each block's block preset) or `module` (the module snapshot
+    /// that owns the block).
+    pub scope: String,
+    /// A new block preset / module snapshot to create for the blocks that
+    /// have none in that scope. Empty = save only where there is one.
+    pub name: String,
+}
+
+/// What a macro call did — shown in the panel's header.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct MacroResult {
+    pub ok: bool,
+    /// "Saved to Ambient Dotted", or why not.
+    pub message: String,
+    /// What would make it work: `new_block_preset` / `new_module_snapshot`
+    /// (ask for a name and save again with it). Empty otherwise.
+    pub offer: String,
 }
 
 // ── Services ──────────────────────────────────────────────────────────────
@@ -857,7 +935,8 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode, MacroKnobView, MacroTune,
+        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode, MacroKnobView, MacroResult,
+        MacroSave, MacroTune,
         PartOverride, PatchInfo, PerformanceModel, PresetInfo, RigStatus, SwitchTuning, TunerReading,
     };
 
@@ -1273,22 +1352,30 @@ pub mod rig {
         /// (0..1). A bar knob sets its panel's knobs; they set the patch's
         /// params as offsets from the patch as dialled (never recorded as
         /// patch edits). Kept with the patch.
-        fn set_macro(&self, id: String, value: f32);
+        fn set_macro(&self, id: String, value: f32) -> MacroResult;
+        /// Double-click in play: a bar knob back to rest, a panel knob back
+        /// to where its bar knob puts it.
+        fn reset_macro(&self, id: String) -> MacroResult;
         /// A drive stage's ON/OFF pad: force the stage on or off until its
         /// bar knob next moves.
-        fn set_macro_pad(&self, id: String, on: bool);
-        /// Tune panel knob `id`'s response (where its param lands at the
-        /// knob's ends, and the curve) — live, until saved or discarded.
-        fn tune_macro(&self, tune: MacroTune);
-        /// Save what is tuned on bar knob `knob`'s panel into the presets:
-        /// `scope` `block` — each block's block preset — or `module` — the
-        /// module snapshot that sets the block.
-        fn save_macro_tune(&self, knob: String, scope: String);
+        fn set_macro_pad(&self, id: String, on: bool) -> MacroResult;
+        /// Tune one param's response (where it lands at the knob's ends,
+        /// the curve, off, a drive stage's entry) — live, until saved or
+        /// discarded.
+        fn tune_macro(&self, tune: MacroTune) -> MacroResult;
+        /// Save what is tuned on a bar knob's panel into the presets. With
+        /// no home in that scope for a block, the result offers a new block
+        /// preset or module snapshot; saving again with a name creates it.
+        fn save_macro_tune(&self, save: MacroSave) -> MacroResult;
+        /// Clear what `scope` (`block` / `module`) says about bar knob
+        /// `knob`'s params, so the next layer down plays.
+        fn reset_macro_scope(&self, knob: String, scope: String) -> MacroResult;
         /// Throw away what is tuned on `knob`'s panel.
-        fn discard_macro_tune(&self, knob: String);
-        /// Keep the bar's knob positions with the active patch's preset
-        /// snapshot — every patch playing it starts there.
-        fn save_macro_positions(&self);
+        fn discard_macro_tune(&self, knob: String) -> MacroResult;
+        /// Keep the bar's knob positions: `patch` (the active patch, which
+        /// always can) or `snapshot` (its preset snapshot — every patch
+        /// playing it starts there).
+        fn save_macro_positions(&self, scope: String) -> MacroResult;
 
         /// Every rig change, as it happens: meters at meter rate, perf/chain
         /// on mutation. Remotes render from this stream instead of polling.

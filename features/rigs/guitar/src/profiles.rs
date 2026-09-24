@@ -619,6 +619,46 @@ pub fn default_boost(dps: &[DrivePresetDef]) -> Option<(String, usize)> {
         .map(|p| (p.name.clone(), 0))
 }
 
+/// What a board slot is playing, as the UI names it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SlotPedal {
+    /// The pedal (drive preset), e.g. "King of Tone"; "Clean Boost
+    /// (built-in)" for the native boost; empty for an empty slot.
+    pub pedal: String,
+    /// Which of its captures, e.g. "Both Sides".
+    pub option: String,
+    /// The capture's file, for a tooltip.
+    pub nam: String,
+    /// Nothing assigned and no fallback: the slot does nothing.
+    pub empty: bool,
+}
+
+/// What board slot `slot` plays for a patch whose effective drive slots are
+/// `drives` — the pedal assigned to it (profile, module snapshot or the
+/// patch's own), the library's boost pedal for an unassigned boost slot, the
+/// native clean boost when the library has none, or nothing.
+#[must_use]
+pub fn slot_pedal(slot: &str, drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -> SlotPedal {
+    let assignment = drives
+        .iter()
+        .find(|d| d.block.eq_ignore_ascii_case(slot))
+        .map(|d| (d.preset.clone(), d.option))
+        .or_else(|| slot.eq_ignore_ascii_case(BOOST_SLOT).then(|| default_boost(dps)).flatten());
+    let found = assignment.and_then(|(preset, i)| {
+        let p = dps.iter().find(|p| p.name.eq_ignore_ascii_case(&preset))?;
+        let o = p.options.get(i).or_else(|| p.options.first())?;
+        Some(SlotPedal { pedal: p.name.clone(), option: o.name.clone(), nam: o.nam.clone(), empty: false })
+    });
+    match found {
+        Some(s) => s,
+        None if slot.eq_ignore_ascii_case(BOOST_SLOT) => SlotPedal {
+            pedal: "Clean Boost (built-in)".to_string(),
+            ..SlotPedal::default()
+        },
+        None => SlotPedal { empty: true, ..SlotPedal::default() },
+    }
+}
+
 /// Build the boost slot: the captured pedal assigned to it; unassigned, the
 /// library's boost capture (a drive preset option named for boosting, e.g.
 /// King of Tone "Red = Boost"); with none in the library, the native clean
@@ -1436,7 +1476,7 @@ pub struct MidiMapDef {
     /// presses, Note Off releases, tap/hold from the timing — for pedals set
     /// to send a note per switch. Defaults to notes 1–5 so a `midi.styx`
     /// written before this field still maps a note pedal.
-    #[facet(default = vec![1, 2, 3, 4, 5])]
+    #[facet(default = vec![1u32, 2, 3, 4, 5])]
     pub tap_notes: Vec<u32>,
     pub direct: Vec<DirectCcDef>,
     /// The pedal whose LEDs follow the rig (name contains this; empty =
@@ -2189,5 +2229,48 @@ part_recalls ({part Verse, profile Rock, patch Crunch, overrides ()})
         let old = "name X\nkey G\nbpm 70\nstack 0\nparts ()\nstack_defaults ()\n";
         let song: super::SongDef = facet_styx::from_str(old).expect("an old song parses");
         assert!(song.profile.is_empty() && song.start_part.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod slot_tests {
+    use super::*;
+
+    fn pedal(name: &str, options: &[(&str, &str)]) -> DrivePresetDef {
+        DrivePresetDef {
+            name: name.into(),
+            options: options
+                .iter()
+                .map(|(n, f)| DriveOptionDef { name: (*n).into(), nam: (*f).into(), hash: String::new(), level_db: 0.0 })
+                .collect(),
+        }
+    }
+
+    fn slot(block: &str, preset: &str, option: usize) -> DriveSlotDef {
+        DriveSlotDef { block: block.into(), preset: preset.into(), option }
+    }
+
+    /// A slot names the pedal assigned to it and which capture; the boost
+    /// slot unassigned plays the library's boost pedal, or the native boost
+    /// when there is none; an unassigned drive slot is empty.
+    #[test]
+    fn a_slot_names_the_pedal_it_plays() {
+        let dps = vec![
+            pedal("King of Tone", &[("Red", "/m/kot red.nam"), ("Both Sides", "/m/kot both.nam")]),
+            pedal("Clean Boost", &[("King of Tone Red", "/m/kot red.nam")]),
+        ];
+        let drives = vec![slot("Drive 1", "King of Tone", 1)];
+        let d1 = slot_pedal("Drive 1", &drives, &dps);
+        assert_eq!((d1.pedal.as_str(), d1.option.as_str(), d1.empty), ("King of Tone", "Both Sides", false));
+        assert_eq!(d1.nam, "/m/kot both.nam");
+        let boost = slot_pedal("Boost", &drives, &dps);
+        assert_eq!((boost.pedal.as_str(), boost.option.as_str()), ("Clean Boost", "King of Tone Red"));
+        let native = slot_pedal("Boost", &drives, &dps[..1]);
+        assert_eq!(native.pedal, "Clean Boost (built-in)");
+        assert!(!native.empty);
+        let empty = slot_pedal("Drive 3", &drives, &dps);
+        assert!(empty.empty && empty.pedal.is_empty());
+        // A slot assigned a pedal the library no longer has is empty too.
+        assert!(slot_pedal("Drive 2", &[slot("Drive 2", "Gone", 0)], &dps).empty);
     }
 }

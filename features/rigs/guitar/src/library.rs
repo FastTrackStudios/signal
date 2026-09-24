@@ -81,7 +81,13 @@ fn env_flag(name: &str) -> bool {
 /// leaves its seed directory alone.
 #[must_use]
 pub fn rig_is_ephemeral() -> bool {
-    env_flag("SIGNAL_RIG_EPHEMERAL") || rig_is_design()
+    // Said outright either way, that wins: a design run with
+    // `SIGNAL_RIG_EPHEMERAL=0` saves (into whatever `SIGNAL_RIG_DIR` says) —
+    // how a test drives the library end to end without an audio device.
+    match std::env::var("SIGNAL_RIG_EPHEMERAL") {
+        Ok(_) => env_flag("SIGNAL_RIG_EPHEMERAL"),
+        Err(_) => rig_is_design(),
+    }
 }
 
 /// Run with the output muted, processing everything (`SIGNAL_RIG_SILENT`).
