@@ -157,6 +157,8 @@ type SharedRig = Arc<Mutex<Option<ProfileRig>>>;
 use signal_rig_host::gestures::{FootswitchAction, FootswitchEngine, FootswitchMap};
 use signal_rig_host::lock::{LockExt, panic_message};
 
+mod hot_reload;
+
 /// The headless rig session: live audio + profile/footswitch state, shared
 /// behind `Arc`s so service calls can arrive from any thread.
 ///
@@ -271,6 +273,9 @@ pub struct GuitarRigBackend {
     pump_started: Arc<std::sync::atomic::AtomicBool>,
     /// The process CPU meter's last sample (see [`CpuMeter`]).
     cpu: Arc<Mutex<CpuMeter>>,
+    /// Library files edited under the running rig, applied live (see
+    /// `hot_reload`).
+    hot: Arc<hot_reload::HotReload>,
 }
 
 /// The process's CPU share, from its CPU time against the wall clock.
@@ -381,6 +386,7 @@ impl GuitarRigBackend {
             events: architect::rig::events_hub(),
             pump_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             cpu: Arc::new(Mutex::new(CpuMeter::default())),
+            hot: Arc::default(),
         };
         backend.spawn_meter_pump("rig-meter-pump");
         backend.spawn_drive_calibration();
@@ -499,6 +505,11 @@ impl GuitarRigBackend {
         // Audio device drop-outs: twice a second.
         if !crate::library::rig_is_design() && pump.tick.is_multiple_of(15) {
             self.audio_watchdog(pump);
+        }
+        // Library files edited under the rig: looked at twice a second,
+        // applied on their own thread (see `hot_reload`).
+        if pump.tick.is_multiple_of(15) {
+            self.poll_config();
         }
         // Flush pending auto-saves (live edits + position) about once a second.
         if pump.tick.is_multiple_of(30) {
@@ -923,14 +934,25 @@ impl GuitarRigBackend {
         mode: ReloadMode,
         activate: Option<&str>,
     ) -> bool {
+        self.reload_gapless_counted(rebuilt, mode, activate).is_some()
+    }
+
+    /// [`reload_gapless`](Self::reload_gapless), saying how many chains it
+    /// built and reused. `None` when nothing committed (or no engine).
+    fn reload_gapless_counted(
+        &self,
+        rebuilt: signal_sampler::rig_profile::RigProfile,
+        mode: ReloadMode,
+        activate: Option<&str>,
+    ) -> Option<hot_reload::ReloadCounts> {
         let Some(ticket) = self.rig.lock_ok().as_mut().map(|prig| prig.begin_reload(mode)) else {
-            return false;
+            return None;
         };
         let prepared = ticket.plan(rebuilt, None).prepare();
         let commit = {
             let mut guard = self.rig.lock_ok();
             let Some(prig) = guard.as_mut() else {
-                return false;
+                return None;
             };
             let commit = prig.commit_reload(prepared, activate);
             if !commit.is_committed() {
@@ -949,14 +971,29 @@ impl GuitarRigBackend {
                 tracing::info!("profile reload superseded by a newer one — discarded");
             }
         }
-        let committed = commit.is_committed();
+        let counts = commit.is_committed().then(|| hot_reload::ReloadCounts {
+            built: commit.built,
+            reused: commit.reused,
+            failed: commit.failed,
+        });
         // The chains it let go of are freed here, off the rig lock.
         drop(commit);
-        committed
+        counts
     }
 
     fn reload_rebuilt(&self, rebuilt: signal_sampler::rig_profile::RigProfile) {
         self.reload_rebuilt_activating(rebuilt, None);
+    }
+
+    /// [`reload_rebuilt`](Self::reload_rebuilt), saying what the reload did.
+    fn reload_rebuilt_counted(
+        &self,
+        rebuilt: signal_sampler::rig_profile::RigProfile,
+        mode: ReloadMode,
+    ) -> Option<hot_reload::ReloadCounts> {
+        let counts = self.reload_gapless_counted(rebuilt, mode, None);
+        self.retune_after_reload();
+        counts
     }
 
     /// [`reload_rebuilt`](Self::reload_rebuilt), landing on `activate` (a
@@ -967,6 +1004,12 @@ impl GuitarRigBackend {
         activate: Option<&str>,
     ) {
         self.reload_gapless(rebuilt, ReloadMode::Keep, activate);
+        self.retune_after_reload();
+    }
+
+    /// After a reload: the song's tuning, tempo, boost and drives back on
+    /// the chains, and the new state out to every remote.
+    fn retune_after_reload(&self) {
         // The reload carries the song's rotations and every cursor across;
         // re-tuning puts the song's switch modes back on the (possibly
         // edited) stacks and moves no switch whose rotation is unchanged.
@@ -5108,34 +5151,15 @@ impl Rig for GuitarRigBackend {
     }
 
     fn reload_library(&self) {
-        tracing::info!(
-            "reloading rig library from {}",
-            crate::library::rig_dir().display()
-        );
-        let lib = RigLibrary::load_or_bootstrap();
-        // Keep playing the profile that was up, if it is still there — the
-        // file on disk names the active one only as of the last flush.
-        let current = self.profile_def.lock_ok().name.clone();
-        let profile = lib
-            .profiles
-            .iter()
-            .find(|p| p.name.eq_ignore_ascii_case(&current))
-            .cloned()
-            .unwrap_or(lib.profile);
-        *self.other_profiles.lock_ok() = others_of(&lib.profiles, &profile.name);
-        *self.profile_def.lock_ok() = profile;
-        *self.drive_presets.lock_ok() = lib.drive_presets;
-        *self.songs_lib.lock_ok() = lib.songs;
-        *self.setlists.lock_ok() = lib.setlists;
-        *self.midi_map.lock_ok() = lib.midi_map;
-        *self.keymap.lock_ok() = lib.keymap;
-        let rebuilt = {
-            let def = self.profile_def.lock_ok();
-            let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
-        };
-        self.reload_rebuilt(rebuilt);
-        self.spawn_drive_calibration();
+        // The same path as the file watcher: only files that differ from
+        // what the rig holds are re-read, a file that does not parse changes
+        // nothing, and chains rebuild gaplessly.
+        let report = self.reload_config_now();
+        tracing::info!("reload_library — {report}");
+    }
+
+    fn reload_config(&self) -> String {
+        self.reload_config_now()
     }
 
     fn rename_preset(&self, old: String, new_name: String) {

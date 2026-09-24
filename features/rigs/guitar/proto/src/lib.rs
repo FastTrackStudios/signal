@@ -1168,6 +1168,13 @@ pub mod rig {
         /// Re-read the styx library from disk and rebuild the live rig —
         /// the hook for external edits (text editor, LLM, git).
         fn reload_library(&self);
+        /// Apply every library file edited since the rig loaded it, now —
+        /// without waiting for the file watcher. Files that differ from
+        /// what the rig holds are re-read and applied live (gapless chain
+        /// rebuilds; the playing patch, song and part kept); a file that
+        /// does not parse changes nothing. One line per file applied, or a
+        /// line saying nothing had changed.
+        fn reload_config(&self) -> String;
         /// Rename a pool preset (patch pointers follow).
         fn rename_preset(&self, old: String, new_name: String);
         /// Delete a pool preset — refused while any patch points at it.
