@@ -48,11 +48,15 @@ pub struct Shared {
 impl Shared {
     #[must_use]
     pub fn new(max_block: usize) -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(Self {
+        let shared = Arc::new(Mutex::new(Self {
             in_l: vec![0.0; max_block],
             in_r: vec![0.0; max_block],
             fresh: false,
-        }))
+        }));
+        // Lock it once here: a platform mutex may be set up lazily on first
+        // use (a heap allocation), and that must not be the audio thread's.
+        drop(shared.lock());
+        shared
     }
 }
 

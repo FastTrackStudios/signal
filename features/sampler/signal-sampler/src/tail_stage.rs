@@ -53,9 +53,14 @@ pub struct InputShare {
 impl InputShare {
     #[must_use]
     pub fn new(max_block: usize) -> Arc<Self> {
-        Arc::new(Self {
+        let share = Arc::new(Self {
             buf: Mutex::new((vec![0.0; max_block], vec![0.0; max_block], 0)),
-        })
+        });
+        // Lock it once here: a platform mutex may be set up lazily on first
+        // use (a heap allocation), and that first use must not be the audio
+        // thread's.
+        drop(share.buf.lock());
+        share
     }
 
     /// Keep this block's chain input.
