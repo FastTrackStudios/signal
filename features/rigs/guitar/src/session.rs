@@ -3951,13 +3951,18 @@ impl Rig for GuitarRigBackend {
                 .collect();
         }
         m.part_index = *self.part_index.lock_ok() as u32;
-        if let Some(song) = m.songs.get(m.song_index as usize) {
-            if let Some(def) = self
-                .songs_lib
+        // The song, cloned out: `songs_lib` must not be held across the
+        // calls below, which take it again (a std Mutex is not re-entrant —
+        // holding it here deadlocked every `perf`).
+        let song_def = m.songs.get(m.song_index as usize).and_then(|song| {
+            self.songs_lib
                 .lock_ok()
                 .iter()
                 .find(|s| s.name.eq_ignore_ascii_case(&song.name))
-            {
+                .cloned()
+        });
+        {
+            if let Some(def) = song_def {
                 m.song_profile = def.profile.clone();
                 m.start_part = def.start_part.clone();
                 m.start_patch = def.start_patch.clone();
