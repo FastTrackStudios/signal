@@ -177,6 +177,18 @@ fn seconds_text(t60: f64) -> String {
     }
 }
 
+/// A drive board slot as the strip names it: "Pedal · Capture" (the
+/// capture only when it says more than the pedal), or "Empty".
+pub(crate) fn board_label(b: &LiveBlock) -> String {
+    if b.empty || b.preset.is_empty() {
+        "Empty".to_string()
+    } else if b.detail.is_empty() || b.detail.eq_ignore_ascii_case(&b.preset) {
+        b.preset.clone()
+    } else {
+        format!("{} · {}", b.preset, b.detail)
+    }
+}
+
 /// Fire a param write without blocking the UI.
 fn send_param(rig: &Option<RigClient>, id: &str, name: &str, value: f32) {
     if let Some(r) = rig.clone() {
@@ -2031,6 +2043,9 @@ fn DriveChunk(
     /// the control.
     #[props(default)]
     output_level: Option<f32>,
+    /// A tooltip — the capture file.
+    #[props(default)]
+    tooltip: String,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut el = use_signal(|| None::<std::rc::Rc<MountedData>>);
@@ -2076,6 +2091,7 @@ fn DriveChunk(
                 "relative flex-1 min-w-0 border border-border overflow-hidden cursor-ew-resize touch-none select-none"
             },
             style: "background: #0a0a0a;",
+            title: "{tooltip}",
             onmounted: move |e| el.set(Some(e.data())),
             onpointerdown: {
                 let rig = rig.clone();
@@ -2465,10 +2481,13 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         for b in board.iter() {
                             DriveChunk {
                                 key: "{b.id}",
-                                name: if b.preset.is_empty() { b.name.clone() } else { b.preset.clone() },
+                                // What the slot plays: "Pedal · Capture", or
+                                // "Empty" — the file only in the tooltip.
+                                name: board_label(b),
+                                tooltip: if b.asset.is_empty() { b.name.clone() } else { format!("{} — {}", b.name, b.asset) },
                                 level: b.params.iter().find(|p| p.name == "drive").map_or(0.5, |p| p.value),
-                                engaged: !b.bypassed,
-                                block_id: Some(b.id.clone()),
+                                engaged: !b.bypassed && !b.empty,
+                                block_id: (!b.empty).then(|| b.id.clone()),
                                 options: b.options.clone(),
                                 option: b.option,
                                 output_level: b.output_level_db,

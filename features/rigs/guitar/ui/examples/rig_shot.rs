@@ -55,6 +55,9 @@ const SIGNAL_TAILWIND: &str =
 /// prop would have to be `PartialEq` for a value that is a set of live clients.
 static WIRED: std::sync::OnceLock<Wired> = std::sync::OnceLock::new();
 
+/// What a save made in `RIG_SHOT_TUNE_SAVE` answered, for the panel header.
+static SHOT_STATUS: std::sync::OnceLock<(String, signal_guitar_proto::MacroResult)> = std::sync::OnceLock::new();
+
 struct Wired {
     rig: RigClient,
     stream: RigStreamClient,
@@ -136,6 +139,48 @@ fn main() {
             }
         });
     }
+    // `RIG_SHOT_TUNE_OPS=0:max:-4;1:off:1` (on `RIG_SHOT_MACRO`'s knob):
+    // tune-mode edits on its params, by their place in its tune list.
+    // `RIG_SHOT_TUNE_SAVE=block` or `block:Name` (or `module…`): then save
+    // them — the answer shows in the panel header.
+    if let Ok(knob) = std::env::var("RIG_SHOT_MACRO") {
+        let rig = wired.rig.clone();
+        runtime.block_on(async move {
+            let Ok(bar) = rig.macros().await else { return };
+            let Some(k) = bar.into_iter().find(|k| k.id == knob) else { return };
+            if let Ok(ops) = std::env::var("RIG_SHOT_TUNE_OPS") {
+                for op in ops.split(';') {
+                    let parts: Vec<&str> = op.split(':').collect();
+                    let [i, op, v] = parts.as_slice() else { continue };
+                    let (Ok(i), Ok(v)) = (i.parse::<usize>(), v.parse::<f32>()) else { continue };
+                    let Some(t) = k.tune.get(i) else { continue };
+                    let _ = rig
+                        .tune_macro(signal_guitar_proto::MacroTune {
+                            knob: t.knob.clone(),
+                            block: t.block.clone(),
+                            param: t.param.clone(),
+                            op: (*op).to_string(),
+                            value: v,
+                            text: String::new(),
+                        })
+                        .await;
+                }
+            }
+            if let Ok(save) = std::env::var("RIG_SHOT_TUNE_SAVE") {
+                let (scope, name) = save.split_once(':').unwrap_or((save.as_str(), ""));
+                if let Ok(r) = rig
+                    .save_macro_tune(signal_guitar_proto::MacroSave {
+                        knob: k.id.clone(),
+                        scope: scope.to_string(),
+                        name: name.to_string(),
+                    })
+                    .await
+                {
+                    let _ = SHOT_STATUS.set((k.id.clone(), r));
+                }
+            }
+        });
+    }
     let _ = WIRED.set(wired);
 
     let _guard = runtime.enter();
@@ -189,7 +234,10 @@ fn Shot() -> Element {
         // `RIG_SHOT_MACRO=drive`: that macro's hover panel, held open.
         let _ = provide_context(signal_guitar_ui::MacroPanelOpen(std::env::var("RIG_SHOT_MACRO").ok()));
         // `RIG_SHOT_TUNE=1`: that panel in tune mode.
-        let _ = provide_context(signal_guitar_ui::MacroTuneMode(std::env::var("RIG_SHOT_TUNE").is_ok()));
+        let _ = provide_context(signal_guitar_ui::MacroTuneMode(
+            std::env::var("RIG_SHOT_TUNE").map_or(0, |v| v.parse::<u8>().unwrap_or(1)),
+        ));
+        let _ = provide_context(signal_guitar_ui::MacroShotStatus(SHOT_STATUS.get().cloned()));
     });
     rsx! {
         // The same two stylesheets the window mounts. Without them the shot is

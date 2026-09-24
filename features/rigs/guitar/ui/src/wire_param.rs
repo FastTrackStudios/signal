@@ -218,6 +218,9 @@ mod tests {
             param_min: 0.0,
             param_max: 1.0,
             output_level_db: None,
+            detail: String::new(),
+            asset: String::new(),
+            empty: false,
             params: vec![
                 BlockParam {
                     name: "b1_freq".into(),
