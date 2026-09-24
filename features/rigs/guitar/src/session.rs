@@ -22,7 +22,9 @@ use signal_guitar_proto::{
     TunerReading,
 };
 use signal_proto::block::BlockType;
-use signal_sampler::{DeviceInfo, GuitarRig, ProfileRig, RigBlock, RigManager};
+use signal_sampler::{
+    CommitStatus, DeviceInfo, GuitarRig, ProfileRig, ReloadMode, RigBlock, RigManager,
+};
 
 use crate::library::RigLibrary;
 use crate::nodes::profile_from_library;
@@ -861,14 +863,10 @@ impl GuitarRigBackend {
             let dps = self.drive_presets.lock_ok();
             profile_from_library(&def, &dps)
         };
-        {
-            let mut guard = self.rig.lock_ok();
-            if let Some(prig) = guard.as_mut() {
-                if let Err(e) = prig.load_profile(rebuilt, None) {
-                    tracing::error!("profile switch: load failed: {e}");
-                }
-            }
-        }
+        // Gapless: built beside the old profile's chains with the rig lock
+        // released, then the landing patch crossfades in and the old one
+        // rings out.
+        self.reload_gapless(rebuilt, ReloadMode::Switch, None);
         self.resync_blocks();
         self.apply_tempo_to_delays();
         self.recall_patch_boost();
@@ -878,6 +876,60 @@ impl GuitarRigBackend {
         self.mark_state_dirty();
         self.spawn_drive_calibration();
         tracing::info!("profile switched → {name}");
+    }
+
+    /// Rebuild the live chains for `rebuilt` without a gap — every chain
+    /// edit and profile switch comes through here.
+    ///
+    /// Three phases (see `signal_sampler::rig_profile`): a ticket under the
+    /// rig lock (microseconds); the diff and the build of only the chains
+    /// that changed with the lock **released**, so footswitches, the pump
+    /// and every other RPC carry on — a footswitch pressed meanwhile switches
+    /// at once, on the old chains; then the commit under the lock (under a
+    /// couple of milliseconds for one chain), which keeps the playing patch
+    /// and every stack cursor by name and switches a rebuilt playing chain
+    /// in through the footswitch's own crossfade, its old tail ringing on.
+    ///
+    /// Two reloads racing: only the one that began last commits (each
+    /// rebuilds from the whole definition, so it carries the other's edit);
+    /// the other's chains are dropped, and its `activate`, if any, is still
+    /// honoured on what plays. `false` when nothing committed.
+    fn reload_gapless(
+        &self,
+        rebuilt: signal_sampler::rig_profile::RigProfile,
+        mode: ReloadMode,
+        activate: Option<&str>,
+    ) -> bool {
+        let Some(ticket) = self.rig.lock_ok().as_mut().map(|prig| prig.begin_reload(mode)) else {
+            return false;
+        };
+        let prepared = ticket.plan(rebuilt, None).prepare();
+        let commit = {
+            let mut guard = self.rig.lock_ok();
+            let Some(prig) = guard.as_mut() else {
+                return false;
+            };
+            let commit = prig.commit_reload(prepared, activate);
+            if !commit.is_committed() {
+                if let Some(name) = activate {
+                    prig.activate_named(name);
+                }
+            }
+            commit
+        };
+        match commit.status {
+            CommitStatus::Committed => {}
+            CommitStatus::NothingBuilt => {
+                tracing::error!("profile reload: no patch chain could be built");
+            }
+            CommitStatus::Stale => {
+                tracing::info!("profile reload superseded by a newer one — discarded");
+            }
+        }
+        let committed = commit.is_committed();
+        // The chains it let go of are freed here, off the rig lock.
+        drop(commit);
+        committed
     }
 
     fn reload_rebuilt(&self, rebuilt: signal_sampler::rig_profile::RigProfile) {
@@ -891,31 +943,10 @@ impl GuitarRigBackend {
         rebuilt: signal_sampler::rig_profile::RigProfile,
         activate: Option<&str>,
     ) {
-        let active = activate.map(str::to_string).or_else(|| {
-            let guard = self.rig.lock_ok();
-            guard
-                .as_ref()
-                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
-        });
-        {
-            let mut guard = self.rig.lock_ok();
-            if let Some(prig) = guard.as_mut() {
-                if let Err(e) = prig.load_profile(rebuilt, None) {
-                    tracing::error!("profile reload failed: {e}");
-                }
-                if let Some(name) = &active {
-                    let idx = prig
-                        .patches()
-                        .iter()
-                        .position(|p| p.name.eq_ignore_ascii_case(name));
-                    if let Some(idx) = idx {
-                        prig.activate(idx);
-                    }
-                }
-            }
-        }
-        // Rebuilt from the profile: the song's rotations went with the old
-        // stacks.
+        self.reload_gapless(rebuilt, ReloadMode::Keep, activate);
+        // The reload carries the song's rotations and every cursor across;
+        // re-tuning puts the song's switch modes back on the (possibly
+        // edited) stacks and moves no switch whose rotation is unchanged.
         self.apply_song_stacks();
         self.resync_blocks();
         self.apply_tempo_to_delays();
@@ -2445,10 +2476,14 @@ impl GuitarRigBackend {
             })
             .unzip();
         if let Some(prig) = self.rig.lock_ok().as_mut() {
-            prig.restore_stack_rotations();
-            for d in defaults.iter().filter(|d| !d.patches.is_empty()) {
-                prig.set_stack_rotation(&d.stack, d.patches.clone());
-            }
+            // A stack whose rotation is unchanged keeps its cursor — after a
+            // reload this is the same tuning again, and no switch moves.
+            let rotations: Vec<(String, Vec<String>)> = defaults
+                .iter()
+                .filter(|d| !d.patches.is_empty())
+                .map(|d| (d.stack.clone(), d.patches.clone()))
+                .collect();
+            prig.retune_stacks(&rotations);
             let no_rotate: Vec<bool> = modes.iter().map(|m| m.no_rotate).collect();
             prig.set_no_rotate(&no_rotate);
         }
@@ -4725,39 +4760,8 @@ impl Rig for GuitarRigBackend {
                 profile_from_library(&def, &dps)
             }
         };
-        // …then rebuild the live chains. A full reload (brief gap) — this is
-        // an edit-time operation, and it keeps every patch preinstalled for
-        // gapless footswitching afterward.
-        let active = {
-            let guard = self.rig.lock_ok();
-            guard
-                .as_ref()
-                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
-        };
-        {
-            let mut guard = self.rig.lock_ok();
-            if let Some(prig) = guard.as_mut() {
-                if let Err(e) = prig.load_profile(rebuilt, None) {
-                    tracing::error!("profile reload failed: {e}");
-                }
-                // Restore the patch that was live before the reload.
-                if let Some(name) = &active {
-                    let idx = prig
-                        .patches()
-                        .iter()
-                        .position(|p| p.name.eq_ignore_ascii_case(name));
-                    if let Some(idx) = idx {
-                        prig.activate(idx);
-                    }
-                }
-            }
-        }
-        self.resync_blocks();
-        self.apply_tempo_to_delays();
-        self.recall_patch_boost();
-        self.apply_boost_to_block();
-        self.apply_all_drives();
-        self.publish_state();
+        // …then rebuild the live chains: gaplessly, only the patch's own.
+        self.reload_rebuilt(rebuilt);
     }
 
     /// Load a second amp (Amp R) into the patch, blended in parallel with the
@@ -4877,35 +4881,8 @@ impl Rig for GuitarRigBackend {
                 profile_from_library(&def, &dps)
             }
         };
-        let active = {
-            let guard = self.rig.lock_ok();
-            guard
-                .as_ref()
-                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
-        };
-        {
-            let mut guard = self.rig.lock_ok();
-            if let Some(prig) = guard.as_mut() {
-                if let Err(e) = prig.load_profile(rebuilt, None) {
-                    tracing::error!("profile reload failed: {e}");
-                }
-                if let Some(name) = &active {
-                    let idx = prig
-                        .patches()
-                        .iter()
-                        .position(|p| p.name.eq_ignore_ascii_case(name));
-                    if let Some(idx) = idx {
-                        prig.activate(idx);
-                    }
-                }
-            }
-        }
-        self.resync_blocks();
-        self.apply_tempo_to_delays();
-        self.recall_patch_boost();
-        self.apply_boost_to_block();
-        self.apply_all_drives();
-        self.publish_state();
+        // Gapless: only the chains playing this drive slot rebuild.
+        self.reload_rebuilt(rebuilt);
     }
 
     fn add_preset(&self, name: String, nam_path: String) {
