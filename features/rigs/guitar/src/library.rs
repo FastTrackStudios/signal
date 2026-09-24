@@ -181,6 +181,17 @@ pub struct LastState {
     /// headroom for the system the rig feeds.
     #[facet(default = -6.0_f32)]
     pub master_trim_db: f32,
+    /// The phones' faders (positions, 0–1, unity at 0.75): overall, your
+    /// guitar, the incoming mix.
+    #[facet(default = 0.75_f32)]
+    pub phones_volume: f32,
+    #[facet(default = 0.75_f32)]
+    pub phones_guitar: f32,
+    #[facet(default = 0.75_f32)]
+    pub phones_mix: f32,
+    /// The main output muted (the phones keep playing).
+    #[facet(default)]
+    pub main_mute: bool,
 }
 
 /// Everything loaded from the rig directory.
@@ -835,6 +846,10 @@ mod tests {
             profile: "Blues".to_string(),
             perform_mode: 2,
             master_trim_db: -4.5,
+            phones_volume: 0.6,
+            phones_guitar: 0.8,
+            phones_mix: 0.7,
+            main_mute: true,
         };
         super::RigLibrary::save_last_state(&state);
         let back = super::RigLibrary::load_last_state().expect("last-state.styx roundtrip");
@@ -849,6 +864,11 @@ mod tests {
         let old: super::LastState = facet_styx::from_str("setlist_index 1\nperform_mode 2\n").expect("old state parses");
         assert_eq!(old.master_trim_db, -6.0);
         assert_eq!(back.profile, "Blues");
+        // The phones come back as they were; an old file opens at unity.
+        assert_eq!((back.phones_volume, back.phones_guitar, back.phones_mix), (0.6, 0.8, 0.7));
+        assert!(back.main_mute);
+        assert_eq!((old.phones_volume, old.phones_guitar, old.phones_mix), (0.75, 0.75, 0.75));
+        assert!(!old.main_mute);
     }
 
     #[test]

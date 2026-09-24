@@ -120,8 +120,12 @@ impl Default for MeterPump {
 
 /// The footswitches' usual jobs: 1–4 their stacks, 5 tap tempo — or, in a
 /// song that has sections, stepping through them (tap on, hold back).
-fn default_switch_actions(song_has_parts: bool) -> Vec<String> {
-    let five = if song_has_parts { "sections" } else { "tap_tempo" };
+/// The switches' jobs before a song or part says otherwise. With a song up
+/// (Setlist mode) switch 5 steps the song — through its sections, or
+/// straight on to the next song when it has none — and holding it goes back;
+/// with none (Profile mode) it taps the tempo.
+fn default_switch_actions(song_is_up: bool) -> Vec<String> {
+    let five = if song_is_up { "sections" } else { "tap_tempo" };
     ["stack", "stack", "stack", "stack", five]
         .iter()
         .map(|s| (*s).to_string())
@@ -303,6 +307,18 @@ pub struct GuitarRigBackend {
     headphone: Arc<Mutex<HeadphoneState>>,
     /// Master output trim (dB) — applied with the patch base + mute.
     master_trim: Arc<Mutex<f32>>,
+    /// The headphone mixer's shared file (see `signal_phones`); `None` when
+    /// it cannot be opened.
+    phones: Option<Arc<signal_phones::PhonesLink>>,
+    /// The phones have outputs of their own (routing on), and whether the
+    /// separate mixer plays the mix — as the rig last opened.
+    phones_routing: Arc<std::sync::atomic::AtomicBool>,
+    phones_mixer_on: Arc<std::sync::atomic::AtomicBool>,
+    /// When the mixer was last started, so a mixer that dies at once is not
+    /// restarted in a tight loop.
+    phones_spawned: Arc<Mutex<Option<std::time::Instant>>>,
+    /// The mixer as last published.
+    phones_status: Arc<Mutex<signal_guitar_proto::PhonesMixer>>,
     /// Recent MIDI events (formatted), newest last, capped.
     midi_log: Arc<Mutex<Vec<String>>>,
     /// Monotonic state version, bumped on every mutation (see
@@ -424,6 +440,11 @@ impl GuitarRigBackend {
             keymap: Arc::new(Mutex::new(lib.keymap)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
             master_trim: Arc::new(Mutex::new(DEFAULT_MASTER_TRIM_DB)),
+            phones: open_phones_link(),
+            phones_routing: Arc::default(),
+            phones_mixer_on: Arc::default(),
+            phones_spawned: Arc::default(),
+            phones_status: Arc::default(),
             midi_log: Arc::new(Mutex::new(Vec::new())),
             revision: Arc::new(Mutex::new(0)),
             events: architect::rig::events_hub(),
@@ -548,6 +569,9 @@ impl GuitarRigBackend {
         // Audio device drop-outs: twice a second.
         if !crate::library::rig_is_design() && pump.tick.is_multiple_of(15) {
             self.audio_watchdog(pump);
+            // The headphone mixer: restarted if it died, its state
+            // published when it changes.
+            self.supervise_phones();
         }
         // Library files edited under the rig: looked at twice a second,
         // applied on their own thread (see `hot_reload`).
@@ -808,6 +832,8 @@ impl GuitarRigBackend {
                 output_peak_l: f.output,
                 output_peak_r: f.output,
                 perf: signal_guitar_proto::RigPerf::default(),
+                mix_db_l: -90.0,
+                mix_db_r: -90.0,
             };
         }
         let guard = self.rig.lock_ok();
@@ -857,6 +883,8 @@ impl GuitarRigBackend {
             output_peak_l: out_lr.0,
             output_peak_r: out_lr.1,
             perf,
+            mix_db_l: -90.0,
+            mix_db_r: -90.0,
         }
     }
 
@@ -1656,6 +1684,11 @@ impl GuitarRigBackend {
         };
         let n = song.parts.len();
         if n == 0 {
+            // A song with no sections is one long section: on to the next.
+            if dir > 0 {
+                tracing::info!("part step: the song has no sections → next song");
+                Rig::next_song(self);
+            }
             return;
         }
         let cur = (*self.part_index.lock_ok()).min(n - 1);
@@ -1768,6 +1801,123 @@ impl GuitarRigBackend {
         Rig::select_profile(self, next.clone());
     }
 
+    /// Route the phones as the audio prefs say: the engine blends the mix
+    /// itself, or leaves it to the separate headphone mixer — which is then
+    /// pointed at the device and channels, given the levels, and started.
+    fn apply_phones_prefs(&self, a: &signal_sampler::rig_prefs::RigAudioPrefs) {
+        use std::sync::atomic::Ordering::Relaxed;
+        let (_, phones, mix) = a.resolved_routing();
+        let routed = a.phones_routing;
+        let mixer = routed && a.phones_mixer;
+        self.phones_routing.store(routed, Relaxed);
+        self.phones_mixer_on.store(mixer, Relaxed);
+        GuitarRig::set_phones_blend(!mixer);
+        if let Some(link) = &self.phones {
+            let device = a.output_name().or(a.input_name()).unwrap_or("").to_string();
+            link.configure(&signal_phones::MixerConfig {
+                device,
+                mix_in: (mix.0 as u32, mix.1 as u32),
+                out: (phones.0 as u32, phones.1 as u32),
+            });
+            link.set_enabled(mixer);
+        }
+        self.push_phones_levels();
+        if mixer {
+            self.ensure_phones_mixer();
+        }
+        tracing::info!(
+            phones.routing = routed,
+            phones.mixer = mixer,
+            phones.out = ?(phones.0 + 1, phones.1 + 1),
+            phones.mix_in = ?(mix.0 + 1, mix.1 + 1),
+            "phones routed"
+        );
+    }
+
+    /// The phones' levels, to the engine (your guitar) and the mixer (the
+    /// mix), each through the same fader law.
+    fn push_phones_levels(&self) {
+        let hp = self.headphone.lock_ok().clone();
+        GuitarRig::set_phones_levels(
+            signal_phones::fader_gain(hp.volume),
+            signal_phones::fader_gain(hp.self_mix),
+        );
+        if let Some(link) = &self.phones {
+            link.set_levels(hp.mix_level, hp.volume);
+        }
+    }
+
+    /// Start the headphone mixer unless one is running (at most every few
+    /// seconds, so one that dies at once does not spin).
+    fn ensure_phones_mixer(&self) {
+        let Some(link) = &self.phones else { return };
+        if signal_phones::is_running(link.path()) {
+            return;
+        }
+        {
+            let mut last = self.phones_spawned.lock_ok();
+            if last.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(3)) {
+                return;
+            }
+            *last = Some(std::time::Instant::now());
+        }
+        let Some(bin) = signal_phones::find_binary() else {
+            tracing::warn!("phones mixer: no signal-phones binary beside the app — the mix will not play");
+            return;
+        };
+        match signal_phones::spawn(&bin, link.path(), &signal_phones::default_log_path()) {
+            Ok(pid) => tracing::info!(pid, bin = %bin.display(), "phones mixer: started"),
+            Err(e) => tracing::warn!("phones mixer: could not start {}: {e}", bin.display()),
+        }
+    }
+
+    /// Keep the mixer running while it is on, and publish its state when it
+    /// changes.
+    fn supervise_phones(&self) {
+        use signal_guitar_proto::{PhonesMixer, PhonesMixerState};
+        let on = self.phones_mixer_on.load(std::sync::atomic::Ordering::Relaxed);
+        let now = match (&self.phones, on) {
+            (Some(link), true) => {
+                self.ensure_phones_mixer();
+                let st = link.status();
+                PhonesMixer {
+                    enabled: true,
+                    state: match (st.running, st.state) {
+                        (false, _) | (true, signal_phones::MixerState::Idle) => PhonesMixerState::STARTING,
+                        (true, signal_phones::MixerState::Streaming) => PhonesMixerState::PLAYING,
+                        (true, signal_phones::MixerState::NoDevice) => PhonesMixerState::NO_DEVICE,
+                    },
+                    pid: if st.running { st.pid } else { 0 },
+                    rate: st.rate,
+                    block: st.block,
+                }
+            }
+            _ => PhonesMixer::default(),
+        };
+        let changed = {
+            let mut cur = self.phones_status.lock_ok();
+            let changed = *cur != now;
+            if changed {
+                tracing::info!(state = now.state, pid = now.pid, "phones mixer: state");
+            }
+            *cur = now;
+            changed
+        };
+        if changed {
+            self.publish_state();
+        }
+    }
+
+    /// The incoming mix's meter, dBFS — while the mixer plays it.
+    fn phones_meter(&self) -> (f32, f32) {
+        match &self.phones {
+            Some(link) if self.phones_mixer_on.load(std::sync::atomic::Ordering::Relaxed) => {
+                link.meter_db()
+            }
+            _ => (-90.0, -90.0),
+        }
+    }
+
     /// Mark the last-active position (setlist/song/part/patch/tempo) for
     /// the pump's debounced flush to `last-state.styx`.
     fn mark_state_dirty(&self) {
@@ -1777,6 +1927,7 @@ impl GuitarRigBackend {
 
     /// Snapshot the last-active position for persistence.
     fn snapshot_last_state(&self) -> crate::library::LastState {
+        let hp = self.headphone.lock_ok().clone();
         let active_patch = self
             .rig
             .lock_ok()
@@ -1792,6 +1943,10 @@ impl GuitarRigBackend {
             profile: self.profile_def.lock_ok().name.clone(),
             perform_mode: *self.perform_mode.lock_ok(),
             master_trim_db: *self.master_trim.lock_ok(),
+            phones_volume: hp.volume,
+            phones_guitar: hp.self_mix,
+            phones_mix: hp.mix_level,
+            main_mute: hp.main_mute,
         }
     }
 
@@ -1806,6 +1961,16 @@ impl GuitarRigBackend {
             return;
         };
         *self.perform_mode.lock_ok() = st.perform_mode.min(2);
+        {
+            let mut hp = self.headphone.lock_ok();
+            let fader = |v: f32, d: f32| if v.is_finite() { v.clamp(0.0, 1.0) } else { d };
+            hp.volume = fader(st.phones_volume, signal_guitar_proto::PHONES_UNITY);
+            hp.self_mix = fader(st.phones_guitar, signal_guitar_proto::PHONES_UNITY);
+            hp.mix_level = fader(st.phones_mix, signal_guitar_proto::PHONES_UNITY);
+            // A silent run stays muted whatever was saved.
+            hp.main_mute |= st.main_mute;
+        }
+        self.push_phones_levels();
         *self.master_trim.lock_ok() = if st.master_trim_db.is_finite() {
             st.master_trim_db.clamp(-24.0, 12.0)
         } else {
@@ -1854,11 +2019,16 @@ impl GuitarRigBackend {
     fn apply_main_mute(&self) {
         let mute = self.headphone.lock_ok().main_mute;
         let trim = *self.master_trim.lock_ok();
+        // With the phones on outputs of their own, the mute is the main
+        // pair's alone and the phones keep the guitar; on one shared pair it
+        // is the master's.
+        let routed = self.phones_routing.load(std::sync::atomic::Ordering::Relaxed);
+        GuitarRig::set_main_pair_mute(routed && mute);
         {
             let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
                 prig.rig()
-                    .set_output_trim_db(trim + if mute { -96.0 } else { 0.0 });
+                    .set_output_trim_db(trim + if mute && !routed { -96.0 } else { 0.0 });
             }
         }
     }
@@ -2745,7 +2915,7 @@ impl GuitarRigBackend {
         *self.switch_modes.lock_ok() = modes;
         *self.part_tuned.lock_ok() = tuned;
         // The switches' jobs: the defaults, the song's, then the part's.
-        let mut jobs = default_switch_actions(song.as_ref().is_some_and(|s| !s.parts.is_empty()));
+        let mut jobs = default_switch_actions(song.is_some());
         let assigned = song
             .iter()
             .flat_map(|s| s.switch_actions.iter())
@@ -3183,6 +3353,9 @@ impl GuitarRigBackend {
             let _ = mgr.save();
         }
 
+        // The phones first: the mix plays from its own process, so it is up
+        // (and stays up) whether or not the rig's device opens.
+        self.apply_phones_prefs(&mgr.audio);
         tracing::info!("rig open: prefs loaded, opening audio device…");
         match GuitarRig::open(&mgr.audio) {
             Ok(g) => {
@@ -4249,6 +4422,9 @@ impl Rig for GuitarRigBackend {
         let cores = std::thread::available_parallelism().map_or(1, |n| n.get() as u32);
         status.perf.cpu = self.cpu.lock_ok().sample(cores);
         status.perf.cores = cores;
+        let (l, r) = self.phones_meter();
+        status.mix_db_l = l;
+        status.mix_db_r = r;
         status
     }
 
@@ -4380,6 +4556,7 @@ impl Rig for GuitarRigBackend {
             }
         }
         m.headphone = self.headphone.lock_ok().clone();
+        m.headphone.mixer = self.phones_status.lock_ok().clone();
         m.master_trim_db = *self.master_trim.lock_ok();
         m.revision = *self.revision.lock_ok();
         m
@@ -6032,17 +6209,46 @@ impl Rig for GuitarRigBackend {
             let mut hp = self.headphone.lock_ok();
             hp.volume = volume.clamp(0.0, 1.0);
             hp.self_mix = self_mix.clamp(0.0, 1.0);
-            // Feed the engine's phones bus (routed interfaces blend the
-            // external monitor mix + self signal there, lock-free).
-            signal_sampler::rig::GuitarRig::set_phones_levels(hp.volume, hp.self_mix);
         }
+        self.push_phones_levels();
+        self.mark_state_dirty();
         self.publish_state();
+    }
+
+    fn set_phones_mix(&self, level: f32) {
+        self.headphone.lock_ok().mix_level = level.clamp(0.0, 1.0);
+        self.push_phones_levels();
+        self.mark_state_dirty();
+        self.publish_state();
+    }
+
+    fn restart_phones_mixer(&self) {
+        let Some(link) = self.phones.clone() else { return };
+        if !self.phones_mixer_on.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+        tracing::info!("phones mixer: restarting");
+        let backend = self.clone();
+        std::thread::spawn(move || {
+            link.set_enabled(false);
+            // It looks at the file ten times a second.
+            for _ in 0..20 {
+                if !signal_phones::is_running(link.path()) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            link.set_enabled(true);
+            *backend.phones_spawned.lock_ok() = None;
+            backend.ensure_phones_mixer();
+        });
     }
 
     fn toggle_main_mute(&self) {
         {
             let mut hp = self.headphone.lock_ok();
             hp.main_mute = !hp.main_mute;
+            self.mark_state_dirty();
             tracing::info!(
                 "main output: {}",
                 if hp.main_mute { "MUTED" } else { "live" }
@@ -7719,12 +7925,21 @@ impl AudioSettings for GuitarRigBackend {
     fn prefs(&self) -> AudioPrefs {
         let mgr = RigManager::load(AUDIO_RIG_NAME);
         let a = &mgr.audio;
+        let (main, phones, mix) = a.resolved_routing();
         AudioPrefs {
             input_device: a.input_device.clone(),
             input_channel: a.input_channel as u32,
             output_device: a.output_device.clone(),
             sample_rate: a.sample_rate,
             buffer_size: a.buffer_size,
+            phones_routing: a.phones_routing,
+            main_out_l: main.0 as u32,
+            main_out_r: main.1 as u32,
+            phones_out_l: phones.0 as u32,
+            phones_out_r: phones.1 as u32,
+            mix_in_l: mix.0 as u32,
+            mix_in_r: mix.1 as u32,
+            phones_mixer: a.phones_mixer,
         }
     }
 
@@ -7735,6 +7950,14 @@ impl AudioSettings for GuitarRigBackend {
         mgr.audio.output_device = prefs.output_device;
         mgr.audio.sample_rate = prefs.sample_rate;
         mgr.audio.buffer_size = prefs.buffer_size;
+        mgr.audio.phones_routing = prefs.phones_routing;
+        mgr.audio.main_out_l = prefs.main_out_l as usize;
+        mgr.audio.main_out_r = prefs.main_out_r as usize;
+        mgr.audio.phones_out_l = prefs.phones_out_l as usize;
+        mgr.audio.phones_out_r = prefs.phones_out_r as usize;
+        mgr.audio.phones_mix_in_l = prefs.mix_in_l as usize;
+        mgr.audio.phones_mix_in_r = prefs.mix_in_r as usize;
+        mgr.audio.phones_mixer = prefs.phones_mixer;
         if let Err(e) = mgr.save() {
             tracing::error!("failed to save audio prefs: {e}");
         }
@@ -8241,5 +8464,17 @@ impl GuitarRigBackend {
         };
         self.reload_rebuilt(rebuilt);
         Ok(())
+    }
+}
+
+/// The headphone mixer's shared file, opened once per rig.
+fn open_phones_link() -> Option<Arc<signal_phones::PhonesLink>> {
+    let path = signal_phones::default_state_path();
+    match signal_phones::PhonesLink::open(&path) {
+        Ok(l) => Some(Arc::new(l)),
+        Err(e) => {
+            tracing::warn!("phones mixer: cannot open {}: {e}", path.display());
+            None
+        }
     }
 }

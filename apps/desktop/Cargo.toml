@@ -356,7 +356,7 @@ signal-rig-host = { workspace = true }
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
 # + the status item for `--menubar` (menubar.rs).
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSMenu", "NSMenuItem", "NSResponder", "NSRunningApplication", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSImage", "NSCell", "NSButtonCell"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSMenu", "NSMenuItem", "NSEvent", "NSResponder", "NSRunningApplication", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSImage", "NSCell", "NSButtonCell"] }
 
 # ── iPhone (dx build --platform ios) — the in-process rig + phone shell ──
 [target.'cfg(target_os = "ios")'.dependencies]

@@ -59,6 +59,7 @@ members = [
     "features/rigs/guitar",
     "features/rigs/guitar/proto",
     "features/rigs/guitar/ui",
+    "features/rigs/guitar/phones",
     "features/rigs/keys",
     "features/rigs/keys/proto",
     "features/rigs/keys/ui",
@@ -294,6 +295,7 @@ signal-bass-ui = { path = "features/rigs/bass/ui" }
 signal-guitar = { path = "features/rigs/guitar" }
 signal-guitar-proto = { path = "features/rigs/guitar/proto" }
 signal-guitar-ui = { path = "features/rigs/guitar/ui" }
+signal-phones = { path = "features/rigs/guitar/phones" }
 signal-keys = { path = "features/rigs/keys" }
 signal-keys-proto = { path = "features/rigs/keys/proto" }
 signal-keys-ui = { path = "features/rigs/keys/ui" }

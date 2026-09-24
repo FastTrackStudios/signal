@@ -5,8 +5,9 @@
 //!   like REAPER's (`48 kHz · 64 spls · 2.7 ms · DSP 12%`), refreshed every
 //!   second from the embedded rig's [`RigPerf`](signal_guitar_proto::RigPerf).
 //!   Its menu holds the detail: render times, dropped blocks, xruns.
-//! - **Settings… ⌘,** in the app menu, opening the same flyout as the bar's
-//!   gear.
+//! - **Audio Settings… ⌘,** in the app menu and at the top of the Audio
+//!   menu — the rig's device, outputs and headphone mix. The app's own
+//!   flyout (account, engines, updates) is **Settings… ⌥⌘,**.
 //!
 //! Everything here runs on the main thread: dioxus-native polls the
 //! VirtualDom (and so this component's future) from the AppKit event loop.
@@ -24,6 +25,7 @@ use objc2_foundation::NSString;
 /// Set by the menu's target, drained by the component: AppKit calls the
 /// action, the component opens the panel.
 static SETTINGS_REQUESTED: AtomicBool = AtomicBool::new(false);
+static AUDIO_SETTINGS_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 define_class!(
     // SAFETY: NSObject has no subclassing requirements; the class adds one
@@ -37,6 +39,11 @@ define_class!(
         #[unsafe(method(openSettings:))]
         fn open_settings(&self, _sender: Option<&AnyObject>) {
             SETTINGS_REQUESTED.store(true, Ordering::Relaxed);
+        }
+
+        #[unsafe(method(openAudioSettings:))]
+        fn open_audio_settings(&self, _sender: Option<&AnyObject>) {
+            AUDIO_SETTINGS_REQUESTED.store(true, Ordering::Relaxed);
         }
     }
 );
@@ -52,7 +59,29 @@ impl MenuTarget {
 struct Installed {
     stats: Retained<NSMenuItem>,
     stats_menu: Retained<NSMenu>,
-    _target: Retained<MenuTarget>,
+    target: Retained<MenuTarget>,
+}
+
+/// A menu item that sends `action` to `target`, with a key equivalent.
+fn action_item(
+    mtm: MainThreadMarker,
+    title: &str,
+    action: objc2::runtime::Sel,
+    key: &str,
+    target: &MenuTarget,
+) -> Retained<NSMenuItem> {
+    // SAFETY: a selector the target class defines.
+    let item = unsafe {
+        NSMenuItem::initWithTitle_action_keyEquivalent(
+            NSMenuItem::alloc(mtm),
+            &NSString::from_str(title),
+            Some(action),
+            &NSString::from_str(key),
+        )
+    };
+    // SAFETY: the target outlives the item (held in INSTALLED).
+    unsafe { item.setTarget(Some(target)) };
+    item
 }
 
 thread_local! {
@@ -77,22 +106,18 @@ fn install(mtm: MainThreadMarker) -> bool {
     };
 
     let target = MenuTarget::new(mtm);
-    // Settings… ⌘, — second in the app menu, after "About", as on every Mac.
+    // Audio Settings… ⌘, — second in the app menu, after "About", where
+    // every Mac keeps its settings; the app's own flyout beside it on ⌥⌘,.
     if let Some(app_menu) = main_menu.itemAtIndex(0).and_then(|i| i.submenu()) {
-        // SAFETY: a selector the target class defines, with `&str` literals.
-        let settings = unsafe {
-            NSMenuItem::initWithTitle_action_keyEquivalent(
-                NSMenuItem::alloc(mtm),
-                &NSString::from_str("Settings…"),
-                Some(sel!(openSettings:)),
-                &NSString::from_str(","),
-            )
-        };
-        // SAFETY: the target outlives the item (held in INSTALLED).
-        unsafe { settings.setTarget(Some(&target)) };
+        let audio = action_item(mtm, "Audio Settings…", sel!(openAudioSettings:), ",", &target);
+        let settings = action_item(mtm, "Settings…", sel!(openSettings:), ",", &target);
+        settings.setKeyEquivalentModifierMask(
+            objc2_app_kit::NSEventModifierFlags::Command | objc2_app_kit::NSEventModifierFlags::Option,
+        );
         let at = app_menu.numberOfItems().min(1);
-        app_menu.insertItem_atIndex(&settings, at);
-        app_menu.insertItem_atIndex(&NSMenuItem::separatorItem(mtm), at + 1);
+        app_menu.insertItem_atIndex(&audio, at);
+        app_menu.insertItem_atIndex(&settings, at + 1);
+        app_menu.insertItem_atIndex(&NSMenuItem::separatorItem(mtm), at + 2);
     }
 
     // The readout: a menu-bar title, its menu the detail lines.
@@ -106,7 +131,7 @@ fn install(mtm: MainThreadMarker) -> bool {
         *i.borrow_mut() = Some(Installed {
             stats,
             stats_menu,
-            _target: target,
+            target,
         });
     });
     true
@@ -129,10 +154,10 @@ fn show(title: &str, lines: &[String]) {
     }
     SHOWN.with(|s| *s.borrow_mut() = (title.to_string(), lines.to_vec()));
     INSTALLED.with(|i| {
-        let Some(inst) = i.borrow().as_ref().map(|i| (i.stats.clone(), i.stats_menu.clone())) else {
+        let Some(inst) = i.borrow().as_ref().map(|i| (i.stats.clone(), i.stats_menu.clone(), i.target.clone())) else {
             return;
         };
-        let (stats, menu) = inst;
+        let (stats, menu, target) = inst;
         let Some(mtm) = MainThreadMarker::new() else {
             return;
         };
@@ -141,6 +166,8 @@ fn show(title: &str, lines: &[String]) {
         menu.setTitle(&title);
         stats.setTitle(&title);
         menu.removeAllItems();
+        menu.addItem(&action_item(mtm, "Audio Settings…", sel!(openAudioSettings:), "", &target));
+        menu.addItem(&NSMenuItem::separatorItem(mtm));
         for line in lines {
             let row = item(mtm, line);
             row.setEnabled(false);
@@ -199,6 +226,9 @@ pub fn MacMenuBar(on_settings: Callback<()>) -> Element {
             {
                 if SETTINGS_REQUESTED.swap(false, Ordering::Relaxed) {
                     on_settings.call(());
+                }
+                if AUDIO_SETTINGS_REQUESTED.swap(false, Ordering::Relaxed) {
+                    signal_guitar_ui::open_audio_settings();
                 }
                 let status = match crate::rig_engine::engine() {
                     Some(e) => e.rig.status().await.ok(),

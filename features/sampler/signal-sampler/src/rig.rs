@@ -1800,6 +1800,7 @@ impl GuitarRig {
             phones_out_r: 0,
             phones_mix_in_l: 0,
             phones_mix_in_r: 0,
+            phones_mixer: prefs.phones_mixer,
             allow_builtin_mic: prefs.allow_builtin_mic,
             input_calibration_dbu: prefs.input_calibration_dbu,
             nam_calibration_off: prefs.nam_calibration_off,
@@ -2042,6 +2043,25 @@ impl GuitarRig {
         daw::standalone::audio_engine::PhonesBus::shared().set(volume, self_mix);
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         let _ = (volume, self_mix); // cpal fallback: no routed phones bus yet
+    }
+
+    /// Whether the engine blends the monitor-mix inputs into the phones
+    /// itself — off while the separate headphone mixer (`signal-phones`)
+    /// plays the mix.
+    pub fn set_phones_blend(on: bool) {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        daw::standalone::audio_engine::PhonesBus::shared().set_blend_mix(on);
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let _ = on;
+    }
+
+    /// Mute the main output pair only (routed interfaces): the phones keep
+    /// the signal.
+    pub fn set_main_pair_mute(on: bool) {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        daw::standalone::audio_engine::PhonesBus::shared().set_main_mute(on);
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let _ = on;
     }
 
     /// Build an FX chain on **this** thread (loading every `.nam` / `.wav` /

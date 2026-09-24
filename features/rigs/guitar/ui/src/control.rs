@@ -2831,7 +2831,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
             // then the phones group — mix fader | phones meter | guitar
             // (self) fader.
             div {
-                style: "width: 58px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 0; padding: 0 2px;",
+                style: "width: 86px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 0; padding: 0 2px;",
                 button {
                     class: if hp.main_mute {
                         "w-9 rounded px-0.5 py-0.5 text-[8px] font-bold uppercase ring-2 ring-red-500"
@@ -2870,41 +2870,81 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         muted: hp.main_mute,
                     }
                 }
-                div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; justify-content: center; gap: 3px;",
-                    VFader {
-                        label: "Mix",
-                        value: hp.volume,
-                        readout: format!("{:.0}%", hp.volume * 100.0),
-                        on_change: cbs.cb({
-                            let rig = rig.clone();
-                            let self_mix = hp.self_mix;
-                            move |v: f32| {
-                                if let Some(r) = rig.clone() {
-                                    spawn(async move { let _ = r.set_headphone(v, self_mix).await; });
-                                }
-                            }
-                        }),
-                    }
-                    StereoMeter {
-                        label: "Phns",
-                        l_db: 20.0f32.mul_add(hp.volume.max(0.001).log10(), out_l),
-                        r_db: 20.0f32.mul_add(hp.volume.max(0.001).log10(), out_r),
-                    }
-                    VFader {
-                        label: "Gtr",
-                        value: hp.self_mix,
-                        readout: format!("{:.0}%", hp.self_mix * 100.0),
-                        on_change: cbs.cb({
-                            let rig = rig.clone();
-                            let vol = hp.volume;
-                            move |v: f32| {
-                                if let Some(r) = rig.clone() {
-                                    spawn(async move { let _ = r.set_headphone(vol, v).await; });
-                                }
-                            }
-                        }),
-                    }
+                PhonesStrip { hp: hp.clone(), state }
+            }
+        }
+    }
+}
+
+/// The phones: the incoming monitor mix and your guitar, each on its own
+/// fader, the mix's meter between them, and the phones overall. The mix
+/// plays from the separate headphone mixer — its state is the dot by the
+/// title (click it for Audio Settings, where it is set up).
+#[component]
+fn PhonesStrip(hp: signal_guitar_proto::HeadphoneState, state: RigViewState) -> Element {
+    use signal_guitar_proto::{PhonesMixerState, phones_fader_db};
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let (mix_l, mix_r) = state.mix_db.cloned();
+    let db = |pos: f32| {
+        let d = phones_fader_db(pos);
+        if d.is_finite() { format!("{d:+.0}") } else { "off".to_string() }
+    };
+    let mixer = hp.mixer.clone();
+    let (dot, tip) = match (mixer.enabled, mixer.state) {
+        (false, _) => ("#52525b", "Headphone mixer off — set it up in Audio Settings".to_string()),
+        (true, PhonesMixerState::PLAYING) => (
+            "#22c55e",
+            format!("Headphone mixer playing the mix · {} Hz · {} frames · pid {}", mixer.rate, mixer.block, mixer.pid),
+        ),
+        (true, PhonesMixerState::NO_DEVICE) => ("#ef4444", "Headphone mixer: the interface is not there — retrying".to_string()),
+        (true, _) => ("#eab308", "Headphone mixer starting…".to_string()),
+    };
+    let set_mix = {
+        let rig = rig.clone();
+        move |v: f32| {
+            if let Some(r) = rig.clone() {
+                spawn(async move { let _ = r.set_phones_mix(v).await; });
+            }
+        }
+    };
+    let set_gtr = {
+        let rig = rig.clone();
+        let vol = hp.volume;
+        move |v: f32| {
+            if let Some(r) = rig.clone() {
+                spawn(async move { let _ = r.set_headphone(vol, v).await; });
+            }
+        }
+    };
+    let set_vol = {
+        let rig = rig.clone();
+        let gtr = hp.self_mix;
+        move |v: f32| {
+            if let Some(r) = rig.clone() {
+                spawn(async move { let _ = r.set_headphone(v, gtr).await; });
+            }
+        }
+    };
+    rsx! {
+        div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; flex-direction: column; gap: 2px; \
+                      border-top: 1px solid #27272a; padding-top: 4px;",
+            button {
+                style: "display: flex; align-items: center; justify-content: center; gap: 4px; background: transparent; border: none; padding: 0; cursor: pointer;",
+                title: "{tip}",
+                onclick: move |_| crate::settings::open_audio_settings(),
+                span { style: "width: 6px; height: 6px; border-radius: 999px; background: {dot}; flex-shrink: 0;" }
+                span { style: "font-size: 8px; font-weight: 700; letter-spacing: 0.08em; color: #a1a1aa;", "PHONES" }
+            }
+            div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; justify-content: center; gap: 3px;",
+                // Keyed on the state: Blitz does not always re-apply a
+                // changed opacity in place.
+                div { key: "{mixer.enabled}",
+                    style: if mixer.enabled { "display: flex; gap: 3px; height: 100%; min-height: 0;" } else { "display: flex; gap: 3px; height: 100%; min-height: 0; opacity: 0.4;" },
+                    VFader { label: "Mix", value: hp.mix_level, readout: db(hp.mix_level), on_change: set_mix }
+                    StereoMeter { label: "Mix in", l_db: mix_l, r_db: mix_r }
                 }
+                VFader { label: "Gtr", value: hp.self_mix, readout: db(hp.self_mix), on_change: set_gtr }
+                VFader { label: "Phns", value: hp.volume, readout: db(hp.volume), on_change: set_vol }
             }
         }
     }

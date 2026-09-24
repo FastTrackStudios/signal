@@ -93,7 +93,7 @@ pub fn GuitarRigRemote() -> Element {
     // stage view; Setlist manages the set (toggle away if unused).
     let mut mode = use_signal(|| Mode::Control);
     let mut switches = use_signal(|| Switches::Full);
-    let mut audio_open = use_signal(|| false);
+    let mut audio_open = crate::settings::AUDIO_SETTINGS_OPEN.signal();
     // One bar: this header replaces the app's (crumbs and window controls
     // included) instead of stacking under it. No-op outside the app.
     fts_chrome::use_bar_claim();
@@ -643,7 +643,7 @@ pub fn GuitarRigRemote() -> Element {
             // appeared and the window looked frozen.
             div {
                 class: "flex-1 min-h-0 flex flex-row overflow-hidden",
-                style: if library_open().is_some() || palette_open() { "display: none;" } else { "" },
+                style: if library_open().is_some() || palette_open() || audio_open() { "display: none;" } else { "" },
                 // The left sidebar follows the mode: the pool for Preset,
                 // the profile tree for Profile, the set and its songs for
                 // Setlist.
@@ -803,6 +803,19 @@ pub fn GuitarRigRemote() -> Element {
                     }
                 }
             }
+            // Audio Settings, in the body's place (the body is hidden above).
+            if audio_open() {
+                AudioSettingsModal {
+                    bridge: live_bridge.clone().unwrap_or_else(|| AudioSettingsBridge {
+                        inputs: Vec::new(),
+                        outputs: Vec::new(),
+                        prefs: prefs(),
+                        on_save: apply,
+                    }),
+                    state: Some(state),
+                    on_close: move |()| audio_open.set(false),
+                }
+            }
             // Last, so they paint over the bar and the body.
             crate::library::LibraryPicker { model: perf_now.clone(), open: library_open }
             crate::palette::CommandPalette {
@@ -827,15 +840,6 @@ pub fn GuitarRigRemote() -> Element {
             }
         }
 
-        // Audio settings modal
-        if audio_open() {
-            if let Some(bridge) = live_bridge {
-                AudioSettingsModal {
-                    bridge: bridge,
-                    on_close: move |()| audio_open.set(false),
-                }
-            }
-        }
         }
     }
 }

@@ -25,6 +25,8 @@ pub struct RigViewState {
     pub out_peak_db: Signal<f32>,
     /// Stereo peaks in dBFS: (in L, in R, out L, out R).
     pub stereo_db: Signal<(f32, f32, f32, f32)>,
+    /// The incoming monitor mix at the headphone mixer, dBFS (L, R).
+    pub mix_db: Signal<(f32, f32)>,
     /// Compressor gain reduction (dB, positive = reducing).
     pub comp_gr_db: Signal<f32>,
     /// Input spectrum (dB per log bin, 20 Hz–20 kHz), ~15 Hz.
@@ -70,6 +72,7 @@ pub fn use_rig_state() -> RigViewState {
     let mut out_peak_db = use_signal(|| -90.0f32);
     let mut stereo_db = use_signal(|| (-90.0f32, -90.0f32, -90.0f32, -90.0f32));
     let mut comp_gr_db = use_signal(|| 0.0f32);
+    let mut mix_db = use_signal(|| (-90.0f32, -90.0f32));
     let spectrum = use_signal(Vec::<f32>::new);
     let comp_wave = use_signal(std::collections::HashMap::<String, (Vec<f32>, Vec<f32>, f32)>::new);
     let mut perf = use_signal(PerformanceModel::default);
@@ -101,6 +104,7 @@ pub fn use_rig_state() -> RigViewState {
                         peak_db(s.output_peak_r),
                     ));
                     comp_gr_db.set(s.comp_gr_db);
+                    mix_db.set((s.mix_db_l, s.mix_db_r));
                     active_patch.set(s.active_patch);
                     dsp.set(s.perf);
                 }
@@ -147,6 +151,7 @@ pub fn use_rig_state() -> RigViewState {
                         mut in_peak_db,
                         mut out_peak_db,
                         mut stereo_db,
+                        mut mix_db,
                         mut comp_gr_db,
                         mut spectrum,
                         mut comp_wave,
@@ -164,6 +169,7 @@ pub fn use_rig_state() -> RigViewState {
                         in_peak_db,
                         out_peak_db,
                         stereo_db,
+                        mix_db,
                         comp_gr_db,
                         spectrum,
                         comp_wave,
@@ -189,6 +195,9 @@ pub fn use_rig_state() -> RigViewState {
                                 peak_db(s.output_peak_r),
                             ));
                             comp_gr_db.set(s.comp_gr_db);
+                            if *mix_db.peek() != (s.mix_db_l, s.mix_db_r) {
+                                mix_db.set((s.mix_db_l, s.mix_db_r));
+                            }
                             active_patch.set(s.active_patch);
                             dsp.set(s.perf);
                         }
@@ -256,6 +265,7 @@ pub fn use_rig_state() -> RigViewState {
         in_peak_db,
         out_peak_db,
         stereo_db,
+        mix_db,
         comp_gr_db,
         spectrum,
         comp_wave,

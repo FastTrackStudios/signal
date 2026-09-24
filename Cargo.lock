@@ -13368,6 +13368,7 @@ dependencies = [
  "signal-guitar-proto",
  "signal-macromod",
  "signal-nam",
+ "signal-phones",
  "signal-proto",
  "signal-rig-host",
  "signal-rigs-proto",
@@ -13659,6 +13660,17 @@ dependencies = [
  "thiserror 2.0.18",
  "vox",
  "vox-types",
+]
+
+[[package]]
+name = "signal-phones"
+version = "0.1.0"
+dependencies = [
+ "daw-audio-io",
+ "libc",
+ "memmap2",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

@@ -56,7 +56,7 @@ pub use perform::PerformGrid;
 pub use preset_bar::PresetSidebar;
 pub use remote::GuitarRigRemote;
 pub use setlist_bar::SetlistSidebar;
-pub use settings::{AudioSettingsBridge, AudioSettingsModal};
+pub use settings::{AUDIO_SETTINGS_OPEN, AudioSettingsBridge, AudioSettingsModal, open_audio_settings};
 pub use sidebars::{LeftSidebar, LevellingChip};
 /// The node/preset tree (moved to signal-widgets — both rigs draw it).
 pub use signal_widgets::PresetTree;

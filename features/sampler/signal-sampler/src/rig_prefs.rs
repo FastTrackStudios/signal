@@ -48,6 +48,11 @@ pub struct RigAudioPrefs {
     pub phones_mix_in_l: usize,
     #[facet(default)]
     pub phones_mix_in_r: usize,
+    /// Play the monitor mix from the separate headphone-mixer process
+    /// (`signal-phones`) instead of this engine, so it keeps playing when
+    /// the rig overruns, stops or crashes. Needs `phones_routing`.
+    #[facet(default)]
+    pub phones_mixer: bool,
     /// Let the rig open a built-in microphone as its input. Off by default —
     /// the laptop mic through the laptop speakers feeds back the moment the
     /// rig opens (see `daw_audio_io::input_guard`). `allow_builtin_mic true`
@@ -79,6 +84,7 @@ impl Default for RigAudioPrefs {
             phones_out_r: 0,
             phones_mix_in_l: 0,
             phones_mix_in_r: 0,
+            phones_mixer: false,
             allow_builtin_mic: false,
             input_calibration_dbu: 0.0,
             nam_calibration_off: false,
@@ -106,6 +112,19 @@ impl RigAudioPrefs {
 }
 
 impl RigAudioPrefs {
+    /// The routing, zeros resolved to the live-rig conventions: `(main,
+    /// phones, monitor-mix in)` pairs, 0-based — main on 3-4, phones on
+    /// 1-2, the mix in on 3-4. Meaningful with `phones_routing` on.
+    #[must_use]
+    pub fn resolved_routing(&self) -> ((usize, usize), (usize, usize), (usize, usize)) {
+        let pair = |l: usize, r: usize, d: (usize, usize)| if l == 0 && r == 0 { d } else { (l, r) };
+        (
+            pair(self.main_out_l, self.main_out_r, (2, 3)),
+            pair(self.phones_out_l, self.phones_out_r, (0, 1)),
+            pair(self.phones_mix_in_l, self.phones_mix_in_r, (2, 3)),
+        )
+    }
+
     /// Input device substring, or `None` if unset (use default).
     #[must_use]
     pub fn input_name(&self) -> Option<&str> {

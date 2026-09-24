@@ -43,6 +43,30 @@ pub struct AudioPrefs {
     pub output_device: String,
     pub sample_rate: u32,
     pub buffer_size: u32,
+    /// Separate outputs for the main mix and the phones. Off: one stereo
+    /// pair (1-2) carries everything.
+    #[facet(default)]
+    pub phones_routing: bool,
+    /// 0-based output channels of the main mix (to the PA), with routing on.
+    #[facet(default)]
+    pub main_out_l: u32,
+    #[facet(default)]
+    pub main_out_r: u32,
+    /// 0-based output channels of the phones.
+    #[facet(default)]
+    pub phones_out_l: u32,
+    #[facet(default)]
+    pub phones_out_r: u32,
+    /// 0-based input channels of the incoming monitor mix (the same twice =
+    /// a mono mix, in both ears).
+    #[facet(default)]
+    pub mix_in_l: u32,
+    #[facet(default)]
+    pub mix_in_r: u32,
+    /// Play the monitor mix from the separate headphone-mixer process, so it
+    /// keeps playing when the rig overruns, stops or crashes.
+    #[facet(default)]
+    pub phones_mixer: bool,
 }
 
 impl Default for AudioPrefs {
@@ -53,6 +77,14 @@ impl Default for AudioPrefs {
             output_device: String::new(),
             sample_rate: 48_000,
             buffer_size: 256,
+            phones_routing: false,
+            main_out_l: 2,
+            main_out_r: 3,
+            phones_out_l: 0,
+            phones_out_r: 1,
+            mix_in_l: 2,
+            mix_in_r: 3,
+            phones_mixer: false,
         }
     }
 }
@@ -153,6 +185,12 @@ pub struct RigStatus {
     pub output_peak_r: f32,
     /// What the rig costs to run — see [`RigPerf`].
     pub perf: RigPerf,
+    /// The incoming monitor mix at the headphone mixer's input, before its
+    /// fader, dBFS (−90 = silence or no mixer).
+    #[facet(default)]
+    pub mix_db_l: f32,
+    #[facet(default)]
+    pub mix_db_r: f32,
 }
 
 /// A compressor block's rolling telemetry.
@@ -391,29 +429,78 @@ pub struct SongSlot {
     pub bpm: u32,
 }
 
-/// The headphone-cue module's state.
+/// The phones: your guitar and the incoming monitor mix, and how loud.
 ///
-/// The physical headphone bus lands with engine multi-out; until then
-/// volume/self-mix are staged state and `main_mute` is real (kills the main
-/// output, monitoring survives on the hardware direct path).
+/// Levels are fader positions, 0–1: silent at 0, unity at 0.75 (the
+/// [`PHONES_UNITY`] mark), +12 dB at the top — see [`phones_fader_db`].
 #[derive(Clone, PartialEq, Debug, Facet)]
 pub struct HeadphoneState {
-    /// Headphone level (0–1).
+    /// The phones overall — your guitar and the mix together.
     pub volume: f32,
-    /// Your own guitar's level in your ears only (0–1).
+    /// Your own guitar, in your ears only.
     pub self_mix: f32,
-    /// Main output muted (rehearse silently; headphones keep signal).
+    /// The incoming monitor mix.
+    #[facet(default = 0.75_f32)]
+    pub mix_level: f32,
+    /// Main output muted (rehearse silently; the phones keep playing).
     pub main_mute: bool,
+    /// The separate headphone-mixer process that plays the mix.
+    #[facet(default)]
+    pub mixer: PhonesMixer,
 }
 
 impl Default for HeadphoneState {
     fn default() -> Self {
         Self {
-            volume: 0.8,
-            self_mix: 0.5,
+            volume: PHONES_UNITY,
+            self_mix: PHONES_UNITY,
+            mix_level: PHONES_UNITY,
             main_mute: false,
+            mixer: PhonesMixer::default(),
         }
     }
+}
+
+/// Where unity sits on a phones fader.
+pub const PHONES_UNITY: f32 = 0.75;
+
+/// A phones fader position's gain, dB (−∞ at the bottom): unity at 0.75,
+/// +12 dB at the top, 48 dB of travel. The headphone mixer uses the same
+/// law, so the guitar and mix faders read alike.
+#[must_use]
+pub fn phones_fader_db(pos: f32) -> f32 {
+    if pos <= 0.001 {
+        return f32::NEG_INFINITY;
+    }
+    (pos.clamp(0.0, 1.0) - PHONES_UNITY) * 48.0
+}
+
+/// The headphone-mixer process, as the rig sees it.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct PhonesMixer {
+    /// Turned on (Audio Settings → Phones).
+    pub enabled: bool,
+    /// What it is doing — see [`PhonesMixerState`].
+    pub state: u32,
+    /// Its process id (0 = none).
+    pub pid: u32,
+    /// The device's rate and the mixer's block, while playing.
+    pub rate: u32,
+    pub block: u32,
+}
+
+/// [`PhonesMixer::state`] values.
+pub struct PhonesMixerState;
+impl PhonesMixerState {
+    /// Turned off.
+    pub const OFF: u32 = 0;
+    /// Playing the mix.
+    pub const PLAYING: u32 = 1;
+    /// Running, but the device is not there (retrying every second).
+    pub const NO_DEVICE: u32 = 2;
+    /// Turned on and not running yet (starting, or restarting after it
+    /// died).
+    pub const STARTING: u32 = 3;
 }
 
 /// One tuner reading. `active: false` means no usable signal (too quiet /
@@ -1105,8 +1192,14 @@ pub mod rig {
         fn set_patch_preset2(&self, patch: u32, preset: u32);
         /// Unload Amp R — the slot goes back to an empty, bypassed passthrough.
         fn clear_patch_preset2(&self, patch: u32);
-        /// Set the headphone-cue module (volume + self mix, 0–1 each).
+        /// Set the phones: overall volume and your guitar in them (fader
+        /// positions, 0–1 — see [`HeadphoneState`]).
         fn set_headphone(&self, volume: f32, self_mix: f32);
+        /// Set the incoming monitor mix's level in the phones (a fader
+        /// position, 0–1).
+        fn set_phones_mix(&self, level: f32);
+        /// Restart the headphone-mixer process (a short gap in the mix).
+        fn restart_phones_mixer(&self);
         /// Mute/unmute the main output (headphone cue survives).
         fn toggle_main_mute(&self);
         /// Master output trim in dB (how loud the rig is for FOH).
