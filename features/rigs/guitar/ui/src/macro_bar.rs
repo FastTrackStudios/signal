@@ -260,7 +260,7 @@ fn MacroCell(
                 style: format!(
                     "display: flex; flex-direction: column; align-items: center; gap: 2px; \
                      padding: 6px 0; border-radius: 12px; cursor: pointer; \
-                     border: 1px solid transparent; transition: all 150ms; background: {};",
+                     border: 1px solid transparent; background: {};",
                     if over_cell() { "rgba(39,39,42,0.4)" } else { "transparent" },
                 ),
                 onmouseenter: move |_| over_cell.set(true),
@@ -431,7 +431,7 @@ fn ChildCell(
         div {
             style: format!(
                 "{width_css} display: flex; flex-direction: column; align-items: center; gap: 4px; \
-                 padding: 6px 0; border-radius: 8px; cursor: pointer; transition: all 150ms; \
+                 padding: 6px 0; border-radius: 8px; cursor: pointer; \
                  border: 1px solid transparent; background: {}; opacity: {};",
                 if over() { "rgba(63,63,70,0.4)" } else { "transparent" },
                 if dim { "0.4" } else { "1" },
@@ -451,13 +451,13 @@ fn ChildCell(
                                 "width: 48px; height: 16px; border-radius: 6px; font-size: 8px; font-weight: 700; \
                                  display: flex; align-items: center; justify-content: center; \
                                  border: 1px solid #52525b; background: rgba(39,39,42,0.6); color: #52525b; \
-                                 text-transform: uppercase; letter-spacing: 0.05em; transition: all 150ms;".to_string()
+                                 text-transform: uppercase; letter-spacing: 0.05em;".to_string()
                             } else {
                                 format!(
                                     "width: 48px; height: 16px; border-radius: 6px; font-size: 8px; font-weight: 700; \
                                      display: flex; align-items: center; justify-content: center; \
                                      border: 1px solid transparent; background: {color}; color: #18181b; \
-                                     text-transform: uppercase; letter-spacing: 0.05em; transition: all 150ms;"
+                                     text-transform: uppercase; letter-spacing: 0.05em;"
                                 )
                             },
                             onclick: move |e: MouseEvent| {
@@ -561,7 +561,7 @@ fn DualRowDropdown(
     let link = |on: bool| {
         format!(
             "display: flex; align-items: center; justify-content: center; padding: 2px 4px; border-radius: 4px; \
-             cursor: pointer; transition: all 150ms; background: {};",
+             cursor: pointer; background: {};",
             if on { "rgba(22,78,99,0.4)" } else { "transparent" },
         )
     };

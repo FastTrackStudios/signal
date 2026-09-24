@@ -420,7 +420,7 @@ pub fn PerformGrid(
                         rsx! {
                             button {
                                 key: "{b.id}",
-                                class: "rounded-2xl border flex flex-col items-center justify-center gap-2 p-3 transition-all duration-100",
+                                class: "rounded-2xl border flex flex-col items-center justify-center gap-2 p-3",
                                 style: if on {
                                     format!("border-color: {color}; background: color-mix(in srgb, {color} 22%, #0a0a0a); box-shadow: inset 0 0 40px color-mix(in srgb, {color} 12%, transparent);")
                                 } else {
@@ -790,7 +790,7 @@ fn StackTile(
             },
             onmouseleave: move |_| menu.set(false),
         HoldButton {
-            class: format!("{layout_cls} transition-all h-full {state_cls}"),
+            class: format!("{layout_cls} h-full {state_cls}"),
             style: format!("background-color: {bg}; color: {text};"),
             on_tap: cbs.cb(move |(): ()| on_press.call(index)),
             on_hold,
@@ -1213,7 +1213,7 @@ fn FnTile(
     };
     rsx! {
         button {
-            class: format!("{layout_cls} transition-all h-full {state_cls}"),
+            class: format!("{layout_cls} h-full {state_cls}"),
             style: "background-color: {bg}; color: {text};",
             onclick: move |_| onclick.call(()),
             SwitchNo { no: switch_no }
@@ -1250,7 +1250,7 @@ fn BoostTile(
     rsx! {
         HoldButton {
             class: format!(
-                "relative flex items-center justify-center gap-2 rounded-lg transition-all h-full {state_cls}"
+                "relative flex items-center justify-center gap-2 rounded-lg h-full {state_cls}"
             ),
             style: "background-color: #fafafa; color: #0a0a0a;".to_string(),
             on_tap: on_toggle,
