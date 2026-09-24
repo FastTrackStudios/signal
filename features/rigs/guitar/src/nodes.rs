@@ -477,7 +477,7 @@ fn settle_drives(
 
 /// The rig's sample rate the drive curves are cached at — levels are set
 /// at build time, before any rig says what rate it runs.
-const LEVEL_SAMPLE_RATE: f64 = 48_000.0;
+
 
 /// Every amp and drive block's Output Level, written into its trims as the
 /// chain is built: the amp's from its module snapshot (via the pool preset),
@@ -513,9 +513,8 @@ fn apply_block_levels(
         };
         let drive = block.param_f32("drive").unwrap_or(0.5);
         let path = std::path::Path::new(&block.nam);
-        block.input_trim_db = signal_sampler::nam_calibrate::drive_input_db(drive);
-        block.output_trim_db = level
-            + signal_sampler::nam_calibrate::drive_output_delta_cached(path, LEVEL_SAMPLE_RATE, drive);
+        (block.input_trim_db, block.output_trim_db) =
+            signal_sampler::nam_calibrate::drive_trims(path, level, drive);
     }
 }
 

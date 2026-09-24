@@ -25,6 +25,8 @@
 use std::path::Path;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
+#[cfg(not(target_arch = "wasm32"))]
+use std::{collections::HashMap, sync::Arc};
 
 use facet::Facet;
 
@@ -32,6 +34,8 @@ use crate::SamplerError;
 use crate::rig::RigBlock;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::rig::{GuitarRig, ModelId};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::block_params::{BlockDelta, BlockWrite};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::rig::{PreparedChain, prepare_chain};
 
@@ -377,9 +381,13 @@ pub struct ProfileRig {
     no_rotate: Vec<bool>,
     /// The spec each installed chain was built from, so a reload rebuilds
     /// only the chains whose spec changed (see [`ReloadTicket::plan`]).
-    chain_keys: std::collections::HashMap<ModelId, ChainKey>,
+    chain_keys: HashMap<ModelId, ChainKey>,
     /// The newest reload ticket's generation; only it may commit.
     reload_gen: u64,
+    /// Every value written to a running chain since it was built or
+    /// retuned — what a reload puts back on that patch's next chain.
+    /// Control-thread only.
+    live_log: std::sync::Mutex<LiveLog>,
     /// Global "time bypass": when on, every time/fx block (the Time module) on
     /// the active patch is bypassed. Re-applied on each `activate`.
     fx_bypass: bool,
@@ -410,10 +418,10 @@ struct ChainSpec {
 /// The result is parallel to `specs` — `None` where the patch had nothing to
 /// build — so the caller can install them in patch order.
 fn prepare_all(
-    specs: &[Option<ChainSpec>],
+    specs: &[Option<Arc<ChainSpec>>],
     sample_rate: u32,
 ) -> Vec<Option<Result<PreparedChain, String>>> {
-    let one = |spec: &Option<ChainSpec>| {
+    let one = |spec: &Option<Arc<ChainSpec>>| {
         spec.as_ref()
             .map(|s| prepare_chain(&s.blocks, &s.block_ids, sample_rate))
     };
@@ -458,14 +466,20 @@ fn prepare_all(
 // patch again — seconds, under whatever lock guarded the rig. A reload is
 // now three phases:
 //
-// 1. **ticket** (`ProfileRig::begin_reload`, under the lock, cheap): the key
-//    of every installed chain, and a generation;
+// 1. **ticket** (`ProfileRig::begin_reload`, under the lock, cheap): the
+//    spec of every installed chain, a generation, and where the live-write
+//    log stood;
 // 2. **plan + prepare** (`ReloadTicket::plan`, `ReloadPlan::prepare`, no
-//    lock, no rig): resolve the new profile's chains, reuse every one whose
-//    key is unchanged, build only the rest;
-// 3. **commit** (`ProfileRig::commit_reload`, under the lock, fast): install,
-//    remap by patch name, carry the switcher's state across, switch the
-//    playing patch over the way a footswitch does, retire what is left.
+//    lock, no rig): resolve the new profile's chains; keep every one whose
+//    spec is unchanged, *retune* one that differs only in what can be
+//    written to its running blocks (params, NAM trims — see
+//    `block_params`), and build only the rest;
+// 3. **commit** (`ProfileRig::commit_reload`, under the lock, fast): write
+//    the retunes, install the builds with the patch's live state (knobs,
+//    macros, boost, tempo: the live-write log, and the session's overlay)
+//    already on them, remap by patch name, carry the switcher's state
+//    across, switch a rebuilt playing chain in the way a footswitch does,
+//    retire what is left.
 
 /// Hands out reload generations, process-wide — so a plan made against one
 /// rig can never be mistaken for current on another (a reopened device).
@@ -493,6 +507,20 @@ pub enum ReloadMode {
 struct ChainKey {
     patch: String,
     key: String,
+    /// The part of `key` a retune cannot change: asset stamps, NAM build
+    /// settings.
+    stamps: String,
+    spec: Arc<ChainSpec>,
+}
+
+/// One installed chain, as a ticket carries it.
+#[cfg(not(target_arch = "wasm32"))]
+struct Installed {
+    id: ModelId,
+    patch: String,
+    key: String,
+    stamps: String,
+    spec: Arc<ChainSpec>,
 }
 
 /// A stack's state carried across a [`ReloadMode::Keep`] reload.
@@ -507,75 +535,175 @@ struct CarriedStack {
     no_rotate: bool,
 }
 
+/// What becomes of one patch's chain in a reload.
+#[cfg(not(target_arch = "wasm32"))]
+enum Fate {
+    /// Nothing to build (no blocks with a backend).
+    Nothing,
+    /// The installed chain, as it is.
+    Keep(ModelId),
+    /// The installed chain, with these writes to its running blocks.
+    Retune(ModelId, Vec<(usize, BlockWrite)>),
+    /// A new chain.
+    Build,
+}
+
+/// A value written to a running block since it was built — a knob, a macro,
+/// the boost, the tempo on a delay — kept so a chain built or retuned for the
+/// same patch comes in with it.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Debug, PartialEq)]
+pub enum LiveWrite {
+    /// A param, in the value the live path takes (plain, as the knob).
+    Param(String, f32),
+    Bypass(bool),
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Debug)]
+struct LogEntry {
+    block: String,
+    write: LiveWrite,
+    seq: u64,
+}
+
+/// Every chain's live writes, newest last, one per block and param.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Default)]
+struct LiveLog {
+    seq: u64,
+    chains: HashMap<ModelId, Vec<LogEntry>>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl LiveLog {
+    fn record(&mut self, chain: ModelId, block: &str, write: LiveWrite) {
+        self.seq += 1;
+        let entries = self.chains.entry(chain).or_default();
+        entries.retain(|e| !(e.block == block && same_target(&e.write, &write)));
+        entries.push(LogEntry { block: block.to_string(), write, seq: self.seq });
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn same_target(a: &LiveWrite, b: &LiveWrite) -> bool {
+    match (a, b) {
+        (LiveWrite::Param(x, _), LiveWrite::Param(y, _)) => x == y,
+        (LiveWrite::Bypass(_), LiveWrite::Bypass(_)) => true,
+        _ => false,
+    }
+}
+
 /// Phase one of a reload — see [`ProfileRig::begin_reload`].
 #[cfg(not(target_arch = "wasm32"))]
 pub struct ReloadTicket {
     generation: u64,
     sample_rate: u32,
     mode: ReloadMode,
-    /// `(chain, patch, key)` for every installed chain.
-    installed: Vec<(ModelId, String, String)>,
+    installed: Vec<Installed>,
+    /// Where the live-write log stood: a write after this is *late* — made
+    /// while this reload built — and wins over the reload's own values.
+    log_seq: u64,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl ReloadTicket {
-    /// Resolve `profile`'s chains and diff them against the installed ones:
-    /// a patch whose chain spec — its blocks with their params, assets (and
-    /// the assets' file stamps) and ids — matches an installed chain's reuses
-    /// that chain (its own first, then any other free one); the rest are
-    /// listed to build. Needs no rig: run it off the lock.
+    /// Resolve `profile`'s chains and diff them against the installed ones.
+    ///
+    /// A patch whose chain spec — blocks with their params, assets (and the
+    /// assets' file stamps), block ids — matches an installed chain keeps
+    /// that chain (its own first, then any other free one). A patch whose
+    /// own chain differs only in what can be written to its running blocks
+    /// (params of a built-in effect, a NAM block's trims — see
+    /// [`block_delta`](crate::block_params::block_delta)) keeps it too,
+    /// retuned. The rest are listed to build. Needs no rig: run it off the
+    /// lock.
     #[must_use]
     pub fn plan(self, profile: RigProfile, base_dir: Option<&Path>) -> ReloadPlan {
-        let specs = resolve_specs(&profile, base_dir);
-        let keys: Vec<Option<String>> = specs.iter().map(|s| s.as_ref().map(chain_key)).collect();
+        let specs: Vec<Option<Arc<ChainSpec>>> = resolve_specs(&profile, base_dir)
+            .into_iter()
+            .map(|s| s.map(Arc::new))
+            .collect();
+        let keys: Vec<Option<(String, String)>> =
+            specs.iter().map(|s| s.as_deref().map(chain_key)).collect();
         let mut claimed = vec![false; self.installed.len()];
-        let mut reuse: Vec<Option<ModelId>> = vec![None; specs.len()];
-        // Its own chain first, so a patch keeps the chain it had (and any
-        // tail it is ringing), then any identical free one.
+        let mut fate: Vec<Fate> = specs
+            .iter()
+            .map(|s| if s.is_some() { Fate::Build } else { Fate::Nothing })
+            .collect();
+        // Unchanged: its own chain first, so a patch keeps the chain it had
+        // (and any tail it is ringing), then any identical free one.
         for own in [true, false] {
             for (i, patch) in profile.patches.iter().enumerate() {
-                let Some(key) = &keys[i] else { continue };
-                if reuse[i].is_some() {
+                let Some((key, _)) = &keys[i] else { continue };
+                if !matches!(fate[i], Fate::Build) {
                     continue;
                 }
-                let hit = self.installed.iter().enumerate().position(|(j, (_, name, k))| {
-                    !claimed[j] && k == key && (!own || name.eq_ignore_ascii_case(&patch.name))
+                let hit = self.installed.iter().enumerate().position(|(j, c)| {
+                    !claimed[j] && c.key == *key && (!own || c.patch.eq_ignore_ascii_case(&patch.name))
                 });
                 if let Some(j) = hit {
                     claimed[j] = true;
-                    reuse[i] = Some(self.installed[j].0);
+                    fate[i] = Fate::Keep(self.installed[j].id);
                 }
             }
         }
-        let build = specs
-            .into_iter()
-            .zip(&reuse)
-            .map(|(spec, r)| if r.is_some() { None } else { spec })
-            .collect();
+        // Changed only in settings: its own chain, retuned.
+        for (i, patch) in profile.patches.iter().enumerate() {
+            let (Some(spec), Some((_, stamps))) = (&specs[i], &keys[i]) else { continue };
+            if !matches!(fate[i], Fate::Build) {
+                continue;
+            }
+            let Some(j) = self.installed.iter().enumerate().position(|(j, c)| {
+                !claimed[j] && c.patch.eq_ignore_ascii_case(&patch.name)
+            }) else {
+                continue;
+            };
+            let old = &self.installed[j];
+            if old.stamps != *stamps || old.spec.block_ids != spec.block_ids {
+                continue;
+            }
+            let mut writes = Vec::new();
+            let mut live = true;
+            for (slot, (a, b)) in old.spec.blocks.iter().zip(&spec.blocks).enumerate() {
+                match crate::block_params::block_delta(a, b) {
+                    BlockDelta::Same => {}
+                    BlockDelta::Live(w) => writes.push((slot, w)),
+                    BlockDelta::Structural => {
+                        live = false;
+                        break;
+                    }
+                }
+            }
+            if live {
+                claimed[j] = true;
+                fate[i] = Fate::Retune(old.id, writes);
+            }
+        }
         ReloadPlan {
             generation: self.generation,
             sample_rate: self.sample_rate,
             mode: self.mode,
+            log_seq: self.log_seq,
             profile,
             keys,
-            reuse,
-            build,
+            specs,
+            fate,
         }
     }
 }
 
-/// Phase two of a reload: which chains to reuse and which to build.
+/// Phase two of a reload: which chains to keep, retune and build.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct ReloadPlan {
     generation: u64,
     sample_rate: u32,
     mode: ReloadMode,
+    log_seq: u64,
     profile: RigProfile,
-    keys: Vec<Option<String>>,
-    /// Per patch: the installed chain it keeps.
-    reuse: Vec<Option<ModelId>>,
-    /// Per patch: what to build (`None`: reused, or nothing to build).
-    build: Vec<Option<ChainSpec>>,
+    keys: Vec<Option<(String, String)>>,
+    specs: Vec<Option<Arc<ChainSpec>>>,
+    fate: Vec<Fate>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -583,13 +711,19 @@ impl ReloadPlan {
     /// Chains this plan builds.
     #[must_use]
     pub fn builds(&self) -> usize {
-        self.build.iter().flatten().count()
+        self.fate.iter().filter(|f| matches!(f, Fate::Build)).count()
     }
 
-    /// Chains this plan reuses.
+    /// Chains this plan keeps as they are.
     #[must_use]
     pub fn reuses(&self) -> usize {
-        self.reuse.iter().flatten().count()
+        self.fate.iter().filter(|f| matches!(f, Fate::Keep(_))).count()
+    }
+
+    /// Chains this plan keeps and writes new settings to.
+    #[must_use]
+    pub fn retunes(&self) -> usize {
+        self.fate.iter().filter(|f| matches!(f, Fate::Retune(..))).count()
     }
 
     /// Build the chains the plan lists — concurrently, and touching no rig,
@@ -599,12 +733,14 @@ impl ReloadPlan {
         let began = std::time::Instant::now();
         // Only what needs building goes to the builders, so one changed
         // chain is one chain's work, not a pass over every patch.
-        let todo: Vec<usize> = (0..self.build.len()).filter(|&i| self.build[i].is_some()).collect();
+        let todo: Vec<usize> = (0..self.fate.len())
+            .filter(|&i| matches!(self.fate[i], Fate::Build))
+            .collect();
         let mut built: Vec<Option<Result<PreparedChain, String>>> =
-            (0..self.build.len()).map(|_| None).collect();
+            (0..self.fate.len()).map(|_| None).collect();
         if !todo.is_empty() {
-            let mut build = self.build;
-            let specs: Vec<Option<ChainSpec>> = todo.iter().map(|&i| build[i].take()).collect();
+            let specs: Vec<Option<Arc<ChainSpec>>> =
+                todo.iter().map(|&i| self.specs[i].clone()).collect();
             for (&i, outcome) in todo.iter().zip(prepare_all(&specs, self.sample_rate)) {
                 built[i] = outcome;
             }
@@ -613,10 +749,13 @@ impl ReloadPlan {
             generation: self.generation,
             sample_rate: self.sample_rate,
             mode: self.mode,
+            log_seq: self.log_seq,
             profile: self.profile,
             keys: self.keys,
-            reuse: self.reuse,
+            specs: self.specs,
+            fate: self.fate,
             built,
+            overlay: HashMap::new(),
             build_ms: began.elapsed().as_secs_f64() * 1000.0,
         }
     }
@@ -629,11 +768,43 @@ pub struct PreparedReload {
     generation: u64,
     sample_rate: u32,
     mode: ReloadMode,
+    log_seq: u64,
     profile: RigProfile,
-    keys: Vec<Option<String>>,
-    reuse: Vec<Option<ModelId>>,
+    keys: Vec<Option<(String, String)>>,
+    specs: Vec<Option<Arc<ChainSpec>>>,
+    fate: Vec<Fate>,
     built: Vec<Option<Result<PreparedChain, String>>>,
+    /// Per patch (lowercase name): writes to put on its new or retuned chain
+    /// before it plays — the session's macro positions over the new
+    /// baseline.
+    overlay: HashMap<String, Vec<(String, LiveWrite)>>,
     build_ms: f64,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl PreparedReload {
+    /// The patch named `name` in the profile this reload commits.
+    #[must_use]
+    pub fn patch(&self, name: &str) -> Option<&RigPatch> {
+        let i = self.profile.patch_index(name)?;
+        self.profile.patches.get(i)
+    }
+
+    /// Whether this reload gives `name` a new chain or writes new settings
+    /// to its chain — so its live state has to be put back on.
+    #[must_use]
+    pub fn changes(&self, name: &str) -> bool {
+        self.profile
+            .patch_index(name)
+            .is_some_and(|i| matches!(self.fate[i], Fate::Build | Fate::Retune(..)))
+    }
+
+    /// Put `writes` — `(block id, write)` — on `patch`'s chain before it
+    /// plays, if the reload changes it: after the logged live writes, before
+    /// the late ones (see [`ProfileRig::commit_reload`]).
+    pub fn set_overlay(&mut self, patch: &str, writes: Vec<(String, LiveWrite)>) {
+        self.overlay.insert(patch.to_ascii_lowercase(), writes);
+    }
 }
 
 /// How a commit went.
@@ -664,10 +835,14 @@ pub struct ReloadCommit {
     pub built: usize,
     /// Chains kept as they were.
     pub reused: usize,
+    /// Chains kept, with new settings written to their running blocks.
+    pub retuned: usize,
     /// Chains taken out.
     pub retired: usize,
     /// Chains that failed to build.
     pub failed: usize,
+    /// Live writes put back on new and retuned chains before they played.
+    pub carried: usize,
     /// Whether the chain playing changed (a gapless switch happened).
     pub switched: bool,
     /// How long phase two took, off the lock.
@@ -683,6 +858,37 @@ impl ReloadCommit {
     pub fn is_committed(&self) -> bool {
         self.status != CommitStatus::Stale
     }
+}
+
+/// The ids a patch's chain gives its blocks, in chain order — one per block
+/// with a backend (the blocks a chain is built from).
+#[cfg(not(target_arch = "wasm32"))]
+#[must_use]
+pub fn chain_block_ids(patch: &RigPatch) -> Vec<String> {
+    let blocks: Vec<&RigBlock> = patch.chain.iter().filter(|b| b.has_backend()).collect();
+    block_ids_for(&blocks)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn block_ids_for(blocks: &[&RigBlock]) -> Vec<String> {
+    // Stable, unique per-block ids (block name, deduped) so the UI can
+    // address each block (bypass toggle, param edits) individually —
+    // otherwise assetless native blocks all collapse to the id "block".
+    let mut seen: HashMap<String, u32> = HashMap::new();
+    blocks
+        .iter()
+        .map(|b| {
+            let base = if b.name.trim().is_empty() {
+                format!("{:?}", b.block_type)
+            } else {
+                b.name.trim().to_string()
+            };
+            let n = seen.entry(base.clone()).or_insert(0);
+            let id = if *n == 0 { base.clone() } else { format!("{base} {}", *n + 1) };
+            *n += 1;
+            id
+        })
+        .collect()
 }
 
 /// Resolve every patch into the blocks and ids its chain is built from.
@@ -721,44 +927,26 @@ fn resolve_specs(profile: &RigProfile, base_dir: Option<&Path>) -> Vec<Option<Ch
                 tracing::warn!(patch = %patch.name, "ProfileRig: patch has no blocks — skipping");
                 return None;
             }
-            // Stable, unique per-block ids (block name, deduped) so the UI can
-            // address each block (bypass toggle, param edits) individually —
-            // otherwise assetless native blocks all collapse to the id "block".
-            let mut seen: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
-            let block_ids: Vec<String> = blocks
-                .iter()
-                .map(|b| {
-                    let base = if b.name.trim().is_empty() {
-                        format!("{:?}", b.block_type)
-                    } else {
-                        b.name.trim().to_string()
-                    };
-                    let n = seen.entry(base.clone()).or_insert(0);
-                    let id = if *n == 0 {
-                        base.clone()
-                    } else {
-                        format!("{base} {}", *n + 1)
-                    };
-                    *n += 1;
-                    id
-                })
-                .collect();
+            let block_ids = block_ids_for(&blocks.iter().collect::<Vec<_>>());
             Some(ChainSpec { blocks, block_ids })
         })
         .collect()
 }
 
-/// What a chain is built from, as a key: equal keys build the same chain.
+/// What a chain is built from, as keys: `(everything, stamps)`. Equal
+/// `everything` builds the same chain; equal `stamps` is what a retune
+/// needs besides equal shapes.
 ///
-/// Every block field that reaches the build — type, assets, params, trims,
-/// names, the chain's block ids — plus each asset file's modification stamp (a capture
-/// re-recorded to the same path is a different chain) and the global NAM
-/// build settings. A block's `bypassed` is left out on purpose: it only
-/// seeds the block's gate, and [`ProfileRig::activate`] sets every gate from
-/// the patch anyway — so toggling a bypass in the definition reuses the
-/// chain. So is its `id`, a UUID the build never reads.
+/// `everything` is every block field that reaches the build — type, assets,
+/// params, trims, names, the chain's block ids — plus `stamps`: each asset
+/// file's modification stamp (a capture re-recorded to the same path is a
+/// different chain) and the global NAM build settings. A block's `bypassed`
+/// is left out on purpose: it only seeds the block's gate, and
+/// [`ProfileRig::activate`] sets every gate from the patch anyway — so
+/// toggling a bypass in the definition reuses the chain. So is its `id`, a
+/// UUID the build never reads.
 #[cfg(not(target_arch = "wasm32"))]
-fn chain_key(spec: &ChainSpec) -> String {
+fn chain_key(spec: &ChainSpec) -> (String, String) {
     use std::fmt::Write as _;
     fn stamp(path: &str) -> String {
         if path.is_empty() {
@@ -776,11 +964,12 @@ fn chain_key(spec: &ChainSpec) -> String {
             })
             .unwrap_or_else(|| "-".into())
     }
-    let mut key = format!(
+    let mut stamps = format!(
         "size={:?};cal={:?};",
         crate::nam::model_size(),
         crate::nam::interface_calibration_dbu()
     );
+    let mut key = String::new();
     for (block, id) in spec.blocks.iter().zip(&spec.block_ids) {
         let mut b = block.clone();
         b.bypassed = false;
@@ -788,15 +977,90 @@ fn chain_key(spec: &ChainSpec) -> String {
         // by the build: two realizations of one definition are one chain.
         b.id = String::new();
         let _ = write!(
-            key,
-            "[{id}|{b:?}|{}|{}|{}|{}]",
+            stamps,
+            "[{}|{}|{}|{}]",
             stamp(&b.nam),
             stamp(&b.ir),
             stamp(&b.plugin),
             stamp(&b.sample)
         );
+        let _ = write!(key, "[{id}|{b:?}]");
     }
-    key
+    (format!("{stamps}{key}"), stamps)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+/// A patch's live state, for its new or retuned chain: the old chain's
+/// logged writes the edit left alone, then `overlay`, then the writes
+/// made after the ticket (`seq > log_seq`) whatever the edit did. Returns
+/// the writes to put on the chain, its new log, and the bypasses to land
+/// it with.
+fn carry_live_state(
+    old: Option<&ChainSpec>,
+    new: &ChainSpec,
+    entries: &[LogEntry],
+    overlay: &[(String, LiveWrite)],
+    log_seq: u64,
+) -> (Vec<(usize, BlockWrite)>, Vec<LogEntry>, Vec<(String, bool)>) {
+    let edited = |block: &str, w: &LiveWrite| -> bool {
+        let (Some(old), Some(bi)) = (old, new.block_ids.iter().position(|b| b == block)) else {
+            return true;
+        };
+        let Some(oi) = old.block_ids.iter().position(|b| b == block) else {
+            return true;
+        };
+        let (a, b) = (&old.blocks[oi], &new.blocks[bi]);
+        match w {
+            LiveWrite::Bypass(_) => a.bypassed != b.bypassed,
+            LiveWrite::Param(p, _) if p == "input_trim" => a.input_trim_db != b.input_trim_db,
+            LiveWrite::Param(p, _) if p == "output_trim" => a.output_trim_db != b.output_trim_db,
+            LiveWrite::Param(p, _) => a.param_str(p) != b.param_str(p),
+        }
+    };
+    let mut order: Vec<LogEntry> = entries
+        .iter()
+        .filter(|e| e.seq <= log_seq && !edited(&e.block, &e.write))
+        .cloned()
+        .collect();
+    order.extend(overlay.iter().map(|(block, write)| LogEntry {
+        block: block.clone(),
+        write: write.clone(),
+        seq: 0,
+    }));
+    order.extend(entries.iter().filter(|e| e.seq > log_seq).cloned());
+
+    let mut writes: Vec<(usize, BlockWrite)> = Vec::new();
+    let mut bypass: Vec<(String, bool)> = Vec::new();
+    let mut kept: Vec<LogEntry> = Vec::new();
+    for e in order {
+        let Some(slot) = new.block_ids.iter().position(|b| *b == e.block) else {
+            continue;
+        };
+        let block = &new.blocks[slot];
+        match &e.write {
+            LiveWrite::Bypass(on) => {
+                bypass.retain(|(b, _)| *b != e.block);
+                bypass.push((e.block.clone(), *on));
+            }
+            LiveWrite::Param(p, v) => {
+                let w = if block.is_nam() && p == "input_trim" {
+                    BlockWrite::Nam { input_db: Some(*v), output_db: None }
+                } else if block.is_nam() && p == "output_trim" {
+                    BlockWrite::Nam { input_db: None, output_db: Some(*v) }
+                } else if crate::block_params::is_known(block.block_type, p) && block.is_native() {
+                    BlockWrite::Params(vec![(p.clone(), f64::from(*v))])
+                } else {
+                    // A hosted plugin's param lives on its slot, not
+                    // its chain; nothing to carry.
+                    continue;
+                };
+                writes.push((slot, w));
+            }
+        }
+        kept.retain(|k| !(k.block == e.block && same_target(&k.write, &e.write)));
+        kept.push(e);
+    }
+    (writes, kept, bypass)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -810,8 +1074,9 @@ impl ProfileRig {
             stack_pos: Vec::new(),
             stack_base: Vec::new(),
             no_rotate: Vec::new(),
-            chain_keys: std::collections::HashMap::new(),
+            chain_keys: HashMap::new(),
             reload_gen: 0,
+            live_log: std::sync::Mutex::new(LiveLog::default()),
             fx_bypass: false,
             level_match: true,
             target_loudness_db: -18.0,
@@ -929,13 +1194,14 @@ impl ProfileRig {
     }
 
     /// Phase one of a gapless reload: a ticket carrying what the plan diffs
-    /// against — every installed chain's spec key — and a generation.
+    /// against — every installed chain's spec — a generation, and where the
+    /// live-write log stands.
     ///
-    /// Cheap (clones a few strings), so take it under whatever lock guards
-    /// this rig, then release the lock for [`ReloadTicket::plan`] and
-    /// [`ReloadPlan::prepare`], which never touch the rig. Taking a ticket
-    /// supersedes every earlier one: only the newest commits (see
-    /// [`commit_reload`](Self::commit_reload)).
+    /// Cheap (a few string clones and reference counts), so take it under
+    /// whatever lock guards this rig, then release the lock for
+    /// [`ReloadTicket::plan`] and [`ReloadPlan::prepare`], which never touch
+    /// the rig. Taking a ticket supersedes every earlier one: only the newest
+    /// commits (see [`commit_reload`](Self::commit_reload)).
     pub fn begin_reload(&mut self, mode: ReloadMode) -> ReloadTicket {
         self.reload_gen = next_reload_gen();
         ReloadTicket {
@@ -945,30 +1211,56 @@ impl ProfileRig {
             installed: self
                 .chain_keys
                 .iter()
-                .map(|(&id, k)| (id, k.patch.clone(), k.key.clone()))
+                .map(|(&id, k)| Installed {
+                    id,
+                    patch: k.patch.clone(),
+                    key: k.key.clone(),
+                    stamps: k.stamps.clone(),
+                    spec: k.spec.clone(),
+                })
                 .collect(),
+            log_seq: self.log().seq,
         }
     }
 
-    /// Phase three: install what was built, keep what was reused, switch
-    /// the playing patch over gaplessly and retire what nothing references.
+    fn log(&self) -> std::sync::MutexGuard<'_, LiveLog> {
+        self.live_log
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Phase three: write the retunes, install what was built, keep what
+    /// was reused, switch the playing patch over gaplessly and retire what
+    /// nothing references.
     ///
-    /// Fast — moves, map inserts and at most one switch (the same one a
-    /// footswitch makes). Under `&mut self`, but nothing here waits on a
-    /// build.
+    /// Fast — param writes, moves, map inserts and at most one switch (the
+    /// same one a footswitch makes). Under `&mut self`, but nothing here
+    /// waits on a build.
     ///
     /// - A reload whose ticket is not the newest (another reload, or a
     ///   [`load_profile`](Self::load_profile), began since) is **stale**: it
     ///   changes nothing, and its chains come back in the result to be
     ///   dropped.
+    /// - A **retuned** chain gets the new settings written to its running
+    ///   blocks (see [`crate::block_params`]): no new chain, no switch, no
+    ///   crossfade. Written as a param event exactly as its build would have
+    ///   set it.
+    /// - A patch's **live state** — every value written to its old chain
+    ///   since it was built (knob, macro, boost, tempo; see
+    ///   [`set_block_param`](Self::set_block_param)) — goes onto its new or
+    ///   retuned chain *before it plays*: first what the edit did not change
+    ///   (the edit wins over an older live value), then the overlay
+    ///   ([`PreparedReload::set_overlay`]), then every write made after the
+    ///   ticket, edit or no (a knob turned while the chains built is the
+    ///   newest word).
     /// - Patches are matched **by name**: the patch that was playing plays
     ///   on ([`ReloadMode::Keep`]) unless `activate` names another, and each
     ///   stack keeps its cursor on the patch it pointed at, its song rotation
     ///   and its no-rotate flag.
-    /// - The playing patch whose chain changed switches through
+    /// - The playing patch whose chain was rebuilt switches through
     ///   [`GuitarRig::set_active`]: its old chain becomes a tail (only the
-    ///   dry path crossfades) and the new one fades in. One whose chain was
-    ///   reused does not switch at all.
+    ///   dry path crossfades) and the new one fades in. One kept or retuned
+    ///   does not switch at all.
     /// - A chain no longer referenced is retired only after that switch, so
     ///   it is never the one playing; one still ringing stays owned by its
     ///   tail until the tail is done (see [`GuitarRig::retire_chain`]).
@@ -985,10 +1277,13 @@ impl ProfileRig {
             generation,
             sample_rate,
             mode,
+            log_seq,
             profile,
             keys,
-            reuse,
+            specs,
+            fate,
             built,
+            overlay,
             build_ms,
         } = prepared;
         let mut garbage = Garbage::default();
@@ -996,17 +1291,19 @@ impl ProfileRig {
             status: CommitStatus::Stale,
             built: 0,
             reused: 0,
+            retuned: 0,
             retired: 0,
             failed: 0,
+            carried: 0,
             switched: false,
             build_ms,
             commit_us: 0,
             garbage: Garbage::default(),
         };
-        let installed_ok = reuse
-            .iter()
-            .flatten()
-            .all(|id| self.chain_keys.contains_key(id));
+        let installed_ok = fate.iter().all(|f| match f {
+            Fate::Keep(id) | Fate::Retune(id, _) => self.chain_keys.contains_key(id),
+            _ => true,
+        });
         if generation != self.reload_gen || sample_rate != self.rig.sample_rate || !installed_ok {
             garbage
                 .prepared
@@ -1039,52 +1336,118 @@ impl ProfileRig {
                 .collect(),
             _ => Vec::new(),
         };
+        // Each patch's chain before this reload, by name — whose live state
+        // a new or retuned chain for that patch takes on.
+        let old_chain: HashMap<String, ModelId> = self
+            .profile
+            .as_ref()
+            .map(|p| {
+                p.patches
+                    .iter()
+                    .zip(&self.patch_ids)
+                    .filter(|(_, id)| **id != MODEL_UNAVAILABLE)
+                    .map(|(p, id)| (p.name.to_ascii_lowercase(), *id))
+                    .collect()
+            })
+            .unwrap_or_default();
 
-        // Install in patch order, reusing what the plan matched.
+        // Install in patch order, keeping and retuning what the plan
+        // matched; each new or retuned chain gets its patch's live state.
         let mut patch_ids = Vec::with_capacity(profile.patches.len());
-        let mut chain_keys = std::collections::HashMap::with_capacity(profile.patches.len());
+        let mut chain_keys = HashMap::with_capacity(profile.patches.len());
+        let mut new_log: HashMap<ModelId, Vec<LogEntry>> = HashMap::new();
+        let mut landing_bypass: HashMap<String, Vec<(String, bool)>> = HashMap::new();
         let mut first_ok = None;
-        for (i, ((patch, outcome), (reused, key))) in profile
+        let old_log = std::mem::take(&mut self.log().chains);
+        for (i, ((patch, (fate, outcome)), (key, spec))) in profile
             .patches
             .iter()
-            .zip(built)
-            .zip(reuse.iter().zip(keys))
+            .zip(fate.into_iter().zip(built))
+            .zip(keys.into_iter().zip(specs))
             .enumerate()
         {
-            let id = match (reused, outcome) {
-                (Some(id), _) => {
+            let name = patch.name.to_ascii_lowercase();
+            let mut retune: Vec<(usize, BlockWrite)> = Vec::new();
+            let fresh = matches!(fate, Fate::Build);
+            let (id, changed) = match (fate, outcome) {
+                (Fate::Keep(id), _) => {
                     report.reused += 1;
-                    *id
+                    (id, false)
                 }
-                (None, Some(Ok(chain))) => {
+                (Fate::Retune(id, writes), _) => {
+                    report.retuned += 1;
+                    retune = writes;
+                    (id, true)
+                }
+                (Fate::Build, Some(Ok(chain))) => {
                     report.built += 1;
-                    self.rig.install_prepared(chain)
+                    (self.rig.install_prepared(chain), true)
                 }
-                (None, Some(Err(e))) => {
+                (Fate::Build, Some(Err(e))) => {
                     report.failed += 1;
                     tracing::warn!(
                         patch = %patch.name,
                         error = %e,
                         "ProfileRig: failed to build patch chain — skipping"
                     );
-                    MODEL_UNAVAILABLE
+                    (MODEL_UNAVAILABLE, false)
                 }
-                (None, None) => MODEL_UNAVAILABLE,
+                _ => (MODEL_UNAVAILABLE, false),
             };
             if id != MODEL_UNAVAILABLE {
                 first_ok.get_or_insert(i);
-                if let Some(key) = key {
+                if let (Some((key, stamps)), Some(spec)) = (key, spec) {
+                    if changed {
+                        // Another profile's patch of the same name is not
+                        // this one: its live state stays behind.
+                        let before = old_chain
+                            .get(&name)
+                            .copied()
+                            .filter(|_| mode == ReloadMode::Keep);
+                        let old_spec = before.and_then(|b| self.chain_keys.get(&b)).map(|k| k.spec.clone());
+                        let entries = before.and_then(|b| old_log.get(&b)).cloned().unwrap_or_default();
+                        let (writes, kept, bypass) = carry_live_state(
+                            old_spec.as_deref(),
+                            &spec,
+                            &entries,
+                            overlay.get(&name).map(Vec::as_slice).unwrap_or_default(),
+                            log_seq,
+                        );
+                        report.carried += writes.len() + bypass.len();
+                        // The settings and the live state in one write — a
+                        // retuned chain may be playing, and no block of it
+                        // may render between the two.
+                        if fresh {
+                            // A new chain: it starts at its live state, as
+                            // if built with it.
+                            if !writes.is_empty() {
+                                self.rig.write_new_chain_blocks(id, &writes);
+                            }
+                        } else {
+                            retune.extend(writes);
+                            if !retune.is_empty() {
+                                self.rig.write_chain_blocks(id, &retune);
+                            }
+                        }
+                        new_log.insert(id, kept);
+                        landing_bypass.insert(name.clone(), bypass);
+                    } else if let Some(entries) = old_log.get(&id) {
+                        new_log.insert(id, entries.clone());
+                    }
                     chain_keys.insert(
                         id,
                         ChainKey {
                             patch: patch.name.clone(),
                             key,
+                            stamps,
+                            spec,
                         },
                     );
                 }
             }
             patch_ids.push(id);
         }
+        self.log().chains = new_log;
 
         // Stacks: fresh for another profile; for the same one, each stack
         // found by name picks up where it was.
@@ -1127,6 +1490,10 @@ impl ProfileRig {
             })
             .or_else(|| available(&patch_ids, default_patch).then_some(default_patch))
             .or(first_ok);
+        let target_bypass = target
+            .and_then(|i| profile.patches.get(i))
+            .and_then(|p| landing_bypass.remove(&p.name.to_ascii_lowercase()))
+            .unwrap_or_default();
 
         self.profile = Some(profile);
         self.patch_ids = patch_ids;
@@ -1136,9 +1503,10 @@ impl ProfileRig {
         self.no_rotate = no_rotate;
         self.active = None;
 
-        // Land — the footswitch's own path: a chain that changed crossfades
-        // in and the old one rings out as a tail; one reused does not switch.
-        let landed = target.is_some_and(|i| self.activate(i));
+        // Land — the footswitch's own path: a rebuilt chain crossfades in
+        // (already carrying its live state and bypasses) and the old one
+        // rings out as a tail; one kept or retuned does not switch.
+        let landed = target.is_some_and(|i| self.activate_with(i, &target_bypass));
         if !landed {
             // Nothing to play: out through the same switch, so what was
             // playing still rings out rather than stopping.
@@ -1177,8 +1545,10 @@ impl ProfileRig {
             reload.mode = ?mode,
             reload.built = report.built,
             reload.reused = report.reused,
+            reload.retuned = report.retuned,
             reload.retired = report.retired,
             reload.failed = report.failed,
+            reload.carried = report.carried,
             reload.switched = report.switched,
             reload.build_ms = report.build_ms,
             reload.commit_us = report.commit_us,
@@ -1200,6 +1570,14 @@ impl ProfileRig {
     /// Activate the patch at `index`. Returns false if out of range or its
     /// chain failed to build. Applies patch trims + (optional) level-match.
     pub fn activate(&mut self, index: usize) -> bool {
+        self.activate_with(index, &[])
+    }
+
+    /// [`activate`](Self::activate), with `bypass` — `(block id, on)` — in
+    /// place of the patch's own for those blocks: a reload landing on a new
+    /// chain brings the bypasses the old one had been given live (a macro's,
+    /// a stomp's) in with it rather than after it.
+    fn activate_with(&mut self, index: usize, bypass: &[(String, bool)]) -> bool {
         let Some(profile) = &self.profile else {
             return false;
         };
@@ -1239,16 +1617,29 @@ impl ProfileRig {
         // The chain arrives with its bypass already set — the patch's own,
         // plus the global time bypass — rather than being corrected after it
         // starts playing.
-        let mask: Vec<bool> = patch
+        let mut mask: Vec<bool> = patch
             .chain
             .iter()
             .filter(|b| b.has_backend())
             .map(|b| b.bypassed || (self.fx_bypass && b.is_time_module()))
             .collect();
+        let held: Vec<usize> = if bypass.is_empty() {
+            Vec::new()
+        } else {
+            let ids = self.rig.chain_block_ids(id);
+            bypass
+                .iter()
+                .filter_map(|(b, on)| {
+                    let at = ids.iter().position(|i| i == b)?;
+                    *mask.get_mut(at)? = *on;
+                    Some(at)
+                })
+                .collect()
+        };
         self.rig.set_chain_bypass(id, &mask);
         self.rig.set_active(Some(id));
         self.active = Some(index);
-        self.apply_fx_bypass(index);
+        self.apply_fx_bypass(index, &held);
         true
     }
 
@@ -1256,7 +1647,7 @@ impl ProfileRig {
     /// every installed time/fx block (the Time module) of patch `index`. The
     /// installed chain skips placeholder blocks, so we zip the live block ids
     /// against the patch's installed (has-backend) blocks to find which are time/fx.
-    fn apply_fx_bypass(&self, index: usize) {
+    fn apply_fx_bypass(&self, index: usize, held: &[usize]) {
         let Some(profile) = &self.profile else {
             return;
         };
@@ -1265,8 +1656,8 @@ impl ProfileRig {
         };
         let live_ids = self.rig.active_block_ids();
         let real = patch.chain.iter().filter(|b| b.has_backend());
-        for (block, id) in real.zip(live_ids.iter()) {
-            if block.is_time_module() {
+        for (at, (block, id)) in real.zip(live_ids.iter()).enumerate() {
+            if block.is_time_module() && !held.contains(&at) {
                 // Releasing the global bypass must not resurrect blocks the
                 // patch keeps bypassed by configuration (e.g. an "extreme"
                 // DLY 2 / VERB 2 pair) — OR with the block's own state.
@@ -1283,7 +1674,7 @@ impl ProfileRig {
     pub fn set_fx_bypass(&mut self, on: bool) {
         self.fx_bypass = on;
         if let Some(i) = self.active {
-            self.apply_fx_bypass(i);
+            self.apply_fx_bypass(i, &[]);
         }
     }
 
@@ -1593,8 +1984,17 @@ impl ProfileRig {
 
     /// Per-block bypass on the active patch's chain. See
     /// [`GuitarRig::set_block_slot_bypass`].
+    ///
+    /// Kept as the chain's live state: a reload that gives this patch a new
+    /// chain, or retunes this one, puts it back on before the chain plays.
     pub fn set_block_bypass(&self, block_id: &str, on: bool) -> bool {
-        self.rig.set_block_slot_bypass(block_id, on)
+        let ok = self.rig.set_block_slot_bypass(block_id, on);
+        if ok {
+            if let Some(chain) = self.rig.active() {
+                self.log().record(chain, block_id, LiveWrite::Bypass(on));
+            }
+        }
+        ok
     }
 
     /// Update the *configured* bypass of the active patch's block addressed by
@@ -1623,8 +2023,25 @@ impl ProfileRig {
 
     /// Set a named param on the active patch's block `block_id`. See
     /// [`GuitarRig::set_active_block_param`].
+    ///
+    /// Every live write should come through here — a knob, a macro, the
+    /// boost, a delay's tempo, a NAM block's `input_trim` / `output_trim`
+    /// (a drive knob's compensation): each is kept as the chain's live state,
+    /// and a reload that gives this patch a new chain, or retunes this one,
+    /// puts it back on before the chain plays (see
+    /// [`commit_reload`](Self::commit_reload)).
     pub fn set_block_param(&self, block_id: &str, param_name: &str, value: f32) -> bool {
-        self.rig.set_active_block_param(block_id, param_name, value)
+        let ok = self.rig.set_active_block_param(block_id, param_name, value);
+        if ok {
+            if let Some(chain) = self.rig.active() {
+                self.log().record(
+                    chain,
+                    block_id,
+                    LiveWrite::Param(param_name.to_string(), value),
+                );
+            }
+        }
+        ok
     }
 
     /// Mono input samples for pitch detection. See [`GuitarRig::input_samples`].

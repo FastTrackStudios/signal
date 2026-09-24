@@ -86,6 +86,7 @@ pub mod block_profile;
 pub mod amp_blend;
 pub mod time_stage;
 pub mod block_gate;
+pub mod block_params;
 pub mod tail_stage;
 pub mod api;
 pub mod assets;
@@ -205,7 +206,8 @@ pub use rig_node::{Combine, Container, Param, RigNode, Role, Send, Zone};
 pub use rig_prefs::RigAudioPrefs;
 #[cfg(not(target_arch = "wasm32"))]
 pub use rig_profile::{
-    CommitStatus, PreparedReload, ProfileRig, ReloadCommit, ReloadMode, ReloadPlan, ReloadTicket,
+    CommitStatus, LiveWrite, PreparedReload, ProfileRig, ReloadCommit, ReloadMode, ReloadPlan,
+    ReloadTicket,
 };
 pub use rig_profile::{RigPatch, RigProfile};
 pub use runtime::{

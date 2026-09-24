@@ -772,6 +772,25 @@ pub fn drive_compensation_cached(
     compensation_from(&drive_curve_cached(model_path, sample_rate)?, drive)
 }
 
+/// The sample rate a drive curve is read at, wherever trims are worked out
+/// from one — the build (the chain's levels) and the live drive knob alike,
+/// so the two agree.
+pub const DRIVE_CURVE_SAMPLE_RATE: f64 = 48_000.0;
+
+/// A NAM block's `(input_trim_db, output_trim_db)` for a drive position and
+/// the block's Output Level: the input trim the knob stands for, and the
+/// level corrected by the cached curve so the capture stays as loud as it
+/// was levelled. The one conversion from a drive knob to trims — the chain's
+/// build writes them into the block, a live knob writes them to the running
+/// block, and a reload that sees only the trims change writes them live.
+#[must_use]
+pub fn drive_trims(model_path: &Path, level_db: f32, drive: f32) -> (f32, f32) {
+    (
+        drive_input_db(drive),
+        level_db + drive_output_delta_cached(model_path, DRIVE_CURVE_SAMPLE_RATE, drive),
+    )
+}
+
 /// The input trim (dB) a drive position stands for: 0.5 is the capture at
 /// unity, the ends are the ends of the measured sweep.
 #[must_use]

@@ -235,6 +235,17 @@ impl TailStage {
         Some(v)
     }
 
+    /// The blocks of `chain`'s voice, still ringing — for a param write to
+    /// reach a chain whose blocks are out here (control thread, under the
+    /// renderer's lock).
+    pub fn voice_boxes_mut(&mut self, chain: u32) -> Option<&mut [Option<Box<dyn PluginInstance>>]> {
+        self.voices
+            .iter_mut()
+            .flatten()
+            .find(|v| v.chain == chain)
+            .map(|v| v.boxes.as_mut_slice())
+    }
+
     /// Hand every finished voice to `out` (control thread).
     pub fn collect_finished(&mut self, out: &mut Vec<Voice>) {
         for slot in &mut self.voices {
