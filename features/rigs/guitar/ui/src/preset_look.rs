@@ -401,6 +401,10 @@ pub fn PresetRow(
     /// Extra pieces at the right, before the value (a Time snapshot's picks).
     #[props(default)]
     children: Element,
+    /// The macro knobs it tunes (`delay`, `space`) — a quiet glyph by the
+    /// name, the knobs in its tooltip.
+    #[props(default)]
+    macros: Vec<String>,
     onclick: EventHandler<()>,
     #[props(default)] menu: Vec<crate::kit::MenuItem>,
     #[props(default)] on_menu: Option<EventHandler<crate::kit::Picked>>,
@@ -442,6 +446,9 @@ pub fn PresetRow(
                     }
                     span { style: "font-size: 12px; font-weight: 600; color: {ink}; white-space: nowrap; overflow: hidden; min-width: 0;",
                         "{name}"
+                    }
+                    if !macros.is_empty() {
+                        MacroGlyph { knobs: macros.clone() }
                     }
                 }
                 if !off && (!subline.is_empty() || !engine.is_empty() || !count.is_empty()) {
@@ -557,5 +564,31 @@ mod tests {
         let g = grouped(&[hall, bloom, off, room]);
         let names: Vec<&str> = g.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(names, ["Off", "Rooms", "Halls", "Ambient"]);
+    }
+}
+
+/// A preset that tunes how macros move it: a small grey knob by its name,
+/// the knobs it tunes in the tooltip.
+#[component]
+pub fn MacroGlyph(knobs: Vec<String>) -> Element {
+    let names: Vec<String> = knobs
+        .iter()
+        .map(|k| {
+            let mut c = k.chars();
+            c.next().map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
+        })
+        .collect();
+    let tip = format!("Tunes the {} macro{}", names.join(", "), if names.len() == 1 { "" } else { "s" });
+    rsx! {
+        span { title: "{tip}", style: "display: flex; flex-shrink: 0; width: 10px; height: 10px;",
+            svg {
+                width: "10",
+                height: "10",
+                view_box: "0 0 10 10",
+                style: "width: 10px; height: 10px;",
+                path { d: "M2.2 7.8 A3.9 3.9 0 1 1 7.8 7.8", fill: "none", stroke: "#71717a", stroke_width: "1.3", stroke_linecap: "round" }
+                line { x1: "5", y1: "5", x2: "6.8", y2: "2.6", stroke: "#71717a", stroke_width: "1.3", stroke_linecap: "round" }
+            }
+        }
     }
 }

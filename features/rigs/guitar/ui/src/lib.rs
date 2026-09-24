@@ -48,7 +48,7 @@ pub use control::{ControlView, MidiIndicator, ZoomPanel};
 pub use grid::RigGraph;
 pub use icons::module_icon;
 pub use library::{Kind as LibraryKind, LibraryPicker};
-pub use macro_bar::{MacroBar, MacroPanelOpen};
+pub use macro_bar::{MacroBar, MacroPanelOpen, MacroTuneMode};
 pub use module_sidebar::{InitialSelection, Selection as ModuleSelection};
 pub use meters::{CpuMeter, DspReadout, MeterBar, MeterPair, meter_level};
 pub use perform::PerformGrid;

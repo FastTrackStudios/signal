@@ -188,6 +188,8 @@ fn Shot() -> Element {
         let _ = provide_context(signal_guitar_ui::InitialSelection(shot_selection()));
         // `RIG_SHOT_MACRO=drive`: that macro's hover panel, held open.
         let _ = provide_context(signal_guitar_ui::MacroPanelOpen(std::env::var("RIG_SHOT_MACRO").ok()));
+        // `RIG_SHOT_TUNE=1`: that panel in tune mode.
+        let _ = provide_context(signal_guitar_ui::MacroTuneMode(std::env::var("RIG_SHOT_TUNE").is_ok()));
     });
     rsx! {
         // The same two stylesheets the window mounts. Without them the shot is

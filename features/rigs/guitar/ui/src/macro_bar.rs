@@ -20,7 +20,10 @@
 use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::RigClient;
-use signal_guitar_proto::{MacroChildView, MacroKnobView};
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
+use signal_guitar_proto::{MacroChildView, MacroKnobView, MacroTune, MacroTuneView};
 use signal_widgets::arc::{angle_for_value, arc_path, arc_point, SENSITIVITY};
 use signal_widgets::drag_bus::{DragBus, DragEvent};
 
@@ -30,6 +33,10 @@ use crate::param_writer::ParamWriter;
 /// hover state (`rig_shot`'s `RIG_SHOT_MACRO`). Provided by the host.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct MacroPanelOpen(pub Option<String>);
+
+/// Open that held-open panel in tune mode (`rig_shot`'s `RIG_SHOT_TUNE`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MacroTuneMode(pub bool);
 
 /// A knob label with no colour of its own (legacy `#94a3b8`).
 const MUTED: &str = "#94a3b8";
@@ -46,6 +53,10 @@ struct Wire {
     rig: Option<RigClient>,
     writer: ParamWriter,
     macros: Signal<Vec<MacroKnobView>>,
+    /// The newest tuning waiting to go, and whether one is on the wire —
+    /// a handle drag sends as fast as the rig answers, and lands last.
+    tune_next: Rc<RefCell<Option<MacroTune>>>,
+    tune_busy: Rc<Cell<bool>>,
 }
 
 impl Wire {
@@ -63,6 +74,52 @@ impl Wire {
             }
         });
         self.writer.set(id, "", value);
+    }
+
+    /// Tune panel knob `t.id` — here at once, on the rig coalesced.
+    fn tune(&self, t: MacroTune) {
+        let mut macros = self.macros;
+        macros.with_mut(|ks| {
+            for c in ks.iter_mut().flat_map(|k| k.children.iter_mut()).filter(|c| c.id == t.id) {
+                if let Some(v) = c.tune.as_mut() {
+                    v.lo = t.min;
+                    v.hi = t.max;
+                    v.curve.clone_from(&t.curve);
+                    v.source = "tuning".into();
+                    if t.enter >= 0.0 {
+                        v.enter = t.enter;
+                    }
+                }
+            }
+        });
+        *self.tune_next.borrow_mut() = Some(t);
+        if self.tune_busy.get() {
+            return;
+        }
+        let Some(r) = self.rig.clone() else { return };
+        let (next, busy) = (self.tune_next.clone(), self.tune_busy.clone());
+        busy.set(true);
+        spawn(async move {
+            loop {
+                let t = next.borrow_mut().take();
+                let Some(t) = t else { break };
+                let _ = r.tune_macro(t).await;
+            }
+            busy.set(false);
+        });
+    }
+
+    /// Fire-and-forget a call on the rig.
+    fn call<F, Fut>(&self, f: F)
+    where
+        F: FnOnce(RigClient) -> Fut + 'static,
+        Fut: std::future::Future + 'static,
+    {
+        if let Some(r) = self.rig.clone() {
+            spawn(async move {
+                let _ = f(r).await;
+            });
+        }
     }
 
     fn pad(&self, id: &str, on: bool) {
@@ -188,6 +245,8 @@ pub fn MacroBar(
                 },
             ),
             macros,
+            tune_next: Rc::default(),
+            tune_busy: Rc::default(),
         }
     });
     let knobs = macros.read().clone();
@@ -242,8 +301,17 @@ fn MacroCell(
     // A knob in the cell or its panel is being dragged: the panel stays
     // while the pointer wanders off it.
     let dragging = use_signal(|| false);
+    // Tune mode (the panel's ✎): the panel knobs show and shape their
+    // ranges; the panel stays until it is saved or put away.
+    let shot_tune = use_hook(|| try_consume_context::<MacroTuneMode>().is_some_and(|t| t.0));
+    let mut tuning = use_signal(move || forced && shot_tune);
+    // Where Save puts a tuning: each block's block preset, or the module
+    // snapshot that sets the block.
+    let module_only = knob.id == "drive";
+    let mut scope = use_signal(move || if module_only { "module" } else { "block" });
+    let host = signal_widgets::PopupHost::try_use();
     let has_children = !knob.children.is_empty();
-    let open = forced || hovered() || dragging();
+    let open = forced || hovered() || dragging() || tuning();
     let group_on = open;
     let color = if knob.color.is_empty() { MUTED.to_string() } else { knob.color.clone() };
     let at_rest = (knob.value - knob.rest).abs() < 0.005;
@@ -265,6 +333,26 @@ fn MacroCell(
                 ),
                 onmouseenter: move |_| over_cell.set(true),
                 onmouseleave: move |_| over_cell.set(false),
+                // Right-click: keep the bar's positions with the preset
+                // snapshot (a patch's own are kept as it goes).
+                oncontextmenu: {
+                    let wire = wire.clone();
+                    move |e: MouseEvent| {
+                        e.prevent_default();
+                        e.stop_propagation();
+                        let wire = wire.clone();
+                        crate::kit::context_menu(
+                            host,
+                            &e,
+                            vec![crate::kit::MenuItem::run("save_positions", "Save positions to preset snapshot")],
+                            EventHandler::new(move |p: crate::kit::Picked| {
+                                if p.id == "save_positions" {
+                                    wire.call(|r| async move { r.save_macro_positions().await });
+                                }
+                            }),
+                        );
+                    }
+                },
 
                 // Label (above knob)
                 div { style: "display: flex; align-items: center; justify-content: center; gap: 2px; width: 100%;",
@@ -310,7 +398,37 @@ fn MacroCell(
             }
 
             if has_children && open {
-                DropdownPanel { index, count, anchor_cells, drop_up, still: forced,
+                // Tune mode is taller: it rises over the page.
+                DropdownPanel { index, count, anchor_cells, drop_up: drop_up || tuning(), still: forced,
+                    PanelHeader {
+                        label: knob.label.clone(),
+                        tuning: tuning(),
+                        module_only,
+                        scope: scope().to_string(),
+                        tuned: knob.children.iter().any(|c| c.tune.as_ref().is_some_and(|t| t.source == "tuning")),
+                        on_tune: move |on: bool| {
+                            tuning.set(on);
+                        },
+                        on_scope: move |s: String| scope.set(if s == "module" { "module" } else { "block" }),
+                        on_save: {
+                            let wire = wire.clone();
+                            let id = id.clone();
+                            move |()| {
+                                let (id, sc) = (id.clone(), scope().to_string());
+                                wire.call(move |r| async move { r.save_macro_tune(id, sc).await });
+                                tuning.set(false);
+                            }
+                        },
+                        on_discard: {
+                            let wire = wire.clone();
+                            let id = id.clone();
+                            move |()| {
+                                let id = id.clone();
+                                wire.call(move |r| async move { r.discard_macro_tune(id).await });
+                                tuning.set(false);
+                            }
+                        },
+                    }
                     match knob.layout.as_str() {
                         "dual" => rsx! {
                             DualRowDropdown {
@@ -318,13 +436,14 @@ fn MacroCell(
                                 headers: knob.headers.clone(),
                                 children_knobs: knob.children.clone(),
                                 dragging,
+                                tuning: tuning(),
                             }
                         },
                         "grouped" => rsx! {
-                            GroupedDropdown { children_knobs: knob.children.clone(), dragging }
+                            GroupedDropdown { children_knobs: knob.children.clone(), dragging, tuning: tuning() }
                         },
                         _ => rsx! {
-                            SubMacroDropdown { children_knobs: knob.children.clone(), dragging }
+                            SubMacroDropdown { children_knobs: knob.children.clone(), dragging, tuning: tuning() }
                         },
                     }
                 }
@@ -396,11 +515,11 @@ fn DropdownPanel(
 // ============================================================================
 
 #[component]
-fn SubMacroDropdown(children_knobs: Vec<MacroChildView>, dragging: Signal<bool>) -> Element {
+fn SubMacroDropdown(children_knobs: Vec<MacroChildView>, dragging: Signal<bool>, tuning: bool) -> Element {
     rsx! {
-        div { style: "display: flex; align-items: flex-start; gap: 4px;",
+        div { style: "display: flex; align-items: flex-end; gap: 4px;",
             for child in children_knobs.iter() {
-                ChildCell { key: "{child.id}", child: child.clone(), dragging, width: 68 }
+                ChildCell { key: "{child.id}", child: child.clone(), dragging, width: 68, tuning }
             }
         }
     }
@@ -417,6 +536,9 @@ fn ChildCell(
     /// Dual-row links: the knob in the other row that follows this one.
     #[props(default)]
     mirror: Option<String>,
+    /// Tune mode: the knob shows and shapes its range instead.
+    #[props(default)]
+    tuning: bool,
 ) -> Element {
     let wire = use_context::<Wire>();
     let mut over = use_signal(|| false);
@@ -477,6 +599,50 @@ fn ChildCell(
                 "{child.label}"
             }
 
+            if let (true, Some(t)) = (tuning, child.tune.clone()) {
+                TuneKnob {
+                    tune: t.clone(),
+                    color: color.clone(),
+                    dragging,
+                    on_change: {
+                        let wire = wire.clone();
+                        let id = id.clone();
+                        move |(lo, hi, curve, enter): (f32, f32, String, f32)| {
+                            wire.tune(MacroTune { id: id.clone(), min: lo, max: hi, curve, enter });
+                        }
+                    },
+                }
+                // lo – hi, in the param's own units.
+                span {
+                    style: "font-size: 8px; font-family: ui-monospace, monospace; white-space: nowrap; color: #d4d4d8;",
+                    "{range_readout(&child, &t)}"
+                }
+                div { style: "display: flex; gap: 3px;",
+                    CurveChip {
+                        tune: t.clone(),
+                        color: color.clone(),
+                        on_pick: {
+                            let wire = wire.clone();
+                            let (id, t) = (id.clone(), t.clone());
+                            move |curve: String| {
+                                wire.tune(MacroTune { id: id.clone(), min: t.lo, max: t.hi, curve, enter: -1.0 });
+                            }
+                        },
+                    }
+                    if t.enter >= 0.0 {
+                        EnterChip {
+                            tune: t.clone(),
+                            on_pick: {
+                                let wire = wire.clone();
+                                let (id, t) = (id.clone(), t.clone());
+                                move |enter: f32| {
+                                    wire.tune(MacroTune { id: id.clone(), min: t.lo, max: t.hi, curve: t.curve.clone(), enter });
+                                }
+                            },
+                        }
+                    }
+                }
+            } else {
             MiniKnob {
                 value: child.value,
                 color: color.clone(),
@@ -503,9 +669,262 @@ fn ChildCell(
                 ),
                 "{readout}"
             }
+            }
         }
     }
 }
+
+/// A tuned range as the panel prints it: `lo–hi` in the param's units.
+fn range_readout(c: &MacroChildView, t: &MacroTuneView) -> String {
+    let at = |v: f32| child_readout(&MacroChildView { param: v, ..c.clone() });
+    format!("{}–{}", at(t.lo), at(t.hi))
+}
+
+// ============================================================================
+// Tune mode — the panel header, the range knob and its chips
+// ============================================================================
+
+/// The panel's header: its name hard left; the ✎ that puts the panel in
+/// tune mode hard right — and, tuning, where Save puts it (the block preset
+/// or the module snapshot), Save, and put away.
+#[component]
+fn PanelHeader(
+    label: String,
+    tuning: bool,
+    scope: String,
+    /// Something here is tuned and not saved.
+    tuned: bool,
+    /// Only a module snapshot can keep it (Drive's stages: the pedals are
+    /// not block presets).
+    #[props(default)]
+    module_only: bool,
+    on_tune: EventHandler<bool>,
+    on_scope: EventHandler<String>,
+    on_save: EventHandler<()>,
+    on_discard: EventHandler<()>,
+) -> Element {
+    let seg = |on: bool| {
+        format!(
+            "padding: 2px 7px; font-size: 9px; font-weight: 600; cursor: pointer; border-radius: 4px; \
+             white-space: nowrap; color: {}; background: {};",
+            if on { "#18181b" } else { "#a1a1aa" },
+            if on { "#e4e4e7" } else { "transparent" },
+        )
+    };
+    rsx! {
+        div {
+            style: "display: flex; align-items: center; gap: 6px; padding: 0 2px 6px; min-width: 0;",
+            span {
+                style: "font-size: 9px; font-weight: 600; color: #71717a; text-transform: uppercase; \
+                        letter-spacing: 0.05em; white-space: nowrap;",
+                if tuning { "Tune {label}" } else { "{label}" }
+            }
+            div { style: "flex: 1 1 0%;" }
+            if tuning {
+                if module_only {
+                    span { style: "font-size: 9px; color: #a1a1aa; white-space: nowrap;", "Into the module snapshot" }
+                } else {
+                    div {
+                        title: "Where Save keeps the ranges",
+                        style: "display: flex; gap: 1px; padding: 1px; border-radius: 5px; border: 1px solid #3f3f46;",
+                        div { style: seg(scope != "module"), onclick: move |_| on_scope.call("block".into()), "Block preset" }
+                        div { style: seg(scope == "module"), onclick: move |_| on_scope.call("module".into()), "Module snapshot" }
+                    }
+                }
+                div {
+                    title: if tuned { "Keep these ranges in the preset" } else { "Nothing tuned yet" },
+                    style: format!(
+                        "padding: 2px 8px; font-size: 9px; font-weight: 700; border-radius: 4px; cursor: pointer; \
+                         white-space: nowrap; color: {}; background: {};",
+                        if tuned { "#18181b" } else { "#71717a" },
+                        if tuned { "#22d3ee" } else { "rgba(63,63,70,0.5)" },
+                    ),
+                    onclick: move |_| {
+                        if tuned {
+                            on_save.call(());
+                        }
+                    },
+                    "Save"
+                }
+                div {
+                    title: "Put away (unsaved ranges go back)",
+                    style: "padding: 0 4px; font-size: 11px; color: #a1a1aa; cursor: pointer;",
+                    onclick: move |_| on_discard.call(()),
+                    fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 11 }
+                }
+            } else {
+                div {
+                    title: "Tune how this macro moves each param",
+                    style: "padding: 0 4px; font-size: 11px; color: #71717a; cursor: pointer;",
+                    onclick: move |_| on_tune.call(true),
+                    fts_chrome::Glyph { icon: fts_chrome::Icon::Pencil, size: 11 }
+                }
+            }
+        }
+    }
+}
+
+/// A value's place on the tune knob's arc, 0..1 of the param's range (by
+/// ratio for times and frequencies).
+fn arc_pos(t: &MacroTuneView, v: f32) -> f64 {
+    let (lo, hi) = (t.min, t.max);
+    let n = if t.log && lo > 0.0 && hi > lo {
+        (v.max(lo) / lo).ln() / (hi / lo).ln()
+    } else if hi > lo {
+        (v - lo) / (hi - lo)
+    } else {
+        0.0
+    };
+    f64::from(n.clamp(0.0, 1.0))
+}
+
+/// [`arc_pos`]'s inverse.
+fn arc_value(t: &MacroTuneView, n: f64) -> f32 {
+    let n = n.clamp(0.0, 1.0) as f32;
+    let (lo, hi) = (t.min, t.max);
+    if t.log && lo > 0.0 && hi > lo { lo * (hi / lo).powf(n) } else { n.mul_add(hi - lo, lo) }
+}
+
+/// The range knob: the param's whole range as the track, the tuned range
+/// in the knob's colour, the patch's value as a tick, and a handle at each
+/// end — drag on the left half for the bottom handle, the right half for
+/// the top.
+#[component]
+fn TuneKnob(
+    tune: MacroTuneView,
+    color: String,
+    dragging: Signal<bool>,
+    on_change: EventHandler<(f32, f32, String, f32)>,
+) -> Element {
+    let bus = DragBus::try_use();
+    let (size, center, radius) = (36.0f64, 18.0f64, 14.0f64);
+    let (plo, phi, pbase) = (arc_pos(&tune, tune.lo), arc_pos(&tune, tune.hi), arc_pos(&tune, tune.base));
+    let track = arc_path(center, center, radius, angle_for_value(0.0), angle_for_value(1.0));
+    let (a, b) = if plo <= phi { (plo, phi) } else { (phi, plo) };
+    let range = if b - a > 0.002 {
+        arc_path(center, center, radius, angle_for_value(a), angle_for_value(b))
+    } else {
+        String::new()
+    };
+    let (tx, ty) = arc_point(center, center, radius + 2.5, angle_for_value(pbase));
+    let (tx2, ty2) = arc_point(center, center, radius - 4.0, angle_for_value(pbase));
+    let (lx, ly) = arc_point(center, center, radius, angle_for_value(plo));
+    let (hx, hy) = arc_point(center, center, radius, angle_for_value(phi));
+    let t0 = tune.clone();
+    rsx! {
+        div {
+            style: "width: 36px; height: 36px; position: relative; cursor: ns-resize; touch-action: none;",
+            title: "Drag the left half for the bottom of the range, the right half for the top",
+            onpointerdown: move |e: PointerEvent| {
+                let Some(bus) = bus else { return };
+                let y0 = e.client_coordinates().y;
+                // Which handle: the side of the knob the drag starts on.
+                let top = e.element_coordinates().x >= 18.0;
+                let start = if top { phi } else { plo };
+                let t = t0.clone();
+                let mut dragging = dragging;
+                dragging.set(true);
+                bus.begin(move |ev| match ev {
+                    DragEvent::Move { y, .. } => {
+                        let v = arc_value(&t, start + (y0 - y) / SENSITIVITY);
+                        let (lo, hi) = if top { (t.lo, v) } else { (v, t.hi) };
+                        on_change.call((lo, hi, t.curve.clone(), -1.0));
+                    }
+                    DragEvent::End => {
+                        let mut dragging = dragging;
+                        dragging.set(false);
+                    }
+                });
+            },
+            svg {
+                width: "36",
+                height: "36",
+                view_box: "0 0 {size} {size}",
+                style: "width: 36px; height: 36px; position: absolute; pointer-events: none;",
+                path { d: "{track}", fill: "none", stroke: "#374151", stroke_width: "3", stroke_linecap: "round" }
+                if !range.is_empty() {
+                    path { d: "{range}", fill: "none", stroke: "{color}", stroke_width: "3", stroke_linecap: "round" }
+                }
+                circle { cx: "{center}", cy: "{center}", r: "{radius - 5.0}", fill: "#1F2937" }
+                // The patch's own value.
+                line {
+                    x1: "{tx:.1}", y1: "{ty:.1}", x2: "{tx2:.1}", y2: "{ty2:.1}",
+                    stroke: "#f4f4f5", stroke_width: "1.5", stroke_linecap: "round",
+                }
+                // Bottom handle hollow, top handle filled.
+                circle { cx: "{lx:.1}", cy: "{ly:.1}", r: "3", fill: "#18181b", stroke: "{color}", stroke_width: "1.5" }
+                circle { cx: "{hx:.1}", cy: "{hy:.1}", r: "3", fill: "{color}", stroke: "#18181b", stroke_width: "1" }
+            }
+        }
+    }
+}
+
+/// The curve between rest and each end — a chip that steps lin → log →
+/// exp → S. Grey on a default, the knob's colour once a preset or this
+/// tuning shapes it.
+#[component]
+fn CurveChip(tune: MacroTuneView, color: String, on_pick: EventHandler<String>) -> Element {
+    const CURVES: [&str; 4] = ["lin", "log", "exp", "s"];
+    let next = CURVES
+        .iter()
+        .position(|c| *c == tune.curve)
+        .map_or("lin", |i| CURVES[(i + 1) % CURVES.len()])
+        .to_string();
+    let who = match tune.source.as_str() {
+        "module" => "the module snapshot",
+        "block" => "the block preset",
+        "seed" => "the preset's default",
+        "tuning" => "this tuning (not saved)",
+        "stage" => "the drive journey's default",
+        _ => "the macro's own response",
+    };
+    let label = if tune.curve == "s" { "S".to_string() } else { tune.curve.clone() };
+    // Defaults are grey (the engine's own, the journey's, a seed); the
+    // knob's colour once a preset — or this tuning — says otherwise.
+    let ink = if matches!(tune.source.as_str(), "module" | "block" | "tuning") { color.clone() } else { "#71717a".to_string() };
+    rsx! {
+        div {
+            title: "Curve: {label} — shaped by {who}. Click for {next}.",
+            style: "padding: 0 5px; height: 14px; display: flex; align-items: center; border-radius: 4px; \
+                    border: 1px solid #3f3f46; font-size: 8px; font-weight: 700; cursor: pointer; \
+                    font-family: ui-monospace, monospace; color: {ink};",
+            onclick: move |e: MouseEvent| {
+                e.stop_propagation();
+                on_pick.call(next.clone());
+            },
+            "{label}"
+        }
+    }
+}
+
+/// A drive stage's entry point on the Drive knob's upper half — a chip that
+/// steps 0, ¼, ½, ¾.
+#[component]
+fn EnterChip(tune: MacroTuneView, on_pick: EventHandler<f32>) -> Element {
+    let steps = [0.0f32, 0.25, 0.5, 0.75];
+    let i = steps
+        .iter()
+        .enumerate()
+        .min_by(|a, b| (a.1 - tune.enter).abs().total_cmp(&(b.1 - tune.enter).abs()))
+        .map_or(0, |(i, _)| i);
+    let next = steps[(i + 1) % steps.len()];
+    let pct = (tune.enter * 100.0).round();
+    let next_pct = (next * 100.0).round();
+    rsx! {
+        div {
+            title: "Comes in {pct}% of the way up the Drive knob. Click for {next_pct}%.",
+            style: "padding: 0 5px; height: 14px; display: flex; align-items: center; border-radius: 4px; \
+                    border: 1px solid #3f3f46; font-size: 8px; font-weight: 700; cursor: pointer; \
+                    font-family: ui-monospace, monospace; color: #a1a1aa;",
+            onclick: move |e: MouseEvent| {
+                e.stop_propagation();
+                on_pick.call(next);
+            },
+            "in {pct}%"
+        }
+    }
+}
+
 
 // ============================================================================
 // DualRowDropdown — Delay / Reverb: a header row, a row per block, and
@@ -520,6 +939,7 @@ fn DualRowDropdown(
     headers: Vec<String>,
     children_knobs: Vec<MacroChildView>,
     dragging: Signal<bool>,
+    tuning: bool,
 ) -> Element {
     let mut type_linked = use_signal(|| false);
     let mut time_linked = use_signal(|| false);
@@ -553,7 +973,7 @@ fn DualRowDropdown(
         match c {
             Some(c) => {
                 let mirror = linked_mirror(&c.id, &prefix, type_linked(), time_linked());
-                rsx! { ChildCell { key: "{c.id}", child: c.clone(), dragging, width: 0, mirror } }
+                rsx! { ChildCell { key: "{c.id}", child: c.clone(), dragging, width: 0, mirror, tuning } }
             }
             None => rsx! { div {} },
         }
@@ -643,7 +1063,7 @@ fn LinkGlyph(on: bool) -> Element {
 // ============================================================================
 
 #[component]
-fn GroupedDropdown(children_knobs: Vec<MacroChildView>, dragging: Signal<bool>) -> Element {
+fn GroupedDropdown(children_knobs: Vec<MacroChildView>, dragging: Signal<bool>, tuning: bool) -> Element {
     let mut groups: Vec<(String, Vec<MacroChildView>)> = Vec::new();
     for c in &children_knobs {
         match groups.iter_mut().find(|(g, _)| *g == c.group) {
@@ -671,7 +1091,7 @@ fn GroupedDropdown(children_knobs: Vec<MacroChildView>, dragging: Signal<bool>) 
                     // keeps its label and knob on the line of the others.
                     div { style: "display: flex; align-items: flex-end; gap: 4px;",
                         for c in row.iter() {
-                            ChildCell { key: "{c.id}", child: c.clone(), dragging, width: 64 }
+                            ChildCell { key: "{c.id}", child: c.clone(), dragging, width: 64, tuning }
                         }
                     }
                 }

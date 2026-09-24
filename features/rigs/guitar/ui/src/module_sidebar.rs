@@ -519,6 +519,7 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
                                                     live: lit,
                                                     modified: lit && modified,
                                                     subline: info.captures.iter().take(2).cloned().collect::<Vec<_>>().join(" · "),
+                                                    macros: info.macros.clone(),
                                                     onclick: {
                                                         let (p, s) = (preset.clone(), snap.clone());
                                                         move |()| choose(p.clone(), s.clone())
@@ -942,6 +943,7 @@ fn BlockPresets(
                                         name: p.name.clone(),
                                         look,
                                         used_by: p.used_by.clone(),
+                                        macros: p.macros.clone(),
                                         live: lit,
                                         modified: lit && modified,
                                         onclick: {
