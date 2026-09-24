@@ -231,6 +231,10 @@ pub struct PerfStack {
     /// The part that is up tunes this switch (its own rotation or mode).
     #[facet(default)]
     pub part_tuned: bool,
+    /// The song that is up tunes this switch (its rotation, landing patch or
+    /// mode) — the song's own switch setup, shown under the song.
+    #[facet(default)]
+    pub song_tuned: bool,
     /// Every patch in the switch's rotation, in order.
     #[facet(default)]
     pub patches: Vec<String>,
@@ -289,6 +293,9 @@ pub struct PerformanceModel {
     /// The part the current song starts on; empty = the profile's default.
     #[facet(default)]
     pub start_part: String,
+    /// The patch the current song opens on when it has no start part.
+    #[facet(default)]
+    pub start_patch: String,
     /// What footswitches 1–5 do right now: a `SWITCH_ACTIONS` key per
     /// switch (`stack`, `tap_tempo`, `parts`, …) — the song's and the part's
     /// assignments resolved.

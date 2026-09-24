@@ -319,10 +319,31 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                             let count = sections.len();
                                             let on = if model.song_profile.is_empty() { loaded.clone() } else { model.song_profile.clone() };
                                             let starts = if model.start_part.is_empty() { String::new() } else { format!(" · starts {}", model.start_part) };
+                                            // Sections only when parts have been grouped into them;
+                                            // otherwise the song is its parts.
+                                            let grouped = model.parts.iter().any(|p| !p.section.eq_ignore_ascii_case(&p.name));
+                                            let unit = if grouped { "section" } else { "part" };
+                                            // Where a song with no start part opens.
+                                            let start_chip = (model.start_part.is_empty() && !model.start_patch.is_empty())
+                                                .then(|| patch_chip(&model.start_patch));
+                                            // The switches the song (or the part up) tunes.
+                                            let tuned: Vec<signal_guitar_proto::PerfStack> = model
+                                                .stacks
+                                                .iter()
+                                                .filter(|st| st.song_tuned || st.part_tuned)
+                                                .cloned()
+                                                .collect();
                                             rsx! {
                                                 div { style: "display: flex; flex-direction: column; gap: 1px; margin: 0 0 8px 28px;",
                                                     span { style: "padding: 0 0 6px; font-size: 10px; color: {FAINT}; white-space: nowrap; overflow: hidden;",
                                                         "on {on}{starts}"
+                                                    }
+                                                    if let Some(chip) = start_chip {
+                                                        div { style: "display: flex; align-items: center; gap: 8px; padding: 0 6px 6px 0;",
+                                                            span { style: "{crate::theme::EYEBROW}", "Starts" }
+                                                            div { style: "flex: 1;" }
+                                                            PatchChip { label: chip.0.clone(), colour: chip.1, lit: true }
+                                                        }
                                                     }
                                                     if count > 0 {
                                                         div { style: "display: flex; gap: 2px; padding: 0 6px 6px 0;",
@@ -473,9 +494,35 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                             }
                                                         }
                                                     }
-                                                    if model.parts.is_empty() && !adding_part() {
-                                                        span { style: "padding: 4px 0; font-size: 11px; color: {FAINT}; line-height: 1.5;",
-                                                            "No sections yet — name the moments of the song: Verse 1, Chorus, Bridge…"
+                                                    // The song's switch setup: each switch it tunes, with its
+                                                    // rotation, in the switch's colour.
+                                                    if !tuned.is_empty() {
+                                                        div { style: "display: flex; flex-direction: column; gap: 2px; padding: 8px 6px 4px 0;",
+                                                            span { style: "{crate::theme::EYEBROW}", "Switches" }
+                                                            for st in tuned.iter() {
+                                                                {
+                                                                    let (colour, _) = crate::perform::folder_color(&st.name);
+                                                                    let rotation = st.patches.join(" · ");
+                                                                    let mut tags: Vec<&str> = Vec::new();
+                                                                    if st.part_tuned { tags.push("PART"); }
+                                                                    if st.momentary { tags.push("HOLD"); }
+                                                                    if st.no_rotate { tags.push("NO ROTATE"); }
+                                                                    let tags = tags.join(" · ");
+                                                                    rsx! {
+                                                                        div { key: "sw-{st.name}", style: "display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 0;",
+                                                                            span { style: "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; background: {colour};" }
+                                                                            span { style: "flex-shrink: 0; font-size: 11px; font-weight: 600; color: {TEXT};", "{st.name}" }
+                                                                            span { style: "flex: 1 1 auto; min-width: 0; font-size: 10px; color: {MUTED}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+                                                                                title: "{rotation}",
+                                                                                "{rotation}"
+                                                                            }
+                                                                            if !tags.is_empty() {
+                                                                                span { style: "flex-shrink: 0; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; color: {FAINT};", "{tags}" }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                     if adding_part() {
@@ -488,12 +535,12 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                 adding_part.set(true);
                                                                 editing_part.set(None);
                                                             },
-                                                            "+ section"
+                                                            if grouped { "+ section" } else { "+ part" }
                                                         }
                                                     }
                                                     if count > 0 {
                                                         span { style: "padding: 2px 0; font-size: 10px; color: {DIM};",
-                                                            "Switch 5: next · hold: back"
+                                                            "Switch 5: next {unit} · hold: back"
                                                         }
                                                     }
                                                 }

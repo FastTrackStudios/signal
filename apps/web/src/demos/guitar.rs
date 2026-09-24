@@ -534,6 +534,7 @@ fn worship_performance() -> PerformanceModel {
                 momentary: false,
                 no_rotate: false,
                 part_tuned: false,
+                song_tuned: false,
                 patches: Vec::new(),
             })
             .collect(),

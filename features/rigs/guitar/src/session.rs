@@ -3543,6 +3543,7 @@ fn build_perf_model_static(def: &ProfileDef, live: &str) -> PerformanceModel {
                 momentary: false,
                 no_rotate: false,
                 part_tuned: false,
+                song_tuned: false,
                 patches: st.patches.clone(),
             }
         })
@@ -3589,6 +3590,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
                 momentary: false,
                 no_rotate: false,
                 part_tuned: false,
+                song_tuned: false,
                 patches: st.patches.clone(),
             }
         })
@@ -3614,6 +3616,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         revision: 0,
         song_profile: String::new(),
         start_part: String::new(),
+        start_patch: String::new(),
         switch_actions: Vec::new(),
     }
 }
@@ -3957,6 +3960,18 @@ impl Rig for GuitarRigBackend {
             {
                 m.song_profile = def.profile.clone();
                 m.start_part = def.start_part.clone();
+                m.start_patch = def.start_patch.clone();
+                // The switches the song tunes (unless the part that is up
+                // plays the profile's own).
+                let plain = self.current_part_def().is_some_and(|(_, r)| r.profile_switches);
+                if self.current_song_name().is_some() && !plain {
+                    for st in &mut m.stacks {
+                        st.song_tuned = def
+                            .stack_defaults
+                            .iter()
+                            .any(|d| d.stack.eq_ignore_ascii_case(&st.name));
+                    }
+                }
             }
         }
         m.headphone = self.headphone.lock_ok().clone();
