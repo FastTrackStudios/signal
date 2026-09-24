@@ -428,6 +428,11 @@ pub struct ModulePick {
     pub module: String,
     pub preset: String,
     pub snapshot: String,
+    /// The chain blocks this module owns on the live patch (what saving it
+    /// from live folds in): with [`LiveBlock::overridden`], whether the
+    /// module plays differently from its saved snapshot.
+    #[facet(default)]
+    pub blocks: Vec<String>,
 }
 
 /// A module preset (Amp, Drive, Time, …) and its snapshots, by name.
@@ -436,6 +441,14 @@ pub struct ModulePresetEntry {
     pub module: String,
     pub name: String,
     pub snapshots: Vec<String>,
+    /// What refers to it (presets, other modules, patches) — why it cannot
+    /// be deleted.
+    #[facet(default)]
+    pub used_by: Vec<String>,
+    /// The same per snapshot, parallel to `snapshots`: who picks each one,
+    /// joined ("" = nothing does).
+    #[facet(default)]
+    pub snapshot_used_by: Vec<String>,
 }
 
 /// One snapshot of a preset: its module picks.
@@ -452,6 +465,9 @@ pub struct PresetSnapshotEntry {
 pub struct PresetEntry {
     pub name: String,
     pub snapshots: Vec<PresetSnapshotEntry>,
+    /// The patches playing it — why it cannot be deleted.
+    #[facet(default)]
+    pub used_by: Vec<String>,
 }
 
 /// The composition libraries, and what the active patch plays from them.
@@ -481,6 +497,10 @@ pub struct BlockPresetEntry {
     pub name: String,
     /// Picking it bypasses the block.
     pub bypass: bool,
+    /// What refers to it (module snapshots, presets, patches) — why it
+    /// cannot be deleted.
+    #[facet(default)]
+    pub used_by: Vec<String>,
 }
 
 /// A block preset on a chain block, by the block's name (`DLY 1`, `VERB 2`).
@@ -1048,6 +1068,57 @@ pub mod rig {
         /// The patch a profile lands on when loaded — its default scene
         /// (empty: the first patch).
         fn set_profile_default(&self, profile: String, patch: String);
+
+        // ── Library management: module, block and composed presets ──
+        // Each saves its library file and rebuilds, like the edits above. A
+        // delete of something still referenced is refused (the entries'
+        // `used_by` says by what, so a remote can say so before asking).
+
+        /// Save what `module` plays on the live patch as snapshot `snapshot`
+        /// of its preset `preset` — creating either when new, replacing the
+        /// snapshot when it exists (which is "update from live"). The
+        /// patch's own edits on the module's blocks move into the snapshot
+        /// and the patch plays it.
+        fn save_module_snapshot(&self, module: String, preset: String, snapshot: String);
+        /// Drop the live patch's own edits on `module`'s blocks: back to the
+        /// module snapshot as saved.
+        fn revert_module(&self, module: String);
+        /// Rename a module preset; presets, modules and patches follow.
+        fn rename_module_preset(&self, module: String, old: String, new_name: String);
+        /// Copy a module preset, snapshots and all, as `new_name`.
+        fn duplicate_module_preset(&self, module: String, name: String, new_name: String);
+        /// Delete a module preset — refused while anything refers to it.
+        fn delete_module_preset(&self, module: String, name: String);
+        /// Rename one snapshot of a module preset; references follow.
+        fn rename_module_snapshot(&self, module: String, preset: String, old: String, new_name: String);
+        /// Delete one snapshot — refused for the last one, or while a
+        /// preset or patch names it.
+        fn delete_module_snapshot(&self, module: String, preset: String, snapshot: String);
+        /// Save the live block `block` (`DLY 1`) as block preset `name` of
+        /// its type — new, or replacing that preset's settings ("update").
+        /// The patch's own edits on the block go; it plays the preset.
+        fn save_block_preset(&self, block: String, name: String);
+        /// Rename a block preset; module snapshots, presets and patches
+        /// follow.
+        fn rename_block_preset(&self, old: String, new_name: String);
+        /// Copy a block preset as `new_name`.
+        fn duplicate_block_preset(&self, name: String, new_name: String);
+        /// Delete a block preset — refused while anything refers to it.
+        fn delete_block_preset(&self, name: String);
+        /// Rename a preset (composition); patches follow.
+        fn rename_rig_preset(&self, old: String, new_name: String);
+        /// Copy a preset, snapshots and all, as `new_name`.
+        fn duplicate_rig_preset(&self, name: String, new_name: String);
+        /// Delete a preset — refused while a patch plays it.
+        fn delete_rig_preset(&self, name: String);
+        /// Copy a song — sections, recalls, tuning — as `new_name`. Its own
+        /// patches are copied under names of their own.
+        fn duplicate_song(&self, name: String, new_name: String);
+        /// Move an entry within setlist `setlist` (any set, not only the one
+        /// playing).
+        fn move_setlist_entry(&self, setlist: u32, from: u32, to: u32);
+        /// Move a setlist in the list of sets.
+        fn move_setlist(&self, from: u32, to: u32);
 
         /// Every rig change, as it happens: meters at meter rate, perf/chain
         /// on mutation. Remotes render from this stream instead of polling.

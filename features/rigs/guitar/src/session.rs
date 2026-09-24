@@ -5563,6 +5563,44 @@ impl Rig for GuitarRigBackend {
             module: c.module.clone(),
             preset: c.preset.clone(),
             snapshot: c.snapshot.clone(),
+            blocks: Vec::new(),
+        };
+        // The blocks each live pick owns, for the modified dot.
+        let chain = self.live_chain();
+        let owned_pick = |c: &crate::profiles::ModuleChoiceDef| ModulePick {
+            blocks: crate::manage::owned_blocks(&comp, c, &chain),
+            ..pick(c)
+        };
+        // Who refers to what, across every profile — why a delete is refused.
+        let (module_users, preset_users, block_users) = {
+            let active = self.profile_def.lock_ok();
+            let others = self.other_profiles.lock_ok();
+            let all: Vec<&ProfileDef> = std::iter::once(&*active).chain(others.iter()).collect();
+            (
+                comp.modules
+                    .iter()
+                    .map(|m| {
+                        (
+                            crate::manage::module_users(&comp, &all, &m.module, &m.name, None),
+                            m.snapshots
+                                .iter()
+                                .map(|s| {
+                                    crate::manage::module_users(&comp, &all, &m.module, &m.name, Some(&s.name))
+                                        .join(", ")
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+                comp.presets
+                    .iter()
+                    .map(|p| crate::manage::rig_preset_users(&all, &p.name))
+                    .collect::<Vec<_>>(),
+                comp.blocks
+                    .iter()
+                    .map(|b| crate::manage::block_users(&comp, &all, &b.name))
+                    .collect::<Vec<_>>(),
+            )
         };
         // An audition is what is playing, so it is what the preset tab marks.
         let auditioning = self
@@ -5595,7 +5633,7 @@ impl Rig for GuitarRigBackend {
                         (
                             p.rig_preset.clone(),
                             p.snapshot.clone(),
-                            picks.iter().map(pick).collect(),
+                            picks.iter().map(owned_pick).collect(),
                         )
                     })
             }))
@@ -5604,16 +5642,21 @@ impl Rig for GuitarRigBackend {
             modules: comp
                 .modules
                 .iter()
-                .map(|m| ModulePresetEntry {
+                .zip(module_users)
+                .map(|(m, (used_by, snapshot_used_by))| ModulePresetEntry {
                     module: m.module.clone(),
                     name: m.name.clone(),
                     snapshots: m.snapshots.iter().map(|s| s.name.clone()).collect(),
+                    used_by,
+                    snapshot_used_by,
                 })
                 .collect(),
             presets: comp
                 .presets
                 .iter()
-                .map(|p| PresetEntry {
+                .zip(preset_users)
+                .map(|(p, used_by)| PresetEntry {
+                    used_by,
                     name: p.name.clone(),
                     snapshots: p
                         .snapshots
@@ -5632,10 +5675,12 @@ impl Rig for GuitarRigBackend {
             block_presets: comp
                 .blocks
                 .iter()
-                .map(|b| signal_guitar_proto::BlockPresetEntry {
+                .zip(block_users)
+                .map(|(b, used_by)| signal_guitar_proto::BlockPresetEntry {
                     block_type: b.block_type.clone(),
                     name: b.name.clone(),
                     bypass: b.bypass,
+                    used_by,
                 })
                 .collect(),
             active_blocks,
@@ -6313,6 +6358,239 @@ impl Rig for GuitarRigBackend {
         }
     }
 
+    fn save_module_snapshot(&self, module: String, preset: String, snapshot: String) {
+        let chain = self.live_chain();
+        self.edit_live_library("save_module_snapshot", true, |comp, patch| {
+            let picks = crate::compose::module_picks(comp, patch);
+            let current = picks
+                .iter()
+                .find(|p| p.module.eq_ignore_ascii_case(&module))
+                .cloned();
+            let owned = crate::manage::owned_blocks(comp, &current.clone().unwrap_or_else(|| bare_pick(&module)), &chain);
+            let live = crate::manage::LiveModule {
+                current: current.as_ref(),
+                owned: &owned,
+                picks: &picks,
+            };
+            crate::manage::save_module_snapshot(comp, patch, &live, &module, &preset, &snapshot)
+        });
+    }
+
+    fn revert_module(&self, module: String) {
+        let chain = self.live_chain();
+        self.edit_live_library("revert_module", false, |comp, patch| {
+            let pick = crate::compose::module_picks(comp, patch)
+                .into_iter()
+                .find(|p| p.module.eq_ignore_ascii_case(&module))
+                .unwrap_or_else(|| bare_pick(&module));
+            let owned = crate::manage::owned_blocks(comp, &pick, &chain);
+            if crate::manage::revert_blocks(patch, &owned) {
+                Ok(())
+            } else {
+                Err(format!("{module} has no edits on this patch"))
+            }
+        });
+    }
+
+    fn rename_module_preset(&self, module: String, old: String, new_name: String) {
+        self.edit_library("rename_module_preset", |comp, all| {
+            crate::manage::rename_module_preset(comp, all, &module, &old, &new_name)
+        });
+    }
+
+    fn duplicate_module_preset(&self, module: String, name: String, new_name: String) {
+        self.edit_library("duplicate_module_preset", |comp, _| {
+            crate::manage::duplicate_module_preset(comp, &module, &name, &new_name).map(|()| Vec::new())
+        });
+    }
+
+    fn delete_module_preset(&self, module: String, name: String) {
+        self.edit_library("delete_module_preset", |comp, all| {
+            let all: Vec<&ProfileDef> = all.iter().map(|p| &**p).collect();
+            crate::manage::delete_module_preset(comp, &all, &module, &name).map(|()| Vec::new())
+        });
+    }
+
+    fn rename_module_snapshot(&self, module: String, preset: String, old: String, new_name: String) {
+        self.edit_library("rename_module_snapshot", |comp, all| {
+            crate::manage::rename_module_snapshot(comp, all, &module, &preset, &old, &new_name)
+        });
+    }
+
+    fn delete_module_snapshot(&self, module: String, preset: String, snapshot: String) {
+        self.edit_library("delete_module_snapshot", |comp, all| {
+            let all: Vec<&ProfileDef> = all.iter().map(|p| &**p).collect();
+            crate::manage::delete_module_snapshot(comp, &all, &module, &preset, &snapshot).map(|()| Vec::new())
+        });
+    }
+
+    fn save_block_preset(&self, block: String, name: String) {
+        let live = self
+            .blocks
+            .lock_ok()
+            .iter()
+            .find(|b| b.name.eq_ignore_ascii_case(&block))
+            .cloned();
+        let Some(live) = live else {
+            tracing::warn!(%block, "save_block_preset: no such block on the live patch");
+            return;
+        };
+        self.edit_live_library("save_block_preset", true, |comp, patch| {
+            let current = crate::compose::block_picks(comp, patch)
+                .into_iter()
+                .find(|c| c.block.eq_ignore_ascii_case(&live.name))
+                .map(|c| c.preset);
+            let state = crate::manage::LiveBlockState {
+                name: &live.name,
+                block_type: live.block_type.as_str(),
+                params: live.params.iter().map(|p| (p.name.clone(), p.value)).collect(),
+                bypassed: live.bypassed,
+                current: current.as_deref(),
+            };
+            crate::manage::save_block_preset(comp, patch, &state, &name)
+        });
+    }
+
+    fn rename_block_preset(&self, old: String, new_name: String) {
+        self.edit_library("rename_block_preset", |comp, all| {
+            crate::manage::rename_block_preset(comp, all, &old, &new_name)
+        });
+    }
+
+    fn duplicate_block_preset(&self, name: String, new_name: String) {
+        self.edit_library("duplicate_block_preset", |comp, _| {
+            crate::manage::duplicate_block_preset(comp, &name, &new_name).map(|()| Vec::new())
+        });
+    }
+
+    fn delete_block_preset(&self, name: String) {
+        self.edit_library("delete_block_preset", |comp, all| {
+            let all: Vec<&ProfileDef> = all.iter().map(|p| &**p).collect();
+            crate::manage::delete_block_preset(comp, &all, &name).map(|()| Vec::new())
+        });
+    }
+
+    fn rename_rig_preset(&self, old: String, new_name: String) {
+        // An audition names the preset too.
+        if let Some((p, _)) = self.audition.lock_ok().as_mut() {
+            if p.eq_ignore_ascii_case(&old) {
+                p.clone_from(&new_name);
+            }
+        }
+        self.edit_library("rename_rig_preset", |comp, all| {
+            crate::manage::rename_rig_preset(comp, all, &old, &new_name)
+        });
+    }
+
+    fn duplicate_rig_preset(&self, name: String, new_name: String) {
+        self.edit_library("duplicate_rig_preset", |comp, _| {
+            crate::manage::duplicate_rig_preset(comp, &name, &new_name).map(|()| Vec::new())
+        });
+    }
+
+    fn delete_rig_preset(&self, name: String) {
+        self.edit_library("delete_rig_preset", |comp, all| {
+            let all: Vec<&ProfileDef> = all.iter().map(|p| &**p).collect();
+            crate::manage::delete_rig_preset(comp, &all, &name).map(|()| Vec::new())
+        });
+    }
+
+    fn duplicate_song(&self, name: String, new_name: String) {
+        // The song list first, on its own: nothing below holds its lock while
+        // taking the profiles'.
+        let songs = self.songs_lib.lock_ok().clone();
+        let (copy, rebuilt) = {
+            let mut active = self.profile_def.lock_ok();
+            let mut others = self.other_profiles.lock_ok();
+            // The song's patches as played (the profile holds the live
+            // copies; the song list holds them as loaded).
+            let source: Vec<SongDef> = songs
+                .iter()
+                .map(|s| {
+                    let mut s = s.clone();
+                    let live: Vec<crate::profiles::PatchDef> = active
+                        .patches
+                        .iter()
+                        .filter(|p| p.song.eq_ignore_ascii_case(&s.name))
+                        .cloned()
+                        .collect();
+                    if !live.is_empty() {
+                        s.patches = live;
+                    }
+                    s
+                })
+                .collect();
+            let taken: Vec<String> = std::iter::once(&*active)
+                .chain(others.iter())
+                .flat_map(|p| p.patches.iter().map(|x| x.name.clone()))
+                .collect();
+            let taken: Vec<&str> = taken.iter().map(String::as_str).collect();
+            let copy = match crate::manage::duplicate_song(&source, &taken, &name, &new_name) {
+                Ok(c) => c,
+                Err(why) => {
+                    tracing::warn!(%why, "duplicate_song refused");
+                    return;
+                }
+            };
+            // Its patches join the profiles it plays on, as loading does.
+            let mut plays_here = false;
+            for (i, prof) in std::iter::once(&mut *active).chain(others.iter_mut()).enumerate() {
+                if copy.profile.is_empty() || copy.profile.eq_ignore_ascii_case(&prof.name) {
+                    prof.patches.extend(copy.patches.iter().cloned());
+                    plays_here |= i == 0 && !copy.patches.is_empty();
+                }
+            }
+            drop(others);
+            let rebuilt = plays_here.then(|| {
+                let dps = self.drive_presets.lock_ok();
+                profile_from_library(&active, &dps)
+            });
+            (copy, rebuilt)
+        };
+        {
+            let mut songs = self.songs_lib.lock_ok();
+            songs.push(copy);
+            RigLibrary::save_songs(&songs);
+        }
+        match rebuilt {
+            Some(r) => self.reload_rebuilt(r),
+            None => self.publish_state(),
+        }
+    }
+
+    fn move_setlist_entry(&self, setlist: u32, from: u32, to: u32) {
+        {
+            let mut sets = self.setlists.lock_ok();
+            let Some(set) = sets.get_mut(setlist as usize) else {
+                return;
+            };
+            if !crate::manage::move_item(&mut set.entries, from as usize, to as usize) {
+                return;
+            }
+            RigLibrary::save_setlists(&sets);
+            // In the set that is playing, the current song stays current.
+            if *self.setlist_index.lock_ok() == setlist as usize {
+                let mut cur = self.song_index.lock_ok();
+                *cur = crate::manage::follow_move(*cur, from as usize, to as usize);
+            }
+        }
+        self.publish_state();
+    }
+
+    fn move_setlist(&self, from: u32, to: u32) {
+        {
+            let mut sets = self.setlists.lock_ok();
+            if !crate::manage::move_item(&mut sets, from as usize, to as usize) {
+                return;
+            }
+            RigLibrary::save_setlists(&sets);
+            let mut active = self.setlist_index.lock_ok();
+            *active = crate::manage::follow_move(*active, from as usize, to as usize);
+        }
+        self.publish_state();
+        self.mark_state_dirty();
+    }
+
     fn set_block_param(&self, id: String, param: String, value: f32) {
         // A delay or reverb runs fully wet: a `mix` from an older surface
         // is its `level` (see `profiles::PARALLEL_FX`).
@@ -6864,4 +7142,96 @@ fn audio_device_present() -> bool {
     };
     has(&prefs.input_device, GuitarRig::input_devices())
         && has(&prefs.output_device, GuitarRig::output_devices())
+}
+
+/// A pick of `module` that names no preset — what a module owns by block
+/// type alone, when the live patch plays nothing of it yet.
+fn bare_pick(module: &str) -> crate::profiles::ModuleChoiceDef {
+    crate::profiles::ModuleChoiceDef {
+        module: module.to_string(),
+        preset: String::new(),
+        snapshot: String::new(),
+    }
+}
+
+// ── Library management (see `manage`) ────────────────────────────────────────
+impl GuitarRigBackend {
+    /// The live chain as `(name, type)`, for what a module owns.
+    fn live_chain(&self) -> Vec<(String, BlockType)> {
+        self.blocks
+            .lock_ok()
+            .iter()
+            .map(|b| (b.name.clone(), b.block_type))
+            .collect()
+    }
+
+    /// Edit the composition libraries together with every profile (the
+    /// active one first), save what changed, and publish. `edit` returns
+    /// the profiles it touched; an `Err` is a refusal and changes nothing.
+    ///
+    /// No rebuild: a rename leaves every reference resolving to the same
+    /// thing, and a copy or a delete of something unused is not played.
+    fn edit_library(
+        &self,
+        what: &str,
+        edit: impl FnOnce(&mut crate::compose::Compositions, &mut [&mut ProfileDef]) -> Result<Vec<usize>, String>,
+    ) {
+        let mut comp = RigLibrary::load_compositions();
+        {
+            let mut active = self.profile_def.lock_ok();
+            let mut others = self.other_profiles.lock_ok();
+            let mut all: Vec<&mut ProfileDef> = std::iter::once(&mut *active).chain(others.iter_mut()).collect();
+            match edit(&mut comp, &mut all) {
+                Ok(touched) => {
+                    RigLibrary::save_compositions(&comp);
+                    for i in touched {
+                        RigLibrary::save_profile(&*all[i]);
+                    }
+                }
+                Err(why) => {
+                    tracing::warn!(what, %why, "library edit refused");
+                    return;
+                }
+            }
+        }
+        self.publish_state();
+    }
+
+    /// Edit the composition libraries and the live patch together, save
+    /// both, and rebuild so it is heard. `save_comp: false` for an edit of
+    /// the patch alone.
+    fn edit_live_library(
+        &self,
+        what: &str,
+        save_comp: bool,
+        edit: impl FnOnce(&mut crate::compose::Compositions, &mut crate::profiles::PatchDef) -> Result<(), String>,
+    ) {
+        let Some(name) = self.live_patch_name() else {
+            return;
+        };
+        let mut comp = RigLibrary::load_compositions();
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let Some(patch) = def
+                .patches
+                .iter_mut()
+                .find(|p| p.name.eq_ignore_ascii_case(&name))
+            else {
+                // An audition is not a patch of the profile.
+                tracing::warn!(what, patch = %name, "library edit refused: the live sound is not a patch");
+                return;
+            };
+            if let Err(why) = edit(&mut comp, patch) {
+                tracing::warn!(what, %why, "library edit refused");
+                return;
+            }
+            if save_comp {
+                RigLibrary::save_compositions(&comp);
+            }
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+    }
 }
