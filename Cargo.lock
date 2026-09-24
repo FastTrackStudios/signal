@@ -13366,6 +13366,7 @@ dependencies = [
  "midicore",
  "neural-amp-modeler",
  "signal-guitar-proto",
+ "signal-macromod",
  "signal-nam",
  "signal-proto",
  "signal-rig-host",

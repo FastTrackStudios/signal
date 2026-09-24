@@ -211,6 +211,9 @@ pub struct GuitarRigBackend {
     design_patch: Arc<Mutex<String>>,
     /// The last patch-levelling pass — progress while it runs, results after.
     levelling: Arc<Mutex<signal_guitar_proto::LevelProgress>>,
+    /// The active patch's macro bar and the baseline it offsets (see
+    /// `crate::macros`). A leaf lock: never held while taking another.
+    macros: Arc<Mutex<crate::macros::MacroEngine>>,
     /// Set while a levelling pass is in flight, so a second press does not
     /// start a second pass over the same patches.
     levelling_busy: Arc<std::sync::atomic::AtomicBool>,
@@ -347,6 +350,7 @@ impl GuitarRigBackend {
             perform_mode: Arc::new(Mutex::new(1)),
             design_patch: Arc::new(Mutex::new(String::new())),
             levelling: Arc::new(Mutex::new(signal_guitar_proto::LevelProgress::default())),
+            macros: Arc::new(Mutex::new(crate::macros::MacroEngine::default())),
             levelling_busy: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             library_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             state_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1011,6 +1015,123 @@ impl GuitarRigBackend {
     /// the cached curve's difference between the built position and the new
     /// one. Relative to the level the block was built with, never a fresh
     /// absolute gain.
+    /// Put `value` on `param` of block `id` live — the engine, the chain
+    /// the UI draws, and a drive knob's loudness compensation — without
+    /// recording anything on the patch. The one path both a knob edit and
+    /// a macro take to the DSP.
+    fn write_live_param(&self, id: &str, param: &str, value: f32) {
+        // Constant-loudness drive: on NAM board blocks the drive knob is
+        // realised as a compensated input/output trim pair.
+        if param == "drive" {
+            let block = self
+                .blocks
+                .lock_ok()
+                .iter()
+                .find(|b| b.id == id)
+                .map(|b| (b.name.clone(), b.block_type));
+            if let Some((name, bt)) = block {
+                if matches!(bt, BlockType::Drive | BlockType::Boost | BlockType::Amp) {
+                    self.apply_drive(id, &name, value);
+                }
+            }
+        }
+        let mut retime_delay = false;
+        {
+            let mut blocks = self.blocks.lock_ok();
+            if let Some(b) = blocks.iter_mut().find(|b| b.id == id) {
+                if b.param_name.as_deref() == Some(param) {
+                    b.param_value = value;
+                }
+                if let Some(p) = b.params.iter_mut().find(|p| p.name == param) {
+                    p.value = value;
+                }
+                retime_delay = b.block_type == BlockType::Delay && param.starts_with("tap_div");
+            }
+        }
+        if retime_delay {
+            // A note-division change re-times the delay from the tempo.
+            self.apply_tempo_to_delays();
+        }
+        {
+            let guard = self.rig.lock_ok();
+            if let Some(prig) = guard.as_ref() {
+                prig.rig().set_active_block_param(id, param, value);
+            }
+        }
+    }
+
+    /// Put the macro engine's live values and stage bypasses on the chain,
+    /// where they differ from what is there.
+    fn apply_macro_writes(&self, writes: &[crate::macros::Write], bypass: &[(String, bool)]) {
+        for (id, param, v) in writes {
+            let current = self
+                .blocks
+                .lock_ok()
+                .iter()
+                .find(|b| b.id == *id)
+                .and_then(|b| b.params.iter().find(|p| p.name == *param).map(|p| p.value));
+            if current.is_some_and(|c| (c - v).abs() > 1e-6) {
+                self.write_live_param(id, param, *v);
+            }
+        }
+        for (id, byp) in bypass {
+            let changed = {
+                let mut blocks = self.blocks.lock_ok();
+                match blocks.iter_mut().find(|b| b.id == *id) {
+                    Some(b) if b.bypassed != *byp => {
+                        b.bypassed = *byp;
+                        true
+                    }
+                    _ => false,
+                }
+            };
+            if changed {
+                // The slot only: the patch keeps its own bypass (the
+                // macro's is an offset, not an edit).
+                let guard = self.rig.lock_ok();
+                if let Some(prig) = guard.as_ref() {
+                    prig.rig().set_block_slot_bypass(id, *byp);
+                }
+            }
+        }
+    }
+
+    /// Put the active patch's macro bar on the chain just built: the chain
+    /// as built is the baseline, the patch's saved positions go on top.
+    fn macros_rebase(&self) {
+        let Some(patch) = self.live_patch_name() else { return };
+        let blocks = self.blocks.lock_ok().clone();
+        let saved = self
+            .profile_def
+            .lock_ok()
+            .patches
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&patch))
+            .map(|p| p.macros.clone())
+            .unwrap_or_default();
+        let (writes, bypass) = {
+            let mut e = self.macros.lock_ok();
+            e.rebase(&patch, &blocks, &saved);
+            (e.live_params(), e.live_bypass())
+        };
+        self.apply_macro_writes(&writes, &bypass);
+    }
+
+    /// Keep the macro positions with the patch (debounced, like a knob).
+    fn store_macros(&self, patch: &str, saved: Vec<crate::profiles::MacroValueDef>) {
+        if patch.is_empty() {
+            return;
+        }
+        let mut def = self.profile_def.lock_ok();
+        if let Some(p) = def.patches.iter_mut().find(|p| p.name.eq_ignore_ascii_case(patch)) {
+            if p.macros != saved {
+                p.macros = saved;
+                self.library_dirty
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    }
+
     fn apply_drive(&self, block_id: &str, block_name: &str, drive: f32) {
         let (sr, built) = {
             let guard = self.rig.lock_ok();
@@ -1530,6 +1651,7 @@ impl GuitarRigBackend {
         *self.revision.lock_ok() += 1;
         self.events.publish(RigEvent::Perf(Rig::perf(self)));
         self.events.publish(RigEvent::Chain(Rig::chain(self)));
+        self.events.publish(RigEvent::Macros(Rig::macros(self)));
     }
 
     /// The tempo shown/used right now (tapped, or the default).
@@ -1729,11 +1851,23 @@ impl GuitarRigBackend {
         if boost_ids.is_empty() {
             return;
         }
+        // The pedal's level is the Boost macro's baseline; the macro rides
+        // on top of it.
+        let live: Vec<(String, f32)> = {
+            let mut e = self.macros.lock_ok();
+            boost_ids
+                .iter()
+                .map(|id| {
+                    e.set_base(id, "gain_db", db);
+                    (id.clone(), e.live(id, "gain_db").unwrap_or(db))
+                })
+                .collect()
+        };
         {
             let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
-                for id in &boost_ids {
-                    prig.rig().set_active_block_param(id, "gain_db", db);
+                for (id, db) in &live {
+                    prig.rig().set_active_block_param(id, "gain_db", *db);
                 }
             }
         }
@@ -2804,6 +2938,7 @@ impl GuitarRigBackend {
         // No engine to mirror — build the chain the definition describes.
         if self.rig.lock_ok().is_none() && crate::library::rig_is_design() {
             *self.blocks.lock_ok() = self.design_blocks();
+            self.macros_rebase();
             return;
         }
         let mut out = Vec::new();
@@ -3013,6 +3148,7 @@ impl GuitarRigBackend {
             }
         }
         *self.blocks.lock_ok() = out;
+        self.macros_rebase();
     }
 }
 
@@ -3130,6 +3266,10 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("duck_release", 0.05, 1.0, 0.2),
             ("mod_rate", 0.05, 8.0, 0.6),
             ("mod_depth", 0.0, 1.0, 0.0),
+            // The Ice (pitch) machine: the MX interval menu (30 = Free) and
+            // how much of the repeats is shifted — the macro bar's Pitch.
+            ("interval", 0.0, 30.0, 30.0),
+            ("blend", 0.0, 1.0, 1.0),
         ]),
         // Reverb surface — algorithm + mix/time/damping/tone/modulation +
         // wet pan (MX chain-A pan).
@@ -3154,6 +3294,10 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("duck", 0.0, 1.0, 0.0),
             ("duck_threshold", -60.0, 0.0, -20.0),
             ("duck_release", 20.0, 2000.0, 120.0),
+            // The Shimmer algorithm: its first voice's shift and how much
+            // of the tail is shifted — the macro bar's Pitch.
+            ("shim_shift1", -12.0, 12.0, 12.0),
+            ("shim_amount", 0.0, 1.0, 0.35),
         ]),
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => owned(&[
             ("mix", 0.0, 1.0, 0.4),
@@ -4785,6 +4929,7 @@ impl Rig for GuitarRigBackend {
                 level_db: 0.0,
                 boost_db: 0.0,
                 overrides: Vec::new(),
+                macros: Vec::new(),
             });
             if let Some(st) = def
                 .stacks
@@ -5562,6 +5707,14 @@ impl Rig for GuitarRigBackend {
                 }
             }
             self.record_patch_override(&id, None, if byp { 1.0 } else { 0.0 });
+            // A drive stage switched by hand holds until the Drive knob
+            // next moves.
+            let saved = {
+                let mut e = self.macros.lock_ok();
+                e.direct_bypass(&id, byp);
+                (e.saved(), e.patch().to_string())
+            };
+            self.store_macros(&saved.1, saved.0);
         }
         self.publish_state();
     }
@@ -6042,6 +6195,7 @@ impl Rig for GuitarRigBackend {
                     level_db: 0.0,
                     boost_db: 0.0,
                     overrides: Vec::new(),
+                    macros: Vec::new(),
                 }],
                 stacks: vec![crate::profiles::StackDef {
                     name: "Clean".to_string(),
@@ -6625,47 +6779,59 @@ impl Rig for GuitarRigBackend {
                 _ => (param, value),
             }
         };
-        self.record_patch_override(&id, Some(&param), value);
-        // Constant-loudness drive: on NAM board blocks the drive knob is
-        // realised as a compensated input/output trim pair.
-        if param == "drive" {
-            let block = self
-                .blocks
-                .lock_ok()
-                .iter()
-                .find(|b| b.id == id)
-                .map(|b| (b.name.clone(), b.block_type));
-            if let Some((name, bt)) = block {
-                if matches!(bt, BlockType::Drive | BlockType::Boost | BlockType::Amp) {
-                    self.apply_drive(&id, &name, value);
-                }
-            }
-        }
-        let mut retime_delay = false;
-        {
-            let mut blocks = self.blocks.lock_ok();
-            if let Some(b) = blocks.iter_mut().find(|b| b.id == id) {
-                if b.param_name.as_deref() == Some(param.as_str()) {
-                    b.param_value = value;
-                }
-                if let Some(p) = b.params.iter_mut().find(|p| p.name == param) {
-                    p.value = value;
-                }
-                retime_delay = b.block_type == BlockType::Delay && param.starts_with("tap_div");
-            }
-        }
-        if retime_delay {
-            // A note-division change re-times the delay from the tempo.
-            self.apply_tempo_to_delays();
-        }
-        {
-            let guard = self.rig.lock_ok();
-            if let Some(prig) = guard.as_ref() {
-                prig.rig().set_active_block_param(&id, &param, value);
-            }
+        // The value stays as dialled; what the patch records is the baseline
+        // under it at the macros' current offsets (see `crate::macros`).
+        let baseline = self.macros.lock_ok().direct_edit(&id, &param, value);
+        self.record_patch_override(&id, Some(&param), baseline);
+        self.write_live_param(&id, &param, value);
+        // A new delay machine or reverb algorithm can bring a macro knob in
+        // (Pitch, for the Ice machine) or change its rest (Width, a pan).
+        if matches!(param.as_str(), "style" | "algorithm" | "engine" | "pan" | "pan_a" | "width") {
+            let blocks = self.blocks.lock_ok().clone();
+            self.macros.lock_ok().refresh(&blocks);
         }
         // Chain state only — param drags shouldn't re-publish the perf model.
         self.events.publish(RigEvent::Chain(Rig::chain(self)));
+        self.events.publish(RigEvent::Macros(Rig::macros(self)));
+    }
+
+    fn macros(&self) -> Vec<signal_guitar_proto::MacroKnobView> {
+        let blocks = self.blocks.lock_ok().clone();
+        self.macros.lock_ok().views(&blocks)
+    }
+
+    fn set_macro(&self, id: String, value: f32) {
+        let (choice, writes, bypass, saved, patch) = {
+            let mut e = self.macros.lock_ok();
+            let choice = e.set(&id, value);
+            (choice, e.live_params(), e.live_bypass(), e.saved(), e.patch().to_string())
+        };
+        // A Type or Interval knob is a choice made on the patch itself.
+        if let Some((block, param, v)) = choice {
+            self.record_patch_override(&block, Some(&param), v);
+            self.write_live_param(&block, &param, v);
+            let blocks = self.blocks.lock_ok().clone();
+            self.macros.lock_ok().refresh(&blocks);
+        }
+        self.apply_macro_writes(&writes, &bypass);
+        if id == "boost" {
+            self.apply_boost_to_block();
+        }
+        self.store_macros(&patch, saved);
+        self.events.publish(RigEvent::Chain(Rig::chain(self)));
+        self.events.publish(RigEvent::Macros(Rig::macros(self)));
+    }
+
+    fn set_macro_pad(&self, id: String, on: bool) {
+        let (bypass, saved, patch) = {
+            let mut e = self.macros.lock_ok();
+            e.set_pad(&id, on);
+            (e.live_bypass(), e.saved(), e.patch().to_string())
+        };
+        self.apply_macro_writes(&[], &bypass);
+        self.store_macros(&patch, saved);
+        self.events.publish(RigEvent::Chain(Rig::chain(self)));
+        self.events.publish(RigEvent::Macros(Rig::macros(self)));
     }
 
     fn set_block_level(&self, id: String, level_db: f32, commit: bool) {
@@ -7096,6 +7262,7 @@ mod tests {
             level_db: 0.0,
             boost_db: 0.0,
             overrides: Vec::new(),
+            macros: Vec::new(),
         }
     }
 

@@ -728,6 +728,75 @@ pub struct LiveBlock {
     pub output_level_db: Option<f32>,
 }
 
+/// One knob of the macro bar, as the bar draws it — see
+/// [`macros`](rig::Rig::macros).
+///
+/// A macro is **relative to the patch as dialled**: at [`rest`](Self::rest)
+/// it changes nothing, above it gives more of what the patch already does,
+/// below it less. The patch's own values stay where they are (and stay
+/// editable); the macro is an offset on top of them.
+#[derive(Clone, PartialEq, Debug, Facet)]
+pub struct MacroKnobView {
+    /// `drive`, `delay`, `width`…
+    pub id: String,
+    pub label: String,
+    /// Accent (hex) — the label, the arc and the pointer.
+    pub color: String,
+    /// Knob position, 0..1.
+    pub value: f32,
+    /// Where the knob sits when it changes nothing — the patch as dialled.
+    /// 0.5 for most; Width rests at the patch's own spread.
+    pub rest: f32,
+    /// Draw the arc from 12 o'clock and read out ±% (Tone's tilt).
+    pub bipolar: bool,
+    /// `spread` for Width: the arc opens both ways from 12 o'clock.
+    pub style: String,
+    /// The value as the cell prints it ("62%", "+20%", "Mono").
+    pub readout: String,
+    /// How the hover panel lays the children out: `row` (one line of
+    /// knobs), `dual` (Delay / Reverb: a header row and one row per block,
+    /// with Type and Time links) or `grouped` (a row per block, headed by
+    /// the block's name). Empty when the knob has no panel.
+    pub layout: String,
+    /// `dual`: the five column headers.
+    pub headers: Vec<String>,
+    /// The cell the panel hangs under, when it is not the knob's own
+    /// (Clarity's panel sits under Delay). Empty = its own cell.
+    pub anchor: String,
+    pub children: Vec<MacroChildView>,
+}
+
+/// One knob in a macro's hover panel.
+#[derive(Clone, PartialEq, Debug, Facet)]
+pub struct MacroChildView {
+    pub id: String,
+    pub label: String,
+    pub color: String,
+    /// Knob position, 0..1.
+    pub value: f32,
+    /// The position that changes nothing.
+    pub rest: f32,
+    /// The block it belongs to (`DLY 1`): the row of a `dual` or
+    /// `grouped` panel.
+    pub group: String,
+    /// Has an ON/OFF pad (the drive stages).
+    pub has_pad: bool,
+    /// Its block is bypassed.
+    pub bypassed: bool,
+    /// How to print [`param`](Self::param): `db`, `db_gain`, `hz`, `ms`,
+    /// `verb_s`, `div`, `pct`, `ratio`, `delay_style`, `verb_algo`,
+    /// `interval`, `semitones`.
+    pub fmt: String,
+    /// The value it drives, live (with every macro applied).
+    pub param: f32,
+    /// A second value the readout needs (a reverb's algorithm, for its
+    /// time in seconds).
+    pub aux: f32,
+    /// An absolute choice (Type, Interval) rather than an offset: how many
+    /// choices. 0 for a relative knob.
+    pub steps: u32,
+}
+
 // ── Services ──────────────────────────────────────────────────────────────
 // One `#[architect::rpc]` trait per module (the macro emits a `Service`
 // token + `serve`/`layer` verbs at module scope).
@@ -741,8 +810,8 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode, PartOverride,
-        PatchInfo, PerformanceModel, PresetInfo, RigStatus, SwitchTuning, TunerReading,
+        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode, MacroKnobView,
+        PartOverride, PatchInfo, PerformanceModel, PresetInfo, RigStatus, SwitchTuning, TunerReading,
     };
 
     /// One live rig change. Every variant carries **full state** (idempotent
@@ -769,6 +838,9 @@ pub mod rig {
         /// offline and a NAM block is far from realtime, so this can run for a
         /// minute: without progress a player cannot tell it from a hang.
         Levelling(LevelProgress),
+        /// The macro bar changed — a knob moved, the patch switched, or a
+        /// param the bar shows was edited.
+        Macros(Vec<MacroKnobView>),
     }
 
     #[architect::rpc]
@@ -1147,6 +1219,17 @@ pub mod rig {
         fn move_setlist_entry(&self, setlist: u32, from: u32, to: u32);
         /// Move a setlist in the list of sets.
         fn move_setlist(&self, from: u32, to: u32);
+
+        /// The active patch's macro bar, values included.
+        fn macros(&self) -> Vec<MacroKnobView>;
+        /// Move macro `id` (a bar knob or one in its panel) to `value`
+        /// (0..1). A bar knob sets its panel's knobs; they set the patch's
+        /// params as offsets from the patch as dialled (never recorded as
+        /// patch edits). Kept with the patch.
+        fn set_macro(&self, id: String, value: f32);
+        /// A drive stage's ON/OFF pad: force the stage on or off until its
+        /// bar knob next moves.
+        fn set_macro_pad(&self, id: String, on: bool);
 
         /// Every rig change, as it happens: meters at meter rate, perf/chain
         /// on mutation. Remotes render from this stream instead of polling.

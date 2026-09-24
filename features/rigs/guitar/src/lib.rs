@@ -24,6 +24,7 @@ pub mod design;
 pub mod levelling;
 pub mod measure;
 pub mod library;
+pub mod macros;
 pub mod manage;
 pub mod node_store;
 pub mod nodes;

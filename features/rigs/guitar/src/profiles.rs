@@ -223,6 +223,27 @@ pub struct PatchDef {
     /// Boost level recalled with the patch (0 = boost off).
     pub boost_db: f32,
     pub overrides: Vec<OverrideDef>,
+    /// Where the macro bar's knobs sit on this patch — offsets from the
+    /// patch as dialled, so a patch with none plays exactly as its values
+    /// say (see `crate::macros`). Kept apart from `overrides` on purpose:
+    /// a macro turned and turned back must leave the patch where it was.
+    #[facet(default)]
+    pub macros: Vec<MacroValueDef>,
+}
+
+/// One macro knob's position on a patch.
+#[derive(Clone, Debug, PartialEq, Facet)]
+pub struct MacroValueDef {
+    /// The knob (`drive`, `delay-time1`, `width`).
+    pub id: String,
+    /// Offset from rest, −1..1: 0 changes nothing, 1 is the knob all the
+    /// way up, −1 all the way down. For an absolute choice (none are
+    /// stored today) it would be the position itself.
+    pub value: f32,
+    /// A drive stage's ON/OFF pad, pressed since its knob last moved:
+    /// `on`, `off`, or empty (the knob decides).
+    #[facet(default)]
+    pub pad: String,
 }
 
 /// One module's pick: which module preset, and which of its snapshots.
@@ -418,6 +439,7 @@ pub fn worship_def() -> ProfileDef {
         level_db: 0.0,
         boost_db: 0.0,
         overrides: Vec::new(),
+        macros: Vec::new(),
     };
     let with_ovr = |mut p: PatchDef, ovr: Vec<OverrideDef>| {
         p.overrides = ovr;

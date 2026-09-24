@@ -29,6 +29,7 @@ signal-rigs-proto.workspace = true
 signal-sampler.workspace = true
 # Cross-rig utilities: poison-tolerant locking, panic payload text.
 signal-rig-host.workspace = true
+signal-macromod.workspace = true
 
 # The wire contract this crate's headless backend implements (Rig +
 # AudioSettings services); front-ends consume the same crate's clients.

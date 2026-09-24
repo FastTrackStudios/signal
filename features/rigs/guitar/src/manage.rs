@@ -757,6 +757,7 @@ mod tests {
             level_db: 0.0,
             boost_db: 0.0,
             overrides: Vec::new(),
+            macros: Vec::new(),
         }
     }
 

@@ -92,7 +92,7 @@ async fn main() {
             RigEvent::Levelling(l) => {
                 eprintln!("levelling event: {}/{}", l.done, l.total);
             }
-            RigEvent::Spectrum(_) | RigEvent::CompWave(_) => {}
+            RigEvent::Spectrum(_) | RigEvent::CompWave(_) | RigEvent::Macros(_) => {}
         });
     }
     eprintln!("events received: {n_status} status, {n_perf} perf, {n_chain} chain");
