@@ -1124,6 +1124,11 @@ pub struct SongDef {
     /// profile's default patch.
     #[facet(default)]
     pub start_part: String,
+    /// The patch the song opens on, when it has no start part (e.g.
+    /// "Drive Dotted"). Empty lands on the profile's default patch, through
+    /// the song's tuning of that stack.
+    #[facet(default)]
+    pub start_patch: String,
     /// Patches that belong to this song alone (a sound the song needs and
     /// the profile should not carry) — see [`PatchDef::song`].
     #[facet(default)]
@@ -1410,6 +1415,7 @@ pub fn song_library() -> Vec<SongDef> {
             patches: Vec::new(),
             profile: String::new(),
             start_part: String::new(),
+            start_patch: String::new(),
             name: name.to_string(),
             key: key.to_string(),
             bpm,
@@ -1747,6 +1753,7 @@ mod song_tests {
             patches: Vec::new(),
             profile: String::new(),
             start_part: String::new(),
+            start_patch: String::new(),
             name: "No Other Name".into(),
             key: "G".into(),
             bpm: 74,
@@ -2044,6 +2051,7 @@ mod section_tests {
             patches: Vec::new(),
             profile: String::new(),
             start_part: String::new(),
+            start_patch: String::new(),
             name: "Test Song".into(),
             key: "E".into(),
             bpm: 120,

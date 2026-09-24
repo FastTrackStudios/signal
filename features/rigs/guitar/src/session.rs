@@ -2788,7 +2788,7 @@ impl GuitarRigBackend {
         *self.part_index.lock_ok() = 0;
         *self.tempo.lock_ok() = Some(bpm as f32);
         self.mark_state_dirty();
-        let (profile, start_part, defaults) = self
+        let (profile, start_part, defaults, start_patch) = self
             .songs_lib
             .lock_ok()
             .iter()
@@ -2798,6 +2798,7 @@ impl GuitarRigBackend {
                     s.profile.clone(),
                     s.start_part.clone(),
                     s.stack_defaults.clone(),
+                    s.start_patch.clone(),
                 )
             })
             .unwrap_or_default();
@@ -2832,6 +2833,12 @@ impl GuitarRigBackend {
             .position(|p| !start_part.is_empty() && p.name.eq_ignore_ascii_case(&start_part))
         {
             Rig::select_part(self, pi as u32);
+            return;
+        }
+        // …or the patch the song opens on, when it names one…
+        if !start_patch.is_empty() && self.activate_named(&start_patch) {
+            self.sync_after_switch(std::time::Duration::ZERO, "song");
+            self.publish_state();
             return;
         }
         // …or the profile's default scene — through the song's tuning of
@@ -5206,6 +5213,7 @@ impl Rig for GuitarRigBackend {
                 patches: Vec::new(),
                 profile: String::new(),
                 start_part: String::new(),
+                start_patch: String::new(),
                 name: name.clone(),
                 key: if key.is_empty() { "C".to_string() } else { key },
                 bpm: if bpm == 0 { 120 } else { bpm },

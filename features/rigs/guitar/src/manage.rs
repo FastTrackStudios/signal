@@ -957,6 +957,7 @@ mod tests {
             }],
             profile: String::new(),
             start_part: String::new(),
+            start_patch: String::new(),
             patches: vec![PatchDef { song: "Washed".into(), ..patch("Washed Pad") }],
             switch_actions: Vec::new(),
         };
