@@ -33,7 +33,8 @@ use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 // pans are measured centred.
 // v11: the chorus engines rebuilt (depth law, Tape level, feedback
 // compensation) and six added.
-const ENGINE: &str = "rig-v11";
+// v12: the boost pedal boosts (it was a passthrough), the Pitch slot plays.
+const ENGINE: &str = "rig-v12";
 
 /// Settle time before a measurement: long enough for the compressors, gate
 /// and NAM state from the previous input to have gone, and for the delays and

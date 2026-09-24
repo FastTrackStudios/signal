@@ -121,8 +121,14 @@ fn build_phaser(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance>
 fn build_rotary(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
     Box::new(fx_blocks::NativePassthrough::new("Rotary"))
 }
-fn build_boost_pedal(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(fx_blocks::NativePassthrough::new("Boost"))
+/// The clean boost at the head of the drive board: its `drive` is the level
+/// push into the drives (0 dB … +18 dB).
+fn build_boost_pedal(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeBoost::new(sample_rate as f64);
+    if let Some(v) = block.param_f32("drive") {
+        fx.set_named("drive", v as f64);
+    }
+    Box::new(fx)
 }
 fn build_drive(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
     Box::new(fx_blocks::NativePassthrough::new("Drive"))
