@@ -393,10 +393,24 @@ pub fn PerformGrid(
                 subtitle: format!("{song_pos} · {current_song}"),
                 bg: "#a78bfa".to_string(),
                 text: "#1e1b4b".to_string(),
-                active: song_layer(),
+                active: song_layer() || model.perform_mode == 2,
                 switch_no: 8,
                 compact: true,
-                onclick: cbs.cb(move |(): ()| song_layer.toggle()),
+                // As the footswitch: from Profile mode, into Setlist mode on
+                // the song that is up; in Setlist mode, the song layer.
+                onclick: cbs.cb({
+                    let rig = rig.clone();
+                    let in_setlist = model.perform_mode == 2;
+                    move |(): ()| {
+                        if in_setlist {
+                            song_layer.toggle();
+                        } else if let Some(r) = rig.clone() {
+                            spawn(async move {
+                                let _ = r.set_perform_mode(2).await;
+                            });
+                        }
+                    }
+                }),
             }
             // Switch 9 (hold 4): Boost — tap on/off, hold rotates the level.
             BoostTile {

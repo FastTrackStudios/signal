@@ -40,6 +40,9 @@ pub enum FootswitchAction {
     Press(usize),
     /// Momentary switch `i` came back up.
     Release(usize),
+    /// Switch `i` held past the long-hold threshold (see
+    /// [`FootswitchEngine::set_long_hold`]).
+    LongHold(usize),
 }
 
 /// Per-switch gesture state. One per backend pump (thread-local scratch).
@@ -59,6 +62,11 @@ pub struct FootswitchEngine {
     /// press always ends the way it began.
     momentary: Vec<bool>,
     momentary_want: Vec<bool>,
+    /// Switches with a second, longer hold: their `Hold` waits for the
+    /// release (so holding on can still become a `LongHold` without the
+    /// `Hold` having fired), and `LongHold` fires at `long_hold`.
+    long: Vec<bool>,
+    long_hold: Duration,
 }
 
 impl FootswitchEngine {
@@ -74,7 +82,19 @@ impl FootswitchEngine {
             switches,
             momentary: vec![false; switches],
             momentary_want: vec![false; switches],
+            long: vec![false; switches],
+            long_hold: Duration::from_secs(2),
         }
+    }
+
+    /// Give switch `sw` a long hold at `after`: a release between the hold
+    /// and the long hold is its `Hold`, holding on to `after` is its
+    /// `LongHold` (and nothing else).
+    pub fn set_long_hold(&mut self, sw: usize, after: Duration) {
+        if let Some(slot) = self.long.get_mut(sw) {
+            *slot = true;
+        }
+        self.long_hold = after;
     }
 
     /// Which gesture switches are momentary, in switch order (missing =
@@ -156,8 +176,13 @@ impl FootswitchEngine {
                     self.hold_fired[sw] = false;
                     None
                 } else {
+                    let held_for = self.down[sw].map(|t| t.elapsed());
                     let tapped = !self.hold_fired[sw];
                     self.down[sw] = None;
+                    if tapped && self.long[sw] && held_for.is_some_and(|d| d >= self.hold) {
+                        // Released between the hold and the long hold.
+                        return Some(FootswitchAction::Hold(sw));
+                    }
                     tapped.then_some(FootswitchAction::Tap(sw))
                 }
             }
@@ -171,7 +196,13 @@ impl FootswitchEngine {
         let mut fired = Vec::new();
         for sw in 0..self.switches {
             if let Some(t) = self.down[sw] {
-                if !self.hold_fired[sw] && t.elapsed() >= self.hold {
+                if self.long[sw] {
+                    // Its hold comes on release; only the long hold fires here.
+                    if !self.hold_fired[sw] && t.elapsed() >= self.long_hold {
+                        self.hold_fired[sw] = true;
+                        fired.push(FootswitchAction::LongHold(sw));
+                    }
+                } else if !self.hold_fired[sw] && t.elapsed() >= self.hold {
                     self.hold_fired[sw] = true;
                     fired.push(FootswitchAction::Hold(sw));
                 }
@@ -291,6 +322,27 @@ mod tests {
         e.set_momentary(&[true]);
         assert_eq!(e.on_cc(&m, 101, 0), Some(FootswitchAction::Tap(0)));
         assert_eq!(e.on_cc(&m, 101, 127), Some(FootswitchAction::Press(0)));
+    }
+
+    #[test]
+    fn a_long_hold_switch_holds_on_release_and_long_holds_when_held_on() {
+        let m = map();
+        let mut e = FootswitchEngine::new(5, 5, Duration::from_millis(0));
+        e.set_long_hold(2, Duration::from_millis(40));
+        // Past the hold, released before the long hold: its Hold, on release.
+        assert_eq!(e.on_note(&m, 3, true), None);
+        assert_eq!(e.poll_holds(), Vec::new(), "no hold while still down");
+        assert_eq!(e.on_note(&m, 3, false), Some(FootswitchAction::Hold(2)));
+        // Held on past the long hold: LongHold, and nothing on release.
+        assert_eq!(e.on_note(&m, 3, true), None);
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(e.poll_holds(), vec![FootswitchAction::LongHold(2)]);
+        assert_eq!(e.on_note(&m, 3, false), None);
+        // A quick tap is still a tap.
+        let mut e = FootswitchEngine::new(5, 5, Duration::from_millis(500));
+        e.set_long_hold(2, Duration::from_secs(2));
+        assert_eq!(e.on_note(&m, 3, true), None);
+        assert_eq!(e.on_note(&m, 3, false), Some(FootswitchAction::Tap(2)));
     }
 
     #[test]
