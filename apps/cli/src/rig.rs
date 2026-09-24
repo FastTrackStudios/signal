@@ -6,6 +6,16 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Ask the running rig to apply every config file edited since it
+    /// loaded it, now, and print what it did. (It also picks edits up on
+    /// its own within a second; this is for "now, and tell me".) Reaches
+    /// the rig through its config directory, so run it with the same
+    /// `XDG_CONFIG_HOME` / `SIGNAL_RIG_DIR` as the app.
+    Reload {
+        /// Seconds to wait for the rig to answer.
+        #[arg(long, default_value_t = 10)]
+        timeout: u64,
+    },
     /// Level every patch of a profile to the same loudness (writes each
     /// patch's `level_db`; the player's own `trim_db` is left alone).
     /// Restart the app afterwards — it reads the profile at load.
@@ -99,6 +109,7 @@ pub enum Command {
 
 pub fn run(command: Command) -> ExitCode {
     match command {
+        Command::Reload { timeout } => reload(timeout),
         Command::WebBundle { out, profiles } => {
             match signal_guitar::web_bundle::export(&out, &profiles) {
                 Ok((bundle, skipped)) => {
@@ -561,4 +572,47 @@ pub fn run(command: Command) -> ExitCode {
             }
         }
     }
+}
+
+/// `signal rig reload`: drop a request into the rig directory, wait for the
+/// running rig to answer it (it deletes the request), and print its report
+/// lines from the reload log.
+fn reload(timeout: u64) -> ExitCode {
+    use signal_guitar::config_watch::{RELOAD_REQUEST, log_path};
+    let dir = signal_guitar::library::rig_dir();
+    let request = dir.join(RELOAD_REQUEST);
+    let log = log_path();
+    let from = std::fs::metadata(&log).map_or(0, |m| m.len());
+    let tag = format!(
+        "cli-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis())
+    );
+    if let Err(e) = std::fs::write(&request, &tag) {
+        eprintln!("cannot write {}: {e}", request.display());
+        return ExitCode::FAILURE;
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout);
+    while request.exists() {
+        if std::time::Instant::now() > deadline {
+            let _ = std::fs::remove_file(&request);
+            eprintln!(
+                "no running rig answered within {timeout}s (watching {}). Is the app running on this config directory?",
+                dir.display()
+            );
+            return ExitCode::FAILURE;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let text = std::fs::read(&log).unwrap_or_default();
+    let new = String::from_utf8_lossy(text.get(from as usize..).unwrap_or_default());
+    let marker = format!("[{tag}] ");
+    for line in new.lines() {
+        if let Some((_, rest)) = line.split_once(&marker) {
+            println!("{rest}");
+        }
+    }
+    ExitCode::SUCCESS
 }
