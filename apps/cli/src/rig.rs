@@ -82,6 +82,9 @@ pub enum Command {
         /// Render threads (0 = every core).
         #[arg(long, default_value_t = 0)]
         threads: usize,
+        /// Dial only this preset's snapshots (after changing its amps).
+        #[arg(long)]
+        preset: Option<String>,
     },
     LevelPresets {
         #[arg(long)]
@@ -259,6 +262,7 @@ pub fn run(command: Command) -> ExitCode {
             dry_run,
             sample_rate,
             threads,
+            preset,
         } => {
             signal_guitar::levelling::apply_nam_calibration();
             let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
@@ -270,6 +274,7 @@ pub fn run(command: Command) -> ExitCode {
                 &lib.drive_presets,
                 sample_rate,
                 threads,
+                preset.as_deref(),
             );
             let mut failed = 0;
             let mut last = String::new();

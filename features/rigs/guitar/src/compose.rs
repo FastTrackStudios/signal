@@ -1277,11 +1277,14 @@ pub fn dial_post_comp(
     drives: &[crate::profiles::DrivePresetDef],
     sample_rate: u32,
     threads: usize,
+    only: Option<&str>,
 ) -> Vec<PostCompDial> {
     let jobs: Vec<(usize, usize, String, f32)> = comp
         .presets
         .iter()
         .enumerate()
+        // `only`: one preset (by name), when just its snapshots changed.
+        .filter(|(_, preset)| only.is_none_or(|n| preset.name.eq_ignore_ascii_case(n)))
         .flat_map(|(p, preset)| {
             let comp = &*comp;
             preset.snapshots.iter().enumerate().filter_map(move |(s, snap)| {
