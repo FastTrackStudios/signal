@@ -1143,6 +1143,21 @@ pub struct SongDef {
     /// until saved back to the profile.
     #[facet(default)]
     pub patch_overrides: Vec<SongPatchOverridesDef>,
+    /// The song's own versions of the profile's patches: the first change
+    /// made to a profile patch while this song is up (a knob, a bypass, a
+    /// module or preset pick, a macro position) copies the patch here, and
+    /// the song plays its copy — until it is saved back to the profile or
+    /// discarded.
+    #[facet(default)]
+    pub patch_versions: Vec<SongPatchVersionDef>,
+}
+
+/// A song's version of one profile patch.
+#[derive(Clone, Debug, Facet)]
+pub struct SongPatchVersionDef {
+    /// The profile the patch belongs to.
+    pub profile: String,
+    pub patch: PatchDef,
 }
 
 /// One profile patch's changes within a song.
@@ -1180,6 +1195,63 @@ impl SongDef {
             .find(|e| e.patch.eq_ignore_ascii_case(patch))
             .map(|e| e.overrides.clone())
             .unwrap_or_default()
+    }
+
+    /// The song's version of profile `profile`'s patch `patch`.
+    #[must_use]
+    pub fn version_of(&self, profile: &str, patch: &str) -> Option<&PatchDef> {
+        self.patch_versions
+            .iter()
+            .find(|v| v.profile.eq_ignore_ascii_case(profile) && v.patch.name.eq_ignore_ascii_case(patch))
+            .map(|v| &v.patch)
+    }
+
+    /// The song's version of `base` (a profile patch of `profile`), made
+    /// from it on first use — where a change in the song goes.
+    pub fn version_mut(&mut self, profile: &str, base: &PatchDef) -> &mut PatchDef {
+        let at = self.patch_versions.iter().position(|v| {
+            v.profile.eq_ignore_ascii_case(profile) && v.patch.name.eq_ignore_ascii_case(&base.name)
+        });
+        let i = match at {
+            Some(i) => i,
+            None => {
+                self.patch_versions.push(SongPatchVersionDef {
+                    profile: profile.to_string(),
+                    patch: base.clone(),
+                });
+                self.patch_versions.len() - 1
+            }
+        };
+        &mut self.patch_versions[i].patch
+    }
+
+    /// Take the song's version of `patch` out of it.
+    pub fn take_version(&mut self, profile: &str, patch: &str) -> Option<PatchDef> {
+        let i = self.patch_versions.iter().position(|v| {
+            v.profile.eq_ignore_ascii_case(profile) && v.patch.name.eq_ignore_ascii_case(patch)
+        })?;
+        Some(self.patch_versions.remove(i).patch)
+    }
+
+    /// `def` as this song plays it: its versions of the profile's patches in
+    /// place of theirs, and its per-setting changes on top.
+    #[must_use]
+    pub fn apply_to(&self, def: &ProfileDef) -> ProfileDef {
+        let mut out = def.clone();
+        for p in out.patches.iter_mut().filter(|p| p.song.is_empty()) {
+            if let Some(v) = self.version_of(&def.name, &p.name) {
+                *p = v.clone();
+            }
+            for ov in self.patch_overrides_for(&p.name) {
+                match p.overrides.iter_mut().find(|o| {
+                    o.block.eq_ignore_ascii_case(&ov.block) && o.op == ov.op && o.param == ov.param
+                }) {
+                    Some(o) => o.value = ov.value,
+                    None => p.overrides.push(ov),
+                }
+            }
+        }
+        out
     }
 
     /// Take the song's changes to `patch` out of it.
@@ -1476,6 +1548,7 @@ pub fn song_library() -> Vec<SongDef> {
             part_recalls: Vec::new(),
             switch_actions: Vec::new(),
             patch_overrides: Vec::new(),
+            patch_versions: Vec::new(),
         }
     }
     vec![
@@ -1819,6 +1892,7 @@ mod song_tests {
             stack_defaults: Vec::new(),
             switch_actions: Vec::new(),
             patch_overrides: Vec::new(),
+            patch_versions: Vec::new(),
             part_recalls: vec![
                 PartRecallDef {
                     profile: String::new(),
@@ -1864,6 +1938,28 @@ mod song_tests {
     fn a_recall_matches_its_section_whatever_the_case() {
         let pairs = song().parts_with_recalls();
         assert_eq!(pairs[2].1, "Ambient");
+    }
+
+    /// A song's version of a profile patch replaces it in the song, and
+    /// only in that profile.
+    #[test]
+    fn a_song_plays_its_version_of_a_patch() {
+        let prof = worship_def();
+        let base = prof.patches.iter().find(|p| p.name == "Lead").cloned().expect("Lead");
+        let mut s = song();
+        s.version_mut(&prof.name, &base).modules.push(ModuleChoiceDef {
+            module: "Delay".into(),
+            preset: "U2 Edge".into(),
+            snapshot: "Streets".into(),
+        });
+        let played = s.apply_to(&prof);
+        let lead = played.patches.iter().find(|p| p.name == "Lead").unwrap();
+        assert!(lead.modules.iter().any(|m| m.snapshot == "Streets"));
+        let other = ProfileDef { name: "Blues".into(), ..prof.clone() };
+        let blues = s.apply_to(&other);
+        assert!(!blues.patches.iter().find(|p| p.name == "Lead").unwrap().modules.iter().any(|m| m.snapshot == "Streets"));
+        assert!(s.take_version(&prof.name, "Lead").is_some());
+        assert!(s.version_of(&prof.name, "Lead").is_none());
     }
 
     /// A song keeps its changes to a profile patch per setting, the last
@@ -2137,6 +2233,7 @@ mod section_tests {
             stack_defaults: Vec::new(),
             switch_actions: Vec::new(),
             patch_overrides: Vec::new(),
+            patch_versions: Vec::new(),
             part_recalls: vec![
                 // A section that only changes things — no patch of its own.
                 PartRecallDef {

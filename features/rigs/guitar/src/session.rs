@@ -147,6 +147,31 @@ fn part_recall_mut<'a>(
     song.part_recalls.last_mut().expect("just pushed")
 }
 
+/// How many settings `b` changes from `a`: module and block picks,
+/// overrides and macro positions that differ.
+fn patch_differences(a: &crate::profiles::PatchDef, b: &crate::profiles::PatchDef) -> u32 {
+    let key = |o: &crate::profiles::OverrideDef| (o.block.to_ascii_lowercase(), o.op.clone(), o.param.clone());
+    let mut n = 0u32;
+    for ob in &b.overrides {
+        match a.overrides.iter().find(|oa| key(oa) == key(ob)) {
+            Some(oa) if (oa.value - ob.value).abs() < 1e-6 => {}
+            _ => n += 1,
+        }
+    }
+    let mods = |p: &crate::profiles::PatchDef| {
+        p.modules.iter().map(|m| format!("{}|{}|{}", m.module, m.preset, m.snapshot).to_ascii_lowercase()).collect::<std::collections::BTreeSet<_>>()
+    };
+    n += mods(b).difference(&mods(a)).count() as u32;
+    let blocks = |p: &crate::profiles::PatchDef| {
+        p.blocks.iter().map(|c| format!("{}|{}", c.block, c.preset).to_ascii_lowercase()).collect::<std::collections::BTreeSet<_>>()
+    };
+    n += blocks(b).difference(&blocks(a)).count() as u32;
+    if a.macros != b.macros {
+        n += 1;
+    }
+    n
+}
+
 /// The rig's output trim until the player sets one: headroom for the
 /// system it feeds.
 const DEFAULT_MASTER_TRIM_DB: f32 = -6.0;
@@ -910,7 +935,7 @@ impl GuitarRigBackend {
         let rebuilt = {
             let def = self.profile_def.lock_ok();
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         // Gapless: built beside the old profile's chains with the rig lock
         // released, then the landing patch crossfades in and the old one
@@ -1073,7 +1098,7 @@ impl GuitarRigBackend {
             if matches!(outcome, DriveImport::Slot { .. }) {
                 RigLibrary::save_profile(&def);
             }
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
         self.spawn_drive_calibration();
@@ -1257,13 +1282,7 @@ impl GuitarRigBackend {
     fn macros_rebase(&self) {
         let Some(patch) = self.live_patch_name() else { return };
         let blocks = self.blocks.lock_ok().clone();
-        let def = self
-            .profile_def
-            .lock_ok()
-            .patches
-            .iter()
-            .find(|p| p.name.eq_ignore_ascii_case(&patch))
-            .cloned();
+        let def = self.effective_patch(&patch);
         // Its positions over its preset snapshot's, and how its presets
         // tune the macros.
         let ctx = def.map_or_else(crate::macros::Context::default, |d| {
@@ -1280,6 +1299,13 @@ impl GuitarRigBackend {
     /// Keep the macro positions with the patch (debounced, like a knob).
     fn store_macros(&self, patch: &str, saved: Vec<crate::profiles::MacroValueDef>) {
         if patch.is_empty() {
+            return;
+        }
+        // In a song, a profile patch's knob positions are the song's.
+        if let Some(song) = self.song_edit_target(patch) {
+            if self.effective_patch(patch).is_some_and(|p| p.macros != saved) {
+                self.edit_song_version(&song, patch, move |v| v.macros = saved);
+            }
             return;
         }
         let mut def = self.profile_def.lock_ok();
@@ -1476,7 +1502,7 @@ impl GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
     }
@@ -1944,7 +1970,7 @@ impl GuitarRigBackend {
             );
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
     }
@@ -1983,24 +2009,22 @@ impl GuitarRigBackend {
                     Some(n) => (n.to_string(), "set"),
                     None => (String::new(), "bypass"),
                 };
-                {
-                    let mut songs = self.songs_lib.lock_ok();
-                    if let Some(sd) = songs.iter_mut().find(|x| x.name.eq_ignore_ascii_case(&song)) {
-                        sd.set_patch_override(
-                            &patch_name,
-                            crate::profiles::OverrideDef {
-                                module,
-                                block: block_name,
-                                param: param_name,
-                                op: op.to_string(),
-                                value,
-                                text: String::new(),
-                            },
-                        );
+                let ov = crate::profiles::OverrideDef {
+                    module,
+                    block: block_name,
+                    param: param_name,
+                    op: op.to_string(),
+                    value,
+                    text: String::new(),
+                };
+                self.edit_song_version(&song, &patch_name, move |v| {
+                    match v.overrides.iter_mut().find(|o| {
+                        o.block.eq_ignore_ascii_case(&ov.block) && o.op == ov.op && o.param == ov.param
+                    }) {
+                        Some(o) => o.value = ov.value,
+                        None => v.overrides.push(ov),
                     }
-                }
-                self.songs_dirty
-                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                });
                 return;
             }
         }
@@ -2103,7 +2127,7 @@ impl GuitarRigBackend {
     fn design_profile(&self) -> signal_sampler::rig_profile::RigProfile {
         let def = self.profile_def.lock_ok();
         let dps = self.drive_presets.lock_ok();
-        profile_from_library(&def, &dps)
+        profile_from_library(&self.effective_def(&def), &dps)
     }
 
     /// The profile with every composed patch resolved — what actually plays.
@@ -2135,7 +2159,7 @@ impl GuitarRigBackend {
             }
         }
         let dps = self.drive_presets.lock_ok();
-        profile_from_library(&def, &dps)
+        profile_from_library(&self.effective_def(&def), &dps)
     }
 
     /// Stop auditioning (a real patch is being played).
@@ -2148,6 +2172,17 @@ impl GuitarRigBackend {
         let Some(name) = self.live_patch_name() else {
             return;
         };
+        // In a song, a profile patch's change (a module or preset pick) is
+        // the song's: its version of the patch.
+        if let Some(song) = self.song_edit_target(&name) {
+            self.edit_song_version(&song, &name, edit);
+            RigLibrary::save_songs(&self.songs_lib.lock_ok());
+            self.songs_dirty
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+            tracing::info!(%song, patch = %name, "song change: a pick on the song's version of the patch");
+            self.reload_for_song();
+            return;
+        }
         let rebuilt = {
             let mut def = self.profile_def.lock_ok();
             let Some(patch) = def
@@ -2160,7 +2195,85 @@ impl GuitarRigBackend {
             edit(patch);
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+    }
+
+    /// `def` as the song that is up plays it (its versions of the profile's
+    /// patches, its per-setting changes); `def` itself outside a song.
+    fn effective_def(&self, def: &crate::profiles::ProfileDef) -> crate::profiles::ProfileDef {
+        match self.current_song_def() {
+            Some(song) => song.apply_to(def),
+            None => def.clone(),
+        }
+    }
+
+    /// Patch `name` as it plays right now — the song's version of it when a
+    /// song is up and has one.
+    fn effective_patch(&self, name: &str) -> Option<crate::profiles::PatchDef> {
+        let song = self.current_song_def();
+        let def = self.profile_def.lock_ok();
+        let base = def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(name))?;
+        Some(match song {
+            Some(sd) if base.song.is_empty() => {
+                let one = crate::profiles::ProfileDef { patches: vec![base.clone()], ..def.clone() };
+                sd.apply_to(&one).patches.remove(0)
+            }
+            _ => base.clone(),
+        })
+    }
+
+    /// Whether an edit to patch `name` belongs to the song that is up (it is
+    /// one of the profile's patches and a song is up), and which song.
+    fn song_edit_target(&self, name: &str) -> Option<String> {
+        let song = self.current_song_name()?;
+        let def = self.profile_def.lock_ok();
+        def.patches
+            .iter()
+            .any(|p| p.name.eq_ignore_ascii_case(name) && p.song.is_empty())
+            .then_some(song)
+    }
+
+    /// Apply `edit` to the song's version of profile patch `name` (made from
+    /// the profile's on first use).
+    fn edit_song_version(&self, song: &str, name: &str, edit: impl FnOnce(&mut crate::profiles::PatchDef)) {
+        let (profile, base) = {
+            let def = self.profile_def.lock_ok();
+            let Some(b) = def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(name)).cloned() else {
+                return;
+            };
+            (def.name.clone(), b)
+        };
+        {
+            let mut songs = self.songs_lib.lock_ok();
+            if let Some(sd) = songs.iter_mut().find(|x| x.name.eq_ignore_ascii_case(song)) {
+                // The song's older per-setting changes fold into its version.
+                let legacy = sd.take_patch_overrides(name);
+                let v = sd.version_mut(&profile, &base);
+                for ov in legacy {
+                    match v.overrides.iter_mut().find(|o| {
+                        o.block.eq_ignore_ascii_case(&ov.block) && o.op == ov.op && o.param == ov.param
+                    }) {
+                        Some(o) => o.value = ov.value,
+                        None => v.overrides.push(ov),
+                    }
+                }
+                edit(v);
+            }
+        }
+        self.songs_dirty
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Rebuild the rig from the profile as the song that is up plays it —
+    /// on a song change or a song edit that changes a chain. Gapless; only
+    /// the patches whose chains differ are built.
+    fn reload_for_song(&self) {
+        let rebuilt = {
+            let def = self.profile_def.lock_ok();
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
     }
@@ -2172,12 +2285,8 @@ impl GuitarRigBackend {
         module: &str,
     ) -> Option<crate::profiles::ModuleChoiceDef> {
         let name = self.live_patch_name()?;
-        let def = self.profile_def.lock_ok();
-        let patch = def
-            .patches
-            .iter()
-            .find(|p| p.name.eq_ignore_ascii_case(&name))?;
-        crate::compose::module_picks(comp, patch)
+        let patch = self.effective_patch(&name)?;
+        crate::compose::module_picks(comp, &patch)
             .into_iter()
             .find(|m| m.module.eq_ignore_ascii_case(module))
     }
@@ -2356,7 +2465,7 @@ impl GuitarRigBackend {
         let wanted = self.design_patch.lock_ok().clone();
         let def = self.profile_def.lock_ok();
         let dps = self.drive_presets.lock_ok();
-        let profile = profile_from_library(&def, &dps);
+        let profile = profile_from_library(&self.effective_def(&def), &dps);
         let active = Some(wanted)
             .filter(|n| !n.is_empty())
             .and_then(|name| {
@@ -2517,7 +2626,7 @@ impl GuitarRigBackend {
                     patches.is_some().then(|| {
                         RigLibrary::save_profile(&def);
                         let dps = self.drive_presets.lock_ok();
-                        profile_from_library(&def, &dps)
+                        profile_from_library(&self.effective_def(&def), &dps)
                     })
                 };
                 self.library_dirty
@@ -2956,6 +3065,9 @@ impl GuitarRigBackend {
         // The song's profile first: everything after it — the stack
         // tuning, the landing patch, the part — is in that profile's terms.
         self.ensure_profile(&profile);
+        // The profile as this song plays it (its versions of patches): only
+        // the chains that differ are built, gaplessly.
+        self.reload_for_song();
         self.apply_tempo_to_delays();
 
         // Song switch tuning: the song's rotations and switch modes, then
@@ -3082,7 +3194,7 @@ impl GuitarRigBackend {
                 let profile = {
                     let def = self.profile_def.lock_ok();
                     let dps = self.drive_presets.lock_ok();
-                    profile_from_library(&def, &dps)
+                    profile_from_library(&self.effective_def(&def), &dps)
                 };
                 match prig.load_profile(profile, None) {
                     Ok(()) => tracing::info!("profile loaded ({} patches)", prig.patches().len()),
@@ -3203,13 +3315,8 @@ impl GuitarRigBackend {
                 .lock_ok()
                 .as_ref()
                 .and_then(|prig| prig.active_patch().map(|p| p.name.clone()));
+            let patch = active.and_then(|name| self.effective_patch(&name));
             let def = self.profile_def.lock_ok();
-            let patch = active.and_then(|name| {
-                def.patches
-                    .iter()
-                    .find(|p| p.name.eq_ignore_ascii_case(&name))
-                    .cloned()
-            });
             (patch, self.drive_presets.lock_ok().clone(), def.presets.clone())
         };
         let active_overrides: Vec<crate::profiles::OverrideDef> = {
@@ -3219,14 +3326,7 @@ impl GuitarRigBackend {
                 .as_ref()
                 .and_then(|prig| prig.active_patch().map(|p| p.name.clone()));
             active
-                .and_then(|name| {
-                    self.profile_def
-                        .lock_ok()
-                        .patches
-                        .iter()
-                        .find(|p| p.name.eq_ignore_ascii_case(&name))
-                        .map(|p| p.overrides.clone())
-                })
+                .and_then(|name| self.effective_patch(&name).map(|p| p.overrides))
                 .unwrap_or_default()
         };
         {
@@ -3460,22 +3560,28 @@ impl GuitarRigBackend {
         let Some(song) = self.current_song_name() else {
             return "No song is up (Setlist mode).".into();
         };
-        let taken = {
+        let profile = self.profile_def.lock_ok().name.clone();
+        let (version, taken) = {
             let mut songs = self.songs_lib.lock_ok();
             songs
                 .iter_mut()
                 .find(|x| x.name.eq_ignore_ascii_case(&song))
-                .map(|sd| sd.take_patch_overrides(patch))
+                .map(|sd| (sd.take_version(&profile, patch), sd.take_patch_overrides(patch)))
                 .unwrap_or_default()
         };
-        if taken.is_empty() {
+        if version.is_none() && taken.is_empty() {
             return format!("{song} has no changes to {patch}.");
         }
+        let changed = version.as_ref().map_or(0, |_| 1) + taken.len();
         let rebuilt = {
             let mut def = self.profile_def.lock_ok();
             let Some(p) = def.patches.iter_mut().find(|p| p.name.eq_ignore_ascii_case(patch)) else {
                 return format!("The profile has no patch {patch}.");
             };
+            // The song's version becomes the profile's patch.
+            if let Some(v) = version {
+                *p = crate::profiles::PatchDef { name: p.name.clone(), song: String::new(), ..v };
+            }
             for ov in &taken {
                 match p.overrides.iter_mut().find(|o| {
                     o.block.eq_ignore_ascii_case(&ov.block) && o.op == ov.op && o.param == ov.param
@@ -3486,12 +3592,12 @@ impl GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         RigLibrary::save_songs(&self.songs_lib.lock_ok());
         self.reload_rebuilt(rebuilt);
-        let msg = format!("{} change(s) to {patch} saved to the profile from {song}.", taken.len());
-        tracing::info!(%song, %patch, changes = taken.len(), "song changes saved back to the profile");
+        let msg = format!("{patch}: {song}'s version saved to the profile ({changed} change set(s)).");
+        tracing::info!(%song, %patch, changes = changed, "song changes saved back to the profile");
         self.publish_state();
         msg
     }
@@ -3501,18 +3607,27 @@ impl GuitarRigBackend {
         let Some(song) = self.current_song_name() else {
             return "No song is up (Setlist mode).".into();
         };
-        let taken = {
+        let profile = self.profile_def.lock_ok().name.clone();
+        let (version, taken) = {
             let mut songs = self.songs_lib.lock_ok();
             songs
                 .iter_mut()
                 .find(|x| x.name.eq_ignore_ascii_case(&song))
-                .map(|sd| sd.take_patch_overrides(patch))
+                .map(|sd| (sd.take_version(&profile, patch), sd.take_patch_overrides(patch)))
                 .unwrap_or_default()
         };
-        if taken.is_empty() {
+        if version.is_none() && taken.is_empty() {
             return format!("{song} has no changes to {patch}.");
         }
         RigLibrary::save_songs(&self.songs_lib.lock_ok());
+        if version.is_some() {
+            // A version can change the chain itself: rebuild from the
+            // profile's patch (gaplessly), knobs and all.
+            self.reload_for_song();
+            tracing::info!(%song, %patch, "song's version of the patch discarded");
+            self.publish_state();
+            return format!("{song}'s version of {patch} discarded — it plays as the profile has it.");
+        }
         // Put the patch's own values back on the live chain.
         let built = self.rig.lock_ok().as_ref().and_then(|prig| {
             prig.patches().iter().find(|p| p.name.eq_ignore_ascii_case(patch)).cloned()
@@ -4214,13 +4329,26 @@ impl Rig for GuitarRigBackend {
                 m.start_part = def.start_part.clone();
                 m.start_patch = def.start_patch.clone();
                 if *self.perform_mode.lock_ok() == PERFORM_SETLIST {
-                    m.song_changes = def
-                        .patch_overrides
+                    // Each profile patch the song has its own version of (or
+                    // older per-setting changes to), with how many of its
+                    // settings differ from the profile's.
+                    let prof = self.profile_def.lock_ok().clone();
+                    let mut names: Vec<String> = def
+                        .patch_versions
                         .iter()
-                        .filter(|e| !e.overrides.is_empty())
-                        .map(|e| signal_guitar_proto::SongChange {
-                            patch: e.patch.clone(),
-                            count: e.overrides.len() as u32,
+                        .filter(|v| v.profile.eq_ignore_ascii_case(&prof.name))
+                        .map(|v| v.patch.name.clone())
+                        .chain(def.patch_overrides.iter().filter(|e| !e.overrides.is_empty()).map(|e| e.patch.clone()))
+                        .collect();
+                    names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+                    let played = def.apply_to(&prof);
+                    m.song_changes = names
+                        .into_iter()
+                        .filter_map(|n| {
+                            let base = prof.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&n))?;
+                            let mine = played.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&n))?;
+                            let count = patch_differences(base, mine);
+                            (count > 0).then(|| signal_guitar_proto::SongChange { patch: n, count })
                         })
                         .collect();
                 }
@@ -4457,7 +4585,7 @@ impl Rig for GuitarRigBackend {
             assigned.option = 0;
             tracing::info!(slot = %slot, pedal = %pedal, "guitar: drive slot filled");
             RigLibrary::save_profile(&def);
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
     }
@@ -4520,7 +4648,7 @@ impl Rig for GuitarRigBackend {
                 store.select(&node, &preset);
                 RigLibrary::save_node_store(&store);
                 tracing::info!(node.id = %node, preset.id = %preset, "guitar: preset selected");
-                return self.reload_rebuilt(profile_from_library(&def, &dps));
+                return self.reload_rebuilt(profile_from_library(&self.effective_def(&def), &dps));
             };
             let Some(assigned) = def
                 .drives
@@ -4535,7 +4663,7 @@ impl Rig for GuitarRigBackend {
             assigned.option = option;
             tracing::info!(slot = %slot, option, "guitar: drive slot preset selected");
             RigLibrary::save_profile(&def);
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
     }
@@ -5091,7 +5219,7 @@ impl Rig for GuitarRigBackend {
             RigLibrary::save_profile(&def);
             {
                 let dps = self.drive_presets.lock_ok();
-                profile_from_library(&def, &dps)
+                profile_from_library(&self.effective_def(&def), &dps)
             }
         };
         // …then rebuild the live chains: gaplessly, only the patch's own.
@@ -5114,7 +5242,7 @@ impl Rig for GuitarRigBackend {
             p.preset2 = preset_name;
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
     }
@@ -5130,7 +5258,7 @@ impl Rig for GuitarRigBackend {
             p.preset2.clear();
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
     }
@@ -5212,7 +5340,7 @@ impl Rig for GuitarRigBackend {
             RigLibrary::save_profile(&def);
             {
                 let dps = self.drive_presets.lock_ok();
-                profile_from_library(&def, &dps)
+                profile_from_library(&self.effective_def(&def), &dps)
             }
         };
         // Gapless: only the chains playing this drive slot rebuild.
@@ -5315,7 +5443,7 @@ impl Rig for GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         tracing::info!("patch added: {name}");
         self.reload_rebuilt(rebuilt);
@@ -5406,7 +5534,7 @@ impl Rig for GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         tracing::info!("preset renamed: {old} → {new_name}");
         self.reload_rebuilt(rebuilt);
@@ -5453,7 +5581,7 @@ impl Rig for GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         tracing::info!("patch renamed: {old} → {new_name}");
         self.reload_rebuilt(rebuilt);
@@ -5472,7 +5600,7 @@ impl Rig for GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         tracing::info!("patch deleted: {name}");
         self.reload_rebuilt(rebuilt);
@@ -5531,6 +5659,7 @@ impl Rig for GuitarRigBackend {
                 part_recalls: Vec::new(),
                 switch_actions: Vec::new(),
                 patch_overrides: Vec::new(),
+                patch_versions: Vec::new(),
             });
             RigLibrary::save_songs(&songs);
         }
@@ -5653,7 +5782,7 @@ impl Rig for GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         tracing::info!("{block_name}: custom IR {path}");
         self.reload_rebuilt(rebuilt);
@@ -5673,7 +5802,7 @@ impl Rig for GuitarRigBackend {
             p.nam = nam_path;
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
         self.spawn_drive_calibration();
@@ -5698,7 +5827,7 @@ impl Rig for GuitarRigBackend {
             p.cab = ir_path;
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
     }
@@ -5713,7 +5842,7 @@ impl Rig for GuitarRigBackend {
             tracing::info!("patch '{}' trim {:+.1} dB", p.name, p.trim_db);
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
     }
@@ -5730,6 +5859,9 @@ impl Rig for GuitarRigBackend {
         // own back — and a song's patch playing then gives way to the
         // profile's default.
         self.apply_song_stacks();
+        // In a song its versions of the profile's patches play; out of one,
+        // the profile's own.
+        self.reload_for_song();
         if mode.min(2) != PERFORM_SETLIST {
             let on_song_patch = self.active_patch_name().is_some_and(|name| {
                 self.profile_def
@@ -7517,7 +7649,7 @@ impl Rig for GuitarRigBackend {
         let rebuilt = {
             let def = self.profile_def.lock_ok();
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
     }
@@ -8100,7 +8232,7 @@ impl GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library(&self.effective_def(&def), &dps)
         };
         self.reload_rebuilt(rebuilt);
         Ok(())

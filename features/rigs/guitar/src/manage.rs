@@ -961,6 +961,7 @@ mod tests {
             patches: vec![PatchDef { song: "Washed".into(), ..patch("Washed Pad") }],
             switch_actions: Vec::new(),
             patch_overrides: Vec::new(),
+            patch_versions: Vec::new(),
         };
         song.parts.push("Chorus".into());
         let copy = duplicate_song(&[song], &["Washed Pad"], "washed", "Washed (acoustic)").unwrap();
