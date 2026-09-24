@@ -81,14 +81,18 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                     Some(r) => (
                         r.patches().await.unwrap_or_default(),
                         r.presets().await.unwrap_or_default(),
+                        r.library().await.unwrap_or_default().profiles,
                     ),
-                    None => (Vec::new(), Vec::new()),
+                    None => (Vec::new(), Vec::new(), Vec::new()),
                 }
             }
         }
     });
-    let (patch_list, preset_list): (Vec<PatchInfo>, Vec<PresetInfo>) =
-        data.read().clone().unwrap_or_default();
+    let (patch_list, preset_list, profiles): (
+        Vec<PatchInfo>,
+        Vec<PresetInfo>,
+        Vec<signal_guitar_proto::ProfileEntry>,
+    ) = data.read().clone().unwrap_or_default();
 
     // The patch picked in the tree.
     let mut selected_patch = use_signal(|| None::<usize>);
@@ -423,7 +427,52 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                 }
             }
 
-
+            // ── Every profile — the other rigs a set can move to (Blues,
+            // Rock, Metal…). The same list switches 1 + 2 / 4 + 5 step
+            // through in Profile mode. ──
+            if !profiles.is_empty() {
+                div { class: "flex-shrink-0 border-t border-border",
+                    PanelLabel { label: "Profiles" }
+                    div { style: "display: flex; flex-direction: column; gap: 2px; padding: 0 8px 8px;",
+                        for p in profiles.iter() {
+                            {
+                                let name = p.name.clone();
+                                let rig = rig.clone();
+                                let active = p.active;
+                                rsx! {
+                                    div {
+                                        key: "{p.name}",
+                                        class: if active { "" } else { "hover:bg-accent/30" },
+                                        style: format!(
+                                            "display: flex; align-items: center; gap: 8px; padding: 5px 8px; \
+                                             border-radius: 6px; font-size: 12px; cursor: pointer; color: {}; background: {};",
+                                            if active { "#e4e4e7" } else { "#a1a1aa" },
+                                            if active { "rgba(34,197,94,0.12)" } else { "transparent" },
+                                        ),
+                                        onclick: move |_| {
+                                            if active {
+                                                return;
+                                            }
+                                            if let Some(r) = rig.clone() {
+                                                let name = name.clone();
+                                                spawn(async move { let _ = r.select_profile(name).await; });
+                                            }
+                                        },
+                                        span {
+                                            style: format!(
+                                                "width: 6px; height: 6px; border-radius: 999px; background: {};",
+                                                if active { "#22c55e" } else { "#3f3f46" },
+                                            ),
+                                        }
+                                        "{p.name}"
+                                        span { style: "margin-left: auto; font-size: 10px; color: #63636b;", "{p.patches}" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

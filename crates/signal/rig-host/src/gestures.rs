@@ -43,7 +43,15 @@ pub enum FootswitchAction {
     /// Switch `i` held past the long-hold threshold (see
     /// [`FootswitchEngine::set_long_hold`]).
     LongHold(usize),
+    /// Two switches pressed together and held (see
+    /// [`FootswitchEngine::add_chord`]) — `(lower, higher)` switch index.
+    Chord(usize, usize),
 }
+
+/// Two switches pressed within this of each other are pressed *together*.
+const CHORD_WINDOW: Duration = Duration::from_millis(150);
+/// …and held together this long, a chord.
+const CHORD_HOLD: Duration = Duration::from_millis(300);
 
 /// Per-switch gesture state. One per backend pump (thread-local scratch).
 #[derive(Debug)]
@@ -67,6 +75,16 @@ pub struct FootswitchEngine {
     /// `Hold` having fired), and `LongHold` fires at `long_hold`.
     long: Vec<bool>,
     long_hold: Duration,
+    /// The switch pairs that make chords.
+    chords: Vec<(usize, usize)>,
+    /// Switches taken by a chord this press: no tap, hold or long hold of
+    /// their own.
+    chorded: Vec<bool>,
+    /// Chords already fired this press.
+    chord_fired: Vec<(usize, usize)>,
+    /// Actions produced outside a press/release (a momentary taken back
+    /// when its switch joins a chord), handed out by `poll_holds`.
+    pending: Vec<FootswitchAction>,
 }
 
 impl FootswitchEngine {
@@ -84,6 +102,19 @@ impl FootswitchEngine {
             momentary_want: vec![false; switches],
             long: vec![false; switches],
             long_hold: Duration::from_secs(2),
+            chords: Vec::new(),
+            chorded: vec![false; switches],
+            chord_fired: Vec::new(),
+            pending: Vec::new(),
+        }
+    }
+
+    /// Switches `a` and `b` pressed together and held make a
+    /// [`FootswitchAction::Chord`] — and neither does its own tap or hold.
+    pub fn add_chord(&mut self, a: usize, b: usize) {
+        let pair = (a.min(b), a.max(b));
+        if !self.chords.contains(&pair) {
+            self.chords.push(pair);
         }
     }
 
@@ -156,7 +187,33 @@ impl FootswitchEngine {
         if down {
             if let Some(sw) = gesture.filter(|&sw| sw < self.switches) {
                 self.momentary[sw] = self.momentary_want[sw];
+                // Its chord partner went down just before: pressed together.
+                for &(a, b) in &self.chords {
+                    let partner = if a == sw { b } else if b == sw { a } else { continue };
+                    let with = self.down.get(partner).copied().flatten();
+                    if with.is_some_and(|t| t.elapsed() <= CHORD_WINDOW) {
+                        for x in [sw, partner] {
+                            self.chorded[x] = true;
+                            self.hold_fired[x] = true;
+                        }
+                        // A momentary already down gives its press back.
+                        if self.momentary[partner] {
+                            self.pending.push(FootswitchAction::Release(partner));
+                        }
+                    }
+                }
+                if self.chorded[sw] {
+                    self.down[sw] = Some(Instant::now());
+                    return None;
+                }
             }
+        } else if let Some(sw) = gesture.filter(|&sw| sw < self.switches && self.chorded[sw]) {
+            // A chord's switch coming up does nothing of its own; the chord
+            // is over when both are.
+            self.down[sw] = None;
+            self.chorded[sw] = false;
+            self.chord_fired.retain(|&(a, b)| a != sw && b != sw);
+            return None;
         }
         match gesture {
             Some(sw) if sw < self.switches && self.momentary[sw] => {
@@ -193,7 +250,18 @@ impl FootswitchEngine {
     /// Fire due holds — call once per pump tick. Each returned `Hold(i)`
     /// fires at most once per press.
     pub fn poll_holds(&mut self) -> Vec<FootswitchAction> {
-        let mut fired = Vec::new();
+        let mut fired = std::mem::take(&mut self.pending);
+        for &(a, b) in &self.chords {
+            let (Some(ta), Some(tb)) = (self.down[a], self.down[b]) else { continue };
+            if self.chorded[a]
+                && self.chorded[b]
+                && !self.chord_fired.contains(&(a, b))
+                && ta.elapsed().min(tb.elapsed()) >= CHORD_HOLD
+            {
+                self.chord_fired.push((a, b));
+                fired.push(FootswitchAction::Chord(a, b));
+            }
+        }
         for sw in 0..self.switches {
             if let Some(t) = self.down[sw] {
                 if self.long[sw] {
@@ -343,6 +411,56 @@ mod tests {
         e.set_long_hold(2, Duration::from_secs(2));
         assert_eq!(e.on_note(&m, 3, true), None);
         assert_eq!(e.on_note(&m, 3, false), Some(FootswitchAction::Tap(2)));
+    }
+
+    #[test]
+    fn two_switches_pressed_together_and_held_make_a_chord_and_nothing_else() {
+        let m = map();
+        let mut e = engine();
+        e.add_chord(3, 4);
+        assert_eq!(e.on_note(&m, 4, true), None);
+        assert_eq!(e.on_note(&m, 5, true), None);
+        assert_eq!(e.poll_holds(), Vec::new(), "not yet held");
+        std::thread::sleep(CHORD_HOLD + Duration::from_millis(20));
+        assert_eq!(e.poll_holds(), vec![FootswitchAction::Chord(3, 4)]);
+        assert_eq!(e.poll_holds(), Vec::new(), "once per press");
+        // Neither taps on the way up, nor holds.
+        assert_eq!(e.on_note(&m, 4, false), None);
+        assert_eq!(e.on_note(&m, 5, false), None);
+        // Afterwards each is its own switch again.
+        assert_eq!(e.on_note(&m, 4, true), None);
+        assert_eq!(e.on_note(&m, 4, false), Some(FootswitchAction::Tap(3)));
+    }
+
+    #[test]
+    fn a_chord_released_early_does_nothing() {
+        let (m, mut e) = (map(), engine());
+        e.add_chord(0, 1);
+        assert_eq!(e.on_note(&m, 1, true), None);
+        assert_eq!(e.on_note(&m, 2, true), None);
+        assert_eq!(e.on_note(&m, 1, false), None);
+        assert_eq!(e.on_note(&m, 2, false), None);
+        assert_eq!(e.poll_holds(), Vec::new());
+    }
+
+    #[test]
+    fn a_momentary_in_a_chord_gives_its_press_back() {
+        let (m, mut e) = (map(), engine());
+        e.add_chord(0, 1);
+        e.set_momentary(&[false, true]);
+        assert_eq!(e.on_note(&m, 2, true), Some(FootswitchAction::Press(1)));
+        assert_eq!(e.on_note(&m, 1, true), None);
+        assert_eq!(e.poll_holds(), vec![FootswitchAction::Release(1)]);
+    }
+
+    #[test]
+    fn switches_pressed_apart_are_not_a_chord() {
+        let (m, mut e) = (map(), engine());
+        e.add_chord(3, 4);
+        assert_eq!(e.on_note(&m, 4, true), None);
+        std::thread::sleep(CHORD_WINDOW + Duration::from_millis(30));
+        assert_eq!(e.on_note(&m, 5, true), None);
+        assert_eq!(e.on_note(&m, 5, false), Some(FootswitchAction::Tap(4)));
     }
 
     #[test]

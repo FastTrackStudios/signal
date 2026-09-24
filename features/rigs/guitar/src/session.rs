@@ -92,9 +92,10 @@ impl Default for MeterPump {
             // pedalboard convention (mirrors the UI's hold threshold).
             switches: {
                 let mut e = FootswitchEngine::new(5, 5, std::time::Duration::from_millis(500));
-                // Switch 3's hold is switch 8 (the Song switch); holding on
-                // to 2 s goes back to Profile mode (see `song_switch`).
-                e.set_long_hold(2, std::time::Duration::from_secs(2));
+                // Pressed together and held: 1 + 2 is back (previous song,
+                // or profile), 4 + 5 is on (next) — see `step`.
+                e.add_chord(0, 1);
+                e.add_chord(3, 4);
                 e
             },
             audio_calls: 0,
@@ -563,9 +564,13 @@ impl GuitarRigBackend {
                     }
                     FootswitchAction::LongHold(sw) => {
                         tracing::info!("footswitch {} long hold", sw + 1);
-                        if sw == 2 {
-                            // Out of the setlist, back to the profile.
-                            Rig::set_perform_mode(self, 1);
+                    }
+                    FootswitchAction::Chord(a, b) => {
+                        tracing::info!("footswitches {} + {} together", a + 1, b + 1);
+                        match (a, b) {
+                            (0, 1) => self.step(-1),
+                            (3, 4) => self.step(1),
+                            _ => {}
                         }
                     }
                     FootswitchAction::Release(sw) => {
@@ -1226,25 +1231,47 @@ impl GuitarRigBackend {
         match slot {
             0 => Rig::press_stack(self, 4),
             1 => Rig::toggle_fx(self),
-            2 => self.song_switch(),
+            2 => self.toggle_song_mode(),
             3 => Rig::toggle_boost(self),
             4 => Rig::toggle_tuner(self),
             _ => {}
         }
     }
 
-    /// Switch 8 — the Song switch. From Profile (or Preset) mode it enters
-    /// Setlist mode on the song that is up, the switches tuned for it; in
-    /// Setlist mode it goes to the next song. (Held on to a long hold, the
-    /// same switch goes back to Profile mode.)
-    fn song_switch(&self) {
+    /// Switch 8 (hold switch 3): Setlist mode ↔ Profile mode. Into the
+    /// setlist, the song that is up is recalled — switches tuned for it.
+    fn toggle_song_mode(&self) {
         if *self.perform_mode.lock_ok() == PERFORM_SETLIST {
-            Rig::next_song(self);
+            Rig::set_perform_mode(self, 1);
         } else {
             Rig::set_perform_mode(self, PERFORM_SETLIST);
             let idx = *self.song_index.lock_ok();
             self.recall_song(idx);
         }
+    }
+
+    /// The two chords: forward (`+1`, switches 4 + 5) or back (`−1`,
+    /// switches 1 + 2) — through the setlist's songs in Setlist mode,
+    /// through the profiles (by name, wrapping) otherwise.
+    fn step(&self, dir: i32) {
+        if *self.perform_mode.lock_ok() == PERFORM_SETLIST {
+            if dir > 0 {
+                Rig::next_song(self);
+            } else {
+                Rig::prev_song(self);
+            }
+            return;
+        }
+        let current = self.profile_def.lock_ok().name.clone();
+        let mut names = self.profile_names();
+        names.sort_by_key(|n| n.to_lowercase());
+        let Some(at) = names.iter().position(|n| n.eq_ignore_ascii_case(&current)) else {
+            return;
+        };
+        let len = names.len() as i32;
+        let next = &names[(at as i32 + dir).rem_euclid(len) as usize];
+        tracing::info!(profile.from = %current, profile.to = %next, "profile step");
+        Rig::select_profile(self, next.clone());
     }
 
     /// Mark the last-active position (setlist/song/part/patch/tempo) for
