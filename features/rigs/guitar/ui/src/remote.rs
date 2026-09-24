@@ -546,6 +546,37 @@ pub fn GuitarRigRemote() -> Element {
 
                 // Indicators, not buttons: MIDI and audio at a glance, their
                 // options behind a right-click or double-click.
+                // The buffer size, changeable live: a larger buffer is the
+                // quick way out of dropouts on a busy machine (the device
+                // reopens — a short gap). Latency shown for 48 kHz.
+                {
+                    let current = prefs().buffer_size;
+                    let sizes = crate::settings::BUFFER_SIZES;
+                    let options: Vec<String> = sizes
+                        .iter()
+                        .map(|b| format!("{b} · {:.1} ms", f64::from(*b) / 48.0))
+                        .collect();
+                    let selected = sizes.iter().position(|b| *b == current).map_or(u32::MAX, |i| i as u32);
+                    rsx! {
+                        div { style: "display: flex; align-items: center; gap: 6px; flex-shrink: 0;",
+                            title: "Audio buffer (frames) — changing it reopens the device",
+                            span { style: "font-size: 10px; font-weight: 600; letter-spacing: 0.04em; color: #71717a;", "BUF" }
+                            signal_widgets::Picker {
+                                options,
+                                selected,
+                                placeholder: format!("{current}"),
+                                size: signal_widgets::PickerSize::Tiny,
+                                on_select: move |i: u32| {
+                                    if let Some(b) = sizes.get(i as usize).copied() {
+                                        if b != prefs().buffer_size {
+                                            apply.call(AudioPrefs { buffer_size: b, ..prefs() });
+                                        }
+                                    }
+                                },
+                            }
+                        }
+                    }
+                }
                 // The whole app's CPU, as a share of the machine.
                 crate::meters::CpuMeter { perf: (state.dsp)() }
                 crate::control::MidiIndicator {

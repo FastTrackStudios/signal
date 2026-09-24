@@ -26,7 +26,7 @@ pub struct AudioSettingsBridge {
 }
 
 /// Selectable buffer sizes (frames) — matches the guitar TUI's `BUFFERS`.
-const BUFFER_SIZES: &[u32] = &[32, 64, 128, 256, 512, 1024];
+pub(crate) const BUFFER_SIZES: &[u32] = &[32, 64, 128, 256, 512, 1024];
 
 /// Selectable sample rates (Hz). `0` = device native.
 const SAMPLE_RATES: &[(u32, &str)] = &[
