@@ -288,6 +288,26 @@ pub fn profile_file(name: &str) -> String {
     format!("{}.styx", if slug.is_empty() { "profile" } else { slug })
 }
 
+/// Put every song's patches on `profile` (tagged with their song), for the
+/// songs played on it — those naming it, and those naming no profile (they
+/// play on whatever is loaded).
+fn attach_song_patches(profile: &mut ProfileDef, songs: &[SongDef]) {
+    for song in songs {
+        if !song.profile.is_empty() && !song.profile.eq_ignore_ascii_case(&profile.name) {
+            continue;
+        }
+        for p in &song.patches {
+            if profile.patches.iter().any(|x| x.name.eq_ignore_ascii_case(&p.name)) {
+                tracing::warn!(song = %song.name, patch = %p.name, "rig library: a song patch shares a name with a profile patch — skipped");
+                continue;
+            }
+            let mut p = p.clone();
+            p.song.clone_from(&song.name);
+            profile.patches.push(p);
+        }
+    }
+}
+
 /// Every profile in `profiles/`, sorted by name.
 ///
 /// A rig from before there were several profiles has one `profile.styx`
@@ -362,6 +382,7 @@ impl RigLibrary {
             for preset in &mut profile.presets {
                 store.resolve(&mut preset.nam);
             }
+            attach_song_patches(profile, &songs);
         }
         let wanted = Self::load_last_state()
             .map(|s| s.profile)
@@ -469,12 +490,34 @@ impl RigLibrary {
         store.write(crate::node_store::NODE_STORE_FILE, nodes);
     }
 
-    /// Write a profile to `profiles/<file>.styx`, named for the profile.
+    /// Write a profile to `profiles/<file>.styx`, named for the profile —
+    /// its own patches only: a song's patches go back to the song
+    /// (`songs.styx`, see [`PatchDef::song`]).
     pub fn save_profile(profile: &ProfileDef) {
         let Some(store) = writable_store() else {
             return;
         };
         let mut profile = profile.clone();
+        let (song_patches, own): (Vec<crate::profiles::PatchDef>, Vec<crate::profiles::PatchDef>) =
+            profile.patches.drain(..).partition(|p| !p.song.is_empty());
+        profile.patches = own;
+        if !song_patches.is_empty() {
+            let mut songs = store
+                .read::<SongLib>("songs.styx")
+                .map(|l| l.songs)
+                .unwrap_or_default();
+            for song in &mut songs {
+                let mine: Vec<crate::profiles::PatchDef> = song_patches
+                    .iter()
+                    .filter(|p| p.song.eq_ignore_ascii_case(&song.name))
+                    .cloned()
+                    .collect();
+                if !mine.is_empty() {
+                    song.patches = mine;
+                }
+            }
+            store.write("songs.styx", &SongLib { songs });
+        }
         for preset in &mut profile.presets {
             store.relativize(&mut preset.nam);
         }
@@ -506,16 +549,28 @@ impl RigLibrary {
         store.write("drive-presets.styx", &DrivePresetLib { presets });
     }
 
+    /// Write the songs. A song's patches are kept as the file has them —
+    /// they are written by [`save_profile`](Self::save_profile), which holds
+    /// the live copies; a song list held elsewhere must not roll them back.
     pub fn save_songs(songs: &[SongDef]) {
         let Some(store) = writable_store() else {
             return;
         };
-        store.write(
-            "songs.styx",
-            &SongLib {
-                songs: songs.to_vec(),
-            },
-        );
+        let on_disk = store
+            .read::<SongLib>("songs.styx")
+            .map(|l| l.songs)
+            .unwrap_or_default();
+        let songs: Vec<SongDef> = songs
+            .iter()
+            .map(|s| {
+                let mut s = s.clone();
+                if let Some(d) = on_disk.iter().find(|d| d.name.eq_ignore_ascii_case(&s.name)) {
+                    s.patches.clone_from(&d.patches);
+                }
+                s
+            })
+            .collect();
+        store.write("songs.styx", &SongLib { songs });
     }
 
     pub fn save_setlists(setlists: &[SetlistDef]) {
@@ -620,5 +675,39 @@ mod tests {
         assert_eq!(super::profile_file("Rock (Live)"), "rock-live.styx");
         assert_eq!(super::profile_file("../../etc"), "etc.styx");
         assert_eq!(super::profile_file("  "), "profile.styx");
+    }
+}
+
+#[cfg(test)]
+mod song_patch_tests {
+    use super::*;
+
+    fn patch(name: &str) -> crate::profiles::PatchDef {
+        let mut p = crate::profiles::worship_def().patches[0].clone();
+        p.name = name.to_string();
+        p
+    }
+
+    /// A song's patches join the profile it plays on, tagged with the song;
+    /// a song on another profile keeps its patches to itself; a name the
+    /// profile already has is not duplicated.
+    #[test]
+    fn song_patches_join_their_profile_tagged() {
+        let mut profile = crate::profiles::worship_def();
+        let own = profile.patches.len();
+        let clash = profile.patches[0].name.clone();
+        let mut washed = crate::profiles::song_library().remove(0);
+        washed.name = "WASHED".into();
+        washed.profile = String::new();
+        washed.patches = vec![patch("Dry Chorus Clean"), patch(&clash)];
+        let mut other = washed.clone();
+        other.name = "Elsewhere".into();
+        other.profile = "Metal".into();
+        other.patches = vec![patch("Chug")];
+        attach_song_patches(&mut profile, &[washed, other]);
+        assert_eq!(profile.patches.len(), own + 1);
+        let added = profile.patches.last().unwrap();
+        assert_eq!((added.name.as_str(), added.song.as_str()), ("Dry Chorus Clean", "WASHED"));
+        assert!(profile.patches[..own].iter().all(|p| p.song.is_empty()), "the profile's own stay its own");
     }
 }

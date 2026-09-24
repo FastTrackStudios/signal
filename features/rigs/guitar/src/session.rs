@@ -1633,12 +1633,22 @@ impl GuitarRigBackend {
         active: Option<&str>,
         available: impl Fn(usize) -> bool,
     ) -> Vec<PatchInfo> {
+        // A song's own patches are listed while that song is up, not as the
+        // profile's (see `PatchDef::song`).
+        let song = self.current_song_name().unwrap_or_default();
         let def = self.profile_def.lock_ok();
+        let hidden = |name: &str| {
+            def.patches.iter().any(|d| {
+                d.name.eq_ignore_ascii_case(name)
+                    && !d.song.is_empty()
+                    && !d.song.eq_ignore_ascii_case(&song)
+            })
+        };
         patches
             .iter()
             .enumerate()
             // The audition is not one of the profile's patches.
-            .filter(|(_, p)| p.name != AUDITION_PATCH)
+            .filter(|(_, p)| p.name != AUDITION_PATCH && !hidden(&p.name))
             .map(|(i, p)| {
                 let stack_entry = stacks
                     .iter()
@@ -4286,6 +4296,7 @@ impl Rig for GuitarRigBackend {
                 return;
             }
             def.patches.push(crate::profiles::PatchDef {
+                song: String::new(),
                 name: name.clone(),
                 preset,
                 preset2: String::new(),
@@ -4530,6 +4541,7 @@ impl Rig for GuitarRigBackend {
                 return;
             }
             songs.push(SongDef {
+                patches: Vec::new(),
                 profile: String::new(),
                 start_part: String::new(),
                 name: name.clone(),
@@ -5468,6 +5480,7 @@ impl Rig for GuitarRigBackend {
                 drives: active.drives.clone(),
                 presets: active.presets.clone(),
                 patches: vec![crate::profiles::PatchDef {
+                    song: String::new(),
                     name: "Clean".to_string(),
                     preset: first,
                     preset2: String::new(),
@@ -6287,6 +6300,7 @@ mod tests {
 
     fn patch(name: &str, preset: &str) -> PatchDef {
         PatchDef {
+            song: String::new(),
             name: name.to_string(),
             preset: preset.to_string(),
             preset2: String::new(),

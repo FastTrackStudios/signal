@@ -171,6 +171,13 @@ pub fn drive_presets() -> Vec<DrivePresetDef> {
 #[derive(Clone, Debug, Facet)]
 pub struct PatchDef {
     pub name: String,
+    /// The song this patch belongs to — empty for the profile's own. A
+    /// song's patches live in `songs.styx` with the song, not in the
+    /// profile: they join the profile in memory (so their chains are
+    /// preloaded and switching stays gapless), show only while their song
+    /// is up, and are written back to the song when the profile is saved.
+    #[facet(default)]
+    pub song: String,
     pub preset: String,
     /// A second amp (Amp R), in parallel with the first: Amp L → Cab L and
     /// Amp R → Cab R both hear the guitar and are blended at the end (see
@@ -398,6 +405,7 @@ pub fn worship_def() -> ProfileDef {
         no_rotate: false,
     };
     let patch = |name: &str, preset: &str| PatchDef {
+        song: String::new(),
         name: name.to_string(),
         preset: preset.to_string(),
         preset2: String::new(),
@@ -989,6 +997,10 @@ pub struct SongDef {
     /// profile's default patch.
     #[facet(default)]
     pub start_part: String,
+    /// Patches that belong to this song alone (a sound the song needs and
+    /// the profile should not carry) — see [`PatchDef::song`].
+    #[facet(default)]
+    pub patches: Vec<PatchDef>,
 }
 
 impl SongDef {
@@ -1184,6 +1196,7 @@ pub struct SetlistDef {
 pub fn song_library() -> Vec<SongDef> {
     fn song(name: &str, key: &str, bpm: u32) -> SongDef {
         SongDef {
+            patches: Vec::new(),
             profile: String::new(),
             start_part: String::new(),
             name: name.to_string(),
@@ -1519,6 +1532,7 @@ mod song_tests {
 
     fn song() -> SongDef {
         SongDef {
+            patches: Vec::new(),
             profile: String::new(),
             start_part: String::new(),
             name: "No Other Name".into(),
@@ -1792,6 +1806,7 @@ mod section_tests {
 
     fn song_with_sections() -> SongDef {
         SongDef {
+            patches: Vec::new(),
             profile: String::new(),
             start_part: String::new(),
             name: "Test Song".into(),
