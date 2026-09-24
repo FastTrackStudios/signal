@@ -86,6 +86,8 @@ impl StyxDir {
 
     /// Read `file`, seeding it from the embedded default text when missing
     /// (written verbatim so the on-disk copy matches the repo snapshot).
+    /// A file that exists and fails to parse is never overwritten: the
+    /// default plays in memory until the file is fixed.
     /// Falls back to the code-built default if the embedded text fails to
     /// parse — and persists that fallback so the directory stays complete.
     pub fn read_or_seed<T: for<'a> Facet<'a>>(
@@ -96,6 +98,16 @@ impl StyxDir {
     ) -> T {
         if let Some(v) = self.read(file) {
             return v;
+        }
+        // A file that is there but does not parse is somebody's work with a
+        // typo in it. Play the default for now and leave the file alone:
+        // seeding over it would throw the work away, and fixing the typo
+        // should be all it takes to get it back.
+        if self.dir.join(file).exists() {
+            tracing::error!(
+                "rig store: {file} does not parse — playing the default for now and leaving the file as it is"
+            );
+            return facet_styx::from_str::<T>(seed).unwrap_or_else(|_| fallback());
         }
         if let Err(e) = std::fs::create_dir_all(&self.dir) {
             tracing::warn!("rig store: cannot create {}: {e}", self.dir.display());
@@ -156,6 +168,24 @@ mod tests {
         });
         assert_eq!(v.count, 7);
         assert!(store.dir().join("seeded.styx").exists());
+    }
+
+    #[test]
+    fn read_or_seed_leaves_an_unparsable_file_alone() {
+        let store = tmp_store("bad");
+        let path = store.dir().join("typo.styx");
+        std::fs::create_dir_all(store.dir()).unwrap();
+        std::fs::write(&path, "name \"A\"\ncount {{{\n").unwrap();
+        let v: Demo = store.read_or_seed("typo.styx", "name \"B\"\ncount 2\n", || Demo {
+            name: "fallback".into(),
+            count: 0,
+        });
+        assert_eq!(v.count, 2, "the default plays");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "name \"A\"\ncount {{{\n",
+            "the hand edit is not reseeded"
+        );
     }
 
     #[test]
