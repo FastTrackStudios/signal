@@ -849,6 +849,7 @@ mod tests {
             param,
             aux: 0.0,
             steps: 0,
+            tune: None,
         }
     }
 

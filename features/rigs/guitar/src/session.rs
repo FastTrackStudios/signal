@@ -1101,17 +1101,21 @@ impl GuitarRigBackend {
     fn macros_rebase(&self) {
         let Some(patch) = self.live_patch_name() else { return };
         let blocks = self.blocks.lock_ok().clone();
-        let saved = self
+        let def = self
             .profile_def
             .lock_ok()
             .patches
             .iter()
             .find(|p| p.name.eq_ignore_ascii_case(&patch))
-            .map(|p| p.macros.clone())
-            .unwrap_or_default();
+            .cloned();
+        // Its positions over its preset snapshot's, and how its presets
+        // tune the macros.
+        let ctx = def.map_or_else(crate::macros::Context::default, |d| {
+            crate::macros::context_for(&RigLibrary::load_compositions(), &d)
+        });
         let (writes, bypass) = {
             let mut e = self.macros.lock_ok();
-            e.rebase(&patch, &blocks, &saved);
+            e.rebase(&patch, &blocks, &ctx);
             (e.live_params(), e.live_bypass())
         };
         self.apply_macro_writes(&writes, &bypass);
@@ -1226,11 +1230,19 @@ impl GuitarRigBackend {
         tracing::info!(sample_rate, "patch levelling: begin");
 
         for pass in 0..PASSES {
-            // The profile as the live rig builds it, from what is saved now.
+            // The profile as the live rig builds it, from what is saved now —
+            // each patch with its macro knobs where it keeps them (they are
+            // part of its sound).
             let profile = {
                 let def = self.profile_def.lock_ok();
                 let dps = self.drive_presets.lock_ok();
-                profile_from_library(&def, &dps)
+                let mut built = profile_from_library(&def, &dps);
+                for patch in &mut built.patches {
+                    if let Some(d) = def.patches.iter().find(|d| d.name.eq_ignore_ascii_case(&patch.name)) {
+                        crate::macros::apply_positions(d, &comp, patch);
+                    }
+                }
+                built
             };
             let patches = profile.patches;
             {
@@ -5852,6 +5864,7 @@ impl Rig for GuitarRigBackend {
                         .iter()
                         .map(|p| signal_guitar_proto::PresetParam { name: p.param.clone(), value: p.value })
                         .collect(),
+                    macros: crate::compose::MacroResponseDef::knobs(&b.macros),
                 })
                 .collect(),
             active_blocks,
@@ -6822,6 +6835,118 @@ impl Rig for GuitarRigBackend {
         self.events.publish(RigEvent::Macros(Rig::macros(self)));
     }
 
+    fn tune_macro(&self, tune: signal_guitar_proto::MacroTune) {
+        let blocks = self.blocks.lock_ok().clone();
+        let (writes, bypass) = {
+            let mut e = self.macros.lock_ok();
+            let r = crate::macros::Response {
+                min: Some(tune.min),
+                max: Some(tune.max),
+                shape: crate::macros::Shape::parse(&tune.curve),
+                off: false,
+                enter: (tune.enter >= 0.0).then_some(tune.enter),
+                source: "tuning",
+            };
+            e.tune(&tune.id, r, &blocks);
+            (e.live_params(), e.live_bypass())
+        };
+        self.apply_macro_writes(&writes, &bypass);
+        self.events.publish(RigEvent::Chain(Rig::chain(self)));
+        self.events.publish(RigEvent::Macros(Rig::macros(self)));
+    }
+
+    fn save_macro_tune(&self, knob: String, scope: String) {
+        let (defs, patch) = {
+            let e = self.macros.lock_ok();
+            (e.tuned_defs(&knob), e.patch().to_string())
+        };
+        if defs.is_empty() {
+            return;
+        }
+        let Some(patch_def) = self
+            .profile_def
+            .lock_ok()
+            .patches
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&patch))
+            .cloned()
+        else {
+            return;
+        };
+        let chain: Vec<(String, BlockType)> =
+            self.blocks.lock_ok().iter().map(|b| (b.name.clone(), b.block_type)).collect();
+        let mut comp = RigLibrary::load_compositions();
+        let saved = crate::macros::save_tuning(&mut comp, &patch_def, &chain, &defs, &scope);
+        tracing::info!(%knob, %scope, saved, "macro tuning saved into the presets");
+        if saved == 0 {
+            return;
+        }
+        RigLibrary::save_compositions(&comp);
+        let blocks = self.blocks.lock_ok().clone();
+        self.macros.lock_ok().untune(&knob, &blocks);
+        // Played from the presets now.
+        self.macros_rebase();
+        *self.revision.lock_ok() += 1;
+        self.publish_state();
+    }
+
+    fn discard_macro_tune(&self, knob: String) {
+        let blocks = self.blocks.lock_ok().clone();
+        let (writes, bypass) = {
+            let mut e = self.macros.lock_ok();
+            e.untune(&knob, &blocks);
+            (e.live_params(), e.live_bypass())
+        };
+        self.apply_macro_writes(&writes, &bypass);
+        self.events.publish(RigEvent::Chain(Rig::chain(self)));
+        self.events.publish(RigEvent::Macros(Rig::macros(self)));
+    }
+
+    fn save_macro_positions(&self) {
+        let (positions, patch) = {
+            let e = self.macros.lock_ok();
+            (e.positions(), e.patch().to_string())
+        };
+        let Some(patch_def) = self
+            .profile_def
+            .lock_ok()
+            .patches
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&patch))
+            .cloned()
+        else {
+            return;
+        };
+        let mut comp = RigLibrary::load_compositions();
+        let Some(snap) = comp
+            .presets
+            .iter_mut()
+            .find(|p| p.name.eq_ignore_ascii_case(&patch_def.rig_preset))
+            .and_then(|p| {
+                let i = p
+                    .snapshots
+                    .iter()
+                    .position(|s| !patch_def.snapshot.is_empty() && s.name.eq_ignore_ascii_case(&patch_def.snapshot))
+                    .unwrap_or(0);
+                p.snapshots.get_mut(i)
+            })
+        else {
+            tracing::warn!(%patch, "macro positions: the patch plays no preset snapshot to keep them in");
+            return;
+        };
+        snap.macros.clone_from(&positions);
+        RigLibrary::save_compositions(&comp);
+        // The patch has nothing of its own now: it plays its snapshot's.
+        let saved = {
+            let mut e = self.macros.lock_ok();
+            e.set_defaults(positions);
+            e.saved()
+        };
+        self.store_macros(&patch, saved);
+        *self.revision.lock_ok() += 1;
+        self.publish_state();
+    }
+
     fn set_macro_pad(&self, id: String, on: bool) {
         let (bypass, saved, patch) = {
             let mut e = self.macros.lock_ok();
@@ -7359,7 +7484,51 @@ fn snapshot_info(s: &crate::compose::ModuleSnapshotDef) -> signal_guitar_proto::
             .filter(|p| !p.is_empty())
             .map(|p| stem(p))
             .collect(),
+        macros: crate::compose::MacroResponseDef::knobs(&s.macros),
     }
+}
+
+/// A built chain as live blocks, straight from its definition — ids
+/// `chain-<index>` — for what reads a patch without a rig (levelling puts
+/// the macro positions on it: `crate::macros::apply_positions`).
+pub(crate) fn chain_as_live(chain: &[RigBlock]) -> Vec<LiveBlock> {
+    chain
+        .iter()
+        .enumerate()
+        .map(|(i, block)| {
+            let name = if block.name.trim().is_empty() {
+                format!("{:?}", block.block_type)
+            } else {
+                block.name.clone()
+            };
+            let params: Vec<BlockParam> = param_specs(block.block_type)
+                .iter()
+                .map(|(pname, min, max, dflt)| BlockParam {
+                    name: pname.clone(),
+                    value: block.param_f32(pname).unwrap_or(*dflt),
+                    min: *min,
+                    max: *max,
+                    overridden: false,
+                })
+                .collect();
+            LiveBlock {
+                id: format!("chain-{i}"),
+                block_type: block.block_type,
+                name,
+                bypassed: block.bypassed,
+                param_name: None,
+                param_value: 0.0,
+                param_min: 0.0,
+                param_max: 0.0,
+                params,
+                preset: GuitarRigBackend::asset_stem(block.asset_path()),
+                options: Vec::new(),
+                option: 0,
+                output_level_db: None,
+                overridden: false,
+            }
+        })
+        .collect()
 }
 
 /// A pick of `module` that names no preset — what a module owns by block

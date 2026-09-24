@@ -112,7 +112,14 @@ pub fn level_profile(
         p.level_db = 0.0;
         p.trim_db = 0.0;
     }
-    let built = profile_from_library(&raw, &lib.drive_presets);
+    let mut built = profile_from_library(&raw, &lib.drive_presets);
+    let comp = RigLibrary::load_compositions();
+    // Each patch with its macro knobs where it keeps them — as it plays.
+    for patch in &mut built.patches {
+        if let Some(d) = raw.patches.iter().find(|d| d.name.eq_ignore_ascii_case(&patch.name)) {
+            crate::macros::apply_positions(d, &comp, patch);
+        }
+    }
 
     // Measured on the rig itself (see `crate::measure`), a patch per core.
     let names: Vec<String> = def.patches.iter().map(|p| p.name.clone()).collect();
@@ -124,7 +131,6 @@ pub fn level_profile(
             .and_then(|p| crate::measure::patch_lufs(p, sample_rate))
     });
 
-    let comp = RigLibrary::load_compositions();
     let mut out = Vec::with_capacity(def.patches.len());
     for (patch, lufs) in def.patches.iter_mut().zip(measured) {
         if let Some(l) = lufs {

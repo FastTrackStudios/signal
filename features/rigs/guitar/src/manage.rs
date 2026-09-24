@@ -538,6 +538,7 @@ pub fn save_block_preset(
                 params,
                 bypass: live.bypassed,
                 target_gr_db: 0.0,
+                macros: Vec::new(),
             });
             name.to_string()
         }
@@ -798,6 +799,7 @@ mod tests {
                     overrides: Vec::new(),
                     level_db: 0.0,
                     gain_bias_db: 0.0,
+                    macros: Vec::new(),
                 }],
             }],
             blocks: vec![BlockPresetDef {
@@ -806,6 +808,7 @@ mod tests {
                 params: vec![ParamSetDef { param: "time".into(), value: 375.0 }],
                 bypass: false,
                 target_gr_db: 0.0,
+                macros: Vec::new(),
             }],
         }
     }

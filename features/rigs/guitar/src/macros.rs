@@ -42,13 +42,26 @@
 //! a parent at rest leaves every child — and every param — as the patch has
 //! it.
 
+//! # Tuned by the presets
+//!
+//! How far a macro moves a param is the preset's to say. A block preset
+//! (`blocks.styx`) and a module snapshot (`modules.styx`, keyed by block)
+//! carry [`MacroResponseDef`]s — for a knob and param, where the param lands
+//! at the knob's bottom and top and the curve between. A module snapshot's
+//! entry wins over the block preset's, which wins over a seed (a musical
+//! default by the preset's character, [`seed_responses`]), which wins over
+//! the engine's own relative response. A composed preset's snapshot carries
+//! knob *positions* ([`crate::compose::PresetSnapshotDef::macros`]): the
+//! patch's own position wins, then the snapshot's, then rest.
+
 use std::collections::HashMap;
 
 use signal_guitar_proto::{BlockParam, LiveBlock, MacroChildView, MacroKnobView};
 use signal_macromod::{MacroBank, MacroBinding, MacroKnob};
 use signal_proto::block::BlockType;
 
-use crate::profiles::MacroValueDef;
+use crate::compose::{Compositions, MacroResponseDef};
+use crate::profiles::{MacroValueDef, PatchDef};
 
 // ── How a knob moves a param ────────────────────────────────────────────────
 
@@ -69,6 +82,150 @@ pub enum Curve {
     Div,
 }
 
+/// The shape of a tuned response between rest and an end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Shape {
+    Lin,
+    /// By ratio: equal steps sound equal on times and frequencies.
+    Log,
+    /// Slow, then fast.
+    Exp,
+    /// Slow at both ends.
+    S,
+}
+
+impl Shape {
+    #[must_use]
+    pub fn parse(s: &str) -> Self {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "log" => Self::Log,
+            "exp" => Self::Exp,
+            "s" | "scurve" | "s-curve" => Self::S,
+            _ => Self::Lin,
+        }
+    }
+
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Lin => "lin",
+            Self::Log => "log",
+            Self::Exp => "exp",
+            Self::S => "s",
+        }
+    }
+
+    /// `from` moved `t` (0..1) of the way to `to`.
+    #[must_use]
+    pub fn between(self, from: f32, to: f32, t: f32) -> f32 {
+        let t = t.clamp(0.0, 1.0);
+        match self {
+            Self::Log if from > 0.0 && to > 0.0 => from * (to / from).powf(t),
+            Self::Exp => (to - from).mul_add(t * t, from),
+            Self::S => (to - from).mul_add(t * t * 2.0f32.mul_add(-t, 3.0), from),
+            _ => (to - from).mul_add(t, from),
+        }
+    }
+
+    /// The `from` under `v` = `between(from, to, t)` — `None` at `t` = 1,
+    /// where every `from` lands on `to`.
+    #[must_use]
+    pub fn from_of(self, v: f32, to: f32, t: f32) -> Option<f32> {
+        let t = t.clamp(0.0, 1.0);
+        if t >= 0.999 {
+            return None;
+        }
+        Some(match self {
+            Self::Log if v > 0.0 && to > 0.0 => (v / to.powf(t)).powf(1.0 / (1.0 - t)),
+            Self::Exp => (v - to * t * t) / (1.0 - t * t),
+            Self::S => {
+                let s = t * t * 2.0f32.mul_add(-t, 3.0);
+                (v - to * s) / (1.0 - s)
+            }
+            _ => (v - to * t) / (1.0 - t),
+        })
+    }
+}
+
+/// A preset's response on one param ([`MacroResponseDef`], resolved).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Response {
+    pub min: Option<f32>,
+    pub max: Option<f32>,
+    pub shape: Shape,
+    pub off: bool,
+    /// A drive stage: where on the knob's upper half it comes in.
+    pub enter: Option<f32>,
+    /// Who says so: `module`, `block`, `seed`, `tuning`, or `stage` (the
+    /// drive journey's own default).
+    pub source: &'static str,
+}
+
+impl Response {
+    #[must_use]
+    pub fn of(def: &MacroResponseDef, source: &'static str) -> Self {
+        Self {
+            min: def.min,
+            max: def.max,
+            shape: Shape::parse(&def.curve),
+            off: def.off,
+            enter: def.enter,
+            source,
+        }
+    }
+
+    /// The live value for `base` with the knob at offset `m`. `entry` is
+    /// where an off drive stage fades in from (instead of `base`).
+    #[must_use]
+    pub fn apply(&self, base: f32, m: f32, entry: Option<f32>) -> f32 {
+        if self.off || m == 0.0 {
+            return base;
+        }
+        if m > 0.0 {
+            self.max.map_or(base, |to| self.shape.between(entry.unwrap_or(base), to, m))
+        } else {
+            self.min.map_or(base, |to| self.shape.between(base, to, -m))
+        }
+    }
+
+    /// [`apply`](Self::apply)'s inverse (without an entry).
+    #[must_use]
+    pub fn invert(&self, live: f32, m: f32) -> Option<f32> {
+        if self.off || m == 0.0 {
+            return Some(live);
+        }
+        let end = if m > 0.0 { self.max } else { self.min };
+        match end {
+            None => Some(live),
+            Some(to) => self.shape.from_of(live, to, m.abs()),
+        }
+    }
+
+    /// As a definition, for saving.
+    #[must_use]
+    pub fn def(&self, block: &str, knob: &str, param: &str) -> MacroResponseDef {
+        MacroResponseDef {
+            block: block.to_string(),
+            knob: knob.to_string(),
+            param: param.to_string(),
+            min: self.min,
+            max: self.max,
+            curve: self.shape.name().to_string(),
+            off: self.off,
+            enter: self.enter,
+        }
+    }
+}
+
+/// A response for one block of the patch, with who set it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Resolved {
+    /// The chain block, by name.
+    pub block: String,
+    pub def: MacroResponseDef,
+    pub source: &'static str,
+}
+
 /// One param a knob moves, and how.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Target {
@@ -82,6 +239,8 @@ pub struct Target {
     pub dir: f32,
     /// How far all the way up goes: 1 = to the end of the range.
     pub depth: f32,
+    /// A preset's own response, in place of `curve`.
+    pub resp: Option<Response>,
 }
 
 /// Synced divisions, shortest first — indices into the delay's
@@ -136,6 +295,15 @@ impl Target {
     /// The live value for `base` with the knob at offset `m`.
     #[must_use]
     pub fn apply(&self, base: f32, m: f32) -> f32 {
+        self.apply_from(base, m, None)
+    }
+
+    /// As [`apply`](Self::apply), an off drive stage fading in from `entry`.
+    #[must_use]
+    pub fn apply_from(&self, base: f32, m: f32, entry: Option<f32>) -> f32 {
+        if let Some(r) = &self.resp {
+            return r.apply(base, m, entry).clamp(self.lo.min(self.hi), self.hi.max(self.lo));
+        }
         let e = self.effect(m);
         if e == 0.0 {
             return base;
@@ -163,6 +331,9 @@ impl Target {
     /// one end pins every baseline to that end, so the baseline is kept.
     #[must_use]
     pub fn invert(&self, live: f32, m: f32) -> Option<f32> {
+        if let Some(r) = &self.resp {
+            return r.invert(live, m).map(|v| v.clamp(self.lo.min(self.hi), self.hi.max(self.lo)));
+        }
         let e = self.effect(m);
         if e == 0.0 {
             return Some(live);
@@ -271,7 +442,7 @@ pub struct Stage {
 /// chain order). At rest each stage is as the patch has it. The upper half
 /// is shared out in chain order: stage 1 ramps from rest, stage 2 comes in
 /// (if the patch has it off) and ramps from a quarter of the way up, and so
-/// on — every stage all the way driven at the top. Below rest the stages
+/// on — every stage at its top at the top of the knob. Below rest the stages
 /// that are on go, last first, spread over the lower half, until at the
 /// bottom none is left. The legacy three-stage rule (stage 1 from the start,
 /// stage 2 in the middle, stage 3 at the top), made to fit any number of
@@ -310,10 +481,11 @@ pub fn drive_rules(ids: &[String], stages: &[Stage]) -> Vec<BypassRule> {
 }
 
 /// A stage's knob position for the Drive knob at offset `m`: 0.5 (the
-/// patch) at rest; going up, each stage ramps from where it is on to all the
-/// way driven at the top — the first across the whole upper half, a late one
-/// only once it is in; going down, each on stage lowers toward a gentle 30 %
-/// of its drive until it drops out.
+/// patch) at rest; going up, each stage ramps from where it comes in to its
+/// top at the top of the knob — the first across the whole upper half, a
+/// late one only once it is in; going down, each on stage lowers toward its
+/// bottom until it drops out. How far "top" and "bottom" are is the stage's
+/// response (a Drive snapshot's, or [`stage_fallback`]).
 #[must_use]
 pub fn drive_stage_value(m: f32, s: Stage) -> f32 {
     if m >= 0.0 {
@@ -321,9 +493,25 @@ pub fn drive_stage_value(m: f32, s: Stage) -> f32 {
         0.5 + 0.5 * u
     } else if s.on {
         let u = (-m / s.drop.max(1e-6)).clamp(0.0, 1.0);
-        0.5 - 0.35 * u
+        0.5 - 0.5 * u
     } else {
         0.5
+    }
+}
+
+/// A drive stage's response when no Drive snapshot shapes it, around its
+/// dialled drive `r`: up to a sensible top (60 % of the way from `r` to
+/// full, not full), down to a gentle 30 % of `r` — and a stage the patch
+/// has off fades in from that gentle floor rather than jumping in at `r`.
+#[must_use]
+pub fn stage_fallback(r: f32) -> Response {
+    Response {
+        min: Some(r * 0.3),
+        max: Some(0.6f32.mul_add(1.0 - r, r)),
+        shape: Shape::Lin,
+        off: false,
+        enter: None,
+        source: "stage",
     }
 }
 
@@ -402,6 +590,7 @@ fn target(b: &LiveBlock, name: &str, curve: Curve, dir: f32, depth: f32) -> Opti
         curve,
         dir,
         depth,
+        resp: None,
     })
 }
 
@@ -960,6 +1149,35 @@ pub struct MacroEngine {
     pads: HashMap<String, bool>,
     /// Each journey knob's stages, in child order.
     journeys: HashMap<String, Vec<Stage>>,
+    /// The presets' responses for this patch ([`responses_for`]).
+    responses: Vec<Resolved>,
+    /// Its preset snapshot's knob positions (offsets) — what the patch's
+    /// own positions are kept against.
+    defaults: Vec<MacroValueDef>,
+    /// Responses being tuned in the panel, by knob id — live until saved
+    /// into a preset or the patch changes.
+    tuned: HashMap<String, Response>,
+    /// Block names by id.
+    names: HashMap<String, String>,
+}
+
+/// What a patch brings to the bar besides its chain.
+#[derive(Clone, Debug, Default)]
+pub struct Context {
+    /// The patch's own knob positions.
+    pub saved: Vec<MacroValueDef>,
+    /// Its preset snapshot's positions, under the patch's.
+    pub defaults: Vec<MacroValueDef>,
+    /// The presets' responses ([`responses_for`]).
+    pub responses: Vec<Resolved>,
+}
+
+impl Context {
+    /// Only the patch's own positions.
+    #[must_use]
+    pub fn saved(saved: &[MacroValueDef]) -> Self {
+        Self { saved: saved.to_vec(), ..Self::default() }
+    }
 }
 
 impl MacroEngine {
@@ -990,14 +1208,19 @@ impl MacroEngine {
                 b
             })
             .collect();
-        let (patch, saved) = (self.patch.clone(), self.saved());
+        let patch = self.patch.clone();
+        let ctx = Context {
+            saved: self.saved(),
+            defaults: self.defaults.clone(),
+            responses: self.responses.clone(),
+        };
         let extra: Vec<((String, String), f32)> = self
             .baseline
             .iter()
             .filter(|((b, p), _)| !base.iter().any(|x| x.id == *b && x.params.iter().any(|q| q.name == *p)))
             .map(|(k, v)| (k.clone(), *v))
             .collect();
-        self.rebase(&patch, &base, &saved);
+        self.rebase(&patch, &base, &ctx);
         self.baseline.extend(extra);
     }
 
@@ -1008,14 +1231,20 @@ impl MacroEngine {
     }
 
     /// Put `patch` on: its chain as built (`blocks` — the baseline, no
-    /// macro applied) and its saved knob positions.
-    pub fn rebase(&mut self, patch: &str, blocks: &[LiveBlock], saved: &[MacroValueDef]) {
+    /// macro applied), its presets' responses and its knob positions.
+    pub fn rebase(&mut self, patch: &str, blocks: &[LiveBlock], ctx: &Context) {
+        if !self.patch.eq_ignore_ascii_case(patch) {
+            self.tuned.clear();
+        }
         self.patch = patch.to_string();
+        self.responses = ctx.responses.clone();
+        self.defaults = ctx.defaults.clone();
         self.baseline = blocks
             .iter()
             .flat_map(|b| b.params.iter().map(move |p| ((b.id.clone(), p.name.clone()), p.value)))
             .collect();
         self.built = build(blocks);
+        self.attach(blocks);
         self.base_bypass = self
             .built
             .meta
@@ -1047,11 +1276,19 @@ impl MacroEngine {
         }
         self.rebuild_rules();
         self.pads.clear();
-        // Saved positions: bar knobs first (they set their children), then
-        // the children moved on their own since.
+        // Positions: the preset snapshot's, then the patch's own over them —
+        // bar knobs first (they set their children), then the children
+        // moved on their own since.
         let is_parent = |id: &str| self.built.bank.knobs.iter().any(|k| k.id == id);
+        let mut all: Vec<MacroValueDef> = ctx.defaults.clone();
+        for d in &ctx.saved {
+            match all.iter_mut().find(|x| x.id == d.id) {
+                Some(x) => *x = d.clone(),
+                None => all.push(d.clone()),
+            }
+        }
         let (parents, kids): (Vec<&MacroValueDef>, Vec<&MacroValueDef>) =
-            saved.iter().partition(|d| is_parent(&d.id));
+            all.iter().partition(|d| is_parent(&d.id));
         for d in parents.into_iter().chain(kids) {
             if let Some(rest) = self.built.meta.get(&d.id).map(|m| m.rest) {
                 if self.built.meta.get(&d.id).is_some_and(|m| m.select.is_none()) {
@@ -1097,7 +1334,20 @@ impl MacroEngine {
                         .is_some_and(|b| !self.base_bypass.get(b).copied().unwrap_or(false))
                 })
                 .collect();
-            let stages = journey(&on);
+            let mut stages = journey(&on);
+            // A Drive snapshot's stage says where it comes in.
+            for (s, id) in stages.iter_mut().zip(&ids) {
+                if let Some(e) = self
+                    .built
+                    .meta
+                    .get(id)
+                    .and_then(|m| m.targets.first())
+                    .and_then(|t| t.resp.as_ref())
+                    .and_then(|r| r.enter)
+                {
+                    s.enter = e.clamp(0.0, 0.99);
+                }
+            }
             rules.insert(parent.id.clone(), drive_rules(&ids, &stages));
             // Drive's children follow the journey rather than bindings.
             if self.built.panels.get(&parent.id).is_some_and(|p| p.journey) {
@@ -1106,6 +1356,124 @@ impl MacroEngine {
         }
         self.built.rules = rules;
         self.journeys = journeys;
+    }
+
+    /// Put the presets' responses (and any being tuned) on the targets they
+    /// name. A panel knob whose every param is tuned follows its bar knob
+    /// end to end (a 0..1 binding), so the bar knob's top is the preset's
+    /// top. Drive stages without one get [`stage_fallback`].
+    fn attach(&mut self, blocks: &[LiveBlock]) {
+        self.names = blocks.iter().map(|b| (b.id.clone(), b.name.clone())).collect();
+        let mut family: HashMap<String, String> = HashMap::new();
+        let mut journey_kids: Vec<String> = Vec::new();
+        for p in &self.built.bank.knobs {
+            family.insert(p.id.clone(), p.id.clone());
+            let journey = self.built.panels.get(&p.id).is_some_and(|x| x.journey);
+            for c in &p.children {
+                family.insert(c.id.clone(), p.id.clone());
+                if journey {
+                    journey_kids.push(c.id.clone());
+                }
+            }
+        }
+        let Self { built, responses, tuned, names, baseline, .. } = self;
+        let mut rebind: Vec<(String, String)> = Vec::new();
+        for (kid, meta) in &mut built.meta {
+            let fam = family.get(kid).cloned().unwrap_or_else(|| kid.clone());
+            let mut all = !meta.targets.is_empty() && meta.select.is_none();
+            for t in &mut meta.targets {
+                let name = names.get(&t.block).cloned().unwrap_or_default();
+                t.resp = tuned.get(kid).cloned().or_else(|| {
+                    responses
+                        .iter()
+                        .find(|r| {
+                            r.block.eq_ignore_ascii_case(&name)
+                                && r.def.param == t.param
+                                && (r.def.knob == *kid || r.def.knob == fam)
+                        })
+                        .map(|r| Response::of(&r.def, r.source))
+                });
+                if t.resp.is_none() && journey_kids.contains(kid) {
+                    let r = baseline.get(&(t.block.clone(), t.param.clone())).copied().unwrap_or(0.5);
+                    t.resp = Some(stage_fallback(r));
+                } else if t.resp.is_none() {
+                    all = false;
+                }
+            }
+            if all && fam != *kid && !journey_kids.contains(kid) {
+                rebind.push((fam, kid.clone()));
+            }
+        }
+        for (p, c) in rebind {
+            if let Some(parent) = built.bank.get_mut(&p) {
+                for b in parent.bindings.iter_mut().filter(|b| b.target.param_id == c) {
+                    b.min = 0.0;
+                    b.max = 1.0;
+                }
+                if let Some(k) = parent.get_child_mut(&c) {
+                    k.set_value(0.5);
+                }
+            }
+            if let Some(m) = built.meta.get_mut(&c) {
+                m.rest = 0.5;
+            }
+        }
+    }
+
+    /// Tune knob `id`'s response live (the panel's tune mode) — until it is
+    /// saved into a preset, or the patch changes. `blocks` is the live chain.
+    pub fn tune(&mut self, id: &str, r: Response, blocks: &[LiveBlock]) {
+        if self.built.meta.get(id).is_some_and(|m| !m.targets.is_empty()) {
+            self.tuned.insert(id.to_string(), r);
+            self.refresh(blocks);
+        }
+    }
+
+    /// The responses being tuned on bar knob `parent`'s panel, as they would
+    /// be saved: `(chain block, entry)` — the entry keyed to the bar knob,
+    /// so it applies to whichever row the block sits in.
+    #[must_use]
+    pub fn tuned_defs(&self, parent: &str) -> Vec<(String, MacroResponseDef)> {
+        let Some(p) = self.built.bank.get(parent) else { return Vec::new() };
+        let mut out = Vec::new();
+        for c in &p.children {
+            let (Some(r), Some(meta)) = (self.tuned.get(&c.id), self.built.meta.get(&c.id)) else { continue };
+            for t in &meta.targets {
+                let block = self.names.get(&t.block).cloned().unwrap_or_default();
+                out.push((block, r.def("", parent, &t.param)));
+            }
+        }
+        out
+    }
+
+    /// Forget the responses being tuned on `parent`'s panel (saved, or
+    /// thrown away).
+    pub fn untune(&mut self, parent: &str, blocks: &[LiveBlock]) {
+        let kids: Vec<String> = self
+            .built
+            .bank
+            .get(parent)
+            .map(|p| p.children.iter().map(|c| c.id.clone()).collect())
+            .unwrap_or_default();
+        self.tuned.retain(|k, _| !kids.contains(k));
+        self.refresh(blocks);
+    }
+
+    /// Every knob's position as an offset, off rest — what a preset snapshot
+    /// keeps.
+    #[must_use]
+    pub fn positions(&self) -> Vec<MacroValueDef> {
+        self.offsets()
+            .into_iter()
+            .filter(|(_, m, bar)| !*bar || m.abs() > 1e-4)
+            .map(|(id, value, _)| MacroValueDef { id, value, pad: String::new() })
+            .collect()
+    }
+
+    /// Take `defaults` as the preset snapshot's positions from now on (they
+    /// were just saved there), so the patch keeps nothing of its own.
+    pub fn set_defaults(&mut self, defaults: Vec<MacroValueDef>) {
+        self.defaults = defaults;
     }
 
     fn base(&self, block: &str, param: &str) -> Option<f32> {
@@ -1118,23 +1486,12 @@ impl MacroEngine {
         let rest = self.built.meta.get(id).map_or(0.5, |m| m.rest);
         let Some(k) = self.built.bank.get_knob_mut(id) else { return };
         k.set_value(value);
+        let _ = (stages, rest);
+        let implied = self.built.bank.get(id).map(|p| self.implied(p)).unwrap_or_default();
         if let Some(parent) = self.built.bank.get_mut(id) {
-            let v = parent.value;
-            if let Some(stages) = stages {
-                let m = offset_of(v, rest);
-                for (child, s) in parent.children.iter_mut().zip(stages) {
-                    child.set_value(drive_stage_value(m, s));
-                }
-            } else {
-                let values: Vec<(String, f32)> = parent
-                    .bindings
-                    .iter()
-                    .map(|b| (b.target.param_id.clone(), parent.compute_binding_value(b)))
-                    .collect();
-                for (cid, cv) in values {
-                    if let Some(c) = parent.get_child_mut(&cid) {
-                        c.set_value(cv);
-                    }
+            for (cid, cv) in implied {
+                if let Some(c) = parent.get_child_mut(&cid) {
+                    c.set_value(cv);
                 }
             }
             // The legacy bar: a bar knob move re-applies its rules, so a pad
@@ -1145,6 +1502,50 @@ impl MacroEngine {
             }
             apply_bypass_rules(&mut self.built.bank, &self.built.rules);
         }
+    }
+
+    /// Where bar knob `parent`'s panel knobs sit for its present value —
+    /// by its bindings, or Drive's journey.
+    fn implied(&self, parent: &MacroKnob) -> Vec<(String, f32)> {
+        let rest = self.built.meta.get(&parent.id).map_or(0.5, |m| m.rest);
+        match self.journeys.get(&parent.id) {
+            Some(stages) => {
+                let m = offset_of(parent.value, rest);
+                parent
+                    .children
+                    .iter()
+                    .zip(stages)
+                    .map(|(c, s)| (c.id.clone(), drive_stage_value(m, *s)))
+                    .collect()
+            }
+            None => parent
+                .bindings
+                .iter()
+                .map(|b| (b.target.param_id.clone(), parent.compute_binding_value(b)))
+                .collect(),
+        }
+    }
+
+    /// Every knob's position as an offset — the bar knobs off rest, and the
+    /// panel knobs moved away from where their bar knob puts them.
+    fn offsets(&self) -> Vec<(String, f32, bool)> {
+        let mut out = Vec::new();
+        for parent in &self.built.bank.knobs {
+            out.push((parent.id.clone(), self.offset(&parent.id), true));
+            let implied = self.implied(parent);
+            for c in &parent.children {
+                let Some(meta) = self.built.meta.get(&c.id).filter(|m| m.select.is_none()) else { continue };
+                let rest = meta.rest;
+                // Where its bar knob puts it — or, left be by the bar knob,
+                // its rest.
+                let put = implied.iter().find(|(id, _)| *id == c.id).map_or(rest, |(_, v)| *v);
+                let own = (put - c.value).abs() > 1e-4;
+                if own {
+                    out.push((c.id.clone(), offset_of(c.value, rest), false));
+                }
+            }
+        }
+        out
     }
 
     fn apply_pads(&mut self) {
@@ -1195,14 +1596,21 @@ impl MacroEngine {
 
     /// Every knob's targets on `(block, param)`, in bank order, with their
     /// offsets — the layers from the baseline up.
-    fn layers(&self, block: &str, param: &str) -> Vec<(Target, f32)> {
+    fn layers(&self, block: &str, param: &str) -> Vec<(Target, f32, Option<f32>)> {
         let mut out = Vec::new();
         for parent in &self.built.bank.knobs {
+            let journey = self.journeys.contains_key(&parent.id);
             for k in std::iter::once(parent).chain(parent.children.iter()) {
                 let Some(meta) = self.built.meta.get(&k.id) else { continue };
                 let m = self.offset(&k.id);
+                // A drive stage the patch has off fades in from its floor.
+                let entry = meta
+                    .pad_block
+                    .as_ref()
+                    .filter(|b| journey && self.base_bypass.get(*b).copied().unwrap_or(false));
                 for t in meta.targets.iter().filter(|t| t.block == block && t.param == param) {
-                    out.push((t.clone(), m));
+                    let from = entry.and_then(|_| t.resp.as_ref()).and_then(|r| r.min);
+                    out.push((t.clone(), m, from));
                 }
             }
         }
@@ -1214,7 +1622,7 @@ impl MacroEngine {
     #[must_use]
     pub fn live(&self, block: &str, param: &str) -> Option<f32> {
         let base = self.base(block, param)?;
-        Some(self.layers(block, param).iter().fold(base, |v, (t, m)| t.apply(v, *m)))
+        Some(self.layers(block, param).iter().fold(base, |v, (t, m, e)| t.apply_from(v, *m, *e)))
     }
 
     /// Every param a macro can move, with its live value.
@@ -1260,8 +1668,9 @@ impl MacroEngine {
         let layers = self.layers(block, param);
         let old = self.base(block, param);
         let mut v = live;
-        for (t, m) in layers.iter().rev() {
-            match t.invert(v, *m) {
+        for (t, m, entry) in layers.iter().rev() {
+            let inverse = if entry.is_some() && *m > 0.0 { None } else { t.invert(v, *m) };
+            match inverse {
                 Some(b) => v = b,
                 // Pinned to an end: nothing under it can be told apart, so
                 // the baseline stays.
@@ -1319,25 +1728,82 @@ impl MacroEngine {
         }
     }
 
-    /// The positions worth keeping with the patch: every knob off rest, and
-    /// every pad pressed.
+    /// The positions worth keeping with the patch: every knob away from
+    /// where its preset snapshot puts it (rest, when it says nothing) — a
+    /// knob turned back to rest over a snapshot that turns it is kept too —
+    /// and every pad pressed.
     #[must_use]
     pub fn saved(&self) -> Vec<MacroValueDef> {
         let mut out = Vec::new();
-        for parent in &self.built.bank.knobs {
-            for k in std::iter::once(parent).chain(parent.children.iter()) {
-                let m = self.offset(&k.id);
-                let pad = match self.pads.get(&k.id) {
-                    Some(true) => "on",
-                    Some(false) => "off",
-                    None => "",
-                };
-                if m.abs() > 1e-4 || !pad.is_empty() {
-                    out.push(MacroValueDef { id: k.id.clone(), value: m, pad: pad.to_string() });
-                }
+        let offsets = self.offsets();
+        let ids: Vec<String> = self
+            .built
+            .bank
+            .knobs
+            .iter()
+            .flat_map(|p| std::iter::once(p.id.clone()).chain(p.children.iter().map(|c| c.id.clone())))
+            .collect();
+        for id in ids {
+            let own = offsets.iter().find(|(k, _, _)| *k == id);
+            let pad = match self.pads.get(&id) {
+                Some(true) => "on",
+                Some(false) => "off",
+                None => "",
+            };
+            let d = self.defaults.iter().find(|d| d.id == id).map(|d| d.value);
+            let m = own.map(|(_, m, _)| *m);
+            let keep = match (m, d) {
+                (Some(m), Some(d)) => (m - d).abs() > 1e-4,
+                // Where its bar knob puts it, but the snapshot moved it.
+                (None, Some(_)) => true,
+                (Some(m), None) => m.abs() > 1e-4 || own.is_some_and(|(_, _, bar)| !*bar),
+                (None, None) => false,
+            };
+            if keep || !pad.is_empty() {
+                let value = m.unwrap_or_else(|| self.offset(&id));
+                out.push(MacroValueDef { id, value, pad: pad.to_string() });
             }
         }
         out
+    }
+
+    /// A panel knob's response as tune mode draws it: where its param sits
+    /// at the patch's value, the knob's bottom and top, on which curve.
+    fn tune_view(&self, id: &str, meta: &Meta) -> Option<signal_guitar_proto::MacroTuneView> {
+        let t = meta.targets.first().filter(|_| meta.select.is_none())?;
+        let base = self.base(&t.block, &t.param)?;
+        let stage = self
+            .journeys
+            .keys()
+            .filter_map(|p| self.built.bank.get(p))
+            .any(|p| p.children.iter().any(|c| c.id == id));
+        let off_stage = stage
+            && meta.pad_block.as_ref().is_some_and(|b| self.base_bypass.get(b).copied().unwrap_or(false));
+        let entry = t.resp.as_ref().filter(|_| off_stage).and_then(|r| r.min);
+        let (curve, source, enter) = match &t.resp {
+            Some(r) => (r.shape.name(), r.source, r.enter.unwrap_or(-1.0)),
+            None => (if t.curve == Curve::Log { "log" } else { "lin" }, "", -1.0),
+        };
+        let stage_enter = self
+            .journeys
+            .iter()
+            .find_map(|(p, stages)| {
+                let parent = self.built.bank.get(p)?;
+                let i = parent.children.iter().position(|c| c.id == id)?;
+                stages.get(i).map(|s| s.enter)
+            })
+            .unwrap_or(enter);
+        Some(signal_guitar_proto::MacroTuneView {
+            base,
+            lo: t.apply_from(base, -1.0, None),
+            hi: t.apply_from(base, 1.0, entry),
+            min: t.lo,
+            max: t.hi,
+            curve: curve.to_string(),
+            source: source.to_string(),
+            enter: stage_enter,
+            log: t.curve == Curve::Log || matches!(t.resp.as_ref().map(|r| r.shape), Some(Shape::Log)),
+        })
     }
 
     /// The bar as the UI draws it; `blocks` is the live chain (values with
@@ -1391,6 +1857,7 @@ impl MacroEngine {
                                 param: live(&meta.show),
                                 aux: live(&meta.aux),
                                 steps: meta.select.as_ref().map_or(0, |s| s.choices.len() as u32),
+                                tune: self.tune_view(&c.id, &meta),
                             }
                         })
                         .collect(),
@@ -1423,6 +1890,252 @@ fn select_value(s: &Select, pos: f32) -> f32 {
     }
     let i = (pos.clamp(0.0, 1.0) * (n - 1) as f32).round() as usize;
     s.choices[i.min(n - 1)]
+}
+
+// ── The presets' responses and positions for a patch ──────────────────────
+
+/// Every response the presets give `patch`'s blocks, most important first:
+/// its module snapshots' (by block), then its block presets' own, then the
+/// seeds for block presets that say nothing ([`seed_responses`]). The
+/// engine takes the first that fits each knob and param.
+#[must_use]
+pub fn responses_for(comp: &Compositions, patch: &PatchDef) -> Vec<Resolved> {
+    let mut out = Vec::new();
+    for pick in crate::compose::module_picks(comp, patch) {
+        let Some(snap) = comp.module(&pick.module, &pick.preset).and_then(|m| {
+            m.snapshots
+                .iter()
+                .find(|s| !pick.snapshot.is_empty() && s.name.eq_ignore_ascii_case(&pick.snapshot))
+                .or_else(|| m.snapshots.first())
+        }) else {
+            continue;
+        };
+        for d in &snap.macros {
+            out.push(Resolved { block: d.block.clone(), def: d.clone(), source: "module" });
+        }
+    }
+    let picks = crate::compose::block_picks(comp, patch);
+    for c in &picks {
+        if let Some(p) = comp.block_preset(&c.preset) {
+            for d in &p.macros {
+                out.push(Resolved { block: c.block.clone(), def: d.clone(), source: "block" });
+            }
+        }
+    }
+    for c in &picks {
+        if let Some(p) = comp.block_preset(&c.preset).filter(|p| p.macros.is_empty()) {
+            for d in seed_responses(p) {
+                out.push(Resolved { block: c.block.clone(), def: d, source: "seed" });
+            }
+        }
+    }
+    out
+}
+
+/// Save tuned entries (`(chain block, entry)`, from
+/// [`MacroEngine::tuned_defs`]) into the presets `patch` plays: `scope`
+/// `module` — the module snapshot that owns the block (the most specific:
+/// Delay over Time) — or `block` — the block preset on it. A block preset
+/// that played on seeds keeps them, written out, beside the new entry.
+/// Returns how many entries were written.
+pub fn save_tuning(
+    comp: &mut Compositions,
+    patch: &PatchDef,
+    chain: &[(String, BlockType)],
+    defs: &[(String, MacroResponseDef)],
+    scope: &str,
+) -> usize {
+    fn put(list: &mut Vec<MacroResponseDef>, d: MacroResponseDef) {
+        match list
+            .iter_mut()
+            .find(|x| x.block.eq_ignore_ascii_case(&d.block) && x.knob == d.knob && x.param == d.param)
+        {
+            Some(x) => *x = d,
+            None => list.push(d),
+        }
+    }
+    let mut n = 0;
+    for (block, def) in defs {
+        if scope == "module" {
+            let picks = crate::compose::module_picks(comp, patch);
+            let Some(owner) = picks
+                .iter()
+                .rev()
+                .find(|p| {
+                    crate::manage::owned_blocks(comp, p, chain)
+                        .iter()
+                        .any(|b| b.eq_ignore_ascii_case(block))
+                })
+                .cloned()
+            else {
+                continue;
+            };
+            let Some(snap) = comp
+                .modules
+                .iter_mut()
+                .find(|m| m.module.eq_ignore_ascii_case(&owner.module) && m.name.eq_ignore_ascii_case(&owner.preset))
+                .and_then(|m| {
+                    let i = m
+                        .snapshots
+                        .iter()
+                        .position(|s| !owner.snapshot.is_empty() && s.name.eq_ignore_ascii_case(&owner.snapshot))
+                        .unwrap_or(0);
+                    m.snapshots.get_mut(i)
+                })
+            else {
+                continue;
+            };
+            put(&mut snap.macros, MacroResponseDef { block: block.clone(), ..def.clone() });
+            n += 1;
+        } else {
+            let picks = crate::compose::block_picks(comp, patch);
+            let Some(choice) = picks.iter().find(|c| c.block.eq_ignore_ascii_case(block)) else { continue };
+            let Some(bp) = comp.blocks.iter_mut().find(|b| b.name.eq_ignore_ascii_case(&choice.preset)) else {
+                continue;
+            };
+            if bp.macros.is_empty() {
+                bp.macros = seed_responses(bp);
+            }
+            put(&mut bp.macros, MacroResponseDef { block: String::new(), ..def.clone() });
+            n += 1;
+        }
+    }
+    n
+}
+
+/// The knob positions `patch`'s preset snapshot carries.
+#[must_use]
+pub fn preset_positions(comp: &Compositions, patch: &PatchDef) -> Vec<MacroValueDef> {
+    comp.preset(&patch.rig_preset)
+        .and_then(|p| {
+            p.snapshots
+                .iter()
+                .find(|s| !patch.snapshot.is_empty() && s.name.eq_ignore_ascii_case(&patch.snapshot))
+                .or_else(|| p.snapshots.first())
+        })
+        .map(|s| s.macros.clone())
+        .unwrap_or_default()
+}
+
+/// Everything `patch` brings to the bar: its positions over its preset
+/// snapshot's, and its presets' responses.
+#[must_use]
+pub fn context_for(comp: &Compositions, patch: &PatchDef) -> Context {
+    Context {
+        saved: patch.macros.clone(),
+        defaults: preset_positions(comp, patch),
+        responses: responses_for(comp, patch),
+    }
+}
+
+fn r(knob: &str, param: &str, min: f32, max: f32, curve: &str) -> MacroResponseDef {
+    MacroResponseDef {
+        knob: knob.into(),
+        param: param.into(),
+        min: Some(min),
+        max: Some(max),
+        curve: curve.into(),
+        ..MacroResponseDef::default()
+    }
+}
+
+fn off(knob: &str, param: &str) -> MacroResponseDef {
+    MacroResponseDef { knob: knob.into(), param: param.into(), off: true, ..MacroResponseDef::default() }
+}
+
+/// Musical defaults for a block preset that tunes nothing itself, by its
+/// character — the shipped seeds:
+///
+/// - a **slapback** (short and dry, or named so): feedback 0–0.25, level
+///   −18..−8 dB, and Space barely moves it (±2 dB, no feedback);
+/// - an **ambient** delay (long, or regenerating, or named for it):
+///   feedback 0.3–0.75, level −20..−6 dB, and Clarity ducks it up to 10 dB;
+/// - a **room**: its decay stays short (0.8×–1.2×), Space leaves it be;
+/// - a **hall**, cloud, bloom, shimmer or other ambient reverb: decay
+///   0.5×–2× by ratio, on the Reverb knob and on Space, and Clarity cuts its
+///   lows up to 400 Hz.
+///
+/// Each range contains the preset's own value, so rest is always the preset.
+#[must_use]
+pub fn seed_responses(p: &crate::compose::BlockPresetDef) -> Vec<MacroResponseDef> {
+    let v = |name: &str, dflt: f32| p.params.iter().find(|x| x.param == name).map_or(dflt, |x| x.value);
+    let name = p.name.to_ascii_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
+    // Keep a range around the preset's own value.
+    let around = |x: f32, lo: f32, hi: f32| (lo.min(x), hi.max(x));
+    let mut out = Vec::new();
+    match p.block_type.as_str() {
+        "delay" => {
+            let (fb, level, time) = (v("feedback", 0.3), v("level", -16.0), v("time", 350.0));
+            let synced = v("tap_div_l", DIV_FREE).round() != DIV_FREE;
+            let slap = has(&["slap"]) || (!synced && time < 180.0 && fb <= 0.3);
+            let ambient = !slap && (has(&["ambient", "wash", "swell", "bloom", "shimmer", "pad", "flute"]) || fb >= 0.5 || time >= 550.0);
+            if slap {
+                let (a, b) = around(fb, 0.0, 0.25);
+                out.push(r("delay", "feedback", a, b, "lin"));
+                let (a, b) = around(level, -18.0, -8.0);
+                out.push(r("delay", "level", a, b, "lin"));
+                out.push(off("space", "feedback"));
+                out.push(r("space", "level", level - 2.0, level + 2.0, "lin"));
+            } else if ambient {
+                let (a, b) = around(fb, 0.3, 0.75);
+                out.push(r("delay", "feedback", a, b, "s"));
+                let (a, b) = around(level, -20.0, -6.0);
+                out.push(r("delay", "level", a, b, "lin"));
+                let (a, b) = around(v("duck_sens", 0.0), 0.0, 10.0);
+                out.push(r("clarity", "duck_sens", a, b, "lin"));
+            }
+        }
+        "reverb" => {
+            let (decay, level) = (v("decay", 0.4), v("level", -16.0));
+            let alg = v("algorithm", 1.0).round() as i32;
+            let room = alg == 0 || has(&["room", "tight", "small"]);
+            let big = !room && (matches!(alg, 1 | 4 | 5 | 6 | 7 | 12) || has(&["hall", "ambient", "cathedral", "wash", "swell", "arena", "bloom", "shimmer"]));
+            if room {
+                out.push(r("reverb", "decay", decay * 0.8, (decay * 1.2).min(1.0), "lin"));
+                out.push(off("space", "decay"));
+            } else if big && decay > 0.0 {
+                let (a, b) = (decay * 0.5, (decay * 2.0).min(1.0));
+                out.push(r("reverb", "decay", a, b, "log"));
+                out.push(r("space", "decay", a, b, "log"));
+                let (a, b) = around(level, level - 8.0, level + 6.0);
+                out.push(r("reverb", "level", a, b.min(12.0), "lin"));
+                let lc = v("low_cut", 20.0);
+                let (a, b) = around(lc, 20.0, 400.0);
+                out.push(r("clarity", "low_cut", a, b, "log"));
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
+/// Put `patch`'s stored knob positions on its built chain, as the live rig
+/// does — what levelling measures, so a preset's knob positions are part of
+/// the loudness it is levelled to.
+pub fn apply_positions(def: &PatchDef, comp: &Compositions, patch: &mut signal_sampler::RigPatch) {
+    let ctx = context_for(comp, def);
+    if ctx.saved.is_empty() && ctx.defaults.is_empty() {
+        return;
+    }
+    let blocks = crate::session::chain_as_live(&patch.chain);
+    let mut e = MacroEngine::default();
+    e.rebase(&def.name, &blocks, &ctx);
+    let writes = e.live_params();
+    let bypass = e.live_bypass();
+    let index = |id: &str| id.strip_prefix("chain-").and_then(|i| i.parse::<usize>().ok());
+    for (id, param, v) in writes {
+        let Some(b) = index(&id).and_then(|i| patch.chain.get_mut(i)) else { continue };
+        match b.params.iter_mut().find(|p| p.name == param) {
+            Some(p) => p.value = format!("{v}"),
+            None => b.params.push(signal_sampler::rig_node::Param { name: param, value: format!("{v}") }),
+        }
+    }
+    for (id, byp) in bypass {
+        if let Some(b) = index(&id).and_then(|i| patch.chain.get_mut(i)) {
+            b.bypassed = byp;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1534,7 +2247,7 @@ mod tests {
 
     fn engine() -> MacroEngine {
         let mut e = MacroEngine::default();
-        e.rebase("Test", &chain(), &[]);
+        e.rebase("Test", &chain(), &Context::default());
         e
     }
 
@@ -1620,8 +2333,8 @@ mod tests {
     }
 
     /// Drive is a journey: at rest the stages are as the patch has them;
-    /// going up the off stages come in, in chain order, and every stage ends
-    /// all the way driven; going down they drop out, last first, until none
+    /// going up the off stages come in, in chain order, fading in from their
+    /// floor, and every stage ends at a sensible top; going down they drop out, last first, until none
     /// is left.
     #[test]
     fn drive_brings_the_stages_in_and_out_in_order() {
@@ -1632,13 +2345,16 @@ mod tests {
         assert_eq!(byp(&e), vec![false, true, true], "stage 1 ramps first");
         assert!(e.live("d1", "drive").unwrap() > 0.4);
         assert!(approx(e.live("d2", "drive").unwrap(), 0.5), "stage 2 not yet");
-        e.set("drive", 0.75);
+        e.set("drive", 0.7);
         assert_eq!(byp(&e), vec![false, false, true], "then stage 2 comes in");
+        assert!(e.live("d2", "drive").unwrap() < 0.25, "fading in from its floor, not jumping to 0.5");
         e.set("drive", 0.9);
         assert_eq!(byp(&e), vec![false, false, false], "then stage 3");
         e.set("drive", 1.0);
-        for id in ["d1", "d2", "d3"] {
-            assert!(approx(e.live(id, "drive").unwrap(), 1.0), "{id} all the way driven");
+        // Each at a sensible top — 60 % of the way from its drive to full.
+        for (id, d) in [("d1", 0.4), ("d2", 0.5), ("d3", 0.6)] {
+            let top = 0.6f32.mul_add(1.0 - d, d);
+            assert!(approx(e.live(id, "drive").unwrap(), top), "{id} at its top");
         }
         e.set("drive", 0.3);
         assert_eq!(byp(&e), vec![false, true, true]);
@@ -1780,7 +2496,7 @@ mod tests {
         let saved = e.saved();
         let live = e.live_params();
         let mut again = MacroEngine::default();
-        again.rebase("Test", &chain(), &saved);
+        again.rebase("Test", &chain(), &Context::saved(&saved));
         for (a, b) in live.iter().zip(again.live_params().iter()) {
             assert!(approx(a.2, b.2), "{}.{}", a.0, a.1);
         }
@@ -1805,7 +2521,7 @@ mod tests {
             p.value = 2.0; // 1/8
         }
         let mut e = MacroEngine::default();
-        e.rebase("Sync", &[b], &[]);
+        e.rebase("Sync", &[b], &Context::default());
         e.set("delay-time1", 1.0);
         let up = e.live("dly1", "tap_div_l").unwrap();
         assert!([5.0, 10.0, 1.0].contains(&up), "a longer division: {up}");
@@ -1835,7 +2551,7 @@ mod tests {
         );
         pog.bypassed = true;
         let mut e = MacroEngine::default();
-        e.rebase("POG", &[pog], &[]);
+        e.rebase("POG", &[pog], &Context::default());
         let kids: Vec<String> = e.built.bank.get("pitch").unwrap().children.iter().map(|c| c.label.clone()).collect();
         assert_eq!(kids, ["Mix", "Oct Down", "Oct Up", "Dry", "Interval A", "Interval B"]);
         assert_eq!(e.live_bypass(), vec![("pog".to_string(), true)]);
@@ -1858,7 +2574,7 @@ mod tests {
         ice.params.push(p("interval", 27.0, 0.0, 30.0));
         ice.params.push(p("blend", 0.6, 0.0, 1.0));
         let mut e = MacroEngine::default();
-        e.rebase("Flute", &[ice], &[]);
+        e.rebase("Flute", &[ice], &Context::default());
         let pitch = e.built.bank.get("pitch").expect("pitch");
         assert_eq!(pitch.children.len(), 2);
         e.set("pitch", 1.0);
@@ -1883,6 +2599,332 @@ mod tests {
         assert_eq!(back.patches[0].macros, def.patches[0].macros);
     }
 
+    // ── Preset-tuned responses ─────────────────────────────────────────
+
+    /// The curves between rest and an end: linear, by ratio, slow-then-fast
+    /// and S; each lands on the end and starts at rest; a side left out
+    /// does not move.
+    #[test]
+    fn response_curves_and_one_sided_ranges() {
+        let resp = |curve: &str, min: Option<f32>, max: Option<f32>| Response {
+            min,
+            max,
+            shape: Shape::parse(curve),
+            off: false,
+            enter: None,
+            source: "block",
+        };
+        let lin = resp("lin", Some(0.0), Some(1.0));
+        assert!(approx(lin.apply(0.5, 0.5, None), 0.75));
+        assert!(approx(lin.apply(0.5, -0.5, None), 0.25));
+        // By ratio: halfway from 1 s to 4 s is 2 s, not 2.5 s.
+        let log = resp("log", Some(0.25), Some(4.0));
+        assert!(approx(log.apply(1.0, 0.5, None), 2.0));
+        assert!(approx(log.apply(1.0, -0.5, None), 0.5));
+        // Slow, then fast: a quarter of the way at halfway.
+        let exp = resp("exp", None, Some(1.0));
+        assert!(approx(exp.apply(0.0, 0.5, None), 0.25));
+        // S: half at half, gentle at the ends.
+        let s = resp("s", None, Some(1.0));
+        assert!(approx(s.apply(0.0, 0.5, None), 0.5));
+        assert!(s.apply(0.0, 0.1, None) < 0.1);
+        for r in [&lin, &log, &exp, &s] {
+            assert!(approx(r.apply(0.5, 1.0, None), r.max.unwrap()), "lands on its top");
+            assert!(approx(r.apply(0.5, 0.0, None), 0.5), "rest is the patch");
+        }
+        // One-sided: no min, so down changes nothing.
+        assert!(approx(exp.apply(0.3, -1.0, None), 0.3));
+        // Off: never moves.
+        let mut o = lin.clone();
+        o.off = true;
+        assert!(approx(o.apply(0.3, 1.0, None), 0.3));
+        // Every curve inverts.
+        for r in [&lin, &log, &exp, &s] {
+            for m in [-0.7, -0.2, 0.3, 0.8] {
+                if (m < 0.0 && r.min.is_none()) || (m > 0.0 && r.max.is_none()) {
+                    continue;
+                }
+                let live = r.apply(0.6, m, None);
+                assert!((r.invert(live, m).unwrap() - 0.6).abs() < 1e-3, "{:?} {m}", r.shape);
+            }
+        }
+    }
+
+    fn patch_def(name: &str) -> PatchDef {
+        PatchDef {
+            name: name.into(),
+            song: String::new(),
+            preset: String::new(),
+            preset2: String::new(),
+            rig_preset: String::new(),
+            snapshot: String::new(),
+            modules: Vec::new(),
+            blocks: Vec::new(),
+            drives: Vec::new(),
+            trim_db: 0.0,
+            level_db: 0.0,
+            boost_db: 0.0,
+            overrides: Vec::new(),
+            macros: Vec::new(),
+        }
+    }
+
+    fn entry(block: &str, knob: &str, param: &str, min: f32, max: f32) -> MacroResponseDef {
+        MacroResponseDef {
+            block: block.into(),
+            knob: knob.into(),
+            param: param.into(),
+            min: Some(min),
+            max: Some(max),
+            ..MacroResponseDef::default()
+        }
+    }
+
+    /// Who decides how a macro moves a param: the module snapshot playing,
+    /// over the block preset on the block, over a seed for a block preset
+    /// that says nothing, over the engine's own response.
+    #[test]
+    fn a_module_snapshot_beats_a_block_preset_beats_a_seed() {
+        use crate::compose::{BlockChoiceDef, BlockPresetDef, ModulePresetDef, ModuleSnapshotDef, ParamSetDef};
+        use crate::profiles::ModuleChoiceDef;
+        let mut comp = Compositions::default();
+        comp.blocks.push(BlockPresetDef {
+            block_type: "delay".into(),
+            name: "Tuned".into(),
+            macros: vec![entry("", "delay", "feedback", 0.1, 0.4), entry("", "delay", "level", -20.0, -10.0)],
+            ..BlockPresetDef::default()
+        });
+        comp.blocks.push(BlockPresetDef {
+            block_type: "delay".into(),
+            name: "Slapback".into(),
+            params: vec![ParamSetDef { param: "feedback".into(), value: 0.1 }, ParamSetDef { param: "time".into(), value: 110.0 }],
+            ..BlockPresetDef::default()
+        });
+        comp.modules.push(ModulePresetDef {
+            module: "Delay".into(),
+            name: "Rig".into(),
+            snapshots: vec![ModuleSnapshotDef {
+                name: "A".into(),
+                blocks: vec![
+                    BlockChoiceDef { block: "DLY 1".into(), preset: "Tuned".into() },
+                    BlockChoiceDef { block: "DLY 2".into(), preset: "Slapback".into() },
+                ],
+                macros: vec![entry("DLY 1", "delay", "feedback", 0.0, 0.9)],
+                ..ModuleSnapshotDef::default()
+            }],
+        });
+        let mut patch = patch_def("P");
+        patch.modules.push(ModuleChoiceDef { module: "Delay".into(), preset: "Rig".into(), snapshot: "A".into() });
+        let ctx = context_for(&comp, &patch);
+        let mut e = MacroEngine::default();
+        e.rebase("P", &chain(), &ctx);
+        let src = |id: &str| e.built.meta[id].targets[0].resp.as_ref().map(|r| r.source);
+        assert_eq!(src("delay-fb1"), Some("module"), "the module snapshot's feedback");
+        assert_eq!(src("delay-level1"), Some("block"), "the block preset's level");
+        assert_eq!(src("delay-fb2"), Some("seed"), "the slapback's seed");
+        assert_eq!(src("delay-time1"), None, "nothing says: the engine's own");
+        // A tuned knob follows its bar knob end to end: the bar knob's top
+        // is the preset's top.
+        e.set("delay", 1.0);
+        assert!(approx(e.live("dly1", "feedback").unwrap(), 0.9));
+        assert!(approx(e.live("dly1", "level").unwrap(), -10.0));
+        assert!(approx(e.live("dly2", "feedback").unwrap(), 0.25), "a slapback tops out at 0.25");
+        e.set("delay", 0.0);
+        assert!(approx(e.live("dly1", "feedback").unwrap(), 0.0));
+        assert!(approx(e.live("dly1", "level").unwrap(), -20.0));
+        e.set("delay", 0.5);
+        assert!(approx(e.live("dly1", "feedback").unwrap(), 0.3), "rest is the patch");
+        // Space: the slapback opts its feedback out.
+        e.set("space", 1.0);
+        assert!(approx(e.live("dly2", "feedback").unwrap(), 0.3), "Space leaves a slapback's feedback be");
+        assert!(e.live("dly1", "feedback").unwrap() > 0.3);
+    }
+
+    /// A Drive snapshot shapes the journey per stage: where it comes in, the
+    /// drive it fades in from, and where it tops out.
+    #[test]
+    fn a_drive_snapshot_shapes_the_journey() {
+        let mut ctx = Context::default();
+        for (slot, enter, min, max) in [("Drive 2", 0.1, 0.2, 0.55), ("Drive 3", 0.8, 0.35, 0.7)] {
+            let mut d = entry(slot, "drive", "drive", min, max);
+            d.enter = Some(enter);
+            ctx.responses.push(Resolved { block: slot.into(), def: d, source: "module" });
+        }
+        let mut e = MacroEngine::default();
+        e.rebase("Drive", &chain(), &ctx);
+        let byp = |e: &MacroEngine| e.live_bypass().into_iter().map(|(_, b)| b).collect::<Vec<_>>();
+        e.set("drive", 0.56);
+        assert_eq!(byp(&e), vec![false, false, true], "stage 2 comes in early");
+        let d2 = e.live("d2", "drive").unwrap();
+        assert!(d2 > 0.2 && d2 < 0.3, "fading in from 0.2: {d2}");
+        e.set("drive", 0.85);
+        assert_eq!(byp(&e), vec![false, false, true], "stage 3 only at 80 % up");
+        e.set("drive", 1.0);
+        assert_eq!(byp(&e), vec![false, false, false]);
+        assert!(approx(e.live("d2", "drive").unwrap(), 0.55), "its own top, not full");
+        assert!(approx(e.live("d3", "drive").unwrap(), 0.7));
+        let tv = e.views(&chain());
+        let stage = tv.iter().find(|k| k.id == "drive").unwrap().children[2].tune.clone().unwrap();
+        assert!(approx(stage.enter, 0.8));
+        assert_eq!(stage.source, "module");
+    }
+
+    /// A patch's own knob positions win over its preset snapshot's, which
+    /// win over rest; the patch keeps only what differs from the snapshot —
+    /// a knob turned back to rest over a snapshot that turns it included.
+    #[test]
+    fn positions_patch_over_snapshot_over_rest() {
+        let pos = |id: &str, v: f32| MacroValueDef { id: id.into(), value: v, pad: String::new() };
+        let ctx = Context {
+            saved: vec![pos("delay", -0.5)],
+            defaults: vec![pos("delay", 0.4), pos("space", 0.6)],
+            responses: Vec::new(),
+        };
+        let mut e = MacroEngine::default();
+        e.rebase("P", &chain(), &ctx);
+        assert!(approx(offset_of(e.built.bank.get("delay").unwrap().value, 0.5), -0.5), "the patch's");
+        assert!(approx(offset_of(e.built.bank.get("space").unwrap().value, 0.5), 0.6), "the snapshot's");
+        assert!(approx(e.built.bank.get("reverb").unwrap().value, 0.5), "rest");
+        assert_eq!(e.saved(), vec![pos("delay", -0.5)]);
+        // Back to the snapshot's position: nothing of its own.
+        e.set("delay", value_of(0.4, 0.5));
+        assert!(e.saved().is_empty(), "{:?}", e.saved());
+        // To rest, over a snapshot that turns it: kept, as rest.
+        e.set("space", 0.5);
+        assert_eq!(e.saved(), vec![pos("space", 0.0)]);
+        // What a preset snapshot would keep: every knob off rest.
+        let kept = e.positions();
+        assert!(kept.iter().any(|d| d.id == "delay" && approx(d.value, 0.4)));
+        assert!(!kept.iter().any(|d| d.id == "space"));
+        assert!(!kept.iter().any(|d| d.id.starts_with("delay-")), "panel knobs where their bar knob puts them");
+    }
+
+    /// Levelling measures a patch with its knobs where it keeps them: the
+    /// built chain carries the positions.
+    #[test]
+    fn levelling_measures_the_stored_positions() {
+        use signal_sampler::{RigBlock, RigPatch};
+        let dly = RigBlock::of_type(BlockType::Delay)
+            .named("DLY 1")
+            .with_param("feedback", "0.3")
+            .with_param("level", "-14");
+        let mut built = RigPatch::new("P").with_block(dly);
+        let mut def = patch_def("P");
+        def.macros = vec![MacroValueDef { id: "space".into(), value: 1.0, pad: String::new() }];
+        apply_positions(&def, &Compositions::default(), &mut built);
+        let level = built.chain[0].param_f32("level").unwrap();
+        assert!(level > -14.0, "Space up raised the wet level the meter hears: {level}");
+        // A patch with no positions is measured as built.
+        let mut plain = RigPatch::new("P").with_block(
+            RigBlock::of_type(BlockType::Delay).named("DLY 1").with_param("level", "-14"),
+        );
+        apply_positions(&patch_def("P"), &Compositions::default(), &mut plain);
+        assert!(approx(plain.chain[0].param_f32("level").unwrap(), -14.0));
+    }
+
+    /// The new fields are defaulted: libraries written before them parse,
+    /// and what is written comes back.
+    #[test]
+    fn preset_responses_and_positions_round_trip_through_styx() {
+        use crate::compose::{BlockLib, ModuleLib, PresetLib};
+        let old_blocks = r#"presets ({block_type delay, name Slap, params ({param feedback, value 0.1}), bypass false, target_gr_db 0})"#;
+        let lib: BlockLib = facet_styx::from_str(old_blocks).expect("an old blocks.styx parses");
+        assert!(lib.presets[0].macros.is_empty());
+        let old_modules = r#"presets ({module Delay, name Rig, snapshots ({name A, nam "", cab "", nam2 "", cab2 "", level_db 0, level2_db 0, drives (), blocks (), modules (), overrides ()})})"#;
+        let m: ModuleLib = facet_styx::from_str(old_modules).expect("an old modules.styx parses");
+        assert!(m.presets[0].snapshots[0].macros.is_empty());
+        let old_presets = r#"presets ({name Fender, snapshots ({name Clean, modules (), blocks (), overrides (), level_db 0})})"#;
+        let p: PresetLib = facet_styx::from_str(old_presets).expect("an old presets.styx parses");
+        assert!(p.presets[0].snapshots[0].macros.is_empty());
+
+        let mut lib = lib;
+        let mut one_sided = entry("", "space", "level", -16.0, -8.0);
+        one_sided.min = None;
+        one_sided.curve = "log".into();
+        lib.presets[0].macros = vec![entry("", "delay", "feedback", 0.0, 0.25), one_sided];
+        let back: BlockLib = facet_styx::from_str(&facet_styx::to_string(&lib).unwrap()).unwrap();
+        assert_eq!(back.presets[0].macros, lib.presets[0].macros);
+        let mut p = p;
+        p.presets[0].snapshots[0].macros = vec![MacroValueDef { id: "drive".into(), value: 0.3, pad: String::new() }];
+        let back: PresetLib = facet_styx::from_str(&facet_styx::to_string(&p).unwrap()).unwrap();
+        assert_eq!(back.presets[0].snapshots[0].macros, p.presets[0].snapshots[0].macros);
+    }
+
+    /// Saving a tuning writes it where it was asked: the block preset on the
+    /// block (keeping the seeds it played on), or the module snapshot.
+    #[test]
+    fn tuning_saves_into_the_block_preset_or_the_module_snapshot() {
+        use crate::compose::{BlockChoiceDef, BlockPresetDef, ModulePresetDef, ModuleSnapshotDef, ParamSetDef};
+        use crate::profiles::ModuleChoiceDef;
+        let mut comp = Compositions::default();
+        comp.blocks.push(BlockPresetDef {
+            block_type: "delay".into(),
+            name: "Slapback".into(),
+            params: vec![ParamSetDef { param: "time".into(), value: 110.0 }],
+            ..BlockPresetDef::default()
+        });
+        comp.modules.push(ModulePresetDef {
+            module: "Delay".into(),
+            name: "Rig".into(),
+            snapshots: vec![ModuleSnapshotDef {
+                name: "A".into(),
+                blocks: vec![BlockChoiceDef { block: "DLY 1".into(), preset: "Slapback".into() }],
+                ..ModuleSnapshotDef::default()
+            }],
+        });
+        let mut patch = patch_def("P");
+        patch.modules.push(ModuleChoiceDef { module: "Delay".into(), preset: "Rig".into(), snapshot: "A".into() });
+        let mut e = MacroEngine::default();
+        e.rebase("P", &chain(), &context_for(&comp, &patch));
+        let r = Response { min: Some(0.05), max: Some(0.2), shape: Shape::S, off: false, enter: None, source: "tuning" };
+        e.tune("delay-fb1", r, &chain());
+        e.set("delay", 1.0);
+        assert!(approx(e.live("dly1", "feedback").unwrap(), 0.2), "live while tuning");
+        let defs = e.tuned_defs("delay");
+        assert_eq!(defs[0].0, "DLY 1");
+        let chain_types: Vec<(String, BlockType)> = chain().iter().map(|b| (b.name.clone(), b.block_type)).collect();
+        let mut by_block = comp.clone();
+        assert_eq!(save_tuning(&mut by_block, &patch, &chain_types, &defs, "block"), 1);
+        let saved = &by_block.block_preset("Slapback").unwrap().macros;
+        assert!(saved.iter().any(|d| d.knob == "delay" && d.param == "feedback" && d.max == Some(0.2) && d.curve == "s"));
+        assert!(saved.iter().any(|d| d.knob == "space" && d.off), "the seeds it played on, kept");
+        let mut by_module = comp.clone();
+        assert_eq!(save_tuning(&mut by_module, &patch, &chain_types, &defs, "module"), 1);
+        let snap = &by_module.module("Delay", "Rig").unwrap().snapshots[0];
+        assert_eq!(snap.macros[0].block, "DLY 1");
+        assert_eq!(snap.macros[0].min, Some(0.05));
+    }
+
+    /// The seeds are musical and always contain the preset's own value.
+    #[test]
+    fn seeds_fit_the_presets_character() {
+        use crate::compose::{BlockPresetDef, ParamSetDef};
+        let preset = |ty: &str, name: &str, params: &[(&str, f32)]| BlockPresetDef {
+            block_type: ty.into(),
+            name: name.into(),
+            params: params.iter().map(|(p, v)| ParamSetDef { param: (*p).into(), value: *v }).collect(),
+            ..BlockPresetDef::default()
+        };
+        let find = |list: &[MacroResponseDef], k: &str, p: &str| list.iter().find(|d| d.knob == k && d.param == p).cloned();
+        let slap = seed_responses(&preset("delay", "Slap", &[("feedback", 0.12), ("level", -12.0), ("time", 100.0)]));
+        assert_eq!(find(&slap, "delay", "feedback").unwrap().max, Some(0.25));
+        assert!(find(&slap, "space", "feedback").unwrap().off);
+        let amb = seed_responses(&preset("delay", "Ambient Wash", &[("feedback", 0.6), ("level", -10.0)]));
+        let fb = find(&amb, "delay", "feedback").unwrap();
+        assert_eq!((fb.min, fb.max), (Some(0.3), Some(0.75)));
+        let hall = seed_responses(&preset("reverb", "Big Hall", &[("decay", 0.4), ("algorithm", 1.0)]));
+        let d = find(&hall, "reverb", "decay").unwrap();
+        assert!(approx(d.min.unwrap(), 0.2) && approx(d.max.unwrap(), 0.8) && d.curve == "log");
+        let room = seed_responses(&preset("reverb", "Room", &[("decay", 0.3), ("algorithm", 0.0)]));
+        assert!(find(&room, "reverb", "decay").unwrap().max.unwrap() <= 0.36 + 1e-6, "a room stays short");
+        for list in [&slap, &amb, &hall, &room] {
+            for d in list.iter().filter(|d| !d.off) {
+                assert!(d.min.unwrap() <= d.max.unwrap());
+            }
+        }
+        assert!(seed_responses(&preset("compressor", "Glue", &[])).is_empty());
+    }
+
     #[test]
     fn offsets_round_trip() {
         for rest in [0.0, 0.3, 0.5, 1.0] {
@@ -1898,7 +2940,7 @@ mod tests {
 
     #[test]
     fn curves_invert() {
-        let t = |curve| Target { block: "b".into(), param: "p".into(), lo: 20.0, hi: 2000.0, curve, dir: 1.0, depth: 1.0 };
+        let t = |curve| Target { block: "b".into(), param: "p".into(), lo: 20.0, hi: 2000.0, curve, dir: 1.0, depth: 1.0, resp: None };
         for curve in [Curve::Lin, Curve::Log, Curve::Add(12.0)] {
             let t = t(curve);
             for m in [-0.8, -0.3, 0.4, 0.9] {

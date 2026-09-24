@@ -42,6 +42,60 @@ pub struct ParamSetDef {
     pub value: f32,
 }
 
+/// How one macro moves one param, as a preset tunes it — where the param
+/// lands at the knob's bottom and top, and the shape between.
+///
+/// On a block preset the entry is for the block the preset is on (`block`
+/// empty); on a module snapshot it names the chain block (`DLY 1`). At rest
+/// the param is always the patch's own value; turning up moves it toward
+/// `max`, down toward `min`, along `curve`. A side left out does not move
+/// that way. `off` keeps the macro off the param altogether (a slapback
+/// that Space should never touch). With no entry the macro engine's own
+/// relative response applies (see `crate::macros`).
+#[derive(Clone, Debug, Default, PartialEq, Facet)]
+pub struct MacroResponseDef {
+    /// The chain block — a module snapshot's entries only.
+    #[facet(default)]
+    pub block: String,
+    /// The macro: a bar knob (`delay`, `space`, `drive`) — its panel's knob
+    /// on this param, or the bar knob itself — or one panel knob
+    /// (`delay-fb1`).
+    pub knob: String,
+    pub param: String,
+    /// Where the param lands at the knob's bottom, in the param's units.
+    #[facet(default, skip_serializing_if = Option::is_none)]
+    pub min: Option<f32>,
+    /// Where it lands at the top.
+    #[facet(default, skip_serializing_if = Option::is_none)]
+    pub max: Option<f32>,
+    /// `lin`, `log` (by ratio — times, frequencies), `exp` (slow, then
+    /// fast) or `s`. Empty = `lin`.
+    #[facet(default)]
+    pub curve: String,
+    #[facet(default)]
+    pub off: bool,
+    /// A Drive stage (a Drive module snapshot's entries): how far up the
+    /// knob's upper half (0..1) the stage comes in — `min` is the drive it
+    /// fades in from, `max` where it ends at the top.
+    #[facet(default, skip_serializing_if = Option::is_none)]
+    pub enter: Option<f32>,
+}
+
+impl MacroResponseDef {
+    /// The bar knobs a list of entries tunes, once each, in order.
+    #[must_use]
+    pub fn knobs(list: &[Self]) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for r in list {
+            let k = r.knob.split('-').next().unwrap_or(&r.knob).to_string();
+            if !out.contains(&k) {
+                out.push(k);
+            }
+        }
+        out
+    }
+}
+
 /// A preset for one kind of block — a compressor setting, an EQ curve, a
 /// spring reverb — picked onto any chain block of that kind.
 #[derive(Clone, Debug, Default, Facet)]
@@ -62,6 +116,9 @@ pub struct BlockPresetDef {
     /// comp, which only ever hears the guitar.
     #[facet(default)]
     pub target_gr_db: f32,
+    /// How the macros move this preset's params ([`MacroResponseDef`]).
+    #[facet(default)]
+    pub macros: Vec<MacroResponseDef>,
 }
 
 /// Put a block preset on a named chain block.
@@ -116,6 +173,12 @@ pub struct ModuleSnapshotDef {
     pub modules: Vec<ModuleChoiceDef>,
     #[facet(default)]
     pub overrides: Vec<OverrideDef>,
+    /// How the macros move this module's blocks while the snapshot plays,
+    /// by block — over the block presets' own ([`MacroResponseDef`]). A
+    /// Drive snapshot's entries (`knob: drive`, per slot) shape the drive
+    /// journey: where each stage comes in and its drive range.
+    #[facet(default)]
+    pub macros: Vec<MacroResponseDef>,
 }
 
 /// A named sound for one module, with its snapshots.
@@ -152,6 +215,10 @@ pub struct PresetSnapshotDef {
     /// the target plus this ([`loudness_target`]).
     #[facet(default)]
     pub gain_bias_db: f32,
+    /// Where the macro knobs sit when a patch plays this snapshot — part of
+    /// its sound. A patch's own positions win knob by knob.
+    #[facet(default)]
+    pub macros: Vec<crate::profiles::MacroValueDef>,
 }
 
 /// A preset: a composition of module presets, with snapshots.
@@ -557,6 +624,7 @@ mod tests {
                         overrides: vec![OverrideDef::set("Time", "VERB 1", "mix", 0.3)],
                         level_db: 0.0,
                         gain_bias_db: 0.0,
+                        macros: Vec::new(),
                     },
                     PresetSnapshotDef {
                         blocks: Vec::new(),
@@ -565,6 +633,7 @@ mod tests {
                         overrides: Vec::new(),
                         level_db: 0.0,
                         gain_bias_db: 2.0,
+                        macros: Vec::new(),
                     },
                 ],
             }],
@@ -769,6 +838,7 @@ mod tests {
             ],
             bypass: false,
             target_gr_db: 0.0,
+            macros: Vec::new(),
         });
         c.modules[0].snapshots[0].blocks.push(BlockChoiceDef {
             block: crate::profiles::POST_COMP.into(),
@@ -928,6 +998,7 @@ pub fn propose(def: &ProfileDef) -> Migration {
             overrides: std::mem::take(&mut patch.overrides),
             level_db: 0.0,
             gain_bias_db: 0.0,
+            macros: Vec::new(),
         });
         patch.rig_preset = preset_name;
         patch.snapshot = patch.name.clone();
@@ -1068,8 +1139,11 @@ pub fn level_presets(
         let mut calm = comp.clone();
         calm.presets[p].snapshots[s].level_db = level_db;
         let flat = flatten(&def, &calm);
-        let built = crate::nodes::to_nodes_with_store(&flat, drives).to_profile(&flat, drives);
-        crate::measure::patch_lufs(built.patches.first()?, sample_rate).filter(|l| *l > -70.0)
+        let mut built = crate::nodes::to_nodes_with_store(&flat, drives).to_profile(&flat, drives);
+        // With the snapshot's macro knob positions — part of its sound.
+        let patch = built.patches.first_mut()?;
+        crate::macros::apply_positions(flat.patches.first()?, &calm, patch);
+        crate::measure::patch_lufs(patch, sample_rate).filter(|l| *l > -70.0)
     };
     // Measure raw, correct, and re-measure with the correction applied until
     // it lands: the chain ends in the rig's limiter (the live chain does), so
@@ -1527,6 +1601,7 @@ pub fn recompose(
                 overrides: std::mem::take(&mut patch.overrides),
                 level_db: 0.0,
                 gain_bias_db: 0.0,
+                macros: Vec::new(),
             };
             match preset
                 .snapshots

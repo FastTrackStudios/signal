@@ -529,6 +529,7 @@ mod tests {
                 .iter()
                 .map(|(n, v)| PresetParam { name: (*n).into(), value: *v })
                 .collect(),
+            macros: Vec::new(),
         }
     }
 
