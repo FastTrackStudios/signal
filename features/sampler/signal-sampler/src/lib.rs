@@ -81,9 +81,12 @@
 // filesystem scans, the pack CLI). The wasm32 build keeps the pure engine +
 // tree renderer + the keys lane machinery — see `keys_rig::KeysRig::
 // open_headless` and the browser worklet entry (signal-keys-worklet).
+/// What each block of a chain costs (per-block DSP time and latency).
+pub mod block_profile;
 pub mod amp_blend;
 pub mod time_stage;
 pub mod block_gate;
+pub mod block_params;
 pub mod tail_stage;
 pub mod api;
 pub mod assets;
