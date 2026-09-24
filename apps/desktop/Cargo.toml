@@ -351,6 +351,8 @@ include_dir = { workspace = true, optional = true }
 # ── macOS — the native menu bar (mac_menu.rs): audio stats in the bar,
 # Settings… ⌘, in the app menu. The same objc2 line winit already links.
 [target.'cfg(target_os = "macos")'.dependencies]
+# `midi_hub::init_platform` — the CoreMIDI run-loop thread, first in `main`.
+signal-rig-host = { workspace = true }
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
 # + the status item for `--menubar` (menubar.rs).

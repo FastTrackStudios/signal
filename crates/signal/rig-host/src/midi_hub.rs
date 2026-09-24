@@ -110,6 +110,16 @@ impl Drop for Subscription {
     }
 }
 
+/// Keep the platform's device list live for the life of the process — call
+/// first thing in `main`, before anything touches MIDI. On macOS, CoreMIDI
+/// only updates a process's view of its devices through the run loop of the
+/// thread that first connected to it; when a worker thread with no run loop
+/// got there first, a pedal switched on after launch never appeared (see
+/// `midicore_macos::init`).
+pub fn init_platform() {
+    midicore::native::init();
+}
+
 static HUB: std::sync::OnceLock<MidiHub> = std::sync::OnceLock::new();
 
 /// The process-wide hub.
