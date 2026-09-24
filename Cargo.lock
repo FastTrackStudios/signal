@@ -8423,6 +8423,7 @@ dependencies = [
 name = "midicore-macos"
 version = "0.1.0"
 dependencies = [
+ "core-foundation 0.10.1",
  "coremidi",
  "midicore-proto",
  "tracing",
@@ -10679,6 +10680,7 @@ name = "pitch-dsp"
 version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
+ "realfft",
  "serde",
 ]
 
@@ -13209,6 +13211,7 @@ dependencies = [
  "signal-nam",
  "signal-pack-library",
  "signal-packs-proto",
+ "signal-rig-host",
  "signal-rigs-proto",
  "signal-sampler",
  "signal-space",

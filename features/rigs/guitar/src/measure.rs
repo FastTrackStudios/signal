@@ -31,6 +31,8 @@ use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 // v9: the shimmer and oil-can loops bounded; volume blocks pan.
 // v10: modulation at unity (chorus/flanger/vibrato level-neutral when on);
 // pans are measured centred.
+// v11: the chorus engines rebuilt (depth law, Tape level, feedback
+// compensation) and six added.
 const ENGINE: &str = "rig-v11";
 
 /// Settle time before a measurement: long enough for the compressors, gate
