@@ -68,6 +68,10 @@ struct Wire {
 /// The separator in a tuner key.
 const SEP: char = '\u{1f}';
 
+/// A knob "value" meaning reset, on the knob-move queue (a knob's values
+/// are 0..1).
+const RESET: f32 = -1.0;
+
 impl Wire {
     /// Move knob `id` — here at once, on the rig as fast as it answers.
     fn set(&self, id: &str, value: f32) {
@@ -172,10 +176,16 @@ impl Wire {
     }
 
     /// Double-click in play: a bar knob to rest, a panel knob to where its
-    /// bar knob puts it.
+    /// bar knob puts it. Sent down the same queue as the knob's moves, so a
+    /// move from the click itself cannot land after it.
     fn reset(&self, id: &str) {
-        let (id, parent) = (id.to_string(), self.parent_of(id));
-        self.run(&parent, move |r| async move { r.reset_macro(id).await });
+        let mut macros = self.macros;
+        macros.with_mut(|ks| {
+            for k in ks.iter_mut().filter(|k| k.id == id) {
+                k.value = k.rest;
+            }
+        });
+        self.writer.set(id, "", RESET);
     }
 
     /// The bar knob `id` belongs to (itself, for a bar knob).
@@ -188,21 +198,13 @@ impl Wire {
     }
 }
 
-/// When a dual-row panel's Type or Time link is on, the knob in the other
-/// row that follows `id` — the legacy `linked_mirror`, unchanged.
+/// When a dual-row panel's Type link is on, the knob in the other row that
+/// follows `id` — the legacy `linked_mirror`, less its Time link: the macros
+/// never move timing, so the two delays' times stay as the patch has them.
 #[must_use]
-pub fn linked_mirror(id: &str, prefix: &str, type_linked: bool, time_linked: bool) -> Option<String> {
+pub fn linked_mirror(id: &str, prefix: &str, type_linked: bool) -> Option<String> {
     if type_linked {
         let (t1, t2) = (format!("{prefix}-type1"), format!("{prefix}-type2"));
-        if id == t1 {
-            return Some(t2);
-        }
-        if id == t2 {
-            return Some(t1);
-        }
-    }
-    if time_linked {
-        let (t1, t2) = (format!("{prefix}-time1"), format!("{prefix}-time2"));
         if id == t1 {
             return Some(t2);
         }
@@ -300,7 +302,7 @@ pub fn MacroBar(
                     let r = send.clone();
                     Box::pin(async move {
                         if let Some(r) = r {
-                            let _ = r.set_macro(id, value).await;
+                            let _ = if value <= RESET { r.reset_macro(id).await } else { r.set_macro(id, value).await };
                         }
                     })
                 },
@@ -1425,7 +1427,6 @@ fn DualRowDropdown(
     dragging: Signal<bool>,
 ) -> Element {
     let mut type_linked = use_signal(|| false);
-    let mut time_linked = use_signal(|| false);
     // One row per block, in the columns the headers name.
     let mut rows: Vec<(String, Vec<MacroChildView>)> = Vec::new();
     for c in &children_knobs {
@@ -1437,9 +1438,10 @@ fn DualRowDropdown(
     // The columns, by the knobs' ids (`delay-fb1`): a block without one
     // leaves its cell empty rather than shifting the row.
     let keys: [&str; 5] = if prefix == "reverb" {
-        ["type", "time", "predelay", "character", "level"]
+        // `reverb-time` is the decay: how much tail, not when.
+        ["type", "time", "character", "level", "mod"]
     } else {
-        ["type", "time", "fb", "filter", "level"]
+        ["type", "fb", "filter", "level", "mod"]
     };
     let cols = |row: &[MacroChildView]| -> Vec<Option<MacroChildView>> {
         keys.iter()
@@ -1455,7 +1457,7 @@ fn DualRowDropdown(
         let prefix = prefix.clone();
         match c {
             Some(c) => {
-                let mirror = linked_mirror(&c.id, &prefix, type_linked(), time_linked());
+                let mirror = linked_mirror(&c.id, &prefix, type_linked());
                 rsx! { ChildCell { key: "{c.id}", child: c.clone(), dragging, width: 0, mirror } }
             }
             None => rsx! { div {} },
@@ -1490,14 +1492,7 @@ fn DualRowDropdown(
                             LinkGlyph { on: type_linked() }
                         }
                     }
-                    div { style: "display: flex; align-items: center; justify-content: center; padding: 2px 0;",
-                        div {
-                            title: "Link Time 1 and 2",
-                            style: link(time_linked()),
-                            onclick: move |_| time_linked.set(!time_linked()),
-                            LinkGlyph { on: time_linked() }
-                        }
-                    }
+                    div {}
                     div {}
                     div {}
                     div {}
@@ -1658,9 +1653,18 @@ fn MiniKnob(
                 let y0 = e.client_coordinates().y;
                 let mut dragging = dragging;
                 dragging.set(true);
+                // A click (or the first of a double-click) is not a turn:
+                // nothing moves until the pointer has travelled a few pixels.
+                let moved = std::cell::Cell::new(false);
                 match bus {
                     Some(bus) => bus.begin(move |ev| match ev {
-                        DragEvent::Move { y, .. } => apply(v + (y0 - y) / SENSITIVITY),
+                        DragEvent::Move { y, .. } => {
+                            if !moved.get() && (y0 - y).abs() < 3.0 {
+                                return;
+                            }
+                            moved.set(true);
+                            apply(v + (y0 - y) / SENSITIVITY);
+                        }
                         DragEvent::End => {
                             let mut dragging = dragging;
                             dragging.set(false);
@@ -1777,16 +1781,14 @@ mod tests {
         assert_eq!(pick_handle(18.0, 20.0, 0.2, 0.8), None);
     }
 
-    /// The Type and Time links pair the two rows' knobs — and only those.
+    /// The Type link pairs the two rows' Type knobs — nothing else links.
     #[test]
     fn links_mirror_type_and_time_only() {
-        assert_eq!(linked_mirror("delay-type1", "delay", true, false).as_deref(), Some("delay-type2"));
-        assert_eq!(linked_mirror("delay-type2", "delay", true, false).as_deref(), Some("delay-type1"));
-        assert_eq!(linked_mirror("reverb-time1", "reverb", false, true).as_deref(), Some("reverb-time2"));
-        assert_eq!(linked_mirror("reverb-time2", "reverb", false, true).as_deref(), Some("reverb-time1"));
-        assert_eq!(linked_mirror("delay-time1", "delay", true, false), None, "time not linked");
-        assert_eq!(linked_mirror("delay-fb1", "delay", true, true), None, "only type and time link");
-        assert_eq!(linked_mirror("delay-type1", "reverb", true, true), None, "its own panel only");
+        assert_eq!(linked_mirror("delay-type1", "delay", true).as_deref(), Some("delay-type2"));
+        assert_eq!(linked_mirror("delay-type2", "delay", true).as_deref(), Some("delay-type1"));
+        assert_eq!(linked_mirror("delay-type1", "delay", false), None, "unlinked");
+        assert_eq!(linked_mirror("delay-fb1", "delay", true), None, "only Type links");
+        assert_eq!(linked_mirror("delay-type1", "reverb", true), None, "its own panel only");
     }
 
     fn child(fmt: &str, param: f32) -> MacroChildView {

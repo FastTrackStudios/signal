@@ -78,8 +78,6 @@ pub enum Curve {
     /// A pan's distance from the centre toward the side it is on (0 stays
     /// 0), or toward the centre.
     Spread,
-    /// Steps along the synced tempo divisions, shortest to longest.
-    Div,
 }
 
 /// The shape of a tuned response between rest and an end.
@@ -247,6 +245,18 @@ pub struct Tuned {
     pub def: MacroResponseDef,
 }
 
+/// A param that says *when*, not *how much*: a delay's time, its tempo
+/// divisions, a tempo, a pre-delay. No macro moves these — a macro is more
+/// or less of what the patch does, never a different rhythm — and a
+/// preset entry naming one is ignored.
+#[must_use]
+pub fn is_timing(param: &str) -> bool {
+    matches!(
+        param,
+        "time" | "time_b" | "tap_div_l" | "tap_div_r" | "tempo_bpm" | "predelay" | "density" | "density_ms"
+    )
+}
+
 /// A response for one block of the patch, with who set it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Resolved {
@@ -274,15 +284,6 @@ pub struct Target {
     /// Tune mode's edit over it.
     pub edit: Option<Edit>,
 }
-
-/// Synced divisions, shortest first — indices into the delay's
-/// `TapDivision` menu (1/16, 1/8T, Silver, 1/8, Golden, 1/4T, 1/8., 1/4,
-/// 1/4., 1/2). Free (7) is not a division.
-const DIV_ORDER: [usize; 10] = [4, 3, 6, 2, 5, 10, 1, 0, 8, 9];
-/// The delay menu's Free: the time knob, not a division, sets the time.
-const DIV_FREE: f32 = 7.0;
-/// How many divisions a Time knob all the way up (or down) moves.
-const DIV_STEPS: f32 = 3.0;
 
 impl Target {
     fn effect(&self, m: f32) -> f32 {
@@ -406,7 +407,6 @@ impl Target {
                 }
                 base.signum() * toward(a, e) * reach
             }
-            Curve::Div => div_shift(base, (e * DIV_STEPS).round()),
         }
     }
 
@@ -435,7 +435,6 @@ impl Target {
                 }
                 away(a, e).map(|b| live.signum() * b * reach)
             }
-            Curve::Div => Some(div_shift(live, -(e * DIV_STEPS).round())),
         }
     }
 }
@@ -454,14 +453,6 @@ fn away(t: f32, e: f32) -> Option<f32> {
     }
 }
 
-/// A division index moved `steps` along [`DIV_ORDER`]; Free stays Free.
-fn div_shift(index: f32, steps: f32) -> f32 {
-    let Some(pos) = DIV_ORDER.iter().position(|&d| d as f32 == index.round()) else {
-        return index;
-    };
-    let to = (pos as f32 + steps).clamp(0.0, (DIV_ORDER.len() - 1) as f32) as usize;
-    DIV_ORDER[to] as f32
-}
 
 /// A knob's offset from its position: −1 at 0, 0 at `rest`, 1 at 1.
 #[must_use]
@@ -1026,60 +1017,44 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
         blocks.iter().enumerate().flat_map(|(i, b)| cols(b, i + 1)).collect()
     };
     {
+        // How strong and what character — never when: no time, no
+        // division, no tempo. Both delays run the patch's own times.
         let kids = dual(&delays, &|b, n| {
-            let synced = value(b, "tap_div_l", DIV_FREE).round() != DIV_FREE;
-            let mut time = if synced {
-                let targets: Vec<Target> = ["tap_div_l", "tap_div_r"]
-                    .iter()
-                    .filter_map(|p| target(b, p, Curve::Div, 1.0, 1.0))
-                    .collect();
-                Child::new(
-                    &format!("delay-time{n}"),
-                    &format!("Time {n}"),
-                    "#93C5FD",
-                    Meta { targets, fmt: "div", show: Some((b.id.clone(), "tap_div_l".into())), group: b.name.clone(), ..Meta::default() },
-                    Some((0.1, 0.8)),
-                )
-            } else {
-                match rel_child(b, &format!("delay-time{n}"), &format!("Time {n}"), "#93C5FD", "time", Curve::Log, 1.0, "ms", Some((0.1, 0.8))) {
-                    Some(c) => c,
-                    None => return Vec::new(),
-                }
-            };
-            time.meta.group = b.name.clone();
             [
                 select_child(b, &format!("delay-type{n}"), &format!("Type {n}"), "#60A5FA", "style", "delay_style"),
-                Some(time),
                 rel_child(b, &format!("delay-fb{n}"), &format!("FB {n}"), "#BFDBFE", "feedback", Curve::Lin, 1.0, "pct", Some((0.0, 0.65))),
                 rel_child(b, &format!("delay-filter{n}"), &format!("Filter {n}"), "#DBEAFE", "high_cut", Curve::Log, 1.0, "hz", Some((0.0, 0.5))),
                 rel_child(b, &format!("delay-level{n}"), &format!("Level {n}"), "#93C5FD", "level", Curve::Add(12.0), 1.0, "db", Some((0.0, 0.7))),
+                rel_child(b, &format!("delay-mod{n}"), &format!("Mod {n}"), "#BFDBFE", "mod_depth", Curve::Lin, 1.0, "pct", Some((0.0, 0.6))),
             ]
             .into_iter()
             .flatten()
             .collect()
         });
-        let headers = ["Type", "Time", "Feedback", "Filter", "Level"].map(String::from).to_vec();
+        let headers = ["Type", "Feedback", "Filter", "Level", "Mod"].map(String::from).to_vec();
         add_parent(&mut out, "delay", "Delay", "#3B82F6", Panel { layout: "dual", headers, ..Panel::default() }, kids);
     }
     {
+        // Decay is how much of the tail — a strength. Pre-delay is timing,
+        // and stays as the patch has it.
         let kids = dual(&verbs, &|b, n| {
-            let mut time = rel_child(b, &format!("reverb-time{n}"), &format!("Time {n}"), "#C4B5FD", "decay", Curve::Lin, 1.0, "verb_s", Some((0.1, 0.9)));
-            if let Some(t) = time.as_mut() {
+            let mut decay = rel_child(b, &format!("reverb-time{n}"), &format!("Decay {n}"), "#C4B5FD", "decay", Curve::Lin, 1.0, "verb_s", Some((0.1, 0.9)));
+            if let Some(t) = decay.as_mut() {
                 t.meta.aux = Some((b.id.clone(), "algorithm".into()));
             }
             [
                 select_child(b, &format!("reverb-type{n}"), &format!("Type {n}"), "#A78BFA", "algorithm", "verb_algo"),
-                time,
-                rel_child(b, &format!("reverb-predelay{n}"), &format!("Pre-Dly {n}"), "#DDD6FE", "predelay", Curve::Lin, 1.0, "ms", Some((0.0, 0.5))),
+                decay,
                 // More reverb is an open, less damped tail.
                 rel_child(b, &format!("reverb-character{n}"), &format!("Char {n}"), "#EDE9FE", "damping", Curve::Lin, -1.0, "pct", Some((0.0, 0.8))),
                 rel_child(b, &format!("reverb-level{n}"), &format!("Level {n}"), "#C4B5FD", "level", Curve::Add(12.0), 1.0, "db", Some((0.0, 0.7))),
+                rel_child(b, &format!("reverb-mod{n}"), &format!("Mod {n}"), "#DDD6FE", "modulation", Curve::Lin, 1.0, "pct", Some((0.0, 0.6))),
             ]
             .into_iter()
             .flatten()
             .collect()
         });
-        let headers = ["Type", "Time", "Pre-Delay", "Character", "Level"].map(String::from).to_vec();
+        let headers = ["Type", "Decay", "Character", "Level", "Mod"].map(String::from).to_vec();
         add_parent(&mut out, "reverb", "Reverb", "#8B5CF6", Panel { layout: "dual", headers, ..Panel::default() }, kids);
     }
 
@@ -1570,6 +1545,9 @@ impl MacroEngine {
         text: &str,
         blocks: &[LiveBlock],
     ) -> Result<(), String> {
+        if is_timing(param) {
+            return Err(format!("macros never move timing ({param})"));
+        }
         let meta = self.built.meta.get(knob).ok_or_else(|| format!("no macro knob {knob:?} on this patch"))?;
         if !meta.targets.iter().any(|t| t.block == block && t.param == param) {
             return Err(format!("{knob} does not move {param} on that block"));
@@ -1854,7 +1832,15 @@ impl MacroEngine {
     #[must_use]
     pub fn live(&self, block: &str, param: &str) -> Option<f32> {
         let base = self.base(block, param)?;
-        Some(self.layers(block, param).iter().fold(base, |v, (t, m, e)| t.apply_from(v, *m, *e)))
+        // A knob at rest is no layer at all: the patch's own value, as
+        // stored — not a curve evaluated at zero, which a clamp or a
+        // round-trip could move by a bit.
+        Some(
+            self.layers(block, param)
+                .iter()
+                .filter(|(_, m, _)| *m != 0.0)
+                .fold(base, |v, (t, m, e)| t.apply_from(v, *m, *e)),
+        )
     }
 
     /// Every param a macro can move, with its live value.
@@ -1900,7 +1886,7 @@ impl MacroEngine {
         let layers = self.layers(block, param);
         let old = self.base(block, param);
         let mut v = live;
-        for (t, m, entry) in layers.iter().rev() {
+        for (t, m, entry) in layers.iter().rev().filter(|(_, m, _)| *m != 0.0) {
             let inverse = if entry.is_some() && *m > 0.0 { None } else { t.invert(v, *m) };
             match inverse {
                 Some(b) => v = b,
@@ -2188,6 +2174,20 @@ fn stage_pedal(meta: &Meta, blocks: &[LiveBlock]) -> Option<StagePedal> {
 /// engine takes the first that fits each knob and param.
 #[must_use]
 pub fn responses_for(comp: &Compositions, patch: &PatchDef) -> Vec<Resolved> {
+    let mut out = resolve_all(comp, patch);
+    let before = out.len();
+    out.retain(|r| !is_timing(&r.def.param));
+    if out.len() < before {
+        tracing::warn!(
+            patch = %patch.name,
+            ignored = before - out.len(),
+            "macro responses on timing params (time, divisions, pre-delay) ignored: macros never move timing"
+        );
+    }
+    out
+}
+
+fn resolve_all(comp: &Compositions, patch: &PatchDef) -> Vec<Resolved> {
     let mut out = Vec::new();
     for pick in crate::compose::module_picks(comp, patch) {
         let Some(snap) = comp.module(&pick.module, &pick.preset).and_then(|m| {
@@ -2576,7 +2576,9 @@ pub fn seed_responses(p: &crate::compose::BlockPresetDef) -> Vec<MacroResponseDe
     match p.block_type.as_str() {
         "delay" => {
             let (fb, level, time) = (v("feedback", 0.3), v("level", -16.0), v("time", 350.0));
-            let synced = v("tap_div_l", DIV_FREE).round() != DIV_FREE;
+            // The delay menu's Free (7): the time knob, not a division, sets
+            // the time.
+            let synced = v("tap_div_l", 7.0).round() != 7.0;
             let slap = has(&["slap"]) || (!synced && time < 180.0 && fb <= 0.3);
             let ambient = !slap && (has(&["ambient", "wash", "swell", "bloom", "shimmer", "pad", "flute"]) || fb >= 0.5 || time >= 550.0);
             if slap {
@@ -2699,6 +2701,7 @@ mod tests {
                 p("high_pass", 40.0, 0.0, 900.0),
                 p("pan", 0.5, -1.0, 1.0),
                 p("high_cut", 8000.0, 500.0, 20000.0),
+                p("mod_depth", 0.2, 0.0, 1.0),
                 p("duck_sens", 3.0, 0.0, 18.0),
                 p("duck_release", 0.2, 0.05, 1.0),
             ],
@@ -2717,6 +2720,7 @@ mod tests {
                 p("damping", 0.5, 0.0, 1.0),
                 p("pan_a", -0.3, -1.0, 1.0),
                 p("predelay", 20.0, 0.0, 200.0),
+                p("modulation", 0.1, 0.0, 1.0),
                 p("low_cut", 100.0, 20.0, 2000.0),
                 p("high_cut", 6000.0, 1000.0, 20000.0),
                 p("duck", 0.2, 0.0, 1.0),
@@ -2834,12 +2838,14 @@ mod tests {
     fn delay_up_is_more_of_the_patch() {
         let mut e = engine();
         e.set("delay", 1.0);
-        assert!(e.live("dly1", "time").unwrap() > 350.0);
         assert!(e.live("dly1", "feedback").unwrap() > 0.3);
         assert!(e.live("dly1", "level").unwrap() > -14.0);
+        assert!(e.live("dly1", "high_cut").unwrap() > 8000.0);
+        assert!(e.live("dly1", "mod_depth").unwrap() > 0.2);
+        assert_eq!(e.live("dly1", "time"), Some(350.0), "never the timing");
         e.set("delay", 0.0);
-        assert!(e.live("dly1", "time").unwrap() < 350.0);
         assert!(e.live("dly1", "feedback").unwrap() < 0.3);
+        assert_eq!(e.live("dly1", "time"), Some(350.0));
         // Type is a choice, not scaled by the parent.
         assert!(approx(e.live("dly1", "style").unwrap_or(0.0), 0.0));
     }
@@ -3025,75 +3031,6 @@ mod tests {
         assert!(e.saved().iter().all(|d| d.id != "delay-type1"));
     }
 
-    /// A synced delay's time steps through the divisions, longer up.
-    #[test]
-    fn a_synced_time_steps_through_divisions() {
-        let mut b = delay("dly1", "DLY 1");
-        for p in b.params.iter_mut().filter(|p| p.name.starts_with("tap_div")) {
-            p.value = 2.0; // 1/8
-        }
-        let mut e = MacroEngine::default();
-        e.rebase("Sync", &[b], &Context::default());
-        e.set("delay-time1", 1.0);
-        let up = e.live("dly1", "tap_div_l").unwrap();
-        assert!([5.0, 10.0, 1.0].contains(&up), "a longer division: {up}");
-        assert_eq!(e.live("dly1", "tap_div_r"), Some(up));
-        e.set("delay-time1", 0.0);
-        assert!([3.0, 6.0, 4.0].contains(&e.live("dly1", "tap_div_l").unwrap()));
-    }
-
-    /// Pitch appears only with a pitch-bearing block: the Ice delay, a
-    /// shimmer reverb or the Pitch block.
-    #[test]
-    fn pitch_needs_a_pitch_block() {
-        // The octaver: bypassed in the patch, it comes in above rest with
-        // more of both octaves, and its intervals are left be.
-        let mut pog = block(
-            "pog",
-            BlockType::Pitch,
-            "Pitch",
-            vec![
-                p("semitones", 12.0, -24.0, 24.0),
-                p("b_semitones", -12.0, -24.0, 24.0),
-                p("mix", 0.5, 0.0, 1.0),
-                p("a_level", 0.7, 0.0, 1.0),
-                p("b_level", 0.7, 0.0, 1.0),
-                p("dry", 1.0, 0.0, 1.0),
-            ],
-        );
-        pog.bypassed = true;
-        let mut e = MacroEngine::default();
-        e.rebase("POG", &[pog], &Context::default());
-        let kids: Vec<String> = e.built.bank.get("pitch").unwrap().children.iter().map(|c| c.label.clone()).collect();
-        assert_eq!(kids, ["Mix", "Oct Down", "Oct Up", "Dry", "Interval A", "Interval B"]);
-        assert_eq!(e.live_bypass(), vec![("pog".to_string(), true)]);
-        e.set("pitch", 0.7);
-        assert_eq!(e.live_bypass(), vec![("pog".to_string(), false)], "up engages it");
-        assert!(e.live("pog", "a_level").unwrap() > 0.7);
-        assert!(e.live("pog", "b_level").unwrap() > 0.7);
-        assert!(e.live("pog", "mix").unwrap() > 0.5);
-        assert!(approx(e.live("pog", "semitones").unwrap(), 12.0));
-        e.set("pitch", 0.2);
-        assert_eq!(e.live_bypass(), vec![("pog".to_string(), true)]);
-        e.set_pad("pitch-mix1", true);
-        assert_eq!(e.live_bypass(), vec![("pog".to_string(), false)], "the pad engages it");
-        let w = e.set("pitch-b1", 31.0 / 48.0).expect("a choice");
-        assert_eq!((w.1.as_str(), w.2), ("b_semitones", 7.0));
-
-        assert!(engine().built.bank.get("pitch").is_none());
-        let mut ice = delay("dly1", "DLY 1");
-        ice.params.iter_mut().find(|p| p.name == "style").unwrap().value = 6.0;
-        ice.params.push(p("interval", 27.0, 0.0, 30.0));
-        ice.params.push(p("blend", 0.6, 0.0, 1.0));
-        let mut e = MacroEngine::default();
-        e.rebase("Flute", &[ice], &Context::default());
-        let pitch = e.built.bank.get("pitch").expect("pitch");
-        assert_eq!(pitch.children.len(), 2);
-        e.set("pitch", 1.0);
-        assert!(e.live("dly1", "blend").unwrap() > 0.6);
-        assert!(approx(e.live("dly1", "interval").unwrap(), 27.0), "the interval is left be");
-    }
-
     /// The positions ride on the patch in the styx library: a profile
     /// written before macros existed still parses (the field defaults),
     /// and positions written come back.
@@ -3234,7 +3171,7 @@ mod tests {
         assert_eq!(src("delay-fb1"), Some("module"), "the module snapshot's feedback");
         assert_eq!(src("delay-level1"), Some("block"), "the block preset's level");
         assert_eq!(src("delay-fb2"), Some("seed"), "the slapback's seed");
-        assert_eq!(src("delay-time1"), None, "nothing says: the engine's own");
+        assert_eq!(src("delay-mod1"), None, "nothing says: the engine's own");
         // A tuned knob follows its bar knob end to end: the bar knob's top
         // is the preset's top.
         e.set("delay", 1.0);
@@ -3514,12 +3451,12 @@ mod tests {
         assert!(!t.edited && approx(t.lo, 0.1) && t.source == "module");
         assert!(!e.has_edits("delay"));
         // Over the engine's own, an edit of one side keeps the other.
-        e.tune_op("delay-time1", "dly1", "time", "max", 1000.0, "", &chain()).unwrap();
+        e.tune_op("delay-filter1", "dly1", "high_cut", "max", 16000.0, "", &chain()).unwrap();
         e.set("delay", 0.0);
-        let down = e.live("dly1", "time").unwrap();
-        assert!(down < 350.0, "the engine's own bottom stays: {down}");
+        let down = e.live("dly1", "high_cut").unwrap();
+        assert!(down < 8000.0, "the engine's own bottom stays: {down}");
         e.set("delay", 1.0);
-        assert!(approx(e.live("dly1", "time").unwrap(), 1000.0));
+        assert!(approx(e.live("dly1", "high_cut").unwrap(), 16000.0));
     }
 
     /// Off keeps a macro off a param; turning it back on restores the
@@ -3636,6 +3573,105 @@ mod tests {
         assert!(e.saved().is_empty());
         assert!(e.reset_position("delay-type1").is_err(), "a choice has no rest");
         assert!(e.reset_position("nope").is_err());
+    }
+
+    /// Every bar knob and panel knob, moved anywhere and reset (or turned
+    /// back to rest), leaves every param exactly — bit for bit — as the
+    /// patch has it.
+    #[test]
+    fn every_reset_is_exact() {
+        let mut blocks = chain();
+        let mut pog = block("pog", BlockType::Pitch, "Pitch", vec![p("mix", 0.5, 0.0, 1.0), p("a_level", 0.7, 0.0, 1.0), p("b_level", 0.7, 0.0, 1.0)]);
+        pog.bypassed = true;
+        blocks.push(pog);
+        blocks.push(block("g", BlockType::Gate, "Gate", vec![p("threshold", -62.0, -90.0, 0.0), p("attack", 1.0, 0.1, 50.0), p("release", 120.0, 5.0, 500.0)]));
+        blocks.push(block("pc", BlockType::Compressor, "Pre Comp", vec![p("threshold", -22.5, -60.0, 0.0), p("ratio", 3.0, 1.0, 20.0), p("attack", 25.0, 0.1, 200.0), p("release", 200.0, 5.0, 1000.0)]));
+        let mut amp = block("amp", BlockType::Amp, "Amp L", vec![p("drive", 0.37, 0.0, 1.0)]);
+        amp.preset = "Deluxe".into();
+        blocks.push(amp);
+        blocks.push(block("trem", BlockType::Trem, "Tremolo", vec![p("depth", 0.43, 0.0, 1.0)]));
+        blocks.push(block("boost", BlockType::Volume, "Boost", vec![p("gain_db", 0.0, -24.0, 24.0), p("pan", 0.0, -1.0, 1.0)]));
+        let mut e = MacroEngine::default();
+        e.rebase("P", &blocks, &Context::default());
+        let bits = |e: &MacroEngine| -> Vec<(String, String, u32)> {
+            e.live_params().into_iter().map(|(b, p, v)| (b, p, v.to_bits())).collect()
+        };
+        let bypass = |e: &MacroEngine| e.live_bypass();
+        let (before, before_byp) = (bits(&e), bypass(&e));
+        // Every base value is the patch's, bit for bit.
+        for (b, p, v) in &before {
+            let x = blocks.iter().find(|x| x.id == *b).and_then(|x| param(x, p)).unwrap().value;
+            assert_eq!(*v, x.to_bits(), "{b}.{p} at rest is the patch's value");
+        }
+        let ids: Vec<String> = e
+            .built
+            .bank
+            .knobs
+            .iter()
+            .flat_map(|k| std::iter::once(k.id.clone()).chain(k.children.iter().map(|c| c.id.clone())))
+            .filter(|id| e.built.meta[id].select.is_none())
+            .collect();
+        // A cheap, fixed pseudo-random walk.
+        let mut seed = 0x9E37_79B9u32;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            (seed % 10_000) as f32 / 10_000.0
+        };
+        for id in &ids {
+            for v in [0.0, 1.0, next(), next(), next()] {
+                e.set(id, v);
+            }
+            e.reset_position(id).unwrap();
+            assert_eq!(bits(&e), before, "{id} reset");
+            assert_eq!(bypass(&e), before_byp, "{id} reset (bypass)");
+            // Back to rest by hand, too.
+            e.set(id, 0.93);
+            let rest = e.built.meta[id].rest;
+            if e.built.bank.get(id).is_some() {
+                e.set(id, rest);
+                assert_eq!(bits(&e), before, "{id} back at rest");
+            } else {
+                e.reset_position(id).unwrap();
+            }
+        }
+        // A panel knob moved on its own, under a moved bar knob, then both
+        // reset.
+        e.set("delay", 0.8);
+        e.set("delay-fb1", 0.05);
+        e.reset_position("delay-fb1").unwrap();
+        e.reset_position("delay").unwrap();
+        assert_eq!(bits(&e), before);
+        assert!(e.saved().is_empty());
+    }
+
+    /// No macro moves timing — not the Delay knob, not Space, not any.
+    #[test]
+    fn no_macro_touches_timing() {
+        let e = engine();
+        for (id, meta) in &e.built.meta {
+            for t in &meta.targets {
+                assert!(!is_timing(&t.param), "{id} moves {}", t.param);
+            }
+        }
+        let delay = e.built.bank.get("delay").unwrap();
+        let params: Vec<String> = delay
+            .children
+            .iter()
+            .flat_map(|c| e.built.meta[&c.id].targets.iter().map(|t| t.param.clone()))
+            .collect();
+        for p in ["time", "tap_div_l", "tap_div_r", "tempo_bpm"] {
+            assert!(!params.iter().any(|x| x == p), "Delay moves {p}");
+        }
+        let mut e = engine();
+        assert!(e.tune_op("delay-fb1", "dly1", "time", "max", 1.0, "", &chain()).is_err());
+        // A saved entry on a timing param is ignored.
+        let mut ctx = Context::default();
+        ctx.responses.push(Resolved { block: "DLY 1".into(), def: entry("", "delay", "time", 100.0, 900.0), source: "block" });
+        e.rebase("P", &chain(), &ctx);
+        e.set("delay", 1.0);
+        assert_eq!(e.live("dly1", "time"), Some(350.0));
     }
 
     #[test]

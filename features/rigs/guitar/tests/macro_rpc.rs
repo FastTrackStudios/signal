@@ -7,12 +7,16 @@ use signal_guitar::library::RigLibrary;
 use signal_guitar::proto::rig::Rig;
 use signal_guitar::proto::{MacroSave, MacroTune};
 
+/// The tests set the process environment the library reads: one at a time.
+static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn every_macro_call_reports_what_it_did() {
+    let _env = ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let root = std::env::temp_dir().join(format!("macro-rpc-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
-    // SAFETY: this test binary runs this one test, before any thread.
+    // SAFETY: the tests hold `ENV` while they touch the environment.
     unsafe {
         std::env::set_var("SIGNAL_RIG_DIR", root.join("rig"));
         std::env::set_var("XDG_CONFIG_HOME", root.join("xdg"));
@@ -106,5 +110,52 @@ fn every_macro_call_reports_what_it_did() {
     let r = Rig::save_macro_positions(&rig, "patch".into());
     assert!(!r.ok && r.message.starts_with("Not saved"), "{r:?}");
 
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// Every macro, moved anywhere and reset, leaves every param of the chain
+/// exactly as the patch has it — bit for bit — through the whole rig
+/// (live writes, drive compensation, delay re-timing included).
+#[test]
+fn a_reset_restores_the_patch_exactly() {
+    let _env = ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let root = std::env::temp_dir().join(format!("macro-reset-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    // SAFETY: the tests hold `ENV` while they touch the environment.
+    unsafe {
+        std::env::set_var("SIGNAL_RIG_DIR", root.join("rig"));
+        std::env::set_var("XDG_CONFIG_HOME", root.join("xdg"));
+        std::env::set_var("SIGNAL_RIG_DESIGN", "1");
+        std::env::set_var("SIGNAL_RIG_EPHEMERAL", "1");
+    }
+    let rig = GuitarRigBackend::new();
+    rig.open_blocking();
+    let snapshot = |rig: &GuitarRigBackend| -> Vec<(String, String, u32, bool)> {
+        let mut out = Vec::new();
+        for b in Rig::chain(rig) {
+            for p in &b.params {
+                out.push((b.name.clone(), p.name.clone(), p.value.to_bits(), b.bypassed));
+            }
+        }
+        out
+    };
+    let before = snapshot(&rig);
+    let bar = Rig::macros(&rig);
+    let mut ids: Vec<String> = Vec::new();
+    for k in &bar {
+        ids.push(k.id.clone());
+        ids.extend(k.children.iter().filter(|c| c.steps == 0).map(|c| c.id.clone()));
+    }
+    for id in &ids {
+        for v in [0.0, 1.0, 0.137, 0.861, 0.5001] {
+            assert!(Rig::set_macro(&rig, id.clone(), v).ok);
+        }
+        assert!(Rig::reset_macro(&rig, id.clone()).ok, "{id}");
+        let after = snapshot(&rig);
+        for (a, b) in before.iter().zip(after.iter()) {
+            assert_eq!(a, b, "after {id}: {}.{} {} → {}", a.0, a.1, f32::from_bits(a.2), f32::from_bits(b.2));
+        }
+    }
     let _ = std::fs::remove_dir_all(&root);
 }
