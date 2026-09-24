@@ -2625,7 +2625,24 @@ pub fn seed_responses(p: &crate::compose::BlockPresetDef) -> Vec<MacroResponseDe
 /// does — what levelling measures, so a preset's knob positions are part of
 /// the loudness it is levelled to.
 pub fn apply_positions(def: &PatchDef, comp: &Compositions, patch: &mut signal_sampler::RigPatch) {
-    let ctx = context_for(comp, def);
+    apply_ctx(context_for(comp, def), def, patch);
+}
+
+/// Knobs levelling leaves at rest: Output is the player's own per-patch
+/// level offset on top of the levelled patch — measuring it in would have
+/// the next levelling pass cancel it.
+pub const LEVEL_EXEMPT: &[&str] = &["output"];
+
+/// [`apply_positions`] for a loudness measurement: every knob where the
+/// patch keeps it except the [`LEVEL_EXEMPT`] ones, which stay at rest.
+pub fn apply_positions_for_level(def: &PatchDef, comp: &Compositions, patch: &mut signal_sampler::RigPatch) {
+    let mut ctx = context_for(comp, def);
+    ctx.saved.retain(|m| !LEVEL_EXEMPT.iter().any(|k| m.id.eq_ignore_ascii_case(k)));
+    ctx.defaults.retain(|m| !LEVEL_EXEMPT.iter().any(|k| m.id.eq_ignore_ascii_case(k)));
+    apply_ctx(ctx, def, patch);
+}
+
+fn apply_ctx(ctx: Context, def: &PatchDef, patch: &mut signal_sampler::RigPatch) {
     if ctx.saved.is_empty() && ctx.defaults.is_empty() {
         return;
     }

@@ -147,6 +147,10 @@ fn part_recall_mut<'a>(
     song.part_recalls.last_mut().expect("just pushed")
 }
 
+/// The rig's output trim until the player sets one: headroom for the
+/// system it feeds.
+const DEFAULT_MASTER_TRIM_DB: f32 = -6.0;
+
 /// The patch the preset tab's audition plays under (see `choose_preset`).
 /// Never saved, never listed.
 const AUDITION_PATCH: &str = "\u{25B6} Audition";
@@ -380,7 +384,7 @@ impl GuitarRigBackend {
             midi_map: Arc::new(Mutex::new(lib.midi_map)),
             keymap: Arc::new(Mutex::new(lib.keymap)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
-            master_trim: Arc::new(Mutex::new(0.0)),
+            master_trim: Arc::new(Mutex::new(DEFAULT_MASTER_TRIM_DB)),
             midi_log: Arc::new(Mutex::new(Vec::new())),
             revision: Arc::new(Mutex::new(0)),
             events: architect::rig::events_hub(),
@@ -1380,7 +1384,7 @@ impl GuitarRigBackend {
                 let mut built = profile_from_library(&def, &dps);
                 for patch in &mut built.patches {
                     if let Some(d) = def.patches.iter().find(|d| d.name.eq_ignore_ascii_case(&patch.name)) {
-                        crate::macros::apply_positions(d, &comp, patch);
+                        crate::macros::apply_positions_for_level(d, &comp, patch);
                     }
                 }
                 built
@@ -1740,6 +1744,7 @@ impl GuitarRigBackend {
             tempo_bpm: self.tempo.lock_ok().unwrap_or(0.0),
             profile: self.profile_def.lock_ok().name.clone(),
             perform_mode: *self.perform_mode.lock_ok(),
+            master_trim_db: *self.master_trim.lock_ok(),
         }
     }
 
@@ -1754,6 +1759,11 @@ impl GuitarRigBackend {
             return;
         };
         *self.perform_mode.lock_ok() = st.perform_mode.min(2);
+        *self.master_trim.lock_ok() = if st.master_trim_db.is_finite() {
+            st.master_trim_db.clamp(-24.0, 12.0)
+        } else {
+            DEFAULT_MASTER_TRIM_DB
+        };
         {
             let sets = self.setlists.lock_ok();
             if !sets.is_empty() {
@@ -3054,6 +3064,8 @@ impl GuitarRigBackend {
         }
         // Land back where the last set was (crash-restart recovery).
         self.restore_last_state();
+        // The main fader (its saved trim, −6 dB by default) on the new rig.
+        self.apply_main_mute();
         // The song that is up tunes the switches.
         self.apply_song_stacks();
         // Mirror the (now active) patch's FX chain + apply bypass defaults,
@@ -5686,6 +5698,7 @@ impl Rig for GuitarRigBackend {
 
     fn set_master_trim(&self, db: f32) {
         *self.master_trim.lock_ok() = db.clamp(-24.0, 12.0);
+        self.mark_state_dirty();
         self.apply_main_mute();
         self.publish_state();
     }

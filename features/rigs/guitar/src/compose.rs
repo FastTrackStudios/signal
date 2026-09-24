@@ -1142,7 +1142,7 @@ pub fn level_presets(
         let mut built = crate::nodes::to_nodes_with_store(&flat, drives).to_profile(&flat, drives);
         // With the snapshot's macro knob positions — part of its sound.
         let patch = built.patches.first_mut()?;
-        crate::macros::apply_positions(flat.patches.first()?, &calm, patch);
+        crate::macros::apply_positions_for_level(flat.patches.first()?, &calm, patch);
         crate::measure::patch_lufs(patch, sample_rate).filter(|l| *l > -70.0)
     };
     // Measure raw, correct, and re-measure with the correction applied until

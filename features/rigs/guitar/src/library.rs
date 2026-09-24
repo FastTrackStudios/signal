@@ -177,6 +177,10 @@ pub struct LastState {
     /// only in Setlist, so a restart mid-set must land back in it.
     #[facet(default = 1)]
     pub perform_mode: u32,
+    /// The whole rig's output trim (dB) — the main fader. −6 dB by default:
+    /// headroom for the system the rig feeds.
+    #[facet(default = -6.0_f32)]
+    pub master_trim_db: f32,
 }
 
 /// Everything loaded from the rig directory.
@@ -830,6 +834,7 @@ mod tests {
             tempo_bpm: 74.0,
             profile: "Blues".to_string(),
             perform_mode: 2,
+            master_trim_db: -4.5,
         };
         super::RigLibrary::save_last_state(&state);
         let back = super::RigLibrary::load_last_state().expect("last-state.styx roundtrip");
@@ -839,6 +844,10 @@ mod tests {
         assert_eq!(back.part_index, 1);
         assert_eq!(back.active_patch, "Lead Big");
         assert_eq!(back.tempo_bpm, 74.0);
+        assert_eq!(back.master_trim_db, -4.5, "the main fader survives a restart");
+        // A last-state from before the fader was kept opens at −6 dB.
+        let old: super::LastState = facet_styx::from_str("setlist_index 1\nperform_mode 2\n").expect("old state parses");
+        assert_eq!(old.master_trim_db, -6.0);
         assert_eq!(back.profile, "Blues");
     }
 

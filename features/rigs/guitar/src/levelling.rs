@@ -117,7 +117,7 @@ pub fn level_profile(
     // Each patch with its macro knobs where it keeps them — as it plays.
     for patch in &mut built.patches {
         if let Some(d) = raw.patches.iter().find(|d| d.name.eq_ignore_ascii_case(&patch.name)) {
-            crate::macros::apply_positions(d, &comp, patch);
+            crate::macros::apply_positions_for_level(d, &comp, patch);
         }
     }
 
