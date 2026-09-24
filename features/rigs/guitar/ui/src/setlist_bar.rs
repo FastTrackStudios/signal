@@ -251,7 +251,21 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                 let open = editing_part() == Some(pi);
                                                 let rig = rig.clone();
                                                 let part = part.clone();
+                                                // A section of several parts (or one
+                                                // named apart from its part) gets a
+                                                // heading where it starts.
+                                                let grouped = !part.section.eq_ignore_ascii_case(&part.name);
+                                                let starts = pi == 0
+                                                    || !model.parts[pi - 1].section.eq_ignore_ascii_case(&part.section);
                                                 rsx! {
+                                                    if grouped && starts {
+                                                        span {
+                                                            key: "sec-{pi}",
+                                                            style: "margin-top: 4px; padding: 2px 8px; font-size: 9px; font-weight: 700; \
+                                                                    letter-spacing: 0.12em; text-transform: uppercase; color: {FAINT};",
+                                                            "{part.section}"
+                                                        }
+                                                    }
                                                     button {
                                                         key: "{pi}-{part.name}",
                                                         style: format!(
@@ -297,6 +311,8 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                             if !part.profile.is_empty() { "{part.profile} · " }
                                                             if part.patch.is_empty() { "" } else { "{part.patch}" }
                                                             if !part.overrides.is_empty() { " · ±{part.overrides.len()}" }
+                                                            if part.profile_switches { " · profile switches" }
+                                                            if part.switch_count > 0 { " · ⇄{part.switch_count}" }
                                                         }
                                                     }
                                                     if open {
@@ -318,6 +334,8 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                     count: model.parts.len(),
                                                                     name: part.name.clone(),
                                                                     patch: part.patch.clone(),
+                                                                    section: if grouped { part.section.clone() } else { String::new() },
+                                                                    profile_switches: part.profile_switches,
                                                                     profile: part.profile.clone(),
                                                                     song_profile: if model.song_profile.is_empty() { loaded.clone() } else { model.song_profile.clone() },
                                                                     profiles: profile_names.clone(),
@@ -579,6 +597,10 @@ fn PartEditor(
     count: usize,
     name: String,
     patch: String,
+    /// The section it belongs to; empty = its own.
+    section: String,
+    /// It plays the profile's own switches.
+    profile_switches: bool,
     /// The part's own profile; empty = the song's.
     profile: String,
     /// What "the song's" means right now, for the placeholder.
@@ -592,6 +614,7 @@ fn PartEditor(
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut rename = use_signal(|| name.clone());
+    let mut section_name = use_signal(|| section.clone());
     let i = index as u32;
     let selected = patches
         .iter()
@@ -644,6 +667,35 @@ fn PartEditor(
                         },
                     }
                 }
+            }
+            span { style: "font-size: 10px; color: {FAINT};", "Section — parts in a row with the same section are one" }
+            Field {
+                value: section_name(),
+                placeholder: "its own section".to_string(),
+                on_input: move |v: String| section_name.set(v),
+                on_enter: {
+                    let (rig, part) = (rig.clone(), name.clone());
+                    move |()| {
+                        let sec = section_name.peek().trim().to_string();
+                        let part = part.clone();
+                        send(&rig, move |r| async move { let _ = r.set_part_section(part, sec).await; });
+                    }
+                },
+                on_escape: move |()| on_done.call(()),
+            }
+            button {
+                style: "display: flex; align-items: center; gap: 6px; padding: 2px 0; border: none; background: transparent; \
+                        cursor: pointer; font-size: 11px; color: {MUTED}; text-align: left;",
+                title: "The song's switch tuning steps aside for this part (its own switch changes still apply)",
+                onclick: {
+                    let (rig, part) = (rig.clone(), name.clone());
+                    move |_| {
+                        let part = part.clone();
+                        send(&rig, move |r| async move { let _ = r.set_part_profile_switches(part, !profile_switches).await; });
+                    }
+                },
+                span { style: "width: 12px; color: #22c55e;", if profile_switches { "✓" } else { "○" } }
+                "Plays the profile's switches"
             }
             span { style: "font-size: 10px; color: {FAINT};", "Name" }
             div { style: "display: flex; gap: 6px; align-items: center;",

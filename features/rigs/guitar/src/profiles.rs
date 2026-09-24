@@ -1001,9 +1001,52 @@ pub struct SongDef {
     /// the profile should not carry) — see [`PatchDef::song`].
     #[facet(default)]
     pub patches: Vec<PatchDef>,
+    /// What the footswitches do for this song when it is not their usual
+    /// job (see [`SwitchActionDef`]) — switch 5 stepping through the parts
+    /// instead of tapping tempo, say.
+    #[facet(default)]
+    pub switch_actions: Vec<SwitchActionDef>,
 }
 
 impl SongDef {
+    /// The recall entry for part `name`, when it has one.
+    #[must_use]
+    pub fn part_recall(&self, name: &str) -> Option<&PartRecallDef> {
+        self.part_recalls
+            .iter()
+            .find(|r| r.part.eq_ignore_ascii_case(name))
+    }
+
+    /// The part at `idx`'s section: its own `section`, else its name — a
+    /// part nobody grouped is a section of one.
+    #[must_use]
+    pub fn section_of(&self, idx: usize) -> String {
+        let Some(name) = self.parts.get(idx) else {
+            return String::new();
+        };
+        self.part_recall(name)
+            .map(|r| r.section.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| name.clone())
+    }
+
+    /// Where each section starts: the index of its first part. Sections are
+    /// runs of consecutive parts with the same section name, so the same
+    /// section name later in the song ("Chorus" again) is a new section.
+    #[must_use]
+    pub fn section_starts(&self) -> Vec<usize> {
+        let mut starts = Vec::new();
+        let mut last: Option<String> = None;
+        for i in 0..self.parts.len() {
+            let sec = self.section_of(i);
+            if last.as_ref().is_none_or(|l| !l.eq_ignore_ascii_case(&sec)) {
+                starts.push(i);
+            }
+            last = Some(sec);
+        }
+        starts
+    }
+
     /// Each section paired with the patch it recalls, in section order.
     ///
     /// The empty string for a section nothing has been assigned to — which is
@@ -1116,7 +1159,7 @@ impl SongDef {
 }
 
 /// One section's recall: the patch selecting it switches to.
-#[derive(Clone, Debug, Facet)]
+#[derive(Clone, Debug, Default, Facet)]
 pub struct PartRecallDef {
     /// The section's name, as it appears in [`SongDef::parts`].
     pub part: String,
@@ -1144,10 +1187,51 @@ pub struct PartRecallDef {
     /// the delay would leave it lifted in the verse that followed.
     #[facet(default)]
     pub overrides: Vec<OverrideDef>,
+    /// The section this part belongs to (Verse 1, Bridge…): consecutive
+    /// parts with the same section make one section. Empty = the part is a
+    /// section of its own.
+    #[facet(default)]
+    pub section: String,
+    /// The switches as this part tunes them, laid over the song's
+    /// [`stack_defaults`](SongDef::stack_defaults) — an entry for a stack
+    /// replaces the song's entry for it while the part is up.
+    #[facet(default)]
+    pub stack_defaults: Vec<StackDefaultDef>,
+    /// The part plays the profile's own switches: the song's switch tuning
+    /// steps aside (the part's own entries still apply).
+    #[facet(default)]
+    pub profile_switches: bool,
+    /// The part's switch actions, over the song's.
+    #[facet(default)]
+    pub switch_actions: Vec<SwitchActionDef>,
 }
 
-/// One song-level stack override: which patch a stack lands on.
+/// What a footswitch does in place of its usual job, for a song or a part.
 #[derive(Clone, Debug, Facet)]
+pub struct SwitchActionDef {
+    /// The footswitch, 1-based (1–5).
+    pub switch: u32,
+    /// One of [`SWITCH_ACTIONS`]' keys; empty = the switch's usual job.
+    pub action: String,
+}
+
+/// The actions a footswitch can be given: `(key, label)`. `stack` is the
+/// usual job of switches 1–4; `tap_tempo` switch 5's outside a song.
+/// Stepping actions go forward on a tap and back on a hold.
+pub const SWITCH_ACTIONS: &[(&str, &str)] = &[
+    ("stack", "Its stack"),
+    ("tap_tempo", "Tap tempo"),
+    ("parts", "Next part (hold: previous)"),
+    ("sections", "Next section (hold: previous)"),
+    ("songs", "Next song (hold: previous)"),
+    ("tuner", "Tuner"),
+    ("boost", "Boost"),
+    ("fx", "FX toggle"),
+    ("none", "Nothing"),
+];
+
+/// One song-level stack override: which patch a stack lands on.
+#[derive(Clone, Debug, Default, Facet)]
 pub struct StackDefaultDef {
     pub stack: String,
     pub patch: String,
@@ -1206,6 +1290,7 @@ pub fn song_library() -> Vec<SongDef> {
             parts: Vec::new(),
             stack_defaults: Vec::new(),
             part_recalls: Vec::new(),
+            switch_actions: Vec::new(),
         }
     }
     vec![
@@ -1546,18 +1631,21 @@ mod song_tests {
                 "Bridge".into(),
             ],
             stack_defaults: Vec::new(),
+            switch_actions: Vec::new(),
             part_recalls: vec![
                 PartRecallDef {
                     profile: String::new(),
                     part: "chorus".into(),
                     patch: "Ambient".into(),
                     overrides: Vec::new(),
+                    ..Default::default()
                 },
                 PartRecallDef {
                     profile: String::new(),
                     part: "Bridge".into(),
                     patch: "Lead".into(),
                     overrides: Vec::new(),
+                    ..Default::default()
                 },
             ],
         }
@@ -1591,6 +1679,25 @@ mod song_tests {
         assert_eq!(pairs[2].1, "Ambient");
     }
 
+    /// Consecutive parts with one section name make one section.
+    #[test]
+    fn sections_are_runs_of_parts() {
+        let mut s = song();
+        s.parts = ["Verse 1", "Chorus 1", "Flute", "Build", "Chorus 2"]
+            .map(String::from)
+            .to_vec();
+        for p in ["Flute", "Build"] {
+            s.part_recalls.push(PartRecallDef {
+                part: p.into(),
+                section: "Bridge".into(),
+                ..Default::default()
+            });
+        }
+        assert_eq!(s.section_of(0), "Verse 1");
+        assert_eq!(s.section_of(3), "Bridge");
+        assert_eq!(s.section_starts(), vec![0, 1, 2, 4]);
+    }
+
     /// A recall naming a section the song does not have is ignored rather
     /// than appearing as an extra section — the sections are the song's, and
     /// this list only says what they do.
@@ -1602,6 +1709,7 @@ mod song_tests {
             part: "Outro".into(),
             patch: "Clean".into(),
             overrides: Vec::new(),
+            ..Default::default()
         });
         assert_eq!(s.parts_with_recalls().len(), 4);
     }
@@ -1815,6 +1923,7 @@ mod section_tests {
             stack: 0,
             parts: vec!["Verse".into(), "Chorus".into(), "Bridge".into()],
             stack_defaults: Vec::new(),
+            switch_actions: Vec::new(),
             part_recalls: vec![
                 // A section that only changes things — no patch of its own.
                 PartRecallDef {
@@ -1822,6 +1931,7 @@ mod section_tests {
                     part: "Chorus".into(),
                     patch: String::new(),
                     overrides: vec![OverrideDef::set("Time", "VERB 1", "mix", 0.35)],
+                    ..Default::default()
                 },
                 // A section that recalls a patch AND changes something.
                 PartRecallDef {
@@ -1829,6 +1939,7 @@ mod section_tests {
                     part: "Bridge".into(),
                     patch: "Lead".into(),
                     overrides: vec![OverrideDef::set("Time", "DLY 1", "mix", 0.4)],
+                    ..Default::default()
                 },
             ],
         }

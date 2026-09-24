@@ -228,6 +228,12 @@ pub struct PerfStack {
     /// Always lands on its patch — pressing again does not rotate.
     #[facet(default)]
     pub no_rotate: bool,
+    /// The part that is up tunes this switch (its own rotation or mode).
+    #[facet(default)]
+    pub part_tuned: bool,
+    /// Every patch in the switch's rotation, in order.
+    #[facet(default)]
+    pub patches: Vec<String>,
 }
 
 /// The live performance model: the active profile's footswitch stacks + the
@@ -283,6 +289,11 @@ pub struct PerformanceModel {
     /// The part the current song starts on; empty = the profile's default.
     #[facet(default)]
     pub start_part: String,
+    /// What footswitches 1–5 do right now: a `SWITCH_ACTIONS` key per
+    /// switch (`stack`, `tap_tempo`, `parts`, …) — the song's and the part's
+    /// assignments resolved.
+    #[facet(default)]
+    pub switch_actions: Vec<String>,
 }
 
 /// One patch in the loaded profile — the preset browser's row.
@@ -551,6 +562,20 @@ pub struct DriveEntry {
     pub slots: Vec<String>,
 }
 
+/// How a stack switch is tuned (see `Rig::tune_switch`).
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct SwitchTuning {
+    /// The stack's index.
+    pub index: u32,
+    /// Its rotation; empty leaves the rotation as it is.
+    pub patches: Vec<String>,
+    pub momentary: bool,
+    pub no_rotate: bool,
+    /// For the part that is up (else the song — or, with no song, the
+    /// profile).
+    pub part: bool,
+}
+
 /// One section of the current song, and the patch selecting it recalls.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct PerfPart {
@@ -565,6 +590,16 @@ pub struct PerfPart {
     /// The profile this part is played on, when it is not the song's.
     #[facet(default)]
     pub profile: String,
+    /// The section it belongs to (consecutive parts with one section name
+    /// make one section); a part nobody grouped is its own.
+    #[facet(default)]
+    pub section: String,
+    /// How many switches the part tunes on top of the song's.
+    #[facet(default)]
+    pub switch_count: u32,
+    /// It plays the profile's own switches (the song's tuning steps aside).
+    #[facet(default)]
+    pub profile_switches: bool,
 }
 
 /// One parameter a section changes.
@@ -659,7 +694,7 @@ pub mod rig {
 
     use super::{
         Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode, PartOverride,
-        PatchInfo, PerformanceModel, PresetInfo, RigStatus, TunerReading,
+        PatchInfo, PerformanceModel, PresetInfo, RigStatus, SwitchTuning, TunerReading,
     };
 
     /// One live rig change. Every variant carries **full state** (idempotent
@@ -711,6 +746,26 @@ pub mod rig {
         /// Set how switch `index` behaves for the song that is up (or the
         /// profile, with no song): momentary, and/or no rotation.
         fn set_stack_mode(&self, index: u32, momentary: bool, no_rotate: bool);
+        /// Tune switch (stack) `index`: its rotation (empty = leave it) and
+        /// mode — for the part that is up when `part`, else the song (or the
+        /// profile, with no song).
+        fn tune_switch(&self, tuning: SwitchTuning);
+        /// Drop the part's (`part`) or the song's tuning of switch `index`.
+        fn reset_switch(&self, index: u32, part: bool);
+        /// Give footswitch `switch` (0-based, 0–4) a job — a `SWITCH_ACTIONS`
+        /// key, empty for its usual one — for the part (`part`) or the song.
+        fn set_switch_action(&self, switch: u32, action: String, part: bool);
+        /// Footswitch `switch` (0-based) tapped / held, as the pedal does it
+        /// — whatever job it has right now.
+        fn tap_switch(&self, switch: u32);
+        fn hold_switch(&self, switch: u32);
+        /// Step through the song: parts (`sections` false) or sections,
+        /// forward (`dir` > 0) or back.
+        fn step_part(&self, dir: i32, sections: bool);
+        /// Put `part` in section `section` (empty = its own).
+        fn set_part_section(&self, part: String, section: String);
+        /// Whether `part` plays the profile's own switches.
+        fn set_part_profile_switches(&self, part: String, on: bool);
         /// Toggle the global time/FX bypass.
         fn toggle_fx(&self);
         /// Boost pedal tap: on/off at the remembered level (default +1 dB).

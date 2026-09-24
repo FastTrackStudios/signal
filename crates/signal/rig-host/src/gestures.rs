@@ -128,6 +128,16 @@ impl FootswitchEngine {
         self.long_hold = after;
     }
 
+    /// Which gesture switches have a long hold, in switch order (missing =
+    /// not) — the per-switch form of [`set_long_hold`](Self::set_long_hold),
+    /// for switches whose job changes (switch 5 stepping through a song's
+    /// parts keeps its tuner on the long hold).
+    pub fn set_long_holds(&mut self, flags: &[bool]) {
+        for (sw, slot) in self.long.iter_mut().enumerate() {
+            *slot = flags.get(sw).copied().unwrap_or(false);
+        }
+    }
+
     /// Which gesture switches are momentary, in switch order (missing =
     /// not). A switch changed while it is held finishes that press the way
     /// it started.

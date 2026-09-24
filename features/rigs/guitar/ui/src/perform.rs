@@ -22,6 +22,35 @@ use signal_guitar_proto::{PerfStack, PerformanceModel, TunerReading};
 /// How long a press must last to count as a hold (footswitch convention).
 const HOLD_MS: u64 = 500;
 
+/// The jobs a footswitch can be given (the rig's `SWITCH_ACTIONS`):
+/// `(key, label)`. Stepping jobs go forward on a tap, back on a hold.
+const JOBS: &[(&str, &str)] = &[
+    ("stack", "Its stack"),
+    ("tap_tempo", "Tap tempo"),
+    ("parts", "Next part · hold: previous"),
+    ("sections", "Next section · hold: previous"),
+    ("songs", "Next song · hold: previous"),
+    ("tuner", "Tuner"),
+    ("boost", "Boost"),
+    ("fx", "FX toggle"),
+    ("none", "Nothing"),
+];
+
+/// A job's tile title.
+fn job_title(job: &str) -> &'static str {
+    match job {
+        "tap_tempo" => "Tap Tempo",
+        "parts" => "Next Part",
+        "sections" => "Next Section",
+        "songs" => "Next Song",
+        "tuner" => "Tuner",
+        "boost" => "Boost",
+        "fx" => "FX Toggle",
+        "none" => "—",
+        _ => "Stack",
+    }
+}
+
 /// Tile background + text color for a folder (footswitch), by name. Also
 /// tints the header's active-patch lens, so "where you are in the set" reads
 /// at a glance from anywhere in the UI.
@@ -244,6 +273,41 @@ pub fn PerformGrid(
         Some(cbs.cb(move |(): ()| on_toggle_boost.call(()))),
     ];
 
+    // What each footswitch does right now (the song's and part's jobs).
+    let jobs: Vec<String> = (0..5)
+        .map(|i| {
+            model
+                .switch_actions
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| if i < 4 { "stack".into() } else { "tap_tempo".into() })
+        })
+        .collect();
+    let in_song = mode == 2;
+    let part_name = if in_song {
+        model.parts.get(model.part_index as usize).map(|p| p.name.clone())
+    } else {
+        None
+    };
+    // Where a stepping switch goes next — its tile says so.
+    let step_hint = |job: &str| -> String {
+        let at = model.part_index as usize;
+        let next = match job {
+            "parts" => model.parts.get(at + 1),
+            "sections" => {
+                let sec = model.parts.get(at).map(|p| p.section.clone()).unwrap_or_default();
+                model.parts.iter().skip(at + 1).find(|p| !p.section.eq_ignore_ascii_case(&sec))
+            }
+            "songs" => {
+                return model
+                    .songs
+                    .get(model.song_index as usize + 1)
+                    .map_or("end of the set".into(), |s| format!("→ {}", s.name));
+            }
+            _ => return String::new(),
+        };
+        next.map_or("end of the song".into(), |p| format!("→ {}", p.name))
+    };
     let current_song = model
         .songs
         .get(model.song_index as usize)
@@ -259,7 +323,11 @@ pub fn PerformGrid(
                 // The part that is up, and what it lays over the profile.
                 if let Some(part) = model.parts.get(model.part_index as usize) {
                     span { class: "text-xs truncate", style: "color: #bfdbfe;",
-                        "Part: {part.name}"
+                        if part.section.eq_ignore_ascii_case(&part.name) {
+                            "Part: {part.name}"
+                        } else {
+                            "{part.section} › {part.name}"
+                        }
                     }
                     if !part.patch.is_empty() {
                         span { class: "text-xs text-muted-foreground truncate", "→ {part.patch}" }
@@ -369,7 +437,7 @@ pub fn PerformGrid(
             // same feet as Profile mode — parts are chosen from the sidebar,
             // the palette or the keymap. ──
             if let Some(stack) = stacks.get(4).cloned() {
-                StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true }
+                StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true, part: part_name.clone(), in_song }
             } else {
                 div { class: "relative rounded-lg border border-dashed border-border/30",
                     SwitchNo { no: 6 }
@@ -492,7 +560,18 @@ pub fn PerformGrid(
                 }
             } else {
             for i in 0..4usize {
-                if let Some(stack) = stacks.get(i).cloned() {
+                if jobs[i] != "stack" {
+                    ActionTile {
+                        key: "a{i}",
+                        footswitch: i,
+                        job: jobs[i].clone(),
+                        subtitle: step_hint(&jobs[i]),
+                        stack: stacks.get(i).cloned(),
+                        part: part_name.clone(),
+                        in_song,
+                        compact,
+                    }
+                } else if let Some(stack) = stacks.get(i).cloned() {
                     StackTile {
                         key: "s{i}",
                         index: i,
@@ -501,6 +580,9 @@ pub fn PerformGrid(
                         on_press,
                         on_hold: hold_actions[i],
                         compact,
+                        footswitch: Some(i),
+                        part: part_name.clone(),
+                        in_song,
                     }
                 } else {
                     div { key: "s{i}", class: "relative rounded-xl border-2 border-dashed border-border/30",
@@ -508,9 +590,22 @@ pub fn PerformGrid(
                     }
                 }
             }
-            // Switch 5: Tap Tempo (hold: tuner).
+            // Switch 5: its job — Tap Tempo (hold: tuner) unless the song
+            // gives it another (stepping through the parts, by default).
+            if jobs[4] != "tap_tempo" {
+                ActionTile {
+                    footswitch: 4usize,
+                    job: jobs[4].clone(),
+                    subtitle: step_hint(&jobs[4]),
+                    part: part_name.clone(),
+                    in_song,
+                    compact,
+                }
+            } else {
             TapTempoTile {
                 compact,
+                in_song,
+                part: part_name.clone(),
                 tempo_bpm: model.tempo_bpm,
                 on_tap: on_tap_tempo,
                 on_hold: cbs.cb({
@@ -521,6 +616,7 @@ pub fn PerformGrid(
                         }
                     }
                 }),
+            }
             }
             }
         }
@@ -539,22 +635,18 @@ fn StackTile(
     on_press: Callback<usize>,
     #[props(default)] on_hold: Option<Callback<()>>,
     #[props(default)] compact: bool,
+    /// The footswitch (0-based) this tile is, when it is one of 1–5 — its
+    /// job can then be changed from the menu.
+    #[props(default)] footswitch: Option<usize>,
+    /// The part that is up (Setlist mode).
+    #[props(default)] part: Option<String>,
+    #[props(default)] in_song: bool,
 ) -> Element {
     // Callbacks made once per site, not once per render (see `stable`).
     let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<signal_guitar_proto::rig::RigClient>);
     let mut menu = use_signal(|| false);
     let (momentary, no_rotate) = (stack.momentary, stack.no_rotate);
-    let set_mode = {
-        let rig = rig.clone();
-        move |m: bool, n: bool| {
-            if let Some(r) = rig.clone() {
-                spawn(async move {
-                    let _ = r.set_stack_mode(index as u32, m, n).await;
-                });
-            }
-        }
-    };
     let (bg, text) = folder_color(&stack.name);
     let state_cls = if stack.is_active {
         "ring-2 ring-white/80 shadow-xl opacity-100"
@@ -592,12 +684,19 @@ fn StackTile(
                 })
             }),
             SwitchNo { no: switch_no }
-            // How the switch behaves, when it is not the usual latch-and-rotate.
-            if momentary || no_rotate {
+            // How the switch behaves, when it is not the usual latch-and-rotate
+            // — and whether the part that is up tunes it.
+            if momentary || no_rotate || stack.part_tuned {
                 span {
-                    style: "position: absolute; top: 6px; left: 50%; transform: translateX(-50%); \
+                    style: "position: absolute; top: 6px; left: 50%; transform: translateX(-50%); white-space: nowrap; \
                             font-size: 8px; font-weight: 800; letter-spacing: 0.12em; opacity: 0.85;",
-                    if momentary && no_rotate { "HOLD · NO ROTATE" } else if momentary { "HOLD" } else { "NO ROTATE" }
+                    {
+                        let mut tags = Vec::new();
+                        if stack.part_tuned { tags.push("PART"); }
+                        if momentary { tags.push("HOLD"); }
+                        if no_rotate { tags.push("NO ROTATE"); }
+                        tags.join(" · ")
+                    }
                 }
             }
             // Amber dot while the current patch is still loading.
@@ -655,37 +754,304 @@ fn StackTile(
             }
         }
             if menu() {
-                div {
-                    style: "position: absolute; top: 8px; right: 8px; z-index: 300; \
-                            min-width: 180px; padding: 4px; display: flex; flex-direction: column; gap: 1px; \
-                            border: 1px solid #2b2b31; border-radius: 10px; \
-                            background: #0d0d10; box-shadow: 0 12px 32px #000c;",
-                    div { style: "padding: 4px 9px 6px; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #71717a;",
-                        "Switch {switch_no} · this song"
+                SwitchMenu {
+                    switch_no,
+                    footswitch,
+                    stack: Some((index, stack.clone())),
+                    job: "stack".to_string(),
+                    part,
+                    in_song,
+                    on_close: move |()| menu.set(false),
+                }
+            }
+        }
+    }
+}
+
+/// A footswitch given a job other than its usual one (Next Part, Tuner…):
+/// tap does it, hold does its back (stepping) or the hold layer. Right-click
+/// to change it.
+#[component]
+fn ActionTile(
+    footswitch: usize,
+    job: String,
+    subtitle: String,
+    /// The stack it would play, for turning it back into one from the menu.
+    #[props(default)] stack: Option<PerfStack>,
+    #[props(default)] part: Option<String>,
+    #[props(default)] in_song: bool,
+    #[props(default)] compact: bool,
+) -> Element {
+    let cbs = crate::stable::use_stable();
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut menu = use_signal(|| false);
+    let sw = footswitch as u32;
+    rsx! {
+        div {
+            style: "position: relative; height: 100%; display: flex; flex-direction: column;",
+            oncontextmenu: move |e: MouseEvent| {
+                e.prevent_default();
+                menu.set(true);
+            },
+            onmouseleave: move |_| menu.set(false),
+            HoldButton {
+                class: if compact {
+                    "relative flex items-center justify-center gap-2 rounded-lg h-full opacity-90 hover:opacity-100".to_string()
+                } else {
+                    "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full opacity-90 hover:opacity-100".to_string()
+                },
+                style: "background-color: #1e1b4b; color: #c7d2fe; box-shadow: inset 0 0 0 1px #4338ca;".to_string(),
+                on_tap: cbs.cb({
+                    let rig = rig.clone();
+                    move |(): ()| {
+                        if let Some(r) = rig.clone() {
+                            spawn(async move { let _ = r.tap_switch(sw).await; });
+                        }
                     }
-                    for (label, on, flip) in [("Momentary — only while held", momentary, 0u8), ("Disable stacking", no_rotate, 1u8)] {
+                }),
+                on_hold: Some(cbs.cb({
+                    let rig = rig.clone();
+                    move |(): ()| {
+                        if let Some(r) = rig.clone() {
+                            spawn(async move { let _ = r.hold_switch(sw).await; });
+                        }
+                    }
+                })),
+                SwitchNo { no: footswitch + 1 }
+                span {
+                    class: if compact { "text-sm font-bold tracking-wide" } else { "text-xl font-bold tracking-wide" },
+                    "{job_title(&job)}"
+                }
+                if !subtitle.is_empty() {
+                    span { class: if compact { "text-[10px] opacity-80 truncate max-w-full" } else { "text-xs opacity-80 truncate max-w-full" },
+                        "{subtitle}"
+                    }
+                }
+                if !compact && matches!(job.as_str(), "parts" | "sections" | "songs") {
+                    span { class: "text-[10px] opacity-50", "hold: back" }
+                }
+            }
+            if menu() {
+                SwitchMenu {
+                    switch_no: footswitch + 1,
+                    footswitch: Some(footswitch),
+                    stack: stack.map(|st| (footswitch, st)),
+                    job,
+                    part,
+                    in_song,
+                    on_close: move |()| menu.set(false),
+                }
+            }
+        }
+    }
+}
+
+/// A switch's right-click menu: for the whole song or just the part that
+/// is up — how its stack behaves (momentary, no stacking), which patches it
+/// rotates through, and what job the footswitch does.
+#[component]
+fn SwitchMenu(
+    switch_no: usize,
+    /// The footswitch (0-based), when the tile is one of 1–5.
+    footswitch: Option<usize>,
+    /// The stack (index, state), for a stack switch.
+    stack: Option<(usize, PerfStack)>,
+    job: String,
+    part: Option<String>,
+    in_song: bool,
+    on_close: Callback<()>,
+) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    // Per part when a part is up — the reason to open this in a song.
+    let mut for_part = use_signal(|| part.is_some());
+    let mut show_patches = use_signal(|| false);
+    let patches = use_resource({
+        let rig = rig.clone();
+        move || {
+            let rig = rig.clone();
+            async move {
+                match rig {
+                    Some(r) => r.patches().await.unwrap_or_default(),
+                    None => Vec::new(),
+                }
+            }
+        }
+    });
+    let scope_part = for_part() && part.is_some();
+    let scope = match (&part, scope_part, in_song) {
+        (Some(p), true, _) => format!("part · {p}"),
+        (_, _, true) => "this song".to_string(),
+        _ => "the profile".to_string(),
+    };
+    let row = "display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 6px; \
+               font-size: 11px; color: #d4d4d8; cursor: pointer; white-space: nowrap;";
+    let head = "padding: 6px 9px 3px; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #71717a;";
+    let tune = {
+        let rig = rig.clone();
+        move |index: usize, patches: Vec<String>, momentary: bool, no_rotate: bool| {
+            if let Some(r) = rig.clone() {
+                let t = signal_guitar_proto::SwitchTuning {
+                    index: index as u32,
+                    patches,
+                    momentary,
+                    no_rotate,
+                    part: scope_part,
+                };
+                spawn(async move { let _ = r.tune_switch(t).await; });
+            }
+        }
+    };
+    let set_job = {
+        let rig = rig.clone();
+        move |action: String| {
+            if let (Some(r), Some(sw)) = (rig.clone(), footswitch) {
+                spawn(async move { let _ = r.set_switch_action(sw as u32, action, scope_part).await; });
+            }
+        }
+    };
+    let reset = {
+        let rig = rig.clone();
+        let index = stack.as_ref().map(|(i, _)| *i);
+        let footswitch = footswitch;
+        move || {
+            if let Some(r) = rig.clone() {
+                spawn(async move {
+                    if let Some(i) = index {
+                        let _ = r.reset_switch(i as u32, scope_part).await;
+                    }
+                    if let Some(sw) = footswitch {
+                        let _ = r.set_switch_action(sw as u32, String::new(), scope_part).await;
+                    }
+                });
+            }
+        }
+    };
+    let patch_list = patches.read().clone().unwrap_or_default();
+    rsx! {
+        div {
+            style: "position: absolute; top: 8px; right: 8px; z-index: 300; max-height: 70vh; overflow-y: auto; \
+                    min-width: 220px; padding: 4px; display: flex; flex-direction: column; gap: 1px; \
+                    border: 1px solid #2b2b31; border-radius: 10px; \
+                    background: #0d0d10; box-shadow: 0 12px 32px #000c;",
+            div { style: "{head}", "Switch {switch_no} · {scope}" }
+            // Whole song ↔ the part that is up.
+            if let Some(p) = part.clone() {
+                div { style: "display: flex; gap: 4px; padding: 2px 6px 6px;",
+                    for (label, want) in [("Whole song".to_string(), false), (format!("Part · {p}"), true)] {
+                        button {
+                            key: "{want}",
+                            style: format!(
+                                "flex: 1; padding: 4px 6px; border-radius: 6px; font-size: 10px; border: 1px solid {}; \
+                                 background: {}; color: {}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+                                if for_part() == want { "#6366f1" } else { "#2b2b31" },
+                                if for_part() == want { "#1e1b4b" } else { "transparent" },
+                                if for_part() == want { "#e0e7ff" } else { "#a1a1aa" },
+                            ),
+                            onclick: move |_| for_part.set(want),
+                            "{label}"
+                        }
+                    }
+                }
+            }
+            if let Some((index, st)) = stack.clone().filter(|_| job == "stack") {
+                for (label, on, flip) in [("Momentary — only while held", st.momentary, 0u8), ("Disable stacking", st.no_rotate, 1u8)] {
+                    {
+                        let tune = tune.clone();
+                        let (m, n) = (st.momentary, st.no_rotate);
+                        rsx! {
+                            div {
+                                key: "{flip}",
+                                class: "hover:bg-accent/40",
+                                style: "{row}",
+                                onclick: move |_| {
+                                    on_close.call(());
+                                    if flip == 0 { tune(index, Vec::new(), !m, n) } else { tune(index, Vec::new(), m, !n) }
+                                },
+                                span { style: "width: 12px; text-align: center; color: #22c55e;", if on { "✓" } else { "" } }
+                                "{label}"
+                            }
+                        }
+                    }
+                }
+                div {
+                    class: "hover:bg-accent/40",
+                    style: "{row}",
+                    onclick: move |_| show_patches.toggle(),
+                    span { style: "width: 12px; text-align: center;", if show_patches() { "▾" } else { "▸" } }
+                    "Patches · {st.patches.len()} in rotation"
+                }
+                if show_patches() {
+                    // Click to add a patch to the rotation (numbered in order)
+                    // or take it out.
+                    for p in patch_list.iter() {
                         {
-                            let set_mode = set_mode.clone();
+                            let at = st.patches.iter().position(|x| x.eq_ignore_ascii_case(&p.name));
+                            let name = p.name.clone();
+                            let group = p.stack.clone();
+                            let current = st.patches.clone();
+                            let tune = tune.clone();
+                            let (m, n) = (st.momentary, st.no_rotate);
                             rsx! {
                                 div {
-                                    key: "{flip}",
+                                    key: "{name}",
                                     class: "hover:bg-accent/40",
-                                    style: "display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 6px; \
-                                            font-size: 11px; color: #d4d4d8; cursor: pointer; white-space: nowrap;",
+                                    style: "{row} padding-left: 18px;",
                                     onclick: move |_| {
-                                        menu.set(false);
-                                        if flip == 0 {
-                                            set_mode(!momentary, no_rotate);
-                                        } else {
-                                            set_mode(momentary, !no_rotate);
+                                        let mut next = current.clone();
+                                        match at {
+                                            Some(i) => { next.remove(i); }
+                                            None => next.push(name.clone()),
+                                        }
+                                        if !next.is_empty() {
+                                            tune(index, next, m, n);
                                         }
                                     },
-                                    span { style: "width: 12px; text-align: center; color: #22c55e;", if on { "✓" } else { "" } }
-                                    "{label}"
+                                    span { style: "width: 14px; text-align: center; color: #22c55e; font-family: monospace;",
+                                        if let Some(i) = at { "{i + 1}" } else { "" }
+                                    }
+                                    span { "{p.name}" }
+                                    if !group.is_empty() {
+                                        span { style: "margin-left: auto; font-size: 9px; color: #52525b;", "{group}" }
+                                    }
                                 }
                             }
                         }
                     }
+                }
+            }
+            if footswitch.is_some() && in_song {
+                div { style: "{head}", "Job" }
+                for (key, label) in JOBS.iter() {
+                    {
+                        let set_job = set_job.clone();
+                        let on = job == *key;
+                        let key = key.to_string();
+                        rsx! {
+                            div {
+                                key: "{key}",
+                                class: "hover:bg-accent/40",
+                                style: "{row}",
+                                onclick: move |_| {
+                                    on_close.call(());
+                                    set_job(key.clone());
+                                },
+                                span { style: "width: 12px; text-align: center; color: #22c55e;", if on { "✓" } else { "" } }
+                                "{label}"
+                            }
+                        }
+                    }
+                }
+            }
+            if in_song {
+                div {
+                    class: "hover:bg-accent/40",
+                    style: "{row} color: #fca5a5;",
+                    onclick: move |_| {
+                        on_close.call(());
+                        reset();
+                    },
+                    span { style: "width: 12px;" }
+                    if scope_part { "Reset for this part" } else { "Reset for this song" }
                 }
             }
         }
@@ -774,8 +1140,11 @@ fn TapTempoTile(
     on_tap: Callback<()>,
     on_hold: Callback<()>,
     #[props(default)] compact: bool,
+    #[props(default)] in_song: bool,
+    #[props(default)] part: Option<String>,
 ) -> Element {
     let mut lit = use_signal(|| false);
+    let mut menu = use_signal(|| false);
 
     // Props aren't reactive — mirror the tempo into a signal so the blink
     // loop restarts the moment a tap changes it.
@@ -801,6 +1170,16 @@ fn TapTempoTile(
         "box-shadow: 0 0 0 3px transparent;"
     };
     rsx! {
+        div {
+            style: "position: relative; height: 100%; display: flex; flex-direction: column;",
+            // Right-click (in a song): give switch 5 another job.
+            oncontextmenu: move |e: MouseEvent| {
+                e.prevent_default();
+                if in_song {
+                    menu.set(true);
+                }
+            },
+            onmouseleave: move |_| menu.set(false),
         HoldButton {
             class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full transition-shadow duration-100 opacity-90 hover:opacity-100".to_string(),
             style: format!("background-color: #27272a; color: #d4d4d8; {ring}"),
@@ -814,6 +1193,18 @@ fn TapTempoTile(
             span {
                 class: if compact { "text-[10px] text-zinc-500" } else { "text-[11px] text-zinc-500" },
                 if compact { "{tempo_bpm} BPM" } else { "{tempo_bpm} BPM · hold: tuner" }
+            }
+        }
+            if menu() {
+                SwitchMenu {
+                    switch_no: 5usize,
+                    footswitch: Some(4usize),
+                    stack: None,
+                    job: "tap_tempo".to_string(),
+                    part,
+                    in_song,
+                    on_close: move |()| menu.set(false),
+                }
             }
         }
     }

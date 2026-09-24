@@ -531,6 +531,10 @@ fn worship_performance() -> PerformanceModel {
                 is_active: *active,
                 preset: (*patch).into(),
                 override_modules: Vec::new(),
+                momentary: false,
+                no_rotate: false,
+                part_tuned: false,
+                patches: Vec::new(),
             })
             .collect(),
         tempo_bpm: 96,
