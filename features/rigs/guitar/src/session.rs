@@ -1176,11 +1176,17 @@ impl GuitarRigBackend {
         };
         let dps = self.drive_presets.lock_ok().clone();
         let mut blocks = self.blocks.lock_ok();
-        for b in blocks.iter_mut().filter(|b| {
-            matches!(b.block_type, BlockType::Drive | BlockType::Boost)
-                && crate::profiles::BOARD_SLOTS.iter().any(|s| s.eq_ignore_ascii_case(&b.name))
-        }) {
-            let sp = crate::profiles::slot_pedal(&b.name, &drives, &dps);
+        // The board's slots by position — its Drive/Boost blocks in chain
+        // order are Boost, Drive 1-3 — not by name: a captured pedal can
+        // come through the node library under its pedal's name ("Clean
+        // Boost"), which left the boost slot unlabelled ("Empty") while it
+        // played.
+        let board = blocks
+            .iter_mut()
+            .filter(|b| matches!(b.block_type, BlockType::Drive | BlockType::Boost))
+            .zip(crate::profiles::BOARD_SLOTS);
+        for (b, slot) in board {
+            let sp = crate::profiles::slot_pedal(slot, &drives, &dps);
             if let Some(p) = dps.iter().find(|p| p.name.eq_ignore_ascii_case(&sp.pedal)) {
                 b.options = p.options.iter().map(|o| o.name.clone()).collect();
                 b.option = p.options.iter().position(|o| o.name == sp.option).unwrap_or(0) as u32;
