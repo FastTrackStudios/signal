@@ -28,7 +28,8 @@ use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 // prove it.
 // v8: reverb decay is a calibrated time on every engine (measured tables),
 // and the vintage spring no longer self-oscillates.
-const ENGINE: &str = "rig-v8";
+// v9: the shimmer and oil-can loops bounded; volume blocks pan.
+const ENGINE: &str = "rig-v9";
 
 /// Settle time before a measurement: long enough for the compressors, gate
 /// and NAM state from the previous input to have gone, and for the delays and
