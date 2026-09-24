@@ -65,6 +65,20 @@ pub fn folder_color(name: &str) -> (&'static str, &'static str) {
     }
 }
 
+/// A lit switch's ring.
+const LIT_RING: &str = "box-shadow: 0 0 0 2px rgba(255,255,255,0.8), 0 10px 24px rgba(0,0,0,0.5);";
+
+/// `hex` (`#rrggbb`) darkened toward the grid's background — `amount` of
+/// the colour left — for a switch that is not lit. A plain colour, so the
+/// dark state never depends on the renderer re-applying an opacity.
+fn dim(hex: &str, amount: f32) -> String {
+    let h = hex.trim_start_matches('#');
+    let ch = |i: usize| f32::from(u8::from_str_radix(h.get(i..i + 2).unwrap_or("00"), 16).unwrap_or(0));
+    let base = [10.0, 10.0, 12.0];
+    let mix = |c: f32, b: f32| (b + (c - b) * amount).round().clamp(0.0, 255.0) as u8;
+    format!("#{:02x}{:02x}{:02x}", mix(ch(0), base[0]), mix(ch(2), base[1]), mix(ch(4), base[2]))
+}
+
 /// The physical switch number, pinned to a tile corner.
 #[component]
 fn SwitchNo(no: usize) -> Element {
@@ -629,7 +643,7 @@ pub fn PerformGrid(
                         }
                     } else if let Some(stack) = stacks.get(i).cloned() {
                         StackTile {
-                            key: "s{i}",
+                            key: "s{i}-{stack.is_active}",
                             index: i,
                             switch_no: i + 1,
                             stack,
@@ -770,11 +784,16 @@ fn StackTile(
     let mut menu = use_signal(|| false);
     let (momentary, no_rotate) = (stack.momentary, stack.no_rotate);
     let (bg, text) = folder_color(&stack.name);
-    let state_cls = if stack.is_active {
-        "ring-2 ring-white/80 shadow-xl opacity-100"
+    // Lit or dark as colours, not as an opacity class: the renderer could
+    // keep a tile's old opacity when only its class changed (every switch
+    // that had been active stayed lit, the ring alone moving), and a
+    // footswitch's state is the one thing that must never be stale.
+    let (bg, text, state_style) = if stack.is_active {
+        (bg.to_string(), text.to_string(), LIT_RING)
     } else {
-        "opacity-[0.22] saturate-50 hover:opacity-60"
+        (dim(bg, 0.24), dim(text, 0.35), "")
     };
+    let state_cls = "";
     let layout_cls = if compact {
         "relative flex items-center justify-center gap-2 rounded-lg"
     } else {
@@ -791,7 +810,7 @@ fn StackTile(
             onmouseleave: move |_| menu.set(false),
         HoldButton {
             class: format!("{layout_cls} h-full {state_cls}"),
-            style: format!("background-color: {bg}; color: {text};"),
+            style: format!("background-color: {bg}; color: {text}; {state_style}"),
             on_tap: cbs.cb(move |(): ()| on_press.call(index)),
             on_hold,
             on_down: momentary.then(|| cbs.cb(move |(): ()| on_press.call(index))),
@@ -1201,10 +1220,11 @@ fn FnTile(
     #[props(default)] compact: bool,
     onclick: Callback<()>,
 ) -> Element {
-    let state_cls = if active {
-        "ring-2 ring-white/80 shadow-xl opacity-100"
+    // Colours, not an opacity class (see `StackTile`).
+    let (bg, text, ring) = if active {
+        (bg.clone(), text.clone(), LIT_RING)
     } else {
-        "opacity-[0.3] saturate-50 hover:opacity-70"
+        (dim(&bg, 0.3), dim(&text, 0.45), "")
     };
     let layout_cls = if compact {
         "relative flex items-center justify-center gap-2 rounded-lg"
@@ -1213,8 +1233,9 @@ fn FnTile(
     };
     rsx! {
         button {
-            class: format!("{layout_cls} h-full {state_cls}"),
-            style: "background-color: {bg}; color: {text};",
+            key: "{active}",
+            class: format!("{layout_cls} h-full"),
+            style: "background-color: {bg}; color: {text}; {ring}",
             onclick: move |_| onclick.call(()),
             SwitchNo { no: switch_no }
             span {
@@ -1242,17 +1263,17 @@ fn BoostTile(
     on_toggle: Callback<()>,
     on_cycle: Callback<()>,
 ) -> Element {
-    let state_cls = if active {
-        "ring-2 ring-white/80 shadow-xl opacity-100"
+    // Colours, not an opacity class (see `StackTile`).
+    let style = if active {
+        format!("background-color: #fafafa; color: #0a0a0a; {LIT_RING}")
     } else {
-        "opacity-[0.3] saturate-50 hover:opacity-70"
+        format!("background-color: {}; color: {};", dim("#fafafa", 0.3), dim("#0a0a0a", 0.45))
     };
     rsx! {
         HoldButton {
-            class: format!(
-                "relative flex items-center justify-center gap-2 rounded-lg h-full {state_cls}"
-            ),
-            style: "background-color: #fafafa; color: #0a0a0a;".to_string(),
+            key: "{active}",
+            class: "relative flex items-center justify-center gap-2 rounded-lg h-full".to_string(),
+            style,
             on_tap: on_toggle,
             on_hold: Some(on_cycle),
             SwitchNo { no: switch_no }
