@@ -1427,12 +1427,13 @@ fn ModGroupPanel(
         d.push_str(if px == 0 { "M " } else { "L " });
         let _ = write!(d, "{:.1} {:.1} ", 4.0 + t * 192.0, y);
     }
-    // Modulation is cyan, motion is pink — the two groups sit one above the
-    // other and the colour is how you tell which you are reading.
+    // Modulation is light blue, motion is pink (the block palette's
+    // families) — the two groups sit one above the other and the colour is
+    // how you tell which you are reading.
     let group_color = if tempo_divisions {
-        "#f472b6"
+        "#ec4899"
     } else {
-        "#22d3ee"
+        "#7dd3fc"
     };
     let color = if engaged { group_color } else { "#3f3f46" };
 
@@ -1490,7 +1491,7 @@ fn ModGroupPanel(
                     } else {
                         "px-1.5 h-4 rounded-sm text-[9px] text-muted-foreground border border-border leading-none"
                     },
-                    style: if engaged { "background-color: #f472b6; color: #000;" } else { "" },
+                    style: if engaged { format!("background-color: {group_color}; color: #000;") } else { String::new() },
                     // Tap the name to engage/bypass the shown member.
                     onclick: {
                         let rig = rig;
@@ -1518,7 +1519,7 @@ fn ModGroupPanel(
                             name: "engine",
                             value: param_v(&cur, "engine", 0.0),
                             options: MOD_ENGINES.to_vec(),
-                            accent: "#f472b6".to_string(),
+                            accent: group_color.to_string(),
                         }
                     },
                     BlockType::Trem => rsx! {
@@ -1527,7 +1528,7 @@ fn ModGroupPanel(
                             name: "mode",
                             value: param_v(&cur, "mode", 1.0),
                             options: TREM_MODES.to_vec(),
-                            accent: "#f472b6".to_string(),
+                            accent: group_color.to_string(),
                         }
                     },
                     _ => rsx! {},
@@ -2039,10 +2040,11 @@ fn DriveChunk(
     let bus = signal_widgets::DragBus::try_use();
 
     let pct = (level * 100.0).clamp(0.0, 100.0);
+    // Amp blonde; drives orange into red — more push reads hotter.
     let (c_hi, c_lo) = if amp_style {
-        ("rgba(245,158,11,0.30)", "rgba(245,158,11,0.05)")
+        ("rgba(214,179,106,0.32)", "rgba(214,179,106,0.05)")
     } else {
-        ("rgba(220,60,50,0.32)", "rgba(220,60,50,0.06)")
+        ("rgba(220,60,50,0.34)", "rgba(249,115,22,0.07)")
     };
     let empty = block_id.is_none();
 
@@ -2168,7 +2170,7 @@ fn DriveChunk(
                     style: if empty {
                         "background-color: #27272a;"
                     } else if engaged {
-                        if amp_style { "background-color: #f59e0b;" } else { "background-color: #ef4444;" }
+                        if amp_style { "background-color: #d6b36a;" } else { "background-color: #f97316;" }
                     } else {
                         "background-color: #3f3f46;"
                     },

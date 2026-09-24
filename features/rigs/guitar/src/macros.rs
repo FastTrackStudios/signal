@@ -546,11 +546,11 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
     // ── Gate ──
     if let Some(b) = blocks.iter().find(|b| b.block_type == BlockType::Gate) {
         let spec: [(&str, &str, &str, &str, Curve, (f32, f32)); 5] = [
-            ("threshold", "Threshold", "#F87171", "db_gain", Curve::Add(12.0), (0.0, 0.8)),
-            ("range", "Range", "#FECACA", "db_gain", Curve::Lin, (0.0, 0.9)),
-            ("attack", "Attack", "#FEE2E2", "ms", Curve::Log, (0.0, 0.5)),
-            ("release", "Release", "#F87171", "ms", Curve::Log, (0.1, 0.8)),
-            ("hold", "Hold", "#FCA5A5", "ms", Curve::Log, (0.0, 0.6)),
+            ("threshold", "Threshold", "#CBD5E1", "db_gain", Curve::Add(12.0), (0.0, 0.8)),
+            ("range", "Range", "#E2E8F0", "db_gain", Curve::Lin, (0.0, 0.9)),
+            ("attack", "Attack", "#F1F5F9", "ms", Curve::Log, (0.0, 0.5)),
+            ("release", "Release", "#CBD5E1", "ms", Curve::Log, (0.1, 0.8)),
+            ("hold", "Hold", "#CBD5E1", "ms", Curve::Log, (0.0, 0.6)),
         ];
         let kids = spec
             .iter()
@@ -558,7 +558,7 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
                 rel_child(b, &format!("gate-{p}"), l, c, p, *curve, 1.0, f, Some(*r))
             })
             .collect();
-        add_parent(&mut out, "gate", "Gate", "#EF4444", Panel { layout: "row", ..Panel::default() }, kids);
+        add_parent(&mut out, "gate", "Gate", "#94A3B8", Panel { layout: "row", ..Panel::default() }, kids);
     }
 
     // ── Pre-Comp / Comp: more = more compression ──
@@ -577,8 +577,8 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             .collect()
     };
     if let Some(b) = find(BlockType::Compressor, "Pre Comp") {
-        let kids = comp_kids(b, "pre-comp", ["#60A5FA", "#93C5FD", "#BFDBFE", "#DBEAFE"]);
-        add_parent(&mut out, "pre-comp", "Pre-Comp", "#3B82F6", Panel { layout: "row", ..Panel::default() }, kids);
+        let kids = comp_kids(b, "pre-comp", ["#F3F4F6", "#E5E7EB", "#D1D5DB", "#F9FAFB"]);
+        add_parent(&mut out, "pre-comp", "Pre-Comp", "#E5E7EB", Panel { layout: "row", ..Panel::default() }, kids);
     }
 
     // ── Pitch: the octaves (a POG-style blend on the Pitch block) and the
@@ -595,29 +595,29 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
                 // octaves; the block comes in above rest (it is bypassed in
                 // most patches) and goes at the bottom.
                 BlockType::Pitch => {
-                    if let Some(mut mix) = rel_child(b, &format!("pitch-mix{tag}"), "Mix", "#E879F9", "mix", Curve::Lin, 1.0, "pct", r) {
+                    if let Some(mut mix) = rel_child(b, &format!("pitch-mix{tag}"), "Mix", "#FDE047", "mix", Curve::Lin, 1.0, "pct", r) {
                         mix.meta.pad_block = Some(b.id.clone());
                         kids.push(mix);
                     }
-                    kids.extend(rel_child(b, &format!("pitch-down{tag}"), "Oct Down", "#C026D3", "b_level", Curve::Lin, 1.0, "pct", r));
-                    kids.extend(rel_child(b, &format!("pitch-up{tag}"), "Oct Up", "#F0ABFC", "a_level", Curve::Lin, 1.0, "pct", r));
-                    kids.extend(rel_child(b, &format!("pitch-dry{tag}"), "Dry", "#FAE8FF", "dry", Curve::Lin, 1.0, "pct", None));
-                    kids.extend(select_child(b, &format!("pitch-a{tag}"), "Interval A", "#F5D0FE", "semitones", "semitones"));
-                    kids.extend(select_child(b, &format!("pitch-b{tag}"), "Interval B", "#F5D0FE", "b_semitones", "semitones"));
+                    kids.extend(rel_child(b, &format!("pitch-down{tag}"), "Oct Down", "#EAB308", "b_level", Curve::Lin, 1.0, "pct", r));
+                    kids.extend(rel_child(b, &format!("pitch-up{tag}"), "Oct Up", "#FEF08A", "a_level", Curve::Lin, 1.0, "pct", r));
+                    kids.extend(rel_child(b, &format!("pitch-dry{tag}"), "Dry", "#FEFCE8", "dry", Curve::Lin, 1.0, "pct", None));
+                    kids.extend(select_child(b, &format!("pitch-a{tag}"), "Interval A", "#FEF9C3", "semitones", "semitones"));
+                    kids.extend(select_child(b, &format!("pitch-b{tag}"), "Interval B", "#FEF9C3", "b_semitones", "semitones"));
                 }
                 // The Ice machine: its blend is how much of the repeats is
                 // shifted.
                 BlockType::Delay if !is_pre_fx(b) && value(b, "style", -1.0).round() == 6.0 => {
-                    kids.extend(rel_child(b, &format!("pitch-mix{tag}"), "Blend", "#E879F9", "blend", Curve::Lin, 1.0, "pct", r));
-                    kids.extend(select_child(b, &format!("pitch-a{tag}"), "Interval", "#F5D0FE", "interval", "interval"));
+                    kids.extend(rel_child(b, &format!("pitch-mix{tag}"), "Blend", "#FDE047", "blend", Curve::Lin, 1.0, "pct", r));
+                    kids.extend(select_child(b, &format!("pitch-a{tag}"), "Interval", "#FEF9C3", "interval", "interval"));
                 }
                 // A shimmer delay has no amount of its own: its level is it.
                 BlockType::Delay if !is_pre_fx(b) && value(b, "style", -1.0).round() == 4.0 => {
-                    kids.extend(rel_child(b, &format!("pitch-mix{tag}"), "Shimmer", "#E879F9", "level", Curve::Add(12.0), 1.0, "db", r));
+                    kids.extend(rel_child(b, &format!("pitch-mix{tag}"), "Shimmer", "#FDE047", "level", Curve::Add(12.0), 1.0, "db", r));
                 }
                 BlockType::Reverb if !is_pre_fx(b) && value(b, "algorithm", -1.0).round() == 6.0 => {
-                    kids.extend(rel_child(b, &format!("pitch-mix{tag}"), "Shimmer", "#E879F9", "shim_amount", Curve::Lin, 1.0, "pct", r));
-                    kids.extend(select_child(b, &format!("pitch-a{tag}"), "Shift", "#F5D0FE", "shim_shift1", "semitones"));
+                    kids.extend(rel_child(b, &format!("pitch-mix{tag}"), "Shimmer", "#FDE047", "shim_amount", Curve::Lin, 1.0, "pct", r));
+                    kids.extend(select_child(b, &format!("pitch-a{tag}"), "Shift", "#FEF9C3", "shim_shift1", "semitones"));
                 }
                 _ => {}
             }
@@ -625,7 +625,7 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
                 n += 1;
             }
         }
-        add_parent(&mut out, "pitch", "Pitch", "#D946EF", Panel { layout: "grouped", ..Panel::default() }, kids);
+        add_parent(&mut out, "pitch", "Pitch", "#FACC15", Panel { layout: "grouped", ..Panel::default() }, kids);
     }
 
     // ── Drive: a journey through the drive stages ──
@@ -636,7 +636,7 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             .iter()
             .filter(|b| matches!(b.block_type, BlockType::Boost | BlockType::Drive))
             .collect();
-        let colors = ["#FB923C", "#FDBA74", "#FED7AA", "#FFEDD5"];
+        let colors = ["#FB923C", "#F97316", "#EF4444", "#DC2626"];
         let kids: Vec<Child> = stages
             .iter()
             .enumerate()
@@ -664,7 +664,7 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             .filter(|b| b.block_type == BlockType::Amp && !b.preset.is_empty())
             .filter_map(|b| target(b, "drive", Curve::Lin, 1.0, 1.0))
             .collect();
-        add_single(&mut out, "gain", "Gain", "#EAB308", t, 0.5);
+        add_single(&mut out, "gain", "Gain", "#D6B36A", t, 0.5);
     }
 
     // ── Tone: a dark ↔ bright tilt on the Amp EQ, and the wet's top ──
@@ -714,8 +714,8 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
 
     // ── Comp (post) ──
     if let Some(b) = find(BlockType::Compressor, "Post Comp") {
-        let kids = comp_kids(b, "comp", ["#93C5FD", "#BFDBFE", "#DBEAFE", "#EFF6FF"]);
-        add_parent(&mut out, "comp", "Comp", "#60A5FA", Panel { layout: "row", ..Panel::default() }, kids);
+        let kids = comp_kids(b, "comp", ["#F3F4F6", "#E5E7EB", "#D1D5DB", "#F9FAFB"]);
+        add_parent(&mut out, "comp", "Comp", "#E5E7EB", Panel { layout: "row", ..Panel::default() }, kids);
     }
 
     // ── Mod: depth and mix of the modulation after the amp ──
@@ -727,7 +727,7 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             })
             .flatten()
             .collect();
-        add_single(&mut out, "mod", "Mod", "#A855F7", t, 0.5);
+        add_single(&mut out, "mod", "Mod", "#7DD3FC", t, 0.5);
     }
 
     // ── Motion: the tremolo's depth ──
@@ -736,13 +736,13 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             .into_iter()
             .filter_map(|b| target(b, "depth", Curve::Lin, 1.0, 1.0))
             .collect();
-        add_single(&mut out, "motion", "Motion", "#8B5CF6", t, 0.5);
+        add_single(&mut out, "motion", "Motion", "#EC4899", t, 0.5);
     }
 
     // ── Boost: the boost block's level, ±6 dB on what the pedal gives ──
     if let Some(b) = find(BlockType::Volume, "Boost") {
         let t = target(b, "gain_db", Curve::Add(6.0), 1.0, 1.0).into_iter().collect();
-        add_single(&mut out, "boost", "Boost", "#EC4899", t, 0.5);
+        add_single(&mut out, "boost", "Boost", "#FAFAF9", t, 0.5);
     }
 
     // ── Delay / Reverb: a row per block ──
@@ -760,51 +760,51 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
                 Child::new(
                     &format!("delay-time{n}"),
                     &format!("Time {n}"),
-                    "#67E8F9",
+                    "#93C5FD",
                     Meta { targets, fmt: "div", show: Some((b.id.clone(), "tap_div_l".into())), group: b.name.clone(), ..Meta::default() },
                     Some((0.1, 0.8)),
                 )
             } else {
-                match rel_child(b, &format!("delay-time{n}"), &format!("Time {n}"), "#67E8F9", "time", Curve::Log, 1.0, "ms", Some((0.1, 0.8))) {
+                match rel_child(b, &format!("delay-time{n}"), &format!("Time {n}"), "#93C5FD", "time", Curve::Log, 1.0, "ms", Some((0.1, 0.8))) {
                     Some(c) => c,
                     None => return Vec::new(),
                 }
             };
             time.meta.group = b.name.clone();
             [
-                select_child(b, &format!("delay-type{n}"), &format!("Type {n}"), "#22D3EE", "style", "delay_style"),
+                select_child(b, &format!("delay-type{n}"), &format!("Type {n}"), "#60A5FA", "style", "delay_style"),
                 Some(time),
-                rel_child(b, &format!("delay-fb{n}"), &format!("FB {n}"), "#A5F3FC", "feedback", Curve::Lin, 1.0, "pct", Some((0.0, 0.65))),
-                rel_child(b, &format!("delay-filter{n}"), &format!("Filter {n}"), "#CFFAFE", "high_cut", Curve::Log, 1.0, "hz", Some((0.0, 0.5))),
-                rel_child(b, &format!("delay-level{n}"), &format!("Level {n}"), "#67E8F9", "level", Curve::Add(12.0), 1.0, "db", Some((0.0, 0.7))),
+                rel_child(b, &format!("delay-fb{n}"), &format!("FB {n}"), "#BFDBFE", "feedback", Curve::Lin, 1.0, "pct", Some((0.0, 0.65))),
+                rel_child(b, &format!("delay-filter{n}"), &format!("Filter {n}"), "#DBEAFE", "high_cut", Curve::Log, 1.0, "hz", Some((0.0, 0.5))),
+                rel_child(b, &format!("delay-level{n}"), &format!("Level {n}"), "#93C5FD", "level", Curve::Add(12.0), 1.0, "db", Some((0.0, 0.7))),
             ]
             .into_iter()
             .flatten()
             .collect()
         });
         let headers = ["Type", "Time", "Feedback", "Filter", "Level"].map(String::from).to_vec();
-        add_parent(&mut out, "delay", "Delay", "#06B6D4", Panel { layout: "dual", headers, ..Panel::default() }, kids);
+        add_parent(&mut out, "delay", "Delay", "#3B82F6", Panel { layout: "dual", headers, ..Panel::default() }, kids);
     }
     {
         let kids = dual(&verbs, &|b, n| {
-            let mut time = rel_child(b, &format!("reverb-time{n}"), &format!("Time {n}"), "#7DD3FC", "decay", Curve::Lin, 1.0, "verb_s", Some((0.1, 0.9)));
+            let mut time = rel_child(b, &format!("reverb-time{n}"), &format!("Time {n}"), "#C4B5FD", "decay", Curve::Lin, 1.0, "verb_s", Some((0.1, 0.9)));
             if let Some(t) = time.as_mut() {
                 t.meta.aux = Some((b.id.clone(), "algorithm".into()));
             }
             [
-                select_child(b, &format!("reverb-type{n}"), &format!("Type {n}"), "#38BDF8", "algorithm", "verb_algo"),
+                select_child(b, &format!("reverb-type{n}"), &format!("Type {n}"), "#A78BFA", "algorithm", "verb_algo"),
                 time,
-                rel_child(b, &format!("reverb-predelay{n}"), &format!("Pre-Dly {n}"), "#BAE6FD", "predelay", Curve::Lin, 1.0, "ms", Some((0.0, 0.5))),
+                rel_child(b, &format!("reverb-predelay{n}"), &format!("Pre-Dly {n}"), "#DDD6FE", "predelay", Curve::Lin, 1.0, "ms", Some((0.0, 0.5))),
                 // More reverb is an open, less damped tail.
-                rel_child(b, &format!("reverb-character{n}"), &format!("Char {n}"), "#E0F2FE", "damping", Curve::Lin, -1.0, "pct", Some((0.0, 0.8))),
-                rel_child(b, &format!("reverb-level{n}"), &format!("Level {n}"), "#7DD3FC", "level", Curve::Add(12.0), 1.0, "db", Some((0.0, 0.7))),
+                rel_child(b, &format!("reverb-character{n}"), &format!("Char {n}"), "#EDE9FE", "damping", Curve::Lin, -1.0, "pct", Some((0.0, 0.8))),
+                rel_child(b, &format!("reverb-level{n}"), &format!("Level {n}"), "#C4B5FD", "level", Curve::Add(12.0), 1.0, "db", Some((0.0, 0.7))),
             ]
             .into_iter()
             .flatten()
             .collect()
         });
         let headers = ["Type", "Time", "Pre-Delay", "Character", "Level"].map(String::from).to_vec();
-        add_parent(&mut out, "reverb", "Reverb", "#0EA5E9", Panel { layout: "dual", headers, ..Panel::default() }, kids);
+        add_parent(&mut out, "reverb", "Reverb", "#8B5CF6", Panel { layout: "dual", headers, ..Panel::default() }, kids);
     }
 
     // ── Space: the whole wash — wet levels, a little feedback and decay ──

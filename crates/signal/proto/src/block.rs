@@ -211,7 +211,10 @@ macro_rules! block_types {
                 }
             }
 
-            /// Quad Cortex / Helix inspired color palette for UI rendering.
+            /// The rig's colour families for UI rendering: drives orange→red,
+            /// boost and compressors white, amp blonde, EQ green, modulation
+            /// light blue, motion pink, delay blue, reverb purple, pitch
+            /// strong yellow.
             pub const fn color(self) -> BlockColor {
                 match self {
                     Self::$default_variant => BlockColor {
@@ -237,47 +240,47 @@ block_types! {
     Tuner,         "tuner",          Utility,  ("#78716C", "#FAFAF9", "#57534E");
 
     // ── Dynamics ────────────────────────────────────────────────
-    Compressor,    "compressor",     Dynamics, ("#3B82F6", "#EFF6FF", "#2563EB");
-    Gate,          "gate",           Dynamics, ("#3B82F6", "#EFF6FF", "#2563EB");
-    Limiter,       "limiter",        Dynamics, ("#3B82F6", "#EFF6FF", "#2563EB");
-    DeEsser,       "de-esser",       Dynamics, ("#60A5FA", "#EFF6FF", "#3B82F6"), as "De-Esser";
+    Compressor,    "compressor",     Dynamics, ("#E5E7EB", "#111827", "#D1D5DB");
+    Gate,          "gate",           Dynamics, ("#94A3B8", "#0F172A", "#64748B");
+    Limiter,       "limiter",        Dynamics, ("#E5E7EB", "#111827", "#D1D5DB");
+    DeEsser,       "de-esser",       Dynamics, ("#CBD5E1", "#0F172A", "#94A3B8"), as "De-Esser";
 
     // ── Drive (continued) ───────────────────────────────────────
     Saturator,     "saturator",      Drive,    ("#EF4444", "#FEF2F2", "#DC2626");
-    Boost,         "boost",          Drive,    ("#FB923C", "#FFF7ED", "#F97316");
+    Boost,         "boost",          Drive,    ("#FAFAF9", "#1C1917", "#D6D3D1");
 
     // ── Amp ─────────────────────────────────────────────────────
-    Amp,           "amp",            Amp,      ("#EAB308", "#FEFCE8", "#CA8A04");
-    Cabinet,       "cabinet",        Amp,      ("#B45309", "#FEF3C7", "#92400E");
+    Amp,           "amp",            Amp,      ("#D6B36A", "#1C1917", "#B8954A");
+    Cabinet,       "cabinet",        Amp,      ("#A8844A", "#FFFBEB", "#8A6A38");
 
     // ── EQ ──────────────────────────────────────────────────────
     Eq,            "eq",             Eq,       ("#22C55E", "#F0FDF4", "#16A34A"), as "EQ";
     Crossover,     "crossover",      Eq,       ("#22C55E", "#F0FDF4", "#16A34A");
 
     // ── Modulation ──────────────────────────────────────────────
-    Modulation,    "modulation",     Modulation, ("#A855F7", "#FAF5FF", "#9333EA");
-    Chorus,        "chorus",         Modulation, ("#A855F7", "#FAF5FF", "#9333EA");
-    Flanger,       "flanger",        Modulation, ("#A855F7", "#FAF5FF", "#9333EA");
-    Phaser,        "phaser",         Modulation, ("#A855F7", "#FAF5FF", "#9333EA");
-    RingModulator, "ring-modulator", Modulation, ("#9333EA", "#FAF5FF", "#7E22CE"), as "Ring Modulator";
+    Modulation,    "modulation",     Modulation, ("#7DD3FC", "#082F49", "#38BDF8");
+    Chorus,        "chorus",         Modulation, ("#7DD3FC", "#082F49", "#38BDF8");
+    Flanger,       "flanger",        Modulation, ("#7DD3FC", "#082F49", "#38BDF8");
+    Phaser,        "phaser",         Modulation, ("#7DD3FC", "#082F49", "#38BDF8");
+    RingModulator, "ring-modulator", Modulation, ("#38BDF8", "#082F49", "#0EA5E9"), as "Ring Modulator";
 
     // ── Motion ──────────────────────────────────────────────────
-    Trem,          "trem",           Motion,   ("#C084FC", "#FAF5FF", "#A855F7");
-    Panner,        "panner",         Motion,   ("#C084FC", "#FAF5FF", "#A855F7");
-    Vibrato,       "vibrato",        Motion,   ("#C084FC", "#FAF5FF", "#A855F7");
-    Rotary,        "rotary",         Motion,   ("#C084FC", "#FAF5FF", "#A855F7");
+    Trem,          "trem",           Motion,   ("#EC4899", "#FDF2F8", "#DB2777");
+    Panner,        "panner",         Motion,   ("#EC4899", "#FDF2F8", "#DB2777");
+    Vibrato,       "vibrato",        Motion,   ("#EC4899", "#FDF2F8", "#DB2777");
+    Rotary,        "rotary",         Motion,   ("#EC4899", "#FDF2F8", "#DB2777");
 
     // ── Time ────────────────────────────────────────────────────
-    Delay,         "delay",          Time,     ("#06B6D4", "#ECFEFF", "#0891B2");
-    Reverb,        "reverb",         Time,     ("#0EA5E9", "#F0F9FF", "#0284C7");
-    Freeze,        "freeze",         Time,     ("#22D3EE", "#ECFEFF", "#06B6D4");
+    Delay,         "delay",          Time,     ("#3B82F6", "#EFF6FF", "#2563EB");
+    Reverb,        "reverb",         Time,     ("#8B5CF6", "#F5F3FF", "#7C3AED");
+    Freeze,        "freeze",         Time,     ("#60A5FA", "#EFF6FF", "#3B82F6");
 
     // ── Special ─────────────────────────────────────────────────
-    Special,       "special",        Special,  ("#EC4899", "#FDF2F8", "#DB2777");
-    Wah,           "wah",            Special,  ("#EC4899", "#FDF2F8", "#DB2777");
-    Filter,        "filter",         Special,  ("#EC4899", "#FDF2F8", "#DB2777");
-    Doubler,       "doubler",        Special,  ("#EC4899", "#FDF2F8", "#DB2777");
-    Pitch,         "pitch",          Special,  ("#8B5CF6", "#FAF5FF", "#7C3AED");
+    Special,       "special",        Special,  ("#14B8A6", "#F0FDFA", "#0D9488");
+    Wah,           "wah",            Special,  ("#14B8A6", "#F0FDFA", "#0D9488");
+    Filter,        "filter",         Special,  ("#14B8A6", "#F0FDFA", "#0D9488");
+    Doubler,       "doubler",        Special,  ("#14B8A6", "#F0FDFA", "#0D9488");
+    Pitch,         "pitch",          Special,  ("#FACC15", "#1C1917", "#EAB308");
 
     // ── Catch-all ───────────────────────────────────────────────
     Custom,        "custom",         Other,    ("#A8A29E", "#FAFAF9", "#78716C");

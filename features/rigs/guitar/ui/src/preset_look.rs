@@ -48,6 +48,8 @@ pub struct Look {
     pub group: String,
     /// Its engine or style, short ("Tape", "Hall"); empty when it has none.
     pub engine: String,
+    /// The block type's storage key (`delay`, `reverb`…) — its colour family.
+    pub block_type: String,
     /// The engine is the block's default (drawn grey).
     pub engine_default: bool,
     /// The one value a player reads ("1/8.", "120 ms", "2.4 s").
@@ -137,6 +139,13 @@ pub fn look(p: &BlockPresetEntry) -> Look {
             ..Look::default()
         };
     }
+    let mut out = look_of(p);
+    out.block_type = p.block_type.clone();
+    out
+}
+
+fn look_of(p: &BlockPresetEntry) -> Look {
+    let params = &p.params;
     match p.block_type.as_str() {
         "delay" => {
             let style = param(params, "style", 0.0).round().max(0.0) as usize;
@@ -147,6 +156,7 @@ pub fn look(p: &BlockPresetEntry) -> Look {
                 format!("{:.0} ms", param(params, "time", 350.0))
             };
             Look {
+                block_type: String::new(),
                 group: delay_group(&p.name, params).to_string(),
                 engine: DELAY_ALGOS.get(style).copied().unwrap_or("").to_string(),
                 engine_default: style == 0,
@@ -165,6 +175,7 @@ pub fn look(p: &BlockPresetEntry) -> Look {
                 param(params, "decay", 0.5),
             );
             Look {
+                block_type: String::new(),
                 group: verb_group(alg).to_string(),
                 engine: VERB_ALGOS.get(alg).copied().unwrap_or("").to_string(),
                 engine_default: false,
@@ -334,18 +345,30 @@ pub fn EngineChip(engine: String, #[props(default)] default: bool) -> Element {
     }
 }
 
-/// An engine's swatch colour — muted, and the same for one engine wherever
-/// it appears, so Tape reads as Tape down a list before its chip is read.
+/// An engine's swatch colour: a shade of its block's colour family (delay
+/// blue, reverb purple, modulation light blue, motion pink, drives
+/// orange→red, compressors white, amp blonde), the same shade for one
+/// engine wherever it appears — so a list reads as its family first and
+/// Tape reads as Tape before its chip is read.
 #[must_use]
-pub fn engine_swatch(engine: &str) -> &'static str {
-    const SWATCHES: [&str; 8] = [
-        "#a16207", "#0e7490", "#7c3aed", "#be185d", "#15803d", "#1d4ed8", "#b45309", "#4d7c0f",
-    ];
+pub fn engine_swatch(block_type: &str, engine: &str) -> &'static str {
+    const OTHER: [&str; 5] = ["#15803d", "#0e7490", "#4d7c0f", "#a16207", "#0f766e"];
+    let family: &[&str] = match block_type {
+        "delay" => &["#3b82f6", "#1d4ed8", "#60a5fa", "#2563eb", "#93c5fd"],
+        "reverb" => &["#8b5cf6", "#6d28d9", "#a78bfa", "#7c3aed", "#c4b5fd"],
+        "chorus" | "flanger" | "phaser" | "modulation" => &["#7dd3fc", "#38bdf8", "#bae6fd", "#0ea5e9", "#e0f2fe"],
+        "trem" | "vibrato" | "rotary" | "panner" => &["#ec4899", "#f472b6", "#db2777", "#f9a8d4", "#be185d"],
+        "drive" | "boost" | "saturator" => &["#f97316", "#ef4444", "#fb923c", "#dc2626", "#ea580c"],
+        "compressor" | "limiter" => &["#e5e7eb", "#d1d5db", "#f3f4f6", "#9ca3af", "#cbd5e1"],
+        "amp" | "cabinet" => &["#d6b36a", "#b8954a", "#e6cb8f", "#a8844a", "#f0dcae"],
+        "pitch" => &["#facc15", "#eab308", "#fde047", "#ca8a04", "#fef08a"],
+        _ => &OTHER,
+    };
     if engine.is_empty() {
         return DIM;
     }
     let h = engine.bytes().fold(7u32, |h, b| h.wrapping_mul(31).wrapping_add(u32::from(b)));
-    SWATCHES[(h as usize) % SWATCHES.len()]
+    family[(h as usize) % family.len()]
 }
 
 /// "×3" when a preset is shared, with who shares it as the tooltip; nothing
@@ -410,7 +433,7 @@ pub fn PresetRow(
                 }
             },
             if !off && !look.engine.is_empty() {
-                span { style: "width: 3px; height: 22px; border-radius: 2px; flex-shrink: 0; background: {engine_swatch(&look.engine)};" }
+                span { style: "width: 3px; height: 22px; border-radius: 2px; flex-shrink: 0; background: {engine_swatch(&look.block_type, &look.engine)};" }
             }
             div { style: "flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px;",
                 div { style: "display: flex; align-items: center; gap: 5px; min-width: 0;",
