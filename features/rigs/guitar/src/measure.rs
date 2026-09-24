@@ -29,7 +29,9 @@ use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 // v8: reverb decay is a calibrated time on every engine (measured tables),
 // and the vintage spring no longer self-oscillates.
 // v9: the shimmer and oil-can loops bounded; volume blocks pan.
-const ENGINE: &str = "rig-v9";
+// v10: modulation at unity (chorus/flanger/vibrato level-neutral when on);
+// pans are measured centred.
+const ENGINE: &str = "rig-v10";
 
 /// Settle time before a measurement: long enough for the compressors, gate
 /// and NAM state from the previous input to have gone, and for the delays and
@@ -57,11 +59,27 @@ pub fn apply_chain_bypass(prig: &ProfileRig) {
 /// reference — cached per chain, measured through an offline rig on a miss.
 #[must_use]
 pub fn patch_lufs(patch: &RigPatch, sample_rate: u32) -> Option<f32> {
+    // Measured with every pan centred: panning places the guitar, it is not
+    // a level for the levelling to make up — a patch panned 70 % right
+    // would otherwise come back several dB hotter on the side it went to.
+    let centred = centre_pans(patch);
+    let patch = &centred;
     signal_sampler::patch_level::level_cached(&patch.chain, sample_rate, ENGINE, |di| {
         render(patch, sample_rate, di)
     })
     .filter(|l| l.is_finite())
     .map(|l| l as f32)
+}
+
+/// `patch` with every volume block's pan at the centre.
+fn centre_pans(patch: &RigPatch) -> RigPatch {
+    let mut p = patch.clone();
+    for b in p.chain.iter_mut().filter(|b| b.block_type == signal_proto::BlockType::Volume) {
+        for param in b.params.iter_mut().filter(|x| x.name == "pan") {
+            param.value = "0".to_string();
+        }
+    }
+    p
 }
 
 /// Load `patch` alone on an offline rig, switch it in exactly as the live rig
