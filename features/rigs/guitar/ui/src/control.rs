@@ -1639,72 +1639,97 @@ fn PreFxPanel(blocks: Vec<LiveBlock>) -> Element {
     }
 }
 
-/// A module's preset controls, at the head of its row: ▾ opens the Library
-/// on that module's presets, ‹ › step through the playing preset's
-/// snapshots. The label is what the module plays — preset · snapshot.
+/// A module's preset bar, at the head of its row — the kit's
+/// [`PresetBar`](crate::kit::PresetBar), compact: ▾ drops the module's
+/// presets and snapshots, ‹ › step the playing preset's snapshots, the name
+/// (preset · snapshot, amber when this patch has edits on the module's
+/// blocks) selects the module for the right sidebar, and ⋯ saves or reverts
+/// those edits and manages the preset — the same menu as the sidebar's.
 #[component]
 fn ModuleControls(
     kind: crate::library::Kind,
     pick: Option<signal_guitar_proto::ModulePick>,
+    /// Every module preset (this module's are picked out here).
+    #[props(default)]
+    modules: Vec<signal_guitar_proto::ModulePresetEntry>,
+    /// The live blocks the patch has edits on.
+    #[props(default)]
+    edited: Vec<String>,
     /// Extra inline style (width, height) — the controls sit in a row's
     /// head or a panel's corner.
     #[props(default)]
     style: String,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let open = try_use_context::<crate::library::OpenLibrary>();
+    let library = try_use_context::<crate::library::OpenLibrary>();
     let select = try_use_context::<crate::module_sidebar::SelectedModule>();
     let module = kind.module().unwrap_or_default();
+    let presets: Vec<signal_guitar_proto::ModulePresetEntry> = modules
+        .into_iter()
+        .filter(|m| m.module.eq_ignore_ascii_case(module))
+        .collect();
+    let chain: Vec<crate::module_sidebar::ChainRef> = edited
+        .iter()
+        .map(|n| (n.clone(), String::new(), true))
+        .collect();
+    let modified = crate::module_sidebar::pick_modified(pick.as_ref(), &chain);
     let (preset, snapshot) = pick
         .as_ref()
         .map(|p| (p.preset.clone(), p.snapshot.clone()))
         .unwrap_or_default();
-    let step = move |delta: i32| {
-        let rig = rig.clone();
-        move |e: MouseEvent| {
-            e.stop_propagation();
-            if let Some(r) = rig.clone() {
-                spawn(async move {
-                    let _ = r.step_module(module.to_string(), delta).await;
-                });
-            }
-        }
+    let played = if snapshot.is_empty() {
+        presets
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&preset))
+            .and_then(|p| p.snapshots.first().cloned())
+            .unwrap_or_default()
+    } else {
+        snapshot
     };
-    let btn = "flex items-center justify-center w-5 h-full text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent/40 cursor-pointer select-none flex-shrink-0";
+    let (options, targets) = crate::module_sidebar::module_options(&presets, pick.as_ref());
+    let menu = crate::module_sidebar::module_menu(module, pick.as_ref(), &presets, modified);
     rsx! {
-        div {
-            class: "flex items-center gap-0 border border-border overflow-hidden flex-shrink-0",
-            style: "background: #0d0d10; {style}",
-            div {
-                class: btn,
-                title: "Browse {module} presets",
-                onclick: move |e: MouseEvent| {
-                    e.stop_propagation();
-                    if let Some(mut o) = open.map(|o| o.0) {
-                        o.set(Some(kind));
-                    }
-                },
-                fts_chrome::Glyph { icon: fts_chrome::Icon::ChevronDown, size: 10 }
-            }
-            div { class: "flex flex-col justify-center min-w-0 flex-1 px-1 leading-none cursor-pointer hover:bg-accent/30",
-                title: "Show {module} presets",
-                // Selecting the module opens its presets in the right sidebar.
-                onclick: move |e: MouseEvent| {
-                    e.stop_propagation();
-                    if let Some(sel) = select {
-                        sel.set(crate::module_sidebar::Selection::Module(module.to_string()));
-                    }
-                },
-                span { class: "text-[8px] uppercase tracking-wider text-muted-foreground", "{module}" }
-                span { class: "text-[10px] font-semibold truncate",
-                    if preset.is_empty() { "—" } else { "{preset}" }
-                    if !snapshot.is_empty() {
-                        span { class: "text-muted-foreground font-normal", " · {snapshot}" }
+        crate::kit::PresetBar {
+            label: module.to_string(),
+            name: preset.clone(),
+            sub: played.clone(),
+            modified,
+            compact: true,
+            style: "flex-shrink: 0; {style}",
+            options,
+            on_pick: {
+                let rig = rig.clone();
+                move |i: usize| {
+                    if let (Some(r), Some((p, s))) = (rig.clone(), targets.get(i).cloned()) {
+                        spawn(async move {
+                            let _ = r.choose_module(module.to_string(), p, s).await;
+                        });
                     }
                 }
-            }
-            div { class: btn, title: "Previous snapshot", onclick: step(-1), "‹" }
-            div { class: btn, title: "Next snapshot", onclick: step(1), "›" }
+            },
+            on_step: {
+                let rig = rig.clone();
+                move |delta: i32| {
+                    if let Some(r) = rig.clone() {
+                        spawn(async move {
+                            let _ = r.step_module(module.to_string(), delta).await;
+                        });
+                    }
+                }
+            },
+            // Selecting the module opens its presets in the right sidebar.
+            on_label: move |()| {
+                if let Some(sel) = select {
+                    sel.set(crate::module_sidebar::Selection::Module(module.to_string()));
+                }
+            },
+            menu,
+            on_menu: {
+                let rig = rig.clone();
+                move |p: crate::kit::Picked| {
+                    crate::module_sidebar::module_act(&rig, library, module, &preset, &played, p);
+                }
+            },
         }
     }
 }
@@ -2385,6 +2410,18 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                 .cloned()
         })
     };
+    // For the module bars: every module preset, and the blocks this patch
+    // has edits on (a bar is amber when its module owns one).
+    let all_modules: Vec<signal_guitar_proto::ModulePresetEntry> = compositions
+        .read()
+        .as_ref()
+        .map(|c| c.modules.clone())
+        .unwrap_or_default();
+    let edited: Vec<String> = blocks
+        .iter()
+        .filter(|b| b.overridden)
+        .map(|b| b.name.clone())
+        .collect();
     let (drive_pick, amp_pick, time_pick, delay_pick, reverb_pick) = (
         pick_of("Drive"),
         pick_of("Amp"),
@@ -2422,7 +2459,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // Cab R) in signal order. A drive or amp chunk is its
                     // level fader; a cab chunk only engages/bypasses. ──
                     div { class: "flex gap-0 flex-shrink-0", style: "height: 30px;",
-                        ModuleControls { kind: crate::library::Kind::DriveModules, pick: drive_pick, style: "width: 170px;" }
+                        ModuleControls { kind: crate::library::Kind::DriveModules, pick: drive_pick, modules: all_modules.clone(), edited: edited.clone(), style: "width: 200px;" }
                         for b in board.iter() {
                             DriveChunk {
                                 key: "{b.id}",
@@ -2437,7 +2474,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                     }
                     div { class: "flex gap-0 flex-shrink-0", style: "height: 30px;",
-                        ModuleControls { kind: crate::library::Kind::AmpModules, pick: amp_pick, style: "width: 170px;" }
+                        ModuleControls { kind: crate::library::Kind::AmpModules, pick: amp_pick, modules: all_modules.clone(), edited: edited.clone(), style: "width: 200px;" }
                         DriveChunk {
                             // Constant-loudness drive: the bar pushes the
                             // capture harder while calibration holds the
@@ -2657,9 +2694,9 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             // The Time module — a Delay pick and a Reverb pick — and
                             // the two it references, side by side.
                             div { class: "flex gap-0", style: "height: 22px; width: 100%;",
-                                ModuleControls { kind: crate::library::Kind::TimeModules, pick: time_pick, style: "height: 22px; flex: 1 1 0%;" }
-                                ModuleControls { kind: crate::library::Kind::DelayModules, pick: delay_pick, style: "height: 22px; flex: 1 1 0%;" }
-                                ModuleControls { kind: crate::library::Kind::ReverbModules, pick: reverb_pick, style: "height: 22px; flex: 1 1 0%;" }
+                                ModuleControls { kind: crate::library::Kind::TimeModules, pick: time_pick, modules: all_modules.clone(), edited: edited.clone(), style: "height: 22px; flex: 1 1 0%;" }
+                                ModuleControls { kind: crate::library::Kind::DelayModules, pick: delay_pick, modules: all_modules.clone(), edited: edited.clone(), style: "height: 22px; flex: 1 1 0%;" }
+                                ModuleControls { kind: crate::library::Kind::ReverbModules, pick: reverb_pick, modules: all_modules.clone(), edited: edited.clone(), style: "height: 22px; flex: 1 1 0%;" }
                             }
                         }
                         }

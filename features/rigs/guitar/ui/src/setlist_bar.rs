@@ -37,14 +37,40 @@ use signal_widgets::{Picker, PickerSize};
 
 use crate::library::Kind;
 
-const LINE: &str = "#1f1f24";
-const TEXT: &str = "#e4e4e7";
-const MUTED: &str = "#a1a1aa";
-const FAINT: &str = "#63636b";
-const SONG_BG: &str = "#1b2331";
-const SONG_FG: &str = "#bfdbfe";
-const PART_BG: &str = "#26324a";
-const LIVE: &str = "#22c55e";
+use crate::kit::{MenuItem, PickOption, Picked, PresetBar};
+use crate::theme::{
+    DIM, FAINT, FIELD, FOCUS_BG as SONG_BG, FOCUS_BG_HI as PART_BG, FOCUS_FG as SONG_FG, LINE,
+    LINE_STRONG, LIVE, MUTED, SIDEBAR, SIDEBAR_W, TEXT,
+};
+
+/// The set's menu: rename, duplicate, a new set, move it in the list,
+/// delete (refused for the only one), and the library.
+fn set_items(sets: &[String], index: usize) -> Vec<MenuItem> {
+    let name = sets.get(index).cloned().unwrap_or_default();
+    let others: Vec<String> = sets.iter().filter(|n| !n.eq_ignore_ascii_case(&name)).cloned().collect();
+    vec![
+        MenuItem::head(format!("Setlist · {name}")),
+        MenuItem::name("rename", "Rename…", "Rename", &name, others),
+        MenuItem::name(
+            "duplicate",
+            "Duplicate…",
+            "Duplicate",
+            crate::module_sidebar::next_name(&name, sets),
+            sets.to_vec(),
+        ),
+        MenuItem::name("new", "New setlist…", "Create", "", sets.to_vec()),
+        MenuItem::sep(),
+        MenuItem::run("up", "Move up the list").unless((index == 0).then(|| "First".to_string())),
+        MenuItem::run("down", "Move down the list").unless((index + 1 >= sets.len()).then(|| "Last".to_string())),
+        MenuItem::delete(
+            "delete",
+            "Delete setlist",
+            (sets.len() <= 1).then(|| "The only setlist — make another first".to_string()),
+        ),
+        MenuItem::sep(),
+        MenuItem::run("library", "All sets and songs in the library"),
+    ]
+}
 
 /// Fire a rig call without waiting — the next `Perf` event redraws.
 fn send<F, Fut>(rig: &Option<RigClient>, call: F)
@@ -120,32 +146,58 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
 
     rsx! {
         aside {
-            style: "width: 272px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
-                    border-right: 1px solid {LINE}; background: #0e0e11; color: {TEXT};",
+            style: "width: {SIDEBAR_W}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
+                    border-right: 1px solid {LINE}; background: {SIDEBAR}; color: {TEXT};",
 
-            // ── Which set ──
+            // ── Which set: the kit's preset bar, as every selector ──
             div { style: "display: flex; flex-direction: column; gap: 4px; padding: 12px 12px 10px; \
                           border-bottom: 1px solid {LINE}; flex-shrink: 0;",
-                span { style: "font-size: 9px; font-weight: 700; letter-spacing: 0.14em; \
-                               text-transform: uppercase; color: {FAINT};",
-                    "Setlist"
-                }
-                button {
-                    style: "display: flex; align-items: center; gap: 6px; width: 100%; padding: 0; \
-                            border: none; background: transparent; color: {TEXT}; cursor: pointer; \
-                            justify-content: flex-start; text-align: left;",
-                    title: "Switch set — opens the library",
-                    onclick: move |_| on_browse.call(Kind::Setlists),
-                    span { style: "flex: 1 1 0; min-width: 0; font-size: 15px; font-weight: 700; \
-                                   white-space: nowrap; overflow: hidden;",
-                        "{set_name}"
-                    }
-                    span { style: "color: {FAINT}; display: flex;",
-                        fts_chrome::Glyph { icon: fts_chrome::Icon::ChevronDown, size: 14 }
-                    }
-                }
-                span { style: "font-size: 11px; color: {FAINT};",
-                    if model.songs.len() == 1 { "1 song" } else { "{model.songs.len()} songs" }
+                PresetBar {
+                    label: "Setlist",
+                    name: set_name.clone(),
+                    sub: if model.songs.len() == 1 { "1 song".to_string() } else { format!("{} songs", model.songs.len()) },
+                    options: model
+                        .setlists
+                        .iter()
+                        .enumerate()
+                        .map(|(i, n)| PickOption {
+                            label: n.clone(),
+                            live: i == model.setlist_index as usize,
+                            ..Default::default()
+                        })
+                        .collect::<Vec<_>>(),
+                    on_pick: {
+                        let rig = rig.clone();
+                        move |i: usize| send(&rig, move |r| async move { let _ = r.select_setlist(i as u32).await; })
+                    },
+                    on_step: {
+                        let rig = rig.clone();
+                        let (at, n) = (model.setlist_index as i32, model.setlists.len() as i32);
+                        move |d: i32| {
+                            if n > 0 {
+                                let to = (at + d).rem_euclid(n) as u32;
+                                send(&rig, move |r| async move { let _ = r.select_setlist(to).await; });
+                            }
+                        }
+                    },
+                    menu: set_items(&model.setlists, model.setlist_index as usize),
+                    on_menu: {
+                        let rig = rig.clone();
+                        let index = model.setlist_index;
+                        move |p: Picked| {
+                            let text = p.text;
+                            match p.id {
+                                "rename" => send(&rig, move |r| async move { let _ = r.rename_setlist(index, text).await; }),
+                                "duplicate" => send(&rig, move |r| async move { let _ = r.duplicate_setlist(index, text).await; }),
+                                "new" => send(&rig, move |r| async move { let _ = r.add_setlist(text).await; }),
+                                "up" => send(&rig, move |r| async move { let _ = r.move_setlist(index, index.saturating_sub(1)).await; }),
+                                "down" => send(&rig, move |r| async move { let _ = r.move_setlist(index, index + 1).await; }),
+                                "delete" => send(&rig, move |r| async move { let _ = r.delete_setlist(index).await; }),
+                                "library" => on_browse.call(Kind::Setlists),
+                                _ => {}
+                            }
+                        }
+                    },
                 }
             }
 
@@ -388,7 +440,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                                         },
                                                                                         span { style: format!(
                                                                                             "width: 5px; height: 5px; border-radius: 999px; flex-shrink: 0; background: {};",
-                                                                                            if part_on { LIVE } else { "#3f3f46" }) }
+                                                                                            if part_on { LIVE } else { DIM }) }
                                                                                         span { style: "flex: 1 1 0; min-width: 0; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden;",
                                                                                             "{part.name}"
                                                                                         }
@@ -484,17 +536,11 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
 #[component]
 fn FootButton(label: String, onclick: EventHandler<()>) -> Element {
     rsx! {
-        button {
-            style: "flex: 1 1 0; min-width: 0; padding: 7px 8px; border-radius: 7px; cursor: pointer; \
-                    font-size: 11px; font-weight: 600; border: 1px solid {LINE}; background: transparent; \
-                    color: {MUTED};",
-            onclick: move |_| onclick.call(()),
-            "{label}"
-        }
+        crate::kit::Button { label, grow: true, small: true, onclick }
     }
 }
 
-/// A small icon button.
+/// A small icon button — the kit's.
 #[component]
 fn Tool(
     icon: fts_chrome::Icon,
@@ -504,32 +550,8 @@ fn Tool(
     #[props(default = false)] danger: bool,
     onclick: EventHandler<()>,
 ) -> Element {
-    let colour = if disabled {
-        "#3a3a40"
-    } else if danger {
-        "#f87171"
-    } else {
-        MUTED
-    };
-    let rotate = if flip {
-        "transform: rotate(180deg);"
-    } else {
-        ""
-    };
     rsx! {
-        button {
-            style: "display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; \
-                    flex-shrink: 0; border-radius: 6px; border: 1px solid {LINE}; background: transparent; \
-                    cursor: pointer; color: {colour};",
-            title: "{title}",
-            disabled,
-            onclick: move |_| {
-                if !disabled {
-                    onclick.call(());
-                }
-            },
-            span { style: "display: flex; {rotate}", fts_chrome::Glyph { icon, size: 12 } }
-        }
+        crate::kit::IconButton { icon, title, flip, disabled, danger, onclick }
     }
 }
 
@@ -546,8 +568,8 @@ fn Field(
 ) -> Element {
     rsx! {
         input {
-            style: "flex: {flex}; min-width: 0; font-size: 12px; color: {TEXT}; background: #0a0a0d; \
-                    border: 1px solid #2a2a31; border-radius: 6px; padding: 5px 7px; outline: none;",
+            style: "flex: {flex}; min-width: 0; font-size: 12px; color: {TEXT}; background: {FIELD}; \
+                    border: 1px solid {LINE_STRONG}; border-radius: 6px; padding: 5px 7px; outline: none;",
             value: "{value}",
             placeholder: "{placeholder}",
             onmounted: move |e| {

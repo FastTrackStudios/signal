@@ -29,6 +29,11 @@ use signal_guitar_proto::{
     ProfileEntry, SetlistEntry, SongEntry,
 };
 
+// The look is the rig's own (`theme`); the buttons, prompts and chips are
+// the kit's, shared with every sidebar.
+use crate::kit::{Button as Act, Chips, DeleteButton as DeleteAct, ListRow, MenuItem, NamePrompt, Picked};
+use crate::theme::{BG, FAINT, FOCUS_BG, FOCUS_FG, LINE, LIVE, MUTED, PANE, TEXT};
+
 /// The picker's open state, in context — so a surface deep in the rig (the
 /// board's module rows) can open it on a kind without threading a prop.
 #[derive(Clone, Copy)]
@@ -54,10 +59,13 @@ pub enum Kind {
     TimeModules,
     DelayModules,
     ReverbModules,
+    /// Block presets — a delay, a reverb, a compressor setting — that module
+    /// snapshots and patches put on a block.
+    BlockPresets,
 }
 
 impl Kind {
-    const ALL: [Self; 12] = [
+    const ALL: [Self; 13] = [
         Self::Setlists,
         Self::Songs,
         Self::Profiles,
@@ -68,12 +76,13 @@ impl Kind {
         Self::TimeModules,
         Self::DelayModules,
         Self::ReverbModules,
+        Self::BlockPresets,
         Self::Presets,
         Self::Drives,
     ];
 
     /// The rail: no tag, then every kind.
-    const RAIL: [Self; 13] = [
+    const RAIL: [Self; 14] = [
         Self::All,
         Self::Setlists,
         Self::Songs,
@@ -85,9 +94,24 @@ impl Kind {
         Self::TimeModules,
         Self::DelayModules,
         Self::ReverbModules,
+        Self::BlockPresets,
         Self::Presets,
         Self::Drives,
     ];
+
+    /// The module-preset kind that browses `module`'s presets.
+    #[must_use]
+    pub fn for_module(module: &str) -> Option<Self> {
+        [
+            Self::AmpModules,
+            Self::DriveModules,
+            Self::TimeModules,
+            Self::DelayModules,
+            Self::ReverbModules,
+        ]
+        .into_iter()
+        .find(|k| k.module().is_some_and(|m| m.eq_ignore_ascii_case(module)))
+    }
 
     /// The module a module-preset kind browses, as the rig names it.
     #[must_use]
@@ -117,6 +141,7 @@ impl Kind {
             Self::TimeModules => "Time",
             Self::DelayModules => "Delay",
             Self::ReverbModules => "Reverb",
+            Self::BlockPresets => "Blocks",
         }
     }
 
@@ -136,6 +161,7 @@ impl Kind {
             Self::TimeModules => "time preset",
             Self::DelayModules => "delay preset",
             Self::ReverbModules => "reverb preset",
+            Self::BlockPresets => "block preset",
         }
     }
 
@@ -154,6 +180,7 @@ impl Kind {
             Self::TimeModules => fts_chrome::Icon::Refresh,
             Self::DelayModules => fts_chrome::Icon::Refresh,
             Self::ReverbModules => fts_chrome::Icon::Refresh,
+            Self::BlockPresets => fts_chrome::Icon::Control,
         }
     }
 
@@ -235,6 +262,30 @@ fn rows(
                     }),
                 })
                 .collect()
+        }
+        Kind::BlockPresets => {
+            let mut v: Vec<Row> = comp
+            .block_presets
+            .iter()
+            .enumerate()
+            .map(|(idx, b)| Row {
+                kind,
+                name: b.name.clone(),
+                idx,
+                sub: {
+                    let what = if b.bypass { format!("{} · off", b.block_type) } else { b.block_type.clone() };
+                    if b.used_by.is_empty() {
+                        what
+                    } else {
+                        format!("{what} · used by {}", b.used_by.len())
+                    }
+                },
+                active: comp.active_blocks.iter().any(|a| a.preset.eq_ignore_ascii_case(&b.name)),
+            })
+            .collect();
+            // Grouped by type (see `group_of`), in library order within one.
+            v.sort_by_key(|r| r.sub.split(" · ").next().unwrap_or_default().to_string());
+            v
         }
         Kind::Setlists => lib
             .setlists
@@ -344,6 +395,16 @@ fn rows(
     }
 }
 
+/// The group a row is listed under: its kind in the untagged list, its
+/// block type among block presets; else none.
+fn group_of(kind: Kind, row: &Row) -> String {
+    match kind {
+        Kind::All => row.kind.label().to_string(),
+        Kind::BlockPresets => row.sub.split(" · ").next().unwrap_or_default().to_string(),
+        _ => String::new(),
+    }
+}
+
 /// "3 songs", "1 song".
 fn count(n: usize, what: &str) -> String {
     match (n, what) {
@@ -413,25 +474,10 @@ fn activate(rig: &Option<RigClient>, row: &Row, model: &PerformanceModel) -> boo
                 let _ = r.choose_module(module, name, String::new()).await;
             });
         }
-        Kind::Drives | Kind::All => return false,
+        Kind::Drives | Kind::BlockPresets | Kind::All => return false,
     }
     true
 }
-
-// ── Palette ────────────────────────────────────────────────────────────────
-// Inline, because the picker must lay out without Tailwind (CLAUDE.md), and
-// the rig's own greys rather than the theme's so it reads as the same app.
-
-const BG: &str = "#0c0c0f";
-const PANE: &str = "#101014";
-const LINE: &str = "#222228";
-const TEXT: &str = "#e4e4e7";
-const MUTED: &str = "#a1a1aa";
-const FAINT: &str = "#63636b";
-const FOCUS_BG: &str = "#1b2331";
-const FOCUS_FG: &str = "#bfdbfe";
-const LIVE: &str = "#22c55e";
-const DANGER: &str = "#f87171";
 
 /// The picker. Renders nothing while `open` is `None`; `Some(kind)` shows it
 /// on that kind. Mount it inside the rig's root, which must be
@@ -732,7 +778,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                 span { style: "font-size: 11px; color: {FAINT};", "of {model.profile_name}" }
                             }
                             div { style: "flex: 1;" }
-                            if !matches!(kind, Kind::Drives | Kind::All | Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules) {
+                            if !matches!(kind, Kind::Drives | Kind::All | Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules | Kind::BlockPresets) {
                                 button {
                                     style: format!(
                                         "padding: 5px 11px; border-radius: 7px; cursor: pointer; font-size: 11px; \
@@ -775,8 +821,14 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                     }
                                 }
                             }
-                            for row in list.iter().cloned() {
+                            for (n, row) in list.iter().cloned().enumerate() {
                                 {
+                                    // A quiet header where the group changes: the
+                                    // kind in the untagged list, the block type
+                                    // among block presets.
+                                    let group = group_of(kind, &row);
+                                    let new_group = !group.is_empty()
+                                        && (n == 0 || group_of(kind, &list[n - 1]) != group);
                                     let is_focus = focused
                                         .as_ref()
                                         .is_some_and(|f| f.kind == row.kind && f.name == row.name);
@@ -784,11 +836,18 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                     let model = model.clone();
                                     let target = (row.kind, row.name.clone());
                                     rsx! {
+                                        div { key: "{row.kind.label()}-{row.name}", style: "display: contents;",
+                                        if new_group {
+                                            div {
+                                                style: "padding: 12px 10px 4px; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; \
+                                                        text-transform: uppercase; color: {FAINT};",
+                                                "{group}"
+                                            }
+                                        }
                                         button {
-                                            key: "{row.kind.label()}-{row.name}",
                                             style: format!(
                                                 "display: flex; align-items: center; gap: 10px; width: 100%; \
-                                                 padding: 8px 10px; margin-bottom: 1px; border-radius: 8px; \
+                                                 max-width: 880px; padding: 8px 10px; margin-bottom: 1px; border-radius: 8px; \
                                                  border: none; cursor: pointer; text-align: left; \
                                                  justify-content: flex-start; background: {}; color: {};",
                                                 if is_focus { FOCUS_BG } else { "transparent" },
@@ -841,6 +900,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                                     "Playing"
                                                 }
                                             }
+                                        }
                                         }
                                     }
                                 }
@@ -964,9 +1024,41 @@ fn Detail(
                 });
             }
         })),
+        Kind::Compositions => Some(cbs.cb({
+            let rig = rig.clone();
+            let old = name.clone();
+            move |new: String| {
+                let old = old.clone();
+                send(&rig, move |r| async move {
+                    let _ = r.rename_rig_preset(old, new).await;
+                });
+            }
+        })),
+        Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => {
+            let module = kind.module().unwrap_or_default().to_string();
+            Some(cbs.cb({
+                let rig = rig.clone();
+                let old = name.clone();
+                move |new: String| {
+                    let (module, old) = (module.clone(), old.clone());
+                    send(&rig, move |r| async move {
+                        let _ = r.rename_module_preset(module, old, new).await;
+                    });
+                }
+            }))
+        }
+        Kind::BlockPresets => Some(cbs.cb({
+            let rig = rig.clone();
+            let old = name.clone();
+            move |new: String| {
+                let old = old.clone();
+                send(&rig, move |r| async move {
+                    let _ = r.rename_block_preset(old, new).await;
+                });
+            }
+        })),
         // A song's name is edited with its key and tempo, below.
         Kind::Songs | Kind::Drives | Kind::All => None,
-        Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => None,
     };
 
     rsx! {
@@ -998,7 +1090,7 @@ fn Detail(
                     None => rsx! {},
                 },
                 Kind::Profiles => match lib.profiles.get(row.idx).cloned() {
-                    Some(profile) => rsx! { ProfileDetail { profile, on_go } },
+                    Some(profile) => rsx! { ProfileDetail { profile, profiles: lib.profiles.iter().map(|p| p.name.clone()).collect::<Vec<_>>(), on_go } },
                     None => rsx! {},
                 },
                 Kind::Patches => match patches.get(row.idx).cloned() {
@@ -1014,11 +1106,15 @@ fn Detail(
                     None => rsx! {},
                 },
                 Kind::Compositions => match comp.presets.get(row.idx).cloned() {
-                    Some(preset) => rsx! { CompositionDetail { preset, comp: comp.clone() } },
+                    Some(preset) => rsx! { CompositionDetail { preset, comp: comp.clone(), on_go } },
                     None => rsx! {},
                 },
                 Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => match comp.modules.get(row.idx).cloned() {
-                    Some(entry) => rsx! { ModuleDetail { entry, comp: comp.clone() } },
+                    Some(entry) => rsx! { ModuleDetail { entry, comp: comp.clone(), kind, on_go } },
+                    None => rsx! {},
+                },
+                Kind::BlockPresets => match comp.block_presets.get(row.idx).cloned() {
+                    Some(preset) => rsx! { BlockPresetDetail { preset, comp: comp.clone(), on_go } },
                     None => rsx! {},
                 },
                 // A row always names its own kind; `All` is only a tag.
@@ -1118,106 +1214,6 @@ fn Actions(children: Element) -> Element {
     }
 }
 
-/// An action button. `primary` is the one thing you came to do.
-#[component]
-fn Act(
-    label: String,
-    #[props(default = false)] primary: bool,
-    #[props(default = false)] disabled: bool,
-    #[props(default = String::new())] title: String,
-    onclick: EventHandler<()>,
-) -> Element {
-    let (bg, fg, border) = match (primary, disabled) {
-        (_, true) => ("transparent", FAINT, LINE),
-        (true, false) => ("#2563eb", "#ffffff", "#2563eb"),
-        (false, false) => ("transparent", TEXT, "#34343c"),
-    };
-    let cursor = if disabled { "default" } else { "pointer" };
-    rsx! {
-        button {
-            style: "padding: 6px 12px; border-radius: 7px; font-size: 12px; font-weight: 600; \
-                    background: {bg}; color: {fg}; border: 1px solid {border}; \
-                    cursor: {cursor};",
-            title: "{title}",
-            disabled,
-            onclick: move |_| {
-                if !disabled {
-                    onclick.call(());
-                }
-            },
-            "{label}"
-        }
-    }
-}
-
-/// Delete, in two steps — the first click arms it, the second deletes.
-/// Disabled with the reason as its tooltip when the rig would refuse.
-#[component]
-fn DeleteAct(#[props(default)] refused: Option<String>, on_delete: EventHandler<()>) -> Element {
-    let mut armed = use_signal(|| false);
-    if let Some(why) = refused {
-        return rsx! {
-            Act { label: "Delete", disabled: true, title: why, onclick: |()| {} }
-        };
-    }
-    rsx! {
-        button {
-            style: format!(
-                "padding: 6px 12px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; \
-                 background: {}; color: {}; border: 1px solid {};",
-                if armed() { DANGER } else { "transparent" },
-                if armed() { "#1a0505" } else { DANGER },
-                if armed() { DANGER } else { "#4a1f22" },
-            ),
-            onclick: move |_| {
-                if armed() {
-                    on_delete.call(());
-                    armed.set(false);
-                } else {
-                    armed.set(true);
-                }
-            },
-            onmouseleave: move |_| armed.set(false),
-            if armed() { "Click again to delete" } else { "Delete" }
-        }
-    }
-}
-
-/// A name typed in place, for Duplicate: a field, a confirm and a cancel.
-#[component]
-fn NamePrompt(label: String, initial: String, on_done: EventHandler<Option<String>>) -> Element {
-    let mut text = use_signal(|| initial.clone());
-    let commit = move || {
-        let t = text.peek().trim().to_string();
-        on_done.call((!t.is_empty()).then_some(t));
-    };
-    rsx! {
-        div { style: "display: flex; align-items: center; gap: 6px;",
-            input {
-                style: "flex: 1; min-width: 0; font-size: 12px; color: {TEXT}; background: {BG}; \
-                        border: 1px solid {LINE}; border-radius: 7px; padding: 6px 8px; outline: none;",
-                value: "{text}",
-                onmounted: move |e| {
-                    spawn(async move {
-                        let _ = e.data().set_focus(true).await;
-                    });
-                },
-                oninput: move |e| text.set(e.value()),
-                onkeydown: move |e: KeyboardEvent| {
-                    e.stop_propagation();
-                    match e.key() {
-                        Key::Enter => commit(),
-                        Key::Escape => on_done.call(None),
-                        _ => {}
-                    }
-                },
-            }
-            Act { label: label.clone(), primary: true, onclick: move |()| commit() }
-            Act { label: "Cancel", onclick: move |()| on_done.call(None) }
-        }
-    }
-}
-
 /// A clickable list line — a song in a set, a patch on a preset.
 #[component]
 fn LinkRow(
@@ -1226,6 +1222,11 @@ fn LinkRow(
     #[props(default = false)] live: bool,
     onclick: EventHandler<()>,
     #[props(default)] on_remove: Option<EventHandler<()>>,
+    /// Move it up (−1) or down (+1) in its list; `None` for a fixed list.
+    #[props(default)]
+    on_move: Option<EventHandler<i32>>,
+    #[props(default)] first: bool,
+    #[props(default)] last: bool,
 ) -> Element {
     rsx! {
         div { style: "display: flex; align-items: center; gap: 4px;",
@@ -1247,6 +1248,23 @@ fn LinkRow(
                     span { style: "font-size: 11px; color: {FAINT}; flex-shrink: 0;", "{sub}" }
                 }
             }
+            if let Some(mv) = on_move {
+                crate::kit::IconButton {
+                    icon: fts_chrome::Icon::ChevronDown,
+                    title: "Move up",
+                    flip: true,
+                    disabled: first,
+                    size: 24,
+                    onclick: move |()| mv.call(-1),
+                }
+                crate::kit::IconButton {
+                    icon: fts_chrome::Icon::ChevronDown,
+                    title: "Move down",
+                    disabled: last,
+                    size: 24,
+                    onclick: move |()| mv.call(1),
+                }
+            }
             if let Some(remove) = on_remove {
                 button {
                     style: "display: flex; align-items: center; justify-content: center; width: 26px; \
@@ -1255,39 +1273,6 @@ fn LinkRow(
                     title: "Remove",
                     onclick: move |_| remove.call(()),
                     fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 12 }
-                }
-            }
-        }
-    }
-}
-
-/// A choice among a few names, as chips.
-#[component]
-fn Chips(
-    options: Vec<String>,
-    #[props(default = String::new())] selected: String,
-    on_pick: EventHandler<String>,
-) -> Element {
-    rsx! {
-        div { style: "display: flex; flex-wrap: wrap; gap: 5px;",
-            for opt in options {
-                {
-                    let on = opt.eq_ignore_ascii_case(&selected);
-                    let pick = opt.clone();
-                    rsx! {
-                        button {
-                            key: "{opt}",
-                            style: format!(
-                                "padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; \
-                                 cursor: pointer; border: 1px solid {}; background: {}; color: {};",
-                                if on { FOCUS_FG } else { LINE },
-                                if on { FOCUS_BG } else { "transparent" },
-                                if on { FOCUS_FG } else { MUTED },
-                            ),
-                            onclick: move |_| on_pick.call(pick.clone()),
-                            "{opt}"
-                        }
-                    }
                 }
             }
         }
@@ -1336,6 +1321,27 @@ fn SetlistDetail(
                 }
             }
             Act { label: "Duplicate", onclick: move |()| duplicating.set(true) }
+            crate::kit::IconButton {
+                icon: fts_chrome::Icon::ChevronDown,
+                title: "Move this set up the list",
+                flip: true,
+                disabled: index == 0,
+                size: 30,
+                onclick: {
+                    let rig = rig.clone();
+                    move |()| send(&rig, move |r| async move { let _ = r.move_setlist(index, index.saturating_sub(1)).await; })
+                },
+            }
+            crate::kit::IconButton {
+                icon: fts_chrome::Icon::ChevronDown,
+                title: "Move this set down the list",
+                disabled: index as usize + 1 >= lib.setlists.len(),
+                size: 30,
+                onclick: {
+                    let rig = rig.clone();
+                    move |()| send(&rig, move |r| async move { let _ = r.move_setlist(index, index + 1).await; })
+                },
+            }
             DeleteAct {
                 refused: last.then(|| "The only setlist — make another first".to_string()),
                 on_delete: {
@@ -1347,7 +1353,8 @@ fn SetlistDetail(
         if duplicating() {
             NamePrompt {
                 label: "Duplicate",
-                initial: format!("{} copy", set.name),
+                initial: crate::module_sidebar::next_name(&set.name, &lib.setlists.iter().map(|s| s.name.clone()).collect::<Vec<_>>()),
+                taken: lib.setlists.iter().map(|s| s.name.clone()).collect::<Vec<_>>(),
                 on_done: {
                     let rig = rig.clone();
                     move |name: Option<String>| {
@@ -1368,6 +1375,15 @@ fn SetlistDetail(
             for (j, slot) in set.songs.iter().cloned().enumerate() {
                 LinkRow {
                     key: "{j}-{slot.name}",
+                    first: j == 0,
+                    last: j + 1 == set.songs.len(),
+                    on_move: {
+                        let rig = rig.clone();
+                        move |d: i32| {
+                            let to = (j as i32 + d).max(0) as u32;
+                            send(&rig, move |r| async move { let _ = r.move_setlist_entry(index, j as u32, to).await; });
+                        }
+                    },
                     title: format!("{}. {}", j + 1, slot.name),
                     sub: format!("{} · {}", slot.key, slot.bpm),
                     live: set.active && j == model.song_index as usize,
@@ -1437,6 +1453,7 @@ fn SongDetail(
     on_go: EventHandler<(Kind, String)>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let mut duplicating = use_signal(|| false);
     let mut name = use_signal(|| song.name.clone());
     let mut key = use_signal(|| song.key.clone());
     let mut bpm = use_signal(|| song.bpm.to_string());
@@ -1510,6 +1527,7 @@ fn SongDetail(
                     },
                 }
             }
+            Act { label: "Duplicate", onclick: move |()| duplicating.set(true) }
             DeleteAct {
                 refused: (!song.setlists.is_empty()).then(|| {
                     format!("In {} — remove it there first", song.setlists.join(", "))
@@ -1520,6 +1538,25 @@ fn SongDetail(
                     move |()| {
                         let name = name.clone();
                         send(&rig, move |r| async move { let _ = r.delete_song(name).await; });
+                    }
+                },
+            }
+        }
+        if duplicating() {
+            NamePrompt {
+                label: "Duplicate",
+                initial: crate::module_sidebar::next_name(&song.name, &lib.songs.iter().map(|s| s.name.clone()).collect::<Vec<_>>()),
+                taken: lib.songs.iter().map(|s| s.name.clone()).collect::<Vec<_>>(),
+                on_done: {
+                    let rig = rig.clone();
+                    let from = song.name.clone();
+                    move |n: Option<String>| {
+                        duplicating.set(false);
+                        if let Some(n) = n {
+                            let (from, go) = (from.clone(), n.clone());
+                            send(&rig, move |r| async move { let _ = r.duplicate_song(from, n).await; });
+                            on_go.call((Kind::Songs, go));
+                        }
                     }
                 },
             }
@@ -1626,7 +1663,7 @@ fn SongDetail(
 }
 
 #[component]
-fn ProfileDetail(profile: ProfileEntry, on_go: EventHandler<(Kind, String)>) -> Element {
+fn ProfileDetail(profile: ProfileEntry, profiles: Vec<String>, on_go: EventHandler<(Kind, String)>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut duplicating = use_signal(|| false);
     rsx! {
@@ -1661,7 +1698,8 @@ fn ProfileDetail(profile: ProfileEntry, on_go: EventHandler<(Kind, String)>) -> 
         if duplicating() {
             NamePrompt {
                 label: "Duplicate",
-                initial: format!("{} copy", profile.name),
+                initial: crate::module_sidebar::next_name(&profile.name, &profiles),
+                taken: profiles.clone(),
                 on_done: {
                     let rig = rig.clone();
                     let from = profile.name.clone();
@@ -1882,7 +1920,9 @@ fn PresetDetail(
         Section { label: "Cab",
             if editing_cab() {
                 NamePrompt {
-                    label: "IR wav path (blank = none / built-in)".to_string(),
+                    label: "Set".to_string(),
+                    placeholder: "IR wav path (blank = none / built-in)".to_string(),
+                    allow_blank: true,
                     initial: preset.cab.clone(),
                     on_done: {
                         let rig = rig.clone();
@@ -1937,11 +1977,47 @@ fn DriveDetail(drive: DriveEntry) -> Element {
     }
 }
 
-/// A module preset: its snapshots as chips — the one playing is lit, a tap
-/// plays another on the active patch.
+/// "Used by": what refers to an item — the reason a delete is refused,
+/// listed so it can be undone one by one.
 #[component]
-fn ModuleDetail(entry: signal_guitar_proto::ModulePresetEntry, comp: CompositionModel) -> Element {
+fn UsedBy(users: Vec<String>, #[props(default)] none: String) -> Element {
+    rsx! {
+        Section { label: "Used by",
+            if users.is_empty() {
+                span { style: "font-size: 12px; color: {FAINT}; line-height: 1.5;",
+                    if none.is_empty() { "Nothing — it can be deleted." } else { "{none}" }
+                }
+            }
+            for u in users {
+                span { key: "{u}", style: "font-size: 12px; color: {MUTED}; padding: 2px 0;", "{u}" }
+            }
+        }
+    }
+}
+
+/// "In use: …" for a refused delete.
+fn in_use(users: &[String]) -> Option<String> {
+    (!users.is_empty()).then(|| format!("In use: {} — change those first", users.join(", ")))
+}
+
+/// A module preset: its snapshots — the one playing lit, a tap plays another
+/// on the active patch — each with its menu (rename, delete); and the
+/// preset's own management (rename above, duplicate, delete).
+#[component]
+fn ModuleDetail(
+    entry: signal_guitar_proto::ModulePresetEntry,
+    comp: CompositionModel,
+    kind: Kind,
+    on_go: EventHandler<(Kind, String)>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let mut duplicating = use_signal(|| false);
+    let siblings: Vec<String> = comp
+        .modules
+        .iter()
+        .filter(|m| m.module.eq_ignore_ascii_case(&entry.module))
+        .map(|m| m.name.clone())
+        .collect();
     let playing = comp
         .active_modules
         .iter()
@@ -1951,47 +2027,124 @@ fn ModuleDetail(entry: signal_guitar_proto::ModulePresetEntry, comp: Composition
         })
         .map(|a| a.snapshot.clone());
     rsx! {
+        Actions {
+            Act { label: "Duplicate", onclick: move |()| duplicating.set(true) }
+            DeleteAct {
+                refused: in_use(&entry.used_by),
+                on_delete: {
+                    let rig = rig.clone();
+                    let (m, n) = (entry.module.clone(), entry.name.clone());
+                    move |()| {
+                        let (m, n) = (m.clone(), n.clone());
+                        send(&rig, move |r| async move { let _ = r.delete_module_preset(m, n).await; });
+                    }
+                },
+            }
+        }
+        if duplicating() {
+            NamePrompt {
+                label: "Duplicate",
+                initial: crate::module_sidebar::next_name(&entry.name, &siblings),
+                taken: siblings.clone(),
+                on_done: {
+                    let rig = rig.clone();
+                    let (m, from) = (entry.module.clone(), entry.name.clone());
+                    move |name: Option<String>| {
+                        duplicating.set(false);
+                        if let Some(n) = name {
+                            let (m, from, go) = (m.clone(), from.clone(), n.clone());
+                            send(&rig, move |r| async move { let _ = r.duplicate_module_preset(m, from, n).await; });
+                            on_go.call((kind, go));
+                        }
+                    }
+                },
+            }
+        }
         Section { label: "Snapshots",
-            div { style: "display: flex; flex-wrap: wrap; gap: 6px;",
-                for (i, snap) in entry.snapshots.iter().enumerate() {
-                    {
-                        let lit = playing.as_deref().is_some_and(|p| p.eq_ignore_ascii_case(snap)
-                            || (p.is_empty() && i == 0));
-                        let (module, preset, snap_name) = (entry.module.clone(), entry.name.clone(), snap.clone());
-                        let rig = rig.clone();
-                        rsx! {
-                            button {
-                                key: "{snap}",
-                                style: format!(
-                                    "padding: 6px 12px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; \
-                                     border: 1px solid {}; background: {}; color: {};",
-                                    if lit { LIVE } else { LINE },
-                                    if lit { "rgba(34,197,94,0.12)" } else { "transparent" },
-                                    if lit { TEXT } else { MUTED },
-                                ),
-                                onclick: move |_| {
-                                    let (m, p, s) = (module.clone(), preset.clone(), snap_name.clone());
+            for (i, snap) in entry.snapshots.iter().cloned().enumerate() {
+                {
+                    let lit = playing.as_deref().is_some_and(|p| p.eq_ignore_ascii_case(&snap)
+                        || (p.is_empty() && i == 0));
+                    let users = entry.snapshot_used_by.get(i).cloned().unwrap_or_default();
+                    let items: Vec<MenuItem> = crate::module_sidebar::snapshot_items(&entry, &snap);
+                    rsx! {
+                        ListRow {
+                            key: "{snap}",
+                            title: snap.clone(),
+                            note: if users.is_empty() { String::new() } else { format!("{}", users.split(", ").count()) },
+                            live: lit,
+                            onclick: {
+                                let rig = rig.clone();
+                                let (m, p, s) = (entry.module.clone(), entry.name.clone(), snap.clone());
+                                move |()| {
+                                    let (m, p, s) = (m.clone(), p.clone(), s.clone());
                                     send(&rig, move |r| async move { let _ = r.choose_module(m, p, s).await; });
-                                },
-                                "{snap}"
-                            }
+                                }
+                            },
+                            menu: items,
+                            on_menu: {
+                                let rig = rig.clone();
+                                let (m, p, s) = (entry.module.clone(), entry.name.clone(), snap.clone());
+                                move |x: Picked| crate::module_sidebar::module_act(&rig, None, &m, &p, &s, x)
+                            },
                         }
                     }
                 }
             }
         }
+        UsedBy { users: entry.used_by.clone() }
         span { style: "font-size: 11px; color: {FAINT}; line-height: 1.5;",
-            "Choosing here sets this module on the playing patch only — its preset keeps its own pick."
+            "A pick here plays on this patch only. Save edits into a snapshot from the module's bar."
         }
     }
 }
 
-/// A preset: each snapshot with the module snapshots it plays.
+/// A preset: each snapshot with the module snapshots it plays; rename (above),
+/// duplicate, delete — refused while a patch plays it.
 #[component]
-fn CompositionDetail(preset: signal_guitar_proto::PresetEntry, comp: CompositionModel) -> Element {
+fn CompositionDetail(
+    preset: signal_guitar_proto::PresetEntry,
+    comp: CompositionModel,
+    on_go: EventHandler<(Kind, String)>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let mut duplicating = use_signal(|| false);
+    let siblings: Vec<String> = comp.presets.iter().map(|p| p.name.clone()).collect();
     let playing_here = comp.active_preset.eq_ignore_ascii_case(&preset.name);
     rsx! {
+        Actions {
+            Act { label: "Duplicate", onclick: move |()| duplicating.set(true) }
+            DeleteAct {
+                refused: in_use(&preset.used_by),
+                on_delete: {
+                    let rig = rig.clone();
+                    let n = preset.name.clone();
+                    move |()| {
+                        let n = n.clone();
+                        send(&rig, move |r| async move { let _ = r.delete_rig_preset(n).await; });
+                    }
+                },
+            }
+        }
+        if duplicating() {
+            NamePrompt {
+                label: "Duplicate",
+                initial: crate::module_sidebar::next_name(&preset.name, &siblings),
+                taken: siblings.clone(),
+                on_done: {
+                    let rig = rig.clone();
+                    let from = preset.name.clone();
+                    move |name: Option<String>| {
+                        duplicating.set(false);
+                        if let Some(n) = name {
+                            let (from, go) = (from.clone(), n.clone());
+                            send(&rig, move |r| async move { let _ = r.duplicate_rig_preset(from, n).await; });
+                            on_go.call((Kind::Compositions, go));
+                        }
+                    }
+                },
+            }
+        }
         Section { label: "Snapshots",
             for (i, snap) in preset.snapshots.iter().enumerate() {
                 {
@@ -2029,6 +2182,77 @@ fn CompositionDetail(preset: signal_guitar_proto::PresetEntry, comp: Composition
                     }
                 }
             }
+        }
+        UsedBy { users: preset.used_by.clone(), none: "No patch plays it — it is auditioned from the Preset sidebar." }
+    }
+}
+
+/// A block preset: its type and who uses it; rename (above), duplicate,
+/// delete — refused while anything puts it on a block.
+#[component]
+fn BlockPresetDetail(
+    preset: signal_guitar_proto::BlockPresetEntry,
+    comp: CompositionModel,
+    on_go: EventHandler<(Kind, String)>,
+) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut duplicating = use_signal(|| false);
+    let siblings: Vec<String> = comp.block_presets.iter().map(|b| b.name.clone()).collect();
+    let on_blocks: Vec<String> = comp
+        .active_blocks
+        .iter()
+        .filter(|b| b.preset.eq_ignore_ascii_case(&preset.name))
+        .map(|b| b.block.clone())
+        .collect();
+    rsx! {
+        Actions {
+            Act { label: "Duplicate", onclick: move |()| duplicating.set(true) }
+            DeleteAct {
+                refused: in_use(&preset.used_by),
+                on_delete: {
+                    let rig = rig.clone();
+                    let n = preset.name.clone();
+                    move |()| {
+                        let n = n.clone();
+                        send(&rig, move |r| async move { let _ = r.delete_block_preset(n).await; });
+                    }
+                },
+            }
+        }
+        if duplicating() {
+            NamePrompt {
+                label: "Duplicate",
+                initial: crate::module_sidebar::next_name(&preset.name, &siblings),
+                taken: siblings.clone(),
+                on_done: {
+                    let rig = rig.clone();
+                    let from = preset.name.clone();
+                    move |name: Option<String>| {
+                        duplicating.set(false);
+                        if let Some(n) = name {
+                            let (from, go) = (from.clone(), n.clone());
+                            send(&rig, move |r| async move { let _ = r.duplicate_block_preset(from, n).await; });
+                            on_go.call((Kind::BlockPresets, go));
+                        }
+                    }
+                },
+            }
+        }
+        Section { label: "Block",
+            span { style: "font-size: 12px; color: {MUTED};",
+                if preset.bypass { "A {preset.block_type} preset that turns the block off." } else { "A {preset.block_type} preset." }
+            }
+            span { style: "font-size: 12px; color: {MUTED};",
+                if on_blocks.is_empty() {
+                    "Not on the playing patch."
+                } else {
+                    "On the playing patch: {on_blocks.join(\", \")}"
+                }
+            }
+        }
+        UsedBy { users: preset.used_by.clone() }
+        span { style: "font-size: 11px; color: {FAINT}; line-height: 1.5;",
+            "Pick it on a block from the block's sidebar (click the block on the Control view)."
         }
     }
 }
@@ -2071,7 +2295,7 @@ fn NewForm(
             Kind::Patches => patches.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
             Kind::Presets => presets.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
             Kind::Drives | Kind::All => false,
-            Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => false,
+            Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules | Kind::BlockPresets => false,
         }
     };
     let n = name();
@@ -2132,7 +2356,7 @@ fn NewForm(
                     });
                 }
                 Kind::Drives | Kind::All => return,
-                Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => {
+                Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules | Kind::BlockPresets => {
                     return;
                 }
             }

@@ -11,15 +11,31 @@ use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{CompositionModel, PerformanceModel, PresetEntry};
 
+use crate::kit::{Button, ListRow, MenuItem, Picked, SectionHeader};
 use crate::library::Kind;
+use crate::theme::{FAINT, FIELD, LINE, LINE_STRONG, SIDEBAR, SIDEBAR_W, TEXT};
 
-const LINE: &str = "#1f1f24";
-const TEXT: &str = "#e4e4e7";
-const MUTED: &str = "#a1a1aa";
-const FAINT: &str = "#63636b";
-const ON_BG: &str = "#1b2331";
-const ON_FG: &str = "#bfdbfe";
-const LIVE: &str = "#22c55e";
+/// A preset's menu: rename, duplicate, delete (refused while a patch plays
+/// it).
+fn preset_items(p: &PresetEntry, all: &[String]) -> Vec<MenuItem> {
+    let others: Vec<String> = all.iter().filter(|n| !n.eq_ignore_ascii_case(&p.name)).cloned().collect();
+    vec![
+        MenuItem::head(format!("Preset · {}", p.name)),
+        MenuItem::name("rename", "Rename…", "Rename", &p.name, others),
+        MenuItem::name(
+            "duplicate",
+            "Duplicate…",
+            "Duplicate",
+            crate::module_sidebar::next_name(&p.name, all),
+            all.to_vec(),
+        ),
+        MenuItem::delete(
+            "delete",
+            "Delete preset",
+            (!p.used_by.is_empty()).then(|| format!("In use: {}", p.used_by.join(", "))),
+        ),
+    ]
+}
 
 /// Every word of the query in the text.
 fn hit(text: &str, query: &str) -> bool {
@@ -92,25 +108,36 @@ pub fn PresetSidebar(
     };
     let total: usize = comp.presets.len();
 
+    let names: Vec<String> = comp.presets.iter().map(|p| p.name.clone()).collect();
+    let manage = {
+        let rig = rig.clone();
+        move |name: String, x: Picked| {
+            let Some(r) = rig.clone() else { return };
+            let text = x.text;
+            spawn(async move {
+                let _ = match x.id {
+                    "rename" => r.rename_rig_preset(name, text).await,
+                    "duplicate" => r.duplicate_rig_preset(name, text).await,
+                    "delete" => r.delete_rig_preset(name).await,
+                    _ => return,
+                };
+            });
+        }
+    };
+
     rsx! {
         aside {
-            style: "width: 272px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
-                    border-right: 1px solid {LINE}; background: #0e0e11; color: {TEXT};",
+            style: "width: {SIDEBAR_W}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
+                    border-right: 1px solid {LINE}; background: {SIDEBAR}; color: {TEXT};",
             div { style: "display: flex; flex-direction: column; gap: 8px; padding: 12px 12px 10px; \
                           border-bottom: 1px solid {LINE}; flex-shrink: 0;",
-                div { style: "display: flex; align-items: baseline; gap: 6px;",
-                    span { style: "font-size: 9px; font-weight: 700; letter-spacing: 0.14em; \
-                                   text-transform: uppercase; color: {FAINT};",
-                        "Presets"
-                    }
-                    div { style: "flex: 1;" }
-                    span { style: "font-size: 10px; color: {FAINT};",
-                        if searching { "{hits.len()}/{total}" } else { "{total}" }
-                    }
+                SectionHeader {
+                    label: "Presets",
+                    count: if searching { format!("{}/{total}", hits.len()) } else { format!("{total}") },
                 }
                 input {
-                    style: "width: 100%; font-size: 12px; color: {TEXT}; background: #0a0a0d; \
-                            border: 1px solid #2a2a31; border-radius: 7px; padding: 6px 9px; outline: none;",
+                    style: "width: 100%; font-size: 12px; color: {TEXT}; background: {FIELD}; \
+                            border: 1px solid {LINE_STRONG}; border-radius: 7px; padding: 6px 9px; outline: none;",
                     placeholder: "Search presets and snapshots…",
                     value: "{q}",
                     oninput: move |e| query.set(e.value()),
@@ -129,7 +156,7 @@ pub fn PresetSidebar(
                     },
                 }
             }
-            div { style: "flex: 1 1 0; min-height: 0; overflow-y: scroll; padding: 6px 8px;",
+            div { style: "flex: 1 1 0; min-height: 0; overflow-y: scroll; padding: 6px 8px; display: flex; flex-direction: column; gap: 1px;",
                 if hits.is_empty() {
                     div { style: "padding: 10px 6px; font-size: 12px; color: {FAINT}; line-height: 1.5;",
                         if total == 0 { "No presets yet — build them in the Library." } else { "No preset matches." }
@@ -143,18 +170,14 @@ pub fn PresetSidebar(
                         let active_snap = comp.active_snapshot.clone();
                         let play = play.clone();
                         rsx! {
-                            div { key: "{p.name}", style: "margin-bottom: 2px;",
-                                button {
-                                    style: format!(
-                                        "display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; \
-                                         border-radius: 7px; border: none; cursor: pointer; justify-content: flex-start; \
-                                         text-align: left; background: {}; color: {};",
-                                        if playing { ON_BG } else { "transparent" },
-                                        if playing { ON_FG } else { TEXT },
-                                    ),
+                            div { key: "{p.name}", style: "display: flex; flex-direction: column; gap: 1px;",
+                                ListRow {
+                                    title: p.name.clone(),
+                                    note: format!("{}", p.snapshots.len()),
+                                    live: playing,
                                     onclick: {
                                         let name = name.clone();
-                                        move |_| {
+                                        move |()| {
                                             let mut o = opened.write();
                                             if let Some(i) = o.iter().position(|x| x == &name) {
                                                 o.remove(i);
@@ -163,47 +186,29 @@ pub fn PresetSidebar(
                                             }
                                         }
                                     },
-                                    span {
-                                        style: format!(
-                                            "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; background: {};",
-                                            if playing { LIVE } else { "transparent" },
-                                        ),
-                                    }
-                                    span { style: "flex: 1 1 0; min-width: 0; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden;",
-                                        "{p.name}"
-                                    }
-                                    span { style: "font-size: 10px; color: {FAINT}; flex-shrink: 0;",
-                                        if open { "▾" } else { "{p.snapshots.len()} ▸" }
-                                    }
+                                    menu: preset_items(&p, &names),
+                                    on_menu: {
+                                        let manage = manage.clone();
+                                        let name = name.clone();
+                                        move |x: Picked| manage(name.clone(), x)
+                                    },
                                 }
                                 if open {
-                                    div { style: "display: flex; flex-direction: column; padding: 1px 0 4px 20px;",
-                                        for (i, snap) in snaps.iter().enumerate() {
-                                            {
-                                                let lit = playing
-                                                    && (active_snap.eq_ignore_ascii_case(snap)
-                                                        || (active_snap.is_empty() && i == 0));
-                                                let (pn, sn) = (name.clone(), snap.clone());
-                                                let play = play.clone();
-                                                rsx! {
-                                                    button {
-                                                        key: "{snap}",
-                                                        style: format!(
-                                                            "display: flex; align-items: center; gap: 7px; width: 100%; padding: 5px 8px; \
-                                                             border-radius: 6px; border: none; cursor: pointer; justify-content: flex-start; \
-                                                             text-align: left; font-size: 12px; background: {}; color: {};",
-                                                            if lit { "rgba(34,197,94,0.12)" } else { "transparent" },
-                                                            if lit { TEXT } else { MUTED },
-                                                        ),
-                                                        onclick: move |_| play(pn.clone(), sn.clone()),
-                                                        span {
-                                                            style: format!(
-                                                                "width: 5px; height: 5px; border-radius: 999px; flex-shrink: 0; background: {};",
-                                                                if lit { LIVE } else { "#3f3f46" },
-                                                            ),
-                                                        }
-                                                        "{snap}"
-                                                    }
+                                    for (i, snap) in snaps.iter().enumerate() {
+                                        {
+                                            let lit = playing
+                                                && (active_snap.eq_ignore_ascii_case(snap)
+                                                    || (active_snap.is_empty() && i == 0));
+                                            let (pn, sn) = (name.clone(), snap.clone());
+                                            let play = play.clone();
+                                            rsx! {
+                                                ListRow {
+                                                    key: "{snap}",
+                                                    title: snap.clone(),
+                                                    small: true,
+                                                    indent: 18,
+                                                    live: lit,
+                                                    onclick: move |()| play(pn.clone(), sn.clone()),
                                                 }
                                             }
                                         }
@@ -215,19 +220,19 @@ pub fn PresetSidebar(
                 }
             }
             div { style: "display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid {LINE}; flex-shrink: 0;",
-                button {
-                    style: "flex: 1 1 0; min-width: 0; padding: 7px 8px; border-radius: 7px; cursor: pointer; \
-                            font-size: 11px; font-weight: 600; border: 1px solid {LINE}; background: transparent; color: {MUTED};",
+                Button {
+                    label: "Manage",
+                    grow: true,
+                    small: true,
                     title: "Every preset and its module picks — in the library",
-                    onclick: move |_| on_browse.call(Kind::Compositions),
-                    "Manage"
+                    onclick: move |()| on_browse.call(Kind::Compositions),
                 }
-                button {
-                    style: "flex: 1 1 0; min-width: 0; padding: 7px 8px; border-radius: 7px; cursor: pointer; \
-                            font-size: 11px; font-weight: 600; border: 1px solid {LINE}; background: transparent; color: {MUTED};",
+                Button {
+                    label: "Get tones",
+                    grow: true,
+                    small: true,
                     title: "Find a new capture on TONE3000",
-                    onclick: move |_| on_tones.call(()),
-                    "Get tones"
+                    onclick: move |()| on_tones.call(()),
                 }
             }
         }

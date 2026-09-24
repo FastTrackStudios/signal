@@ -237,12 +237,7 @@ pub(crate) fn fuzzy(query: &str, text: &str) -> Option<i32> {
     (qi == q.len()).then(|| score - t.len() as i32 / 12)
 }
 
-const BG: &str = "#0c0c0f";
-const LINE: &str = "#222228";
-const TEXT: &str = "#e4e4e7";
-const FAINT: &str = "#63636b";
-const FOCUS_BG: &str = "#1b2331";
-const FOCUS_FG: &str = "#bfdbfe";
+use crate::theme::{BG, FAINT, FOCUS_BG, FOCUS_FG, LINE, TEXT};
 
 /// The picker. `on_local` receives the [`Effect::is_local`] effects — the
 /// remote's own view state — everything else goes to the rig.

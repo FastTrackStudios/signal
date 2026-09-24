@@ -100,6 +100,14 @@ fn main() {
             settings,
         }
     });
+    // `RIG_SHOT_MODE=0|1|2`: the perform mode (Preset / Profile / Setlist),
+    // which picks the left sidebar. Design mode forgets it afterwards.
+    if let Some(mode) = std::env::var("RIG_SHOT_MODE").ok().and_then(|m| m.parse::<u32>().ok()) {
+        let rig = wired.rig.clone();
+        runtime.block_on(async move {
+            let _ = rig.set_perform_mode(mode).await;
+        });
+    }
     let _ = WIRED.set(wired);
 
     let _guard = runtime.enter();
@@ -147,6 +155,9 @@ fn Shot() -> Element {
             let _ = provide_context(w.stream.clone());
             let _ = provide_context(w.settings.clone());
         }
+        // `RIG_SHOT_SELECT=Amp` (a module) or `RIG_SHOT_SELECT=DLY 1:delay`
+        // (a block and its type): the right sidebar, open on it.
+        let _ = provide_context(signal_guitar_ui::InitialSelection(shot_selection()));
     });
     rsx! {
         // The same two stylesheets the window mounts. Without them the shot is
@@ -175,6 +186,18 @@ fn Shot() -> Element {
     }
 }
 
+/// What `RIG_SHOT_SELECT` selects for the right sidebar, if anything.
+fn shot_selection() -> Option<signal_guitar_ui::ModuleSelection> {
+    let v = std::env::var("RIG_SHOT_SELECT").ok()?;
+    Some(match v.split_once(':') {
+        Some((name, block_type)) => signal_guitar_ui::ModuleSelection::Block {
+            name: name.to_string(),
+            block_type: block_type.to_string(),
+        },
+        None => signal_guitar_ui::ModuleSelection::Module(v),
+    })
+}
+
 /// The picker kind `RIG_SHOT_LIBRARY` names, if any.
 fn shot_library() -> Option<signal_guitar_ui::LibraryKind> {
     use signal_guitar_ui::LibraryKind as K;
@@ -185,6 +208,11 @@ fn shot_library() -> Option<signal_guitar_ui::LibraryKind> {
         "patches" => K::Patches,
         "presets" => K::Presets,
         "drives" => K::Drives,
+        "all" => K::All,
+        "compositions" => K::Compositions,
+        "amp" => K::AmpModules,
+        "delay" => K::DelayModules,
+        "blocks" => K::BlockPresets,
         _ => K::Setlists,
     })
 }

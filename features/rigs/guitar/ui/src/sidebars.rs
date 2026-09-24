@@ -12,6 +12,8 @@ use signal_widgets::Picker;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{PatchInfo, PerformanceModel, PresetInfo};
 
+use crate::kit::{ListRow, MenuItem, Picked};
+use crate::theme::LINE;
 use crate::perform::folder_color;
 
 /// Section eyebrow shared by every sidebar group.
@@ -44,14 +46,71 @@ fn PresetCell(preset: String, variation: String) -> Element {
 }
 
 #[component]
-fn PanelLabel(label: &'static str) -> Element {
+fn PanelLabel(label: &'static str, #[props(default)] count: String, #[props(default)] children: Element) -> Element {
     rsx! {
-        div { class: "px-3 py-2 border-b border-border flex-shrink-0",
-            h3 { class: "text-[10px] font-semibold text-muted-foreground uppercase tracking-wider",
-                "{label}"
-            }
+        div { style: "padding: 8px 12px; flex: 1 1 0; min-width: 0;",
+            crate::kit::SectionHeader { label: label.to_string(), count, {children} }
         }
     }
+}
+
+/// Fire a rig call without waiting — the next `Perf` event redraws.
+fn send<F, Fut>(rig: &Option<RigClient>, call: F)
+where
+    F: FnOnce(RigClient) -> Fut + 'static,
+    Fut: std::future::Future<Output = ()> + 'static,
+{
+    if let Some(r) = rig.clone() {
+        spawn(async move { call(r).await });
+    }
+}
+
+/// A patch's menu: rename, delete.
+fn patch_items(name: &str, all: &[String]) -> Vec<MenuItem> {
+    let others: Vec<String> = all.iter().filter(|n| !n.eq_ignore_ascii_case(name)).cloned().collect();
+    vec![
+        MenuItem::head(format!("Patch · {name}")),
+        MenuItem::name("rename", "Rename…", "Rename", name, others),
+        MenuItem::delete("delete", "Delete patch", None),
+    ]
+}
+
+/// A stack's menu: rename, delete (its patches stay).
+fn stack_items(name: &str, all: &[String]) -> Vec<MenuItem> {
+    let others: Vec<String> = all.iter().filter(|n| !n.eq_ignore_ascii_case(name)).cloned().collect();
+    vec![
+        MenuItem::head(format!("Stack · {name}")),
+        MenuItem::name("rename", "Rename…", "Rename", name, others),
+        MenuItem::delete("delete", "Delete stack (patches stay)", None),
+    ]
+}
+
+/// A profile's menu: load, rename, duplicate, delete (refused while it plays).
+fn profile_items(p: &signal_guitar_proto::ProfileEntry, all: &[String]) -> Vec<MenuItem> {
+    let others: Vec<String> = all.iter().filter(|n| !n.eq_ignore_ascii_case(&p.name)).cloned().collect();
+    vec![
+        MenuItem::head(format!("Profile · {}", p.name)),
+        MenuItem::run("load", "Load").unless(p.active.then(|| "Playing".to_string())),
+        MenuItem::name("rename", "Rename…", "Rename", &p.name, others),
+        MenuItem::name(
+            "duplicate",
+            "Duplicate…",
+            "Duplicate",
+            crate::module_sidebar::next_name(&p.name, all),
+            all.to_vec(),
+        ),
+        MenuItem::delete(
+            "delete",
+            "Delete profile",
+            if p.active {
+                Some("Playing — load another profile first".to_string())
+            } else if all.len() <= 1 {
+                Some("The only profile".to_string())
+            } else {
+                None
+            },
+        ),
+    ]
 }
 
 /// Left sidebar — the profile tree over the preset pool.
@@ -106,6 +165,10 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
     let mut renaming = use_signal(|| None::<(String, String)>);
     let mut rename_text = use_signal(String::new);
 
+    let patch_names: Vec<String> = patch_list.iter().map(|p| p.name.clone()).collect();
+    let stack_names: Vec<String> = model.stacks.iter().map(|s| s.name.clone()).collect();
+    let profile_names: Vec<String> = profiles.iter().map(|p| p.name.clone()).collect();
+    let mut adding_profile = use_signal(|| false);
     // Group patches by stack, in the stacks' own order.
     let mut groups: Vec<(String, Vec<(usize, PatchInfo)>)> = model
         .stacks
@@ -276,21 +339,27 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                     "{stack_label}"
                                 }
                                 PresetCell { preset: main_preset.clone(), variation: main_variation.clone() }
-                                span {
-                                    class: "text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 cursor-pointer",
-                                    style: "flex-shrink: 0;",
-                                    title: "Delete stack (patches stay)",
-                                    onclick: {
-                                        let rig = rig.clone();
-                                        let name = stack_label;
-                                        move |_| {
-                                            let name = name.clone();
-                                            if let Some(r) = rig.clone() {
-                                                spawn(async move { let _ = r.delete_stack(name).await; });
+                                div {
+                                    class: "opacity-0 group-hover:opacity-100",
+                                    style: "display: flex; flex-shrink: 0;",
+                                    crate::kit::ActionMenu {
+                                        items: stack_items(&stack_label, &stack_names),
+                                        size: 18,
+                                        bare: true,
+                                        title: "Stack actions",
+                                        on_pick: {
+                                            let rig = rig.clone();
+                                            let name = stack_label.clone();
+                                            move |p: Picked| {
+                                                let (old, text) = (name.clone(), p.text);
+                                                match p.id {
+                                                    "rename" => send(&rig, move |r| async move { let _ = r.rename_stack(old, text).await; }),
+                                                    "delete" => send(&rig, move |r| async move { let _ = r.delete_stack(old).await; }),
+                                                    _ => {}
+                                                }
                                             }
-                                        }
-                                    },
-                                    fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 10 }
+                                        },
+                                    }
                                 }
                             }
                                 }
@@ -402,21 +471,27 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                             // Preset last (fixed, right-aligned) so it lines
                                             // up down the list; icons sit to its left.
                                             PresetCell { preset: preset.clone(), variation: variation.clone() }
-                                            span {
-                                                class: "text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-shrink-0 cursor-pointer",
-                                                title: "Delete patch",
-                                                onclick: {
-                                                    let rig = rig.clone();
-                                                    let name = name;
-                                                    move |e: MouseEvent| {
-                                                        e.stop_propagation();
+                                            div {
+                                                class: "opacity-0 group-hover:opacity-100",
+                                                style: "display: flex; flex-shrink: 0;",
+                                                crate::kit::ActionMenu {
+                                                    items: patch_items(&name, &patch_names),
+                                                    size: 18,
+                                                    bare: true,
+                                                    title: "Patch actions",
+                                                    on_pick: {
+                                                        let rig = rig.clone();
                                                         let name = name.clone();
-                                                        if let Some(r) = rig.clone() {
-                                                            spawn(async move { let _ = r.delete_patch(name).await; });
+                                                        move |p: Picked| {
+                                                            let (old, text) = (name.clone(), p.text);
+                                                            match p.id {
+                                                                "rename" => send(&rig, move |r| async move { let _ = r.rename_patch(old, text).await; }),
+                                                                "delete" => send(&rig, move |r| async move { let _ = r.delete_patch(old).await; }),
+                                                                _ => {}
+                                                            }
                                                         }
-                                                    }
-                                                },
-                                                fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 10 }
+                                                    },
+                                                }
                                             }
                                         }
                                     }
@@ -429,43 +504,78 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
 
             // ── Every profile — the other rigs a set can move to (Blues,
             // Rock, Metal…). The same list switches 1 + 2 / 4 + 5 step
-            // through in Profile mode. ──
+            // through in Profile mode. Each row has the kit's menu: load,
+            // rename, duplicate, delete. ──
             if !profiles.is_empty() {
-                div { class: "flex-shrink-0 border-t border-border",
-                    PanelLabel { label: "Profiles" }
-                    div { style: "display: flex; flex-direction: column; gap: 2px; padding: 0 8px 8px;",
+                div { style: "flex-shrink: 0; border-top: 1px solid {LINE}; display: flex; flex-direction: column;",
+                    div { style: "display: flex; align-items: center;",
+                        PanelLabel { label: "Profiles", count: format!("{}", profiles.len()),
+                            crate::kit::Button {
+                                label: "+ New",
+                                small: true,
+                                title: "A new profile — a copy of the one playing",
+                                onclick: move |()| adding_profile.toggle(),
+                            }
+                        }
+                    }
+                    if adding_profile() {
+                        div { style: "padding: 0 8px 8px;",
+                            crate::kit::NamePrompt {
+                                label: "Create",
+                                initial: String::new(),
+                                placeholder: "New profile name",
+                                taken: profile_names.clone(),
+                                on_done: {
+                                    let rig = rig.clone();
+                                    let from = model.profile_name.clone();
+                                    move |n: Option<String>| {
+                                        adding_profile.set(false);
+                                        if let Some(n) = n {
+                                            let from = from.clone();
+                                            send(&rig, move |r| async move { let _ = r.add_profile(n, from).await; });
+                                        }
+                                    }
+                                },
+                            }
+                        }
+                    }
+                    div { style: "display: flex; flex-direction: column; gap: 1px; padding: 0 8px 8px;",
                         for p in profiles.iter() {
                             {
                                 let name = p.name.clone();
-                                let rig = rig.clone();
                                 let active = p.active;
                                 rsx! {
-                                    div {
+                                    ListRow {
                                         key: "{p.name}",
-                                        class: if active { "" } else { "hover:bg-accent/30" },
-                                        style: format!(
-                                            "display: flex; align-items: center; gap: 8px; padding: 5px 8px; \
-                                             border-radius: 6px; font-size: 12px; cursor: pointer; color: {}; background: {};",
-                                            if active { "#e4e4e7" } else { "#a1a1aa" },
-                                            if active { "rgba(34,197,94,0.12)" } else { "transparent" },
-                                        ),
-                                        onclick: move |_| {
-                                            if active {
-                                                return;
-                                            }
-                                            if let Some(r) = rig.clone() {
-                                                let name = name.clone();
-                                                spawn(async move { let _ = r.select_profile(name).await; });
+                                        title: p.name.clone(),
+                                        note: format!("{}", p.patches),
+                                        live: active,
+                                        small: true,
+                                        onclick: {
+                                            let rig = rig.clone();
+                                            let name = name.clone();
+                                            move |()| {
+                                                if !active {
+                                                    let name = name.clone();
+                                                    send(&rig, move |r| async move { let _ = r.select_profile(name).await; });
+                                                }
                                             }
                                         },
-                                        span {
-                                            style: format!(
-                                                "width: 6px; height: 6px; border-radius: 999px; background: {};",
-                                                if active { "#22c55e" } else { "#3f3f46" },
-                                            ),
-                                        }
-                                        "{p.name}"
-                                        span { style: "margin-left: auto; font-size: 10px; color: #63636b;", "{p.patches}" }
+                                        menu: profile_items(p, &profile_names),
+                                        on_menu: {
+                                            let rig = rig.clone();
+                                            let name = name.clone();
+                                            move |x: Picked| {
+                                                let (old, text) = (name.clone(), x.text);
+                                                match x.id {
+                                                    "load" => send(&rig, move |r| async move { let _ = r.select_profile(old).await; }),
+                                                    "rename" => send(&rig, move |r| async move { let _ = r.rename_profile(old, text).await; }),
+                                                    "duplicate" => send(&rig, move |r| async move { let _ = r.add_profile(text, old).await; }),
+                                                    "delete" => send(&rig, move |r| async move { let _ = r.delete_profile(old).await; }),
+                                                    _ => {}
+                                                }
+                                            }
+                                        },
                                     }
                                 }
                             }
