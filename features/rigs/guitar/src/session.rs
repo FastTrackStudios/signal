@@ -93,9 +93,11 @@ impl Default for MeterPump {
             switches: {
                 let mut e = FootswitchEngine::new(5, 5, std::time::Duration::from_millis(500));
                 // Pressed together and held: 1 + 2 is back (previous song,
-                // or profile), 4 + 5 is on (next) — see `step`.
+                // or profile), 4 + 5 is on (next) — see `step`; 3 + 4 is
+                // the tuner.
                 e.add_chord(0, 1);
                 e.add_chord(3, 4);
+                e.add_chord(2, 3);
                 e
             },
             audio_calls: 0,
@@ -109,18 +111,13 @@ impl Default for MeterPump {
 }
 
 /// The footswitches' usual jobs: 1–4 their stacks, 5 tap tempo — or, in a
-/// song that has parts, stepping through them (tap on, hold back).
+/// song that has sections, stepping through them (tap on, hold back).
 fn default_switch_actions(song_has_parts: bool) -> Vec<String> {
-    let five = if song_has_parts { "parts" } else { "tap_tempo" };
+    let five = if song_has_parts { "sections" } else { "tap_tempo" };
     ["stack", "stack", "stack", "stack", five]
         .iter()
         .map(|s| (*s).to_string())
         .collect()
-}
-
-/// A switch job that steps (tap on, hold back).
-fn is_stepping(job: &str) -> bool {
-    matches!(job, "parts" | "sections" | "songs")
 }
 
 /// Part `name`'s recall entry, made if it has none.
@@ -561,11 +558,6 @@ impl GuitarRigBackend {
                     .map(|i| job(i) == "stack" && modes.get(i).is_some_and(|m| m.momentary))
                     .collect();
                 pump.switches.set_momentary(&flags);
-                // A stepping switch goes back on its hold — released before
-                // the long hold; holding on is its usual hold (switch 5's
-                // tuner).
-                let long: Vec<bool> = (0..5).map(|i| is_stepping(job(i))).collect();
-                pump.switches.set_long_holds(&long);
             }
             let mut actions: Vec<FootswitchAction> = events
                 .into_iter()
@@ -619,6 +611,7 @@ impl GuitarRigBackend {
                         match (a, b) {
                             (0, 1) => self.step(-1),
                             (3, 4) => self.step(1),
+                            (2, 3) => Rig::toggle_tuner(self),
                             _ => {}
                         }
                     }
@@ -1313,6 +1306,8 @@ impl GuitarRigBackend {
             "parts" => self.step_part_impl(-1, false),
             "sections" => self.step_part_impl(-1, true),
             "songs" => Rig::prev_song(self),
+            // Switch 5's hold is free: the tuner is switches 3 + 4 together.
+            "tap_tempo" if sw == 4 => tracing::info!("footswitch 5 hold: unassigned"),
             _ => self.hold_layer_action(sw),
         }
     }

@@ -289,24 +289,43 @@ pub fn PerformGrid(
     } else {
         None
     };
-    // Where a stepping switch goes next — its tile says so.
-    let step_hint = |job: &str| -> String {
+    // Where a stepping switch goes on a tap (next) and a hold (back) — its
+    // tile says so.
+    let step_hint = |job: &str| -> (String, String) {
         let at = model.part_index as usize;
-        let next = match job {
-            "parts" => model.parts.get(at + 1),
+        match job {
+            "parts" => (
+                model.parts.get(at + 1).map_or("end of the song".into(), |p| p.name.clone()),
+                at.checked_sub(1).and_then(|i| model.parts.get(i)).map_or(String::new(), |p| p.name.clone()),
+            ),
             "sections" => {
-                let sec = model.parts.get(at).map(|p| p.section.clone()).unwrap_or_default();
-                model.parts.iter().skip(at + 1).find(|p| !p.section.eq_ignore_ascii_case(&sec))
+                let sec = |i: usize| model.parts.get(i).map(|p| p.section.clone()).unwrap_or_default();
+                let cur = sec(at);
+                let next = model
+                    .parts
+                    .iter()
+                    .skip(at + 1)
+                    .find(|p| !p.section.eq_ignore_ascii_case(&cur))
+                    .map_or("end of the song".into(), |p| p.section.clone());
+                // Back: to this section's start from a later part of it, else
+                // the section before.
+                let first = (0..=at).rev().take_while(|&i| sec(i).eq_ignore_ascii_case(&cur)).last().unwrap_or(at);
+                let back = if first < at {
+                    cur.clone()
+                } else {
+                    first.checked_sub(1).map(sec).unwrap_or_default()
+                };
+                (next, back)
             }
             "songs" => {
-                return model
-                    .songs
-                    .get(model.song_index as usize + 1)
-                    .map_or("end of the set".into(), |s| format!("→ {}", s.name));
+                let i = model.song_index as usize;
+                (
+                    model.songs.get(i + 1).map_or("end of the set".into(), |s| s.name.clone()),
+                    i.checked_sub(1).and_then(|i| model.songs.get(i)).map_or(String::new(), |s| s.name.clone()),
+                )
             }
-            _ => return String::new(),
-        };
-        next.map_or("end of the song".into(), |p| format!("→ {}", p.name))
+            _ => (String::new(), String::new()),
+        }
     };
     let current_song = model
         .songs
@@ -565,7 +584,8 @@ pub fn PerformGrid(
                         key: "a{i}",
                         footswitch: i,
                         job: jobs[i].clone(),
-                        subtitle: step_hint(&jobs[i]),
+                        next: step_hint(&jobs[i]).0,
+                        back: step_hint(&jobs[i]).1,
                         stack: stacks.get(i).cloned(),
                         part: part_name.clone(),
                         in_song,
@@ -596,7 +616,8 @@ pub fn PerformGrid(
                 ActionTile {
                     footswitch: 4usize,
                     job: jobs[4].clone(),
-                    subtitle: step_hint(&jobs[4]),
+                    next: step_hint(&jobs[4]).0,
+                    back: step_hint(&jobs[4]).1,
                     part: part_name.clone(),
                     in_song,
                     compact,
@@ -607,15 +628,8 @@ pub fn PerformGrid(
                 in_song,
                 part: part_name.clone(),
                 tempo_bpm: model.tempo_bpm,
+                // Hold is free — the tuner is switches 3 + 4 together.
                 on_tap: on_tap_tempo,
-                on_hold: cbs.cb({
-                    let rig = rig;
-                    move |(): ()| {
-                        if let Some(r) = rig.clone() {
-                            spawn(async move { let _ = r.toggle_tuner().await; });
-                        }
-                    }
-                }),
             }
             }
             }
@@ -775,7 +789,9 @@ fn StackTile(
 fn ActionTile(
     footswitch: usize,
     job: String,
-    subtitle: String,
+    /// Where a stepping job goes on a tap, and on a hold.
+    #[props(default)] next: String,
+    #[props(default)] back: String,
     /// The stack it would play, for turning it back into one from the menu.
     #[props(default)] stack: Option<PerfStack>,
     #[props(default)] part: Option<String>,
@@ -818,17 +834,24 @@ fn ActionTile(
                     }
                 })),
                 SwitchNo { no: footswitch + 1 }
-                span {
-                    class: if compact { "text-sm font-bold tracking-wide" } else { "text-xl font-bold tracking-wide" },
-                    "{job_title(&job)}"
-                }
-                if !subtitle.is_empty() {
-                    span { class: if compact { "text-[10px] opacity-80 truncate max-w-full" } else { "text-xs opacity-80 truncate max-w-full" },
-                        "{subtitle}"
+                if matches!(job.as_str(), "parts" | "sections" | "songs") {
+                    // A stepping switch leads with where it goes.
+                    span { class: "text-[9px] font-bold tracking-[0.14em] uppercase opacity-60", "{job_title(&job)}" }
+                    span {
+                        class: if compact { "text-sm font-bold truncate max-w-full px-2" } else { "text-2xl font-bold truncate max-w-full px-2" },
+                        style: "color: #e0e7ff;",
+                        "{next}"
                     }
-                }
-                if !compact && matches!(job.as_str(), "parts" | "sections" | "songs") {
-                    span { class: "text-[10px] opacity-50", "hold: back" }
+                    if !back.is_empty() {
+                        span { class: if compact { "text-[9px] opacity-60 truncate max-w-full" } else { "text-[11px] opacity-60 truncate max-w-full" },
+                            "hold: ‹ {back}"
+                        }
+                    }
+                } else {
+                    span {
+                        class: if compact { "text-sm font-bold tracking-wide" } else { "text-xl font-bold tracking-wide" },
+                        "{job_title(&job)}"
+                    }
                 }
             }
             if menu() {
@@ -1133,12 +1156,11 @@ fn BoostTile(
 
 /// Tap Tempo tile — muted like the other function tiles, with a ring around
 /// the block flashing at the current tempo (the tile *is* the metronome).
-/// Tap = tempo tap; hold = open the tuner (footswitch 5's hold layer).
+/// Tap = tempo tap. Its hold is free (the tuner is switches 3 + 4).
 #[component]
 fn TapTempoTile(
     tempo_bpm: u32,
     on_tap: Callback<()>,
-    on_hold: Callback<()>,
     #[props(default)] compact: bool,
     #[props(default)] in_song: bool,
     #[props(default)] part: Option<String>,
@@ -1184,7 +1206,6 @@ fn TapTempoTile(
             class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full transition-shadow duration-100 opacity-90 hover:opacity-100".to_string(),
             style: format!("background-color: #27272a; color: #d4d4d8; {ring}"),
             on_tap,
-            on_hold: Some(on_hold),
             SwitchNo { no: 5 }
             span {
                 class: if compact { "text-sm font-bold tracking-wide" } else { "text-lg font-bold tracking-wide" },
@@ -1192,7 +1213,7 @@ fn TapTempoTile(
             }
             span {
                 class: if compact { "text-[10px] text-zinc-500" } else { "text-[11px] text-zinc-500" },
-                if compact { "{tempo_bpm} BPM" } else { "{tempo_bpm} BPM · hold: tuner" }
+                "{tempo_bpm} BPM"
             }
         }
             if menu() {
@@ -1244,6 +1265,7 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
             },
             onclick: move |_| onclick.call(()),
             span { class: "absolute top-0.5 left-1.5 text-[10px] font-mono opacity-40", "{switch_no}" }
+            span { class: "absolute top-0.5 right-1.5 text-[8px] font-mono opacity-40", title: "Hold switches 3 and 4 together", "3+4" }
             span {
                 class: "text-base font-bold w-7 text-center leading-none flex-shrink-0",
                 style: if in_tune { "color: #22c55e;" } else if r.active { "color: #e4e4e7;" } else { "color: #4b5563;" },

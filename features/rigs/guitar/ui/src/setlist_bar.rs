@@ -1,32 +1,30 @@
 //! **The setlist sidebar** — the left sidebar in Setlist mode.
 //!
 //! One tree, in the shape a set is played: the set, its songs in order, and
-//! under the song that is up, its **song parts**. Nothing else is nested and
-//! nothing lives in a second sidebar, so there is one place to look for
-//! "where am I in the set" and it reads top to bottom:
+//! under the song that is up, its **map** — its sections in order, each a
+//! card, with a progress strip on top:
 //!
 //! ```text
 //! SETLIST
-//! CYA 9-24-26 ▾                  ← opens the library on setlists
-//!  1  AMAZING!        B · 145    ← the song that is up
-//!     │ Intro      → Clean
-//!     │ Rhythm     → Clean · ±2   ← the part that is up
-//!     │ + part
-//!  2  WASHED          B · 139
-//!  3  TAKEOVER        C · 66
-//! + Add song                     ← opens the library on songs
+//! CYA 9-24-26 ▾
+//!  1  AMAZING!          B · 145
+//!  2  WASHED            B · 139     ← the song that is up
+//!     ▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+//!     Section 3 of 6    next: Chorus 2
+//!     ✓ Verse 1   Dry Chorus Clean
+//!     ✓ Chorus 1  Ambient Clean
+//!     ③ Verse 2   Dry Chorus Clean L · ⇄ 1     ← up (green edge)
+//!     ④ Chorus 2  Drive · profile switches  NEXT
+//!     ⑤ Bridge    Ambient Delay Flute · ⇄ 5
+//!     ⑥ Chorus 3  Drive · profile switches
+//!  3  TAKEOVER          C · 66
 //! ```
 //!
-//! A part is not a verse number: it is whatever the player calls a moment of
-//! the song — "Verse 1", or "Rhythm", or "Clean lead" — and it **overlays
-//! the profile**: it picks another patch from a stack and/or changes a few
-//! things on top. The footswitches stay the profile's.
-//!
-//! A click on a song plays it; a click on a part recalls it. Editing is one
-//! step further in, so the tree stays calm while playing: a click on the
-//! part that is *already* up opens its editor (what it recalls, rename,
-//! move, remove), and the pencil on the current song edits its key and tempo
-//! for this set and its place in it.
+//! A section of one part is one row; a section of several lists its parts
+//! under its name. A click on a section plays it; a click on the one that is
+//! up opens its editor (what it recalls, its section, whether it plays the
+//! profile's switches, rename, move, remove). Switch 5 steps through the
+//! sections (hold: back), and its tile names the next one.
 //!
 //! Building sets — new sets, new songs, adding a song to a set — is the
 //! library's job; this sidebar hands off to it rather than growing forms.
@@ -241,130 +239,229 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                         on_done: move |()| editing_song.set(false),
                                     }
                                 }
-                                // Its parts — only under the song that is up.
+                                // Its map — sections in order, only under the song that is up.
                                 if is_current {
-                                    div { style: "display: flex; flex-direction: column; gap: 2px; margin: 4px 0 6px 20px; \
-                                                  padding-left: 8px; border-left: 1px solid {LINE};",
-                                        for (pi, part) in model.parts.iter().enumerate() {
-                                            {
-                                                let part_on = pi == model.part_index as usize;
-                                                let open = editing_part() == Some(pi);
-                                                let rig = rig.clone();
-                                                let part = part.clone();
-                                                // A section of several parts (or one
-                                                // named apart from its part) gets a
-                                                // heading where it starts.
-                                                let grouped = !part.section.eq_ignore_ascii_case(&part.name);
-                                                let starts = pi == 0
-                                                    || !model.parts[pi - 1].section.eq_ignore_ascii_case(&part.section);
-                                                rsx! {
-                                                    if grouped && starts {
-                                                        span {
-                                                            key: "sec-{pi}",
-                                                            style: "margin-top: 4px; padding: 2px 8px; font-size: 9px; font-weight: 700; \
-                                                                    letter-spacing: 0.12em; text-transform: uppercase; color: {FAINT};",
-                                                            "{part.section}"
-                                                        }
-                                                    }
-                                                    button {
-                                                        key: "{pi}-{part.name}",
-                                                        style: format!(
-                                                            "display: flex; align-items: center; gap: 6px; width: 100%; \
-                                                             padding: 6px 8px; border-radius: 6px; border: none; cursor: pointer; \
-                                                             justify-content: flex-start; text-align: left; background: {}; color: {};",
-                                                            if part_on { PART_BG } else { "transparent" },
-                                                            if part_on { TEXT } else { MUTED },
-                                                        ),
-                                                        title: if part_on { "Click again to edit this part" } else { "Recall this part" },
-                                                        // First click recalls it; a click on the
-                                                        // part already up opens its editor.
-                                                        onclick: move |_| {
-                                                            if part_on {
-                                                                editing_part.set(if open { None } else { Some(pi) });
-                                                                editing_song.set(false);
-                                                            } else {
-                                                                editing_part.set(None);
-                                                                send(&rig, move |r| async move {
-                                                                    let _ = r.select_part(pi as u32).await;
-                                                                });
-                                                            }
-                                                        },
-                                                        span {
-                                                            style: format!(
-                                                                "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; background: {};",
-                                                                if part_on { LIVE } else { "transparent" },
-                                                            ),
-                                                        }
-                                                        span { style: "flex: 1 1 0; min-width: 0; font-size: 12px; font-weight: 600; \
-                                                                       white-space: nowrap; overflow: hidden;",
-                                                            "{part.name}"
-                                                        }
-                                                        if part.name.eq_ignore_ascii_case(&model.start_part) {
-                                                            span {
-                                                                style: "flex-shrink: 0; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; \
-                                                                        text-transform: uppercase; color: {SONG_FG};",
-                                                                title: "The song starts here",
-                                                                "start"
+                                    {
+                                        // Sections: runs of parts with one section name.
+                                        let mut sections: Vec<(String, Vec<usize>)> = Vec::new();
+                                        for (pi, p) in model.parts.iter().enumerate() {
+                                            match sections.last_mut() {
+                                                Some((name, idx)) if name.eq_ignore_ascii_case(&p.section) => idx.push(pi),
+                                                _ => sections.push((p.section.clone(), vec![pi])),
+                                            }
+                                        }
+                                        let at = model.part_index as usize;
+                                        let cur_sec = sections.iter().position(|(_, idx)| idx.contains(&at)).unwrap_or(0);
+                                        let count = sections.len();
+                                        let next_name = sections.get(cur_sec + 1).map(|(n, _)| n.clone());
+                                        rsx! {
+                                            div { style: "display: flex; flex-direction: column; gap: 4px; margin: 6px 0 8px 8px;",
+                                                if count > 0 {
+                                                    // Where we are in the song, at a glance.
+                                                    div { style: "display: flex; flex-direction: column; gap: 4px; padding: 2px 4px 6px;",
+                                                        div { style: "display: flex; gap: 2px;",
+                                                            for k in 0..count {
+                                                                span {
+                                                                    key: "{k}",
+                                                                    style: format!(
+                                                                        "flex: 1; height: 4px; border-radius: 2px; background: {};",
+                                                                        if k < cur_sec { "#2f4a2a" } else if k == cur_sec { LIVE } else { "#27272a" },
+                                                                    ),
+                                                                }
                                                             }
                                                         }
-                                                        span { style: "flex-shrink: 0; font-size: 10px; color: {FAINT}; white-space: nowrap;",
-                                                            if !part.profile.is_empty() { "{part.profile} · " }
-                                                            if part.patch.is_empty() { "" } else { "{part.patch}" }
-                                                            if !part.overrides.is_empty() { " · ±{part.overrides.len()}" }
-                                                            if part.profile_switches { " · profile switches" }
-                                                            if part.switch_count > 0 { " · ⇄{part.switch_count}" }
-                                                        }
-                                                    }
-                                                    if open {
-                                                        {
-                                                            // The recall list is the patches of the
-                                                            // profile the part is played on.
-                                                            let base = if !part.profile.is_empty() {
-                                                                part.profile.clone()
-                                                            } else if !model.song_profile.is_empty() {
-                                                                model.song_profile.clone()
-                                                            } else {
-                                                                loaded.clone()
-                                                            };
-                                                            let (names, labels) = patches_of(&base);
-                                                            rsx! {
-                                                                PartEditor {
-                                                                    key: "{pi}-{part.name}-{part.profile}-editor",
-                                                                    index: pi,
-                                                                    count: model.parts.len(),
-                                                                    name: part.name.clone(),
-                                                                    patch: part.patch.clone(),
-                                                                    section: if grouped { part.section.clone() } else { String::new() },
-                                                                    profile_switches: part.profile_switches,
-                                                                    profile: part.profile.clone(),
-                                                                    song_profile: if model.song_profile.is_empty() { loaded.clone() } else { model.song_profile.clone() },
-                                                                    profiles: profile_names.clone(),
-                                                                    patches: names,
-                                                                    labels,
-                                                                    on_done: move |()| editing_part.set(None),
+                                                        div { style: "display: flex; font-size: 10px; color: {FAINT};",
+                                                            span { "Section {cur_sec + 1} of {count}" }
+                                                            span { style: "margin-left: auto;",
+                                                                match &next_name {
+                                                                    Some(n) => format!("next: {n}"),
+                                                                    None => "last section".to_string(),
                                                                 }
                                                             }
                                                         }
                                                     }
                                                 }
-                                            }
-                                        }
-                                        if model.parts.is_empty() && !adding_part() {
-                                            span { style: "padding: 4px 8px; font-size: 11px; color: {FAINT}; line-height: 1.5;",
-                                                "No parts yet — name the moments of the song: Verse, Rhythm, Clean lead…"
-                                            }
-                                        }
-                                        if adding_part() {
-                                            NewPart { on_done: move |()| adding_part.set(false) }
-                                        } else {
-                                            button {
-                                                style: "align-self: flex-start; padding: 4px 8px; border: none; background: transparent; \
-                                                        cursor: pointer; font-size: 11px; font-weight: 600; color: {FAINT};",
-                                                onclick: move |_| {
-                                                    adding_part.set(true);
-                                                    editing_part.set(None);
-                                                },
-                                                "+ part"
+                                                for (si, (sec_name, idx)) in sections.iter().enumerate() {
+                                                    {
+                                                        let first = idx[0];
+                                                        let single = idx.len() == 1
+                                                            && model.parts[first].name.eq_ignore_ascii_case(sec_name);
+                                                        let live = si == cur_sec;
+                                                        let past = si < cur_sec;
+                                                        let is_next = si == cur_sec + 1;
+                                                        let starts_here = idx
+                                                            .iter()
+                                                            .any(|&pi| model.parts[pi].name.eq_ignore_ascii_case(&model.start_part));
+                                                        let summary = if single { part_summary(&model.parts[first]) } else { String::new() };
+                                                        let rig_sec = rig.clone();
+                                                        let sec_name = sec_name.clone();
+                                                        let idx = idx.clone();
+                                                        rsx! {
+                                                            div {
+                                                                key: "sec-{si}-{sec_name}",
+                                                                style: format!(
+                                                                    "display: flex; flex-direction: column; border-radius: 8px; \
+                                                                     border: 1px solid {}; border-left: 3px solid {}; background: {}; opacity: {};",
+                                                                    if live { "#2c3b57" } else { LINE },
+                                                                    if live { LIVE } else if is_next { "#6366f1" } else { LINE },
+                                                                    if live { PART_BG } else { "transparent" },
+                                                                    if past { "0.55" } else { "1" },
+                                                                ),
+                                                                // The section: a click plays it (its first part);
+                                                                // on the one-part section that is up, edits it.
+                                                                button {
+                                                                    style: "display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 8px; \
+                                                                            border: none; background: transparent; cursor: pointer; text-align: left; \
+                                                                            justify-content: flex-start; color: {TEXT};",
+                                                                    title: if live && single { "Edit this section" } else { "Play this section" },
+                                                                    onclick: move |_| {
+                                                                        if live && single {
+                                                                            editing_part.set(if editing_part() == Some(first) { None } else { Some(first) });
+                                                                            editing_song.set(false);
+                                                                        } else {
+                                                                            editing_part.set(None);
+                                                                            send(&rig_sec, move |r| async move {
+                                                                                let _ = r.select_part(first as u32).await;
+                                                                            });
+                                                                        }
+                                                                    },
+                                                                    span {
+                                                                        style: format!(
+                                                                            "width: 18px; height: 18px; flex-shrink: 0; border-radius: 999px; display: flex; \
+                                                                             align-items: center; justify-content: center; font-size: 10px; font-weight: 700; \
+                                                                             font-family: monospace; background: {}; color: {};",
+                                                                            if live { LIVE } else { "#1f1f24" },
+                                                                            if live { "#052e16" } else { MUTED },
+                                                                        ),
+                                                                        if past { "✓" } else { "{si + 1}" }
+                                                                    }
+                                                                    div { style: "flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px;",
+                                                                        span { style: format!(
+                                                                                "font-size: 13px; font-weight: {}; white-space: nowrap; overflow: hidden; color: {};",
+                                                                                if live { 700 } else { 600 },
+                                                                                if live { TEXT } else { MUTED },
+                                                                            ),
+                                                                            "{sec_name}"
+                                                                        }
+                                                                        if !summary.is_empty() {
+                                                                            span { style: "font-size: 10px; color: {FAINT}; white-space: nowrap; overflow: hidden;",
+                                                                                "{summary}"
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    if starts_here {
+                                                                        span { style: "flex-shrink: 0; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; color: {SONG_FG};",
+                                                                            title: "The song starts here", "START" }
+                                                                    }
+                                                                    if is_next {
+                                                                        span { style: "flex-shrink: 0; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; \
+                                                                                       padding: 2px 5px; border-radius: 4px; background: #1e1b4b; color: #c7d2fe;",
+                                                                            title: "Switch 5 goes here", "NEXT" }
+                                                                    }
+                                                                }
+                                                                // A section of several parts lists them.
+                                                                if !single {
+                                                                    div { style: "display: flex; flex-direction: column; gap: 1px; padding: 0 6px 6px 34px;",
+                                                                        for &pi in idx.iter() {
+                                                                            {
+                                                                                let part = model.parts[pi].clone();
+                                                                                let part_on = pi == at;
+                                                                                let rig = rig.clone();
+                                                                                rsx! {
+                                                                                    button {
+                                                                                        key: "{pi}-{part.name}",
+                                                                                        style: format!(
+                                                                                            "display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 6px; \
+                                                                                             border-radius: 5px; border: none; cursor: pointer; text-align: left; \
+                                                                                             justify-content: flex-start; background: {}; color: {};",
+                                                                                            if part_on { "#334467" } else { "transparent" },
+                                                                                            if part_on { TEXT } else { MUTED },
+                                                                                        ),
+                                                                                        onclick: move |_| {
+                                                                                            if part_on {
+                                                                                                editing_part.set(if editing_part() == Some(pi) { None } else { Some(pi) });
+                                                                                                editing_song.set(false);
+                                                                                            } else {
+                                                                                                editing_part.set(None);
+                                                                                                send(&rig, move |r| async move { let _ = r.select_part(pi as u32).await; });
+                                                                                            }
+                                                                                        },
+                                                                                        span { style: format!(
+                                                                                            "width: 5px; height: 5px; border-radius: 999px; flex-shrink: 0; background: {};",
+                                                                                            if part_on { LIVE } else { "#3f3f46" }) }
+                                                                                        span { style: "flex: 1 1 0; min-width: 0; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden;",
+                                                                                            "{part.name}"
+                                                                                        }
+                                                                                        span { style: "flex-shrink: 0; font-size: 10px; color: {FAINT}; white-space: nowrap;",
+                                                                                            "{part_summary(&part)}"
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                                // The editor of a part of this section, when open.
+                                                                for &pi in idx.iter().filter(|&&pi| editing_part() == Some(pi)) {
+                                                                    {
+                                                                        let part = model.parts[pi].clone();
+                                                                        let grouped = !part.section.eq_ignore_ascii_case(&part.name);
+                                                                        let base = if !part.profile.is_empty() {
+                                                                            part.profile.clone()
+                                                                        } else if !model.song_profile.is_empty() {
+                                                                            model.song_profile.clone()
+                                                                        } else {
+                                                                            loaded.clone()
+                                                                        };
+                                                                        let (names, labels) = patches_of(&base);
+                                                                        rsx! {
+                                                                            div { key: "ed-{pi}", style: "padding: 0 6px 6px;",
+                                                                                PartEditor {
+                                                                                    key: "{pi}-{part.name}-{part.profile}-editor",
+                                                                                    index: pi,
+                                                                                    count: model.parts.len(),
+                                                                                    name: part.name.clone(),
+                                                                                    patch: part.patch.clone(),
+                                                                                    section: if grouped { part.section.clone() } else { String::new() },
+                                                                                    profile_switches: part.profile_switches,
+                                                                                    profile: part.profile.clone(),
+                                                                                    song_profile: if model.song_profile.is_empty() { loaded.clone() } else { model.song_profile.clone() },
+                                                                                    profiles: profile_names.clone(),
+                                                                                    patches: names,
+                                                                                    labels,
+                                                                                    on_done: move |()| editing_part.set(None),
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                if model.parts.is_empty() && !adding_part() {
+                                                    span { style: "padding: 4px 8px; font-size: 11px; color: {FAINT}; line-height: 1.5;",
+                                                        "No sections yet — name the moments of the song: Verse 1, Chorus, Bridge…"
+                                                    }
+                                                }
+                                                if adding_part() {
+                                                    NewPart { on_done: move |()| adding_part.set(false) }
+                                                } else {
+                                                    button {
+                                                        style: "align-self: flex-start; padding: 4px 8px; border: none; background: transparent; \
+                                                                cursor: pointer; font-size: 11px; font-weight: 600; color: {FAINT};",
+                                                        onclick: move |_| {
+                                                            adding_part.set(true);
+                                                            editing_part.set(None);
+                                                        },
+                                                        "+ section"
+                                                    }
+                                                }
+                                                if count > 0 {
+                                                    span { style: "padding: 2px 8px; font-size: 10px; color: #4b4b52;",
+                                                        "Switch 5: next section · hold: back"
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -747,6 +844,25 @@ fn PartEditor(
             }
         }
     }
+}
+
+/// A part's one-line summary: what it plays and what it changes.
+fn part_summary(part: &signal_guitar_proto::PerfPart) -> String {
+    let mut bits: Vec<String> = Vec::new();
+    if !part.profile.is_empty() {
+        bits.push(part.profile.clone());
+    }
+    bits.push(if part.patch.is_empty() { "stays on the patch".to_string() } else { part.patch.clone() });
+    if part.profile_switches {
+        bits.push("profile switches".to_string());
+    }
+    if part.switch_count > 0 {
+        bits.push(format!("⇄ {} switches", part.switch_count));
+    }
+    if !part.overrides.is_empty() {
+        bits.push(format!("±{}", part.overrides.len()));
+    }
+    bits.join(" · ")
 }
 
 /// Naming a new part on the current song.
