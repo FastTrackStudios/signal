@@ -21,6 +21,7 @@ use std::path::Path;
 
 pub mod compose;
 pub mod design;
+pub mod drop_log;
 pub mod levelling;
 pub mod measure;
 pub mod library;

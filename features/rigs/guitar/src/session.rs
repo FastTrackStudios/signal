@@ -83,6 +83,10 @@ pub struct MeterPump {
     leds: Option<Vec<bool>>,
     leds_at: Option<std::time::Instant>,
     led_echo_until: Option<std::time::Instant>,
+    /// The drop log (`logs/dropouts.log`): the engine's drops collected
+    /// every tick, with where the rig was.
+    drop_seen: u64,
+    drop_log: crate::drop_log::DropLog,
 }
 
 impl Default for MeterPump {
@@ -108,6 +112,8 @@ impl Default for MeterPump {
             leds: None,
             leds_at: None,
             led_echo_until: None,
+            drop_seen: 0,
+            drop_log: crate::drop_log::DropLog::default(),
         }
     }
 }
@@ -240,6 +246,8 @@ pub struct GuitarRigBackend {
     part_tuned: Arc<Mutex<Vec<bool>>>,
     /// Where a held momentary switch goes back to on release.
     momentary_return: Arc<Mutex<Option<String>>>,
+    /// The patch the last switch landed on (the drop log's "from").
+    last_switched: Arc<Mutex<String>>,
     /// Debug-formatted audio prefs the live rig was opened with — a repeat
     /// `start` with unchanged prefs is a no-op instead of an audio gap.
     open_prefs: Arc<Mutex<Option<String>>>,
@@ -362,6 +370,7 @@ impl GuitarRigBackend {
             switch_actions: Arc::new(Mutex::new(default_switch_actions(false))),
             part_tuned: Arc::new(Mutex::new(Vec::new())),
             momentary_return: Arc::new(Mutex::new(None)),
+            last_switched: Arc::new(Mutex::new(String::new())),
             open_prefs: Arc::new(Mutex::new(None)),
             midi_map: Arc::new(Mutex::new(lib.midi_map)),
             keymap: Arc::new(Mutex::new(lib.keymap)),
@@ -472,6 +481,20 @@ impl GuitarRigBackend {
         // refresh every few seconds).
         if !crate::library::rig_is_design() {
             self.sync_leds(pump);
+        }
+        // Dropouts, into the drop log with the patch playing.
+        if !crate::library::rig_is_design() {
+            let (events, patch) = {
+                let guard = self.rig.lock_ok();
+                match guard.as_ref() {
+                    Some(prig) => (
+                        prig.rig().collect_drops(&mut pump.drop_seen),
+                        prig.active_patch().map(|p| p.name.clone()).unwrap_or_default(),
+                    ),
+                    None => (Vec::new(), String::new()),
+                }
+            };
+            pump.drop_log.record(&events, &patch);
         }
         // Audio device drop-outs: twice a second.
         if !crate::library::rig_is_design() && pump.tick.is_multiple_of(15) {
@@ -2681,8 +2704,9 @@ impl GuitarRigBackend {
     }
 
     fn sync_after_switch(&self, audible: std::time::Duration, via: &str) {
-        if let Some(name) = self.live_patch_name() {
-            self.probe_switch_gain(name);
+        let switched_to = self.live_patch_name().unwrap_or_default();
+        if !switched_to.is_empty() {
+            self.probe_switch_gain(switched_to.clone());
         }
         let t = std::time::Instant::now();
         self.resync_blocks();
@@ -2708,6 +2732,16 @@ impl GuitarRigBackend {
         self.mark_state_dirty();
 
         let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0;
+        // The drop log lines drops up against the switch they follow.
+        {
+            let from = std::mem::replace(&mut *self.last_switched.lock_ok(), switched_to.clone());
+            crate::drop_log::switched(
+                &from,
+                &switched_to,
+                via,
+                ms(audible) + ms(resync) + ms(tempo) + ms(boost) + ms(drives) + ms(publish),
+            );
+        }
         tracing::info!(
             switch.via = via,
             switch.audible_ms = ms(audible),

@@ -2676,6 +2676,15 @@ impl GuitarRig {
         0
     }
 
+    /// Every dropout the engine has seen since `*seen` (a sequence number,
+    /// 0 to start), oldest first — for a drop log. Empty for an offline rig.
+    pub fn collect_drops(&self, seen: &mut u64) -> Vec<daw_audio_io::duplex::DropEvent> {
+        self.engine_stats
+            .as_ref()
+            .map(|s| s.drops.collect(seen))
+            .unwrap_or_default()
+    }
+
     pub fn installs(&self) -> u64 {
         self.slots.len() as u64
     }

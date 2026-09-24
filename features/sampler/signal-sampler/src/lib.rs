@@ -897,3 +897,6 @@ impl PlayerPatch {
             .map_or(0, |t| t.pre_delay_ms)
     }
 }
+
+/// The drop log's event types and time base (see [`rig::GuitarRig::collect_drops`]).
+pub use daw_audio_io::duplex::{clock_ns, DropEvent, DropKind};
