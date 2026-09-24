@@ -1264,12 +1264,39 @@ impl SongDef {
 }
 
 impl SongDef {
-    /// The recall entry for part `name`, when it has one.
+    /// The recall entry for part `name` — its source's, when it repeats
+    /// another part (see [`PartRecallDef::repeat_of`]).
     #[must_use]
     pub fn part_recall(&self, name: &str) -> Option<&PartRecallDef> {
+        let src = self.source_part(name);
+        self.own_recall(&src)
+    }
+
+    /// Part `name`'s own entry (never its source's).
+    #[must_use]
+    pub fn own_recall(&self, name: &str) -> Option<&PartRecallDef> {
         self.part_recalls
             .iter()
             .find(|r| r.part.eq_ignore_ascii_case(name))
+    }
+
+    /// The part whose recall `name` plays: itself, or — following its
+    /// repeats — the part it repeats (cycles and missing parts stop at the
+    /// last good one).
+    #[must_use]
+    pub fn source_part(&self, name: &str) -> String {
+        let mut cur = name.to_string();
+        for _ in 0..8 {
+            let next = self
+                .own_recall(&cur)
+                .map(|r| r.repeat_of.trim().to_string())
+                .filter(|n| !n.is_empty() && !n.eq_ignore_ascii_case(&cur) && self.parts.iter().any(|p| p.eq_ignore_ascii_case(n)));
+            match next {
+                Some(n) => cur = n,
+                None => break,
+            }
+        }
+        cur
     }
 
     /// The part at `idx`'s section: its own `section`, else its name — a
@@ -1279,7 +1306,7 @@ impl SongDef {
         let Some(name) = self.parts.get(idx) else {
             return String::new();
         };
-        self.part_recall(name)
+        self.own_recall(name)
             .map(|r| r.section.trim().to_string())
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| name.clone())
@@ -1317,9 +1344,7 @@ impl SongDef {
             .iter()
             .map(|name| {
                 let patch = self
-                    .part_recalls
-                    .iter()
-                    .find(|r| r.part.eq_ignore_ascii_case(name))
+                    .part_recall(name)
                     .map(|r| r.patch.clone())
                     .unwrap_or_default();
                 (name.clone(), patch)
@@ -1362,12 +1387,23 @@ impl SongDef {
             if r.part.eq_ignore_ascii_case(old) {
                 r.part = new_name.to_string();
             }
+            // Its repeats follow it.
+            if r.repeat_of.eq_ignore_ascii_case(old) {
+                r.repeat_of = new_name.to_string();
+            }
         }
         true
     }
 
     /// Remove a section and whatever it recalled.
     pub fn remove_part(&mut self, name: &str) -> bool {
+        // Its repeats keep its sound: each takes a copy of what it recalled.
+        if let Some(src) = self.own_recall(name).cloned() {
+            for r in self.part_recalls.iter_mut().filter(|r| r.repeat_of.eq_ignore_ascii_case(name)) {
+                let (part, section) = (r.part.clone(), r.section.clone());
+                *r = PartRecallDef { part, section, repeat_of: src.repeat_of.clone(), ..src.clone() };
+            }
+        }
         let before = self.parts.len();
         self.parts.retain(|p| !p.eq_ignore_ascii_case(name));
         self.part_recalls
@@ -1399,10 +1435,7 @@ impl SongDef {
         self.parts
             .iter()
             .map(|name| {
-                let recall = self
-                    .part_recalls
-                    .iter()
-                    .find(|r| r.part.eq_ignore_ascii_case(name));
+                let recall = self.part_recall(name);
                 (
                     name.clone(),
                     recall.map(|r| r.patch.clone()).unwrap_or_default(),
@@ -1459,6 +1492,11 @@ pub struct PartRecallDef {
     /// The part's switch actions, over the song's.
     #[facet(default)]
     pub switch_actions: Vec<SwitchActionDef>,
+    /// A repeat of another part (by name): this part plays — and edits —
+    /// that part's recall (patch, changes, switch tuning, profile), so the
+    /// two stay the same sound. Its own name and section stay its own.
+    #[facet(default)]
+    pub repeat_of: String,
 }
 
 /// What a footswitch does in place of its usual job, for a song or a part.
@@ -1938,6 +1976,26 @@ mod song_tests {
     fn a_recall_matches_its_section_whatever_the_case() {
         let pairs = song().parts_with_recalls();
         assert_eq!(pairs[2].1, "Ambient");
+    }
+
+    /// A repeat plays its source's recall; a rename carries the link; the
+    /// source removed, the repeat keeps a copy of the sound.
+    #[test]
+    fn a_repeat_is_linked_to_its_part() {
+        let mut s = song();
+        s.parts = ["Verse 2", "Chorus 2", "Bridge", "Dance! (V2)"].map(String::from).to_vec();
+        s.part_recalls = vec![
+            PartRecallDef { part: "Verse 2".into(), patch: "Dry Chorus Clean L".into(), ..Default::default() },
+            PartRecallDef { part: "Dance! (V2)".into(), repeat_of: "Verse 2".into(), ..Default::default() },
+        ];
+        assert_eq!(s.source_part("Dance! (V2)"), "Verse 2");
+        assert_eq!(s.part_recall("Dance! (V2)").unwrap().patch, "Dry Chorus Clean L");
+        assert!(s.rename_part("Verse 2", "V2"));
+        assert_eq!(s.source_part("Dance! (V2)"), "V2");
+        assert!(s.remove_part("V2"));
+        let own = s.own_recall("Dance! (V2)").unwrap();
+        assert_eq!(own.patch, "Dry Chorus Clean L");
+        assert!(own.repeat_of.is_empty());
     }
 
     /// A song's version of a profile patch replaces it in the song, and

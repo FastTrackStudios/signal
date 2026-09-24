@@ -128,8 +128,18 @@ fn default_switch_actions(song_has_parts: bool) -> Vec<String> {
         .collect()
 }
 
-/// Part `name`'s recall entry, made if it has none.
+/// Part `name`'s recall entry, made if it has none — its source's when it
+/// repeats another part, so an edit to either is an edit to both.
 fn part_recall_mut<'a>(
+    song: &'a mut crate::profiles::SongDef,
+    name: &str,
+) -> &'a mut crate::profiles::PartRecallDef {
+    let src = song.source_part(name);
+    own_recall_mut(song, &src)
+}
+
+/// Part `name`'s own entry, made if it has none (its section, its repeat).
+fn own_recall_mut<'a>(
     song: &'a mut crate::profiles::SongDef,
     name: &str,
 ) -> &'a mut crate::profiles::PartRecallDef {
@@ -3015,6 +3025,10 @@ impl GuitarRigBackend {
                                 profile_switches: s
                                     .part_recall(&name)
                                     .is_some_and(|r| r.profile_switches),
+                                repeat_of: {
+                                    let src = s.source_part(&name);
+                                    if src.eq_ignore_ascii_case(&name) { String::new() } else { src }
+                                },
                                 name,
                                 patch,
                                 overrides: overrides
@@ -4427,23 +4441,9 @@ impl Rig for GuitarRigBackend {
             // the PATCH a section recalls, and clearing it should not throw
             // away the parameter changes that are the section's real
             // content.
-            let (kept, profile) = song
-                .part_recalls
-                .iter()
-                .find(|r| r.part.eq_ignore_ascii_case(&part))
-                .map(|r| (r.overrides.clone(), r.profile.clone()))
-                .unwrap_or_default();
-            song.part_recalls
-                .retain(|r| !r.part.eq_ignore_ascii_case(&part));
-            if !patch.is_empty() || !kept.is_empty() || !profile.is_empty() {
-                song.part_recalls.push(crate::profiles::PartRecallDef {
-                    profile,
-                    part: part.clone(),
-                    patch: patch.clone(),
-                    overrides: kept,
-                    ..Default::default()
-                });
-            }
+            // (Its source's, when the part repeats another; everything else
+            // on the part — its changes, section, switches — stays.)
+            part_recall_mut(song, &part).patch.clone_from(&patch);
             tracing::info!(
                 song = %song_name,
                 part = %part,
@@ -4521,26 +4521,9 @@ impl Rig for GuitarRigBackend {
                 })
                 .collect();
 
-            // Keep the patch this section already recalls: this call sets
-            // what it CHANGES, and the two are independent halves of the
-            // same section.
-            let (patch, profile) = song
-                .part_recalls
-                .iter()
-                .find(|r| r.part.eq_ignore_ascii_case(&part))
-                .map(|r| (r.patch.clone(), r.profile.clone()))
-                .unwrap_or_default();
-            song.part_recalls
-                .retain(|r| !r.part.eq_ignore_ascii_case(&part));
-            if !patch.is_empty() || !defs.is_empty() || !profile.is_empty() {
-                song.part_recalls.push(crate::profiles::PartRecallDef {
-                    profile,
-                    part: part.clone(),
-                    patch,
-                    overrides: defs,
-                    ..Default::default()
-                });
-            }
+            // What it CHANGES; the patch it recalls, its section and its
+            // switches stay (and a repeat's changes are its source's).
+            part_recall_mut(song, &part).overrides = defs;
             tracing::info!(
                 song = %song_name,
                 %part,
@@ -4714,10 +4697,11 @@ impl Rig for GuitarRigBackend {
                 return;
             };
             self.edit_current_song("part switch reset", |song| {
+                let src = song.source_part(&part_name);
                 let Some(r) = song
                     .part_recalls
                     .iter_mut()
-                    .find(|r| r.part.eq_ignore_ascii_case(&part_name))
+                    .find(|r| r.part.eq_ignore_ascii_case(&src))
                 else {
                     return false;
                 };
@@ -4794,9 +4778,45 @@ impl Rig for GuitarRigBackend {
             if !song.parts.iter().any(|p| p.eq_ignore_ascii_case(&part)) {
                 return false;
             }
-            part_recall_mut(song, &part).section = section.clone();
+            own_recall_mut(song, &part).section = section.clone();
             true
         });
+    }
+
+    fn set_part_repeat(&self, part: String, of: String) {
+        let of = of.trim().to_string();
+        self.edit_current_song("part repeat", |song| {
+            if !song.parts.iter().any(|p| p.eq_ignore_ascii_case(&part)) {
+                return false;
+            }
+            if of.is_empty() {
+                // Its own again, keeping the sound it had.
+                let src = song.source_part(&part);
+                let copy = song.own_recall(&src).cloned();
+                let own = own_recall_mut(song, &part);
+                own.repeat_of.clear();
+                if let Some(c) = copy.filter(|_| !src.eq_ignore_ascii_case(&part)) {
+                    own.profile = c.profile;
+                    own.patch = c.patch;
+                    own.overrides = c.overrides;
+                    own.stack_defaults = c.stack_defaults;
+                    own.profile_switches = c.profile_switches;
+                    own.switch_actions = c.switch_actions;
+                }
+                return true;
+            }
+            // Never a loop: `of` must not already lead back to `part`.
+            if !song.parts.iter().any(|p| p.eq_ignore_ascii_case(&of))
+                || song.source_part(&of).eq_ignore_ascii_case(&part)
+            {
+                return false;
+            }
+            own_recall_mut(song, &part).repeat_of = of.clone();
+            true
+        });
+        // The part that is up re-recalled, so the link is heard now.
+        let idx = *self.part_index.lock_ok();
+        Rig::select_part(self, idx as u32);
     }
 
     fn save_song_changes(&self, patch: String) -> String {
@@ -4881,9 +4901,7 @@ impl Rig for GuitarRigBackend {
                         .iter()
                         .find(|s| s.name.eq_ignore_ascii_case(&song_name))
                         .and_then(|s| {
-                            s.part_recalls
-                                .iter()
-                                .find(|r| r.part.eq_ignore_ascii_case(&part.name))
+                            s.part_recall(&part.name)
                                 .map(|r| r.overrides.clone())
                         })
                         .unwrap_or_default()
@@ -6956,20 +6974,7 @@ impl Rig for GuitarRigBackend {
             if !song.parts.iter().any(|p| p.eq_ignore_ascii_case(&part)) {
                 return false;
             }
-            match song
-                .part_recalls
-                .iter_mut()
-                .find(|r| r.part.eq_ignore_ascii_case(&part))
-            {
-                Some(r) => r.profile.clone_from(&profile),
-                None => song.part_recalls.push(crate::profiles::PartRecallDef {
-                    part: part.clone(),
-                    profile: profile.clone(),
-                    patch: String::new(),
-                    overrides: Vec::new(),
-                    ..Default::default()
-                }),
-            }
+            part_recall_mut(song, &part).profile.clone_from(&profile);
             true
         });
         // The part that is up is re-recalled, so the choice is heard now.

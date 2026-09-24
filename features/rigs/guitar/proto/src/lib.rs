@@ -674,6 +674,10 @@ pub struct PerfPart {
     /// It plays the profile's own switches (the song's tuning steps aside).
     #[facet(default)]
     pub profile_switches: bool,
+    /// The part it repeats (plays and edits that part's sound); empty for
+    /// its own.
+    #[facet(default)]
+    pub repeat_of: String,
 }
 
 /// One parameter a section changes.
@@ -1031,6 +1035,10 @@ pub mod rig {
         fn set_part_section(&self, part: String, section: String);
         /// Whether `part` plays the profile's own switches.
         fn set_part_profile_switches(&self, part: String, on: bool);
+        /// Make `part` a repeat of part `of` — it plays and edits `of`'s
+        /// sound, the two linked — or (empty `of`) its own again, keeping a
+        /// copy of the sound it had.
+        fn set_part_repeat(&self, part: String, of: String);
         /// Save the song's changes to profile patch `patch` back into the
         /// profile (its new default) and clear them from the song. Returns
         /// what happened.

@@ -479,6 +479,8 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                                             patch: part.patch.clone(),
                                                                                             section: if grouped { part.section.clone() } else { String::new() },
                                                                                             profile_switches: part.profile_switches,
+                                                                                            repeat_of: part.repeat_of.clone(),
+                                                                                            others: model.parts.iter().filter(|p| p.name != part.name).map(|p| p.name.clone()).collect::<Vec<_>>(),
                                                                                             profile: part.profile.clone(),
                                                                                             song_profile: if model.song_profile.is_empty() { loaded.clone() } else { model.song_profile.clone() },
                                                                                             profiles: profile_names.clone(),
@@ -690,6 +692,14 @@ fn PatchChip(label: String, colour: &'static str, lit: bool) -> Element {
 #[component]
 fn PartMarks(part: signal_guitar_proto::PerfPart) -> Element {
     rsx! {
+        // A repeat: linked to the part it repeats (same sound, edited
+        // together).
+        if !part.repeat_of.is_empty() {
+            span { style: "flex-shrink: 0; font-size: 10px; color: {MUTED}; white-space: nowrap;",
+                title: "Repeats {part.repeat_of} — the same sound; editing one edits both",
+                "↻ {part.repeat_of}"
+            }
+        }
         if part.profile_switches {
             span { style: "flex-shrink: 0; display: flex; color: {FAINT};", title: "Plays the profile's switches",
                 fts_chrome::Glyph { icon: fts_chrome::Icon::Profile, size: 10 }
@@ -902,6 +912,12 @@ fn PartEditor(
     section: String,
     /// It plays the profile's own switches.
     profile_switches: bool,
+    /// The part it repeats; empty = its own sound.
+    #[props(default)]
+    repeat_of: String,
+    /// The song's other parts, for the Repeats picker.
+    #[props(default)]
+    others: Vec<String>,
     /// The part's own profile; empty = the song's.
     profile: String,
     /// What "the song's" means right now, for the placeholder.
@@ -924,6 +940,20 @@ fn PartEditor(
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 6px; margin: 2px 0 6px; padding: 8px; \
                       border-radius: 8px; border: 1px solid {LINE};",
+            span { style: "font-size: 10px; color: {FAINT};", "Repeats — linked: the same sound, edited together" }
+            Picker {
+                options: std::iter::once("— its own sound —".to_string()).chain(others.iter().cloned()).collect::<Vec<_>>(),
+                selected: others.iter().position(|p| p.eq_ignore_ascii_case(&repeat_of)).map_or(0, |p| p as u32 + 1),
+                width: "100%".to_string(),
+                on_select: {
+                    let (rig, part, others) = (rig.clone(), name.clone(), others.clone());
+                    move |i: u32| {
+                        let of = if i == 0 { String::new() } else { others.get(i as usize - 1).cloned().unwrap_or_default() };
+                        let part = part.clone();
+                        send(&rig, move |r| async move { let _ = r.set_part_repeat(part, of).await; });
+                    }
+                },
+            }
             span { style: "font-size: 10px; color: {FAINT};", "Profile" }
             Picker {
                 options: std::iter::once(format!("— the song's ({song_profile}) —")).chain(profiles.iter().cloned()).collect::<Vec<_>>(),
