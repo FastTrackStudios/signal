@@ -204,7 +204,7 @@ fn write_line(at_ns: u64, text: &str) {
 
 /// `YYYY-MM-DD HH:MM:SS.mmm` in UTC (the log's other timestamps, tracing's,
 /// are UTC too).
-fn format_local(t: std::time::SystemTime) -> String {
+pub(crate) fn format_local(t: std::time::SystemTime) -> String {
     let d = t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
     let secs = d.as_secs() as i64;
     let ms = d.subsec_millis();

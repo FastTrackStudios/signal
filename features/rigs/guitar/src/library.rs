@@ -40,6 +40,7 @@ use std::path::PathBuf;
 use facet::Facet;
 use signal_rig_host::store::{StyxDir, signal_config_dir};
 
+use crate::config_watch::{self, Read};
 use crate::profiles::{
     DrivePresetDef, KeyBindingDef, MidiMapDef, ProfileDef, SetlistDef, SongDef, default_keymap,
     default_midi_map, default_setlists, drive_presets, song_library, worship_def,
@@ -298,10 +299,74 @@ pub fn profile_file(name: &str) -> String {
     format!("{}.styx", if slug.is_empty() { "profile" } else { slug })
 }
 
+/// The profiles directory.
+#[must_use]
+pub fn profiles_dir() -> PathBuf {
+    rig_dir().join(PROFILES_DIR)
+}
+
+/// A file that does not parse: said loudly, in the log and the reload log,
+/// and otherwise left alone — never reseeded, never saved over.
+pub(crate) fn report_bad(path: &std::path::Path, err: &str) {
+    let line = format!(
+        "{}: does not parse — kept the running state, the file is left as it is: {err}",
+        config_watch::display_name(path)
+    );
+    tracing::error!("{line}");
+    config_watch::log_line(&line);
+}
+
+/// Read `file`, seeding it from the embedded default when it is missing.
+/// One that is there and does not parse plays the default in memory and is
+/// left alone — it is never reseeded, and no save overwrites it until it
+/// parses again.
+fn read_or_seed<T: for<'a> Facet<'a>>(
+    store: &StyxDir,
+    file: &str,
+    seed: &str,
+    fallback: impl FnOnce() -> T,
+) -> T {
+    let path = store.dir().join(file);
+    match config_watch::read_tracked::<T>(&path) {
+        Read::Ok(v) => v,
+        Read::Bad(e) => {
+            report_bad(&path, &e);
+            facet_styx::from_str::<T>(seed).unwrap_or_else(|_| fallback())
+        }
+        Read::Missing => {
+            let v = store.read_or_seed(file, seed, fallback);
+            // Seeded: remember it as read, so the first save is not taken
+            // for an overwrite of somebody else's file.
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                config_watch::note_read(&path, &text, &v);
+            }
+            v
+        }
+    }
+}
+
+/// Resolve a profile's rig-dir-relative capture paths, as a load does.
+pub(crate) fn resolve_profile(profile: &mut ProfileDef) {
+    let store = store();
+    for preset in &mut profile.presets {
+        store.resolve(&mut preset.nam);
+    }
+}
+
+/// Resolve the drive presets' capture paths, as a load does.
+pub(crate) fn resolve_drive_presets(presets: &mut [DrivePresetDef]) {
+    let store = store();
+    for dp in presets {
+        for option in &mut dp.options {
+            store.resolve(&mut option.nam);
+        }
+    }
+}
+
 /// Put every song's patches on `profile` (tagged with their song), for the
 /// songs played on it — those naming it, and those naming no profile (they
 /// play on whatever is loaded).
-fn attach_song_patches(profile: &mut ProfileDef, songs: &[SongDef]) {
+pub(crate) fn attach_song_patches(profile: &mut ProfileDef, songs: &[SongDef]) {
     for song in songs {
         if !song.profile.is_empty() && !song.profile.eq_ignore_ascii_case(&profile.name) {
             continue;
@@ -338,12 +403,25 @@ fn load_profiles(store: &StyxDir) -> Vec<ProfileDef> {
     files.sort();
     let mut profiles: Vec<ProfileDef> = files
         .iter()
-        .filter_map(|f| dir.read::<ProfileDef>(f))
+        .filter_map(|f| {
+            let path = dir.dir().join(f);
+            match config_watch::read_tracked::<ProfileDef>(&path) {
+                Read::Ok(p) => Some(p),
+                Read::Missing => None,
+                Read::Bad(e) => {
+                    report_bad(&path, &e);
+                    None
+                }
+            }
+        })
         .collect();
-    if profiles.is_empty() {
-        let legacy = store.read_or_seed::<ProfileDef>("profile.styx", DEFAULT_PROFILE, worship_def);
+    // Only a rig with no profile files at all is a legacy one: profiles
+    // that are there and do not parse are somebody's work, and seeding a
+    // default into their place could overwrite one of them.
+    if files.is_empty() {
+        let legacy = read_or_seed(store, "profile.styx", DEFAULT_PROFILE, worship_def);
         if writable_store().is_some() {
-            dir.write(&profile_file(&legacy.name), &legacy);
+            config_watch::write_guarded(&dir.dir().join(profile_file(&legacy.name)), &legacy);
             let old = store.dir().join("profile.styx");
             if let Err(e) = std::fs::rename(&old, old.with_extension("styx.migrated")) {
                 tracing::warn!("rig library: cannot retire {}: {e}", old.display());
@@ -356,6 +434,14 @@ fn load_profiles(store: &StyxDir) -> Vec<ProfileDef> {
     profiles
 }
 
+/// Write `profile` (its own patches only) to `profiles/<file>.styx`.
+fn save_profile_file(store: &StyxDir, mut profile: ProfileDef) {
+    for preset in &mut profile.presets {
+        store.relativize(&mut preset.nam);
+    }
+    config_watch::write_guarded(&profiles_store().dir().join(profile_file(&profile.name)), &profile);
+}
+
 impl RigLibrary {
     /// Load the library, bootstrapping any missing file (and the NAM
     /// models the defaults reference) from the embedded in-repo default
@@ -364,30 +450,28 @@ impl RigLibrary {
         seed_models();
         let store = store();
         let mut profiles = load_profiles(&store);
-        let mut drive_presets = store
-            .read_or_seed::<DrivePresetLib>("drive-presets.styx", DEFAULT_DRIVE_PRESETS, || {
+        let mut drive_presets =
+            read_or_seed::<DrivePresetLib>(&store, "drive-presets.styx", DEFAULT_DRIVE_PRESETS, || {
                 DrivePresetLib {
                     presets: drive_presets(),
                 }
             })
             .presets;
-        let songs = store
-            .read_or_seed::<SongLib>("songs.styx", DEFAULT_SONGS, || SongLib {
-                songs: song_library(),
-            })
-            .songs;
-        let setlists = store
-            .read_or_seed::<SetlistLib>("setlists.styx", DEFAULT_SETLISTS, || SetlistLib {
+        let songs = read_or_seed::<SongLib>(&store, "songs.styx", DEFAULT_SONGS, || SongLib {
+            songs: song_library(),
+        })
+        .songs;
+        let setlists =
+            read_or_seed::<SetlistLib>(&store, "setlists.styx", DEFAULT_SETLISTS, || SetlistLib {
                 setlists: default_setlists(),
             })
             .setlists;
         let midi_map =
-            store.read_or_seed::<MidiMapDef>("midi.styx", DEFAULT_MIDI, default_midi_map);
-        let keymap = store
-            .read_or_seed::<KeymapLib>("keymap.styx", DEFAULT_KEYMAP, || KeymapLib {
-                bindings: default_keymap(),
-            })
-            .bindings;
+            read_or_seed::<MidiMapDef>(&store, "midi.styx", DEFAULT_MIDI, default_midi_map);
+        let keymap = read_or_seed::<KeymapLib>(&store, "keymap.styx", DEFAULT_KEYMAP, || KeymapLib {
+            bindings: default_keymap(),
+        })
+        .bindings;
         for profile in &mut profiles {
             for preset in &mut profile.presets {
                 store.resolve(&mut preset.nam);
@@ -451,33 +535,53 @@ impl RigLibrary {
                 }
             }
         }
-        let comp = Self::read_compositions();
+        let last_good = CACHE
+            .lock()
+            .ok()
+            .and_then(|c| c.as_ref().filter(|(d, _, _)| *d == dir).map(|(_, _, comp)| comp.clone()));
+        let comp = Self::read_compositions(last_good.as_ref());
         if let Ok(mut cache) = CACHE.lock() {
             *cache = Some((dir, stamp, comp.clone()));
         }
         comp
     }
 
-    fn read_compositions() -> crate::compose::Compositions {
-        let store = store();
-        let mut modules = store
-            .read::<crate::compose::ModuleLib>(crate::compose::MODULES_FILE)
-            .unwrap_or_default()
-            .presets;
-        for m in &mut modules {
-            for snap in &mut m.snapshots {
-                store.resolve(&mut snap.nam);
-                store.resolve(&mut snap.nam2);
+    /// Read the three composition files. One that does not parse keeps what
+    /// was last read from it (`last_good`) rather than reading as empty — an
+    /// empty module library would rebuild every patch without its amp.
+    fn read_compositions(
+        last_good: Option<&crate::compose::Compositions>,
+    ) -> crate::compose::Compositions {
+        fn one<T: for<'a> Facet<'a> + Default>(file: &str) -> Result<T, ()> {
+            let path = rig_dir().join(file);
+            match config_watch::read_tracked::<T>(&path) {
+                Read::Ok(v) => Ok(v),
+                Read::Missing => Ok(T::default()),
+                Read::Bad(e) => {
+                    report_bad(&path, &e);
+                    Err(())
+                }
             }
         }
-        let presets = store
-            .read::<crate::compose::PresetLib>(crate::compose::PRESETS_FILE)
-            .unwrap_or_default()
-            .presets;
-        let blocks = store
-            .read::<crate::compose::BlockLib>(crate::compose::BLOCKS_FILE)
-            .unwrap_or_default()
-            .presets;
+        let store = store();
+        let modules = one::<crate::compose::ModuleLib>(crate::compose::MODULES_FILE).map(|l| l.presets);
+        let fresh_modules = modules.is_ok();
+        let mut modules = modules
+            .unwrap_or_else(|()| last_good.map(|c| c.modules.clone()).unwrap_or_default());
+        if fresh_modules {
+            for m in &mut modules {
+                for snap in &mut m.snapshots {
+                    store.resolve(&mut snap.nam);
+                    store.resolve(&mut snap.nam2);
+                }
+            }
+        }
+        let presets = one::<crate::compose::PresetLib>(crate::compose::PRESETS_FILE)
+            .map(|l| l.presets)
+            .unwrap_or_else(|()| last_good.map(|c| c.presets.clone()).unwrap_or_default());
+        let blocks = one::<crate::compose::BlockLib>(crate::compose::BLOCKS_FILE)
+            .map(|l| l.presets)
+            .unwrap_or_else(|()| last_good.map(|c| c.blocks.clone()).unwrap_or_default());
         crate::compose::Compositions {
             modules,
             presets,
@@ -497,18 +601,19 @@ impl RigLibrary {
                 store.relativize(&mut snap.nam2);
             }
         }
-        store.write(
-            crate::compose::MODULES_FILE,
+        let dir = store.dir();
+        config_watch::write_guarded(
+            &dir.join(crate::compose::MODULES_FILE),
             &crate::compose::ModuleLib { presets: modules },
         );
-        store.write(
-            crate::compose::PRESETS_FILE,
+        config_watch::write_guarded(
+            &dir.join(crate::compose::PRESETS_FILE),
             &crate::compose::PresetLib {
                 presets: comp.presets.clone(),
             },
         );
-        store.write(
-            crate::compose::BLOCKS_FILE,
+        config_watch::write_guarded(
+            &dir.join(crate::compose::BLOCKS_FILE),
             &crate::compose::BlockLib {
                 presets: comp.blocks.clone(),
             },
@@ -521,9 +626,16 @@ impl RigLibrary {
     /// presets is the normal state, not an error.
     #[must_use]
     pub fn load_node_store() -> crate::node_store::NodeStore {
-        store()
-            .read(crate::node_store::NODE_STORE_FILE)
-            .unwrap_or_default()
+        // Read per use, so it is always what the rig holds: tracked, so the
+        // save that follows a read is not mistaken for an overwrite.
+        match config_watch::read_tracked(&rig_dir().join(crate::node_store::NODE_STORE_FILE)) {
+            Read::Ok(v) => v,
+            Read::Missing => crate::node_store::NodeStore::default(),
+            Read::Bad(e) => {
+                report_bad(&rig_dir().join(crate::node_store::NODE_STORE_FILE), &e);
+                crate::node_store::NodeStore::default()
+            }
+        }
     }
 
     /// Write it back. Best-effort, like the profile: losing a preset is not
@@ -532,7 +644,7 @@ impl RigLibrary {
         let Some(store) = writable_store() else {
             return;
         };
-        store.write(crate::node_store::NODE_STORE_FILE, nodes);
+        config_watch::write_guarded(&store.dir().join(crate::node_store::NODE_STORE_FILE), nodes);
     }
 
     /// Write a profile to `profiles/<file>.styx`, named for the profile —
@@ -547,10 +659,18 @@ impl RigLibrary {
             profile.patches.drain(..).partition(|p| !p.song.is_empty());
         profile.patches = own;
         if !song_patches.is_empty() {
-            let mut songs = store
-                .read::<SongLib>("songs.styx")
-                .map(|l| l.songs)
-                .unwrap_or_default();
+            let songs_path = store.dir().join("songs.styx");
+            // Merged into what the file says now — read quietly, so an edit
+            // the rig has not loaded yet stays news (and this save, then,
+            // leaves the file to it).
+            let mut songs = match config_watch::read_quiet::<SongLib>(&songs_path) {
+                Read::Ok(l) => l.songs,
+                Read::Missing => Vec::new(),
+                Read::Bad(_) => {
+                    tracing::warn!("songs.styx does not parse — the song patches were not saved into it");
+                    return save_profile_file(&store, profile);
+                }
+            };
             for song in &mut songs {
                 let mine: Vec<crate::profiles::PatchDef> = song_patches
                     .iter()
@@ -561,12 +681,9 @@ impl RigLibrary {
                     song.patches = mine;
                 }
             }
-            store.write("songs.styx", &SongLib { songs });
+            config_watch::write_guarded(&songs_path, &SongLib { songs });
         }
-        for preset in &mut profile.presets {
-            store.relativize(&mut preset.nam);
-        }
-        profiles_store().write(&profile_file(&profile.name), &profile);
+        save_profile_file(&store, profile);
     }
 
     /// Remove a profile's file. The caller has already decided it may go —
@@ -579,6 +696,7 @@ impl RigLibrary {
         if let Err(e) = std::fs::remove_file(&path) {
             tracing::warn!("rig library: cannot remove {}: {e}", path.display());
         }
+        config_watch::forget(&path);
     }
 
     pub fn save_drive_presets(presets: &[DrivePresetDef]) {
@@ -591,7 +709,7 @@ impl RigLibrary {
                 store.relativize(&mut option.nam);
             }
         }
-        store.write("drive-presets.styx", &DrivePresetLib { presets });
+        config_watch::write_guarded(&store.dir().join("drive-presets.styx"), &DrivePresetLib { presets });
     }
 
     /// Write the songs. A song's patches are kept as the file has them —
@@ -601,10 +719,17 @@ impl RigLibrary {
         let Some(store) = writable_store() else {
             return;
         };
-        let on_disk = store
-            .read::<SongLib>("songs.styx")
-            .map(|l| l.songs)
-            .unwrap_or_default();
+        let path = store.dir().join("songs.styx");
+        let on_disk = match config_watch::read_quiet::<SongLib>(&path) {
+            Read::Ok(l) => l.songs,
+            Read::Missing => Vec::new(),
+            // Not overwritten either way (the guard below refuses) — but
+            // say why here, where the reason is known.
+            Read::Bad(_) => {
+                tracing::warn!("songs.styx does not parse — the song list was not saved over it");
+                return;
+            }
+        };
         let songs: Vec<SongDef> = songs
             .iter()
             .map(|s| {
@@ -615,15 +740,15 @@ impl RigLibrary {
                 s
             })
             .collect();
-        store.write("songs.styx", &SongLib { songs });
+        config_watch::write_guarded(&path, &SongLib { songs });
     }
 
     pub fn save_setlists(setlists: &[SetlistDef]) {
         let Some(store) = writable_store() else {
             return;
         };
-        store.write(
-            "setlists.styx",
+        config_watch::write_guarded(
+            &store.dir().join("setlists.styx"),
             &SetlistLib {
                 setlists: setlists.to_vec(),
             },
@@ -634,7 +759,8 @@ impl RigLibrary {
         let Some(store) = writable_store() else {
             return;
         };
-        store.write("last-state.styx", state);
+        // The rig's own file: written whatever is there.
+        config_watch::write_owned(&store.dir().join("last-state.styx"), state);
     }
 
     /// `None` when the file is missing (fresh install) or unparsable.
