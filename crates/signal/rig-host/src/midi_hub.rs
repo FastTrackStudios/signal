@@ -120,6 +120,12 @@ pub fn init_platform() {
     midicore::native::init();
 }
 
+/// Send `bytes` to the MIDI device(s) whose name contains `device` (a
+/// controller's LED feedback). Returns how many it reached.
+pub fn send_to(device: &str, bytes: &[u8]) -> usize {
+    midicore::native::send_to(device, bytes)
+}
+
 static HUB: std::sync::OnceLock<MidiHub> = std::sync::OnceLock::new();
 
 /// The process-wide hub.

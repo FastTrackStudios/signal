@@ -1254,6 +1254,12 @@ pub struct MidiMapDef {
     #[facet(default = vec![1, 2, 3, 4, 5])]
     pub tap_notes: Vec<u32>,
     pub direct: Vec<DirectCcDef>,
+    /// The pedal whose LEDs follow the rig (name contains this; empty =
+    /// none): the switch whose stack is playing is lit, the rest are not.
+    /// Without it a pedal lights its switches by its own toggling, and after
+    /// a few presses — a momentary most of all — several are lit at once.
+    #[facet(default = String::from("AIRSTEP"))]
+    pub led_output: String,
 }
 
 #[derive(Clone, Debug, Facet)]
@@ -1267,6 +1273,7 @@ pub fn default_midi_map() -> MidiMapDef {
     MidiMapDef {
         tap_ccs: vec![101, 102, 103, 104, 105],
         tap_notes: vec![1, 2, 3, 4, 5],
+        led_output: "AIRSTEP".to_string(),
         direct: (0..5)
             .map(|i| DirectCcDef {
                 cc: 106 + i,

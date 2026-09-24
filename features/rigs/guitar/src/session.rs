@@ -76,6 +76,11 @@ pub struct MeterPump {
     audio_calls: u64,
     audio_stalled_since: Option<std::time::Instant>,
     audio_retry_at: Option<std::time::Instant>,
+    /// The pedal's LEDs as last sent, when, and until when an incoming note
+    /// that matches them is the pedal echoing them back (see `sync_leds`).
+    leds: Option<Vec<bool>>,
+    leds_at: Option<std::time::Instant>,
+    led_echo_until: Option<std::time::Instant>,
 }
 
 impl Default for MeterPump {
@@ -89,6 +94,9 @@ impl Default for MeterPump {
             audio_calls: 0,
             audio_stalled_since: None,
             audio_retry_at: None,
+            leds: None,
+            leds_at: None,
+            led_echo_until: None,
         }
     }
 }
@@ -409,6 +417,11 @@ impl GuitarRigBackend {
             }
             hub.rescan();
         }
+        // The pedal's LEDs follow the rig (sent only on change, and a
+        // refresh every few seconds).
+        if !crate::library::rig_is_design() {
+            self.sync_leds(pump);
+        }
         // Audio device drop-outs: twice a second.
         if !crate::library::rig_is_design() && pump.tick.is_multiple_of(15) {
             self.audio_watchdog(pump);
@@ -500,11 +513,26 @@ impl GuitarRigBackend {
                 .into_iter()
                 .filter_map(|(cc, val)| pump.switches.on_cc(&map, cc, val))
                 .collect();
+            let echo_window = pump
+                .led_echo_until
+                .is_some_and(|t| std::time::Instant::now() < t);
             for (note, down) in notes {
+                // The pedal repeating an LED state we just sent is not a press.
+                if echo_window {
+                    if let (Some(i), Some(leds)) = (
+                        map.tap_notes.iter().position(|n| *n == u32::from(note)),
+                        pump.leds.as_ref(),
+                    ) {
+                        if down == Some(leds.get(i).copied().unwrap_or(false)) {
+                            continue;
+                        }
+                    }
+                }
                 let down = down.unwrap_or_else(|| !pump.switches.note_switch_is_down(&map, note));
                 actions.extend(pump.switches.on_note(&map, note, down));
             }
             actions.extend(pump.switches.poll_holds());
+            // LEDs after this tick's switching (below the action loop).
             for action in actions {
                 match action {
                     FootswitchAction::Tap(4) => {
@@ -534,6 +562,46 @@ impl GuitarRigBackend {
                 }
             }
         }
+    }
+
+    /// Light the pedal's switches from the rig: the one whose stack is
+    /// playing on, the rest off — sent when that changes, and again every few
+    /// seconds so a pedal that reconnected (or toggled a light itself)
+    /// comes back into step.
+    fn sync_leds(&self, pump: &mut MeterPump) {
+        const REFRESH: std::time::Duration = std::time::Duration::from_secs(3);
+        let (device, notes) = {
+            let m = self.midi_map.lock_ok();
+            (m.led_output.clone(), m.tap_notes.clone())
+        };
+        if device.is_empty() || notes.is_empty() {
+            return;
+        }
+        let active = self.rig.lock_ok().as_ref().and_then(ProfileRig::active_stack);
+        // The stack switches (tap tempo on the last switch keeps its own).
+        let want: Vec<bool> = (0..notes.len().min(4)).map(|i| active == Some(i)).collect();
+        let now = std::time::Instant::now();
+        let due = pump.leds.as_ref() != Some(&want)
+            || pump.leds_at.is_none_or(|t| now.duration_since(t) >= REFRESH);
+        if !due {
+            return;
+        }
+        let mut bytes = Vec::with_capacity(want.len() * 3);
+        for (i, &lit) in want.iter().enumerate() {
+            let note = u8::try_from(notes[i]).unwrap_or(0).min(127);
+            if lit {
+                bytes.extend_from_slice(&[0x90, note, 127]);
+            } else {
+                bytes.extend_from_slice(&[0x80, note, 0]);
+            }
+        }
+        let reached = signal_rig_host::midi_hub::send_to(&device, &bytes);
+        if pump.leds.as_ref() != Some(&want) {
+            tracing::info!(midi.leds = ?want, midi.device = %device, midi.reached = reached, "pedal LEDs");
+        }
+        pump.leds = Some(want);
+        pump.leds_at = Some(now);
+        pump.led_echo_until = Some(now + std::time::Duration::from_millis(60));
     }
 
     /// Log-binned input spectrum (dB, −90..0) from the rig's pre-amp tap.
