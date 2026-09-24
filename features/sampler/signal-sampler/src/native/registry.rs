@@ -94,8 +94,10 @@ fn build_gate(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
 }
 fn build_volume(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeGain::new(sample_rate as f64);
-    if let Some(v) = block.param_f32("gain_db") {
-        fx.set_named("gain_db", v as f64);
+    for name in ["gain_db", "pan"] {
+        if let Some(v) = block.param_f32(name) {
+            fx.set_named(name, v as f64);
+        }
     }
     Box::new(fx)
 }

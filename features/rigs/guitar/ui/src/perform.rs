@@ -55,15 +55,35 @@ fn HoldButton(
     style: String,
     on_tap: Callback<()>,
     #[props(default)] on_hold: Option<Callback<()>>,
+    /// Momentary: `on_down` on the press and `on_up` on the release (or on
+    /// dragging off), in place of tap and hold.
+    #[props(default)] on_down: Option<Callback<()>>,
+    #[props(default)] on_up: Option<Callback<()>>,
     children: Element,
 ) -> Element {
     let mut hold_fired = use_signal(|| false);
     let mut hold_task = use_signal(|| None::<Task>);
+    let mut held = use_signal(|| false);
+    // A right-click opens the tile's menu; it is not a press.
+    let secondary = |e: &PointerEvent| {
+        matches!(
+            e.trigger_button(),
+            Some(dioxus::html::input_data::MouseButton::Secondary)
+        )
+    };
     rsx! {
         button {
             class: "{class}",
             style: "{style}",
-            onpointerdown: move |_| {
+            onpointerdown: move |e: PointerEvent| {
+                if secondary(&e) {
+                    return;
+                }
+                if let Some(down) = on_down {
+                    held.set(true);
+                    down.call(());
+                    return;
+                }
                 hold_fired.set(false);
                 if let Some(hold) = on_hold {
                     let task = spawn(async move {
@@ -74,7 +94,19 @@ fn HoldButton(
                     hold_task.set(Some(task));
                 }
             },
-            onpointerup: move |_| {
+            onpointerup: move |e: PointerEvent| {
+                if secondary(&e) {
+                    return;
+                }
+                if on_down.is_some() {
+                    if held() {
+                        held.set(false);
+                        if let Some(up) = on_up {
+                            up.call(());
+                        }
+                    }
+                    return;
+                }
                 if let Some(task) = hold_task.take() {
                     task.cancel();
                 }
@@ -83,6 +115,13 @@ fn HoldButton(
                 }
             },
             onpointerleave: move |_| {
+                // A held momentary lets go when the pointer leaves.
+                if held() {
+                    held.set(false);
+                    if let Some(up) = on_up {
+                        up.call(());
+                    }
+                }
                 // Dragging off the switch cancels the press entirely.
                 if let Some(task) = hold_task.take() {
                     task.cancel();
@@ -489,6 +528,19 @@ fn StackTile(
 ) -> Element {
     // Callbacks made once per site, not once per render (see `stable`).
     let cbs = crate::stable::use_stable();
+    let rig = use_hook(try_consume_context::<signal_guitar_proto::rig::RigClient>);
+    let mut menu = use_signal(|| false);
+    let (momentary, no_rotate) = (stack.momentary, stack.no_rotate);
+    let set_mode = {
+        let rig = rig.clone();
+        move |m: bool, n: bool| {
+            if let Some(r) = rig.clone() {
+                spawn(async move {
+                    let _ = r.set_stack_mode(index as u32, m, n).await;
+                });
+            }
+        }
+    };
     let (bg, text) = folder_color(&stack.name);
     let state_cls = if stack.is_active {
         "ring-2 ring-white/80 shadow-xl opacity-100"
@@ -501,12 +553,39 @@ fn StackTile(
         "relative flex flex-col items-center justify-center gap-1 rounded-xl"
     };
     rsx! {
+        div {
+            style: "position: relative; height: 100%; display: flex; flex-direction: column;",
+            // Right-click: how this switch behaves, for the song that is up.
+            oncontextmenu: move |e: MouseEvent| {
+                e.prevent_default();
+                menu.set(true);
+            },
+            onmouseleave: move |_| menu.set(false),
         HoldButton {
             class: format!("{layout_cls} transition-all h-full {state_cls}"),
             style: format!("background-color: {bg}; color: {text};"),
             on_tap: cbs.cb(move |(): ()| on_press.call(index)),
             on_hold,
+            on_down: momentary.then(|| cbs.cb(move |(): ()| on_press.call(index))),
+            on_up: momentary.then(|| {
+                let rig = rig.clone();
+                cbs.cb(move |(): ()| {
+                    if let Some(r) = rig.clone() {
+                        spawn(async move {
+                            let _ = r.release_stack(index as u32).await;
+                        });
+                    }
+                })
+            }),
             SwitchNo { no: switch_no }
+            // How the switch behaves, when it is not the usual latch-and-rotate.
+            if momentary || no_rotate {
+                span {
+                    style: "position: absolute; top: 6px; left: 50%; transform: translateX(-50%); \
+                            font-size: 8px; font-weight: 800; letter-spacing: 0.12em; opacity: 0.85;",
+                    if momentary && no_rotate { "HOLD · NO ROTATE" } else if momentary { "HOLD" } else { "NO ROTATE" }
+                }
+            }
             // Amber dot while the current patch is still loading.
             if !stack.available {
                 span { class: "absolute top-2 right-2 w-2.5 h-2.5 rounded-full",
@@ -556,6 +635,41 @@ fn StackTile(
                             } else {
                                 "w-1.5 h-1.5 rounded-full bg-current opacity-30"
                             },
+                        }
+                    }
+                }
+            }
+        }
+            if menu() {
+                div {
+                    style: "position: absolute; top: 8px; right: 8px; z-index: 300; \
+                            min-width: 180px; padding: 4px; display: flex; flex-direction: column; gap: 1px; \
+                            border: 1px solid #2b2b31; border-radius: 10px; \
+                            background: #0d0d10; box-shadow: 0 12px 32px #000c;",
+                    div { style: "padding: 4px 9px 6px; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #71717a;",
+                        "Switch {switch_no} · this song"
+                    }
+                    for (label, on, flip) in [("Momentary — only while held", momentary, 0u8), ("Disable stacking", no_rotate, 1u8)] {
+                        {
+                            let set_mode = set_mode.clone();
+                            rsx! {
+                                div {
+                                    key: "{flip}",
+                                    class: "hover:bg-accent/40",
+                                    style: "display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 6px; \
+                                            font-size: 11px; color: #d4d4d8; cursor: pointer; white-space: nowrap;",
+                                    onclick: move |_| {
+                                        menu.set(false);
+                                        if flip == 0 {
+                                            set_mode(!momentary, no_rotate);
+                                        } else {
+                                            set_mode(momentary, !no_rotate);
+                                        }
+                                    },
+                                    span { style: "width: 12px; text-align: center; color: #22c55e;", if on { "✓" } else { "" } }
+                                    "{label}"
+                                }
+                            }
                         }
                     }
                 }

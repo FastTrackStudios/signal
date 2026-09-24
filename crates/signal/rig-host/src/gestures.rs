@@ -36,6 +36,10 @@ pub enum FootswitchAction {
     Hold(usize),
     /// Direct slot pressed.
     Direct(u32),
+    /// Momentary switch `i` went down (see [`FootswitchEngine::set_momentary`]).
+    Press(usize),
+    /// Momentary switch `i` came back up.
+    Release(usize),
 }
 
 /// Per-switch gesture state. One per backend pump (thread-local scratch).
@@ -50,6 +54,11 @@ pub struct FootswitchEngine {
     /// slots) — edge detection, momentary switches repeat while held.
     cc_down: Vec<bool>,
     switches: usize,
+    /// Switches that act only while held: `Press` down, `Release` up — no
+    /// tap, no hold. Latched from `momentary_want` at each press, so a
+    /// press always ends the way it began.
+    momentary: Vec<bool>,
+    momentary_want: Vec<bool>,
 }
 
 impl FootswitchEngine {
@@ -63,6 +72,17 @@ impl FootswitchEngine {
             hold_fired: vec![false; switches],
             cc_down: vec![false; switches + directs],
             switches,
+            momentary: vec![false; switches],
+            momentary_want: vec![false; switches],
+        }
+    }
+
+    /// Which gesture switches are momentary, in switch order (missing =
+    /// not). A switch changed while it is held finishes that press the way
+    /// it started.
+    pub fn set_momentary(&mut self, flags: &[bool]) {
+        for (sw, slot) in self.momentary_want.iter_mut().enumerate() {
+            *slot = flags.get(sw).copied().unwrap_or(false);
         }
     }
 
@@ -113,7 +133,23 @@ impl FootswitchEngine {
             return None; // momentary repeat — not an edge
         }
         self.cc_down[idx] = down;
+        if down {
+            if let Some(sw) = gesture.filter(|&sw| sw < self.switches) {
+                self.momentary[sw] = self.momentary_want[sw];
+            }
+        }
         match gesture {
+            Some(sw) if sw < self.switches && self.momentary[sw] => {
+                // Held-only: the press is the action, the release undoes it.
+                if down {
+                    self.down[sw] = Some(Instant::now());
+                    self.hold_fired[sw] = true; // no hold for a momentary
+                    Some(FootswitchAction::Press(sw))
+                } else {
+                    self.down[sw] = None;
+                    Some(FootswitchAction::Release(sw))
+                }
+            }
             Some(sw) if sw < self.switches => {
                 if down {
                     self.down[sw] = Some(Instant::now());
@@ -233,6 +269,28 @@ mod tests {
         let down = !e.note_switch_is_down(&m, 3);
         assert!(!down, "a down switch takes it as the release");
         assert_eq!(e.on_note(&m, 3, down), Some(FootswitchAction::Tap(2)));
+    }
+
+    #[test]
+    fn a_momentary_switch_presses_and_releases_without_tap_or_hold() {
+        let m = map();
+        let mut e = FootswitchEngine::new(5, 5, Duration::from_millis(0));
+        e.set_momentary(&[false, true]);
+        assert_eq!(e.on_note(&m, 2, true), Some(FootswitchAction::Press(1)));
+        assert_eq!(e.poll_holds(), Vec::new(), "no hold while held");
+        assert_eq!(e.on_note(&m, 2, false), Some(FootswitchAction::Release(1)));
+        // The other switches still tap.
+        assert_eq!(e.on_note(&m, 1, true), None);
+        assert_eq!(e.on_note(&m, 1, false), Some(FootswitchAction::Tap(0)));
+    }
+
+    #[test]
+    fn a_switch_made_momentary_while_held_finishes_as_it_began() {
+        let (m, mut e) = (map(), engine());
+        assert_eq!(e.on_cc(&m, 101, 127), None);
+        e.set_momentary(&[true]);
+        assert_eq!(e.on_cc(&m, 101, 0), Some(FootswitchAction::Tap(0)));
+        assert_eq!(e.on_cc(&m, 101, 127), Some(FootswitchAction::Press(0)));
     }
 
     #[test]

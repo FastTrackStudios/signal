@@ -370,6 +370,11 @@ pub struct ProfileRig {
     /// Per-stack rotation cursor, parallel to `profile.stacks`. Advancing a
     /// stack (re-pressing its footswitch) bumps its cursor (wrapping).
     stack_pos: Vec<usize>,
+    /// A song's rotations: the profile's own list for each stack a song has
+    /// replaced, kept to put back when the song goes (`None` = untouched).
+    stack_base: Vec<Option<Vec<String>>>,
+    /// Stacks whose switch always lands on its patch rather than rotating.
+    no_rotate: Vec<bool>,
     /// Global "time bypass": when on, every time/fx block (the Time module) on
     /// the active patch is bypassed. Re-applied on each `activate`.
     fx_bypass: bool,
@@ -446,6 +451,8 @@ impl ProfileRig {
             patch_ids: Vec::new(),
             active: None,
             stack_pos: Vec::new(),
+            stack_base: Vec::new(),
+            no_rotate: Vec::new(),
             fx_bypass: false,
             level_match: true,
             target_loudness_db: -18.0,
@@ -528,6 +535,8 @@ impl ProfileRig {
         self.patch_ids.clear();
         self.active = None;
         self.stack_pos = vec![0; profile.stacks.len()];
+        self.stack_base = vec![None; profile.stacks.len()];
+        self.no_rotate = vec![false; profile.stacks.len()];
 
         let build_began = std::time::Instant::now();
         let mut loaded = 0usize;
@@ -769,6 +778,51 @@ impl ProfileRig {
 
     /// The rotation cursor (index into the stack's patch list) for `stack_idx`.
     /// Reset every stack's rotation cursor to its first patch.
+    /// Replace stack `stack`'s rotation with `patches` — a song's switch
+    /// tuning. The profile's own rotation is kept, and comes back with
+    /// [`restore_stack_rotations`](Self::restore_stack_rotations).
+    pub fn set_stack_rotation(&mut self, stack: &str, patches: Vec<String>) -> bool {
+        let Some(profile) = self.profile.as_mut() else {
+            return false;
+        };
+        let Some((si, st)) = profile
+            .stacks
+            .iter_mut()
+            .enumerate()
+            .find(|(_, st)| st.name.eq_ignore_ascii_case(stack))
+        else {
+            return false;
+        };
+        let original = std::mem::replace(&mut st.patches, patches);
+        if let Some(base) = self.stack_base.get_mut(si) {
+            base.get_or_insert(original);
+        }
+        if let Some(pos) = self.stack_pos.get_mut(si) {
+            *pos = 0;
+        }
+        true
+    }
+
+    /// Put every stack's own rotation back (the song has gone).
+    pub fn restore_stack_rotations(&mut self) {
+        let Some(profile) = self.profile.as_mut() else {
+            return;
+        };
+        for (st, base) in profile.stacks.iter_mut().zip(self.stack_base.iter_mut()) {
+            if let Some(original) = base.take() {
+                st.patches = original;
+            }
+        }
+    }
+
+    /// Whether each stack's switch rotates (`false`) or always lands on its
+    /// patch (`true`), in stack order.
+    pub fn set_no_rotate(&mut self, flags: &[bool]) {
+        for (slot, &f) in self.no_rotate.iter_mut().zip(flags) {
+            *slot = f;
+        }
+    }
+
     pub fn reset_stack_positions(&mut self) {
         for p in &mut self.stack_pos {
             *p = 0;
@@ -847,7 +901,8 @@ impl ProfileRig {
         };
 
         let already_active = cur_active_idx.is_some() && self.active == cur_active_idx;
-        let target_pos = if already_active {
+        let rotates = !self.no_rotate.get(stack_idx).copied().unwrap_or(false);
+        let target_pos = if already_active && rotates {
             (cur_pos + 1) % patches.len()
         } else {
             cur_pos

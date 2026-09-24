@@ -222,6 +222,12 @@ pub struct PerfStack {
     pub preset: String,
     /// Module names the current patch overrides (badge icons).
     pub override_modules: Vec<String>,
+    /// Active only while held (released: back to the previous patch).
+    #[facet(default)]
+    pub momentary: bool,
+    /// Always lands on its patch — pressing again does not rotate.
+    #[facet(default)]
+    pub no_rotate: bool,
 }
 
 /// The live performance model: the active profile's footswitch stacks + the
@@ -695,8 +701,16 @@ pub mod rig {
         fn perf(&self) -> PerformanceModel;
         /// The live active-patch FX chain (blocks + bypass + params).
         fn chain(&self) -> Vec<LiveBlock>;
-        /// Press a footswitch stack (by index): activate current / rotate.
+        /// Press a footswitch stack (by index): activate current / rotate —
+        /// or, on a momentary switch, activate it until
+        /// [`release_stack`](Self::release_stack).
         fn press_stack(&self, index: u32);
+        /// Release a footswitch stack: a momentary switch goes back to the
+        /// patch that was playing before its press. No-op otherwise.
+        fn release_stack(&self, index: u32);
+        /// Set how switch `index` behaves for the song that is up (or the
+        /// profile, with no song): momentary, and/or no rotation.
+        fn set_stack_mode(&self, index: u32, momentary: bool, no_rotate: bool);
         /// Toggle the global time/FX bypass.
         fn toggle_fx(&self);
         /// Boost pedal tap: on/off at the remembered level (default +1 dB).

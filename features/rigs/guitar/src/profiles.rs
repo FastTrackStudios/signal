@@ -358,6 +358,21 @@ pub struct ProfileDef {
 pub struct StackDef {
     pub name: String,
     pub patches: Vec<String>,
+    /// How its switch behaves when no song says otherwise (see
+    /// [`SwitchMode`]).
+    #[facet(default)]
+    pub momentary: bool,
+    #[facet(default)]
+    pub no_rotate: bool,
+}
+
+/// How a footswitch behaves: what a stack or a song's entry for it says.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SwitchMode {
+    /// Active only while held: the rig goes back to where it was on release.
+    pub momentary: bool,
+    /// Always its landing patch — pressing it again does not rotate.
+    pub no_rotate: bool,
 }
 
 /// The Worship profile definition: a small preset pool, twelve patches
@@ -379,6 +394,8 @@ pub fn worship_def() -> ProfileDef {
             .iter()
             .map(std::string::ToString::to_string)
             .collect(),
+        momentary: false,
+        no_rotate: false,
     };
     let patch = |name: &str, preset: &str| PatchDef {
         name: name.to_string(),
@@ -1122,6 +1139,26 @@ pub struct PartRecallDef {
 pub struct StackDefaultDef {
     pub stack: String,
     pub patch: String,
+    /// The switch's rotation for this song, in place of the stack's —
+    /// empty keeps the stack's own.
+    #[facet(default)]
+    pub patches: Vec<String>,
+    /// The switch's behaviour for this song (see [`SwitchMode`]). An entry
+    /// for a stack decides its mode for the song, whatever the profile says.
+    #[facet(default)]
+    pub momentary: bool,
+    #[facet(default)]
+    pub no_rotate: bool,
+}
+
+impl StackDefaultDef {
+    #[must_use]
+    pub const fn mode(&self) -> SwitchMode {
+        SwitchMode {
+            momentary: self.momentary,
+            no_rotate: self.no_rotate,
+        }
+    }
 }
 
 /// One setlist entry: a song reference with optional per-set key/tempo

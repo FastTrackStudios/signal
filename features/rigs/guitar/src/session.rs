@@ -179,6 +179,11 @@ pub struct GuitarRigBackend {
     /// The rig is meant to be playing (started, not stopped): the audio
     /// watchdog brings it back when its device drops out and returns.
     wants_audio: Arc<std::sync::atomic::AtomicBool>,
+    /// Each stack switch's behaviour right now (the song's entry for it,
+    /// else the profile's stack), in stack order — see `apply_song_stacks`.
+    switch_modes: Arc<Mutex<Vec<crate::profiles::SwitchMode>>>,
+    /// Where a held momentary switch goes back to on release.
+    momentary_return: Arc<Mutex<Option<String>>>,
     /// Debug-formatted audio prefs the live rig was opened with — a repeat
     /// `start` with unchanged prefs is a no-op instead of an audio gap.
     open_prefs: Arc<Mutex<Option<String>>>,
@@ -296,6 +301,8 @@ impl GuitarRigBackend {
             state_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             opening: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             wants_audio: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            switch_modes: Arc::new(Mutex::new(Vec::new())),
+            momentary_return: Arc::new(Mutex::new(None)),
             open_prefs: Arc::new(Mutex::new(None)),
             midi_map: Arc::new(Mutex::new(lib.midi_map)),
             keymap: Arc::new(Mutex::new(lib.keymap)),
@@ -483,6 +490,12 @@ impl GuitarRigBackend {
                     direct: m.direct.iter().map(|d| (d.cc, d.slot)).collect(),
                 }
             };
+            // Momentary switches (the stack switches, not tap tempo on 5).
+            {
+                let modes = self.switch_modes.lock_ok();
+                let flags: Vec<bool> = (0..4).map(|i| modes.get(i).is_some_and(|m| m.momentary)).collect();
+                pump.switches.set_momentary(&flags);
+            }
             let mut actions: Vec<FootswitchAction> = events
                 .into_iter()
                 .filter_map(|(cc, val)| pump.switches.on_cc(&map, cc, val))
@@ -509,6 +522,14 @@ impl GuitarRigBackend {
                     FootswitchAction::Direct(slot) => {
                         tracing::info!("footswitch direct → slot {slot}");
                         self.hold_layer_action(slot as usize);
+                    }
+                    FootswitchAction::Press(sw) => {
+                        tracing::info!("footswitch {} down (momentary)", sw + 1);
+                        Rig::press_stack(self, sw as u32);
+                    }
+                    FootswitchAction::Release(sw) => {
+                        tracing::info!("footswitch {} up (momentary)", sw + 1);
+                        Rig::release_stack(self, sw as u32);
                     }
                 }
             }
@@ -758,6 +779,9 @@ impl GuitarRigBackend {
                 }
             }
         }
+        // Rebuilt from the profile: the song's rotations went with the old
+        // stacks.
+        self.apply_song_stacks();
         self.resync_blocks();
         self.apply_tempo_to_delays();
         self.recall_patch_boost();
@@ -1750,6 +1774,69 @@ impl GuitarRigBackend {
     /// Activate a footswitch stack and re-sync everything that activation
     /// resets: the block mirror + bypass defaults, the tapped tempo on the
     /// fresh delays, and the boost gain block.
+    /// How stack switch `index` behaves right now.
+    fn switch_mode(&self, index: usize) -> crate::profiles::SwitchMode {
+        self.switch_modes.lock_ok().get(index).copied().unwrap_or_default()
+    }
+
+    /// The song that is up, when the setlist has one.
+    fn current_song_name(&self) -> Option<String> {
+        let idx = *self.song_index.lock_ok();
+        self.resolved_setlist().get(idx).map(|(name, ..)| name.clone())
+    }
+
+    /// The patch playing now.
+    fn active_patch_name(&self) -> Option<String> {
+        self.rig
+            .lock_ok()
+            .as_ref()
+            .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+    }
+
+    /// Put the song's switch tuning on the rig: the rotations it gives its
+    /// switches (in place of the profile's, which come back when it goes),
+    /// and every switch's mode — the song's entry for that stack when it has
+    /// one, else the profile's stack.
+    fn apply_song_stacks(&self) {
+        let defaults: Vec<crate::profiles::StackDefaultDef> = self
+            .current_song_name()
+            .and_then(|name| {
+                self.songs_lib
+                    .lock_ok()
+                    .iter()
+                    .find(|s| s.name.eq_ignore_ascii_case(&name))
+                    .map(|s| s.stack_defaults.clone())
+            })
+            .unwrap_or_default();
+        let modes: Vec<crate::profiles::SwitchMode> = self
+            .profile_def
+            .lock_ok()
+            .stacks
+            .iter()
+            .map(|st| {
+                defaults
+                    .iter()
+                    .find(|d| d.stack.eq_ignore_ascii_case(&st.name))
+                    .map_or(
+                        crate::profiles::SwitchMode {
+                            momentary: st.momentary,
+                            no_rotate: st.no_rotate,
+                        },
+                        crate::profiles::StackDefaultDef::mode,
+                    )
+            })
+            .collect();
+        if let Some(prig) = self.rig.lock_ok().as_mut() {
+            prig.restore_stack_rotations();
+            for d in defaults.iter().filter(|d| !d.patches.is_empty()) {
+                prig.set_stack_rotation(&d.stack, d.patches.clone());
+            }
+            let no_rotate: Vec<bool> = modes.iter().map(|m| m.no_rotate).collect();
+            prig.set_no_rotate(&no_rotate);
+        }
+        *self.switch_modes.lock_ok() = modes;
+    }
+
     fn activate_stack_and_sync(&self, index: usize) {
         self.end_audition();
         let t0 = std::time::Instant::now();
@@ -2048,9 +2135,11 @@ impl GuitarRigBackend {
         self.ensure_profile(&profile);
         self.apply_tempo_to_delays();
 
-        // Song switch tuning: reset every stack cursor, then point the
-        // song's overridden stacks at their landing patches — the switches
-        // are dialed for the song before anything activates.
+        // Song switch tuning: the song's rotations and switch modes, then
+        // reset every stack cursor and point the song's overridden stacks at
+        // their landing patches — the switches are dialed for the song
+        // before anything activates.
+        self.apply_song_stacks();
         {
             let mut guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_mut() {
@@ -2083,7 +2172,13 @@ impl GuitarRigBackend {
                         .iter()
                         .find(|d| d.stack.eq_ignore_ascii_case(&st.name))
                 })
-                .map_or(default, |d| d.patch.clone())
+                .map_or(default.clone(), |d| {
+                    if d.patch.is_empty() {
+                        d.patches.first().cloned().unwrap_or(default)
+                    } else {
+                        d.patch.clone()
+                    }
+                })
         };
         if self.activate_named(&landing) {
             self.sync_after_switch(std::time::Duration::ZERO, "song");
@@ -2187,6 +2282,8 @@ impl GuitarRigBackend {
         }
         // Land back where the last set was (crash-restart recovery).
         self.restore_last_state();
+        // The song that is up tunes the switches.
+        self.apply_song_stacks();
         // Mirror the (now active) patch's FX chain + apply bypass defaults,
         // and re-push any tapped tempo onto the fresh delays.
         self.resync_blocks();
@@ -2541,7 +2638,7 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("attack", 0.1, 50.0, 1.0),
             ("release", 5.0, 500.0, 120.0),
         ]),
-        BlockType::Volume => owned(&[("gain_db", -24.0, 24.0, 0.0)]),
+        BlockType::Volume => owned(&[("gain_db", -24.0, 24.0, 0.0), ("pan", -1.0, 1.0, 0.0)]),
         // Level-matched single drive control (DSP lands with drive-dsp).
         BlockType::Drive | BlockType::Boost => owned(&[("drive", 0.0, 1.0, 0.5)]),
         // NAM amp trims — input trim is "how hard the amp is pushed".
@@ -2619,7 +2716,8 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
 /// The primary dialable param for a block type: `(name, min, max, default)`.
 const fn primary_param(bt: BlockType) -> Option<(&'static str, f32, f32, f32)> {
     match bt {
-        BlockType::Reverb | BlockType::Delay => Some(("mix", 0.0, 0.10, 0.08)),
+        // Fully wet in parallel: how much is the level (dB against the dry).
+        BlockType::Reverb | BlockType::Delay => Some(("level", -60.0, 12.0, -16.0)),
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => Some(("mix", 0.0, 1.0, 0.4)),
         BlockType::Trem => Some(("depth", 0.0, 1.0, 0.5)),
         BlockType::Volume => Some(("gain_db", -12.0, 12.0, 0.0)),
@@ -2679,6 +2777,9 @@ fn build_perf_model_static(def: &ProfileDef, live: &str) -> PerformanceModel {
                 override_modules: patch_def
                     .map(super::profiles::PatchDef::override_modules)
                     .unwrap_or_default(),
+                // The profile's; the service lays the song's over them.
+                momentary: false,
+                no_rotate: false,
             }
         })
         .collect();
@@ -2720,6 +2821,9 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
                 override_modules: patch_def
                     .map(super::profiles::PatchDef::override_modules)
                     .unwrap_or_default(),
+                // The profile's; the service lays the song's over them.
+                momentary: false,
+                no_rotate: false,
             }
         })
         .collect();
@@ -3019,6 +3123,13 @@ impl Rig for GuitarRigBackend {
         };
         m.boost_db = self.current_boost_db();
         m.tempo_bpm = self.tempo_bpm().round() as u32;
+        {
+            let modes = self.switch_modes.lock_ok();
+            for (st, mode) in m.stacks.iter_mut().zip(modes.iter()) {
+                st.momentary = mode.momentary;
+                st.no_rotate = mode.no_rotate;
+            }
+        }
         {
             let resolved = self.resolved_setlist();
             let song_idx = *self.song_index.lock_ok();
@@ -3378,7 +3489,87 @@ impl Rig for GuitarRigBackend {
     }
 
     fn press_stack(&self, index: u32) {
+        if self.switch_mode(index as usize).momentary {
+            // Remember where we are — once: a second momentary pressed
+            // while one is held still returns to where the first began.
+            {
+                let mut ret = self.momentary_return.lock_ok();
+                if ret.is_none() {
+                    *ret = self.active_patch_name();
+                }
+            }
+        }
         self.activate_stack_and_sync(index as usize);
+    }
+
+    fn release_stack(&self, index: u32) {
+        if !self.switch_mode(index as usize).momentary {
+            return;
+        }
+        let Some(back) = self.momentary_return.lock_ok().take() else {
+            return;
+        };
+        if self.activate_named(&back) {
+            self.sync_after_switch(std::time::Duration::ZERO, "momentary");
+        }
+        self.publish_state();
+    }
+
+    fn set_stack_mode(&self, index: u32, momentary: bool, no_rotate: bool) {
+        let Some(stack) = self
+            .profile_def
+            .lock_ok()
+            .stacks
+            .get(index as usize)
+            .map(|st| st.name.clone())
+        else {
+            return;
+        };
+        // Per song: the song that is up gets (or updates) its entry for this
+        // switch. With no song, the profile's stack carries it.
+        let song = self.current_song_name();
+        match song {
+            Some(song) => {
+                {
+                    let mut songs = self.songs_lib.lock_ok();
+                    if let Some(s) = songs.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&song)) {
+                        match s
+                            .stack_defaults
+                            .iter_mut()
+                            .find(|d| d.stack.eq_ignore_ascii_case(&stack))
+                        {
+                            Some(d) => {
+                                d.momentary = momentary;
+                                d.no_rotate = no_rotate;
+                            }
+                            None => s.stack_defaults.push(crate::profiles::StackDefaultDef {
+                                stack: stack.clone(),
+                                patch: String::new(),
+                                patches: Vec::new(),
+                                momentary,
+                                no_rotate,
+                            }),
+                        }
+                    }
+                    RigLibrary::save_songs(&songs);
+                }
+                tracing::info!(song = %song, stack = %stack, momentary, no_rotate, "switch mode set for the song");
+            }
+            None => {
+                {
+                    let mut def = self.profile_def.lock_ok();
+                    if let Some(st) = def.stacks.get_mut(index as usize) {
+                        st.momentary = momentary;
+                        st.no_rotate = no_rotate;
+                    }
+                }
+                self.library_dirty
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                tracing::info!(stack = %stack, momentary, no_rotate, "switch mode set for the profile");
+            }
+        }
+        self.apply_song_stacks();
+        self.publish_state();
     }
 
     fn next_song(&self) {
@@ -3998,6 +4189,8 @@ impl Rig for GuitarRigBackend {
             def.stacks.push(crate::profiles::StackDef {
                 name: name.clone(),
                 patches: Vec::new(),
+                momentary: false,
+                no_rotate: false,
             });
             RigLibrary::save_profile(&def);
         }
@@ -5223,6 +5416,8 @@ impl Rig for GuitarRigBackend {
                 stacks: vec![crate::profiles::StackDef {
                     name: "Clean".to_string(),
                     patches: vec!["Clean".to_string()],
+                    momentary: false,
+                    no_rotate: false,
                 }],
             }
         } else {
