@@ -185,6 +185,10 @@ pub struct RigStatus {
     pub output_peak_r: f32,
     /// What the rig costs to run — see [`RigPerf`].
     pub perf: RigPerf,
+    /// Why the audio is not running, when it is not (the device open's
+    /// error, in words); empty while it runs or before a first try.
+    #[facet(default)]
+    pub audio_error: String,
     /// The incoming monitor mix at the headphone mixer's input, before its
     /// fader, dBFS (−90 = silence or no mixer).
     #[facet(default)]
@@ -427,6 +431,19 @@ pub struct SongSlot {
     pub key: String,
     /// Tempo for this set.
     pub bpm: u32,
+}
+
+/// [`LiveBlock::engine`] values.
+pub struct BlockEngine;
+impl BlockEngine {
+    /// Playing.
+    pub const LIVE: u32 = 0;
+    /// No audio: the device is closed (not found, stopped, refused).
+    pub const NO_AUDIO: u32 = 1;
+    /// The audio device is opening and the chain building.
+    pub const LOADING: u32 = 2;
+    /// Its chain would not build.
+    pub const FAILED: u32 = 3;
 }
 
 /// The phones: your guitar and the incoming monitor mix, and how loud.
@@ -813,6 +830,11 @@ pub use signal_proto::live_node::{LiveNode, LivePreset};
 pub struct LiveBlock {
     /// Stable id used to address the block (bypass / param edits).
     pub id: String,
+    /// Whether the engine is running this block — see [`BlockEngine`]. Not
+    /// live, the block is shown from its patch's definition: its settings
+    /// are what it will play, and can be edited.
+    #[facet(default)]
+    pub engine: u32,
     /// Block type (for coloring).
     pub block_type: BlockType,
     /// Display name.

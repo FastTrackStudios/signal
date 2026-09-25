@@ -210,6 +210,7 @@ mod tests {
     fn block() -> LiveBlock {
         LiveBlock {
             id: "eq-1".into(),
+            engine: 0,
             block_type: BlockType::Eq,
             name: "Amp EQ".into(),
             bypassed: false,

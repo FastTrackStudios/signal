@@ -578,7 +578,7 @@ pub fn GuitarRigRemote() -> Element {
                     }
                 }
                 // The whole app's CPU, as a share of the machine.
-                crate::meters::CpuMeter { perf: (state.dsp)() }
+                LiveCpu { state }
                 crate::control::MidiIndicator {
                     on_settings: move |()| audio_open.set(true),
                 }
@@ -595,7 +595,7 @@ pub fn GuitarRigRemote() -> Element {
                             // measured on the chain actually playing.
                             extra: rsx! {
                                 div { style: "padding: 6px 8px 2px; border-top: 1px solid #1c1c21; margin-top: 4px;",
-                                    crate::meters::DspReadout { perf: (state.dsp)() }
+                                    LiveDsp { state }
                                 }
                             },
                             items: vec![
@@ -842,4 +842,17 @@ pub fn GuitarRigRemote() -> Element {
 
         }
     }
+}
+
+/// The CPU meter, reading the rig's perf itself (it changes every status
+/// tick; read in the shell it would re-render the whole rig view).
+#[component]
+fn LiveCpu(state: crate::state::RigViewState) -> Element {
+    rsx! { crate::meters::CpuMeter { perf: (state.dsp)() } }
+}
+
+/// The DSP readout, reading the rig's perf itself (see [`LiveCpu`]).
+#[component]
+fn LiveDsp(state: crate::state::RigViewState) -> Element {
+    rsx! { crate::meters::DspReadout { perf: (state.dsp)() } }
 }

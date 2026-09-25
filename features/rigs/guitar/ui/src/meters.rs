@@ -157,7 +157,8 @@ pub fn CpuMeter(perf: RigPerf) -> Element {
             title: "{title}",
             span { style: "font-weight: 600; letter-spacing: 0.04em;", "CPU" }
             div { style: "width: 44px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden;",
-                div { style: "height: 100%; width: {pct}%; background: {colour};" }
+                // Scaled, not sized: repainted without a layout pass.
+                div { style: "height: 100%; width: 100%; transform-origin: left; transform: scaleX({pct / 100.0}); background: {colour};" }
             }
             span { style: "width: 28px; text-align: right; font-variant-numeric: tabular-nums;", "{pct:.0}%" }
         }

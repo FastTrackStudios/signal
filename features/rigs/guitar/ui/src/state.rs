@@ -14,6 +14,8 @@ use crate::meters::meter_level;
 pub struct RigViewState {
     /// Audio engine open and processing.
     pub running: Signal<bool>,
+    /// Why it is not, in words (empty while it runs).
+    pub audio_error: Signal<String>,
     /// Perceptual input level (0..1, sqrt-curved).
     pub in_level: Signal<f64>,
     /// Perceptual output level (0..1, sqrt-curved).
@@ -66,6 +68,7 @@ pub fn use_rig_state() -> RigViewState {
     let rig_stream = use_hook(try_consume_context::<RigStreamClient>);
 
     let mut running = use_signal(|| false);
+    let mut audio_error = use_signal(String::new);
     let mut in_level = use_signal(|| 0.0f64);
     let mut out_level = use_signal(|| 0.0f64);
     let mut in_peak_db = use_signal(|| -90.0f32);
@@ -93,6 +96,7 @@ pub fn use_rig_state() -> RigViewState {
                 let Some(rig) = rig else { return };
                 if let Ok(s) = rig.status().await {
                     running.set(s.running);
+                    audio_error.set(s.audio_error.clone());
                     in_level.set(meter_level(s.input_peak));
                     out_level.set(meter_level(s.output_peak));
                     in_peak_db.set(peak_db(s.input_peak));
@@ -145,25 +149,27 @@ pub fn use_rig_state() -> RigViewState {
                 move |ev: RigEvent| {
                     let rig = rig_for_events.clone();
                     let (
-                        mut running,
-                        mut in_level,
-                        mut out_level,
-                        mut in_peak_db,
-                        mut out_peak_db,
-                        mut stereo_db,
-                        mut mix_db,
-                        mut comp_gr_db,
+                        running,
+                        audio_error,
+                        in_level,
+                        out_level,
+                        in_peak_db,
+                        out_peak_db,
+                        stereo_db,
+                        mix_db,
+                        comp_gr_db,
                         mut spectrum,
                         mut comp_wave,
                         mut perf,
                         mut blocks,
                         mut nodes,
-                        mut active_patch,
-                        mut dsp,
+                        active_patch,
+                        dsp,
                         mut levelling,
                         mut macros,
                     ) = (
                         running,
+                        audio_error,
                         in_level,
                         out_level,
                         in_peak_db,
@@ -183,23 +189,32 @@ pub fn use_rig_state() -> RigViewState {
                     );
                     match ev {
                         RigEvent::Status(s) => {
-                            running.set(s.running);
-                            in_level.set(meter_level(s.input_peak));
-                            out_level.set(meter_level(s.output_peak));
-                            in_peak_db.set(peak_db(s.input_peak));
-                            out_peak_db.set(peak_db(s.output_peak));
-                            stereo_db.set((
-                                peak_db(s.input_peak_l),
-                                peak_db(s.input_peak_r),
-                                peak_db(s.output_peak_l),
-                                peak_db(s.output_peak_r),
-                            ));
-                            comp_gr_db.set(s.comp_gr_db);
-                            if *mix_db.peek() != (s.mix_db_l, s.mix_db_r) {
-                                mix_db.set((s.mix_db_l, s.mix_db_r));
+                            // Each only when it changed: a set wakes every
+                            // reader, and this arrives at meter rate.
+                            fn put<T: PartialEq + 'static>(mut sig: Signal<T>, v: T) {
+                                if *sig.peek() != v {
+                                    sig.set(v);
+                                }
                             }
-                            active_patch.set(s.active_patch);
-                            dsp.set(s.perf);
+                            put(running, s.running);
+                            put(audio_error, s.audio_error.clone());
+                            put(in_level, meter_level(s.input_peak));
+                            put(out_level, meter_level(s.output_peak));
+                            put(in_peak_db, peak_db(s.input_peak));
+                            put(out_peak_db, peak_db(s.output_peak));
+                            put(
+                                stereo_db,
+                                (
+                                    peak_db(s.input_peak_l),
+                                    peak_db(s.input_peak_r),
+                                    peak_db(s.output_peak_l),
+                                    peak_db(s.output_peak_r),
+                                ),
+                            );
+                            put(comp_gr_db, s.comp_gr_db);
+                            put(mix_db, (s.mix_db_l, s.mix_db_r));
+                            put(active_patch, s.active_patch);
+                            put(dsp, s.perf);
                         }
                         RigEvent::Levelling(l) => levelling.set(l),
                         RigEvent::Macros(m) => macros.set(m),
@@ -260,6 +275,7 @@ pub fn use_rig_state() -> RigViewState {
 
     RigViewState {
         running,
+        audio_error,
         in_level,
         out_level,
         in_peak_db,

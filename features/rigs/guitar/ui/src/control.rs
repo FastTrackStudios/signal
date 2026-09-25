@@ -56,6 +56,22 @@ fn BypassedBadge(#[props(default)] small: bool) -> Element {
     }
 }
 
+/// Whether the chain on screen is playing — `BlockEngine`, for every panel
+/// under the Control view (provided there, read by `ZoomPanel`).
+#[derive(Clone, Copy)]
+pub(crate) struct ChainEngine(pub Signal<u32>);
+
+/// Why a panel's block is not playing, as its badge says it.
+fn engine_badge(engine: u32) -> Option<(&'static str, &'static str)> {
+    use signal_guitar_proto::BlockEngine;
+    match engine {
+        BlockEngine::NO_AUDIO => Some(("No audio", "#a1a1aa")),
+        BlockEngine::LOADING => Some(("Loading…", "#eab308")),
+        BlockEngine::FAILED => Some(("Didn't load", "#f87171")),
+        _ => None,
+    }
+}
+
 /// Every member of a grouped panel (Mod, Motion) is bypassed — the group is
 /// off. False for a group with no members: that is an empty slot, not a
 /// bypass.
@@ -238,7 +254,17 @@ pub fn ZoomPanel(
     // One bypass look for every visualizer: the content dimmed (still
     // editable) under a BYPASSED badge that lets clicks through.
     let off = bypassed || power_on == Some(false) || left_power_on == Some(false);
-    let dim = if off { "opacity: 0.3;" } else { "" };
+    // Not playing (no audio, loading): the settings still show and edit —
+    // they are what it will play — under a badge saying why it is silent.
+    let engine = try_use_context::<ChainEngine>().map_or(0, |e| (e.0)());
+    let silent = engine_badge(engine);
+    let dim = if off {
+        "opacity: 0.3;"
+    } else if silent.is_some() {
+        "opacity: 0.55;"
+    } else {
+        ""
+    };
     rsx! {
         div { class: "relative flex flex-col flex-1 border border-border bg-card min-h-0 overflow-hidden",
             onclick: move |_| {
@@ -252,6 +278,16 @@ pub fn ZoomPanel(
                     class: "absolute inset-0 flex items-center justify-center",
                     style: "pointer-events: none;",
                     BypassedBadge {}
+                }
+            } else if let Some((text, colour)) = silent {
+                div {
+                    style: "position: absolute; left: 0; right: 0; bottom: 6px; display: flex; justify-content: center; pointer-events: none;",
+                    span {
+                        style: "font-size: 9px; letter-spacing: 0.18em; padding: 3px 8px; border-radius: 4px; font-weight: 600; \
+                                text-transform: uppercase; color: {colour}; border: 1px solid rgba(255,255,255,0.10); \
+                                background: rgba(10,10,12,0.8); white-space: nowrap;",
+                        "{text}"
+                    }
                 }
             }
             if let (Some(on), Some(cb)) = (left_power_on, on_left_power) {
@@ -391,24 +427,38 @@ fn StereoMeter(
     let (lp, lc) = bar(l_db);
     let (rp, rc) = bar(r_db);
     let max_db = l_db.max(r_db);
+    let text = if max_db <= -89.0 { "−∞".to_string() } else { format!("{max_db:.0}") };
+    let tick = use_hook(|| std::rc::Rc::new(std::cell::Cell::new((0u32, String::new()))));
+    let shown_db = {
+        let (n, last) = tick.take();
+        let show = if n % 8 == 0 || last.is_empty() { text } else { last };
+        tick.set((n.wrapping_add(1), show.clone()));
+        show
+    };
     rsx! {
         div { class: "flex flex-col items-center h-full min-h-0 w-full",
             span { class: "text-[6px] font-semibold uppercase text-muted-foreground whitespace-nowrap", style: "letter-spacing: 0.2px;", "{label}" }
             // Two thin bars — the pair reads as one meter's width.
             div { class: "flex flex-1 min-h-0 bg-black/60 border border-border overflow-hidden",
                 style: "width: 17px;",
+                // Full-height bars scaled from the bottom: a transform is
+                // repainted, never laid out — a height would re-lay out the
+                // whole window at meter rate.
                 div { class: "relative h-full", style: "width: 8px;",
-                    div { class: "absolute inset-x-0 bottom-0 transition-[height] duration-75",
-                        style: "height: {lp}%; background-color: {lc};" }
+                    div { style: "position: absolute; left: 0; right: 0; top: 0; bottom: 0; transform-origin: bottom; \
+                                  transform: scaleY({lp / 100.0}); background-color: {lc};" }
                 }
                 div { class: "w-px bg-black h-full" }
                 div { class: "relative h-full", style: "width: 8px;",
-                    div { class: "absolute inset-x-0 bottom-0 transition-[height] duration-75",
-                        style: "height: {rp}%; background-color: {rc};" }
+                    div { style: "position: absolute; left: 0; right: 0; top: 0; bottom: 0; transform-origin: bottom; \
+                                  transform: scaleY({rp / 100.0}); background-color: {rc};" }
                 }
             }
-            span { class: "text-[6px] font-mono text-muted-foreground",
-                if max_db <= -89.0 { "−∞" } else { {format!("{max_db:.0}")} }
+            // The number is text — changing it lays its line out again — so it
+            // follows the bars at a quarter of the meter rate (every 8th
+            // frame), in a fixed-width box.
+            span { class: "text-[6px] font-mono text-muted-foreground", style: "width: 17px; text-align: center;",
+                "{shown_db}"
             }
         }
     }
@@ -2349,19 +2399,23 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     // post-amp Motion/Modulation and Time. The rest is on page two, below.
     let bpre = false;
     let blocks = state.blocks.cloned();
+    // The chain's engine state, for every panel's badge: the blocks say it;
+    // with none on screen and no audio, there is no audio.
+    let chain_engine = blocks.first().map_or(
+        if (state.running)() { signal_guitar_proto::BlockEngine::LIVE } else { signal_guitar_proto::BlockEngine::NO_AUDIO },
+        |b| b.engine,
+    );
+    let engine_sig = use_context_provider(|| ChainEngine(Signal::new(chain_engine))).0;
+    if *engine_sig.peek() != chain_engine {
+        let mut e = engine_sig;
+        e.set(chain_engine);
+    }
     let master_eq = find_block(&blocks, BlockType::Eq, "Master EQ");
     let limiter = find_block(&blocks, BlockType::Compressor, "Limiter");
-    let in_db = state.in_peak_db.cloned();
-    let out_db = state.out_peak_db.cloned();
-    let (in_l, in_r, out_l, out_r) = state.stereo_db.cloned();
-    let spectrum = state.spectrum.cloned();
-    let comp_wave = state.comp_wave.cloned();
-    // Each compressor panel draws its own block's trace and gain reduction.
-    let trace_of = |name: &str| -> ((Vec<f32>, Vec<f32>), f32) {
-        comp_wave
-            .get(name)
-            .map_or_else(|| ((Vec::new(), Vec::new()), 0.0), |(i, g, gr)| ((i.clone(), g.clone()), *gr))
-    };
+    // The meters, the spectrum and the compressor traces move at meter rate:
+    // each is read by the small component that draws it (`LiveStereoMeter`,
+    // `LiveEq`, `LiveComp`, `LiveGate`), never here — reading one here would
+    // re-render the whole surface 30 times a second.
 
     let eq = find_block(&blocks, BlockType::Eq, "Amp EQ");
     // The drive board: Boost + the three drives, plus the amps.
@@ -2454,17 +2508,19 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
 
     let hp = model.headphone.clone();
-    let _ = out_db;
 
     rsx! {
         div { class: "flex gap-0 h-full min-h-0 overflow-hidden",
             style: "width: 100%; height: 100%; display: flex; min-height: 0; overflow: hidden;",
             // ── Input meter rail ──
-            div { class: "w-6 flex-shrink-0", StereoMeter { label: "In", l_db: in_l, r_db: in_r } }
+            div { class: "w-6 flex-shrink-0", LiveStereoMeter { label: "In", state, output: false, muted: false } }
 
             // ── Center surface ──
             div { class: "flex flex-col gap-1 flex-1 min-w-0 min-h-0",
                 style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow-y: scroll;",
+                if chain_engine != signal_guitar_proto::BlockEngine::LIVE {
+                    AudioOffBanner { state, loading: chain_engine == signal_guitar_proto::BlockEngine::LOADING }
+                }
                 // Main modules, in signal order: Compressor → Gate → Amp EQ,
                 // with the time section (Delay | Reverb) docked flush beneath.
                 // Grows, so the rows below it have a height to divide. Left
@@ -2555,12 +2611,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                     })
                                 }),
                                 if let Some(comp) = comp {
-                                    crate::comp_surface::CompSurface {
-                                        block: comp.clone(),
-                                        wave: trace_of(&comp.name).0,
-                                        in_db,
-                                        gr_db: trace_of(&comp.name).1,
-                                    }
+                                    LiveComp { block: comp.clone(), state }
                                 } else {
                                     {empty_slot(comp_title)}
                                 }
@@ -2592,7 +2643,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                     // renderer that can paint it; the portable
                                     // SVG re-host on wasm. Same band model
                                     // either way — see `eq_vello`.
-                                    {eq_panel(eq, spectrum.clone())}
+                                    LiveEq { block: eq, state }
                                 } else {
                                     {empty_slot("Amp EQ")}
                                 }
@@ -2604,7 +2655,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             ZoomPanel {
                                 title: "Gate".to_string(),
                                 zoomed_view: gate.clone().map(|g| rsx! {
-                                    GatePanel { block: g, in_db, expanded: true }
+                                    LiveGate { block: g, state, expanded: true }
                                 }),
                                 left_power_on: gate.as_ref().map(|b| !b.bypassed),
                                 on_left_power: gate.as_ref().map(|b| {
@@ -2743,7 +2794,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 })
                             }),
                             if let Some(pc) = post_comp.clone() {
-                                crate::comp_surface::CompSurface { block: pc.clone(), wave: trace_of(&pc.name).0, in_db, gr_db: trace_of(&pc.name).1 }
+                                LiveComp { block: pc.clone(), state }
                             } else {
                                 {empty_slot("Post Comp")}
                             }
@@ -2793,7 +2844,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 })
                             }),
                             if let Some(meq) = master_eq.clone() {
-                                {eq_panel(meq, spectrum.clone())}
+                                LiveEq { block: meq, state }
                             } else {
                                 {empty_slot("Master EQ")}
                             }
@@ -2814,7 +2865,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 })
                             }),
                             if let Some(lim) = limiter.clone() {
-                                crate::comp_surface::CompSurface { block: lim.clone(), wave: trace_of(&lim.name).0, in_db, gr_db: trace_of(&lim.name).1 }
+                                LiveComp { block: lim.clone(), state }
                             } else {
                                 {empty_slot("Limiter")}
                             }
@@ -2863,17 +2914,106 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             }
                         }),
                     }
-                    StereoMeter {
-                        label: "Out",
-                        l_db: if hp.main_mute { -90.0 } else { out_l },
-                        r_db: if hp.main_mute { -90.0 } else { out_r },
-                        muted: hp.main_mute,
-                    }
+                    LiveStereoMeter { label: "Out", state, output: true, muted: hp.main_mute }
                 }
                 PhonesStrip { hp: hp.clone(), state }
             }
         }
     }
+}
+
+/// Why nothing on the surface is playing, and the ways back: across the top
+/// of the Control view while the audio is off or loading.
+#[component]
+fn AudioOffBanner(state: RigViewState, loading: bool) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let why = state.audio_error.cloned();
+    // Stopped on purpose (the Audio menu): nothing is wrong to explain.
+    let stopped = why == "Audio stopped";
+    let (dot, head, body) = if loading {
+        ("#eab308", "Starting audio…", "Opening the interface and building the patch.".to_string())
+    } else {
+        (
+            "#ef4444",
+            "No audio",
+            if why.is_empty() { "The audio device is closed.".to_string() } else { why },
+        )
+    };
+    rsx! {
+        div { style: "display: flex; align-items: center; gap: 10px; padding: 7px 12px; flex-shrink: 0; \
+                      border: 1px solid #27272a; border-radius: 6px; background: #111113;",
+            span { style: "width: 8px; height: 8px; border-radius: 999px; background: {dot}; flex-shrink: 0;" }
+            span { style: "font-size: 12px; font-weight: 700; color: #f4f4f5; white-space: nowrap;", "{head}" }
+            span { style: "font-size: 12px; color: #a1a1aa; flex: 1 1 0%; min-width: 0; overflow: hidden; white-space: nowrap;", "{body}" }
+            if !loading {
+                if !stopped {
+                    span { style: "font-size: 11px; color: #71717a; white-space: nowrap;", "Plug the interface in and it reconnects." }
+                }
+                button {
+                    style: "padding: 3px 10px; border-radius: 5px; border: 1px solid #3f3f46; background: transparent; color: #e4e4e7; font-size: 11px;",
+                    onclick: move |_| {
+                        if let Some(r) = rig.clone() {
+                            spawn(async move { let _ = r.start().await; });
+                        }
+                    },
+                    if stopped { "Start audio" } else { "Retry" }
+                }
+                button {
+                    style: "padding: 3px 10px; border-radius: 5px; border: 1px solid #3f3f46; background: transparent; color: #e4e4e7; font-size: 11px;",
+                    onclick: move |_| crate::settings::open_audio_settings(),
+                    "Audio Settings…"
+                }
+            }
+        }
+    }
+}
+
+// ── Live leaves ─────────────────────────────────────────────────────────
+//
+// What moves at meter rate is read here, in the smallest component that
+// draws it, so a meter tick re-renders a meter — not the Control surface.
+
+/// A stereo meter on the rig's input or output.
+#[component]
+fn LiveStereoMeter(label: &'static str, state: RigViewState, output: bool, muted: bool) -> Element {
+    let (in_l, in_r, out_l, out_r) = state.stereo_db.cloned();
+    let (l, r) = if output { (out_l, out_r) } else { (in_l, in_r) };
+    rsx! {
+        StereoMeter {
+            label,
+            l_db: if muted { -90.0 } else { l },
+            r_db: if muted { -90.0 } else { r },
+            muted,
+        }
+    }
+}
+
+/// A compressor surface with its block's live trace and gain reduction.
+#[component]
+fn LiveComp(block: LiveBlock, state: RigViewState) -> Element {
+    let in_db = state.in_peak_db.cloned();
+    let (wave, gr_db) = state
+        .comp_wave
+        .read()
+        .get(&block.name)
+        .map_or_else(|| ((Vec::new(), Vec::new()), 0.0), |(i, g, gr)| ((i.clone(), g.clone()), *gr));
+    rsx! {
+        crate::comp_surface::CompSurface { block, wave, in_db, gr_db }
+    }
+}
+
+/// An EQ panel over the live input spectrum.
+#[component]
+fn LiveEq(block: LiveBlock, state: RigViewState) -> Element {
+    let spectrum = state.spectrum.cloned();
+    eq_panel(block, spectrum)
+}
+
+/// The gate panel with the live input level.
+#[component]
+fn LiveGate(block: LiveBlock, state: RigViewState, expanded: bool) -> Element {
+    let in_db = state.in_peak_db.cloned();
+    rsx! { GatePanel { block, in_db, expanded } }
 }
 
 /// The phones: the incoming monitor mix and your guitar, each on its own

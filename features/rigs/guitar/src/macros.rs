@@ -2677,6 +2677,7 @@ mod tests {
     fn block(id: &str, bt: BlockType, name: &str, params: Vec<BlockParam>) -> LiveBlock {
         LiveBlock {
             id: id.into(),
+            engine: 0,
             block_type: bt,
             name: name.into(),
             bypassed: false,

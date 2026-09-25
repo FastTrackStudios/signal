@@ -319,6 +319,19 @@ pub struct GuitarRigBackend {
     phones_spawned: Arc<Mutex<Option<std::time::Instant>>>,
     /// The mixer as last published.
     phones_status: Arc<Mutex<signal_guitar_proto::PhonesMixer>>,
+    /// Why the audio device did not open, in words (empty: it did, or no
+    /// open has been tried).
+    audio_error: Arc<Mutex<String>>,
+    /// The input is a built-in microphone (allowed only by
+    /// `allow_builtin_mic`, for running on a laptop's own speakers with no
+    /// interface): it is opened because the engine needs an input, and never
+    /// heard — the mic through the speakers feeds back.
+    input_silenced: Arc<std::sync::atomic::AtomicBool>,
+    /// The patch the chain view was last built for with the engine running —
+    /// kept on screen as it was (only marked not playing) when the audio
+    /// stops, rather than rebuilt from the definition, which lacks what the
+    /// engine applied (macro bypasses, the amp's preset labels).
+    live_view_patch: Arc<Mutex<String>>,
     /// Recent MIDI events (formatted), newest last, capped.
     midi_log: Arc<Mutex<Vec<String>>>,
     /// Monotonic state version, bumped on every mutation (see
@@ -445,6 +458,9 @@ impl GuitarRigBackend {
             phones_mixer_on: Arc::default(),
             phones_spawned: Arc::default(),
             phones_status: Arc::default(),
+            audio_error: Arc::default(),
+            input_silenced: Arc::default(),
+            live_view_patch: Arc::default(),
             midi_log: Arc::new(Mutex::new(Vec::new())),
             revision: Arc::new(Mutex::new(0)),
             events: architect::rig::events_hub(),
@@ -840,6 +856,7 @@ impl GuitarRigBackend {
                 perf: signal_guitar_proto::RigPerf::default(),
                 mix_db_l: -90.0,
                 mix_db_r: -90.0,
+                audio_error: String::new(),
             };
         }
         let guard = self.rig.lock_ok();
@@ -869,7 +886,14 @@ impl GuitarRigBackend {
                     },
                 )
             }
-            None => return RigStatus::default(),
+            None => {
+                return RigStatus {
+                    audio_error: self.audio_error.lock_ok().clone(),
+                    mix_db_l: -90.0,
+                    mix_db_r: -90.0,
+                    ..RigStatus::default()
+                };
+            }
         };
         drop(guard);
         let in_db = if input_peak > 0.0 {
@@ -891,6 +915,7 @@ impl GuitarRigBackend {
             perf,
             mix_db_l: -90.0,
             mix_db_r: -90.0,
+            audio_error: String::new(),
         }
     }
 
@@ -2780,6 +2805,7 @@ impl GuitarRigBackend {
                     .collect();
                 LiveBlock {
                     id: format!("design-{i}"),
+                    engine: 0,
                     block_type: block.block_type,
                     name,
                     // Everything engaged.
@@ -3190,6 +3216,8 @@ impl GuitarRigBackend {
         let switched_to = self.live_patch_name().unwrap_or_default();
         if !switched_to.is_empty() {
             self.probe_switch_gain(switched_to.clone());
+            // What the surface shows if the audio stops: the patch playing.
+            *self.design_patch.lock_ok() = switched_to.clone();
         }
         let t = std::time::Instant::now();
         self.resync_blocks();
@@ -3447,8 +3475,19 @@ impl GuitarRigBackend {
         // (and stays up) whether or not the rig's device opens.
         self.apply_phones_prefs(&mgr.audio);
         tracing::info!("rig open: prefs loaded, opening audio device…");
+        // What is on screen meanwhile: the chain, from its definition, as
+        // loading.
+        self.show_chain_offline(signal_guitar_proto::BlockEngine::LOADING);
         match GuitarRig::open(&mgr.audio) {
             Ok(g) => {
+                self.audio_error.lock_ok().clear();
+                let mic = mgr.audio.input_device.to_lowercase();
+                let silenced = mic.contains("microphone") || mic.ends_with(" mic") || mic.is_empty() && mgr.audio.allow_builtin_mic;
+                self.input_silenced.store(silenced, std::sync::atomic::Ordering::Relaxed);
+                if silenced {
+                    g.set_input_mute(true);
+                    tracing::warn!(input = %mgr.audio.input_device, "input is a built-in mic — opened silent (no interface; nothing to play through)");
+                }
                 tracing::info!(
                     "rig live: in {} ch{} → out {}",
                     if mgr.audio.input_device.is_empty() {
@@ -3486,6 +3525,7 @@ impl GuitarRigBackend {
             }
             Err(e) => {
                 *self.open_prefs.lock_ok() = None;
+                *self.audio_error.lock_ok() = audio_error_words(&format!("{e:#}"));
                 tracing::error!("rig open failed: {e:#}");
             }
         }
@@ -3574,11 +3614,18 @@ impl GuitarRigBackend {
 
     fn resync_blocks(&self) {
         let comp = RigLibrary::load_compositions();
-        // No engine to mirror — build the chain the definition describes.
-        if self.rig.lock_ok().is_none() && crate::library::rig_is_design() {
-            *self.blocks.lock_ok() = self.design_blocks();
-            self.label_board();
-            self.macros_rebase();
+        // No engine to mirror — build the chain the definition describes
+        // (design mode's surface; a rig whose device is closed shows its
+        // patch the same way, marked as not playing).
+        if self.rig.lock_ok().is_none() {
+            let engine = if crate::library::rig_is_design() {
+                signal_guitar_proto::BlockEngine::LIVE
+            } else if self.opening.load(std::sync::atomic::Ordering::Relaxed) {
+                signal_guitar_proto::BlockEngine::LOADING
+            } else {
+                signal_guitar_proto::BlockEngine::NO_AUDIO
+            };
+            self.offline_view(engine);
             return;
         }
         let mut out = Vec::new();
@@ -3754,6 +3801,7 @@ impl GuitarRigBackend {
                         };
                         out.push(LiveBlock {
                             id: id.clone(),
+                            engine: 0,
                             block_type: block.block_type,
                             name,
                             bypassed: block.bypassed,
@@ -3783,6 +3831,49 @@ impl GuitarRigBackend {
         self.label_board();
         self.macros_rebase();
         self.sync_view();
+        *self.live_view_patch.lock_ok() = self.live_patch_name().unwrap_or_default();
+    }
+
+    /// Show the active patch's chain from its definition, every block marked
+    /// `engine` — while the device opens, or when it will not.
+    fn show_chain_offline(&self, engine: u32) {
+        if crate::library::rig_is_design() {
+            return;
+        }
+        self.offline_view(engine);
+        self.events.publish(RigEvent::Chain(Rig::chain(self)));
+    }
+
+    /// The chain view with no engine: the last live view of the patch on
+    /// screen, kept as it was and marked `engine` (it is what the patch
+    /// plays — macro bypasses, preset labels and all); failing that, the
+    /// patch built from its definition.
+    fn offline_view(&self, engine: u32) {
+        // The last live view of this same patch is what it plays — keep
+        // it, marked; otherwise build it from the definition.
+        let wanted = self.design_patch.lock_ok().clone();
+        let kept = {
+            let live = self.live_view_patch.lock_ok();
+            let mut blocks = self.blocks.lock_ok();
+            let same = !blocks.is_empty() && !live.is_empty() && live.eq_ignore_ascii_case(&wanted);
+            if same {
+                for b in blocks.iter_mut() {
+                    b.engine = engine;
+                }
+            }
+            same
+        };
+        if kept {
+            return;
+        }
+        let mut blocks = self.design_blocks();
+        for b in &mut blocks {
+            b.engine = engine;
+        }
+        *self.blocks.lock_ok() = blocks;
+        self.live_view_patch.lock_ok().clear();
+        self.label_board();
+        self.macros_rebase();
     }
 
     /// Hold the playing chain to its definition plus its live writes (see
@@ -4587,9 +4678,16 @@ impl Rig for GuitarRigBackend {
     fn stop(&self) {
         self.wants_audio
             .store(false, std::sync::atomic::Ordering::Relaxed);
+        // The surface keeps showing the patch that was playing.
+        if let Some(name) = self.live_patch_name() {
+            *self.design_patch.lock_ok() = name;
+        }
         *self.rig.lock_ok() = None;
         *self.open_prefs.lock_ok() = None;
+        *self.audio_error.lock_ok() = "Audio stopped".to_string();
         tracing::info!("rig stopped");
+        // The chain stays on screen, from its definition, as not playing.
+        self.resync_blocks();
         self.publish_state();
     }
 
@@ -6311,7 +6409,9 @@ impl Rig for GuitarRigBackend {
         {
             let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
-                prig.rig().set_input_mute(shown);
+                // A silenced built-in mic stays silent whatever the tuner does.
+                let silenced = self.input_silenced.load(std::sync::atomic::Ordering::Relaxed);
+                prig.rig().set_input_mute(shown || silenced);
             }
         }
         tracing::info!(
@@ -8517,6 +8617,7 @@ pub(crate) fn chain_as_live(chain: &[RigBlock]) -> Vec<LiveBlock> {
                 .collect();
             LiveBlock {
                 id: format!("chain-{i}"),
+                engine: 0,
                 block_type: block.block_type,
                 name,
                 bypassed: block.bypassed,
@@ -8651,4 +8752,22 @@ fn open_phones_link() -> Option<Arc<signal_phones::PhonesLink>> {
             None
         }
     }
+}
+
+/// A device-open error, as a player reads it: the first line of the chain,
+/// the rig host's prefixes taken off.
+fn audio_error_words(err: &str) -> String {
+    let first = err.lines().next().unwrap_or(err);
+    let mut s = first;
+    for prefix in ["rig host: ", "audio engine failed: "] {
+        while let Some(rest) = s.strip_prefix(prefix) {
+            s = rest;
+        }
+    }
+    let s = s.split(": ").filter(|p| !p.starts_with("rig host") && !p.starts_with("audio engine failed")).collect::<Vec<_>>().join(": ");
+    let mut out = s.trim().to_string();
+    if let Some(c) = out.get(0..1) {
+        out = c.to_uppercase() + &out[1..];
+    }
+    out
 }
