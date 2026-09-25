@@ -845,9 +845,6 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 ),
                 "Amp",
             ))
-            // The patch's own level, and the LAST thing before the time
-            // section — see `set_patch_trim`.
-            .with_block(on_fx(BlockType::Volume, "Patch Trim", &[("gain_db", "0")]))
             // Boost gain block the footswitch drives (0 dB until engaged).
             .with_block(on_fx(BlockType::Volume, "Boost", &[("gain_db", "0")]))
             // Motion, then Modulation — all off by default.
@@ -857,6 +854,12 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             .with_block(in_module(off(BlockType::Chorus, "Chorus"), "Modulation"))
             .with_block(in_module(off(BlockType::Flanger, "Flanger"), "Modulation"))
             .with_block(in_module(off(BlockType::Phaser, "Phaser"), "Modulation"))
+            // The patch's own level and pan: the LAST thing before the time
+            // section (see `set_patch_trim`). Everything before it hears the
+            // same signal whatever the patch's level or pan — a compressor,
+            // a drive, a chorus react the same — and the time effects take
+            // the dry sound where it has been placed.
+            .with_block(on_fx(BlockType::Volume, "Patch Trim", &[("gain_db", "0")]))
             // Time module — subtle pair on, extreme pair bypassed.
             .with_block(in_module(
                 on_fx(
@@ -2121,24 +2124,25 @@ mod trim_tests {
         }
     }
 
-    /// And before the modulation, which is also downstream of it.
+    /// And after everything else: the motion and modulation, the boost,
+    /// the amp. Its pan and level are the patch's placing of the finished
+    /// dry sound, so everything upstream reacts the same whatever they are
+    /// (a chorus fed a panned guitar was the WASHED verse in both ears).
     #[test]
-    fn the_trim_sits_before_the_modulation() {
+    fn the_trim_is_the_last_block_before_the_time_module() {
         let patch = a_patch();
         let trim = patch
             .chain
             .iter()
             .position(|b| b.name.eq_ignore_ascii_case(TRIM_BLOCK))
             .expect("trim block");
-        for m in ["Chorus", "Tremolo", "Rotary"] {
-            if let Some(i) = patch
-                .chain
-                .iter()
-                .position(|b| b.name.eq_ignore_ascii_case(m))
-            {
-                assert!(trim < i, "the trim must come before {m}");
+        for m in ["Chorus", "Flanger", "Phaser", "Tremolo", "Vibrato", "Rotary", "Boost", "Amp L", "Amp EQ"] {
+            if let Some(i) = patch.chain.iter().position(|b| b.name.eq_ignore_ascii_case(m)) {
+                assert!(i < trim, "{m} must come before the trim");
             }
         }
+        let next = patch.chain.get(trim + 1).expect("the time module follows");
+        assert!(next.is_time_module(), "the first block after the trim is the Time module's, got {}", next.name);
     }
 
     /// Calibration and the player's own level ADD. Normalisation puts every
