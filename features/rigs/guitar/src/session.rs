@@ -1026,7 +1026,17 @@ impl GuitarRigBackend {
         let Some(ticket) = self.rig.lock_ok().as_mut().map(|prig| prig.begin_reload(mode)) else {
             return None;
         };
-        let prepared = ticket.plan(rebuilt, None).prepare();
+        let mut prepared = ticket.plan(rebuilt, None).prepare();
+        // The macro bar over the landing patch's new baseline, for its new
+        // or retuned chain to come in with (the logged live writes carry
+        // the rest; see `ProfileRig::commit_reload`).
+        let landing = activate.map(str::to_string).or_else(|| self.active_patch_name());
+        if let Some(name) = landing.filter(|n| prepared.changes(n)) {
+            if let Some(patch) = prepared.patch(&name).cloned() {
+                let overlay = self.macro_overlay(&name, &patch);
+                prepared.set_overlay(&name, overlay);
+            }
+        }
         let commit = {
             let mut guard = self.rig.lock_ok();
             let Some(prig) = guard.as_mut() else {
@@ -1057,6 +1067,55 @@ impl GuitarRigBackend {
         // The chains it let go of are freed here, off the rig lock.
         drop(commit);
         counts
+    }
+
+    /// What the macro bar puts on `patch` as the reload builds it: the
+    /// engine's positions over the patch's new chain (its new baseline) —
+    /// the writes `macros_rebase` will make after the commit, made before
+    /// the chain plays so it never plays the baseline first. A drive on a
+    /// NAM block goes as its trims, as a knob's does.
+    fn macro_overlay(
+        &self,
+        name: &str,
+        patch: &signal_sampler::RigPatch,
+    ) -> Vec<(String, signal_sampler::LiveWrite)> {
+        use signal_sampler::LiveWrite;
+        let reals: Vec<RigBlock> = patch.chain.iter().filter(|b| b.has_backend()).cloned().collect();
+        let ids = signal_sampler::rig_profile::chain_block_ids(patch);
+        let mut blocks = chain_as_live(&reals);
+        for (b, id) in blocks.iter_mut().zip(&ids) {
+            b.id = id.clone();
+        }
+        let def = self
+            .profile_def
+            .lock_ok()
+            .patches
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(name))
+            .cloned();
+        let ctx = def.map_or_else(crate::macros::Context::default, |d| {
+            crate::macros::context_for(&RigLibrary::load_compositions(), &d)
+        });
+        let (writes, bypass) = {
+            let mut e = self.macros.lock_ok().clone();
+            e.rebase(name, &blocks, &ctx);
+            (e.live_params(), e.live_bypass())
+        };
+        let mut out = Vec::with_capacity(writes.len() + bypass.len());
+        for (id, param, v) in writes {
+            let block = ids.iter().position(|i| *i == id).and_then(|i| reals.get(i));
+            match block {
+                Some(b) if param == "drive" && b.is_nam() => {
+                    let (input, output) = Self::drive_trims_live(b, None, v);
+                    out.push((id.clone(), LiveWrite::Param("input_trim".into(), input)));
+                    out.push((id, LiveWrite::Param("output_trim".into(), output)));
+                }
+                Some(_) => out.push((id, LiveWrite::Param(param, v))),
+                None => {}
+            }
+        }
+        out.extend(bypass.into_iter().map(|(id, on)| (id, LiveWrite::Bypass(on))));
+        out
     }
 
     fn reload_rebuilt(&self, rebuilt: signal_sampler::rig_profile::RigProfile) {
@@ -1230,7 +1289,10 @@ impl GuitarRigBackend {
         {
             let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
-                prig.rig().set_active_block_param(id, param, value);
+                // Through the patch rig, which keeps it as the chain's live
+                // state: a reload that rebuilds or retunes this patch puts
+                // it back on before the new chain plays.
+                prig.set_block_param(id, param, value);
             }
         }
     }
@@ -1309,7 +1371,7 @@ impl GuitarRigBackend {
                 // macro's is an offset, not an edit).
                 let guard = self.rig.lock_ok();
                 if let Some(prig) = guard.as_ref() {
-                    prig.rig().set_block_slot_bypass(id, *byp);
+                    prig.set_block_bypass(id, *byp);
                 }
             }
         }
@@ -1357,36 +1419,54 @@ impl GuitarRigBackend {
     }
 
     fn apply_drive(&self, block_id: &str, block_name: &str, drive: f32) {
-        let (sr, built) = {
+        let built = {
             let guard = self.rig.lock_ok();
             let Some(prig) = guard.as_ref() else { return };
-            let block = prig.active_patch().and_then(|p| {
+            prig.active_patch().and_then(|p| {
                 p.chain
                     .iter()
                     .find(|b| b.name.eq_ignore_ascii_case(block_name) && !b.nam.is_empty())
                     .cloned()
-            });
-            (f64::from(prig.sample_rate()), block)
+            })
         };
         let Some(block) = built else { return };
+        let (in_db, out_db) = Self::drive_trims_live(&block, None, drive);
         let path = std::path::Path::new(&block.nam);
-        let built_drive = block.param_f32("drive").unwrap_or(0.5);
-        if signal_sampler::nam_calibrate::drive_curve_cached(path, sr).is_none() {
-            self.measure_drive_later(block.nam.clone(), sr);
+        let curve_sr = signal_sampler::nam_calibrate::DRIVE_CURVE_SAMPLE_RATE;
+        if signal_sampler::nam_calibrate::drive_curve_cached(path, curve_sr).is_none() {
+            self.measure_drive_later(block.nam.clone(), curve_sr);
         }
-        let delta = |d: f32| signal_sampler::nam_calibrate::drive_output_delta_cached(path, sr, d);
-        let in_db = signal_sampler::nam_calibrate::drive_input_db(drive);
-        let out_db = block.output_trim_db - delta(built_drive) + delta(drive);
         {
             let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
-                prig.rig()
-                    .set_active_block_param(block_id, "input_trim", in_db);
-                prig.rig()
-                    .set_active_block_param(block_id, "output_trim", out_db);
+                prig.set_block_param(block_id, "input_trim", in_db);
+                prig.set_block_param(block_id, "output_trim", out_db);
             }
         }
         tracing::debug!("{block_name}: drive {drive:.2} → in {in_db:+.1} dB, out {out_db:+.1} dB");
+    }
+
+    /// A NAM board block's trims for `drive`, from the block as built: its
+    /// Output Level (`level_db`, or the one it was built with) through
+    /// `nam_calibrate::drive_trims` — the function the build used — so a
+    /// knob and a rebuild at the same position set the same trims (bit for
+    /// bit at the built position; to a float's rounding elsewhere, the
+    /// built level being recovered from the built trim).
+    fn drive_trims_live(block: &RigBlock, level_db: Option<f32>, drive: f32) -> (f32, f32) {
+        let path = std::path::Path::new(&block.nam);
+        let built_drive = block.param_f32("drive").unwrap_or(0.5);
+        if level_db.is_none() && (drive - built_drive).abs() < f32::EPSILON {
+            return (block.input_trim_db, block.output_trim_db);
+        }
+        let level = level_db.unwrap_or_else(|| {
+            block.output_trim_db
+                - signal_sampler::nam_calibrate::drive_output_delta_cached(
+                    path,
+                    signal_sampler::nam_calibrate::DRIVE_CURVE_SAMPLE_RATE,
+                    built_drive,
+                )
+        });
+        signal_sampler::nam_calibrate::drive_trims(path, level, drive)
     }
 
     /// Measure `path`'s drive curve off the switch path, then re-apply the
@@ -2077,7 +2157,7 @@ impl GuitarRigBackend {
                 for id in &delay_ids {
                     // The MX engine tempo-syncs itself: with tempo set, each
                     // side's tap division derives its own time.
-                    prig.rig().set_active_block_param(id, "tempo_bpm", bpm);
+                    prig.set_block_param(id, "tempo_bpm", bpm);
                 }
             }
         }
@@ -2294,7 +2374,7 @@ impl GuitarRigBackend {
             let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
                 for (id, db) in &live {
-                    prig.rig().set_active_block_param(id, "gain_db", *db);
+                    prig.set_block_param(id, "gain_db", *db);
                 }
             }
         }
@@ -3692,6 +3772,42 @@ impl GuitarRigBackend {
         self.apply_song_patch_overrides();
         self.label_board();
         self.macros_rebase();
+        self.show_live_state();
+    }
+
+    /// Put what the playing chain was written since it was built onto the
+    /// chain view: the engine plays the definition plus those writes, so the
+    /// view read from the definition alone could show a value the block is
+    /// not playing (a knob turned on this patch before switching away and
+    /// back). One source for both — the patch rig's live-state log.
+    fn show_live_state(&self) {
+        let live = {
+            let guard = self.rig.lock_ok();
+            match guard.as_ref() {
+                Some(prig) => prig.live_state(),
+                None => return,
+            }
+        };
+        if live.is_empty() {
+            return;
+        }
+        let mut blocks = self.blocks.lock_ok();
+        for (id, write) in live {
+            let Some(b) = blocks.iter_mut().find(|b| b.id == id) else { continue };
+            match write {
+                signal_sampler::LiveWrite::Param(name, v) => {
+                    if b.param_name.as_deref() == Some(name.as_str()) {
+                        b.param_value = v;
+                    }
+                    if let Some(p) = b.params.iter_mut().find(|p| p.name == name) {
+                        p.value = v;
+                    }
+                }
+                // The view's bypass is the block's own switch; the engine's
+                // may also be the FX-off mute, which the view shows apart.
+                signal_sampler::LiveWrite::Bypass(_) => {}
+            }
+        }
     }
 
     /// The song's changes to the patch that is up, put on the live chain
@@ -6418,7 +6534,7 @@ impl Rig for GuitarRigBackend {
                     // engine slot stays muted until FX comes back.
                     let is_time = bt.category() == signal_proto::block::BlockCategory::Time;
                     let effective = byp || (is_time && prig.fx_bypass());
-                    prig.rig().set_block_slot_bypass(&id, effective);
+                    prig.set_block_bypass(&id, effective);
                 }
             }
             self.record_patch_override(&id, None, if byp { 1.0 } else { 0.0 });
@@ -7756,7 +7872,7 @@ impl Rig for GuitarRigBackend {
         let level_db = level_db.clamp(-60.0, 24.0);
         let comp = RigLibrary::load_compositions();
         // The block as built, and the patch it is in.
-        let (built, patch_name, sr) = {
+        let (built, patch_name) = {
             let guard = self.rig.lock_ok();
             let Some(prig) = guard.as_ref() else { return };
             let Some(patch) = prig.active_patch() else { return };
@@ -7768,7 +7884,7 @@ impl Rig for GuitarRigBackend {
                 .zip(ids.iter())
                 .find(|(_, bid)| **bid == id)
                 .map(|(b, _)| b.clone());
-            (built, patch.name.clone(), f64::from(prig.sample_rate()))
+            (built, patch.name.clone())
         };
         let Some(block) = built else { return };
         let (patch_def, drives, pool) = {
@@ -7789,8 +7905,6 @@ impl Rig for GuitarRigBackend {
         if !commit {
             // Live: the built trim, corrected for a drive knob moved since
             // the build (as `apply_drive` does), plus the level change.
-            let path = std::path::Path::new(&block.nam);
-            let delta = |d: f32| signal_sampler::nam_calibrate::drive_output_delta_cached(path, sr, d);
             let built_drive = block.param_f32("drive").unwrap_or(0.5);
             let drive_now = self
                 .blocks
@@ -7799,11 +7913,11 @@ impl Rig for GuitarRigBackend {
                 .find(|b| b.id == id)
                 .and_then(|b| b.params.iter().find(|p| p.name == "drive").map(|p| p.value))
                 .unwrap_or(built_drive);
-            let out = block.output_trim_db - delta(built_drive) + delta(drive_now) + (level_db - stored);
+            let (_, out) = Self::drive_trims_live(&block, Some(level_db), drive_now);
             {
                 let guard = self.rig.lock_ok();
                 if let Some(prig) = guard.as_ref() {
-                    prig.rig().set_active_block_param(&id, "output_trim", out);
+                    prig.set_block_param(&id, "output_trim", out);
                 }
             }
             if let Some(b) = self.blocks.lock_ok().iter_mut().find(|b| b.id == id) {

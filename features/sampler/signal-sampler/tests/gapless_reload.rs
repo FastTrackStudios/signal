@@ -107,8 +107,25 @@ fn patch(name: &str, blocks: Vec<RigBlock>) -> RigPatch {
 /// "Lead" (a long reverb, playing) and "Clean" (a delay).
 fn two_patch(lead_decay: f32, clean_ms: f32) -> RigProfile {
     RigProfile::new("Worship")
-        .with_patch(patch("Lead", vec![gain(6.0), verb(lead_decay)]))
+        .with_patch(patch("Lead", lead(lead_decay)))
         .with_patch(patch("Clean", vec![gain(0.0), delay(clean_ms, 0.4)]))
+}
+
+fn lead(decay: f32) -> Vec<RigBlock> {
+    vec![gain(6.0), verb(decay)]
+}
+
+/// Lead with a block more — a change no param write can make, so its chain
+/// is built again.
+fn lead_restructured(decay: f32) -> Vec<RigBlock> {
+    vec![gain(6.0), verb(decay), gain(0.0).named("Out")]
+}
+
+/// [`two_patch`] with Lead restructured.
+fn two_patch_rebuilt(lead_decay: f32, clean_ms: f32) -> RigProfile {
+    let mut p = two_patch(lead_decay, clean_ms);
+    p.patches[0].chain = lead_restructured(lead_decay);
+    p
 }
 
 /// The playing patch's reverb preset changes mid-phrase: a sustained note
@@ -121,10 +138,8 @@ fn two_patch(lead_decay: f32, clean_ms: f32) -> RigProfile {
 fn an_edit_to_the_playing_patch_does_not_drop_out() {
     let mut prig = rig(two_patch(0.8, 300.0));
     // The footswitch it must match: both chains installed, then a switch.
-    let mut footswitch = rig(two_patch(0.8, 300.0).with_patch(patch(
-        "Lead'",
-        vec![gain(6.0), verb(0.4)],
-    )));
+    let mut footswitch =
+        rig(two_patch(0.8, 300.0).with_patch(patch("Lead'", lead_restructured(0.4))));
     for r in [&prig, &footswitch] {
         r.rig().start_test_signal(sine(110.0, 0.2));
         heard(r.rig(), 0.8);
@@ -132,7 +147,7 @@ fn an_edit_to_the_playing_patch_does_not_drop_out() {
     let before = heard(prig.rig(), 0.2);
     heard(footswitch.rig(), 0.2);
 
-    let report = prig.reload_profile(two_patch(0.4, 300.0), None);
+    let report = prig.reload_profile(two_patch_rebuilt(0.4, 300.0), None);
     assert!(footswitch.activate_named("Lead'"));
     assert_eq!(report.status, CommitStatus::Committed);
     assert_eq!((report.built, report.reused), (1, 1), "only Lead rebuilds");
@@ -192,7 +207,7 @@ fn the_old_tail_rings_on_through_a_reload() {
         r.rig().start_test_signal(burst());
         heard(r.rig(), 0.3);
     }
-    let report = reloaded.reload_profile(two_patch(0.3, 300.0), None);
+    let report = reloaded.reload_profile(two_patch_rebuilt(0.3, 300.0), None);
     assert!(report.switched);
     let got = heard(reloaded.rig(), 1.5);
     let want = heard(reference.rig(), 1.5);
@@ -215,16 +230,27 @@ fn an_edit_to_another_patch_leaves_the_output_untouched() {
     }
     let a0 = heard(reloaded.rig(), 0.1);
     let b0 = heard(reference.rig(), 0.1);
-    let report = reloaded.reload_profile(two_patch(0.7, 450.0), None);
+    // A structural edit to Clean (rebuilt), then a settings-only one
+    // (retuned): neither touches what plays.
+    let mut restructured = two_patch(0.7, 300.0);
+    restructured.patches[1].chain.push(gain(0.0).named("Out"));
+    let report = reloaded.reload_profile(restructured.clone(), None);
     assert_eq!((report.built, report.reused, report.retired), (1, 1, 1));
+    assert!(!report.switched, "nothing playing changed");
+    let a_mid = heard(reloaded.rig(), 0.1);
+    let b_mid = heard(reference.rig(), 0.1);
+    restructured.patches[1].chain[1] = delay(450.0, 0.4);
+    let report = reloaded.reload_profile(restructured, None);
+    assert_eq!((report.built, report.retuned, report.retired), (0, 1, 0));
     assert!(!report.switched, "nothing playing changed");
     assert_eq!(reloaded.rig().tail_voices(), 0);
     let a1 = heard(reloaded.rig(), 0.5);
     let b1 = heard(reference.rig(), 0.5);
     let diff = a0
         .iter()
+        .chain(&a_mid)
         .chain(&a1)
-        .zip(b0.iter().chain(&b1))
+        .zip(b0.iter().chain(&b_mid).chain(&b1))
         .map(|(x, y)| (x - y).abs())
         .fold(0.0f32, f32::max);
     println!("non-active reload: largest difference from the unreloaded rig {diff:e}");
@@ -262,12 +288,23 @@ fn the_switcher_state_survives_a_reload() {
     assert!(prig.point_stack_at("B", "Crunch"));
     prig.set_no_rotate(&[false, true]);
 
-    // Edit Lead's reverb (the playing patch) and reorder the patches.
-    let mut edited = stacked(0.3);
+    // Edit Lead's reverb level (the playing patch; a setting) and reorder
+    // the patches.
+    let mut edited = stacked(0.6);
+    for p in &mut edited.patches[2].chain[1].params {
+        if p.name == "level" {
+            p.value = "-9".into();
+        }
+    }
     edited.patches.rotate_left(1);
     let report = prig.reload_profile(edited, None);
     assert_eq!(report.status, CommitStatus::Committed);
-    assert_eq!((report.built, report.reused), (1, 3));
+    assert_eq!((report.built, report.retuned, report.reused), (0, 1, 3), "a settings edit");
+    // And a structural one (Lead's decay rebuilds its reverb), same checks.
+    let mut edited = stacked(0.3);
+    edited.patches.rotate_left(1);
+    let report = prig.reload_profile(edited, None);
+    assert_eq!((report.built, report.reused), (1, 3), "Lead rebuilt");
 
     assert_eq!(prig.active_patch().unwrap().name, "Lead", "the playing patch plays on");
     assert_eq!(prig.stack_position(0), 2, "A's cursor on Lead");
@@ -343,6 +380,14 @@ fn a_footswitch_during_the_build_is_not_held_up() {
         }
         p
     };
+    // Every patch restructured: the build is the whole profile.
+    let big_rebuilt = |d: f32| {
+        let mut p = big(d);
+        for q in &mut p.patches {
+            q.chain.push(gain(0.0).named("Out"));
+        }
+        p
+    };
     let shared = Mutex::new(rig(big(0.5)));
 
     // Every patch changes, so the build is the whole profile.
@@ -369,7 +414,7 @@ fn a_footswitch_during_the_build_is_not_held_up() {
             }
             (worst_wait, worst, k)
         });
-        let prepared = ticket.plan(big(0.3), None).prepare();
+        let prepared = ticket.plan(big_rebuilt(0.3), None).prepare();
         done.store(true, std::sync::atomic::Ordering::Relaxed);
         presses.push(presser.join().unwrap());
         prepared
@@ -387,8 +432,8 @@ fn a_footswitch_during_the_build_is_not_held_up() {
 
     // One patch changed: the common edit.
     let mut prig = prig;
-    let mut one = big(0.3);
-    one.patches[0].chain[2] = verb(0.9);
+    let mut one = big_rebuilt(0.3);
+    one.patches[0].chain.push(gain(-1.0).named("Out 2"));
     prig.activate_named("P0");
     let one_patch = prig.reload_profile(one, None);
     assert_eq!((one_patch.built, one_patch.reused), (1, PATCHES - 1));

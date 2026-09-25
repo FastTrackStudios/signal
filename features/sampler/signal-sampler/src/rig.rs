@@ -1116,6 +1116,9 @@ pub struct PreparedChain {
     names: Vec<String>,
     ids: Vec<String>,
     prepare_on_arm: Vec<bool>,
+    /// Each block's type, and whether it is a built-in effect (written live
+    /// as param events), parallel to `boxes`.
+    kinds: Vec<(BlockType, bool)>,
     /// Each block's bypass (see `block_gate`), parallel to `boxes`.
     gates: Vec<Arc<crate::block_gate::GateCtl>>,
     /// Where the Time section starts — what rings on after a switch.
@@ -1193,6 +1196,7 @@ pub fn prepare_chain_with(
     let mut ids = Vec::with_capacity(blocks.len());
     // Which slots hold a tail that must be cleared when the chain is armed.
     let mut prepare_on_arm = Vec::with_capacity(blocks.len());
+    let mut kinds = Vec::with_capacity(blocks.len());
     let mut primary_loudness = None;
     let mut primary_expected_sr = None;
     let mut primary_input_level_dbu = None;
@@ -1229,6 +1233,7 @@ pub fn prepare_chain_with(
                 .unwrap_or_else(|| default_block_id(b.asset_path())),
         );
         prepare_on_arm.push(b.is_time_fx());
+        kinds.push((b.block_type, b.is_native()));
         boxes.push(Some(built.boxed));
     }
 
@@ -1291,6 +1296,7 @@ pub fn prepare_chain_with(
         names,
         ids,
         prepare_on_arm,
+        kinds,
         gates,
         time_start,
         primary_loudness,
@@ -1629,6 +1635,8 @@ struct ResidentChain {
     /// as a burst on the switch, so it is the time blocks — ~0.5 ms each — that
     /// need it and nothing else.
     prepare_on_arm: Vec<bool>,
+    /// Each block's type and built-in-ness, parallel to `boxes`.
+    kinds: Vec<(BlockType, bool)>,
     /// Each block's bypass, parallel to `boxes` — the chain's own, so it is
     /// set before the chain plays and travels with it into a tail.
     gates: Vec<Arc<crate::block_gate::GateCtl>>,
@@ -2112,6 +2120,7 @@ impl GuitarRig {
             names,
             ids,
             prepare_on_arm,
+            kinds,
             gates,
             time_start,
             primary_loudness,
@@ -2143,6 +2152,7 @@ impl GuitarRig {
                     boxes,
                     block_ids: ids,
                     prepare_on_arm,
+                    kinds,
                     gates,
                     time_start,
                 },
@@ -2213,6 +2223,116 @@ impl GuitarRig {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .live
+    }
+
+    /// Write param changes to chain `id`'s running blocks — no rebuild, no
+    /// switch: `(slot, write)` with slots in chain order.
+    ///
+    /// Wherever the chain's blocks are: in the engine (under the renderer's
+    /// lock, all writes in one hold, so no block renders half an edit),
+    /// resident, or ringing out in a tail. A built-in effect gets its params
+    /// as param events — exactly the `(id, value)` its build set from the
+    /// same stored params (see [`crate::block_params`]) — a NAM block its
+    /// trims. Everything is resolved before any lock the renderer takes.
+    ///
+    /// `false` if the rig holds no chain `id`.
+    pub fn write_chain_blocks(
+        &self,
+        id: ModelId,
+        writes: &[(usize, crate::block_params::BlockWrite)],
+    ) -> bool {
+        self.write_chain_blocks_with(id, writes, false)
+    }
+
+    /// [`write_chain_blocks`](Self::write_chain_blocks) to a chain that has
+    /// never played (just built): each written block is prepared again after,
+    /// so it starts *at* the written values rather than gliding to them from
+    /// its build's — exactly as if it had been built with them. A chain that
+    /// is playing or ringing is written as usual (a glide is what a playing
+    /// block should do).
+    pub fn write_new_chain_blocks(
+        &self,
+        id: ModelId,
+        writes: &[(usize, crate::block_params::BlockWrite)],
+    ) -> bool {
+        self.write_chain_blocks_with(id, writes, true)
+    }
+
+    fn write_chain_blocks_with(
+        &self,
+        id: ModelId,
+        writes: &[(usize, crate::block_params::BlockWrite)],
+        settle: bool,
+    ) -> bool {
+        let sr = f64::from(self.sample_rate);
+        let mut swap = self
+            .swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let live = swap.live == Some(id);
+        let Some(chain) = swap.chains.get_mut(&id) else {
+            return false;
+        };
+        let resolved: Vec<(usize, crate::block_params::ResolvedWrite)> = writes
+            .iter()
+            .filter_map(|(slot, w)| {
+                let (bt, _) = *chain.kinds.get(*slot)?;
+                crate::block_params::ResolvedWrite::resolve(bt, w).map(|sw| (*slot, sw))
+            })
+            .collect();
+        if resolved.is_empty() {
+            return true;
+        }
+        if live {
+            let guids = &self.slot_guids;
+            self.daw.with_plugin_instances(|map| {
+                for (slot, sw) in &resolved {
+                    if let Some(inst) = guids.get(slot + 1).and_then(|g| map.get_mut(g)) {
+                        sw.apply(inst.as_mut());
+                    }
+                }
+            });
+        } else if chain.boxes.iter().any(Option::is_some) {
+            for (slot, sw) in &resolved {
+                if let Some(Some(inst)) = chain.boxes.get_mut(*slot) {
+                    sw.apply(inst.as_mut());
+                }
+            }
+            if settle {
+                let mut slots: Vec<usize> = resolved.iter().map(|(s, _)| *s).collect();
+                slots.dedup();
+                for slot in slots {
+                    if let Some(Some(inst)) = chain.boxes.get_mut(slot) {
+                        let _ = inst.prepare(sr, FX_PREPARE_BLOCK);
+                    }
+                }
+            }
+        } else {
+            // Ringing out: its blocks are the tail's.
+            self.with_stage(|stage| {
+                if let Some(boxes) = stage.voice_boxes_mut(id) {
+                    for (slot, sw) in &resolved {
+                        if let Some(Some(inst)) = boxes.get_mut(*slot) {
+                            sw.apply(inst.as_mut());
+                        }
+                    }
+                }
+            });
+        }
+        true
+    }
+
+    /// Chain `id`'s block ids, in slot order (empty if the rig has no such
+    /// chain).
+    #[must_use]
+    pub fn chain_block_ids(&self, id: ModelId) -> Vec<String> {
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .chains
+            .get(&id)
+            .map(|c| c.block_ids.clone())
+            .unwrap_or_default()
     }
 
     /// Select the active chain — swaps the chain's pre-prepared boxes into the
@@ -2906,6 +3026,33 @@ impl GuitarRig {
         let Some((slot, guid)) = self.active_block_slot(block_id) else {
             return false;
         };
+
+        // 0. A built-in effect: its own param event, the value as it is —
+        // the write its build makes from the same stored value (see
+        // `block_params`). Once, to the block: not a value kept on the slot
+        // and re-sent every block to whatever chain plays there next.
+        let target = {
+            let swap = self
+                .swap
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            swap.active
+                .and_then(|a| swap.chains.get(&a).map(|c| (a, c.kinds.get(slot).copied())))
+        };
+        if let Some((active, Some((bt, true)))) = target {
+            if crate::block_params::is_known(bt, param_name) {
+                return self.write_chain_blocks(
+                    active,
+                    &[(
+                        slot,
+                        crate::block_params::BlockWrite::Params(vec![(
+                            param_name.to_string(),
+                            f64::from(value),
+                        )]),
+                    )],
+                );
+            }
+        }
 
         // 1. NAM trims — mutate the live instance directly via downcast.
         let nam_applied = self

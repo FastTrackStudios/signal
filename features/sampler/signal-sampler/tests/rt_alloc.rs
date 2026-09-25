@@ -266,15 +266,32 @@ fn rendering_through_reload_commits_allocates_nothing() {
     // The playing patch rebuilt (a switch, a tail), another patch rebuilt
     // (no switch), and the playing patch rebuilt again while the first
     // tail still rings; then every tail runs out and is collected.
-    for (decay, ms) in [(0.5, 300.0), (0.5, 450.0), (0.3, 450.0), (0.9, 200.0)] {
+    // Rebuilds (a reverb's decay is structural) and retunes (a delay's
+    // time, a trim: written to the running chains, the playing one
+    // included), with knob writes between.
+    let mut retuned = 0;
+    for (k, (decay, ms)) in [(0.5, 300.0), (0.5, 450.0), (0.3, 450.0), (0.9, 200.0), (0.9, 250.0)]
+        .into_iter()
+        .enumerate()
+    {
         let report = prig.reload_profile(profile(decay, ms), None);
         assert!(report.is_committed());
-        render(&prig, 200, &mut through);
+        retuned += report.retuned;
+        render(&prig, 100, &mut through);
+        assert!(prig.set_block_param("Trim", "gain_db", -2.0 + k as f32));
+        render(&prig, 100, &mut through);
     }
+    assert!(retuned >= 2, "retunes were exercised: {retuned}");
+    // A retune of the playing patch itself: its trim.
+    let mut retrim = profile(0.9, 250.0);
+    retrim.patches[0].chain[0] = RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "-4");
+    let report = prig.reload_profile(retrim, None);
+    assert_eq!((report.built, report.retuned), (0, 1));
+    render(&prig, 200, &mut through);
     render(&prig, SR as usize * 3 / BLOCK, &mut through);
     let worst = through.iter().copied().max().unwrap_or(0);
     println!(
-        "{} blocks through 4 reload commits: at most {worst} allocations a block \
+        "{} blocks through 6 reload commits and 5 knob writes: at most {worst} allocations a block \
          (daw's render_block floor: {floor})",
         through.len()
     );
