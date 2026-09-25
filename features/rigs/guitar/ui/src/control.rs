@@ -1041,6 +1041,61 @@ fn PKnob(
     }
 }
 
+/// The patch's own place in the mix — its Patch Trim block: where it sits
+/// between the sides, and its level. Per patch (in a song, the song's
+/// version of it), the last thing before the delays and reverbs, so the
+/// whole dry sound moves and the tails take it from there.
+#[component]
+fn PatchTrimPanel(block: LiveBlock) -> Element {
+    let param = |name: &str, lo: f32, hi: f32| {
+        block.params.iter().find(|p| p.name == name).cloned().unwrap_or(BlockParam {
+            name: name.to_string(),
+            value: 0.0,
+            min: lo,
+            max: hi,
+            overridden: false,
+        })
+    };
+    let pan = param("pan", -1.0, 1.0);
+    let gain = param("gain_db", -24.0, 24.0);
+    let pan_fmt: fn(f32) -> String = |v| {
+        if v.abs() < 0.005 {
+            "C".into()
+        } else if v < 0.0 {
+            format!("L{:.0}", -v * 100.0)
+        } else {
+            format!("R{:.0}", v * 100.0)
+        }
+    };
+    let gain_fmt: fn(f32) -> String = |v| format!("{v:+.1} dB");
+    // The marker on a left–right bar: where the dry sound sits.
+    let at = ((pan.value + 1.0) * 50.0).clamp(0.0, 100.0);
+    let id = block.id.clone();
+    rsx! {
+        div { style: "height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 18px 6px 6px;",
+            div { style: "width: 100%; display: flex; flex-direction: column; gap: 3px;",
+                div { style: "position: relative; height: 6px; border-radius: 3px; background: #1f1f23;",
+                    div { style: "position: absolute; left: 50%; top: -2px; width: 1px; height: 10px; background: #3f3f46;" }
+                    div { style: "position: absolute; left: calc({at}% - 4px); top: -1px; width: 8px; height: 8px; border-radius: 999px; background: #e4e4e7;" }
+                }
+                div { style: "display: flex; justify-content: space-between; font-size: 8px; color: #71717a; letter-spacing: 0.08em;",
+                    span { "L" }
+                    span { "R" }
+                }
+            }
+            PKnob { block_id: id, name: "pan", label: "Pan", p: pan, fmt: Some(crate::knob::FmtFn(pan_fmt)) }
+            // The level is the patch's levelling plus the player's offset —
+            // the Output macro sets the offset; a knob here would pin the sum
+            // and lose the levelling. Shown, not set.
+            div { style: "display: flex; flex-direction: column; align-items: center; gap: 1px;",
+                title: "The patch's level: its levelling plus your offset — set the offset with the Output macro",
+                span { style: "font-size: 8px; font-weight: 600; letter-spacing: 0.08em; color: #71717a;", "LEVEL" }
+                span { style: "font-size: 11px; color: #d4d4d8; font-family: monospace;", "{gain_fmt(gain.value)}" }
+            }
+        }
+    }
+}
+
 /// The stereo delay module, wide: one full-width visualizer per delay
 /// stacked (1 top, 2 bottom) — click a lane to select it — with the
 /// selected delay's controls in a strip beneath.
@@ -2700,6 +2755,17 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                     tempo_bpm: model.tempo_bpm,
                                     tempo_divisions: true,
                                     pre: bpre,
+                                }
+                            }
+                        }
+                        // The patch's own level and pan — Patch Trim, the last
+                        // block before the Time module, in signal order.
+                        if !bpre {
+                            if let Some(trim) = find_block(&blocks, BlockType::Volume, "Patch Trim") {
+                                div { class: "min-h-0 h-full flex flex-col flex-shrink-0", style: "width: 92px;",
+                                    ZoomPanel { title: "Patch".to_string(),
+                                        PatchTrimPanel { block: trim }
+                                    }
                                 }
                             }
                         }
