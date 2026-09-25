@@ -189,3 +189,180 @@ fn the_live_state_is_what_the_chain_plays() {
     let d = max_diff(&now, &want);
     assert!(d < 1e-3, "the preset's value plays, not the old knob (max diff {d})");
 }
+
+// ── The reconciler, and random sequences ──────────────────────────────────
+
+/// Nothing the rig does leaves the playing chain off what it is due to play
+/// — so the reconciler, run after each step, finds nothing to correct. And a
+/// write that goes around the patch rig (no live state recorded) is found
+/// and put back.
+#[test]
+fn the_reconciler_corrects_a_stray_write_and_nothing_else() {
+    use signal_sampler::ReloadMode;
+    let mut p = rig(profile(delay(300.0, 0.3), delay(500.0, 0.45)));
+    p.activate(0);
+    assert!(p.reconcile().is_empty(), "a fresh chain is as built");
+    let id = block_id(&p, "DLY 1");
+    p.set_block_param(&id, "feedback", 0.6);
+    p.set_block_param(&id, "tempo_bpm", 120.0);
+    assert!(p.reconcile().is_empty(), "a knob through the patch rig is its live state");
+    p.activate(1);
+    assert!(p.reconcile().is_empty());
+    p.activate(0);
+    assert!(p.reconcile().is_empty(), "switching back finds it as it was left");
+    let ticket = p.begin_reload(ReloadMode::Keep);
+    let prepared = ticket.plan(profile(delay(250.0, 0.3), delay(500.0, 0.45)), None).prepare();
+    p.commit_reload(prepared, None);
+    assert!(p.reconcile().is_empty(), "a retune lands the chain where it is due");
+
+    // Around the patch rig: the engine plays it, nothing records it.
+    let id = block_id(&p, "DLY 1");
+    assert!(p.rig().set_active_block_param(&id, "feedback", 0.95));
+    let fixed = p.reconcile();
+    assert_eq!(fixed.len(), 1, "the stray write is found: {fixed:?}");
+    assert!(p.reconcile().is_empty(), "and corrected");
+}
+
+/// A small deterministic generator (no dependency, same sequence every run).
+struct Lcg(u64);
+impl Lcg {
+    fn next(&mut self) -> u32 {
+        self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        (self.0 >> 33) as u32
+    }
+    fn below(&mut self, n: usize) -> usize {
+        self.next() as usize % n.max(1)
+    }
+    fn range(&mut self, lo: f32, hi: f32) -> f32 {
+        lo + (hi - lo) * (self.next() as f32 / u32::MAX as f32)
+    }
+}
+
+/// A random live value for a param of the test chain (rounded, as a knob's
+/// text round-trips).
+fn random_write(g: &mut Lcg) -> (&'static str, &'static str, f32) {
+    let v = |x: f32| (x * 100.0).round() / 100.0;
+    match g.below(5) {
+        0 => ("DLY 1", "time", v(g.range(60.0, 700.0))),
+        1 => ("DLY 1", "feedback", v(g.range(0.0, 0.7))),
+        2 => ("DLY 1", "level", v(g.range(-12.0, 0.0))),
+        3 => ("Trim", "gain_db", v(g.range(-9.0, 3.0))),
+        _ => ("Out", "gain_db", v(g.range(-6.0, 0.0))),
+    }
+}
+
+fn random_patch(g: &mut Lcg, name: &str, extra: bool) -> RigPatch {
+    let mut p = RigPatch::new(name)
+        .with_block(RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", g.range(-6.0, 0.0).round().to_string()))
+        .with_block(delay((g.range(100.0, 600.0)).round(), (g.range(0.1, 0.6) * 10.0).round() / 10.0));
+    if extra {
+        p = p.with_block(RigBlock::effect(BlockType::Volume, "Pad").with_param("gain_db", "-1"));
+    }
+    p.with_block(RigBlock::effect(BlockType::Volume, "Out").with_param("gain_db", "0"))
+}
+
+/// The patch as it should play: its definition with its live state baked in.
+fn resolved(patch: &RigPatch, live: &[(String, signal_sampler::LiveWrite)], ids: &[String]) -> RigPatch {
+    let mut out = patch.clone();
+    let reals: Vec<usize> = out.chain.iter().enumerate().filter(|(_, b)| b.has_backend()).map(|(i, _)| i).collect();
+    for (id, w) in live {
+        let signal_sampler::LiveWrite::Param(name, v) = w else { continue };
+        let Some(pos) = ids.iter().position(|i| i == id) else { continue };
+        let Some(&at) = reals.get(pos) else { continue };
+        let b = &mut out.chain[at];
+        let text = v.to_string();
+        match b.params.iter_mut().find(|p| p.name == *name) {
+            Some(p) => p.value = text,
+            None => *b = b.clone().with_param(name, text),
+        }
+    }
+    out
+}
+
+/// Random switches, knob moves, tempo writes, settings edits and rebuilds.
+/// After every step the chain is where it is due (the reconciler finds
+/// nothing); at the end, the playing patch sounds as a rig built from its
+/// definition plus its live state.
+#[test]
+fn random_sequences_never_leave_a_patch_off_its_state() {
+    use signal_sampler::ReloadMode;
+    for seed in 1..=6u64 {
+        let mut g = Lcg(seed);
+        let n = 3;
+        let mut extra = vec![false; n];
+        let mut prof = RigProfile::new("Live");
+        for i in 0..n {
+            prof = prof.with_patch(random_patch(&mut g, &format!("P{i}"), false));
+        }
+        let mut p = rig(prof.clone());
+        p.activate(0);
+        let mut active = 0;
+        for step in 0..40 {
+            match g.below(10) {
+                0..=2 => {
+                    active = g.below(n);
+                    p.activate(active);
+                }
+                3..=6 => {
+                    let (block, param, v) = random_write(&mut g);
+                    let id = block_id(&p, block);
+                    p.set_block_param(&id, param, v);
+                }
+                7 => {
+                    let id = block_id(&p, "DLY 1");
+                    p.set_block_param(&id, "tempo_bpm", g.range(70.0, 160.0).round());
+                }
+                8 => {
+                    // A preset pick: one patch's delay settings change.
+                    let i = g.below(n);
+                    let c = prof.patches[i].chain.iter().position(|b| b.name == "DLY 1").unwrap();
+                    let t = g.range(100.0, 600.0).round().to_string();
+                    let b = prof.patches[i].chain[c].clone();
+                    prof.patches[i].chain[c] = set_param(b, "time", &t);
+                    let ticket = p.begin_reload(ReloadMode::Keep);
+                    let prepared = ticket.plan(prof.clone(), None).prepare();
+                    p.commit_reload(prepared, None);
+                }
+                _ => {
+                    // A structural edit: a block added or taken away.
+                    let i = g.below(n);
+                    extra[i] = !extra[i];
+                    let keep = prof.patches[i].clone();
+                    let mut fresh = random_patch(&mut g, &keep.name, extra[i]);
+                    // Same settings as before for the blocks both have.
+                    for b in &mut fresh.chain {
+                        if let Some(old) = keep.chain.iter().find(|o| o.name == b.name) {
+                            *b = old.clone();
+                        }
+                    }
+                    prof.patches[i] = fresh;
+                    let ticket = p.begin_reload(ReloadMode::Keep);
+                    let prepared = ticket.plan(prof.clone(), None).prepare();
+                    p.commit_reload(prepared, None);
+                    p.activate(active);
+                }
+            }
+            let fixed = p.reconcile();
+            assert!(fixed.is_empty(), "seed {seed} step {step}: the chain drifted: {fixed:?}");
+        }
+
+        // The playing patch against one built as it should be.
+        let playing = p.active_patch().expect("plays").clone();
+        let want_patch = resolved(&playing, &p.live_state(), &p.active_block_ids());
+        let got = pluck_after_silence(p.rig());
+        let mut want_rig = rig(RigProfile::new("Want").with_patch(want_patch));
+        want_rig.activate(0);
+        let want = pluck_after_silence(want_rig.rig());
+        let d = max_diff(&got, &want);
+        assert!(d < 2e-3, "seed {seed}: {} plays off its state (max diff {d})", playing.name);
+    }
+}
+
+/// `block` with `param` set (in place, as an edit leaves it).
+fn set_param(mut block: RigBlock, param: &str, value: &str) -> RigBlock {
+    match block.params.iter_mut().find(|p| p.name == param) {
+        Some(p) => p.value = value.to_string(),
+        None => block = block.with_param(param, value),
+    }
+    block
+}

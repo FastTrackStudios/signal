@@ -217,6 +217,81 @@ pub fn is_known(block_type: BlockType, param: &str) -> bool {
     live_param_ids(block_type).is_some_and(|ids| ids.contains_key(&param.to_ascii_lowercase()))
 }
 
+/// What a running block was last set to, in the ids it takes params by: its
+/// build's values, then every write since. Kept by the rig beside each
+/// resident block (the one place writes reach blocks), and compared with what
+/// the block is due to play by `ProfileRig::reconcile`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BlockState {
+    /// A built-in effect's params: id → plain value.
+    pub params: HashMap<u32, f64>,
+    /// A NAM block's trims (dB).
+    pub nam_in: Option<f32>,
+    pub nam_out: Option<f32>,
+}
+
+impl BlockState {
+    /// What building `block` sets it to — the build's own conversion.
+    #[must_use]
+    pub fn built(block: &RigBlock) -> Self {
+        let mut st = Self::default();
+        if let Some(writes) = native_writes(block) {
+            if let Some(w) = ResolvedWrite::resolve(block.block_type, &BlockWrite::Params(writes)) {
+                st.note(&w);
+            }
+        } else if block.is_nam() {
+            st.nam_in = Some(block.input_trim_db);
+            st.nam_out = Some(block.output_trim_db);
+        }
+        st
+    }
+
+    /// Record `w` as written.
+    pub fn note(&mut self, w: &ResolvedWrite) {
+        match w {
+            ResolvedWrite::Events(events) => {
+                for (id, v) in events {
+                    self.params.insert(*id, *v);
+                }
+            }
+            ResolvedWrite::Nam { input_db, output_db } => {
+                if input_db.is_some() {
+                    self.nam_in = *input_db;
+                }
+                if output_db.is_some() {
+                    self.nam_out = *output_db;
+                }
+            }
+        }
+    }
+
+    /// The write that takes a block from `self` to `due` (`None`: nothing
+    /// differs).
+    #[must_use]
+    pub fn diff_to(&self, due: &Self) -> Vec<ResolvedWrite> {
+        let mut out = Vec::new();
+        let mut events: Vec<(u32, f64)> = due
+            .params
+            .iter()
+            .filter(|(id, v)| self.params.get(id).is_none_or(|have| have.to_bits() != v.to_bits()))
+            .map(|(id, v)| (*id, *v))
+            .collect();
+        events.sort_by_key(|(id, _)| *id);
+        if !events.is_empty() {
+            out.push(ResolvedWrite::Events(events));
+        }
+        let differs = |a: Option<f32>, b: Option<f32>| b.is_some() && a.map(f32::to_bits) != b.map(f32::to_bits);
+        let (i, o) = (differs(self.nam_in, due.nam_in), differs(self.nam_out, due.nam_out));
+        if i || o {
+            out.push(ResolvedWrite::Nam {
+                input_db: due.nam_in.filter(|_| i),
+                output_db: due.nam_out.filter(|_| o),
+            });
+        }
+        out
+    }
+}
+
 /// A difference to write to a running block.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BlockWrite {

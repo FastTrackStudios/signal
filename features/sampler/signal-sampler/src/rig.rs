@@ -1121,6 +1121,8 @@ pub struct PreparedChain {
     kinds: Vec<(BlockType, bool)>,
     /// Each block's bypass (see `block_gate`), parallel to `boxes`.
     gates: Vec<Arc<crate::block_gate::GateCtl>>,
+    /// What each block was set to as built, parallel to `boxes`.
+    applied: Vec<crate::block_params::BlockState>,
     /// Where the Time section starts — what rings on after a switch.
     time_start: usize,
     primary_loudness: Option<f64>,
@@ -1291,6 +1293,7 @@ pub fn prepare_chain_with(
         }
     }
 
+    let applied = blocks.iter().map(crate::block_params::BlockState::built).collect();
     Ok(PreparedChain {
         boxes,
         names,
@@ -1298,6 +1301,7 @@ pub fn prepare_chain_with(
         prepare_on_arm,
         kinds,
         gates,
+        applied,
         time_start,
         primary_loudness,
         primary_expected_sr,
@@ -1640,6 +1644,10 @@ struct ResidentChain {
     /// Each block's bypass, parallel to `boxes` — the chain's own, so it is
     /// set before the chain plays and travels with it into a tail.
     gates: Vec<Arc<crate::block_gate::GateCtl>>,
+    /// What each block was last set to — its build's values, then every
+    /// write since — parallel to `boxes`. Updated where writes reach blocks,
+    /// so it is what the blocks hold, whoever wrote.
+    applied: Vec<crate::block_params::BlockState>,
     /// Where the Time section starts (`boxes.len()`: none).
     time_start: usize,
 }
@@ -2122,6 +2130,7 @@ impl GuitarRig {
             prepare_on_arm,
             kinds,
             gates,
+            applied,
             time_start,
             primary_loudness,
             primary_expected_sr,
@@ -2154,6 +2163,7 @@ impl GuitarRig {
                     prepare_on_arm,
                     kinds,
                     gates,
+                    applied,
                     time_start,
                 },
             );
@@ -2264,6 +2274,44 @@ impl GuitarRig {
         writes: &[(usize, crate::block_params::BlockWrite)],
         settle: bool,
     ) -> bool {
+        let resolved: Vec<(usize, crate::block_params::ResolvedWrite)> = {
+            let swap = self
+                .swap
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let Some(chain) = swap.chains.get(&id) else {
+                return false;
+            };
+            writes
+                .iter()
+                .filter_map(|(slot, w)| {
+                    let (bt, _) = *chain.kinds.get(*slot)?;
+                    crate::block_params::ResolvedWrite::resolve(bt, w).map(|sw| (*slot, sw))
+                })
+                .collect()
+        };
+        self.write_resolved_with(id, resolved, settle)
+    }
+
+    /// Write already-resolved writes to chain `id`'s blocks (as
+    /// [`write_chain_blocks`](Self::write_chain_blocks)).
+    pub fn write_chain_resolved(
+        &self,
+        id: ModelId,
+        writes: &[(usize, crate::block_params::ResolvedWrite)],
+    ) -> bool {
+        self.write_resolved_with(id, writes.to_vec(), false)
+    }
+
+    /// The one place a write reaches a resident block: noted in the chain's
+    /// `applied`, then applied to the block wherever it is (playing,
+    /// resident, or ringing out in the tail).
+    fn write_resolved_with(
+        &self,
+        id: ModelId,
+        resolved: Vec<(usize, crate::block_params::ResolvedWrite)>,
+        settle: bool,
+    ) -> bool {
         let sr = f64::from(self.sample_rate);
         let mut swap = self
             .swap
@@ -2273,15 +2321,13 @@ impl GuitarRig {
         let Some(chain) = swap.chains.get_mut(&id) else {
             return false;
         };
-        let resolved: Vec<(usize, crate::block_params::ResolvedWrite)> = writes
-            .iter()
-            .filter_map(|(slot, w)| {
-                let (bt, _) = *chain.kinds.get(*slot)?;
-                crate::block_params::ResolvedWrite::resolve(bt, w).map(|sw| (*slot, sw))
-            })
-            .collect();
         if resolved.is_empty() {
             return true;
+        }
+        for (slot, sw) in &resolved {
+            if let Some(st) = chain.applied.get_mut(*slot) {
+                st.note(sw);
+            }
         }
         if live {
             let guids = &self.slot_guids;
@@ -2320,6 +2366,18 @@ impl GuitarRig {
             });
         }
         true
+    }
+
+    /// What chain `id`'s blocks were last set to, in slot order (`None` if
+    /// the rig has no such chain).
+    #[must_use]
+    pub fn chain_applied(&self, id: ModelId) -> Option<Vec<crate::block_params::BlockState>> {
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .chains
+            .get(&id)
+            .map(|c| c.applied.clone())
     }
 
     /// Chain `id`'s block ids, in slot order (empty if the rig has no such
@@ -3075,6 +3133,20 @@ impl GuitarRig {
                 None
             })
             .flatten();
+        if nam_applied == Some(true) {
+            let w = crate::block_params::ResolvedWrite::Nam {
+                input_db: (param_name == "input_trim").then_some(value),
+                output_db: (param_name == "output_trim").then_some(value),
+            };
+            let mut swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(st) = swap
+                .active
+                .and_then(|a| swap.chains.get_mut(&a))
+                .and_then(|c| c.applied.get_mut(slot))
+            {
+                st.note(&w);
+            }
+        }
         match nam_applied {
             // NAM trim applied.
             Some(true) => return true,

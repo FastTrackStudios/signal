@@ -585,6 +585,44 @@ impl LiveLog {
     }
 }
 
+/// A live write as the block write it is.
+#[cfg(not(target_arch = "wasm32"))]
+fn live_as_block_write(param: &str, value: f32) -> BlockWrite {
+    match param {
+        "input_trim" => BlockWrite::Nam { input_db: Some(value), output_db: None },
+        "output_trim" => BlockWrite::Nam { input_db: None, output_db: Some(value) },
+        _ => BlockWrite::Params(vec![(param.to_string(), f64::from(value))]),
+    }
+}
+
+/// Whether [`ProfileRig::reconcile`] keeps `block` (a built-in effect or a
+/// NAM block; a hosted plugin keeps its own params).
+#[cfg(not(target_arch = "wasm32"))]
+fn reconciled(block: &RigBlock) -> bool {
+    crate::block_params::native_writes(block).is_some() || block.is_nam()
+}
+
+/// What chain `spec`'s blocks are due to hold: the definition as built, then
+/// the chain's live writes in order.
+#[cfg(not(target_arch = "wasm32"))]
+fn due_state(spec: &ChainSpec, entries: &[LogEntry]) -> Vec<crate::block_params::BlockState> {
+    use crate::block_params::{BlockState, ResolvedWrite};
+    let mut due: Vec<BlockState> = spec.blocks.iter().map(BlockState::built).collect();
+    let mut order: Vec<&LogEntry> = entries.iter().collect();
+    order.sort_by_key(|e| e.seq);
+    for e in order {
+        let LiveWrite::Param(name, v) = &e.write else { continue };
+        let Some(slot) = spec.block_ids.iter().position(|b| *b == e.block) else { continue };
+        let block = &spec.blocks[slot];
+        if reconciled(block) {
+            if let Some(w) = ResolvedWrite::resolve(block.block_type, &live_as_block_write(name, *v)) {
+                due[slot].note(&w);
+            }
+        }
+    }
+    due
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn same_target(a: &LiveWrite, b: &LiveWrite) -> bool {
     match (a, b) {
@@ -2040,6 +2078,41 @@ impl ProfileRig {
         let mut entries = self.log().chains.get(&chain).cloned().unwrap_or_default();
         entries.sort_by_key(|e| e.seq);
         entries.into_iter().map(|e| (e.block, e.write)).collect()
+    }
+
+    /// Put the playing chain where it is due to be: its definition plus its
+    /// live writes, compared with what the rig says its blocks were last set
+    /// to (`GuitarRig::chain_applied`, kept where writes reach blocks), and
+    /// only the differences written. Every write already keeps the two
+    /// equal, so normally this writes nothing — a write that went astray is
+    /// corrected here instead of playing on until its knob moves. Returns
+    /// what it corrected (`block: n params` / `block: trims`), each one a bug
+    /// to find. Safe at any time, as often as wanted.
+    pub fn reconcile(&self) -> Vec<String> {
+        let Some(id) = self.rig.active() else { return Vec::new() };
+        let Some(key) = self.chain_keys.get(&id) else { return Vec::new() };
+        let Some(applied) = self.rig.chain_applied(id) else { return Vec::new() };
+        let entries = self.log().chains.get(&id).cloned().unwrap_or_default();
+        let due = due_state(&key.spec, &entries);
+        let mut report = Vec::new();
+        let mut writes: Vec<(usize, crate::block_params::ResolvedWrite)> = Vec::new();
+        for (slot, (have, want)) in applied.iter().zip(&due).enumerate() {
+            if !key.spec.blocks.get(slot).is_some_and(reconciled) {
+                continue;
+            }
+            for w in have.diff_to(want) {
+                let block = key.spec.block_ids.get(slot).cloned().unwrap_or_default();
+                report.push(match &w {
+                    crate::block_params::ResolvedWrite::Events(ev) => format!("{block}: {} params", ev.len()),
+                    crate::block_params::ResolvedWrite::Nam { .. } => format!("{block}: trims"),
+                });
+                writes.push((slot, w));
+            }
+        }
+        if !writes.is_empty() {
+            self.rig.write_chain_resolved(id, &writes);
+        }
+        report
     }
 
     pub fn set_block_param(&self, block_id: &str, param_name: &str, value: f32) -> bool {

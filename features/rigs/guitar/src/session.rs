@@ -572,6 +572,12 @@ impl GuitarRigBackend {
             // The headphone mixer: restarted if it died, its state
             // published when it changes.
             self.supervise_phones();
+            // The playing chain, held to what it is due to play, and the
+            // chain view to what it plays.
+            self.reconcile_engine("pump");
+            if self.sync_view() {
+                self.events.publish(RigEvent::Chain(Rig::chain(self)));
+            }
         }
         // Library files edited under the rig: looked at twice a second,
         // applied on their own thread (see `hot_reload`).
@@ -1269,6 +1275,17 @@ impl GuitarRigBackend {
                 }
             }
         }
+        // The engine first (through the patch rig, which keeps it as the
+        // chain's live state — a reload that rebuilds or retunes this patch
+        // puts it back on before the new chain plays), then the view: the
+        // view is held to that live state (`sync_view`), so it must never be
+        // ahead of it.
+        {
+            let guard = self.rig.lock_ok();
+            if let Some(prig) = guard.as_ref() {
+                prig.set_block_param(id, param, value);
+            }
+        }
         let mut retime_delay = false;
         {
             let mut blocks = self.blocks.lock_ok();
@@ -1285,15 +1302,6 @@ impl GuitarRigBackend {
         if retime_delay {
             // A note-division change re-times the delay from the tempo.
             self.apply_tempo_to_delays();
-        }
-        {
-            let guard = self.rig.lock_ok();
-            if let Some(prig) = guard.as_ref() {
-                // Through the patch rig, which keeps it as the chain's live
-                // state: a reload that rebuilds or retunes this patch puts
-                // it back on before the new chain plays.
-                prig.set_block_param(id, param, value);
-            }
         }
     }
 
@@ -3200,6 +3208,8 @@ impl GuitarRigBackend {
         self.apply_all_drives();
         let drives = t.elapsed();
 
+        self.reconcile_engine("switch");
+
         let t = std::time::Instant::now();
         self.publish_state();
         let publish = t.elapsed();
@@ -3772,42 +3782,92 @@ impl GuitarRigBackend {
         self.apply_song_patch_overrides();
         self.label_board();
         self.macros_rebase();
-        self.show_live_state();
+        self.sync_view();
     }
 
-    /// Put what the playing chain was written since it was built onto the
-    /// chain view: the engine plays the definition plus those writes, so the
-    /// view read from the definition alone could show a value the block is
-    /// not playing (a knob turned on this patch before switching away and
-    /// back). One source for both — the patch rig's live-state log.
-    fn show_live_state(&self) {
-        let live = {
+    /// Hold the playing chain to its definition plus its live writes (see
+    /// `ProfileRig::reconcile`). A correction means some write never reached
+    /// the engine, or reached the wrong block — the chain is right again
+    /// either way, and the warning names what to go and find.
+    fn reconcile_engine(&self, when: &str) {
+        let fixed = {
             let guard = self.rig.lock_ok();
             match guard.as_ref() {
-                Some(prig) => prig.live_state(),
+                Some(prig) => prig.reconcile(),
                 None => return,
             }
         };
-        if live.is_empty() {
-            return;
+        if !fixed.is_empty() {
+            tracing::warn!(
+                reconcile.when = when,
+                reconcile.patch = %self.live_patch_name().unwrap_or_default(),
+                reconcile.fixed = ?fixed,
+                "engine drifted from its patch — corrected"
+            );
         }
-        let mut blocks = self.blocks.lock_ok();
-        for (id, write) in live {
-            let Some(b) = blocks.iter_mut().find(|b| b.id == id) else { continue };
-            match write {
-                signal_sampler::LiveWrite::Param(name, v) => {
-                    if b.param_name.as_deref() == Some(name.as_str()) {
-                        b.param_value = v;
-                    }
-                    if let Some(p) = b.params.iter_mut().find(|p| p.name == name) {
-                        p.value = v;
+    }
+
+    /// Hold the chain view to what the playing chain holds: each built-in
+    /// effect's params as its definition sets them plus what has been written
+    /// to it since (the patch rig's live-state log — what the engine was
+    /// given, see `ProfileRig::reconcile`). Params the engine takes live are
+    /// the ones held; a NAM block's drive (heard as its trims) and the view's
+    /// own synthetic params are left as they are. Returns whether anything
+    /// had to change — a view that had drifted from the engine.
+    fn sync_view(&self) -> bool {
+        let (patch, ids, live) = {
+            let guard = self.rig.lock_ok();
+            let Some(prig) = guard.as_ref() else { return false };
+            let Some(patch) = prig.active_patch().cloned() else { return false };
+            (patch, prig.active_block_ids(), prig.live_state())
+        };
+        let reals: Vec<&RigBlock> = patch.chain.iter().filter(|b| b.has_backend()).collect();
+        let mut changed = Vec::new();
+        {
+            let mut blocks = self.blocks.lock_ok();
+            for (block, id) in reals.iter().zip(&ids) {
+                if signal_sampler::block_params::native_writes(block).is_none() {
+                    continue;
+                }
+                let Some(view) = blocks.iter_mut().find(|b| b.id == *id) else { continue };
+                // Due: the definition, then the live writes in order.
+                let mut due: Vec<(String, f32)> = Vec::new();
+                for p in &view.params {
+                    if signal_sampler::block_params::is_known(block.block_type, &p.name) {
+                        if let Some(v) = block.param_f32(&p.name) {
+                            due.push((p.name.clone(), v));
+                        }
                     }
                 }
-                // The view's bypass is the block's own switch; the engine's
-                // may also be the FX-off mute, which the view shows apart.
-                signal_sampler::LiveWrite::Bypass(_) => {}
+                for (bid, w) in &live {
+                    if bid != id {
+                        continue;
+                    }
+                    if let signal_sampler::LiveWrite::Param(name, v) = w {
+                        if let Some(d) = due.iter_mut().find(|(n, _)| n == name) {
+                            d.1 = *v;
+                        } else if view.params.iter().any(|p| p.name == *name) {
+                            due.push((name.clone(), *v));
+                        }
+                    }
+                }
+                for (name, v) in due {
+                    if let Some(p) = view.params.iter_mut().find(|p| p.name == name) {
+                        if p.value.to_bits() != v.to_bits() {
+                            changed.push(format!("{}: {name} {} → {v}", view.name, p.value));
+                            p.value = v;
+                        }
+                    }
+                    if view.param_name.as_deref() == Some(name.as_str()) && view.param_value.to_bits() != v.to_bits() {
+                        view.param_value = v;
+                    }
+                }
             }
         }
+        if !changed.is_empty() {
+            tracing::debug!(view.fixed = ?changed, "chain view held to the engine");
+        }
+        !changed.is_empty()
     }
 
     /// The song's changes to the patch that is up, put on the live chain
