@@ -933,6 +933,13 @@ pub struct SampleEngine {
     /// Attack envelope (frames) ramped in on sustain onset. 0 = the sample's
     /// natural attack (CSS attack parameter; user-adjustable).
     attack_frames: usize,
+    /// Decay (frames) and sustain level (0..=1) of the zone voices' ADSR —
+    /// see `Voice::with_decay`. `(0, 1.0)` = none, the sample as recorded.
+    decay_frames: usize,
+    sustain_level: f32,
+    /// Zone voices' filter envelope: `(ADSR, amount, cutoff Hz)`. `None` or
+    /// amount 0 = no per-voice filter (and no cost).
+    filter_env: Option<(crate::native::AdsrParams, f32, f32)>,
     /// Unison playback: `(voices, detune cents, stereo width)`. Every zone
     /// trigger spawns `voices` copies spread symmetrically across ±detune/2
     /// cents and panned by `width`, level-compensated 1/√n. `(1, _, _)` = off.
@@ -1171,6 +1178,9 @@ impl SampleEngine {
             last_velocity: 90,
             release_frames,
             attack_frames: spec_attack_frames,
+            decay_frames: 0,
+            sustain_level: 1.0,
+            filter_env: None,
             unison: (1, 0.0, 0.0),
             zone_rr_counter: 0,
             zone_rr_random_state: 0x9e37_79b9_7f4a_7c15,
@@ -1487,6 +1497,42 @@ impl SampleEngine {
     /// parameter). 0 = the sample's natural attack.
     pub fn set_attack_frames(&mut self, frames: usize) {
         self.attack_frames = frames;
+    }
+
+    /// Decay length in frames for zone voices: after the attack they fall to
+    /// the sustain level over this long. Applies to notes started after it.
+    pub fn set_decay_frames(&mut self, frames: usize) {
+        self.decay_frames = frames;
+    }
+
+    /// Sustain level (0..=1) zone voices decay to and hold at until note-off.
+    /// 1.0 = no decay stage.
+    pub fn set_sustain_level(&mut self, level: f32) {
+        self.sustain_level = level.clamp(0.0, 1.0);
+    }
+
+    /// The zone voices' filter envelope: each new note gets its own ADSR and
+    /// lowpass (see `voice::VoiceFilter`), `amount` in -1..=1 against the
+    /// layer's cutoff `cutoff_hz`. Notes already held follow a new cutoff and
+    /// amount at once; the ADSR applies to notes started after. `amount == 0`
+    /// switches it off.
+    pub fn set_filter_env(
+        &mut self,
+        params: crate::native::AdsrParams,
+        amount: f32,
+        cutoff_hz: f32,
+    ) {
+        let amount = amount.clamp(-1.0, 1.0);
+        self.filter_env = (amount != 0.0).then_some((params, amount, cutoff_hz));
+        for v in self.voices.voices_mut() {
+            v.set_filter_base(cutoff_hz, amount);
+        }
+    }
+
+    fn new_voice_filter(&self) -> Option<voice::VoiceFilter> {
+        self.filter_env.map(|(params, amount, hz)| {
+            voice::VoiceFilter::new(self.sample_rate as f32, params, amount, hz)
+        })
     }
 
     /// Release fade length in frames on note-off (CSS release parameter); the

@@ -170,17 +170,51 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
         // The sampler: a Keyscape piano, an Omnisphere soundsource, a kit.
         Source::Sample(spec) => {
             let mut block = RigBlock::sample_lib(spec.clone()).named("Soundsource");
-            // The sampler's own per-voice amplitude envelope: the attack and
-            // release a note actually gets.
+            // The sampler's own per-voice amplitude envelope: the ADSR a
+            // note actually gets (times in seconds, sustain 0..=1).
             block = block
                 .with_param(
                     "amp_attack",
                     format!("{:.4}", set.amp_env.0.max(0.0) / 1000.0),
                 )
                 .with_param(
+                    "amp_decay",
+                    format!("{:.4}", set.amp_env.1.max(0.0) / 1000.0),
+                )
+                .with_param(
+                    "amp_sustain",
+                    format!("{:.4}", set.amp_env.2.clamp(0.0, 1.0)),
+                )
+                .with_param(
                     "amp_release",
                     format!("{:.4}", set.amp_env.3.max(0.0) / 1000.0),
                 );
+            // Each voice's own filter envelope, below the module cutoff
+            // (the chain's Filter 1). Amount 0 = none.
+            if set.filter_env_depth != 0.0 {
+                block = block
+                    .with_param(
+                        "filter_attack",
+                        format!("{:.4}", set.filter_env.0.max(0.0) / 1000.0),
+                    )
+                    .with_param(
+                        "filter_decay",
+                        format!("{:.4}", set.filter_env.1.max(0.0) / 1000.0),
+                    )
+                    .with_param(
+                        "filter_sustain",
+                        format!("{:.4}", set.filter_env.2.clamp(0.0, 1.0)),
+                    )
+                    .with_param(
+                        "filter_release",
+                        format!("{:.4}", set.filter_env.3.max(0.0) / 1000.0),
+                    )
+                    .with_param(
+                        "filter_env_amt",
+                        format!("{:.4}", set.filter_env_depth.clamp(-1.0, 1.0)),
+                    )
+                    .with_param("filter_cutoff_hz", format!("{:.1}", set.cutoff_hz));
+            }
             if set.unison > 1 {
                 block = block
                     .with_param("unison", set.unison.to_string())
@@ -291,6 +325,118 @@ const fn with_module_envelopes(module: Container, _set: &ModuleSettings) -> Cont
     // a shared Amp Env onto the module Amp's gain, a shared Filter Env onto
     // the module filter's cutoff — double-enveloped the sum, so they're gone.
     module
+}
+
+/// Write a keys module's settings onto layer `layer_idx` ("Layer A".."D")
+/// of an imported Omnisphere tree, so a rebuilt lane keeps what the knobs
+/// say: the source's amp ADSR, Filter 1's cutoff and resonance, the Filter
+/// Env's ADSR and — where the patch routes it — its depth onto the cutoff.
+/// A sample-mode layer with no such route takes the depth as its voices' own
+/// filter envelope instead, as a keys module does. Returns `false` when the
+/// tree has no such layer.
+pub fn apply_settings_to_omni_layer(
+    tree: &mut Container,
+    layer_idx: usize,
+    set: &ModuleSettings,
+) -> bool {
+    use signal_sampler::rig_node::RigNode;
+    fn find_mut<'a>(c: &'a mut Container, name: &str) -> Option<&'a mut Container> {
+        if c.name == name {
+            return Some(c);
+        }
+        c.children.iter_mut().find_map(|child| match child {
+            RigNode::Container { container } => find_mut(container, name),
+            RigNode::Block { .. } => None,
+        })
+    }
+    fn for_blocks(c: &mut Container, f: &mut impl FnMut(&mut RigBlock)) {
+        for child in &mut c.children {
+            match child {
+                RigNode::Block { block } => f(block),
+                RigNode::Container { container } => for_blocks(container, f),
+            }
+        }
+    }
+    fn put(block: &mut RigBlock, name: &str, value: String) {
+        match block.params.iter_mut().find(|p| p.name == name) {
+            Some(p) => p.value = value,
+            None => {
+                block.params.push(signal_sampler::rig_node::Param {
+                    name: name.to_string(),
+                    value,
+                });
+            }
+        }
+    }
+    let Some(name) = crate::omni_import::LAYER_NAMES.get(layer_idx) else {
+        return false;
+    };
+    let Some(layer) = find_mut(tree, name) else {
+        return false;
+    };
+    let secs = |ms: f32| format!("{:.4}", ms.max(0.0) / 1000.0);
+    let depth = set.filter_env_depth.clamp(-1.0, 1.0);
+    // The filter section's own envelope route is the first Filter Env →
+    // cutoff route the importer writes; later ones are mod-matrix rows with
+    // depths of their own, left as the patch set them.
+    let routed = match layer.mod_routes.iter_mut().find(|r| {
+        r.source.key() == "filter env" && r.target.key() == "filter 1" && r.parameter == "cutoff"
+    }) {
+        Some(r) => {
+            r.depth = depth;
+            true
+        }
+        None => false,
+    };
+    let cutoff = signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz);
+    for_blocks(layer, &mut |b| match b.display_name().as_str() {
+        "Soundsource" => {
+            put(b, "amp_attack", secs(set.amp_env.0));
+            put(b, "amp_decay", secs(set.amp_env.1));
+            put(
+                b,
+                "amp_sustain",
+                format!("{:.4}", set.amp_env.2.clamp(0.0, 1.0)),
+            );
+            put(b, "amp_release", secs(set.amp_env.3));
+            if !routed && b.block_type == BlockType::Sampler && depth != 0.0 {
+                put(b, "filter_attack", secs(set.filter_env.0));
+                put(b, "filter_decay", secs(set.filter_env.1));
+                put(
+                    b,
+                    "filter_sustain",
+                    format!("{:.4}", set.filter_env.2.clamp(0.0, 1.0)),
+                );
+                put(b, "filter_release", secs(set.filter_env.3));
+                put(b, "filter_env_amt", format!("{depth:.4}"));
+                put(b, "filter_cutoff_hz", format!("{:.1}", set.cutoff_hz));
+            }
+        }
+        "Filter 1" => {
+            put(b, "cutoff", format!("{cutoff:.4}"));
+            put(
+                b,
+                "resonance",
+                format!("{:.4}", set.resonance.clamp(0.0, 1.0)),
+            );
+        }
+        _ => {}
+    });
+    if let Some(fe) = layer
+        .modulators
+        .iter_mut()
+        .find(|m| m.display_name() == "Filter Env")
+    {
+        put(fe, "attack", secs(set.filter_env.0));
+        put(fe, "decay", secs(set.filter_env.1));
+        put(
+            fe,
+            "sustain",
+            format!("{:.4}", set.filter_env.2.clamp(0.0, 1.0)),
+        );
+        put(fe, "release", secs(set.filter_env.3));
+    }
+    true
 }
 
 /// Build one **layer**: four modules in parallel (they sum — a layer is a
@@ -406,37 +552,63 @@ fn omni_lfo_hz(v: f32) -> f32 {
 pub fn import_omni_patch(path: &std::path::Path) -> Result<ImportedPatch, String> {
     let xml = std::fs::read_to_string(path).map_err(|e| format!("read {path:?}: {e}"))?;
     let patch = crate::omni_import::parse_patch(&xml)?;
-    // Omnisphere times are seconds; the macro surface is milliseconds.
-    let secs = |t: (f32, f32, f32, f32)| (t.0 * 1000.0, t.1 * 1000.0, t.2, t.3 * 1000.0);
     // A patch declares up to four layers but only uses the ones with a
     // soundsource — an empty slot is not a module, it is nothing.
     let modules = patch
         .layers
         .iter()
         .filter(|l| !l.soundsource.trim().is_empty())
-        .map(|l| ImportedModule {
-            source: l.soundsource.clone(),
-            // `level` is normalized; unity sits at 1.0.
-            level_db: if l.level > 0.0 {
-                20.0 * l.level.log10()
-            } else {
-                -60.0
-            },
-            cutoff_hz: crate::omni_import::omni_cutoff_hz(l.filter_freq),
-            resonance: l.filter_res,
-            filter_env_depth: l.filter_env_depth,
-            amp_env: l.amp_env.map(secs),
-            filter_env: l.filter_env.map(secs),
-            unison: l.unison_count.max(1),
-            detune: l.unison_detune,
-            fx: l
-                .fx
-                .iter()
-                .filter(|f| !f.is_empty() && f.as_str() != "No Effect")
-                .cloned()
-                .collect(),
-        })
+        .map(imported_module)
         .collect();
+    Ok(ImportedPatch {
+        modules,
+        ..import_rest(&patch)
+    })
+}
+
+/// Every layer of an Omnisphere patch file, synthesis layers included, in
+/// layer order ("Layer A" first) — the values a lane hosting the whole patch
+/// seeds its module knobs from, one module per layer.
+///
+/// # Errors
+///
+/// When the file cannot be read or parsed.
+pub fn import_omni_layers(path: &std::path::Path) -> Result<Vec<ImportedModule>, String> {
+    let xml = std::fs::read_to_string(path).map_err(|e| format!("read {path:?}: {e}"))?;
+    let patch = crate::omni_import::parse_patch(&xml)?;
+    Ok(patch.layers.iter().take(4).map(imported_module).collect())
+}
+
+/// One Omnisphere layer as a module's settings.
+fn imported_module(l: &crate::omni_import::OmniLayer) -> ImportedModule {
+    // Omnisphere times are seconds; the macro surface is milliseconds.
+    let secs = |t: (f32, f32, f32, f32)| (t.0 * 1000.0, t.1 * 1000.0, t.2, t.3 * 1000.0);
+    ImportedModule {
+        source: l.soundsource.clone(),
+        // `level` is normalized; unity sits at 1.0.
+        level_db: if l.level > 0.0 {
+            20.0 * l.level.log10()
+        } else {
+            -60.0
+        },
+        cutoff_hz: crate::omni_import::omni_cutoff_hz(l.filter_freq),
+        resonance: l.filter_res,
+        filter_env_depth: l.filter_env_depth,
+        amp_env: l.amp_env.map(secs),
+        filter_env: l.filter_env.map(secs),
+        unison: l.unison_count.max(1),
+        detune: l.unison_detune,
+        fx: l
+            .fx
+            .iter()
+            .filter(|f| !f.is_empty() && f.as_str() != "No Effect")
+            .cloned()
+            .collect(),
+    }
+}
+
+/// A patch's name and LFOs (its modules are the caller's choice).
+fn import_rest(patch: &crate::omni_import::OmniPatch) -> ImportedPatch {
     // The mod matrix carries the LFO depths: an LFO with no route is idle,
     // however its rate reads.
     let lfos = patch
@@ -459,11 +631,11 @@ pub fn import_omni_patch(path: &std::path::Path) -> Result<ImportedPatch, String
             )
         })
         .collect();
-    Ok(ImportedPatch {
-        name: patch.name,
-        modules,
+    ImportedPatch {
+        name: patch.name.clone(),
+        modules: Vec::new(),
         lfos,
-    })
+    }
 }
 
 #[cfg(test)]

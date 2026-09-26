@@ -1535,8 +1535,30 @@ pub(crate) fn build_sample_source(
     if let Some(v) = block.param_f32("amp_attack") {
         engine.set_attack_frames((v.max(0.0) * sample_rate as f32) as usize);
     }
+    if let Some(v) = block.param_f32("amp_decay") {
+        engine.set_decay_frames((v.max(0.0) * sample_rate as f32) as usize);
+    }
+    if let Some(v) = block.param_f32("amp_sustain") {
+        engine.set_sustain_level(v);
+    }
     if let Some(v) = block.param_f32("amp_release") {
         engine.set_release_frames((v.max(0.0) * sample_rate as f32) as usize);
+    }
+    if let (Some(amount), Some(hz)) = (
+        block.param_f32("filter_env_amt"),
+        block.param_f32("filter_cutoff_hz"),
+    ) {
+        let s = |k: &str, d: f32| block.param_f32(k).unwrap_or(d);
+        engine.set_filter_env(
+            crate::native::AdsrParams {
+                attack_s: s("filter_attack", 0.0).max(0.0),
+                decay_s: s("filter_decay", 0.0).max(0.0),
+                sustain: s("filter_sustain", 1.0).clamp(0.0, 1.0),
+                release_s: s("filter_release", 0.0).max(0.0),
+            },
+            amount,
+            hz,
+        );
     }
     // Decode in the background, middle-out from middle C, so the block is
     // playable almost immediately and never blocks the caller (same

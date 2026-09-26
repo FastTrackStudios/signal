@@ -171,6 +171,43 @@ fn playing_a_note_does_not_allocate() {
     assert_eq!(n, 0, "note-on allocated {n} times across 16 cycles");
 }
 
+/// The same with the full per-voice envelope on — decay/sustain and each
+/// voice's own filter envelope — the keys rig's knobs at work.
+#[test]
+fn playing_a_note_with_adsr_and_filter_envelope_does_not_allocate() {
+    let mut eng = piano();
+    eng.set_decay_frames(4_800);
+    eng.set_sustain_level(0.6);
+    eng.set_filter_env(
+        signal_sampler::native::AdsrParams {
+            attack_s: 0.05,
+            decay_s: 0.2,
+            sustain: 0.5,
+            release_s: 0.3,
+        },
+        0.7,
+        4_000.0,
+    );
+    let mut out = vec![0.0f32; 512 * 2];
+    for _ in 0..8 {
+        eng.note_on(60, 100);
+        out.fill(0.0);
+        eng.render(&mut out);
+        eng.note_off(60);
+        eng.render(&mut out);
+    }
+    let n = allocations_in(|| {
+        for _ in 0..16 {
+            eng.note_on(60, 100);
+            out.fill(0.0);
+            eng.render(&mut out);
+            eng.note_off(60);
+            eng.render(&mut out);
+        }
+    });
+    assert_eq!(n, 0, "note-on with the envelopes on allocated {n} times");
+}
+
 /// Rendering a held note — the common case, by a wide margin — must not
 /// allocate either.
 #[test]

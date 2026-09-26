@@ -2532,6 +2532,8 @@ impl SampleEngine {
                 .with_choke_group(choke_group)
                 .with_pan(u_pan)
                 .with_attack(self.attack_frames)
+                .with_decay(self.decay_frames, self.sustain_level)
+                .with_filter_env(self.new_voice_filter())
                 .with_pitch_cents(transpose_cents)
                 .with_sample_window(
                     z.sample_start as usize,

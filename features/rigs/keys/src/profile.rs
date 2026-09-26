@@ -92,6 +92,27 @@ pub struct KeysStackDef {
     pub slots: Vec<SceneSlot>,
 }
 
+/// One saved knob value (a module macro id and its value).
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct MacroValue {
+    pub id: String,
+    pub value: f32,
+}
+
+/// The knobs a player set for one patch on one module of a layer: whenever
+/// that patch is on that module again — a stack recall, a browser pick, the
+/// next session — these come back with it.
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct PatchMacros {
+    /// The patch (pack / library / Omnisphere patch name).
+    pub patch: String,
+    /// Module index in the layer (0 = A).
+    #[facet(default)]
+    pub module: u32,
+    #[facet(default)]
+    pub values: Vec<MacroValue>,
+}
+
 /// One layer definition inside an engine.
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct LayerDef {
@@ -122,9 +143,37 @@ pub struct LayerDef {
     /// its own macros; it just isn't in the scope the globals drive.
     #[facet(default)]
     pub exclude_global: bool,
+    /// Knob values saved per patch and module (see [`PatchMacros`]).
+    #[facet(default)]
+    pub patch_macros: Vec<PatchMacros>,
 }
 
 impl LayerDef {
+    /// The knobs saved for `patch` on module `module`, if any.
+    #[must_use]
+    pub fn saved_macros(&self, patch: &str, module: u32) -> Option<&[MacroValue]> {
+        self.patch_macros
+            .iter()
+            .find(|p| p.patch == patch && p.module == module)
+            .map(|p| p.values.as_slice())
+    }
+
+    /// Remember `values` as the knobs for `patch` on module `module`.
+    pub fn remember_macros(&mut self, patch: &str, module: u32, values: Vec<MacroValue>) {
+        match self
+            .patch_macros
+            .iter_mut()
+            .find(|p| p.patch == patch && p.module == module)
+        {
+            Some(p) => p.values = values,
+            None => self.patch_macros.push(PatchMacros {
+                patch: patch.to_string(),
+                module,
+                values,
+            }),
+        }
+    }
+
     pub fn new(name: impl Into<String>, patch: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -134,6 +183,7 @@ impl LayerDef {
             key_lo: 0,
             key_hi: 127,
             exclude_global: false,
+            patch_macros: Vec::new(),
         }
     }
 
@@ -272,6 +322,24 @@ impl KeysProfile {
 
     /// The current engine order, left to right.
     #[must_use]
+    /// Take the knob values `saved` remembers for each layer both profiles
+    /// have (by layer name) — the built-in profile decides what the layers
+    /// are, the player's saved copy what their knobs were set to.
+    pub fn adopt_saved_macros(&mut self, saved: &Self) {
+        for engine in &mut self.engines {
+            for layer in &mut engine.layers {
+                if let Some(s) = saved
+                    .engines
+                    .iter()
+                    .flat_map(|e| &e.layers)
+                    .find(|l| l.name == layer.name)
+                {
+                    layer.patch_macros = s.patch_macros.clone();
+                }
+            }
+        }
+    }
+
     pub fn engine_order(&self) -> Vec<String> {
         self.engines.iter().map(|e| e.name.clone()).collect()
     }
@@ -446,7 +514,7 @@ impl KeysProfile {
         // not a sample source: the importer builds it (a synthesis-mode patch
         // as a Wavetable voice), inside the lane's own layer so its fader,
         // mute and scenes are the lane's as any other.
-        if let Some(lane) = Self::omni_lane(layer, resolve) {
+        if let Some(lane) = Self::omni_lane(layer, resolve, module_set) {
             return lane;
         }
         let sources: Vec<signal_synth::Source> = layer
@@ -480,7 +548,11 @@ impl KeysProfile {
     /// `layer` as its Omnisphere patch, when its first module's patch
     /// resolves to one (`None`: a sample source, or an import that failed —
     /// logged, and the lane plays what it would have).
-    fn omni_lane(layer: &LayerDef, resolve: &impl Fn(&str) -> Option<String>) -> Option<Container> {
+    fn omni_lane(
+        layer: &LayerDef,
+        resolve: &impl Fn(&str) -> Option<String>,
+        module_set: &impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
+    ) -> Option<Container> {
         let patch = layer
             .module_patches()
             .into_iter()
@@ -496,7 +568,16 @@ impl KeysProfile {
         }
         let index = signal_synth::omni_import::SoundsourceIndex::default();
         match signal_synth::omni_import::load_patch_file(path, &index) {
-            Ok(tree) => {
+            Ok(mut tree) => {
+                // The lane's knobs (seeded from this patch, one module per
+                // patch layer) ride onto the tree, so a rebuild keeps them.
+                for i in 0..layer.module_patches().len().min(4) {
+                    signal_synth::engine::apply_settings_to_omni_layer(
+                        &mut tree,
+                        i,
+                        &module_set(&layer.name, i),
+                    );
+                }
                 let mut lane = Container::layer(&layer.name).add(tree);
                 if !layer.is_full_range() {
                     lane = lane.zone(signal_sampler::rig_node::Zone {
@@ -620,6 +701,7 @@ pub fn worship_profile() -> KeysProfile {
                         key_lo: 0,
                         key_hi: 127,
                         exclude_global: false,
+                        patch_macros: Vec::new(),
                     },
                     // "AD │ Gentle Gothics" (Ambient Dreams), part level 0.30.
                     // Not a synth sparkle at all — it is a men's + women's
@@ -633,6 +715,7 @@ pub fn worship_profile() -> KeysProfile {
                         key_lo: 0,
                         key_hi: 127,
                         exclude_global: false,
+                        patch_macros: Vec::new(),
                     },
                 ],
             },
@@ -685,6 +768,7 @@ pub fn worship_profile() -> KeysProfile {
                         key_lo: 0,
                         key_hi: 127,
                         exclude_global: false,
+                        patch_macros: Vec::new(),
                     },
                     // "CLUB │ Club Europa Plucking Pulsars" (Club Land), part
                     // level 0.34 — the Trance lane, one soundsource.
@@ -696,6 +780,7 @@ pub fn worship_profile() -> KeysProfile {
                         key_lo: 0,
                         key_hi: 127,
                         exclude_global: false,
+                        patch_macros: Vec::new(),
                     },
                 ],
             },
@@ -827,6 +912,52 @@ pub fn worship_profile() -> KeysProfile {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn knobs_saved_per_patch_survive_the_file_and_the_merge() {
+        let mut edited = worship_profile();
+        let first = edited.engines[0].layers[0].name.clone();
+        let layer = edited.layer_mut(&first).unwrap();
+        layer.remember_macros(
+            "Some Patch",
+            0,
+            vec![MacroValue {
+                id: "env1.attack".into(),
+                value: 250.0,
+            }],
+        );
+        // Remembering again replaces, it doesn't pile up.
+        layer.remember_macros(
+            "Some Patch",
+            0,
+            vec![MacroValue {
+                id: "env1.attack".into(),
+                value: 300.0,
+            }],
+        );
+        assert_eq!(layer.patch_macros.len(), 1);
+
+        let text = edited.to_styx_string().unwrap();
+        let saved = KeysProfile::from_styx_str(&text).unwrap();
+        let mut merged = worship_profile();
+        merged.adopt_saved_macros(&saved);
+        let got = merged
+            .layer_mut(&first)
+            .unwrap()
+            .saved_macros("Some Patch", 0)
+            .unwrap()
+            .to_vec();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].id, "env1.attack");
+        assert!((got[0].value - 300.0).abs() < 1e-6);
+        assert!(
+            merged
+                .layer_mut(&first)
+                .unwrap()
+                .saved_macros("Some Patch", 1)
+                .is_none()
+        );
+    }
 
     #[test]
     fn worship_shape() {

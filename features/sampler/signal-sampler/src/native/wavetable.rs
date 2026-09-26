@@ -19,6 +19,9 @@
 
 use signal_plugin_host::{PluginDescriptor, PluginEvents, PluginFormat, PluginParamInfo};
 
+/// The envelope time range the normalized ADSR params span (seconds).
+const ENV_RANGE_S: f32 = 8.0;
+
 use super::adsr::{Adsr, AdsrParams};
 use crate::soundsource::{Soundsource, SoundsourceKind};
 
@@ -71,6 +74,7 @@ fn morph(phase: f32, dt: f32, shape: f32, duty: f32) -> f32 {
 
 /// One Harmonia sub-oscillator's configuration.
 #[derive(Clone, Copy, Debug, Default)]
+
 pub struct HarmVoice {
     pub on: bool,
     /// Level 0..1.
@@ -383,6 +387,21 @@ impl Soundsource for NativeWavetable {
             mk(5, "symmetry", self.duty as f64),
             // Harmonia level scale.
             mk(6, "harm_mix", self.harm_mix as f64),
+            // The amp ADSR: times over an 8 s range (the native oscillator's
+            // scale, so the rig's envelope controls drive both alike),
+            // sustain 0..1. Held notes follow at once.
+            mk(
+                7,
+                "amp_attack",
+                (self.cfg.env.attack_s / ENV_RANGE_S) as f64,
+            ),
+            mk(8, "amp_decay", (self.cfg.env.decay_s / ENV_RANGE_S) as f64),
+            mk(9, "amp_sustain", self.cfg.env.sustain as f64),
+            mk(
+                10,
+                "amp_release",
+                (self.cfg.env.release_s / ENV_RANGE_S) as f64,
+            ),
         ]
     }
 
@@ -453,6 +472,17 @@ impl Soundsource for NativeWavetable {
                 4 => self.pitch_mult = 2f32.powf((v - 0.5) * 48.0 / 12.0),
                 5 => self.duty = v,
                 6 => self.harm_mix = v,
+                7..=10 => {
+                    match id {
+                        7 => self.cfg.env.attack_s = v * ENV_RANGE_S,
+                        8 => self.cfg.env.decay_s = v * ENV_RANGE_S,
+                        9 => self.cfg.env.sustain = v,
+                        _ => self.cfg.env.release_s = v * ENV_RANGE_S,
+                    }
+                    for voice in &mut self.voices {
+                        voice.env.set_params(self.sample_rate, self.cfg.env);
+                    }
+                }
                 _ => {}
             }
         }

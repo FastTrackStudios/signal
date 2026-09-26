@@ -30,7 +30,7 @@ pub use model::{
     OmniLayer, OmniModRoute, OmniPatch, classify_filter_full, omni_cutoff_hz, parse_patch,
 };
 pub use multi::{OmniMulti, load_multi_file, multi_to_container, parse_multi};
-pub use tree::{load_patch_file, patch_to_container};
+pub use tree::{LAYER_NAMES, load_patch_file, patch_to_container};
 
 #[cfg(test)]
 use model::classify_effect;
@@ -220,6 +220,78 @@ mod tests {
     }
 
     #[test]
+    fn seeding_the_knobs_and_writing_them_back_changes_nothing() {
+        // A lane's knobs are seeded from the patch's layers; a rebuild writes
+        // them back onto the imported tree. Untouched, that must be the
+        // identity — or every rebuild would drift the patch.
+        let dir = std::env::temp_dir().join(format!("omni-seed-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("mini.prt_omn");
+        std::fs::write(&file, MINI_PATCH).unwrap();
+        let layers = crate::engine::import_omni_layers(&file).unwrap();
+        let before = patch_to_container(
+            &parse_patch(MINI_PATCH).unwrap(),
+            &SoundsourceIndex::default(),
+        );
+        let mut after = before.clone();
+        for (i, m) in layers.iter().enumerate() {
+            let set = crate::engine::ModuleSettings {
+                cutoff_hz: m.cutoff_hz,
+                resonance: m.resonance,
+                filter_env_depth: m.filter_env_depth,
+                amp_env: m.amp_env.unwrap_or((0.0, 0.0, 1.0, 120.0)),
+                filter_env: m.filter_env.unwrap_or((0.0, 0.0, 1.0, 120.0)),
+                ..Default::default()
+            };
+            assert!(crate::engine::apply_settings_to_omni_layer(
+                &mut after, i, &set
+            ));
+        }
+        let layer = |t: &signal_sampler::rig_node::Container, name: &str| {
+            let f1 = t
+                .find("Layer A")
+                .unwrap()
+                .find("Filters")
+                .unwrap()
+                .blocks()
+                .into_iter()
+                .find(|b| b.display_name() == "Filter 1")
+                .unwrap()
+                .param_f32(name);
+            f1
+        };
+        for p in ["cutoff", "resonance"] {
+            let (b, a) = (layer(&before, p), layer(&after, p));
+            if let (Some(b), Some(a)) = (b, a) {
+                assert!((b - a).abs() < 2e-3, "{p}: {b} -> {a}");
+            }
+        }
+        let fe = |t: &signal_sampler::rig_node::Container, name: &str| {
+            t.find("Layer A")
+                .unwrap()
+                .modulators
+                .iter()
+                .find(|m| m.display_name() == "Filter Env")
+                .unwrap()
+                .param_f32(name)
+        };
+        for p in ["attack", "decay", "sustain", "release"] {
+            let (b, a) = (fe(&before, p).unwrap_or(0.0), fe(&after, p).unwrap_or(0.0));
+            assert!((b - a).abs() < 1e-3, "filter env {p}: {b} -> {a}");
+        }
+        let depth = |t: &signal_sampler::rig_node::Container| {
+            t.find("Layer A")
+                .unwrap()
+                .mod_routes
+                .iter()
+                .map(|r| r.depth)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(depth(&before), depth(&after));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn maps_to_a_container() {
         let p = parse_patch(MINI_PATCH).unwrap();
         let tree = patch_to_container(&p, &SoundsourceIndex::default());
@@ -251,7 +323,9 @@ mod tests {
         assert_eq!(layer.mod_routes.len(), 2);
         for r in &layer.mod_routes {
             assert_eq!(r.source.key(), "filter env");
-            assert_eq!(r.target.key(), "lpf test");
+            // The layer's first filter is "Filter 1" (the keys-module name);
+            // Omnisphere's "LPF Test" is its `model`.
+            assert_eq!(r.target.key(), "filter 1");
             assert_eq!(r.parameter, "cutoff");
             assert!((r.depth - 0.5).abs() < 1e-6);
         }
@@ -269,8 +343,9 @@ mod tests {
             .unwrap()
             .blocks()
             .into_iter()
-            .find(|b| b.display_name() == "LPF Test")
+            .find(|b| b.display_name() == "Filter 1")
             .expect("filter 1");
+        assert_eq!(f1.param_str("model").as_deref(), Some("LPF Test"));
         // Omnisphere freq 0.5 → 15·2^(9.55/2) ≈ 411 Hz (calibrated curve) →
         // our normalized cutoff log10(411/20)/3 ≈ 0.4375.
         assert!((f1.param_f32("cutoff").unwrap() - 0.4375).abs() < 1e-3);

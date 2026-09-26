@@ -63,15 +63,15 @@ pub fn translate_route(
     let (block, param, scale): (&str, &str, f32) = match param {
         "freq" => (filter_labels.get(layer_idx)?.as_str(), "cutoff", 1.0),
         "res" => (filter_labels.get(layer_idx)?.as_str(), "resonance", 1.0),
-        "tune" => ("Synth Osc", "tune", 1.0),
+        "tune" => ("Soundsource", "tune", 1.0),
         // tuneFine is ±1 semitone on a ±24 semitone param.
-        "tuneFine" => ("Synth Osc", "tune", 1.0 / 24.0),
+        "tuneFine" => ("Soundsource", "tune", 1.0 / 24.0),
         // Osc amp tremolo → the layer's Amp gain.
         "atrm" => ("Amp", "gain", 1.0),
         // PWM depth → the square's pulse width (Symmetry axis).
-        "pdepth" => ("Synth Osc", "symmetry", 1.0),
+        "pdepth" => ("Soundsource", "symmetry", 1.0),
         // Harmonia mix.
-        "Harmmix" => ("Synth Osc", "harm_mix", 1.0),
+        "Harmmix" => ("Soundsource", "harm_mix", 1.0),
         _ => return None, // hrdsnc/mogrify/timbre/LFO-param/E1P0/… — later
     };
     // Sources: MIDI performance names map directly; Omnisphere modulator
@@ -105,17 +105,15 @@ pub fn translate_route(
 /// placeholders — the structure still routes).
 pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Container {
     // Filter block labels per layer (route targets reference them by name).
+    // Every layer's first filter is "Filter 1" and its source "Soundsource",
+    // the names a keys module uses, so the rig's live controls (cutoff, the
+    // envelopes) reach an imported layer the same way; Omnisphere's own names
+    // ride along as the blocks' `model` / `soundsource` params.
     let filter_labels: Vec<String> = patch
         .layers
         .iter()
         .take(4)
-        .map(|l| {
-            if l.filter_name.is_empty() {
-                "Filter 1".to_string()
-            } else {
-                l.filter_name.clone()
-            }
-        })
+        .map(|_| "Filter 1".to_string())
         .collect();
     // Live routes bucketed per layer; the rest stay inspectable params.
     let mut layer_routes: Vec<Vec<(String, String, f32)>> = vec![Vec::new(); 4];
@@ -134,7 +132,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             // Synth mode: the wavetable voice carries the whole oscillator
             // stack (unison / harmonia / FM / ring) as build params.
             let mut wt = RigBlock::of_type(BlockType::Wavetable)
-                .named("Synth Osc")
+                .named("Soundsource")
                 // The oscillator's waveform. Omnisphere's `OSC type` is a
                 // selector over its wave list and our `shape` is a continuous
                 // sine→triangle→saw→square morph, so this is a first
@@ -190,11 +188,11 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             }
             osc.add(wt)
         } else if let Some(spec) = index.find(&layer.soundsource) {
-            // Sample mode: unison + amp attack/release ride the
-            // Sampler block (the engine handles them at trigger time;
-            // decay/sustain need a full per-voice ADSR — pending).
-            let mut sb =
-                RigBlock::sample_lib(spec.to_string_lossy().to_string()).named(&layer.soundsource);
+            // Sample mode: unison + the amp ADSR ride the Sampler block
+            // (the engine applies them per voice at trigger time).
+            let mut sb = RigBlock::sample_lib(spec.to_string_lossy().to_string())
+                .named("Soundsource")
+                .with_param("soundsource", layer.soundsource.clone());
             if layer.unison_count > 1 {
                 sb = sb
                     .with_param("unison_voices", layer.unison_count.to_string())
@@ -207,9 +205,11 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     )
                     .with_param("unison_width", format!("{:.4}", layer.unison_width));
             }
-            if let Some((a, _d, _s, r)) = layer.amp_env {
+            if let Some((a, d, s, r)) = layer.amp_env {
                 sb = sb
                     .with_param("amp_attack", format!("{a:.4}"))
+                    .with_param("amp_decay", format!("{d:.4}"))
+                    .with_param("amp_sustain", format!("{s:.4}"))
                     .with_param("amp_release", format!("{r:.4}"));
             }
             osc.add(sb)
@@ -281,7 +281,9 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                 // real engine); the factory name only decides the ladder
                 // character. Cutoff goes through the calibrated
                 // 15 Hz × 2^(9.55·v) curve into our normalized map.
-                let mut f1 = RigBlock::of_type(BlockType::Filter).named(filter_label.clone());
+                let mut f1 = RigBlock::of_type(BlockType::Filter)
+                    .named(filter_label.clone())
+                    .with_param("model", layer.filter_name.clone());
                 if layer.filter_active {
                     let (_, _, character) = classify_filter_full(&layer.filter_name);
                     let (mode, poles) =

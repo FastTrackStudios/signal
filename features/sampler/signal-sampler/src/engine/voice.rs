@@ -4,9 +4,12 @@
 //! interpolation between frames. A pitch shift of N semitones multiplies
 //! the playback rate by `2^(N/12)`.
 //!
-//! The amplitude envelope is a simple two-stage model:
-//! - Playing: flat at `gain`
-//! - Releasing: linear fade to zero over `release_frames`
+//! The amplitude envelope:
+//! - Attack: a ramp from silence to `gain` (`with_attack`)
+//! - Decay / sustain: after the attack, a ramp from full level to the
+//!   sustain level over the decay time (`with_decay`; off by default)
+//! - Releasing: linear fade to zero over `release_frames`, from wherever the
+//!   decay had got to
 //!
 //! CSS sustain samples have their own natural releases baked in; we do not
 //! apply an envelope to them. Release samples are played to completion at
@@ -15,6 +18,91 @@
 use std::sync::Arc;
 
 use super::cache::SampleData;
+use crate::native::{Adsr, AdsrParams};
+
+/// A voice's filter envelope: its own ADSR driving its own lowpass, so every
+/// note opens and closes on its own (a module-wide envelope would close the
+/// filter on every ringing note at one note's release).
+///
+/// The lowpass only ever sits at or below the layer's cutoff knob, so it
+/// never fights the layer's tone filter: `amount` > 0 closes it by up to
+/// [`FILTER_ENV_OCTAVES`] × `amount` below the cutoff and lets the envelope
+/// open it back up; `amount` < 0 closes it as the envelope rises.
+#[derive(Debug, Clone)]
+pub struct VoiceFilter {
+    env: Adsr,
+    amount: f32,
+    base_hz: f32,
+    sample_rate: f32,
+    /// Two-pole state-variable lowpass, one per channel: (ic1, ic2).
+    state: [(f32, f32); 2],
+    g: f32,
+    k: f32,
+    /// Coefficients are recomputed every [`FILTER_COEF_EVERY`] frames.
+    countdown: u16,
+}
+
+/// Octaves the filter envelope sweeps at full amount.
+pub const FILTER_ENV_OCTAVES: f32 = 7.0;
+const FILTER_COEF_EVERY: u16 = 16;
+
+impl VoiceFilter {
+    #[must_use]
+    pub fn new(sample_rate: f32, params: AdsrParams, amount: f32, base_hz: f32) -> Self {
+        let mut env = Adsr::new(sample_rate, params);
+        env.note_on();
+        Self {
+            env,
+            amount: amount.clamp(-1.0, 1.0),
+            base_hz,
+            sample_rate,
+            state: [(0.0, 0.0); 2],
+            g: 0.0,
+            // Butterworth: the layer's tone filter carries the resonance.
+            k: std::f32::consts::SQRT_2,
+            countdown: 0,
+        }
+    }
+
+    /// Follow the layer's cutoff knob (and amount) while the note is held.
+    pub fn set_base(&mut self, base_hz: f32, amount: f32) {
+        self.base_hz = base_hz;
+        self.amount = amount.clamp(-1.0, 1.0);
+    }
+
+    fn note_off(&mut self) {
+        self.env.note_off();
+    }
+
+    fn tick(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let e = self.env.tick();
+        if self.countdown == 0 {
+            self.countdown = FILTER_COEF_EVERY;
+            let octaves = if self.amount >= 0.0 {
+                self.amount * (e - 1.0)
+            } else {
+                self.amount * e
+            } * FILTER_ENV_OCTAVES;
+            let hz = (self.base_hz * octaves.exp2()).clamp(20.0, self.sample_rate * 0.45);
+            self.g = (std::f32::consts::PI * hz / self.sample_rate).tan();
+        }
+        self.countdown -= 1;
+        let (g, k) = (self.g, self.k);
+        let a1 = 1.0 / (1.0 + g * (g + k));
+        let a2 = g * a1;
+        let a3 = g * a2;
+        let mut out = [l, r];
+        for (x, (ic1, ic2)) in out.iter_mut().zip(self.state.iter_mut()) {
+            let v3 = *x - *ic2;
+            let v1 = a1 * *ic1 + a2 * v3;
+            let v2 = *ic2 + a2 * *ic1 + a3 * v3;
+            *ic1 = 2.0 * v1 - *ic1;
+            *ic2 = 2.0 * v2 - *ic2;
+            *x = v2;
+        }
+        (out[0], out[1])
+    }
+}
 
 // ── Voice state ───────────────────────────────────────────────────────────────
 
@@ -215,6 +303,14 @@ pub struct Voice {
     /// `gain`/`target_gain` machinery, so CC1/CC2 re-levelling
     /// (`update_sustain_gains`) never cancels it. `bloom_frames == 0` = off.
     bloom_frames: usize,
+    /// Decay / sustain stage (`with_decay`): a multiplier that holds at 1.0
+    /// through the attack, then moves to `sustain` over `decay_left` frames.
+    /// 1.0 / 0 frames = off, so a voice without it is unchanged.
+    ds_level: f32,
+    sustain: f32,
+    decay_left: usize,
+    /// Per-voice filter envelope (`with_filter_env`); `None` = no filter.
+    filter: Option<VoiceFilter>,
     bloom_total: usize,
     bloom_target: f32,
 
@@ -455,6 +551,10 @@ impl Voice {
             arrival_emitted: None,
             arrival_drained: false,
             bloom_frames: 0,
+            ds_level: 1.0,
+            sustain: 1.0,
+            decay_left: 0,
+            filter: None,
             bloom_total: 0,
             bloom_target: 1.0,
             kind,
@@ -524,6 +624,10 @@ impl Voice {
             arrival_emitted: None,
             arrival_drained: false,
             bloom_frames: 0,
+            ds_level: 1.0,
+            sustain: 1.0,
+            decay_left: 0,
+            filter: None,
             bloom_total: 0,
             bloom_target: 1.0,
             kind,
@@ -711,6 +815,36 @@ impl Voice {
             self.gain_ramp_frames = frames;
         }
         self
+    }
+
+    /// The decay and sustain of an ADSR: once the attack is done, fall from
+    /// full level to `sustain` (0..=1) over `decay_frames`, and hold there
+    /// until note-off. `decay_frames == 0` jumps straight to `sustain`;
+    /// `sustain == 1.0` leaves the voice as it was.
+    #[must_use]
+    pub fn with_decay(mut self, decay_frames: usize, sustain: f32) -> Self {
+        let sustain = sustain.clamp(0.0, 1.0);
+        self.sustain = sustain;
+        if decay_frames == 0 {
+            self.ds_level = sustain;
+        } else {
+            self.decay_left = decay_frames;
+        }
+        self
+    }
+
+    /// Give the voice its own filter envelope (see [`VoiceFilter`]).
+    #[must_use]
+    pub fn with_filter_env(mut self, filter: Option<VoiceFilter>) -> Self {
+        self.filter = filter;
+        self
+    }
+
+    /// Follow the layer's cutoff knob on a held note.
+    pub fn set_filter_base(&mut self, base_hz: f32, amount: f32) {
+        if let Some(f) = &mut self.filter {
+            f.set_base(base_hz, amount);
+        }
     }
 
     /// CSS legato handoff: spawn this (looping sustain) voice muted, wait
@@ -918,6 +1052,9 @@ impl Voice {
             }
             _ => {
                 if self.state == VoiceState::Playing {
+                    if let Some(f) = &mut self.filter {
+                        f.note_off();
+                    }
                     let frames = release_frames.max(1);
                     // Update the divisor too — `next_frame` computes
                     // `env = frames_remaining / self.release_frames`, so if
@@ -1046,6 +1183,16 @@ impl Voice {
             self.bloom_frames -= 1;
         }
 
+        // Decay toward the sustain level, once the attack has finished.
+        if self.decay_left > 0
+            && self.attack_delay == 0
+            && self.gain_ramp_frames == 0
+            && self.state == VoiceState::Playing
+        {
+            self.ds_level += (self.sustain - self.ds_level) / self.decay_left as f32;
+            self.decay_left -= 1;
+        }
+
         // Envelope
         let env = match &mut self.state {
             VoiceState::Playing => 1.0f32,
@@ -1112,6 +1259,10 @@ impl Voice {
             r = shift[1].tick(r);
         }
 
+        if let Some(f) = &mut self.filter {
+            (l, r) = f.tick(l, r);
+        }
+
         // Decoded ENV_FLEX amplitude envelope. Freezes at the sustain-hold
         // point while Playing (held note stays steady); advances through the
         // decay once Releasing. Multiplied on top of the note-off release fade.
@@ -1126,7 +1277,7 @@ impl Voice {
         } else {
             1.0
         };
-        let amp = self.gain * env * flex * bloom;
+        let amp = self.gain * env * flex * bloom * self.ds_level;
 
         // Advance position. During a portamento glide the read rate is nudged
         // by `glide_cents` (ramping to 0) so the pitch scoops into true tuning;
@@ -1925,6 +2076,77 @@ mod tests {
             (tuned - 441.0).abs() < 5.0,
             "compensated sample should sound ~441 Hz, got {tuned:.1}"
         );
+    }
+
+    #[test]
+    fn decay_falls_to_sustain_after_the_attack_and_release_starts_from_there() {
+        // A constant 1.0 sample, so the output is the envelope itself.
+        let n = 48_000;
+        let dc = Arc::new(SampleData::from_f32(vec![1.0; n], 1, 48_000, n));
+        let mut v = Voice::new(dc.clone(), 60, VoiceKind::SustainLo, 0, 1.0, 1_000)
+            .with_attack(100)
+            .with_decay(1_000, 0.5);
+        let mut buf = vec![0.0f32; 4_000 * 2];
+        v.render_block(&mut buf);
+        let at = |i: usize| buf[i * 2];
+        let peak = at(100);
+        assert!(peak > 0.0);
+        assert!(
+            (at(1_200) / peak - 0.5).abs() < 0.01,
+            "sustain {}",
+            at(1_200) / peak
+        );
+        assert!((at(3_999) / peak - 0.5).abs() < 0.01, "holds");
+        v.note_off();
+        let mut rel = vec![0.0f32; 1_200 * 2];
+        v.render_block(&mut rel);
+        assert!(
+            rel[0] / peak <= 0.5 + 1e-3,
+            "release starts at the sustain level"
+        );
+        assert!(rel[1_100 * 2].abs() < 1e-6, "and ends silent");
+
+        // Without `with_decay` the voice holds full level, as before.
+        let mut flat = Voice::new(dc, 60, VoiceKind::SustainLo, 0, 1.0, 1_000).with_attack(100);
+        let mut buf2 = vec![0.0f32; 4_000 * 2];
+        flat.render_block(&mut buf2);
+        assert!((buf2[3_999 * 2] - buf2[100 * 2]).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_filter_envelope_opens_each_note_from_closed_to_the_cutoff() {
+        // A bright 4 kHz tone through a voice whose filter envelope sweeps
+        // from 7 octaves under a 10 kHz cutoff up to it over 200 ms.
+        let data = sine_sample(4_000.0, 48_000, 1.0);
+        let params = AdsrParams {
+            attack_s: 0.2,
+            decay_s: 0.0,
+            sustain: 1.0,
+            release_s: 0.1,
+        };
+        let filter = VoiceFilter::new(48_000.0, params, 1.0, 10_000.0);
+        let mut v = Voice::with_rate(data.clone(), 60, VoiceKind::SustainLo, 1.0, 1.0, 128)
+            .with_filter_env(Some(filter));
+        let mut buf = vec![0.0f32; 24_000 * 2];
+        v.render_block(&mut buf);
+        let rms = |a: usize, b: usize| {
+            (buf[a * 2..b * 2]
+                .iter()
+                .step_by(2)
+                .map(|x| x * x)
+                .sum::<f32>()
+                / (b - a) as f32)
+                .sqrt()
+        };
+        let (early, late) = (rms(500, 1_500), rms(14_000, 24_000));
+        assert!(early < late * 0.2, "closed at the start: {early} vs {late}");
+        assert!(late > 0.5, "open once the attack is done: {late}");
+
+        // Amount 0 is off: the engine gives no filter, the tone is untouched.
+        let mut plain = Voice::with_rate(data, 60, VoiceKind::SustainLo, 1.0, 1.0, 128);
+        let mut b2 = vec![0.0f32; 2_000 * 2];
+        plain.render_block(&mut b2);
+        assert!(b2[500 * 2..1_500 * 2].iter().any(|x| x.abs() > 0.5));
     }
 
     #[test]
