@@ -23,9 +23,9 @@
 
 use signal_plugin_host::{PluginEvents, PluginInstance};
 use signal_proto::block::BlockType;
+use signal_sampler::RigBlock;
 use signal_sampler::block_params::{self, BlockDelta, ResolvedWrite};
 use signal_sampler::rig::prepare_chain;
-use signal_sampler::RigBlock;
 
 const SR: u32 = 48_000;
 const BLOCK: usize = 128;
@@ -63,8 +63,14 @@ fn render(bx: &mut Box<dyn PluginInstance>, x: &[f32]) -> Vec<f32> {
     let (mut l, mut r) = (vec![0.0; BLOCK], vec![0.0; BLOCK]);
     for chunk in x.chunks(BLOCK) {
         let n = chunk.len();
-        bx.process_block(chunk, chunk, &mut l[..n], &mut r[..n], &PluginEvents::default())
-            .unwrap();
+        bx.process_block(
+            chunk,
+            chunk,
+            &mut l[..n],
+            &mut r[..n],
+            &PluginEvents::default(),
+        )
+        .unwrap();
         out.extend_from_slice(&l[..n]);
         out.extend_from_slice(&r[..n]);
     }
@@ -97,7 +103,11 @@ fn changed(default: f64, min: f64, max: f64) -> f64 {
 /// A value a little away from `default`, inside the range.
 fn nudged(default: f64, min: f64, max: f64) -> f64 {
     let span = max - min;
-    let v = if default + 0.13 * span <= max { default + 0.13 * span } else { default - 0.13 * span };
+    let v = if default + 0.13 * span <= max {
+        default + 0.13 * span
+    } else {
+        default - 0.13 * span
+    };
     if min.fract() == 0.0 && max.fract() == 0.0 && default.fract() == 0.0 && span >= 2.0 {
         v.round().clamp(min, max)
     } else {
@@ -106,7 +116,10 @@ fn nudged(default: f64, min: f64, max: f64) -> f64 {
 }
 
 fn max_abs_diff(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max)
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, f32::max)
 }
 
 fn error_db(a: &[f32], b: &[f32]) -> f32 {
@@ -128,7 +141,10 @@ fn a_live_write_sets_every_builtin_effect_as_its_build_does() {
     let mut slowest = (0.0f64, String::new());
     let mut slow = Vec::new();
     let only = std::env::var("LIVE_PARAMS_ONLY").ok();
-    for &(bt, name) in TYPES.iter().filter(|(_, n)| only.as_deref().is_none_or(|o| o == *n)) {
+    for &(bt, name) in TYPES
+        .iter()
+        .filter(|(_, n)| only.as_deref().is_none_or(|o| o == *n))
+    {
         let infos = signal_sampler::native::build_native(&RigBlock::of_type(bt), SR)
             .expect("registered")
             .params();
@@ -190,7 +206,10 @@ fn a_live_write_sets_every_builtin_effect_as_its_build_does() {
                 _ => None,
             };
             let mut us = f64::INFINITY;
-            for w in [Some(&resolved), back.as_ref(), Some(&resolved)].into_iter().flatten() {
+            for w in [Some(&resolved), back.as_ref(), Some(&resolved)]
+                .into_iter()
+                .flatten()
+            {
                 let t = std::time::Instant::now();
                 w.apply(running.as_mut());
                 us = us.min(t.elapsed().as_secs_f64() * 1e6);
@@ -219,10 +238,21 @@ fn a_live_write_sets_every_builtin_effect_as_its_build_does() {
          running (no re-prepare), worst after 200 ms: {:.1} dB ({})",
         worst_running.0, worst_running.1
     );
-    println!("{} params glide when written mid-song (above -60 dB after 200 ms): {gliding:?}", gliding.len());
-    println!("slowest live write (the renderer-lock hold): {:.1} µs ({})", slowest.0, slowest.1);
+    println!(
+        "{} params glide when written mid-song (above -60 dB after 200 ms): {gliding:?}",
+        gliding.len()
+    );
+    println!(
+        "slowest live write (the renderer-lock hold): {:.1} µs ({})",
+        slowest.0, slowest.1
+    );
     println!("writes over 50 µs: {slow:?}");
-    assert!(failures.is_empty(), "{} mismatches:\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} mismatches:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
     assert!(checked > 100, "the sweep covered the params: {checked}");
 }
 
@@ -230,8 +260,11 @@ fn a_live_write_sets_every_builtin_effect_as_its_build_does() {
 /// compensation lands — written live, against a block built with them.
 #[test]
 fn nam_trims_written_live_match_the_build() {
-    let bytes = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/assets/amp_a.nam"))
-        .expect("test model");
+    let bytes = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/assets/amp_a.nam"
+    ))
+    .expect("test model");
     let make = |input_db: f32, output_db: f32| -> Box<dyn PluginInstance> {
         let mut nam = signal_sampler::nam::NamProcessor::from_bytes(
             &bytes,
@@ -256,7 +289,13 @@ fn nam_trims_written_live_match_the_build() {
     let BlockDelta::Live(w) = block_params::block_delta(&old, &new) else {
         panic!("trims are live");
     };
-    ResolvedWrite::resolve(BlockType::Amp, &w).unwrap().apply(written.as_mut());
+    ResolvedWrite::resolve(BlockType::Amp, &w)
+        .unwrap()
+        .apply(written.as_mut());
     let x = input(SR as usize / 4);
-    assert_eq!(render(&mut built, &x), render(&mut written, &x), "bit-identical");
+    assert_eq!(
+        render(&mut built, &x),
+        render(&mut written, &x),
+        "bit-identical"
+    );
 }

@@ -102,19 +102,19 @@ fn zone_rr_selection_uses_declared_rr_index() {
     let mut rng = 1;
 
     assert_eq!(
-        select_zone_rr_slot(&zones, &indices, 0, None, &mut rng, None),
+        select_zone_rr_slot(&zones, &indices, 0, None, &mut rng, None, &mut Vec::new()),
         10
     );
     assert_eq!(
-        select_zone_rr_slot(&zones, &indices, 1, None, &mut rng, None),
+        select_zone_rr_slot(&zones, &indices, 1, None, &mut rng, None, &mut Vec::new()),
         20
     );
     assert_eq!(
-        select_zone_rr_slot(&zones, &indices, 2, None, &mut rng, None),
+        select_zone_rr_slot(&zones, &indices, 2, None, &mut rng, None, &mut Vec::new()),
         30
     );
     assert_eq!(
-        select_zone_rr_slot(&zones, &indices, 3, None, &mut rng, None),
+        select_zone_rr_slot(&zones, &indices, 3, None, &mut rng, None, &mut Vec::new()),
         10
     );
     assert_eq!(select_zone_rr_index_by_slot(&zones, &indices, 20), 1);
@@ -126,8 +126,10 @@ fn zone_rr_selection_keeps_multimic_slots_aligned() {
     let left_mic = vec![0, 1];
     let right_mic = vec![2, 3];
     let mut rng = 1;
-    let first_slot = select_zone_rr_slot(&zones, &left_mic, 0, None, &mut rng, None);
-    let second_slot = select_zone_rr_slot(&zones, &left_mic, 1, None, &mut rng, None);
+    let first_slot =
+        select_zone_rr_slot(&zones, &left_mic, 0, None, &mut rng, None, &mut Vec::new());
+    let second_slot =
+        select_zone_rr_slot(&zones, &left_mic, 1, None, &mut rng, None, &mut Vec::new());
 
     assert_eq!(first_slot, 0);
     assert_eq!(second_slot, 2);
@@ -160,7 +162,7 @@ fn zone_rr_no_repeat_random_avoids_previous_slot() {
     let mut last = None;
 
     for _ in 0..64 {
-        let slot = select_zone_rr_slot(&zones, &indices, 0, last, &mut rng, None);
+        let slot = select_zone_rr_slot(&zones, &indices, 0, last, &mut rng, None, &mut Vec::new());
         assert_ne!(Some(slot), last);
         last = Some(slot);
     }
@@ -1353,7 +1355,11 @@ fn indexed_zone_lookup_matches_the_full_scan() {
     for i in 0..400 {
         // Mostly single keys on a whole-tone-ish grid (gaps), some spans.
         let lo = (rnd(44) * 2 + 20) as u8;
-        let hi = if rnd(4) == 0 { lo.saturating_add(rnd(9) as u8).min(127) } else { lo };
+        let hi = if rnd(4) == 0 {
+            lo.saturating_add(rnd(9) as u8).min(127)
+        } else {
+            lo
+        };
         let v0 = (rnd(4) * 32) as u8;
         let v1 = (v0 as u32 + 16 + rnd(48)).min(127) as u8;
         let artic = pick(rnd(3), &["Body", "body", "Other"]);
@@ -1382,7 +1388,10 @@ fn indexed_zone_lookup_matches_the_full_scan() {
                             for rr in 0..5 {
                                 let a = eng.find_layer_zone(artic, dir, dynamic, note, rr);
                                 let b = eng.find_layer_zone_scan(artic, dir, dynamic, note, rr);
-                                assert_eq!(a, b, "note {note} vel {vel} artic {artic} dir {dir:?} dyn {dynamic:?} rr {rr}");
+                                assert_eq!(
+                                    a, b,
+                                    "note {note} vel {vel} artic {artic} dir {dir:?} dyn {dynamic:?} rr {rr}"
+                                );
                                 checked += 1;
                             }
                         }

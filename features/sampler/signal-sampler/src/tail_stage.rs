@@ -238,7 +238,10 @@ impl TailStage {
     /// The blocks of `chain`'s voice, still ringing — for a param write to
     /// reach a chain whose blocks are out here (control thread, under the
     /// renderer's lock).
-    pub fn voice_boxes_mut(&mut self, chain: u32) -> Option<&mut [Option<Box<dyn PluginInstance>>]> {
+    pub fn voice_boxes_mut(
+        &mut self,
+        chain: u32,
+    ) -> Option<&mut [Option<Box<dyn PluginInstance>>]> {
         self.voices
             .iter_mut()
             .flatten()
@@ -316,7 +319,11 @@ impl TailStage {
         out_l: &mut [f32],
         out_r: &mut [f32],
     ) -> bool {
-        let n = main_l.len().min(main_r.len()).min(out_l.len()).min(out_r.len());
+        let n = main_l
+            .len()
+            .min(main_r.len())
+            .min(out_l.len())
+            .min(out_r.len());
         let fading = self.fade_pos < self.fade_len;
         for i in 0..n {
             self.trim += (self.trim_target - self.trim) * self.trim_k;
@@ -330,7 +337,11 @@ impl TailStage {
         }
         self.fade_pos = (self.fade_pos + n).min(self.fade_len);
 
-        if self.voices.iter().all(|v| v.as_ref().is_none_or(Voice::is_finished)) {
+        if self
+            .voices
+            .iter()
+            .all(|v| v.as_ref().is_none_or(Voice::is_finished))
+        {
             return false;
         }
         if n > self.x_l.len() {
@@ -347,7 +358,9 @@ impl TailStage {
             self.input.read(&mut self.x_l[..n], &mut self.x_r[..n]);
         }
         for slot in 0..MAX_VOICES {
-            let Some(v) = self.voices[slot].as_mut() else { continue };
+            let Some(v) = self.voices[slot].as_mut() else {
+                continue;
+            };
             if v.is_finished() {
                 continue;
             }
@@ -385,7 +398,10 @@ struct Bufs<'a> {
     b_r: &'a mut [f32],
 }
 
-#[expect(clippy::too_many_arguments, reason = "one voice, rendered with the stage's settings")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one voice, rendered with the stage's settings"
+)]
 fn render_voice(
     v: &mut Voice,
     n: usize,
@@ -397,7 +413,14 @@ fn render_voice(
     quiet_hold: usize,
     max_age: usize,
 ) {
-    let Bufs { x_l, x_r, a_l, a_r, b_l, b_r } = b;
+    let Bufs {
+        x_l,
+        x_r,
+        a_l,
+        a_r,
+        b_l,
+        b_r,
+    } = b;
     let ts = v.time_start;
     // What goes into the Time section, in `a`.
     match v.state {
@@ -440,7 +463,11 @@ fn render_voice(
         State::Fading => {
             v.pos += n;
             if v.pos >= fade_len {
-                v.state = if ts < v.boxes.len() { State::Tail } else { State::Finished };
+                v.state = if ts < v.boxes.len() {
+                    State::Tail
+                } else {
+                    State::Finished
+                };
                 v.pos = 0;
             }
         }
@@ -519,10 +546,20 @@ mod tests {
     }
     impl Fx {
         fn amp(gain: f32) -> Box<dyn PluginInstance> {
-            Box::new(Self { gain, decay: 0.0, e: 0.0, prepared_count: 0 })
+            Box::new(Self {
+                gain,
+                decay: 0.0,
+                e: 0.0,
+                prepared_count: 0,
+            })
         }
         fn verb(decay: f32) -> Box<dyn PluginInstance> {
-            Box::new(Self { gain: 1.0, decay, e: 0.0, prepared_count: 0 })
+            Box::new(Self {
+                gain: 1.0,
+                decay,
+                e: 0.0,
+                prepared_count: 0,
+            })
         }
     }
     impl PluginInstance for Fx {
@@ -591,13 +628,19 @@ mod tests {
         vec![Some(Fx::amp(gain)), Some(Fx::verb(0.9995))]
     }
 
-    fn block(stage: &mut TailStage, input: &Arc<InputShare>, main: &mut [Box<dyn PluginInstance>], x: f32) -> Vec<f32> {
+    fn block(
+        stage: &mut TailStage,
+        input: &Arc<InputShare>,
+        main: &mut [Box<dyn PluginInstance>],
+        x: f32,
+    ) -> Vec<f32> {
         let xin = vec![x; N];
         input.write(&xin, &xin);
         let (mut a, mut b) = (xin.clone(), xin.clone());
         for bx in main.iter_mut() {
             let (mut ol, mut or) = (vec![0.0; N], vec![0.0; N]);
-            bx.process_block(&a, &b, &mut ol, &mut or, &PluginEvents::EMPTY).unwrap();
+            bx.process_block(&a, &b, &mut ol, &mut or, &PluginEvents::EMPTY)
+                .unwrap();
             a = ol;
             b = or;
         }
@@ -622,7 +665,11 @@ mod tests {
         for _ in 0..40 {
             out.extend(block(&mut stage, &input, &mut b, 0.0));
         }
-        assert!(out[out.len() - 1] > 0.01, "A's reverb still rings: {}", out[out.len() - 1]);
+        assert!(
+            out[out.len() - 1] > 0.01,
+            "A's reverb still rings: {}",
+            out[out.len() - 1]
+        );
         assert_eq!(stage.ringing(), 1);
     }
 
@@ -639,7 +686,10 @@ mod tests {
         for _ in 0..8 {
             out.extend(block(&mut stage, &input, &mut b, 0.25));
         }
-        let max_jump = out.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0, f32::max);
+        let max_jump = out
+            .windows(2)
+            .map(|w| (w[1] - w[0]).abs())
+            .fold(0.0, f32::max);
         // 0.5 → 0.125 in ~384 samples: nothing near the 0.375 a hard switch steps.
         assert!(max_jump < 0.01, "largest step {max_jump}");
         assert!((out[out.len() - 1] - 0.125).abs() < 1e-4, "lands on B");
@@ -679,7 +729,10 @@ mod tests {
         let mut stage = TailStage::new(input.clone(), SR, 1024);
         let mut evicted = 0;
         for id in 0..7 {
-            if stage.switch(Some(Voice::new(id, chain(1.0), 1)), 0.0).is_some() {
+            if stage
+                .switch(Some(Voice::new(id, chain(1.0), 1)), 0.0)
+                .is_some()
+            {
                 evicted += 1;
             }
         }

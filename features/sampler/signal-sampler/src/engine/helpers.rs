@@ -494,7 +494,8 @@ impl SampleEngine {
             .iter()
             .filter(|a| a.kind == ArticulationKind::Legato)
             .filter(|a| {
-                a.instrument_filter.is_empty() || a.instrument_filter.contains(&self.section)
+                a.instrument_filter.is_empty()
+                    || a.instrument_filter.iter().any(|f| **f == *self.section)
             })
             .filter(|a| a.is_sordino() == want_sord)
             .filter(|a| a.resolve_legato_role() == want_role)

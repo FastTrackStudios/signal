@@ -164,24 +164,11 @@ fn playing_a_note_does_not_allocate() {
             eng.render(&mut out);
         }
     });
-    // RATCHET, not a pass. Measured: 4 allocations per note-on, all of them
-    // borrow-checker `String` clones on the dispatch path — `articulation`,
-    // `section` and `mic` cloned out of `self` so `spawn_layers` can take
-    // `&mut self`, plus the `VoiceKind`. Nothing here needs a new string; the
-    // fix is to hold those as `Arc<str>` (or indices) so a clone is a refcount
-    // bump, which touches ~79 use sites and is its own change.
-    //
-    // This number was invisible until the counting allocator above was
-    // actually installed — the assertion had been `== 0` and passing on a
-    // counter nothing incremented.
-    const KNOWN_PER_NOTE_ON: usize = 4;
-    let cycles = 16;
-    assert!(
-        n <= cycles * KNOWN_PER_NOTE_ON,
-        "note-on allocated {n} times across {cycles} cycles \
-         (known: {KNOWN_PER_NOTE_ON}/note-on, target: 0). Something new is \
-         allocating on the audio path."
-    );
+    // The zoned trigger groups by mic through reusable scratch (mic ranks,
+    // not a `BTreeMap<String, _>`), and `section` / `mic` are `Arc<str>`, so
+    // a note-on allocates nothing. This number was invisible until the
+    // counting allocator above was actually installed.
+    assert_eq!(n, 0, "note-on allocated {n} times across 16 cycles");
 }
 
 /// Rendering a held note — the common case, by a wide margin — must not

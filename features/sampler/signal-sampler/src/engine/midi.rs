@@ -553,24 +553,25 @@ impl SampleEngine {
     ) {
         // Bucket matching zones by mic id so each mic gets its own
         // round-robin within the candidate set.
-        let by_mic = self.zoned_selection(note, velocity, trigger, true);
-        self.trigger_zoned_groups(by_mic, Some(note), velocity, trigger, record_empty_miss);
+        let mut pairs = std::mem::take(&mut self.zoned_pairs);
+        pairs.clear();
+        self.zoned_candidates(note, velocity, trigger, true, &mut pairs);
+        self.trigger_zoned_groups(pairs, Some(note), velocity, trigger, record_empty_miss);
     }
 
-    /// The zones `trigger_zoned` fires for `note`, bucketed by mic, in zone
-    /// order. `indexed`: only the zones covering the key (`zone_keys` /
-    /// `release_keys`) — unless the selection ignores the key (a pinned
-    /// articulation, a single-key percussion kit), which scans them all, as
-    /// `indexed = false` always does.
-    pub(crate) fn zoned_selection(
+    /// The zones `trigger_zoned` fires for `note`, as `(mic rank, zone)` in
+    /// zone order, appended to `out`. `indexed`: only the zones covering the
+    /// key (`zone_keys` / `release_keys`) — unless the selection ignores the
+    /// key (a pinned articulation, a single-key percussion kit), which scans
+    /// them all, as `indexed = false` always does.
+    pub(crate) fn zoned_candidates(
         &self,
         note: u8,
         velocity: u8,
         trigger: ZoneTrigger,
         indexed: bool,
-    ) -> std::collections::BTreeMap<String, Vec<usize>> {
-        let mut by_mic: std::collections::BTreeMap<String, Vec<usize>> =
-            std::collections::BTreeMap::new();
+        out: &mut Vec<(u16, u32)>,
+    ) {
         let key_free = self.trigger_articulation.is_some()
             || self.pinned_articulation.is_some()
             || (self.percussion && self.single_attack_key);
@@ -584,52 +585,74 @@ impl SampleEngine {
                 for &i in cands.iter() {
                     let z = &self.patch.spec.zones[i as usize];
                     if self.zone_selected(z, note, velocity, trigger) {
-                        by_mic.entry(z.mic.clone()).or_default().push(i as usize);
+                        out.push((self.zone_mic_rank[i as usize], i));
                     }
                 }
             }
             None => {
                 for (i, z) in self.patch.spec.zones.iter().enumerate() {
                     if self.zone_selected(z, note, velocity, trigger) {
-                        by_mic.entry(z.mic.clone()).or_default().push(i);
+                        out.push((self.zone_mic_rank[i], i as u32));
                     }
                 }
             }
+        }
+    }
+
+    /// [`zoned_candidates`](Self::zoned_candidates) bucketed by mic name, in
+    /// the order `trigger_zoned_groups` fires them (for tests).
+    #[cfg(test)]
+    pub(crate) fn zoned_selection(
+        &self,
+        note: u8,
+        velocity: u8,
+        trigger: ZoneTrigger,
+        indexed: bool,
+    ) -> std::collections::BTreeMap<String, Vec<usize>> {
+        let mut pairs = Vec::new();
+        self.zoned_candidates(note, velocity, trigger, indexed, &mut pairs);
+        let mut by_mic: std::collections::BTreeMap<String, Vec<usize>> =
+            std::collections::BTreeMap::new();
+        for (r, i) in pairs {
+            by_mic
+                .entry(self.mic_rank_names[r as usize].clone())
+                .or_default()
+                .push(i as usize);
         }
         by_mic
     }
 
     pub(crate) fn trigger_cc_zones(&mut self, controller: u8, old_value: u8, value: u8) {
-        let mut by_mic: std::collections::BTreeMap<String, Vec<usize>> =
-            std::collections::BTreeMap::new();
+        let mut pairs = std::mem::take(&mut self.zoned_pairs);
+        pairs.clear();
         for (i, z) in self.patch.spec.zones.iter().enumerate() {
             if zone_cc_trigger_crossed(z, controller, old_value, value) {
-                by_mic.entry(z.mic.clone()).or_default().push(i);
+                pairs.push((self.zone_mic_rank[i], i as u32));
             }
         }
-        self.trigger_zoned_groups(by_mic, None, value, ZoneTrigger::Cc, false);
+        self.trigger_zoned_groups(pairs, None, value, ZoneTrigger::Cc, false);
     }
 
     pub(crate) fn trigger_aftertouch_zones(&mut self, note: Option<u8>, old_value: u8, value: u8) {
-        let mut by_mic: std::collections::BTreeMap<String, Vec<usize>> =
-            std::collections::BTreeMap::new();
+        let mut pairs = std::mem::take(&mut self.zoned_pairs);
+        pairs.clear();
         for (i, z) in self.patch.spec.zones.iter().enumerate() {
             if zone_aftertouch_trigger_crossed(z, note, old_value, value) {
-                by_mic.entry(z.mic.clone()).or_default().push(i);
+                pairs.push((self.zone_mic_rank[i], i as u32));
             }
         }
-        self.trigger_zoned_groups(by_mic, note, value, ZoneTrigger::Aftertouch, false);
+        self.trigger_zoned_groups(pairs, note, value, ZoneTrigger::Aftertouch, false);
     }
 
     pub(crate) fn trigger_event_zones(&mut self, trigger: ZoneTrigger, velocity: u8) {
-        let mut by_mic: std::collections::BTreeMap<String, Vec<usize>> =
-            std::collections::BTreeMap::new();
+        let mut pairs = std::mem::take(&mut self.zoned_pairs);
+        pairs.clear();
         for (i, z) in self.patch.spec.zones.iter().enumerate() {
             if zone_trigger_matches(z, trigger) {
-                by_mic.entry(z.mic.clone()).or_default().push(i);
+                pairs.push((self.zone_mic_rank[i], i as u32));
             }
         }
-        self.trigger_zoned_groups(by_mic, None, velocity, trigger, false);
+        self.trigger_zoned_groups(pairs, None, velocity, trigger, false);
     }
 
     /// Trigger a zoned sustain/legato note with the full CSS expressive blend:
@@ -1546,7 +1569,10 @@ impl SampleEngine {
         // equivalence test), and nothing allocated.
         let velocity = self.last_velocity;
         let zones = &self.patch.spec.zones;
-        let cands = self.zone_keys.get(note as usize).map_or(&[][..], |c| &c[..]);
+        let cands = self
+            .zone_keys
+            .get(note as usize)
+            .map_or(&[][..], |c| &c[..]);
         let passes = |z: &crate::spec::ZoneSpec| self.zone_passes(z, artic, direction, dynamic);
         // VELOCITY-BANDED zones pick by how hard the key was struck (see the
         // scan); a key covered by no band for this velocity sounds the
@@ -1603,7 +1629,8 @@ impl SampleEngine {
         if !z.direction.is_empty() && !z.direction.eq_ignore_ascii_case(direction) {
             return false;
         }
-        if !dynamic.is_empty() && !z.dynamic.is_empty() && !z.dynamic.eq_ignore_ascii_case(dynamic) {
+        if !dynamic.is_empty() && !z.dynamic.is_empty() && !z.dynamic.eq_ignore_ascii_case(dynamic)
+        {
             return false;
         }
         if let Some(solo) = &self.solo_mic {
@@ -2289,20 +2316,61 @@ impl SampleEngine {
 
     pub(crate) fn trigger_zoned_groups(
         &mut self,
-        mut by_mic: std::collections::BTreeMap<String, Vec<usize>>,
+        mut pairs: Vec<(u16, u32)>,
         event_note: Option<u8>,
         velocity: u8,
         trigger: ZoneTrigger,
         record_empty_miss: bool,
     ) {
+        // Grouped by mic (its rank — the sorted mic names' order) and, within
+        // a mic, in zone order: what a `BTreeMap` keyed by the mic string
+        // gave, without building one per note. The sort is stable and the
+        // pairs arrive in zone order.
+        pairs.sort_by_key(|p| p.0);
         // Single-mic solo: keep only the requested mic's bucket so multi-mic
         // zone sets (CSS ships Main + Mix in one set, no `mics` block) don't
         // fold every mic to bus 0 and double. Centralised here so it applies to
         // every trigger path (attack / release / CC / aftertouch / event).
         if let Some(solo) = &self.solo_mic {
-            by_mic.retain(|mic, _| mic.eq_ignore_ascii_case(solo));
+            let names = &self.mic_rank_names;
+            pairs.retain(|(r, _)| names[*r as usize].eq_ignore_ascii_case(solo));
         }
-        if by_mic.is_empty() {
+        let mut idx = std::mem::take(&mut self.zoned_idx);
+        let mut groups = std::mem::take(&mut self.zoned_groups);
+        idx.clear();
+        groups.clear();
+        for (k, &(rank, i)) in pairs.iter().enumerate() {
+            idx.push(i as usize);
+            match groups.last_mut() {
+                Some(g) if g.0 == rank => g.2 = k as u32 + 1,
+                _ => groups.push((rank, k as u32, k as u32 + 1)),
+            }
+        }
+        self.zoned_pairs = pairs;
+        self.fire_zoned_groups(
+            &idx,
+            &groups,
+            event_note,
+            velocity,
+            trigger,
+            record_empty_miss,
+        );
+        self.zoned_idx = idx;
+        self.zoned_groups = groups;
+    }
+
+    /// Fire the grouped zones (see `trigger_zoned_groups`): `idx` every zone
+    /// in group order, `groups` each mic's `(rank, start, end)` in it.
+    fn fire_zoned_groups(
+        &mut self,
+        idx: &[usize],
+        groups: &[(u16, u32, u32)],
+        event_note: Option<u8>,
+        velocity: u8,
+        trigger: ZoneTrigger,
+        record_empty_miss: bool,
+    ) {
+        if groups.is_empty() {
             if record_empty_miss {
                 self.sample_misses
                     .set(self.sample_misses.get().saturating_add(1));
@@ -2320,9 +2388,7 @@ impl SampleEngine {
         // Reuse scratch buffers across note-ons: `mem::take` swaps in an empty
         // Vec (no allocation) and we restore the grown buffer afterwards, so
         // these allocate only on the first few note-ons, never steady-state.
-        let mut all_indices = std::mem::take(&mut self.zone_indices_scratch);
-        all_indices.clear();
-        all_indices.extend(by_mic.values().flatten().copied());
+        let all_indices = idx;
         // Packed key: trigger discriminant | note (+1, 0 = None) | velocity.
         let rr_key = ((trigger as u8 as u64) << 16)
             | ((event_note.map_or(0, |n| n as u64 + 1)) << 8)
@@ -2335,13 +2401,14 @@ impl SampleEngine {
             last_slot,
             &mut self.zone_rr_random_state,
             self.forced_rr,
+            &mut self.rr_slots_scratch,
         );
         self.zone_rr_last_slots.insert(rr_key, selected_rr_slot);
-        self.zone_indices_scratch = all_indices;
 
         let mut choked_groups = std::mem::take(&mut self.zone_choked_scratch);
         choked_groups.clear();
-        for indices in by_mic.values() {
+        for &(_, gs, ge) in groups {
+            let indices = &idx[gs as usize..ge as usize];
             let z = &self.patch.spec.zones
                 [select_zone_rr_index_by_slot(&self.patch.spec.zones, indices, selected_rr_slot)];
             for group in z.off_by.iter().filter(|group| !group.is_empty()) {
@@ -2366,7 +2433,8 @@ impl SampleEngine {
 
         let mut capped_groups = std::mem::take(&mut self.zone_capped_scratch);
         capped_groups.clear();
-        for indices in by_mic.values() {
+        for &(_, gs, ge) in groups {
+            let indices = &idx[gs as usize..ge as usize];
             let z = &self.patch.spec.zones
                 [select_zone_rr_index_by_slot(&self.patch.spec.zones, indices, selected_rr_slot)];
             if z.group_polyphony > 0 {
@@ -2383,15 +2451,17 @@ impl SampleEngine {
         }
         self.zone_capped_scratch = capped_groups;
 
-        for (mic_id, indices) in by_mic {
+        for &(rank, gs, ge) in groups {
+            let indices = &idx[gs as usize..ge as usize];
             let pick =
-                select_zone_rr_index_by_slot(&self.patch.spec.zones, &indices, selected_rr_slot);
+                select_zone_rr_index_by_slot(&self.patch.spec.zones, indices, selected_rr_slot);
             let z = &self.patch.spec.zones[pick];
             // Tag the new voice into the engine-wide choke group (if any) so
             // the next hit can silence it; an explicit zone choke wins.
             let choke_group = zone_choke_group(z).or(self.engine_choke_group);
-            let path = self.patch.zone_paths[pick].clone();
-            let Some(data) = self.cache.get_loaded(&path) else {
+            // Borrowed for the lookup; copied only to report a miss.
+            let Some(data) = self.cache.get_loaded(&self.patch.zone_paths[pick]) else {
+                let path = self.patch.zone_paths[pick].clone();
                 self.cache_misses
                     .set(self.cache_misses.get().saturating_add(1));
                 self.record_cache_miss(&path);
@@ -2414,7 +2484,7 @@ impl SampleEngine {
             let transpose_cents = semitones * 100.0;
             let rate = 2.0f64.powf((z.tune_cents as f64 + self.master_tune_cents()) / 1200.0);
             let gain = 10.0f32.powf(z.gain_db / 20.0);
-            let mic_index = self.mic_index_for(&mic_id);
+            let mic_index = self.mic_index_for(&self.mic_rank_names[rank as usize]);
 
             // Percussion plays one-shot: the sample rings to its natural end
             // and note-off never cuts it (a drum is struck, not held). Pitched

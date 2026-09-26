@@ -360,7 +360,9 @@ mod tests {
             seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
             (seed >> 8) as f32 / (1u32 << 24) as f32 - 0.5
         };
-        let ir: Vec<f32> = (0..1000).map(|i| rnd() * (-(i as f32) / 200.0).exp()).collect();
+        let ir: Vec<f32> = (0..1000)
+            .map(|i| rnd() * (-(i as f32) / 200.0).exp())
+            .collect();
         let x: Vec<f32> = (0..3000).map(|_| rnd()).collect();
         let mut c = Convolver::from_ir(ir.clone(), "t");
         let taps = c.taps();

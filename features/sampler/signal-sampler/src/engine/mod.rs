@@ -630,6 +630,20 @@ pub struct SampleEngine {
     zone_keys: Box<[Box<[u32]>]>,
     /// The same, for the release-trigger zones (a note-off's).
     release_keys: Box<[Box<[u32]>]>,
+    /// Each zone's mic as its rank among the patch's mic names sorted — the
+    /// order the zoned trigger path groups by (it used a `BTreeMap` keyed by
+    /// the mic string, cloning each name per note).
+    zone_mic_rank: Box<[u16]>,
+    /// The mic names by rank.
+    mic_rank_names: Box<[String]>,
+    /// Reusable per-note buffers for the zoned trigger path: the matching
+    /// `(mic rank, zone)` pairs, their zones flattened in group order, each
+    /// group's `(rank, start, end)`, and the round-robin slots. Taken and put
+    /// back, so they allocate only while growing, never in steady state.
+    zoned_pairs: Vec<(u16, u32)>,
+    zoned_idx: Vec<usize>,
+    zoned_groups: Vec<(u16, u32, u32)>,
+    rr_slots_scratch: Vec<u32>,
     cache: SampleCache,
     voices: VoicePool,
     /// Pitch-bend range in semitones (full wheel throw).
@@ -644,11 +658,11 @@ pub struct SampleEngine {
     pub sample_rate: u32,
 
     /// Active section ID (e.g. `"1v"`, `"Va"`, `"Ce"`).
-    section: String,
+    section: std::sync::Arc<str>,
     /// Active articulation ID (e.g. `"Vibsus"`, `"Staccato"`).
     articulation: String,
     /// Active microphone position ID (e.g. `"Mix"`, `"Main"`).
-    mic: String,
+    mic: std::sync::Arc<str>,
     /// Opt-in single-mic filter for multi-mic zone sets that declare no
     /// `mics` block (so `mic_index` folds everything to bus 0). When `Some`,
     /// only zones whose `mic` matches fire — otherwise every mic in the set
@@ -954,7 +968,6 @@ pub struct SampleEngine {
 
     /// Reusable scratch for the zoned trigger path so note-on doesn't allocate.
     /// Drained/refilled each note-on via `mem::take` + restore.
-    zone_indices_scratch: Vec<usize>,
     zone_choked_scratch: Vec<u64>,
     zone_capped_scratch: Vec<(u64, usize)>,
 
@@ -1064,19 +1077,26 @@ impl SampleEngine {
         let latched_cc_selector = patch.spec.latched_cc_selector();
         let zone_keys = zone_key_index(&patch.spec.zones, ZoneTrigger::Attack);
         let release_keys = zone_key_index(&patch.spec.zones, ZoneTrigger::Release);
+        let (zone_mic_rank, mic_rank_names) = zone_mic_ranks(&patch.spec.zones);
 
         Self {
             zone_keys,
             release_keys,
+            zone_mic_rank,
+            mic_rank_names,
+            zoned_pairs: Vec::with_capacity(64),
+            zoned_idx: Vec::with_capacity(64),
+            zoned_groups: Vec::with_capacity(16),
+            rr_slots_scratch: Vec::with_capacity(32),
             patch,
             cache,
             voices: VoicePool::new(),
             bend_range_st: 2.0,
             rr: RefCell::new(RrCounters::new()),
             sample_rate,
-            section,
+            section: section.into(),
             articulation,
-            mic,
+            mic: mic.into(),
             solo_mic: None,
             keyswitch_notes,
             play_direction: "up".to_string(),
@@ -1158,7 +1178,6 @@ impl SampleEngine {
             forced_rr: None,
             spawn_align_lead: None,
             spawn_arrival_override_ms: None,
-            zone_indices_scratch: Vec::with_capacity(32),
             zone_choked_scratch: Vec::with_capacity(16),
             zone_capped_scratch: Vec::with_capacity(16),
             mic_ids,
@@ -1444,7 +1463,7 @@ impl SampleEngine {
 
     /// Switch to a different section. Resets RR counters.
     pub fn set_section(&mut self, section_id: impl Into<String>) {
-        self.section = section_id.into();
+        self.section = section_id.into().into();
         self.rr.borrow_mut().reset();
         self.zone_rr_counter = 0;
         self.zone_rr_last_slots.clear();
@@ -1452,7 +1471,7 @@ impl SampleEngine {
 
     /// Switch to a different microphone position.
     pub fn set_mic(&mut self, mic_id: impl Into<String>) {
-        self.mic = mic_id.into();
+        self.mic = mic_id.into().into();
     }
 
     /// Restrict zoned playback to a single mic. `Some("Mix")` makes only zones
@@ -2271,50 +2290,75 @@ fn push_unique_group_limit(values: &mut Vec<(u64, usize)>, group: u64, limit: us
     }
 }
 
+/// Whether `s`, trimmed, is one of `keys` ignoring ASCII case — the zone
+/// labels' matching, without lowercasing into a new string: these run per
+/// zone per note on the audio thread, where an allocation is a spike.
+fn is_one_of(s: &str, keys: &[&str]) -> bool {
+    let t = s.trim();
+    keys.iter().any(|k| t.eq_ignore_ascii_case(k))
+}
+
 fn zone_is_one_shot(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.trigger_mode.trim().to_ascii_lowercase().as_str(),
-        "one-shot" | "one_shot" | "oneshot"
-    )
+    is_one_of(&zone.trigger_mode, &["one-shot", "one_shot", "oneshot"])
 }
 
 fn zone_is_release_trigger(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.trigger_mode.trim().to_ascii_lowercase().as_str(),
-        "release" | "note-release" | "note_release" | "key-up" | "key_up"
+    is_one_of(
+        &zone.trigger_mode,
+        &[
+            "release",
+            "note-release",
+            "note_release",
+            "key-up",
+            "key_up",
+        ],
     )
 }
 
 fn zone_is_pedal_down_trigger(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.trigger_mode.trim().to_ascii_lowercase().as_str(),
-        "pedal-down" | "pedal_down" | "pedaldown" | "sustain-down" | "sustain_down"
+    is_one_of(
+        &zone.trigger_mode,
+        &[
+            "pedal-down",
+            "pedal_down",
+            "pedaldown",
+            "sustain-down",
+            "sustain_down",
+        ],
     )
 }
 
 fn zone_is_pedal_up_trigger(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.trigger_mode.trim().to_ascii_lowercase().as_str(),
-        "pedal-up" | "pedal_up" | "pedalup" | "sustain-up" | "sustain_up"
+    is_one_of(
+        &zone.trigger_mode,
+        &[
+            "pedal-up",
+            "pedal_up",
+            "pedalup",
+            "sustain-up",
+            "sustain_up",
+        ],
     )
 }
 
 fn zone_is_cc_trigger(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.trigger_mode.trim().to_ascii_lowercase().as_str(),
-        "cc" | "cc-threshold" | "cc_threshold" | "controller"
+    is_one_of(
+        &zone.trigger_mode,
+        &["cc", "cc-threshold", "cc_threshold", "controller"],
     )
 }
 
 fn zone_is_aftertouch_trigger(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.trigger_mode.trim().to_ascii_lowercase().as_str(),
-        "aftertouch"
-            | "channel-aftertouch"
-            | "channel_aftertouch"
-            | "poly-aftertouch"
-            | "poly_aftertouch"
-            | "pressure"
+    is_one_of(
+        &zone.trigger_mode,
+        &[
+            "aftertouch",
+            "channel-aftertouch",
+            "channel_aftertouch",
+            "poly-aftertouch",
+            "poly_aftertouch",
+            "pressure",
+        ],
     )
 }
 
@@ -2379,6 +2423,19 @@ fn spec_is_percussion(spec: &crate::spec::LibrarySpec) -> bool {
     PERC.iter().any(|p| inst.contains(p))
 }
 
+/// Each zone's mic rank among the sorted distinct mic names, and the names
+/// (see `SampleEngine::zone_mic_rank`).
+fn zone_mic_ranks(zones: &[crate::spec::ZoneSpec]) -> (Box<[u16]>, Box<[String]>) {
+    let mut names: Vec<String> = zones.iter().map(|z| z.mic.clone()).collect();
+    names.sort();
+    names.dedup();
+    let ranks = zones
+        .iter()
+        .map(|z| names.binary_search(&z.mic).map_or(0, |i| i as u16))
+        .collect();
+    (ranks, names.into_boxed_slice())
+}
+
 /// For each key, the `trigger` zones covering it, in zone order (see
 /// `SampleEngine::zone_keys`).
 fn zone_key_index(zones: &[crate::spec::ZoneSpec], trigger: ZoneTrigger) -> Box<[Box<[u32]>]> {
@@ -2412,9 +2469,9 @@ fn zone_trigger_matches(zone: &crate::spec::ZoneSpec, trigger: ZoneTrigger) -> b
 }
 
 fn zone_is_alternating_loop(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.playback_mode.trim().to_ascii_lowercase().as_str(),
-        "alternate" | "alternating" | "ping-pong" | "ping_pong"
+    is_one_of(
+        &zone.playback_mode,
+        &["alternate", "alternating", "ping-pong", "ping_pong"],
     )
 }
 
@@ -2447,12 +2504,12 @@ fn select_zone_rr_slot(
     last_slot: Option<u32>,
     random_state: &mut u64,
     forced: Option<u32>,
+    rr_slots: &mut Vec<u32>,
 ) -> u32 {
     debug_assert!(!indices.is_empty());
-    let mut rr_slots = indices
-        .iter()
-        .map(|&idx| zones[idx].rr_index)
-        .collect::<Vec<_>>();
+    // A reused buffer: this runs per note on the audio thread.
+    rr_slots.clear();
+    rr_slots.extend(indices.iter().map(|&idx| zones[idx].rr_index));
     rr_slots.sort_unstable();
     rr_slots.dedup();
     if rr_slots.len() == 1 {
@@ -2465,8 +2522,19 @@ fn select_zone_rr_slot(
         return rr_slots[(f as usize) % rr_slots.len()];
     }
 
-    let mode = zones[indices[0]].rr_mode.trim().to_ascii_lowercase();
-    match mode.as_str() {
+    // Matched without lowercasing into a new string: this runs per note.
+    let raw = zones[indices[0]].rr_mode.trim();
+    let mode = [
+        "random",
+        "no-repeat-random",
+        "no_repeat_random",
+        "norepeat",
+        "no-repeat",
+    ]
+    .into_iter()
+    .find(|k| raw.eq_ignore_ascii_case(k))
+    .unwrap_or("");
+    match mode {
         "random" => rr_slots[next_zone_random(random_state) % rr_slots.len()],
         "no-repeat-random" | "no_repeat_random" | "norepeat" | "no-repeat" => {
             let mut slot = rr_slots[next_zone_random(random_state) % rr_slots.len()];

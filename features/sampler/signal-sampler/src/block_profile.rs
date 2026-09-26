@@ -9,7 +9,7 @@
 
 use std::time::Instant;
 
-use crate::rig::{build_block, RigBlock};
+use crate::rig::{RigBlock, build_block};
 use signal_plugin_host::PluginInstance as _;
 
 /// One block's cost and latency.
@@ -38,18 +38,24 @@ pub fn profile_chain(
     input: &[f32],
     seconds: f64,
 ) -> Vec<BlockCost> {
-    let mut built: Vec<(RigBlock, Option<Box<dyn signal_plugin_host::PluginInstance>>, Option<String>)> =
-        blocks
-            .iter()
-            .map(|b| match build_block(b, sample_rate) {
-                Ok(bb) => {
-                    let mut inst = bb.boxed;
-                    let err = inst.prepare(f64::from(sample_rate), frames as u32).err().map(|e| format!("{e:?}"));
-                    (b.clone(), Some(inst), err)
-                }
-                Err(e) => (b.clone(), None, Some(e)),
-            })
-            .collect();
+    let mut built: Vec<(
+        RigBlock,
+        Option<Box<dyn signal_plugin_host::PluginInstance>>,
+        Option<String>,
+    )> = blocks
+        .iter()
+        .map(|b| match build_block(b, sample_rate) {
+            Ok(bb) => {
+                let mut inst = bb.boxed;
+                let err = inst
+                    .prepare(f64::from(sample_rate), frames as u32)
+                    .err()
+                    .map(|e| format!("{e:?}"));
+                (b.clone(), Some(inst), err)
+            }
+            Err(e) => (b.clone(), None, Some(e)),
+        })
+        .collect();
     let total = (seconds * f64::from(sample_rate) / frames as f64) as usize;
     let warm = (f64::from(sample_rate) / frames as f64) as usize;
     let mut times: Vec<Vec<f64>> = vec![Vec::with_capacity(total); built.len()];
@@ -59,13 +65,19 @@ pub fn profile_chain(
     let mut pos = 0usize;
     for k in 0..total {
         for i in 0..frames {
-            let s = if input.is_empty() { 0.0 } else { input[(pos + i) % input.len()] };
+            let s = if input.is_empty() {
+                0.0
+            } else {
+                input[(pos + i) % input.len()]
+            };
             l[i] = s;
             r[i] = s;
         }
         pos += frames;
         for (j, (_, inst, err)) in built.iter_mut().enumerate() {
-            let Some(inst) = inst.as_mut().filter(|_| err.is_none()) else { continue };
+            let Some(inst) = inst.as_mut().filter(|_| err.is_none()) else {
+                continue;
+            };
             let t = Instant::now();
             let _ = inst.process_block(&l, &r, &mut ol, &mut or, &events);
             if k >= warm {
@@ -83,10 +95,23 @@ pub fn profile_chain(
             let n = t.len().max(1);
             BlockCost {
                 name: b.name.clone(),
-                kind: format!("{:?}{}", b.block_type, if b.is_nam() { " (NAM)" } else if b.is_cab_ir() { " (IR)" } else { "" }),
+                kind: format!(
+                    "{:?}{}",
+                    b.block_type,
+                    if b.is_nam() {
+                        " (NAM)"
+                    } else if b.is_cab_ir() {
+                        " (IR)"
+                    } else {
+                        ""
+                    }
+                ),
                 latency: inst.as_mut().map_or(0, |i| i.latency()),
                 mean_us: t.iter().sum::<f64>() / n as f64,
-                p99_us: t.get((n * 99 / 100).min(n.saturating_sub(1))).copied().unwrap_or(0.0),
+                p99_us: t
+                    .get((n * 99 / 100).min(n.saturating_sub(1)))
+                    .copied()
+                    .unwrap_or(0.0),
                 max_us: t.last().copied().unwrap_or(0.0),
                 error: err.clone(),
             }

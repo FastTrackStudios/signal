@@ -36,22 +36,37 @@ fn poly_blep(t: f32, dt: f32) -> f32 {
     }
 }
 
+/// One of the morph's four band-limited waves: 0 sine, 1 triangle, 2 saw,
+/// 3 square (`duty` its pulse width).
+#[inline]
+fn wave(k: usize, phase: f32, dt: f32, duty: f32) -> f32 {
+    match k {
+        0 => (core::f32::consts::TAU * phase).sin(),
+        1 => 4.0 * (phase - 0.5).abs() - 1.0,
+        2 => 2.0 * phase - 1.0 - poly_blep(phase, dt),
+        _ => {
+            let duty = duty.clamp(0.05, 0.95);
+            let mut sq = if phase < duty { 1.0 } else { -1.0 };
+            sq += poly_blep(phase, dt);
+            sq -= poly_blep((phase + (1.0 - duty)).fract(), dt);
+            sq
+        }
+    }
+}
+
 /// Morph 0..1 across sine → triangle → saw → square, band-limited.
 /// `duty` is the square's pulse width (0.5 = symmetric; the Symmetry/PWM axis).
+///
+/// Only the two waves either side of `shape` are computed — it used to
+/// compute all four every sample, a `sin` included, and throw two away (a
+/// saw-shaped bass paid for a sine per sub-oscillator per sample it never
+/// used: a fifth of a keys rig's audio time on one lane).
 #[inline]
 fn morph(phase: f32, dt: f32, shape: f32, duty: f32) -> f32 {
-    let sine = (core::f32::consts::TAU * phase).sin();
-    let tri = 4.0 * (phase - 0.5).abs() - 1.0;
-    let saw = 2.0 * phase - 1.0 - poly_blep(phase, dt);
-    let duty = duty.clamp(0.05, 0.95);
-    let mut sq = if phase < duty { 1.0 } else { -1.0 };
-    sq += poly_blep(phase, dt);
-    sq -= poly_blep((phase + (1.0 - duty)).fract(), dt);
-    let w = [sine, tri, saw, sq];
     let x = shape.clamp(0.0, 1.0) * 3.0;
     let i = (x as usize).min(2);
     let frac = x - i as f32;
-    w[i] * (1.0 - frac) + w[i + 1] * frac
+    wave(i, phase, dt, duty) * (1.0 - frac) + wave(i + 1, phase, dt, duty) * frac
 }
 
 /// One Harmonia sub-oscillator's configuration.
@@ -518,6 +533,45 @@ impl Soundsource for NativeWavetable {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The morph as it was: all four waves, blended.
+    fn morph_all(phase: f32, dt: f32, shape: f32, duty: f32) -> f32 {
+        let w = [
+            wave(0, phase, dt, duty),
+            wave(1, phase, dt, duty),
+            wave(2, phase, dt, duty),
+            wave(3, phase, dt, duty),
+        ];
+        let x = shape.clamp(0.0, 1.0) * 3.0;
+        let i = (x as usize).min(2);
+        let frac = x - i as f32;
+        w[i] * (1.0 - frac) + w[i + 1] * frac
+    }
+
+    /// Computing only the two waves either side of the shape is the same
+    /// sample, bit for bit, as computing all four.
+    #[test]
+    fn the_morph_computes_only_what_it_blends() {
+        for pi in 0..400 {
+            let phase = pi as f32 / 400.0;
+            for si in 0..=30 {
+                let shape = si as f32 / 30.0;
+                for duty in [0.1f32, 0.5, 0.9] {
+                    for dt in [0.001f32, 0.02] {
+                        let (a, b) = (
+                            morph(phase, dt, shape, duty),
+                            morph_all(phase, dt, shape, duty),
+                        );
+                        assert_eq!(
+                            a.to_bits(),
+                            b.to_bits(),
+                            "phase {phase} shape {shape} duty {duty} dt {dt}"
+                        );
+                    }
+                }
+            }
+        }
+    }
     use signal_plugin_host::PluginMidiEvent;
 
     fn ev_note_on(note: u8, vel: u8) -> midicore::MidiEvent {

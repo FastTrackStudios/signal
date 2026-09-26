@@ -276,7 +276,10 @@ impl PluginInstance for BlockGate {
                     if !events.params.is_empty() {
                         self.in_l[..n].fill(0.0);
                         self.in_r[..n].fill(0.0);
-                        let (il, ir) = (std::mem::take(&mut self.in_l), std::mem::take(&mut self.in_r));
+                        let (il, ir) = (
+                            std::mem::take(&mut self.in_l),
+                            std::mem::take(&mut self.in_r),
+                        );
                         let _ = self.run_into_scratch(&il[..n], &ir[..n], n, events);
                         self.in_l = il;
                         self.in_r = ir;
@@ -296,8 +299,13 @@ impl PluginInstance for BlockGate {
                     self.in_l[i] = g * in_l[i];
                     self.in_r[i] = g * in_r[i];
                 }
-                let (il, ir) = (std::mem::take(&mut self.in_l), std::mem::take(&mut self.in_r));
-                let result = self.inner.process_block(&il[..n], &ir[..n], out_l, out_r, events);
+                let (il, ir) = (
+                    std::mem::take(&mut self.in_l),
+                    std::mem::take(&mut self.in_r),
+                );
+                let result = self
+                    .inner
+                    .process_block(&il[..n], &ir[..n], out_l, out_r, events);
                 self.in_l = il;
                 self.in_r = ir;
                 let mut peak = 0.0f32;
@@ -405,7 +413,13 @@ mod tests {
     #[test]
     fn a_bypassed_delay_rings_out_and_passes_the_dry() {
         let ctl = GateCtl::new(false);
-        let mut gate = BlockGate::new(Box::new(Echo { e: 0.0 }), ctl.clone(), GateMode::Trails, 1.0, 1024);
+        let mut gate = BlockGate::new(
+            Box::new(Echo { e: 0.0 }),
+            ctl.clone(),
+            GateMode::Trails,
+            1.0,
+            1024,
+        );
         gate.prepare(48_000.0, 512).unwrap();
         run(&mut gate, 1.0, 512);
         ctl.set(true);
@@ -421,7 +435,13 @@ mod tests {
     #[test]
     fn a_hard_gate_passes_the_input_once_settled_without_a_step() {
         let ctl = GateCtl::new(false);
-        let mut gate = BlockGate::new(Box::new(Echo { e: 0.0 }), ctl.clone(), GateMode::Hard, 1.0, 1024);
+        let mut gate = BlockGate::new(
+            Box::new(Echo { e: 0.0 }),
+            ctl.clone(),
+            GateMode::Hard,
+            1.0,
+            1024,
+        );
         gate.prepare(48_000.0, 512).unwrap();
         let before = run(&mut gate, 0.25, 512);
         ctl.set(true);
@@ -434,7 +454,13 @@ mod tests {
     #[test]
     fn a_snap_lands_at_once() {
         let ctl = GateCtl::new(false);
-        let mut gate = BlockGate::new(Box::new(Echo { e: 0.0 }), ctl.clone(), GateMode::Hard, 1.0, 1024);
+        let mut gate = BlockGate::new(
+            Box::new(Echo { e: 0.0 }),
+            ctl.clone(),
+            GateMode::Hard,
+            1.0,
+            1024,
+        );
         gate.prepare(48_000.0, 512).unwrap();
         ctl.set_now(true);
         let out = run(&mut gate, 0.5, 4);
