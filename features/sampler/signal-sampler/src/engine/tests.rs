@@ -1333,3 +1333,78 @@ fn pedal_pair_rejects_noise_body_and_release_follows_pedal() {
         "noise must never be the body"
     );
 }
+
+/// The key-indexed zone lookup picks exactly what the full scan picks —
+/// for every key, velocity, round-robin slot and layer filter, over a
+/// randomly laid-out zone map (overlapping key and velocity ranges, mixed
+/// case labels, release / pedal / CC zones that note-on must skip, keys no
+/// zone covers).
+#[test]
+fn indexed_zone_lookup_matches_the_full_scan() {
+    let mut seed = 0x9e37_79b9_u32;
+    let mut rnd = |n: u32| {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        seed % n
+    };
+    let pick = |r: u32, xs: &[&'static str]| xs[r as usize % xs.len()];
+    let mut text = String::from("name \"idx\"\nzones (\n");
+    for i in 0..400 {
+        // Mostly single keys on a whole-tone-ish grid (gaps), some spans.
+        let lo = (rnd(44) * 2 + 20) as u8;
+        let hi = if rnd(4) == 0 { lo.saturating_add(rnd(9) as u8).min(127) } else { lo };
+        let v0 = (rnd(4) * 32) as u8;
+        let v1 = (v0 as u32 + 16 + rnd(48)).min(127) as u8;
+        let artic = pick(rnd(3), &["Body", "body", "Other"]);
+        let mic = pick(rnd(3), &["Close", "room", ""]);
+        let dir = pick(rnd(3), &["", "up", "Down"]);
+        let dynamic = pick(rnd(3), &["", "p", "F"]);
+        let trig = pick(rnd(8), &["", "", "", "", "release", "pedal-down", "cc", ""]);
+        text.push_str(&format!(
+            "  {{file \"z{i}.wav\", key_min {lo}, key_max {hi}, root_key {lo}, vel_min {v0}, vel_max {v1}, \
+             articulation \"{artic}\", mic \"{mic}\", direction \"{dir}\", dynamic \"{dynamic}\", trigger_mode \"{trig}\"}}\n"
+        ));
+    }
+    text.push_str(")\n");
+    let spec = crate::LibrarySpec::from_styx(&text).expect("parse styx");
+    let patch = crate::PlayerPatch::from_spec(spec);
+    let mut eng = SampleEngine::new(patch, 48_000, "", "");
+    let mut checked = 0;
+    for solo in [None, Some("ROOM".to_string())] {
+        eng.solo_mic = solo;
+        for vel in [1u8, 40, 64, 100, 127] {
+            eng.last_velocity = vel;
+            for note in 0..128u8 {
+                for artic in ["body", "OTHER", "Missing"] {
+                    for dir in ["", "UP"] {
+                        for dynamic in ["", "p"] {
+                            for rr in 0..5 {
+                                let a = eng.find_layer_zone(artic, dir, dynamic, note, rr);
+                                let b = eng.find_layer_zone_scan(artic, dir, dynamic, note, rr);
+                                assert_eq!(a, b, "note {note} vel {vel} artic {artic} dir {dir:?} dyn {dynamic:?} rr {rr}");
+                                checked += 1;
+                            }
+                        }
+                    }
+                }
+                // `trigger_zoned`'s selection, attack and release.
+                for trigger in [ZoneTrigger::Attack, ZoneTrigger::Release] {
+                    for artic in ["", "body"] {
+                        eng.articulation = artic.to_string();
+                        for dir in ["", "up"] {
+                            eng.play_direction = dir.to_string();
+                            assert_eq!(
+                                eng.zoned_selection(note, vel, trigger, true),
+                                eng.zoned_selection(note, vel, trigger, false),
+                                "zoned: note {note} vel {vel} {trigger:?} artic {artic:?} dir {dir:?}"
+                            );
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(checked > 70_000);
+}

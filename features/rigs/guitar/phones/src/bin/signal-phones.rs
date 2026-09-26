@@ -138,6 +138,8 @@ fn open(link: &Arc<PhonesLink>, block: u32) -> Result<Backend, String> {
         // The rig owns the device's rate; ask only for a small block.
         latency: None,
         buffer: Some(block),
+        // Its own process: its block is its own.
+        buffer_lower_only: false,
         input_device: device.clone(),
         output_device: device,
         allow_builtin_mic: false,

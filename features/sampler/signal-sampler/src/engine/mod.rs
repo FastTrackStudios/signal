@@ -622,6 +622,14 @@ pub(crate) enum ZoneTrigger {
 /// Real-time sample playback engine for one sample library section.
 pub struct SampleEngine {
     patch: PlayerPatch,
+    /// Per key (0..128): the attack-trigger zones whose key range covers it,
+    /// in zone order — what `find_layer_zone` looks through instead of every
+    /// zone in the patch (thousands on a sampled piano, scanned per layer per
+    /// note on the audio thread). Built once: the zones never change after
+    /// the engine is made.
+    zone_keys: Box<[Box<[u32]>]>,
+    /// The same, for the release-trigger zones (a note-off's).
+    release_keys: Box<[Box<[u32]>]>,
     cache: SampleCache,
     voices: VoicePool,
     /// Pitch-bend range in semitones (full wheel throw).
@@ -1054,8 +1062,12 @@ impl SampleEngine {
         // Resolve the latched-CC articulation selector once (control-path
         // lookups stay allocation-free at runtime).
         let latched_cc_selector = patch.spec.latched_cc_selector();
+        let zone_keys = zone_key_index(&patch.spec.zones, ZoneTrigger::Attack);
+        let release_keys = zone_key_index(&patch.spec.zones, ZoneTrigger::Release);
 
         Self {
+            zone_keys,
+            release_keys,
             patch,
             cache,
             voices: VoicePool::new(),
@@ -2365,6 +2377,21 @@ fn spec_is_percussion(spec: &crate::spec::LibrarySpec) -> bool {
         "cowbell", "perc", "drum",
     ];
     PERC.iter().any(|p| inst.contains(p))
+}
+
+/// For each key, the `trigger` zones covering it, in zone order (see
+/// `SampleEngine::zone_keys`).
+fn zone_key_index(zones: &[crate::spec::ZoneSpec], trigger: ZoneTrigger) -> Box<[Box<[u32]>]> {
+    let mut keys: Vec<Vec<u32>> = vec![Vec::new(); 128];
+    for (i, z) in zones.iter().enumerate() {
+        if !zone_trigger_matches(z, trigger) {
+            continue;
+        }
+        for k in z.key_min..=z.key_max.min(127) {
+            keys[k as usize].push(i as u32);
+        }
+    }
+    keys.into_iter().map(Vec::into_boxed_slice).collect()
 }
 
 fn zone_trigger_matches(zone: &crate::spec::ZoneSpec, trigger: ZoneTrigger) -> bool {

@@ -138,13 +138,16 @@ pub type DuplexEngine = DuplexAudioEngine;
 #[cfg(all(not(target_arch = "wasm32"), not(any(target_os = "linux", target_os = "macos"))))]
 pub type DuplexEngine = AudioEngine;
 
-/// The native output-only engine ([`start_output_native`](RigProject::start_output_native)).
-/// macOS keeps the cpal engine: CoreAudio's buffer size is per process per
-/// device, so a keys rig asking for 256 frames on the interface the guitar
-/// rig plays through would raise the guitar's buffer with it.
-#[cfg(all(not(target_arch = "wasm32"), target_os = "linux"))]
+/// The native output-only engine ([`start_output_native`](RigProject::start_output_native)):
+/// the duplex engine with no input (on a laptop the "default input" is its
+/// microphone), which reports its render time and every overrun — the cpal
+/// engine reported neither. CoreAudio's buffer size is one per process per
+/// device, so an output-only engine only ever lowers it
+/// (`DuplexConfig::buffer_lower_only`): a keys rig asking for 256 frames on
+/// the interface the guitar rig plays through at 64 keeps 64.
+#[cfg(all(not(target_arch = "wasm32"), any(target_os = "linux", target_os = "macos")))]
 pub type OutputEngine = DuplexAudioEngine;
-#[cfg(all(not(target_arch = "wasm32"), not(target_os = "linux")))]
+#[cfg(all(not(target_arch = "wasm32"), not(any(target_os = "linux", target_os = "macos"))))]
 pub type OutputEngine = AudioEngine;
 
 /// A running duplex (live-input) rig host — `Send`-only under the native

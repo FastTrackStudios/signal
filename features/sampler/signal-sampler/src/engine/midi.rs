@@ -553,14 +553,50 @@ impl SampleEngine {
     ) {
         // Bucket matching zones by mic id so each mic gets its own
         // round-robin within the candidate set.
+        let by_mic = self.zoned_selection(note, velocity, trigger, true);
+        self.trigger_zoned_groups(by_mic, Some(note), velocity, trigger, record_empty_miss);
+    }
+
+    /// The zones `trigger_zoned` fires for `note`, bucketed by mic, in zone
+    /// order. `indexed`: only the zones covering the key (`zone_keys` /
+    /// `release_keys`) — unless the selection ignores the key (a pinned
+    /// articulation, a single-key percussion kit), which scans them all, as
+    /// `indexed = false` always does.
+    pub(crate) fn zoned_selection(
+        &self,
+        note: u8,
+        velocity: u8,
+        trigger: ZoneTrigger,
+        indexed: bool,
+    ) -> std::collections::BTreeMap<String, Vec<usize>> {
         let mut by_mic: std::collections::BTreeMap<String, Vec<usize>> =
             std::collections::BTreeMap::new();
-        for (i, z) in self.patch.spec.zones.iter().enumerate() {
-            if self.zone_selected(z, note, velocity, trigger) {
-                by_mic.entry(z.mic.clone()).or_default().push(i);
+        let key_free = self.trigger_articulation.is_some()
+            || self.pinned_articulation.is_some()
+            || (self.percussion && self.single_attack_key);
+        let index = match trigger {
+            ZoneTrigger::Attack if indexed && !key_free => self.zone_keys.get(note as usize),
+            ZoneTrigger::Release if indexed && !key_free => self.release_keys.get(note as usize),
+            _ => None,
+        };
+        match index {
+            Some(cands) => {
+                for &i in cands.iter() {
+                    let z = &self.patch.spec.zones[i as usize];
+                    if self.zone_selected(z, note, velocity, trigger) {
+                        by_mic.entry(z.mic.clone()).or_default().push(i as usize);
+                    }
+                }
+            }
+            None => {
+                for (i, z) in self.patch.spec.zones.iter().enumerate() {
+                    if self.zone_selected(z, note, velocity, trigger) {
+                        by_mic.entry(z.mic.clone()).or_default().push(i);
+                    }
+                }
             }
         }
-        self.trigger_zoned_groups(by_mic, Some(note), velocity, trigger, record_empty_miss);
+        by_mic
     }
 
     pub(crate) fn trigger_cc_zones(&mut self, controller: u8, old_value: u8, value: u8) {
@@ -1494,6 +1530,93 @@ impl SampleEngine {
     /// Pick the zone index for (articulation, direction, dynamic layer, note),
     /// honouring the solo mic, with simple round-robin over matches by `rr`.
     pub(crate) fn find_layer_zone(
+        &self,
+        artic: &str,
+        direction: &str,
+        dynamic: &str,
+        note: u8,
+        rr: usize,
+    ) -> Option<usize> {
+        // Only the zones covering this key (`zone_keys`, attack triggers, in
+        // zone order): a sampled piano has thousands of zones and this runs
+        // per layer per note on the audio thread — scanning them all cost
+        // ~100 µs a note, a 20-note chord 2 ms, over a 64-frame block's
+        // budget. Same filters, same order, same pick as the full scan
+        // (`find_layer_zone_scan`, kept for the fallback below and the
+        // equivalence test), and nothing allocated.
+        let velocity = self.last_velocity;
+        let zones = &self.patch.spec.zones;
+        let cands = self.zone_keys.get(note as usize).map_or(&[][..], |c| &c[..]);
+        let passes = |z: &crate::spec::ZoneSpec| self.zone_passes(z, artic, direction, dynamic);
+        // VELOCITY-BANDED zones pick by how hard the key was struck (see the
+        // scan); a key covered by no band for this velocity sounds the
+        // nearest band rather than nothing.
+        let mut in_band = 0usize;
+        let mut nearest_band: Option<(i32, usize)> = None;
+        for &i in cands {
+            let z = &zones[i as usize];
+            if !passes(z) {
+                continue;
+            }
+            if velocity >= z.vel_min && velocity <= z.vel_max {
+                in_band += 1;
+            } else {
+                let lo = z.vel_min as i32 - velocity as i32;
+                let hi = velocity as i32 - z.vel_max as i32;
+                let d = lo.max(hi).max(0);
+                if nearest_band.is_none_or(|(bd, _)| d < bd) {
+                    nearest_band = Some((d, i as usize));
+                }
+            }
+        }
+        if in_band > 0 {
+            let mut want = rr % in_band;
+            for &i in cands {
+                let z = &zones[i as usize];
+                if passes(z) && velocity >= z.vel_min && velocity <= z.vel_max {
+                    if want == 0 {
+                        return Some(i as usize);
+                    }
+                    want -= 1;
+                }
+            }
+        }
+        if let Some((_, i)) = nearest_band {
+            return Some(i);
+        }
+        // No zone covers the key: the nearest recorded pitch (the rare
+        // whole-tone-grid library) — the full scan.
+        self.find_layer_zone_scan(artic, direction, dynamic, note, rr)
+    }
+
+    /// Whether zone `z` is one `find_layer_zone` may play for this layer.
+    fn zone_passes(
+        &self,
+        z: &crate::spec::ZoneSpec,
+        artic: &str,
+        direction: &str,
+        dynamic: &str,
+    ) -> bool {
+        if !z.articulation.eq_ignore_ascii_case(artic) {
+            return false;
+        }
+        if !z.direction.is_empty() && !z.direction.eq_ignore_ascii_case(direction) {
+            return false;
+        }
+        if !dynamic.is_empty() && !z.dynamic.is_empty() && !z.dynamic.eq_ignore_ascii_case(dynamic) {
+            return false;
+        }
+        if let Some(solo) = &self.solo_mic {
+            if !z.mic.eq_ignore_ascii_case(solo) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Every zone in the patch, scanned — what `find_layer_zone` does
+    /// through its key index, and its fallback when no zone covers the key.
+    pub(crate) fn find_layer_zone_scan(
         &self,
         artic: &str,
         direction: &str,

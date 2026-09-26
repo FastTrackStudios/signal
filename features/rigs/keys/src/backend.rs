@@ -33,10 +33,24 @@ use crate::KeysRig;
 /// `library.styx`). Used as a fallback when no packs are present. Override with
 /// `FTS_KEYSCAPE_ROOT`.
 const KEYSCAPE_ROOT: &str = "/run/media/AudioHaven/Sampled/Keys/Keyscape";
-/// Root of the built `.signalpack` library (one self-contained pack per
-/// instrument). Preferred over the raw extraction. Override with
-/// `FTS_KEYSCAPE_PACKS`.
-const KEYSCAPE_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs";
+/// The built `.signalpack` library — every pack root below is a folder in
+/// it, so one setting moves them all: `FTS_PACK_LIBRARY` (the sampler's own
+/// library setting — a drive mounted elsewhere, `/Volumes/…` on a Mac), else
+/// the studio machine's mount.
+fn pack_library() -> PathBuf {
+    std::env::var("FTS_PACK_LIBRARY")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map_or_else(|| PathBuf::from("/run/media/AudioHaven/Signal/Libraries"), PathBuf::from)
+}
+
+/// A pack root: its own override variable, else `rel` in the pack library.
+fn pack_root(var: &str, rel: &str) -> String {
+    std::env::var(var)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| pack_library().join(rel).to_string_lossy().into_owned())
+}
 #[derive(Default)]
 struct State {
     presets: Vec<KeysPreset>,
@@ -2684,15 +2698,7 @@ impl KeysRigBackend {
             }
             return false;
         }
-        let prefs = AudioIoPrefs {
-            output_device: String::new(),
-            sample_rate: 0,
-            // 256 frames on desktop; on iOS the fixed-size request rides a
-            // macOS-only CoreAudio property (AVAudioSession owns the IO
-            // buffer there), so ask for the backend default instead.
-            buffer_size: if cfg!(target_os = "ios") { 0 } else { 256 },
-            ..Default::default()
-        };
+        let prefs = keys_audio_prefs();
         // Brand the in-flight state and convert panics into a visible
         // error — phone UIs have no logs, and a silent hang and a
         // swallowed thread panic are otherwise indistinguishable from
@@ -4077,22 +4083,21 @@ fn prefer_packs(presets: Vec<KeysPreset>, specs: Vec<PathBuf>) -> (Vec<KeysPrese
 /// The stored spec path (`.signalpack` or `library.styx`) is handed to the
 /// sample block; `rig.rs` picks the loader by extension.
 fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
-    let packs_root =
-        std::env::var("FTS_KEYSCAPE_PACKS").unwrap_or_else(|_| KEYSCAPE_PACKS_ROOT.into());
+    // The Keyscape packs (one self-contained pack per instrument, preferred
+    // over the raw extraction).
+    let packs_root = pack_root("FTS_KEYSCAPE_PACKS", "Keys/Keyscape/Packs");
     let (mut packs, mut pack_specs) = scan_packs(&packs_root);
     // One engine, one library: the Omnisphere soundsources are loadable into
     // any lane exactly like a Keyscape pack (they're both just sources for
     // the Signal Engine's Soundsource block).
-    let omni_root =
-        std::env::var("FTS_OMNISPHERE_PACKS").unwrap_or_else(|_| OMNISPHERE_PACKS_ROOT.into());
+    let omni_root = pack_root("FTS_OMNISPHERE_PACKS", "Keys/Omnisphere/Packs");
     let (omni, omni_specs) = scan_packs_recursive_as(&omni_root, "Soundsource", "module", "Synth");
     packs.extend(omni);
     pack_specs.extend(omni_specs);
     // The NI Essential Pianos. A pack is a whole lane's worth of instrument
     // (the Piano packs) or its pedal-down resonance layer, which loads on its
     // own so a tight-memory rig can leave it out — see `ni-pianos.styx`.
-    let ni_root =
-        std::env::var("FTS_NI_PIANO_PACKS").unwrap_or_else(|_| NI_PIANO_PACKS_ROOT.into());
+    let ni_root = pack_root("FTS_NI_PIANO_PACKS", "Full/Keys");
     let (ni, ni_specs) = scan_packs_recursive_as(&ni_root, "Grand", "layer", "Keys");
     tracing::info!(packs = ni.len(), "keys rig: NI piano packs");
     packs.extend(ni);
@@ -4207,11 +4212,11 @@ fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
 /// The **Full** tree by default: these are the rig's primary pianos and the
 /// proxy tier is audibly lossy (peak error ~3.7e-2 against source). Point this
 /// at `Libraries/Proxy/Keys` on a machine that cannot spare the disk.
-const NI_PIANO_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Full/Keys";
+// (`Full/Keys` in the pack library — see `pack_root`.)
 
 /// Root of the built Omnisphere soundsource packs — the synth half of the
 /// shared library. Override with `FTS_OMNISPHERE_PACKS`.
-const OMNISPHERE_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
+// (`Keys/Omnisphere/Packs` in the pack library — see `pack_root`.)
 
 /// Enumerate `*.signalpack` files under `root`, at any depth (the Omnisphere
 /// library nests by family; the NI pianos nest by library). The file stem is
@@ -4659,3 +4664,24 @@ mod tests {
         }
     }
 }
+
+/// The keys rig's saved audio settings (`rigs/keys-rig.styx`, the guitar
+/// rig's format: device, rate, buffer), as an output-only engine's prefs —
+/// a synth generates, it has no input to open. Unsaved: the system output at
+/// 48 kHz and 256 frames. On iOS the fixed-size request rides a macOS-only
+/// CoreAudio property (AVAudioSession owns the IO buffer there), so the
+/// backend default is asked for instead.
+fn keys_audio_prefs() -> AudioIoPrefs {
+    let mgr = signal_sampler::rig_manager::RigManager::load(KEYS_RIG_NAME);
+    let mut prefs = AudioIoPrefs::from(&mgr.audio);
+    prefs.want_input = false;
+    prefs.input_device = String::new();
+    prefs.phones_routing = false;
+    if cfg!(target_os = "ios") {
+        prefs.buffer_size = 0;
+    }
+    prefs
+}
+
+/// The keys rig's settings name (`rigs/keys-rig.styx`).
+pub const KEYS_RIG_NAME: &str = "Keys Rig";
