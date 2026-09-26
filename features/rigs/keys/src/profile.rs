@@ -441,6 +441,14 @@ impl KeysProfile {
         resolve: &impl Fn(&str) -> Option<String>,
         module_set: &impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
     ) -> Container {
+        // An authored Omnisphere patch (`.prt_omn` / `.mlt_omn`) is a whole
+        // voice — oscillators or soundsources, filters, envelopes, Harmonia —
+        // not a sample source: the importer builds it (a synthesis-mode patch
+        // as a Wavetable voice), inside the lane's own layer so its fader,
+        // mute and scenes are the lane's as any other.
+        if let Some(lane) = Self::omni_lane(layer, resolve) {
+            return lane;
+        }
         let sources: Vec<signal_synth::Source> = layer
             .module_patches()
             .into_iter()
@@ -467,6 +475,40 @@ impl KeysProfile {
             });
         }
         lane
+    }
+
+    /// `layer` as its Omnisphere patch, when its first module's patch
+    /// resolves to one (`None`: a sample source, or an import that failed —
+    /// logged, and the lane plays what it would have).
+    fn omni_lane(layer: &LayerDef, resolve: &impl Fn(&str) -> Option<String>) -> Option<Container> {
+        let patch = layer.module_patches().into_iter().next().filter(|p| !p.is_empty())?;
+        let path = resolve(&patch)?;
+        let path = std::path::Path::new(&path);
+        let is_patch = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("prt_omn") || e.eq_ignore_ascii_case("mlt_omn"));
+        if !is_patch {
+            return None;
+        }
+        let index = signal_synth::omni_import::SoundsourceIndex::default();
+        match signal_synth::omni_import::load_patch_file(path, &index) {
+            Ok(tree) => {
+                let mut lane = Container::layer(&layer.name).add(tree);
+                if !layer.is_full_range() {
+                    lane = lane.zone(signal_sampler::rig_node::Zone {
+                        key_lo: layer.key_lo,
+                        key_hi: layer.key_hi,
+                        ..signal_sampler::rig_node::Zone::full()
+                    });
+                }
+                Some(lane)
+            }
+            Err(e) => {
+                tracing::warn!(layer = %layer.name, patch = %patch, "keys rig: Omnisphere patch import failed: {e}");
+                None
+            }
+        }
     }
 
     /// The rig's global tail — one shared rotary for the organ, master reverb.
