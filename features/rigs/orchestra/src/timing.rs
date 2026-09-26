@@ -103,11 +103,13 @@ pub fn render_click(
     count_in: Option<CountIn>,
 ) -> Vec<f32> {
     let mut engine = session_guide::GuideEngine::new(session_guide::GuideConfig {
-        enable_beat: true,
-        enable_eighth: false,
-        enable_sixteenth: false,
-        enable_triplet: false,
-        enable_measure_accent: true,
+        // Every beat with the downbeat accented, no subdivisions.
+        // (subdivisions default to off.)
+        click: session_guide::ClickSubdivisions {
+            beat: true,
+            measure_accent: true,
+            ..Default::default()
+        },
         enable_count: count_in.is_some(),
         enable_guide: false,
         ..Default::default()

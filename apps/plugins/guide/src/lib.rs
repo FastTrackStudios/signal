@@ -172,12 +172,10 @@ impl Default for FtsGuide {
         // v0: click + downbeat accent only. Count-in and section guide need
         // a section-built CueSchedule (see crate docs) — hold them off so an
         // accidentally installed schedule can't speak.
+        // (Subdivision clicks default to off in `click.subdivisions`.)
         let config = GuideConfig {
             enable_count: false,
             enable_guide: false,
-            enable_eighth: false,
-            enable_sixteenth: false,
-            enable_triplet: false,
             ..Default::default()
         };
         Self {
