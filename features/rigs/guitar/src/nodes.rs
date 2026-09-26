@@ -478,7 +478,6 @@ fn settle_drives(
 /// The rig's sample rate the drive curves are cached at — levels are set
 /// at build time, before any rig says what rate it runs.
 
-
 /// Every amp and drive block's Output Level, written into its trims as the
 /// chain is built: the amp's from its module snapshot (via the pool preset),
 /// a pedal's from its drive option — each levelled on its own by
@@ -506,7 +505,9 @@ fn apply_block_levels(
             continue;
         }
         let level = match block.block_type {
-            BlockType::Amp if block.name.eq_ignore_ascii_case("Amp R") => pool_level(&patch.preset2),
+            BlockType::Amp if block.name.eq_ignore_ascii_case("Amp R") => {
+                pool_level(&patch.preset2)
+            }
             BlockType::Amp => pool_level(&patch.preset),
             BlockType::Drive | BlockType::Boost => drive_option_level(drives, &block.nam),
             _ => continue,
@@ -520,7 +521,11 @@ fn apply_block_levels(
 
 /// A drive capture's Output Level: the option whose capture it is.
 pub(crate) fn drive_option_level(drives: &[DrivePresetDef], nam: &str) -> f32 {
-    let file = |p: &str| std::path::Path::new(p).file_name().map(std::ffi::OsStr::to_owned);
+    let file = |p: &str| {
+        std::path::Path::new(p)
+            .file_name()
+            .map(std::ffi::OsStr::to_owned)
+    };
     drives
         .iter()
         .flat_map(|p| &p.options)

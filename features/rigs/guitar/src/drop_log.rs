@@ -22,7 +22,7 @@ use std::io::Write;
 use std::sync::Mutex;
 
 use signal_rig_host::lock::LockExt;
-use signal_sampler::{clock_ns, DropEvent, DropKind};
+use signal_sampler::{DropEvent, DropKind, clock_ns};
 
 /// How long after a switch its drops are counted for its summary.
 const WINDOW_NS: u64 = 10_000_000_000;
@@ -63,7 +63,10 @@ pub fn switched(from: &str, to: &str, via: &str, settle_ms: f64) {
         let keep = at_ns.saturating_sub(60_000_000_000);
         s.retain(|w| w.at_ns >= keep || !w.reported);
     }
-    write_line(at_ns, &format!("SWITCH\t{from} → {to}\tvia {via}\t(settle {settle_ms:.1} ms)"));
+    write_line(
+        at_ns,
+        &format!("SWITCH\t{from} → {to}\tvia {via}\t(settle {settle_ms:.1} ms)"),
+    );
 }
 
 /// The pump's side: what it has collected so far.
@@ -83,7 +86,13 @@ impl DropLog {
         let now = clock_ns();
         for e in events {
             if self.seen > 0 && e.seq > self.seen {
-                write_line(e.at_ns, &format!("LOST\t{} drops not logged (the ring overflowed)", e.seq - self.seen));
+                write_line(
+                    e.at_ns,
+                    &format!(
+                        "LOST\t{} drops not logged (the ring overflowed)",
+                        e.seq - self.seen
+                    ),
+                );
             }
             self.seen = e.seq + 1;
             let (kind, detail) = match e.kind {
@@ -101,7 +110,10 @@ impl DropLog {
             // The switch it followed, if one was recent.
             let after = {
                 let mut s = SWITCHES.lock_ok();
-                let hit = s.iter_mut().rev().find(|w| w.at_ns <= e.at_ns && e.at_ns - w.at_ns < WINDOW_NS);
+                let hit = s
+                    .iter_mut()
+                    .rev()
+                    .find(|w| w.at_ns <= e.at_ns && e.at_ns - w.at_ns < WINDOW_NS);
                 hit.map(|w| {
                     let dt = (e.at_ns - w.at_ns) as f64 / 1e9;
                     if let Some(b) = BUCKETS.iter().position(|(lo, hi)| dt >= *lo && dt < *hi) {
@@ -112,7 +124,10 @@ impl DropLog {
                 })
             }
             .unwrap_or_else(|| "no recent switch".to_string());
-            write_line(e.at_ns, &format!("DROP\t{kind}\t{detail}\t{after}\tpatch {patch}"));
+            write_line(
+                e.at_ns,
+                &format!("DROP\t{kind}\t{detail}\t{after}\tpatch {patch}"),
+            );
 
             if e.at_ns.saturating_sub(self.minute_start_ns) >= 60_000_000_000 {
                 self.flush_minute(e.at_ns);
@@ -193,11 +208,17 @@ fn path() -> std::path::PathBuf {
 fn write_line(at_ns: u64, text: &str) {
     let now_ns = clock_ns();
     let wall = std::time::SystemTime::now()
-        .checked_sub(std::time::Duration::from_nanos(now_ns.saturating_sub(at_ns)))
+        .checked_sub(std::time::Duration::from_nanos(
+            now_ns.saturating_sub(at_ns),
+        ))
         .unwrap_or_else(std::time::SystemTime::now);
     let stamp = format_local(wall);
     let line = format!("{stamp}  {text}\n");
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path()) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path())
+    {
         let _ = f.write_all(line.as_bytes());
     }
 }
@@ -255,7 +276,14 @@ mod tests {
         let at = clock_ns();
         let mut log = DropLog::default();
         log.record(
-            &[DropEvent { seq: 0, at_ns: at + 1, kind: DropKind::OverBudget, render_ns: 3_000_000, budget_ns: 2_666_000, frames: 128 }],
+            &[DropEvent {
+                seq: 0,
+                at_ns: at + 1,
+                kind: DropKind::OverBudget,
+                render_ns: 3_000_000,
+                budget_ns: 2_666_000,
+                frames: 128,
+            }],
             "Drive",
         );
         let s = SWITCHES.lock_ok();

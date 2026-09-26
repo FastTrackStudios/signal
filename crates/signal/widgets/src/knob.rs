@@ -160,7 +160,11 @@ pub fn Knob(
 
     let apply = move |norm: f64| {
         let n = norm.clamp(0.0, 1.0) as f32;
-        on_change.call(if log { min * (max / min).powf(n) } else { n.mul_add(range, min) });
+        on_change.call(if log {
+            min * (max / min).powf(n)
+        } else {
+            n.mul_add(range, min)
+        });
     };
 
     rsx! {

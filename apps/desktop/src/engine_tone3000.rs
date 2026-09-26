@@ -85,7 +85,10 @@ pub(crate) async fn account_callback(
 pub(crate) fn callback_listen_addr(account: &signal_account::Account) -> String {
     url::Url::parse(&account.config().redirect_uri)
         .ok()
-        .and_then(|u| u.host_str().map(|h| format!("{h}:{}", u.port().unwrap_or(4040))))
+        .and_then(|u| {
+            u.host_str()
+                .map(|h| format!("{h}:{}", u.port().unwrap_or(4040)))
+        })
         .unwrap_or_else(|| "127.0.0.1:4040".to_string())
 }
 

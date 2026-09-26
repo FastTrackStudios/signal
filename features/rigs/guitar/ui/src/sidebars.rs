@@ -13,8 +13,8 @@ use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{PatchInfo, PerformanceModel, PresetInfo};
 
 use crate::kit::{ListRow, MenuItem, Picked};
-use crate::theme::LINE;
 use crate::perform::folder_color;
+use crate::theme::LINE;
 
 /// Section eyebrow shared by every sidebar group.
 
@@ -46,7 +46,11 @@ fn PresetCell(preset: String, variation: String) -> Element {
 }
 
 #[component]
-fn PanelLabel(label: &'static str, #[props(default)] count: String, #[props(default)] children: Element) -> Element {
+fn PanelLabel(
+    label: &'static str,
+    #[props(default)] count: String,
+    #[props(default)] children: Element,
+) -> Element {
     rsx! {
         div { style: "padding: 8px 12px; flex: 1 1 0; min-width: 0;",
             crate::kit::SectionHeader { label: label.to_string(), count, {children} }
@@ -67,7 +71,11 @@ where
 
 /// A patch's menu: rename, delete.
 fn patch_items(name: &str, all: &[String]) -> Vec<MenuItem> {
-    let others: Vec<String> = all.iter().filter(|n| !n.eq_ignore_ascii_case(name)).cloned().collect();
+    let others: Vec<String> = all
+        .iter()
+        .filter(|n| !n.eq_ignore_ascii_case(name))
+        .cloned()
+        .collect();
     vec![
         MenuItem::head(format!("Patch · {name}")),
         MenuItem::name("rename", "Rename…", "Rename", name, others),
@@ -77,7 +85,11 @@ fn patch_items(name: &str, all: &[String]) -> Vec<MenuItem> {
 
 /// A stack's menu: rename, delete (its patches stay).
 fn stack_items(name: &str, all: &[String]) -> Vec<MenuItem> {
-    let others: Vec<String> = all.iter().filter(|n| !n.eq_ignore_ascii_case(name)).cloned().collect();
+    let others: Vec<String> = all
+        .iter()
+        .filter(|n| !n.eq_ignore_ascii_case(name))
+        .cloned()
+        .collect();
     vec![
         MenuItem::head(format!("Stack · {name}")),
         MenuItem::name("rename", "Rename…", "Rename", name, others),
@@ -87,7 +99,11 @@ fn stack_items(name: &str, all: &[String]) -> Vec<MenuItem> {
 
 /// A profile's menu: load, rename, duplicate, delete (refused while it plays).
 fn profile_items(p: &signal_guitar_proto::ProfileEntry, all: &[String]) -> Vec<MenuItem> {
-    let others: Vec<String> = all.iter().filter(|n| !n.eq_ignore_ascii_case(&p.name)).cloned().collect();
+    let others: Vec<String> = all
+        .iter()
+        .filter(|n| !n.eq_ignore_ascii_case(&p.name))
+        .cloned()
+        .collect();
     vec![
         MenuItem::head(format!("Profile · {}", p.name)),
         MenuItem::run("load", "Load").unless(p.active.then(|| "Playing".to_string())),

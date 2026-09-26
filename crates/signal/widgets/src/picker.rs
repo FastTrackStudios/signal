@@ -70,7 +70,8 @@ pub fn Picker(
     /// Width of the closed button. The list matches it unless the option text
     /// needs more, so a long capture name is readable when opened even in a
     /// narrow slot.
-    #[props(default = String::new())] width: String,
+    #[props(default = String::new())]
+    width: String,
     #[props(default = false)] disabled: bool,
 ) -> Element {
     let mut open = use_signal(|| false);

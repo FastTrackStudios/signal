@@ -211,7 +211,10 @@ pub fn run(command: Command) -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        Command::LevelModules { dry_run, sample_rate } => {
+        Command::LevelModules {
+            dry_run,
+            sample_rate,
+        } => {
             let started = std::time::Instant::now();
             let results = signal_guitar::levelling::level_modules(sample_rate, dry_run);
             let mut failed = 0;
@@ -228,7 +231,11 @@ pub fn run(command: Command) -> ExitCode {
                 "\n{} modules in {:.0}s, {failed} failed{}",
                 results.len(),
                 started.elapsed().as_secs_f32(),
-                if dry_run { " (dry run — nothing written)" } else { "" }
+                if dry_run {
+                    " (dry run — nothing written)"
+                } else {
+                    ""
+                }
             );
             ExitCode::SUCCESS
         }
@@ -254,10 +261,20 @@ pub fn run(command: Command) -> ExitCode {
             println!("\nPatches:");
             for p in &profiles {
                 for patch in &p.patches {
-                    println!("  {:<8} {:<22} → {} · {}", p.name, patch.name, patch.rig_preset, patch.snapshot);
+                    println!(
+                        "  {:<8} {:<22} → {} · {}",
+                        p.name, patch.name, patch.rig_preset, patch.snapshot
+                    );
                 }
             }
-            println!("\nPresets now: {}", comp.presets.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", "));
+            println!(
+                "\nPresets now: {}",
+                comp.presets
+                    .iter()
+                    .map(|p| p.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
             if write {
                 signal_guitar::library::RigLibrary::save_compositions(&comp);
                 for p in &profiles {
@@ -313,9 +330,17 @@ pub fn run(command: Command) -> ExitCode {
                 results.len(),
                 started.elapsed().as_secs_f64(),
                 failed,
-                if dry_run { " (dry run — nothing written)" } else { "" }
+                if dry_run {
+                    " (dry run — nothing written)"
+                } else {
+                    ""
+                }
             );
-            if failed == 0 { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+            if failed == 0 {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
         }
         Command::LevelPresets {
             dry_run,

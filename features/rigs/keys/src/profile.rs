@@ -481,13 +481,16 @@ impl KeysProfile {
     /// resolves to one (`None`: a sample source, or an import that failed —
     /// logged, and the lane plays what it would have).
     fn omni_lane(layer: &LayerDef, resolve: &impl Fn(&str) -> Option<String>) -> Option<Container> {
-        let patch = layer.module_patches().into_iter().next().filter(|p| !p.is_empty())?;
+        let patch = layer
+            .module_patches()
+            .into_iter()
+            .next()
+            .filter(|p| !p.is_empty())?;
         let path = resolve(&patch)?;
         let path = std::path::Path::new(&path);
-        let is_patch = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|e| e.eq_ignore_ascii_case("prt_omn") || e.eq_ignore_ascii_case("mlt_omn"));
+        let is_patch = path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+            e.eq_ignore_ascii_case("prt_omn") || e.eq_ignore_ascii_case("mlt_omn")
+        });
         if !is_patch {
             return None;
         }

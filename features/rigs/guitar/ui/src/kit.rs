@@ -28,7 +28,8 @@ use signal_widgets::PopupHost;
 
 use crate::theme::{
     DANGER, DANGER_INK, DANGER_LINE, DIM, EYEBROW, FAINT, FIELD, FOCUS_BG, FOCUS_FG, LINE,
-    LINE_STRONG, LIVE, LIVE_BG, MENU, MODIFIED, MUTED, PRIMARY, R_MD, R_SM, T_BODY, T_META, T_SMALL, TEXT,
+    LINE_STRONG, LIVE, LIVE_BG, MENU, MODIFIED, MUTED, PRIMARY, R_MD, R_SM, T_BODY, T_META,
+    T_SMALL, TEXT,
 };
 
 // ── Small pieces ───────────────────────────────────────────────────────────
@@ -92,14 +93,22 @@ pub fn Button(
     #[props(default)] title: String,
     onclick: EventHandler<()>,
 ) -> Element {
-    let (pad, font) = if small { ("3px 8px", T_SMALL) } else { ("6px 12px", T_BODY) };
+    let (pad, font) = if small {
+        ("3px 8px", T_SMALL)
+    } else {
+        ("6px 12px", T_BODY)
+    };
     let (bg, fg, border) = match (primary, disabled) {
         (_, true) => ("transparent", FAINT, LINE),
         (true, false) => (PRIMARY, "#ffffff", PRIMARY),
         (false, false) => ("transparent", TEXT, "#34343c"),
     };
     let cursor = if disabled { "default" } else { "pointer" };
-    let flex = if grow { "flex: 1 1 0; min-width: 0;" } else { "flex-shrink: 0;" };
+    let flex = if grow {
+        "flex: 1 1 0; min-width: 0;"
+    } else {
+        "flex-shrink: 0;"
+    };
     rsx! {
         button {
             style: "{flex} padding: {pad}; border-radius: {R_SM}; font-size: {font}; font-weight: 600; \
@@ -144,7 +153,11 @@ pub fn IconButton(
         MUTED
     };
     let bg = if active { FOCUS_BG } else { "transparent" };
-    let rotate = if flip { "transform: rotate(180deg);" } else { "" };
+    let rotate = if flip {
+        "transform: rotate(180deg);"
+    } else {
+        ""
+    };
     let glyph = (size / 2).max(10);
     let cursor = if disabled { "default" } else { "pointer" };
     rsx! {
@@ -233,7 +246,11 @@ pub fn NamePrompt(
     on_done: EventHandler<Option<String>>,
 ) -> Element {
     let mut text = use_signal(|| initial.clone());
-    let problem = if allow_blank { None } else { name_problem(&text(), &taken) };
+    let problem = if allow_blank {
+        None
+    } else {
+        name_problem(&text(), &taken)
+    };
     let ok = problem.is_none();
     let commit = move || {
         if ok {
@@ -422,7 +439,14 @@ pub struct Picked {
 const MENU_W: f64 = 236.0;
 
 /// Show `items` at client `(x, y)` through the host.
-fn open_menu(host: PopupHost, x: f64, y: f64, items: Vec<MenuItem>, on_pick: EventHandler<Picked>, on_closed: impl Fn() + 'static) {
+fn open_menu(
+    host: PopupHost,
+    x: f64,
+    y: f64,
+    items: Vec<MenuItem>,
+    on_pick: EventHandler<Picked>,
+    on_closed: impl Fn() + 'static,
+) {
     host.open(
         x,
         y,
@@ -452,7 +476,12 @@ fn origin_of(e: &MouseEvent) -> (f64, f64) {
 /// Open `items` as a context menu at the pointer (a right-click on a row).
 /// `host` is captured at render — looking it up here would be a hook
 /// called from an event.
-pub fn context_menu(host: Option<PopupHost>, e: &MouseEvent, items: Vec<MenuItem>, on_pick: EventHandler<Picked>) {
+pub fn context_menu(
+    host: Option<PopupHost>,
+    e: &MouseEvent,
+    items: Vec<MenuItem>,
+    on_pick: EventHandler<Picked>,
+) {
     if items.is_empty() {
         return;
     }
@@ -494,7 +523,11 @@ pub fn ActionMenu(
     let host = PopupHost::try_use();
     let mut open = use_signal(|| false);
     let border = if bare { "transparent" } else { LINE };
-    let (fg, bg) = if open() { (FOCUS_FG, FOCUS_BG) } else { (MUTED, "transparent") };
+    let (fg, bg) = if open() {
+        (FOCUS_FG, FOCUS_BG)
+    } else {
+        (MUTED, "transparent")
+    };
     let glyph = (size * 3 / 5).max(10);
     rsx! {
         div { style: "position: relative; display: flex; flex-shrink: 0;",
@@ -546,7 +579,11 @@ pub fn ActionMenu(
 /// The menu's contents: its items, or — once a naming item is chosen — the
 /// name field in their place.
 #[component]
-pub fn MenuPanel(items: Vec<MenuItem>, on_pick: EventHandler<Picked>, on_close: EventHandler<()>) -> Element {
+pub fn MenuPanel(
+    items: Vec<MenuItem>,
+    on_pick: EventHandler<Picked>,
+    on_close: EventHandler<()>,
+) -> Element {
     let mut naming = use_signal(|| None::<usize>);
     let mut armed = use_signal(|| None::<usize>);
     let row = format!(
@@ -562,7 +599,18 @@ pub fn MenuPanel(items: Vec<MenuItem>, on_pick: EventHandler<Picked>, on_close: 
     );
 
     if let Some(i) = naming() {
-        if let Some(MenuItem { id, label, kind: ItemKind::Name { initial, confirm, taken }, .. }) = items.get(i).cloned() {
+        if let Some(MenuItem {
+            id,
+            label,
+            kind:
+                ItemKind::Name {
+                    initial,
+                    confirm,
+                    taken,
+                },
+            ..
+        }) = items.get(i).cloned()
+        {
             return rsx! {
                 div { style: "{panel} padding: 8px; gap: 6px;",
                     onclick: move |e: MouseEvent| e.stop_propagation(),
@@ -695,7 +743,11 @@ pub fn ListRow(
     } else {
         ("transparent", if small { MUTED } else { TEXT })
     };
-    let (title_size, pad) = if small { ("12px", "5px 8px") } else { ("13px", "7px 8px") };
+    let (title_size, pad) = if small {
+        ("12px", "5px 8px")
+    } else {
+        ("13px", "7px 8px")
+    };
     let weight = if small { 500 } else { 600 };
     let host = PopupHost::try_use();
     let has_menu = !menu.is_empty() && on_menu.is_some();
@@ -775,7 +827,11 @@ const SEARCH_AFTER: usize = 8;
 
 /// The list a preset bar drops: its options, grouped, searchable when long.
 #[component]
-pub fn PickList(options: Vec<PickOption>, on_pick: EventHandler<usize>, on_close: EventHandler<()>) -> Element {
+pub fn PickList(
+    options: Vec<PickOption>,
+    on_pick: EventHandler<usize>,
+    on_close: EventHandler<()>,
+) -> Element {
     let mut query = use_signal(String::new);
     let q = query();
     let words: Vec<String> = q.split_whitespace().map(str::to_lowercase).collect();
@@ -926,9 +982,15 @@ pub fn PresetBar(
     };
     // The box, and the hairlines between its parts: none on a heading.
     let (frame, sep) = if large {
-        ("border: none; background: transparent;".to_string(), "transparent")
+        (
+            "border: none; background: transparent;".to_string(),
+            "transparent",
+        )
     } else {
-        (format!("border: 1px solid {LINE_STRONG}; background: {FIELD};"), LINE)
+        (
+            format!("border: 1px solid {LINE_STRONG}; background: {FIELD};"),
+            LINE,
+        )
     };
     let (radius, name_pad, menu_pad) = if compact {
         ("4px", "5px", "0px")
@@ -938,7 +1000,11 @@ pub fn PresetBar(
         ("8px", "9px", "3px")
     };
     let drop_bg = if open() { FOCUS_BG } else { "transparent" };
-    let empty = if placeholder.is_empty() { "—".to_string() } else { placeholder.clone() };
+    let empty = if placeholder.is_empty() {
+        "—".to_string()
+    } else {
+        placeholder.clone()
+    };
     let toggle = {
         let options = options.clone();
         move |e: &MouseEvent| {

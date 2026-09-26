@@ -40,7 +40,10 @@ fn pack_library() -> PathBuf {
     std::env::var("FTS_PACK_LIBRARY")
         .ok()
         .filter(|s| !s.is_empty())
-        .map_or_else(|| PathBuf::from("/run/media/AudioHaven/Signal/Libraries"), PathBuf::from)
+        .map_or_else(
+            || PathBuf::from("/run/media/AudioHaven/Signal/Libraries"),
+            PathBuf::from,
+        )
 }
 
 /// The raw sample and patch tree (the extractions the packs were built from,
@@ -50,7 +53,10 @@ fn sampled_root() -> PathBuf {
     std::env::var("FTS_SAMPLED_ROOT")
         .ok()
         .filter(|s| !s.is_empty())
-        .map_or_else(|| PathBuf::from("/run/media/AudioHaven/Sampled"), PathBuf::from)
+        .map_or_else(
+            || PathBuf::from("/run/media/AudioHaven/Sampled"),
+            PathBuf::from,
+        )
 }
 
 /// A root in the sampled tree: its own override variable, else `rel` in it.
@@ -4120,8 +4126,7 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
     packs.extend(ni);
     pack_specs.extend(ni_specs);
     // Authored Omnisphere patches — these open into a whole layer.
-    let patch_root =
-        sampled_path("FTS_OMNISPHERE_PATCHES", OMNISPHERE_PATCHES_REL);
+    let patch_root = sampled_path("FTS_OMNISPHERE_PATCHES", OMNISPHERE_PATCHES_REL);
     let (patches, patch_specs) = scan_omni_patches(&patch_root);
     tracing::info!(patches = patches.len(), "keys rig: omnisphere patches");
     packs.extend(patches);
@@ -4171,7 +4176,8 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
 /// Root of the Omnisphere patch library (`.prt_omn` presets — the authored
 /// patches, as opposed to raw soundsources). Override with
 /// `FTS_OMNISPHERE_PATCHES`.
-const OMNISPHERE_PATCHES_REL: &str = "Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches";
+const OMNISPHERE_PATCHES_REL: &str =
+    "Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches";
 
 /// Enumerate `.prt_omn` patches under `root` — the **module presets**: an
 /// authored voice (source + filter + envelopes + unison) that loads onto a

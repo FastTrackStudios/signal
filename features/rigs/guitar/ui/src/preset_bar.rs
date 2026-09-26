@@ -18,7 +18,11 @@ use crate::theme::{FAINT, FIELD, LINE, LINE_STRONG, SIDEBAR, SIDEBAR_W, TEXT};
 /// A preset's menu: rename, duplicate, delete (refused while a patch plays
 /// it).
 fn preset_items(p: &PresetEntry, all: &[String]) -> Vec<MenuItem> {
-    let others: Vec<String> = all.iter().filter(|n| !n.eq_ignore_ascii_case(&p.name)).cloned().collect();
+    let others: Vec<String> = all
+        .iter()
+        .filter(|n| !n.eq_ignore_ascii_case(&p.name))
+        .cloned()
+        .collect();
     vec![
         MenuItem::head(format!("Preset · {}", p.name)),
         MenuItem::name("rename", "Rename…", "Rename", &p.name, others),

@@ -1067,9 +1067,9 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode, MacroKnobView, MacroResult,
-        MacroSave, MacroTune,
-        PartOverride, PatchInfo, PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
+        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode,
+        MacroKnobView, MacroResult, MacroSave, MacroTune, PartOverride, PatchInfo,
+        PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
     };
 
     /// One live rig change. Every variant carries **full state** (idempotent
@@ -1471,7 +1471,13 @@ pub mod rig {
         /// Delete a module preset — refused while anything refers to it.
         fn delete_module_preset(&self, module: String, name: String);
         /// Rename one snapshot of a module preset; references follow.
-        fn rename_module_snapshot(&self, module: String, preset: String, old: String, new_name: String);
+        fn rename_module_snapshot(
+            &self,
+            module: String,
+            preset: String,
+            old: String,
+            new_name: String,
+        );
         /// Delete one snapshot — refused for the last one, or while a
         /// preset or patch names it.
         fn delete_module_snapshot(&self, module: String, preset: String, snapshot: String);

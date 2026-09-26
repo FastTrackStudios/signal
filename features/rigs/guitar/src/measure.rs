@@ -51,7 +51,12 @@ pub fn apply_chain_bypass(prig: &ProfileRig) {
         return;
     };
     let ids = prig.active_block_ids();
-    for (block, id) in patch.chain.iter().filter(|b| b.has_backend()).zip(ids.iter()) {
+    for (block, id) in patch
+        .chain
+        .iter()
+        .filter(|b| b.has_backend())
+        .zip(ids.iter())
+    {
         if block.bypassed {
             prig.rig().set_block_slot_bypass(id, true);
         }
@@ -77,7 +82,11 @@ pub fn patch_lufs(patch: &RigPatch, sample_rate: u32) -> Option<f32> {
 /// `patch` with every volume block's pan at the centre.
 fn centre_pans(patch: &RigPatch) -> RigPatch {
     let mut p = patch.clone();
-    for b in p.chain.iter_mut().filter(|b| b.block_type == signal_proto::BlockType::Volume) {
+    for b in p
+        .chain
+        .iter_mut()
+        .filter(|b| b.block_type == signal_proto::BlockType::Volume)
+    {
         for param in b.params.iter_mut().filter(|x| x.name == "pan") {
             param.value = "0".to_string();
         }

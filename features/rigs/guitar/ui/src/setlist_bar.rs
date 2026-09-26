@@ -46,7 +46,11 @@ use crate::theme::{
 /// delete (refused for the only one), and the library.
 fn set_items(sets: &[String], index: usize) -> Vec<MenuItem> {
     let name = sets.get(index).cloned().unwrap_or_default();
-    let others: Vec<String> = sets.iter().filter(|n| !n.eq_ignore_ascii_case(&name)).cloned().collect();
+    let others: Vec<String> = sets
+        .iter()
+        .filter(|n| !n.eq_ignore_ascii_case(&name))
+        .cloned()
+        .collect();
     vec![
         MenuItem::head(format!("Setlist · {name}")),
         MenuItem::name("rename", "Rename…", "Rename", &name, others),
@@ -60,7 +64,8 @@ fn set_items(sets: &[String], index: usize) -> Vec<MenuItem> {
         MenuItem::name("new", "New setlist…", "Create", "", sets.to_vec()),
         MenuItem::sep(),
         MenuItem::run("up", "Move up the list").unless((index == 0).then(|| "First".to_string())),
-        MenuItem::run("down", "Move down the list").unless((index + 1 >= sets.len()).then(|| "Last".to_string())),
+        MenuItem::run("down", "Move down the list")
+            .unless((index + 1 >= sets.len()).then(|| "Last".to_string())),
         MenuItem::delete(
             "delete",
             "Delete setlist",
@@ -162,7 +167,10 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                     .find(|x| x.name.eq_ignore_ascii_case(patch))
                     .map(|x| x.stack.clone())
             });
-        (patch.to_string(), stack.map_or(DIM, |s| crate::perform::folder_color(&s).0))
+        (
+            patch.to_string(),
+            stack.map_or(DIM, |s| crate::perform::folder_color(&s).0),
+        )
     };
 
     rsx! {

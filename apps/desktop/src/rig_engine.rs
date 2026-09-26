@@ -14,12 +14,12 @@
 use std::sync::{Arc, OnceLock};
 
 use architect::rig::RigBackend as _;
+use signal_account_proto::account::AccountAuthClient;
 use signal_guitar::GuitarRigBackend;
 use signal_guitar::proto::audio::AudioSettingsClient;
 use signal_guitar::proto::rig::{Rig as _, RigClient, RigStreamClient};
 #[cfg(feature = "signal-keys-rig")]
 use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
-use signal_account_proto::account::AccountAuthClient;
 use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
 
 /// The embedded rig: the backend + the established in-process clients.

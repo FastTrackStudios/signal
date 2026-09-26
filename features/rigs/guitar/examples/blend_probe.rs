@@ -41,15 +41,31 @@ fn render(patch: &RigPatch, di: &[f32]) -> Option<Vec<f32>> {
             .collect();
         println!("  chain(has_backend) {names:?}");
         println!("  live ids           {:?}", prig.active_block_ids());
-        for b in patch.chain.iter().filter(|b| b.has_backend() && !b.bypassed) {
-            println!("    {:<14} {:?} impl={:?} params={:?}", b.name, b.block_type, b.implementation(), b.params.iter().map(|p| format!("{}={}", p.name, p.value)).collect::<Vec<_>>());
+        for b in patch
+            .chain
+            .iter()
+            .filter(|b| b.has_backend() && !b.bypassed)
+        {
+            println!(
+                "    {:<14} {:?} impl={:?} params={:?}",
+                b.name,
+                b.block_type,
+                b.implementation(),
+                b.params
+                    .iter()
+                    .map(|p| format!("{}={}", p.name, p.value))
+                    .collect::<Vec<_>>()
+            );
         }
     }
     if std::env::var_os("DUMP_SLOTS").is_some() {
         for id in prig.active_block_ids() {
             let d = prig.with_active_block_instance(&id, |inst| {
                 let ps = inst.params();
-                let vals: Vec<String> = ps.iter().map(|p| format!("{}={:?}", p.name, inst.param_value(p.id))).collect();
+                let vals: Vec<String> = ps
+                    .iter()
+                    .map(|p| format!("{}={:?}", p.name, inst.param_value(p.id)))
+                    .collect();
                 format!("{} {:?}", inst.descriptor().name, vals)
             });
             println!("    slot {id}: {d:?}");
@@ -112,9 +128,10 @@ fn main() {
             let blend = snap.modules.iter().any(|m| {
                 comp.modules.iter().any(|mp| {
                     mp.name.eq_ignore_ascii_case(&m.preset)
-                        && mp.snapshots.iter().any(|s| {
-                            s.name.eq_ignore_ascii_case(&m.snapshot) && !s.nam2.is_empty()
-                        })
+                        && mp
+                            .snapshots
+                            .iter()
+                            .any(|s| s.name.eq_ignore_ascii_case(&m.snapshot) && !s.nam2.is_empty())
                 })
             });
             if !blend {
@@ -128,7 +145,9 @@ fn main() {
             };
             def.patches = vec![p];
             let built = signal_guitar::nodes::profile_from_library(&def, lib_drives);
-            let Some(patch) = built.patches.first() else { continue };
+            let Some(patch) = built.patches.first() else {
+                continue;
+            };
             // Raw: without the snapshot's level, so each branch reads as built.
             let mut patch = patch.clone();
             for b in &mut patch.chain {
@@ -143,7 +162,10 @@ fn main() {
             println!("\n== {} · {} ==", preset.name, snap.name);
             for b in &patch.chain {
                 if b.name.contains("Trim") || b.name.contains("Volume") {
-                    println!("  {:<12} bypassed={:<5} params={:?}", b.name, b.bypassed, b.params);
+                    println!(
+                        "  {:<12} bypassed={:<5} params={:?}",
+                        b.name, b.bypassed, b.params
+                    );
                 }
                 if b.name.contains("Amp") || b.name.contains("Cab") {
                     let file = |p: &str| {
@@ -182,7 +204,8 @@ fn main() {
             if std::env::var_os("MINIMAL").is_some() {
                 let keep = |names: &[&str], trim: &str| {
                     let mut p = patch.clone();
-                    p.chain.retain(|b| names.iter().any(|n| b.name.eq_ignore_ascii_case(n)));
+                    p.chain
+                        .retain(|b| names.iter().any(|n| b.name.eq_ignore_ascii_case(n)));
                     for b in &mut p.chain {
                         if b.name.eq_ignore_ascii_case("Patch Trim") {
                             b.params[0].value = trim.into();
@@ -190,7 +213,8 @@ fn main() {
                     }
                     p
                 };
-                let first = render(&keep(&["Amp L", "Amp R", "Patch Trim"], "-40"), &di).map(|x| lufs(&x));
+                let first =
+                    render(&keep(&["Amp L", "Amp R", "Patch Trim"], "-40"), &di).map(|x| lufs(&x));
                 println!("  MIN first-render L+R trim-40 {first:?}");
                 for (names, label) in [
                     (&["Amp L", "Amp R", "Patch Trim"][..], "L+R+trim"),
@@ -215,7 +239,13 @@ fn main() {
             }
             if let Some(h) = render(&hot, &di) {
                 let pk = |x: &[f32]| x.iter().fold(0.0f32, |m, v| m.max(v.abs()));
-                println!("  blend with Patch Trim +10: {:6.1} LUFS  peak {:.4} vs {:.4}  identical={}", lufs(&h), pk(&h), pk(&both), h == both);
+                println!(
+                    "  blend with Patch Trim +10: {:6.1} LUFS  peak {:.4} vs {:.4}  identical={}",
+                    lufs(&h),
+                    pk(&h),
+                    pk(&both),
+                    h == both
+                );
             }
             if let Some(h) = render(&with_bypass(&hot, &["Amp R"]), &di) {
                 println!("  L alone with Patch Trim +10: {:6.1} LUFS", lufs(&h));

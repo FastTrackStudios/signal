@@ -199,8 +199,7 @@ impl Tone3000Backend {
     /// a reason to fail the call.
     async fn brokered_client(&self) -> Option<api::Client> {
         let token = self.brokered_token().await?;
-        let mut builder =
-            api::Client::builder(&self.inner.cfg.publishable_key).access_token(token);
+        let mut builder = api::Client::builder(&self.inner.cfg.publishable_key).access_token(token);
         if let Some(base) = &self.inner.cfg.base_url {
             builder = builder.base_url(base.clone());
         }

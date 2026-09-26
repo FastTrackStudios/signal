@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use dioxus::prelude::*;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
-use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
+use objc2::{MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{NSApplication, NSMenu, NSMenuItem};
 use objc2_foundation::NSString;
 
@@ -109,10 +109,17 @@ fn install(mtm: MainThreadMarker) -> bool {
     // Audio Settings… ⌘, — second in the app menu, after "About", where
     // every Mac keeps its settings; the app's own flyout beside it on ⌥⌘,.
     if let Some(app_menu) = main_menu.itemAtIndex(0).and_then(|i| i.submenu()) {
-        let audio = action_item(mtm, "Audio Settings…", sel!(openAudioSettings:), ",", &target);
+        let audio = action_item(
+            mtm,
+            "Audio Settings…",
+            sel!(openAudioSettings:),
+            ",",
+            &target,
+        );
         let settings = action_item(mtm, "Settings…", sel!(openSettings:), ",", &target);
         settings.setKeyEquivalentModifierMask(
-            objc2_app_kit::NSEventModifierFlags::Command | objc2_app_kit::NSEventModifierFlags::Option,
+            objc2_app_kit::NSEventModifierFlags::Command
+                | objc2_app_kit::NSEventModifierFlags::Option,
         );
         let at = app_menu.numberOfItems().min(1);
         app_menu.insertItem_atIndex(&audio, at);
@@ -154,7 +161,11 @@ fn show(title: &str, lines: &[String]) {
     }
     SHOWN.with(|s| *s.borrow_mut() = (title.to_string(), lines.to_vec()));
     INSTALLED.with(|i| {
-        let Some(inst) = i.borrow().as_ref().map(|i| (i.stats.clone(), i.stats_menu.clone(), i.target.clone())) else {
+        let Some(inst) = i
+            .borrow()
+            .as_ref()
+            .map(|i| (i.stats.clone(), i.stats_menu.clone(), i.target.clone()))
+        else {
             return;
         };
         let (stats, menu, target) = inst;
@@ -166,7 +177,13 @@ fn show(title: &str, lines: &[String]) {
         menu.setTitle(&title);
         stats.setTitle(&title);
         menu.removeAllItems();
-        menu.addItem(&action_item(mtm, "Audio Settings…", sel!(openAudioSettings:), "", &target));
+        menu.addItem(&action_item(
+            mtm,
+            "Audio Settings…",
+            sel!(openAudioSettings:),
+            "",
+            &target,
+        ));
         menu.addItem(&NSMenuItem::separatorItem(mtm));
         for line in lines {
             let row = item(mtm, line);
@@ -182,7 +199,10 @@ fn describe(status: Option<&signal_guitar_proto::RigStatus>) -> (String, Vec<Str
         return ("Audio —".into(), vec!["No rig engine in this app".into()]);
     };
     if !status.running {
-        return ("Audio stopped".into(), vec!["The audio device is closed".into()]);
+        return (
+            "Audio stopped".into(),
+            vec!["The audio device is closed".into()],
+        );
     }
     let p = &status.perf;
     // Running with no negotiated rate: a rig with no device (design mode).
@@ -190,7 +210,11 @@ fn describe(status: Option<&signal_guitar_proto::RigStatus>) -> (String, Vec<Str
         return ("Audio idle".into(), vec!["No audio device open".into()]);
     }
     let khz = p.sample_rate as f32 / 1000.0;
-    let khz = if khz.fract() == 0.0 { format!("{khz:.0}") } else { format!("{khz:.1}") };
+    let khz = if khz.fract() == 0.0 {
+        format!("{khz:.0}")
+    } else {
+        format!("{khz:.1}")
+    };
     let mut title = format!(
         "{khz} kHz · {} spls · {:.1} ms · DSP {:.0}%",
         p.block_frames,

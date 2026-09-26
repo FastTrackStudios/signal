@@ -74,9 +74,11 @@ where
 #[must_use]
 pub fn pick_modified(pick: Option<&ModulePick>, chain: &[ChainRef]) -> bool {
     pick.is_some_and(|p| {
-        p.blocks
-            .iter()
-            .any(|b| chain.iter().any(|(n, _, edited)| *edited && n.eq_ignore_ascii_case(b)))
+        p.blocks.iter().any(|b| {
+            chain
+                .iter()
+                .any(|(n, _, edited)| *edited && n.eq_ignore_ascii_case(b))
+        })
     })
 }
 
@@ -133,7 +135,13 @@ pub fn snapshot_items(entry: &ModulePresetEntry, snap: &str) -> Vec<MenuItem> {
     };
     vec![
         MenuItem::head(format!("Snapshot · {snap}")),
-        MenuItem::name("rename_snapshot", "Rename snapshot…", "Rename", snap, others),
+        MenuItem::name(
+            "rename_snapshot",
+            "Rename snapshot…",
+            "Rename",
+            snap,
+            others,
+        ),
         MenuItem::delete("delete_snapshot", "Delete snapshot", refused),
     ]
 }
@@ -141,15 +149,27 @@ pub fn snapshot_items(entry: &ModulePresetEntry, snap: &str) -> Vec<MenuItem> {
 /// The menu for one module preset (and, given one, one of its snapshots
 /// first): rename, duplicate, delete.
 #[must_use]
-pub fn preset_items(entry: &ModulePresetEntry, siblings: &[String], snapshot: Option<&str>) -> Vec<MenuItem> {
+pub fn preset_items(
+    entry: &ModulePresetEntry,
+    siblings: &[String],
+    snapshot: Option<&str>,
+) -> Vec<MenuItem> {
     let others: Vec<String> = siblings
         .iter()
         .filter(|n| !n.eq_ignore_ascii_case(&entry.name))
         .cloned()
         .collect();
-    let mut items = snapshot.map(|s| snapshot_items(entry, s)).unwrap_or_default();
+    let mut items = snapshot
+        .map(|s| snapshot_items(entry, s))
+        .unwrap_or_default();
     items.push(MenuItem::head(format!("Preset · {}", entry.name)));
-    items.push(MenuItem::name("rename_preset", "Rename preset…", "Rename", &entry.name, others));
+    items.push(MenuItem::name(
+        "rename_preset",
+        "Rename preset…",
+        "Rename",
+        &entry.name,
+        others,
+    ));
     items.push(MenuItem::name(
         "duplicate_preset",
         "Duplicate preset…",
@@ -157,7 +177,11 @@ pub fn preset_items(entry: &ModulePresetEntry, siblings: &[String], snapshot: Op
         next_name(&entry.name, siblings),
         siblings.to_vec(),
     ));
-    items.push(MenuItem::delete("delete_preset", "Delete preset", in_use(&entry.used_by)));
+    items.push(MenuItem::delete(
+        "delete_preset",
+        "Delete preset",
+        in_use(&entry.used_by),
+    ));
     items
 }
 
@@ -172,8 +196,14 @@ pub fn module_menu(
     modified: bool,
 ) -> Vec<MenuItem> {
     let names: Vec<String> = presets.iter().map(|p| p.name.clone()).collect();
-    let entry = pick.and_then(|p| presets.iter().find(|e| e.name.eq_ignore_ascii_case(&p.preset)));
-    let snap = pick.map(|p| played_snapshot(p, presets)).unwrap_or_default();
+    let entry = pick.and_then(|p| {
+        presets
+            .iter()
+            .find(|e| e.name.eq_ignore_ascii_case(&p.preset))
+    });
+    let snap = pick
+        .map(|p| played_snapshot(p, presets))
+        .unwrap_or_default();
     let no_edits = (!modified).then(|| "No edits on this patch".to_string());
     let mut items = vec![MenuItem::head(format!("{module} on this patch"))];
     match entry {
@@ -202,7 +232,10 @@ pub fn module_menu(
         items.extend(preset_items(e, &names, Some(&snap)));
     }
     items.push(MenuItem::sep());
-    items.push(MenuItem::run("manage", format!("All {module} presets in the library")));
+    items.push(MenuItem::run(
+        "manage",
+        format!("All {module} presets in the library"),
+    ));
     items
 }
 
@@ -218,20 +251,47 @@ pub fn module_act(
     snapshot: &str,
     p: Picked,
 ) {
-    let (m, pr, sn, text) = (module.to_string(), preset.to_string(), snapshot.to_string(), p.text);
+    let (m, pr, sn, text) = (
+        module.to_string(),
+        preset.to_string(),
+        snapshot.to_string(),
+        p.text,
+    );
     match p.id {
-        "save" => send(rig, move |r| async move { let _ = r.save_module_snapshot(m, pr, sn).await; }),
-        "save_snapshot" => send(rig, move |r| async move { let _ = r.save_module_snapshot(m, pr, text).await; }),
+        "save" => send(rig, move |r| async move {
+            let _ = r.save_module_snapshot(m, pr, sn).await;
+        }),
+        "save_snapshot" => send(rig, move |r| async move {
+            let _ = r.save_module_snapshot(m, pr, text).await;
+        }),
         "save_preset" => {
-            let sn = if sn.is_empty() { "Default".to_string() } else { sn };
-            send(rig, move |r| async move { let _ = r.save_module_snapshot(m, text, sn).await; });
+            let sn = if sn.is_empty() {
+                "Default".to_string()
+            } else {
+                sn
+            };
+            send(rig, move |r| async move {
+                let _ = r.save_module_snapshot(m, text, sn).await;
+            });
         }
-        "revert" => send(rig, move |r| async move { let _ = r.revert_module(m).await; }),
-        "rename_preset" => send(rig, move |r| async move { let _ = r.rename_module_preset(m, pr, text).await; }),
-        "duplicate_preset" => send(rig, move |r| async move { let _ = r.duplicate_module_preset(m, pr, text).await; }),
-        "delete_preset" => send(rig, move |r| async move { let _ = r.delete_module_preset(m, pr).await; }),
-        "rename_snapshot" => send(rig, move |r| async move { let _ = r.rename_module_snapshot(m, pr, sn, text).await; }),
-        "delete_snapshot" => send(rig, move |r| async move { let _ = r.delete_module_snapshot(m, pr, sn).await; }),
+        "revert" => send(rig, move |r| async move {
+            let _ = r.revert_module(m).await;
+        }),
+        "rename_preset" => send(rig, move |r| async move {
+            let _ = r.rename_module_preset(m, pr, text).await;
+        }),
+        "duplicate_preset" => send(rig, move |r| async move {
+            let _ = r.duplicate_module_preset(m, pr, text).await;
+        }),
+        "delete_preset" => send(rig, move |r| async move {
+            let _ = r.delete_module_preset(m, pr).await;
+        }),
+        "rename_snapshot" => send(rig, move |r| async move {
+            let _ = r.rename_module_snapshot(m, pr, sn, text).await;
+        }),
+        "delete_snapshot" => send(rig, move |r| async move {
+            let _ = r.delete_module_snapshot(m, pr, sn).await;
+        }),
         "manage" => {
             if let (Some(crate::library::OpenLibrary(mut open)), Some(kind)) =
                 (library, crate::library::Kind::for_module(module))
@@ -246,7 +306,10 @@ pub fn module_act(
 /// Every (preset, snapshot) of a module as a preset bar's list, grouped by
 /// preset.
 #[must_use]
-pub fn module_options(presets: &[ModulePresetEntry], pick: Option<&ModulePick>) -> (Vec<PickOption>, Vec<(String, String)>) {
+pub fn module_options(
+    presets: &[ModulePresetEntry],
+    pick: Option<&ModulePick>,
+) -> (Vec<PickOption>, Vec<(String, String)>) {
     let mut options = Vec::new();
     let mut targets = Vec::new();
     for p in presets {
@@ -342,7 +405,10 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             .cloned()
     });
     let modified = pick_modified(pick.as_ref(), &chain);
-    let played = pick.as_ref().map(|p| played_snapshot(p, &presets)).unwrap_or_default();
+    let played = pick
+        .as_ref()
+        .map(|p| played_snapshot(p, &presets))
+        .unwrap_or_default();
     let (options, targets) = module_options(&presets, pick.as_ref());
     let choose = {
         let rig = rig.clone();
@@ -562,10 +628,9 @@ fn block_look(comp: &CompositionModel, name: &str) -> Option<Look> {
 /// How a module pick reads: its snapshot's first block preset (a Delay
 /// pick's DLY 1).
 fn pick_look(comp: &CompositionModel, pick: &ModulePick) -> Option<Look> {
-    let entry = comp
-        .modules
-        .iter()
-        .find(|m| m.module.eq_ignore_ascii_case(&pick.module) && m.name.eq_ignore_ascii_case(&pick.preset))?;
+    let entry = comp.modules.iter().find(|m| {
+        m.module.eq_ignore_ascii_case(&pick.module) && m.name.eq_ignore_ascii_case(&pick.preset)
+    })?;
     let i = entry
         .snapshots
         .iter()
@@ -650,7 +715,13 @@ fn block_preset_items(p: &BlockPresetEntry, siblings: &[String]) -> Vec<MenuItem
     vec![
         MenuItem::head(format!("Preset · {}", p.name)),
         MenuItem::name("rename", "Rename…", "Rename", &p.name, others),
-        MenuItem::name("duplicate", "Duplicate…", "Duplicate", next_name(&p.name, siblings), siblings.to_vec()),
+        MenuItem::name(
+            "duplicate",
+            "Duplicate…",
+            "Duplicate",
+            next_name(&p.name, siblings),
+            siblings.to_vec(),
+        ),
         MenuItem::delete("delete", "Delete", in_use(&p.used_by)),
     ]
 }
@@ -658,14 +729,31 @@ fn block_preset_items(p: &BlockPresetEntry, siblings: &[String]) -> Vec<MenuItem
 /// Do what a block preset menu item says. `block` is the live block (for
 /// saving and reverting), `preset` the preset the item is about.
 fn block_act(rig: &Option<RigClient>, block: &str, block_id: &str, preset: &str, p: Picked) {
-    let (b, id, pr, text) = (block.to_string(), block_id.to_string(), preset.to_string(), p.text);
+    let (b, id, pr, text) = (
+        block.to_string(),
+        block_id.to_string(),
+        preset.to_string(),
+        p.text,
+    );
     match p.id {
-        "save" => send(rig, move |r| async move { let _ = r.save_block_preset(b, pr).await; }),
-        "save_as" => send(rig, move |r| async move { let _ = r.save_block_preset(b, text).await; }),
-        "revert" => send(rig, move |r| async move { let _ = r.clear_block_overrides(id).await; }),
-        "rename" => send(rig, move |r| async move { let _ = r.rename_block_preset(pr, text).await; }),
-        "duplicate" => send(rig, move |r| async move { let _ = r.duplicate_block_preset(pr, text).await; }),
-        "delete" => send(rig, move |r| async move { let _ = r.delete_block_preset(pr).await; }),
+        "save" => send(rig, move |r| async move {
+            let _ = r.save_block_preset(b, pr).await;
+        }),
+        "save_as" => send(rig, move |r| async move {
+            let _ = r.save_block_preset(b, text).await;
+        }),
+        "revert" => send(rig, move |r| async move {
+            let _ = r.clear_block_overrides(id).await;
+        }),
+        "rename" => send(rig, move |r| async move {
+            let _ = r.rename_block_preset(pr, text).await;
+        }),
+        "duplicate" => send(rig, move |r| async move {
+            let _ = r.duplicate_block_preset(pr, text).await;
+        }),
+        "delete" => send(rig, move |r| async move {
+            let _ = r.delete_block_preset(pr).await;
+        }),
         _ => {}
     }
 }
@@ -679,7 +767,11 @@ fn hit(words: &[String], parts: &[&str]) -> bool {
 
 /// The search field of a sidebar list.
 #[component]
-pub(crate) fn SearchField(value: String, placeholder: String, on_input: EventHandler<String>) -> Element {
+pub(crate) fn SearchField(
+    value: String,
+    placeholder: String,
+    on_input: EventHandler<String>,
+) -> Element {
     // The hint is drawn under the field rather than as its `placeholder`,
     // which the renderer does not paint.
     let empty = value.is_empty();
@@ -763,7 +855,10 @@ fn BlockPresets(
             .find(|b| b.block.eq_ignore_ascii_case(&block))
             .map(|b| b.preset.clone())
     });
-    let live = chain.iter().find(|(n, _, _)| n.eq_ignore_ascii_case(&block)).cloned();
+    let live = chain
+        .iter()
+        .find(|(n, _, _)| n.eq_ignore_ascii_case(&block))
+        .cloned();
     let modified = live.as_ref().is_some_and(|(_, _, e)| *e);
     let block_id = live.map(|(_, id, _)| id).unwrap_or_default();
     let kind = match block_type.as_str() {
@@ -771,7 +866,9 @@ fn BlockPresets(
         "reverb" => "Reverb".to_string(),
         other => {
             let mut c = other.chars();
-            c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+            c.next()
+                .map(|f| f.to_uppercase().chain(c).collect())
+                .unwrap_or_default()
         }
     };
     let choose = {
@@ -791,7 +888,10 @@ fn BlockPresets(
     let at = playing
         .as_ref()
         .and_then(|p| names.iter().position(|n| n.eq_ignore_ascii_case(p)));
-    let current_look = at.and_then(|i| presets.get(i)).map(crate::preset_look::look).unwrap_or_default();
+    let current_look = at
+        .and_then(|i| presets.get(i))
+        .map(crate::preset_look::look)
+        .unwrap_or_default();
     let no_edits = (!modified).then(|| "No edits on this block".to_string());
     let mut menu = vec![MenuItem::head(format!("{block} on this patch"))];
     if let Some(p) = &playing {
@@ -1018,8 +1118,20 @@ mod tests {
         let find = |id: &str| items.iter().find(|i| i.id == id).cloned().unwrap();
         assert!(find("save").disabled.is_some(), "nothing to save");
         assert!(find("revert").disabled.is_some());
-        assert!(find("delete_snapshot").disabled.is_some(), "the only snapshot");
-        assert!(find("delete_preset").disabled.as_deref().is_some_and(|w| w.contains("Preset Fender")));
-        assert!(module_menu("Delay", Some(&p), &presets, true).iter().any(|i| i.id == "save" && i.disabled.is_none()));
+        assert!(
+            find("delete_snapshot").disabled.is_some(),
+            "the only snapshot"
+        );
+        assert!(
+            find("delete_preset")
+                .disabled
+                .as_deref()
+                .is_some_and(|w| w.contains("Preset Fender"))
+        );
+        assert!(
+            module_menu("Delay", Some(&p), &presets, true)
+                .iter()
+                .any(|i| i.id == "save" && i.disabled.is_none())
+        );
     }
 }

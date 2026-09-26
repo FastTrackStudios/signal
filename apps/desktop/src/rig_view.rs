@@ -180,7 +180,6 @@ pub fn SignalWorkspace() -> Element {
         crate::rigs::store_last(rig);
     });
 
-
     let Some(kind) = selected() else {
         level.crumbs(vec![fts_chrome::Crumb::here("Rigs")]);
         return rsx! {

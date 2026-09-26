@@ -46,7 +46,17 @@ struct Args {
 }
 
 fn args() -> Args {
-    let mut a = Args { profile: None, patches: Vec::new(), setlist: None, block: 64, rate: 48_000, secs: 3.0, bypass: Vec::new(), chains: false, blocks: false };
+    let mut a = Args {
+        profile: None,
+        patches: Vec::new(),
+        setlist: None,
+        block: 64,
+        rate: 48_000,
+        secs: 3.0,
+        bypass: Vec::new(),
+        chains: false,
+        blocks: false,
+    };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
         if k == "--chains" {
@@ -90,7 +100,12 @@ impl Stats {
         let over = self.us.iter().filter(|u| **u > budget_us).count();
         let pct = |u: f64| u / budget_us * 100.0;
         (
-            format!("mean {:5.1}%  p99 {:5.1}%  max {:6.1}%  over {over:4}", pct(mean), pct(p99), pct(max)),
+            format!(
+                "mean {:5.1}%  p99 {:5.1}%  max {:6.1}%  over {over:4}",
+                pct(mean),
+                pct(p99),
+                pct(max)
+            ),
             over,
         )
     }
@@ -127,7 +142,9 @@ fn main() {
             return a.patches.iter().any(|n| n.eq_ignore_ascii_case(&p.name));
         }
         match &set_songs {
-            Some(songs) => p.song.is_empty() || songs.iter().any(|s| s.eq_ignore_ascii_case(&p.song)),
+            Some(songs) => {
+                p.song.is_empty() || songs.iter().any(|s| s.eq_ignore_ascii_case(&p.song))
+            }
             None => true,
         }
     };
@@ -135,14 +152,22 @@ fn main() {
     let mut built = signal_guitar::nodes::profile_from_library(&def, &lib.drive_presets);
     let comp = RigLibrary::load_compositions();
     for patch in &mut built.patches {
-        if let Some(d) = def.patches.iter().find(|d| d.name.eq_ignore_ascii_case(&patch.name)) {
+        if let Some(d) = def
+            .patches
+            .iter()
+            .find(|d| d.name.eq_ignore_ascii_case(&patch.name))
+        {
             signal_guitar::macros::apply_positions(d, &comp, patch);
         }
     }
     let chosen: Vec<_> = built
         .patches
         .iter()
-        .filter(|p| def.patches.iter().any(|d| d.name.eq_ignore_ascii_case(&p.name) && wanted(d)))
+        .filter(|p| {
+            def.patches
+                .iter()
+                .any(|d| d.name.eq_ignore_ascii_case(&p.name) && wanted(d))
+        })
         .cloned()
         .collect();
     if chosen.is_empty() {
@@ -158,13 +183,32 @@ fn main() {
             let playing: Vec<_> = p
                 .chain
                 .iter()
-                .filter(|b| b.has_backend() && !b.bypassed && !a.bypass.iter().any(|n| n.eq_ignore_ascii_case(&b.name)))
+                .filter(|b| {
+                    b.has_backend()
+                        && !b.bypassed
+                        && !a.bypass.iter().any(|n| n.eq_ignore_ascii_case(&b.name))
+                })
                 .cloned()
                 .collect();
-            let costs = signal_sampler::block_profile::profile_chain(&playing, a.rate, a.block, &input, a.secs + 1.0);
+            let costs = signal_sampler::block_profile::profile_chain(
+                &playing,
+                a.rate,
+                a.block,
+                &input,
+                a.secs + 1.0,
+            );
             let sum: f64 = costs.iter().map(|c| c.mean_us).sum();
-            println!("\n{}  — {:.1}% of the {}-frame budget ({:.0} µs), all blocks", p.name, sum / budget * 100.0, a.block, budget);
-            println!("  {:<22} {:<16} {:>8} {:>8} {:>8} {:>8}", "block", "kind", "mean %", "p99 %", "max %", "latency");
+            println!(
+                "\n{}  — {:.1}% of the {}-frame budget ({:.0} µs), all blocks",
+                p.name,
+                sum / budget * 100.0,
+                a.block,
+                budget
+            );
+            println!(
+                "  {:<22} {:<16} {:>8} {:>8} {:>8} {:>8}",
+                "block", "kind", "mean %", "p99 %", "max %", "latency"
+            );
             for c in &costs {
                 if let Some(e) = &c.error {
                     println!("  {:<22} {:<16} failed: {e}", c.name, c.kind);
@@ -177,7 +221,11 @@ fn main() {
                     c.mean_us / budget * 100.0,
                     c.p99_us / budget * 100.0,
                     c.max_us / budget * 100.0,
-                    if c.latency == 0 { "0".to_string() } else { format!("{} smp", c.latency) }
+                    if c.latency == 0 {
+                        "0".to_string()
+                    } else {
+                        format!("{} smp", c.latency)
+                    }
                 );
             }
         }
@@ -212,12 +260,19 @@ fn main() {
     prig.rig().render_offline(a.rate as usize);
 
     let mut worst = 0usize;
-    println!("{:<28} {:<58} {}", "patch", "switch (first secs, tails ringing)", "steady");
+    println!(
+        "{:<28} {:<58} {}",
+        "patch", "switch (first secs, tails ringing)", "steady"
+    );
     for i in 0..chosen.len() {
         let target = (i + 1) % chosen.len();
         prig.activate(target);
         signal_guitar::measure::apply_chain_bypass(&prig);
-        let backed: Vec<_> = chosen[target].chain.iter().filter(|b| b.has_backend()).collect();
+        let backed: Vec<_> = chosen[target]
+            .chain
+            .iter()
+            .filter(|b| b.has_backend())
+            .collect();
         for (b, id) in backed.iter().zip(prig.active_block_ids()) {
             if a.bypass.iter().any(|n| n.eq_ignore_ascii_case(&b.name)) {
                 prig.rig().set_block_slot_bypass(&id, true);
@@ -226,7 +281,9 @@ fn main() {
         if a.chains {
             let on: Vec<String> = backed
                 .iter()
-                .filter(|b| !b.bypassed && !a.bypass.iter().any(|n| n.eq_ignore_ascii_case(&b.name)))
+                .filter(|b| {
+                    !b.bypassed && !a.bypass.iter().any(|n| n.eq_ignore_ascii_case(&b.name))
+                })
                 .map(|b| b.name.clone())
                 .collect();
             println!("  {} plays: {}", chosen[target].name, on.join(" · "));
@@ -238,7 +295,11 @@ fn main() {
             let t = Instant::now();
             prig.rig().render_offline(a.block);
             let us = t.elapsed().as_secs_f64() * 1e6;
-            if k < blocks { sw.us.push(us) } else { st.us.push(us) }
+            if k < blocks {
+                sw.us.push(us)
+            } else {
+                st.us.push(us)
+            }
         }
         let (s1, o1) = sw.line(budget_us);
         let (s2, o2) = st.line(budget_us);

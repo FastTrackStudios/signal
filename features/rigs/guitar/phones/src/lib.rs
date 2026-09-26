@@ -172,7 +172,12 @@ impl PhonesLink {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        let f = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(path)?;
+        let f = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path)?;
         let want = std::mem::size_of::<Shared>().next_multiple_of(4096) as u64;
         let fresh = f.metadata()?.len() < want;
         if fresh {
@@ -180,7 +185,10 @@ impl PhonesLink {
         }
         // SAFETY: the file is ours and sized; every access is atomic.
         let map = unsafe { MmapMut::map_mut(&f)? };
-        let link = Self { map, path: path.to_path_buf() };
+        let link = Self {
+            map,
+            path: path.to_path_buf(),
+        };
         let s = link.shared();
         if fresh || s.magic.load(Relaxed) != MAGIC || s.version.load(Relaxed) != VERSION {
             link.reset();
@@ -225,7 +233,8 @@ impl PhonesLink {
     /// Set the mix's and the phones' fader positions (0..=1).
     pub fn set_levels(&self, mix_level: f32, volume: f32) {
         let s = self.shared();
-        s.mix_level.store(mix_level.clamp(0.0, 1.0).to_bits(), Relaxed);
+        s.mix_level
+            .store(mix_level.clamp(0.0, 1.0).to_bits(), Relaxed);
         s.volume.store(volume.clamp(0.0, 1.0).to_bits(), Relaxed);
     }
 
@@ -258,7 +267,8 @@ impl PhonesLink {
         s.mix_in_r.store(cfg.mix_in.1, Relaxed);
         s.out_l.store(cfg.out.0, Relaxed);
         s.out_r.store(cfg.out.1, Relaxed);
-        s.config_seq.fetch_add(1, std::sync::atomic::Ordering::Release);
+        s.config_seq
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
     }
 
     /// The routing as the file holds it.
@@ -292,7 +302,11 @@ impl PhonesLink {
         let running = is_running(&self.path);
         MixerStatus {
             running,
-            state: if running { MixerState::from_u32(s.state.load(Relaxed)) } else { MixerState::Idle },
+            state: if running {
+                MixerState::from_u32(s.state.load(Relaxed))
+            } else {
+                MixerState::Idle
+            },
             pid: s.pid.load(Relaxed),
             heartbeat: s.heartbeat.load(Relaxed),
             peak_db: self.meter_db(),
@@ -306,14 +320,19 @@ impl PhonesLink {
     /// The config generation (a change means reopen).
     #[must_use]
     pub fn config_seq(&self) -> u32 {
-        self.shared().config_seq.load(std::sync::atomic::Ordering::Acquire)
+        self.shared()
+            .config_seq
+            .load(std::sync::atomic::Ordering::Acquire)
     }
 
     /// The fader positions `(mix, volume)`.
     #[must_use]
     pub fn levels(&self) -> (f32, f32) {
         let s = self.shared();
-        (f32::from_bits(s.mix_level.load(Relaxed)), f32::from_bits(s.volume.load(Relaxed)))
+        (
+            f32::from_bits(s.mix_level.load(Relaxed)),
+            f32::from_bits(s.volume.load(Relaxed)),
+        )
     }
 
     /// Report the mixer's state.
@@ -373,7 +392,12 @@ pub struct Instance {
 
 /// Become the running mixer — `None` when another one already is.
 pub fn claim(state: &Path) -> io::Result<Option<Instance>> {
-    let f = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(lock_path(state))?;
+    let f = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lock_path(state))?;
     // SAFETY: a valid fd we own.
     let r = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
     Ok((r == 0).then_some(Instance { _file: f }))
@@ -382,7 +406,13 @@ pub fn claim(state: &Path) -> io::Result<Option<Instance>> {
 /// Whether a mixer is running on `state` (some process holds its lock).
 #[must_use]
 pub fn is_running(state: &Path) -> bool {
-    let Ok(f) = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(lock_path(state)) else {
+    let Ok(f) = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lock_path(state))
+    else {
         return false;
     };
     // SAFETY: a valid fd we own; a shared probe lock, released on close.
@@ -432,7 +462,11 @@ pub fn spawn(bin: &Path, state: &Path, log: &Path) -> io::Result<u32> {
     let out = OpenOptions::new().create(true).append(true).open(log)?;
     let err = out.try_clone()?;
     let mut cmd = Command::new(bin);
-    cmd.arg("--state").arg(state).stdin(Stdio::null()).stdout(out).stderr(err);
+    cmd.arg("--state")
+        .arg(state)
+        .stdin(Stdio::null())
+        .stdout(out)
+        .stderr(err);
     // SAFETY: setsid is async-signal-safe.
     unsafe {
         cmd.pre_exec(|| {
@@ -483,17 +517,36 @@ mod tests {
         let rig = PhonesLink::open(&path).unwrap();
         let mixer = PhonesLink::open(&path).unwrap();
         let seq = mixer.config_seq();
-        rig.configure(&MixerConfig { device: "MiniFuse".into(), mix_in: (2, 3), out: (0, 1) });
-        assert_ne!(mixer.config_seq(), seq, "a routing change bumps the generation");
+        rig.configure(&MixerConfig {
+            device: "MiniFuse".into(),
+            mix_in: (2, 3),
+            out: (0, 1),
+        });
+        assert_ne!(
+            mixer.config_seq(),
+            seq,
+            "a routing change bumps the generation"
+        );
         assert_eq!(mixer.config().device, "MiniFuse");
         let again = mixer.config_seq();
-        rig.configure(&MixerConfig { device: "MiniFuse".into(), mix_in: (2, 3), out: (0, 1) });
-        assert_eq!(mixer.config_seq(), again, "the same routing does not reopen the device");
+        rig.configure(&MixerConfig {
+            device: "MiniFuse".into(),
+            mix_in: (2, 3),
+            out: (0, 1),
+        });
+        assert_eq!(
+            mixer.config_seq(),
+            again,
+            "the same routing does not reopen the device"
+        );
         rig.set_levels(0.5, 0.9);
         assert_eq!(mixer.levels(), (0.5, 0.9));
         mixer.beat(0.5, 0.25);
         assert!((rig.status().peak_db.0 + 6.02).abs() < 0.1);
-        assert!((rig.meter_db().0 + 6.02).abs() < 0.1, "reading the meter does not take it");
+        assert!(
+            (rig.meter_db().0 + 6.02).abs() < 0.1,
+            "reading the meter does not take it"
+        );
 
         assert!(!is_running(&path));
         let held = claim(&path).unwrap().expect("first claim");

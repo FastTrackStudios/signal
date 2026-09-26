@@ -50,8 +50,8 @@
 
 use std::sync::{Arc, Mutex, RwLock};
 
-use midicore::MidiInput;
 use midicore::InputConfig;
+use midicore::MidiInput;
 use midicore_proto::{PortSelector, TimedEvent};
 
 /// A registered listener.

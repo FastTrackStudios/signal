@@ -120,37 +120,82 @@ pub fn AudioSettingsModal(
     let on_save = bridge.on_save;
 
     let in_ch = channels_of(&inputs, &p.input_device);
-    let out_name = if p.output_device.is_empty() { p.input_device.clone() } else { p.output_device.clone() };
+    let out_name = if p.output_device.is_empty() {
+        p.input_device.clone()
+    } else {
+        p.output_device.clone()
+    };
     let out_ch = channels_of(&outputs, &out_name);
 
     // Pickers: options + the selected index.
     let in_devs: Vec<String> = std::iter::once("System default".to_string())
-        .chain(inputs.iter().map(|d| format!("{} ({} in)", d.name, d.channels)))
+        .chain(
+            inputs
+                .iter()
+                .map(|d| format!("{} ({} in)", d.name, d.channels)),
+        )
         .collect();
     let in_sel = if p.input_device.is_empty() {
         0
     } else {
-        inputs.iter().position(|d| d.name.to_lowercase().contains(&p.input_device.to_lowercase())).map_or(u32::MAX, |i| i as u32 + 1)
+        inputs
+            .iter()
+            .position(|d| {
+                d.name
+                    .to_lowercase()
+                    .contains(&p.input_device.to_lowercase())
+            })
+            .map_or(u32::MAX, |i| i as u32 + 1)
     };
     let out_devs: Vec<String> = std::iter::once("Same as input".to_string())
-        .chain(outputs.iter().map(|d| format!("{} ({} out)", d.name, d.channels)))
+        .chain(
+            outputs
+                .iter()
+                .map(|d| format!("{} ({} out)", d.name, d.channels)),
+        )
         .collect();
     let out_sel = if p.output_device.is_empty() {
         0
     } else {
-        outputs.iter().position(|d| d.name.to_lowercase().contains(&p.output_device.to_lowercase())).map_or(u32::MAX, |i| i as u32 + 1)
+        outputs
+            .iter()
+            .position(|d| {
+                d.name
+                    .to_lowercase()
+                    .contains(&p.output_device.to_lowercase())
+            })
+            .map_or(u32::MAX, |i| i as u32 + 1)
     };
     let guitar_in: Vec<String> = (1..=in_ch).map(|c| format!("Input {c}")).collect();
     let rates: Vec<String> = SAMPLE_RATES.iter().map(|(_, l)| (*l).to_string()).collect();
-    let rate_sel = SAMPLE_RATES.iter().position(|(hz, _)| *hz == p.sample_rate).map_or(u32::MAX, |i| i as u32);
-    let bufs: Vec<String> = BUFFER_SIZES.iter().map(|b| format!("{b} frames · {:.1} ms", f64::from(*b) / 48.0)).collect();
-    let buf_sel = BUFFER_SIZES.iter().position(|b| *b == p.buffer_size).map_or(u32::MAX, |i| i as u32);
+    let rate_sel = SAMPLE_RATES
+        .iter()
+        .position(|(hz, _)| *hz == p.sample_rate)
+        .map_or(u32::MAX, |i| i as u32);
+    let bufs: Vec<String> = BUFFER_SIZES
+        .iter()
+        .map(|b| format!("{b} frames · {:.1} ms", f64::from(*b) / 48.0))
+        .collect();
+    let buf_sel = BUFFER_SIZES
+        .iter()
+        .position(|b| *b == p.buffer_size)
+        .map_or(u32::MAX, |i| i as u32);
     let out_pairs = pairs(out_ch);
-    let main_sel = out_pairs.iter().position(|(_, pr)| *pr == (p.main_out_l, p.main_out_r)).map_or(u32::MAX, |i| i as u32);
-    let ph_sel = out_pairs.iter().position(|(_, pr)| *pr == (p.phones_out_l, p.phones_out_r)).map_or(u32::MAX, |i| i as u32);
+    let main_sel = out_pairs
+        .iter()
+        .position(|(_, pr)| *pr == (p.main_out_l, p.main_out_r))
+        .map_or(u32::MAX, |i| i as u32);
+    let ph_sel = out_pairs
+        .iter()
+        .position(|(_, pr)| *pr == (p.phones_out_l, p.phones_out_r))
+        .map_or(u32::MAX, |i| i as u32);
     let mix_opts = mix_inputs(in_ch);
-    let mix_sel = mix_opts.iter().position(|(_, pr)| *pr == (p.mix_in_l, p.mix_in_r)).map_or(u32::MAX, |i| i as u32);
-    let shared_pair = p.phones_routing && (p.main_out_l, p.main_out_r) == (p.phones_out_l, p.phones_out_r);
+    let mix_sel = mix_opts
+        .iter()
+        .position(|(_, pr)| *pr == (p.mix_in_l, p.mix_in_r))
+        .map_or(u32::MAX, |i| i as u32);
+    let shared_pair =
+        p.phones_routing && (p.main_out_l, p.main_out_r) == (p.phones_out_l, p.phones_out_r);
     let mix_on_guitar = p.mix_in_l == p.input_channel || p.mix_in_r == p.input_channel;
 
     let labels = |v: &[(String, (u32, u32))]| v.iter().map(|(l, _)| l.clone()).collect::<Vec<_>>();
@@ -297,13 +342,28 @@ fn PhonesLive(state: crate::state::RigViewState) -> Element {
     let m = hp.mixer.clone();
     let (dot, text) = match (m.enabled, m.state) {
         (false, _) => ("#52525b", "Off".to_string()),
-        (true, PhonesMixerState::PLAYING) => ("#22c55e", format!("Playing · {:.1} kHz · {} frames · pid {}", m.rate as f32 / 1000.0, m.block, m.pid)),
-        (true, PhonesMixerState::NO_DEVICE) => ("#ef4444", "Running — the interface is not there, retrying".to_string()),
+        (true, PhonesMixerState::PLAYING) => (
+            "#22c55e",
+            format!(
+                "Playing · {:.1} kHz · {} frames · pid {}",
+                m.rate as f32 / 1000.0,
+                m.block,
+                m.pid
+            ),
+        ),
+        (true, PhonesMixerState::NO_DEVICE) => (
+            "#ef4444",
+            "Running — the interface is not there, retrying".to_string(),
+        ),
         (true, _) => ("#eab308", "Starting…".to_string()),
     };
     let db = |pos: f32| {
         let d = phones_fader_db(pos);
-        if d.is_finite() { format!("{d:+.1} dB") } else { "off".to_string() }
+        if d.is_finite() {
+            format!("{d:+.1} dB")
+        } else {
+            "off".to_string()
+        }
     };
     let meter = |v: f32| ((v + 60.0) / 60.0 * 100.0).clamp(0.0, 100.0);
     let (r1, r2, r3, r4) = (rig.clone(), rig.clone(), rig.clone(), rig);
@@ -412,7 +472,11 @@ fn Row(label: &'static str, children: Element) -> Element {
 /// An on/off switch with what it does beneath.
 #[component]
 fn Toggle(label: &'static str, hint: String, on: bool, on_change: Callback<bool>) -> Element {
-    let (track, knob) = if on { ("#2563eb", "18px") } else { ("#3f3f46", "2px") };
+    let (track, knob) = if on {
+        ("#2563eb", "18px")
+    } else {
+        ("#3f3f46", "2px")
+    };
     rsx! {
         div { style: "display: flex; align-items: flex-start; gap: 10px; cursor: pointer;",
             onclick: move |_| on_change.call(!on),
@@ -443,7 +507,10 @@ mod tests {
 
     #[test]
     fn a_four_channel_interface_offers_two_pairs_and_every_mono_input() {
-        assert_eq!(pairs(4).iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>(), ["1-2", "3-4"]);
+        assert_eq!(
+            pairs(4).iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>(),
+            ["1-2", "3-4"]
+        );
         let mix = mix_inputs(4);
         assert_eq!(mix[1], ("3-4 (stereo)".to_string(), (2, 3)));
         assert_eq!(mix[4], ("3 (mono)".to_string(), (2, 2)));

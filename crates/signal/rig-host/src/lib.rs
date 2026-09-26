@@ -38,7 +38,10 @@ use daw::service::handle::DawHandle as _;
 use daw::standalone::Standalone;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::audio_engine::AudioEngine;
-#[cfg(all(not(target_arch = "wasm32"), any(target_os = "linux", target_os = "macos")))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(target_os = "linux", target_os = "macos")
+))]
 use daw::standalone::audio_engine::DuplexAudioEngine;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::metering::Meters;
@@ -133,9 +136,15 @@ impl HostedEngine for DuplexAudioEngine {
 /// output as two streams bridged by a ring, and that ring is latency: it
 /// drains one block per output callback, so every frame queued in it by a
 /// stall or a start-up offset stays queued for as long as the stream runs.
-#[cfg(all(not(target_arch = "wasm32"), any(target_os = "linux", target_os = "macos")))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(target_os = "linux", target_os = "macos")
+))]
 pub type DuplexEngine = DuplexAudioEngine;
-#[cfg(all(not(target_arch = "wasm32"), not(any(target_os = "linux", target_os = "macos"))))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    not(any(target_os = "linux", target_os = "macos"))
+))]
 pub type DuplexEngine = AudioEngine;
 
 /// The native output-only engine ([`start_output_native`](RigProject::start_output_native)):
@@ -145,9 +154,15 @@ pub type DuplexEngine = AudioEngine;
 /// device, so an output-only engine only ever lowers it
 /// (`DuplexConfig::buffer_lower_only`): a keys rig asking for 256 frames on
 /// the interface the guitar rig plays through at 64 keeps 64.
-#[cfg(all(not(target_arch = "wasm32"), any(target_os = "linux", target_os = "macos")))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(target_os = "linux", target_os = "macos")
+))]
 pub type OutputEngine = DuplexAudioEngine;
-#[cfg(all(not(target_arch = "wasm32"), not(any(target_os = "linux", target_os = "macos"))))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    not(any(target_os = "linux", target_os = "macos"))
+))]
 pub type OutputEngine = AudioEngine;
 
 /// A running duplex (live-input) rig host — `Send`-only under the native

@@ -31,7 +31,9 @@ use signal_guitar_proto::{
 
 // The look is the rig's own (`theme`); the buttons, prompts and chips are
 // the kit's, shared with every sidebar.
-use crate::kit::{Button as Act, Chips, DeleteButton as DeleteAct, ListRow, MenuItem, NamePrompt, Picked};
+use crate::kit::{
+    Button as Act, Chips, DeleteButton as DeleteAct, ListRow, MenuItem, NamePrompt, Picked,
+};
 use crate::theme::{BG, FAINT, FOCUS_BG, FOCUS_FG, LINE, LIVE, MUTED, PANE, TEXT};
 
 /// The picker's open state, in context — so a surface deep in the rig (the
@@ -245,7 +247,11 @@ fn rows(
                 active: comp.active_preset.eq_ignore_ascii_case(&p.name),
             })
             .collect(),
-        Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => {
+        Kind::AmpModules
+        | Kind::DriveModules
+        | Kind::TimeModules
+        | Kind::DelayModules
+        | Kind::ReverbModules => {
             let module = kind.module().unwrap_or_default();
             comp.modules
                 .iter()
@@ -265,24 +271,31 @@ fn rows(
         }
         Kind::BlockPresets => {
             let mut v: Vec<Row> = comp
-            .block_presets
-            .iter()
-            .enumerate()
-            .map(|(idx, b)| Row {
-                kind,
-                name: b.name.clone(),
-                idx,
-                sub: {
-                    let what = if b.bypass { format!("{} · off", b.block_type) } else { b.block_type.clone() };
-                    if b.used_by.is_empty() {
-                        what
-                    } else {
-                        format!("{what} · used by {}", b.used_by.len())
-                    }
-                },
-                active: comp.active_blocks.iter().any(|a| a.preset.eq_ignore_ascii_case(&b.name)),
-            })
-            .collect();
+                .block_presets
+                .iter()
+                .enumerate()
+                .map(|(idx, b)| Row {
+                    kind,
+                    name: b.name.clone(),
+                    idx,
+                    sub: {
+                        let what = if b.bypass {
+                            format!("{} · off", b.block_type)
+                        } else {
+                            b.block_type.clone()
+                        };
+                        if b.used_by.is_empty() {
+                            what
+                        } else {
+                            format!("{what} · used by {}", b.used_by.len())
+                        }
+                    },
+                    active: comp
+                        .active_blocks
+                        .iter()
+                        .any(|a| a.preset.eq_ignore_ascii_case(&b.name)),
+                })
+                .collect();
             // Grouped by type (see `group_of`), in library order within one.
             v.sort_by_key(|r| r.sub.split(" · ").next().unwrap_or_default().to_string());
             v
@@ -468,7 +481,11 @@ fn activate(rig: &Option<RigClient>, row: &Row, model: &PerformanceModel) -> boo
         Kind::Compositions => send(rig, move |r| async move {
             let _ = r.choose_preset(name, String::new()).await;
         }),
-        Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => {
+        Kind::AmpModules
+        | Kind::DriveModules
+        | Kind::TimeModules
+        | Kind::DelayModules
+        | Kind::ReverbModules => {
             let module = row.kind.module().unwrap_or_default().to_string();
             send(rig, move |r| async move {
                 let _ = r.choose_module(module, name, String::new()).await;
@@ -1034,7 +1051,11 @@ fn Detail(
                 });
             }
         })),
-        Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => {
+        Kind::AmpModules
+        | Kind::DriveModules
+        | Kind::TimeModules
+        | Kind::DelayModules
+        | Kind::ReverbModules => {
             let module = kind.module().unwrap_or_default().to_string();
             Some(cbs.cb({
                 let rig = rig.clone();
@@ -1663,7 +1684,11 @@ fn SongDetail(
 }
 
 #[component]
-fn ProfileDetail(profile: ProfileEntry, profiles: Vec<String>, on_go: EventHandler<(Kind, String)>) -> Element {
+fn ProfileDetail(
+    profile: ProfileEntry,
+    profiles: Vec<String>,
+    on_go: EventHandler<(Kind, String)>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut duplicating = use_signal(|| false);
     rsx! {
@@ -2295,7 +2320,13 @@ fn NewForm(
             Kind::Patches => patches.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
             Kind::Presets => presets.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
             Kind::Drives | Kind::All => false,
-            Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules | Kind::BlockPresets => false,
+            Kind::Compositions
+            | Kind::AmpModules
+            | Kind::DriveModules
+            | Kind::TimeModules
+            | Kind::DelayModules
+            | Kind::ReverbModules
+            | Kind::BlockPresets => false,
         }
     };
     let n = name();
@@ -2356,7 +2387,13 @@ fn NewForm(
                     });
                 }
                 Kind::Drives | Kind::All => return,
-                Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules | Kind::BlockPresets => {
+                Kind::Compositions
+                | Kind::AmpModules
+                | Kind::DriveModules
+                | Kind::TimeModules
+                | Kind::DelayModules
+                | Kind::ReverbModules
+                | Kind::BlockPresets => {
                     return;
                 }
             }

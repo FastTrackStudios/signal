@@ -20,8 +20,10 @@
 use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::RigClient;
-use signal_guitar_proto::{MacroChildView, MacroKnobView, MacroResult, MacroSave, MacroTune, MacroTuneView};
-use signal_widgets::arc::{angle_for_value, arc_path, arc_point, SENSITIVITY};
+use signal_guitar_proto::{
+    MacroChildView, MacroKnobView, MacroResult, MacroSave, MacroTune, MacroTuneView,
+};
+use signal_widgets::arc::{SENSITIVITY, angle_for_value, arc_path, arc_point};
 use signal_widgets::drag_bus::{DragBus, DragEvent};
 
 use crate::param_writer::ParamWriter;
@@ -106,7 +108,14 @@ impl Wire {
         E: std::fmt::Debug + 'static,
     {
         let Some(r) = self.rig.clone() else {
-            self.show(knob, MacroResult { ok: false, message: "Not connected to the rig".into(), offer: String::new() });
+            self.show(
+                knob,
+                MacroResult {
+                    ok: false,
+                    message: "Not connected to the rig".into(),
+                    offer: String::new(),
+                },
+            );
             return;
         };
         let (me, knob) = (self.clone(), knob.to_string());
@@ -127,7 +136,11 @@ impl Wire {
         macros.with_mut(|ks| {
             for k in ks.iter_mut().filter(|k| k.id == parent) {
                 k.tuned = true;
-                for v in k.tune.iter_mut().filter(|v| v.knob == t.knob && v.block == t.block && v.param == t.param) {
+                for v in k
+                    .tune
+                    .iter_mut()
+                    .filter(|v| v.knob == t.knob && v.block == t.block && v.param == t.param)
+                {
                     match op {
                         "min" => {
                             v.lo = value;
@@ -167,12 +180,19 @@ impl Wire {
     fn pad(&self, id: &str, on: bool) {
         let mut macros = self.macros;
         macros.with_mut(|ks| {
-            for c in ks.iter_mut().flat_map(|k| k.children.iter_mut()).filter(|c| c.id == id) {
+            for c in ks
+                .iter_mut()
+                .flat_map(|k| k.children.iter_mut())
+                .filter(|c| c.id == id)
+            {
                 c.bypassed = !on;
             }
         });
         let (id, parent) = (id.to_string(), self.parent_of(id));
-        self.run(&parent, move |r| async move { r.set_macro_pad(id, on).await });
+        self.run(
+            &parent,
+            move |r| async move { r.set_macro_pad(id, on).await },
+        );
     }
 
     /// Double-click in play: a bar knob to rest, a panel knob to where its
@@ -228,7 +248,13 @@ pub fn child_readout(c: &MacroChildView) -> String {
 /// [`MacroChildView::fmt`]).
 #[must_use]
 pub fn fmt_value(fmt: &str, v: f32, aux: f32) -> String {
-    let pick = |names: &[&str]| names.get(v.round().max(0.0) as usize).copied().unwrap_or("—").to_string();
+    let pick = |names: &[&str]| {
+        names
+            .get(v.round().max(0.0) as usize)
+            .copied()
+            .unwrap_or("—")
+            .to_string()
+    };
     match fmt {
         "pan" if v.abs() < 0.005 => "C".to_string(),
         "pan" => format!("{}{:.0}", if v < 0.0 { "L" } else { "R" }, v.abs() * 100.0),
@@ -302,7 +328,11 @@ pub fn MacroBar(
                     let r = send.clone();
                     Box::pin(async move {
                         if let Some(r) = r {
-                            let _ = if value <= RESET { r.reset_macro(id).await } else { r.set_macro(id, value).await };
+                            let _ = if value <= RESET {
+                                r.reset_macro(id).await
+                            } else {
+                                r.set_macro(id, value).await
+                            };
                         }
                     })
                 },
@@ -316,7 +346,9 @@ pub fn MacroBar(
                     let mut status = status;
                     Box::pin(async move {
                         let parts: Vec<&str> = key.split(SEP).collect();
-                        let (Some(r), [parent, knob, block, param]) = (r, parts.as_slice()) else { return };
+                        let (Some(r), [parent, knob, block, param]) = (r, parts.as_slice()) else {
+                            return;
+                        };
                         let tune = MacroTune {
                             knob: (*knob).to_string(),
                             block: (*block).to_string(),
@@ -413,7 +445,11 @@ fn MacroCell(
     // What the last call on this panel said (shown in the header; it keeps
     // the panel open while it shows).
     let mut status = wire.status;
-    let mine = status.read().as_ref().filter(|(k, _)| *k == id).map(|(_, r)| r.clone());
+    let mine = status
+        .read()
+        .as_ref()
+        .filter(|(k, _)| *k == id)
+        .map(|(_, r)| r.clone());
     // A message clears itself after a few seconds; an offer waits for an
     // answer.
     {
@@ -424,7 +460,11 @@ fn MacroCell(
                 if k == id && r.offer.is_empty() {
                     spawn(async move {
                         architect::platform::sleep(std::time::Duration::from_secs(5)).await;
-                        if status.peek().as_ref().is_some_and(|(k2, r2)| *k2 == k && *r2 == r) {
+                        if status
+                            .peek()
+                            .as_ref()
+                            .is_some_and(|(k2, r2)| *k2 == k && *r2 == r)
+                        {
                             status.set(None);
                         }
                     });
@@ -433,12 +473,19 @@ fn MacroCell(
         });
     }
     let open = forced || hovered() || dragging() || tuning() || mine.is_some();
-    let color = if knob.color.is_empty() { MUTED.to_string() } else { knob.color.clone() };
+    let color = if knob.color.is_empty() {
+        MUTED.to_string()
+    } else {
+        knob.color.clone()
+    };
     let at_rest = (knob.value - knob.rest).abs() < 0.005;
     let menu_items = {
-        let mut snap = crate::kit::MenuItem::run("positions_snapshot", "Save positions to preset snapshot");
+        let mut snap =
+            crate::kit::MenuItem::run("positions_snapshot", "Save positions to preset snapshot");
         if knob.snapshot.is_empty() {
-            snap.disabled = Some("This patch plays no preset snapshot — its positions stay with the patch".into());
+            snap.disabled = Some(
+                "This patch plays no preset snapshot — its positions stay with the patch".into(),
+            );
         } else {
             snap.label = format!("Save positions to {}", knob.snapshot);
         }
@@ -657,11 +704,20 @@ fn DropdownPanel(
         "left: 50%; transform: translateX(-50%);".to_string()
     };
     let (edge, gap, anim, origin) = if drop_up {
-        ("bottom: 100%;", "margin-bottom: 8px;", "macro-drop-up", "bottom center")
+        (
+            "bottom: 100%;",
+            "margin-bottom: 8px;",
+            "macro-drop-up",
+            "bottom center",
+        )
     } else {
         ("top: 100%;", "margin-top: 8px;", "macro-drop", "top center")
     };
-    let anim = if still { "none".to_string() } else { format!("{anim} 150ms ease-out") };
+    let anim = if still {
+        "none".to_string()
+    } else {
+        format!("{anim} 150ms ease-out")
+    };
     rsx! {
         // Invisible bridge: fills the gap between the cell and the panel.
         div { style: "position: absolute; {edge} left: 0; width: 100%; height: 8px;" }
@@ -707,14 +763,26 @@ fn ChildCell(
 ) -> Element {
     let wire = use_context::<Wire>();
     let mut over = use_signal(|| false);
-    let color = if child.color.is_empty() { MUTED.to_string() } else { child.color.clone() };
+    let color = if child.color.is_empty() {
+        MUTED.to_string()
+    } else {
+        child.color.clone()
+    };
     // An empty drive slot plays nothing: dimmed, and nothing to turn.
     let dim = child.empty || (child.has_pad && child.bypassed);
     let at_rest = child.steps > 0 || (child.value - child.rest).abs() < 0.005;
     let readout = child_readout(&child);
     let id = child.id.clone();
-    let width_css = if width > 0 { format!("width: {width}px;") } else { String::new() };
-    let label_ink = if child.empty { "#71717a".to_string() } else { color.clone() };
+    let width_css = if width > 0 {
+        format!("width: {width}px;")
+    } else {
+        String::new()
+    };
+    let label_ink = if child.empty {
+        "#71717a".to_string()
+    } else {
+        color.clone()
+    };
 
     rsx! {
         div {
@@ -869,11 +937,22 @@ fn PanelHeader(
             "padding: 2px 8px; font-size: 9px; font-weight: 700; border-radius: 4px; cursor: pointer; \
              white-space: nowrap; color: {}; background: {};",
             if primary { "#18181b" } else { "#d4d4d8" },
-            if primary { "#22d3ee" } else { "rgba(63,63,70,0.6)" },
+            if primary {
+                "#22d3ee"
+            } else {
+                "rgba(63,63,70,0.6)"
+            },
         )
     };
-    let where_ = if scope == "module" { "module snapshot" } else { "block preset" };
-    let offer = status.as_ref().map(|s| s.offer.clone()).filter(|o| !o.is_empty());
+    let where_ = if scope == "module" {
+        "module snapshot"
+    } else {
+        "block preset"
+    };
+    let offer = status
+        .as_ref()
+        .map(|s| s.offer.clone())
+        .filter(|o| !o.is_empty());
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 4px; padding: 0 2px 6px; min-width: 0;",
             div { style: "display: flex; align-items: center; gap: 6px; min-width: 0;",
@@ -1015,7 +1094,12 @@ fn group_tune(tune: &[MacroTuneView]) -> Vec<(String, Vec<MacroTuneView>)> {
 /// panel move, by block — two blocks to a column, so a wide knob (Space,
 /// Width) stays short.
 #[component]
-fn TuneGrid(parent: String, tune: Vec<MacroTuneView>, dragging: Signal<bool>, highlight: bool) -> Element {
+fn TuneGrid(
+    parent: String,
+    tune: Vec<MacroTuneView>,
+    dragging: Signal<bool>,
+    highlight: bool,
+) -> Element {
     let groups = group_tune(&tune);
     let rows = groups.len().min(2);
     rsx! {
@@ -1049,8 +1133,17 @@ fn TuneGrid(parent: String, tune: Vec<MacroTuneView>, dragging: Signal<bool>, hi
 /// One param's range editor: its name, the range knob, `lo–hi`, and its
 /// chips — the curve, Off, and a drive stage's entry.
 #[component]
-fn TuneEditor(parent: String, t: MacroTuneView, dragging: Signal<bool>, highlight: bool) -> Element {
-    let color = if t.color.is_empty() { MUTED.to_string() } else { t.color.clone() };
+fn TuneEditor(
+    parent: String,
+    t: MacroTuneView,
+    dragging: Signal<bool>,
+    highlight: bool,
+) -> Element {
+    let color = if t.color.is_empty() {
+        MUTED.to_string()
+    } else {
+        t.color.clone()
+    };
     let range = if t.off {
         "off".to_string()
     } else {
@@ -1112,7 +1205,11 @@ pub fn pick_handle(x: f64, y: f64, lo: f64, hi: f64) -> Option<Handle> {
     } else {
         0.0
     };
-    Some(if (n - lo).abs() <= (n - hi).abs() { Handle::Lo } else { Handle::Hi })
+    Some(if (n - lo).abs() <= (n - hi).abs() {
+        Handle::Lo
+    } else {
+        Handle::Hi
+    })
 }
 
 /// A value's place on the range knob's arc, 0..1 of the param's range (by
@@ -1133,7 +1230,11 @@ fn arc_pos(t: &MacroTuneView, v: f32) -> f64 {
 fn arc_value(t: &MacroTuneView, n: f64) -> f32 {
     let n = n.clamp(0.0, 1.0) as f32;
     let (lo, hi) = (t.min, t.max);
-    if t.log && lo > 0.0 && hi > lo { lo * (hi / lo).powf(n) } else { n.mul_add(hi - lo, lo) }
+    if t.log && lo > 0.0 && hi > lo {
+        lo * (hi / lo).powf(n)
+    } else {
+        n.mul_add(hi - lo, lo)
+    }
 }
 
 /// The range knob: the param's whole range as the track, the tuned range
@@ -1144,7 +1245,13 @@ fn arc_value(t: &MacroTuneView, n: f64) -> f32 {
 /// the whole response. Hovered, the arrows nudge the handle under the
 /// pointer and Backspace resets it.
 #[component]
-fn TuneKnob(parent: String, t: MacroTuneView, color: String, dragging: Signal<bool>, highlight: bool) -> Element {
+fn TuneKnob(
+    parent: String,
+    t: MacroTuneView,
+    color: String,
+    dragging: Signal<bool>,
+    highlight: bool,
+) -> Element {
     let wire = use_context::<Wire>();
     let bus = DragBus::try_use();
     let mut hover = use_signal(move || highlight.then_some(Handle::Hi));
@@ -1152,26 +1259,59 @@ fn TuneKnob(parent: String, t: MacroTuneView, color: String, dragging: Signal<bo
     let mut mounted = use_signal(|| None::<std::rc::Rc<MountedData>>);
     let (size, center, radius) = (36.0f64, 18.0f64, 14.0f64);
     let (plo, phi, pbase) = (arc_pos(&t, t.lo), arc_pos(&t, t.hi), arc_pos(&t, t.base));
-    let track = arc_path(center, center, radius, angle_for_value(0.0), angle_for_value(1.0));
+    let track = arc_path(
+        center,
+        center,
+        radius,
+        angle_for_value(0.0),
+        angle_for_value(1.0),
+    );
     let (a, b) = if plo <= phi { (plo, phi) } else { (phi, plo) };
     let range = if b - a > 0.002 {
-        arc_path(center, center, radius, angle_for_value(a), angle_for_value(b))
+        arc_path(
+            center,
+            center,
+            radius,
+            angle_for_value(a),
+            angle_for_value(b),
+        )
     } else {
         String::new()
     };
-    let ink = if t.off { "#52525b".to_string() } else { color.clone() };
+    let ink = if t.off {
+        "#52525b".to_string()
+    } else {
+        color.clone()
+    };
     let (tx, ty) = arc_point(center, center, radius + 2.5, angle_for_value(pbase));
     let (tx2, ty2) = arc_point(center, center, radius - 4.0, angle_for_value(pbase));
     let (lx, ly) = arc_point(center, center, radius, angle_for_value(plo));
     let (hx, hy) = arc_point(center, center, radius, angle_for_value(phi));
     let lit = |h: Handle| active() == Some(h) || (active().is_none() && hover() == Some(h));
-    let (lr, hr) = (if lit(Handle::Lo) { 4.5 } else { 3.0 }, if lit(Handle::Hi) { 4.5 } else { 3.0 });
+    let (lr, hr) = (
+        if lit(Handle::Lo) { 4.5 } else { 3.0 },
+        if lit(Handle::Hi) { 4.5 } else { 3.0 },
+    );
     let (lring, hring) = (
-        if lit(Handle::Lo) { "#f4f4f5" } else { ink.as_str() },
-        if lit(Handle::Hi) { "#f4f4f5" } else { "#18181b" },
+        if lit(Handle::Lo) {
+            "#f4f4f5"
+        } else {
+            ink.as_str()
+        },
+        if lit(Handle::Hi) {
+            "#f4f4f5"
+        } else {
+            "#18181b"
+        },
     );
     let op_of = |h: Handle| if h == Handle::Lo { "min" } else { "max" };
-    let reset_of = |h: Handle| if h == Handle::Lo { "reset_min" } else { "reset_max" };
+    let reset_of = |h: Handle| {
+        if h == Handle::Lo {
+            "reset_min"
+        } else {
+            "reset_max"
+        }
+    };
     let (t_down, t_dbl, t_key) = (t.clone(), t.clone(), t.clone());
     let (w_down, w_dbl, w_key) = (wire.clone(), wire.clone(), wire.clone());
     let (p_down, p_dbl, p_key) = (parent.clone(), parent.clone(), parent.clone());
@@ -1284,7 +1424,12 @@ fn chip(ink: &str) -> String {
 /// shapes it.
 #[component]
 fn CurveChip(parent: String, t: MacroTuneView, color: String) -> Element {
-    const CURVES: [(&str, &str); 4] = [("lin", "Linear"), ("log", "Log — by ratio"), ("exp", "Exp — slow, then fast"), ("s", "S — slow at both ends")];
+    const CURVES: [(&str, &str); 4] = [
+        ("lin", "Linear"),
+        ("log", "Log — by ratio"),
+        ("exp", "Exp — slow, then fast"),
+        ("s", "S — slow at both ends"),
+    ];
     let wire = use_context::<Wire>();
     let host = signal_widgets::PopupHost::try_use();
     let next = CURVES
@@ -1299,12 +1444,23 @@ fn CurveChip(parent: String, t: MacroTuneView, color: String) -> Element {
         "stage" => "the drive journey's default",
         _ => "the macro's own response",
     };
-    let label = if t.curve == "s" { "S".to_string() } else { t.curve.clone() };
-    let ink = if matches!(t.source.as_str(), "module" | "block" | "tuning") { color.clone() } else { "#71717a".to_string() };
+    let label = if t.curve == "s" {
+        "S".to_string()
+    } else {
+        t.curve.clone()
+    };
+    let ink = if matches!(t.source.as_str(), "module" | "block" | "tuning") {
+        color.clone()
+    } else {
+        "#71717a".to_string()
+    };
     let (w1, t1, p1) = (wire.clone(), t.clone(), parent.clone());
     let items: Vec<crate::kit::MenuItem> = CURVES
         .iter()
-        .map(|(c, l)| crate::kit::MenuItem { checked: *c == t.curve, ..crate::kit::MenuItem::run(c, *l) })
+        .map(|(c, l)| crate::kit::MenuItem {
+            checked: *c == t.curve,
+            ..crate::kit::MenuItem::run(c, *l)
+        })
         .collect();
     rsx! {
         div {
@@ -1363,8 +1519,16 @@ fn EnterChip(parent: String, t: MacroTuneView) -> Element {
     let bus = DragBus::try_use();
     let host = signal_widgets::PopupHost::try_use();
     const STEPS: [(&str, f32); 10] = [
-        ("e0", 0.0), ("e10", 0.1), ("e20", 0.2), ("e30", 0.3), ("e40", 0.4),
-        ("e50", 0.5), ("e60", 0.6), ("e70", 0.7), ("e80", 0.8), ("e90", 0.9),
+        ("e0", 0.0),
+        ("e10", 0.1),
+        ("e20", 0.2),
+        ("e30", 0.3),
+        ("e40", 0.4),
+        ("e50", 0.5),
+        ("e60", 0.6),
+        ("e70", 0.7),
+        ("e80", 0.8),
+        ("e90", 0.9),
     ];
     let pct = (t.enter * 100.0).round();
     let items: Vec<crate::kit::MenuItem> = STEPS
@@ -1448,7 +1612,10 @@ fn DualRowDropdown(
             .map(|key| {
                 let stem = format!("{prefix}-{key}");
                 row.iter()
-                    .find(|c| c.id.strip_prefix(&stem).is_some_and(|n| n.chars().all(|ch| ch.is_ascii_digit())))
+                    .find(|c| {
+                        c.id.strip_prefix(&stem)
+                            .is_some_and(|n| n.chars().all(|ch| ch.is_ascii_digit()))
+                    })
                     .cloned()
             })
             .collect()
@@ -1467,7 +1634,11 @@ fn DualRowDropdown(
         format!(
             "display: flex; align-items: center; justify-content: center; padding: 2px 4px; border-radius: 4px; \
              cursor: pointer; background: {};",
-            if on { "rgba(22,78,99,0.4)" } else { "transparent" },
+            if on {
+                "rgba(22,78,99,0.4)"
+            } else {
+                "transparent"
+            },
         )
     };
 
@@ -1616,29 +1787,64 @@ fn MiniKnob(
     let size: f64 = 36.0;
     let center: f64 = size / 2.0;
     let radius: f64 = 14.0;
-    let track_path = arc_path(center, center, radius, angle_for_value(0.0), angle_for_value(1.0));
+    let track_path = arc_path(
+        center,
+        center,
+        radius,
+        angle_for_value(0.0),
+        angle_for_value(1.0),
+    );
     let value_path = if spread {
         if v > 0.001 {
-            arc_path(center, center, radius, angle_for_value(0.5 - v / 2.0), angle_for_value(0.5 + v / 2.0))
+            arc_path(
+                center,
+                center,
+                radius,
+                angle_for_value(0.5 - v / 2.0),
+                angle_for_value(0.5 + v / 2.0),
+            )
         } else {
             String::new()
         }
     } else if bipolar {
         if v > 0.501 {
-            arc_path(center, center, radius, angle_for_value(0.5), angle_for_value(v))
+            arc_path(
+                center,
+                center,
+                radius,
+                angle_for_value(0.5),
+                angle_for_value(v),
+            )
         } else if v < 0.499 {
-            arc_path(center, center, radius, angle_for_value(v), angle_for_value(0.5))
+            arc_path(
+                center,
+                center,
+                radius,
+                angle_for_value(v),
+                angle_for_value(0.5),
+            )
         } else {
             String::new()
         }
     } else if v > 0.001 {
-        arc_path(center, center, radius, angle_for_value(0.0), angle_for_value(v))
+        arc_path(
+            center,
+            center,
+            radius,
+            angle_for_value(0.0),
+            angle_for_value(v),
+        )
     } else {
         String::new()
     };
     // Centre tick at 12 o'clock (bipolar), or Width's mono mark.
     let (tick_x, tick_y) = arc_point(center, center, radius + 2.0, angle_for_value(0.5));
-    let (tick_x2, tick_y2) = arc_point(center, center, radius - if spread { 5.0 } else { 1.0 }, angle_for_value(0.5));
+    let (tick_x2, tick_y2) = arc_point(
+        center,
+        center,
+        radius - if spread { 5.0 } else { 1.0 },
+        angle_for_value(0.5),
+    );
     let (px, py) = arc_point(center, center, radius - 3.0, angle_for_value(v));
 
     let apply = move |n: f64| on_change.call(n.clamp(0.0, 1.0) as f32);
@@ -1761,7 +1967,10 @@ mod tests {
         // goes to the bottom.
         let at = |deg: f64| {
             let r: f64 = 15.0;
-            (r.mul_add(deg.to_radians().cos(), 18.0), r.mul_add(deg.to_radians().sin(), 18.0))
+            (
+                r.mul_add(deg.to_radians().cos(), 18.0),
+                r.mul_add(deg.to_radians().sin(), 18.0),
+            )
         };
         let (x, y) = at(135.0);
         assert_eq!(pick_handle(x, y, 0.2, 0.8), Some(Handle::Lo));
@@ -1784,11 +1993,29 @@ mod tests {
     /// The Type link pairs the two rows' Type knobs — nothing else links.
     #[test]
     fn links_mirror_type_and_time_only() {
-        assert_eq!(linked_mirror("delay-type1", "delay", true).as_deref(), Some("delay-type2"));
-        assert_eq!(linked_mirror("delay-type2", "delay", true).as_deref(), Some("delay-type1"));
-        assert_eq!(linked_mirror("delay-type1", "delay", false), None, "unlinked");
-        assert_eq!(linked_mirror("delay-fb1", "delay", true), None, "only Type links");
-        assert_eq!(linked_mirror("delay-type1", "reverb", true), None, "its own panel only");
+        assert_eq!(
+            linked_mirror("delay-type1", "delay", true).as_deref(),
+            Some("delay-type2")
+        );
+        assert_eq!(
+            linked_mirror("delay-type2", "delay", true).as_deref(),
+            Some("delay-type1")
+        );
+        assert_eq!(
+            linked_mirror("delay-type1", "delay", false),
+            None,
+            "unlinked"
+        );
+        assert_eq!(
+            linked_mirror("delay-fb1", "delay", true),
+            None,
+            "only Type links"
+        );
+        assert_eq!(
+            linked_mirror("delay-type1", "reverb", true),
+            None,
+            "its own panel only"
+        );
     }
 
     fn child(fmt: &str, param: f32) -> MacroChildView {

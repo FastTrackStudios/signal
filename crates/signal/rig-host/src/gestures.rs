@@ -163,7 +163,12 @@ impl FootswitchEngine {
     /// Feed one note: `down` for Note On, `false` for Note Off (a Note On at
     /// velocity 0 is a Note Off — the caller folds that in). Same gestures as
     /// [`on_cc`](Self::on_cc): tap on a short release, hold at the threshold.
-    pub fn on_note(&mut self, map: &FootswitchMap, note: u8, down: bool) -> Option<FootswitchAction> {
+    pub fn on_note(
+        &mut self,
+        map: &FootswitchMap,
+        note: u8,
+        down: bool,
+    ) -> Option<FootswitchAction> {
         let gesture = map.tap_notes.iter().position(|n| *n == u32::from(note));
         self.edge(gesture, None, down)
     }
@@ -199,7 +204,13 @@ impl FootswitchEngine {
                 self.momentary[sw] = self.momentary_want[sw];
                 // Its chord partner went down just before: pressed together.
                 for &(a, b) in &self.chords {
-                    let partner = if a == sw { b } else if b == sw { a } else { continue };
+                    let partner = if a == sw {
+                        b
+                    } else if b == sw {
+                        a
+                    } else {
+                        continue;
+                    };
                     let with = self.down.get(partner).copied().flatten();
                     if with.is_some_and(|t| t.elapsed() <= CHORD_WINDOW) {
                         for x in [sw, partner] {
@@ -262,7 +273,9 @@ impl FootswitchEngine {
     pub fn poll_holds(&mut self) -> Vec<FootswitchAction> {
         let mut fired = std::mem::take(&mut self.pending);
         for &(a, b) in &self.chords {
-            let (Some(ta), Some(tb)) = (self.down[a], self.down[b]) else { continue };
+            let (Some(ta), Some(tb)) = (self.down[a], self.down[b]) else {
+                continue;
+            };
             if self.chorded[a]
                 && self.chorded[b]
                 && !self.chord_fired.contains(&(a, b))

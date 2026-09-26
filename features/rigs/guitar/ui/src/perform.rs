@@ -73,10 +73,16 @@ const LIT_RING: &str = "box-shadow: 0 0 0 2px rgba(255,255,255,0.8), 0 10px 24px
 /// dark state never depends on the renderer re-applying an opacity.
 fn dim(hex: &str, amount: f32) -> String {
     let h = hex.trim_start_matches('#');
-    let ch = |i: usize| f32::from(u8::from_str_radix(h.get(i..i + 2).unwrap_or("00"), 16).unwrap_or(0));
+    let ch =
+        |i: usize| f32::from(u8::from_str_radix(h.get(i..i + 2).unwrap_or("00"), 16).unwrap_or(0));
     let base = [10.0, 10.0, 12.0];
     let mix = |c: f32, b: f32| (b + (c - b) * amount).round().clamp(0.0, 255.0) as u8;
-    format!("#{:02x}{:02x}{:02x}", mix(ch(0), base[0]), mix(ch(2), base[1]), mix(ch(4), base[2]))
+    format!(
+        "#{:02x}{:02x}{:02x}",
+        mix(ch(0), base[0]),
+        mix(ch(2), base[1]),
+        mix(ch(4), base[2])
+    )
 }
 
 /// The physical switch number, pinned to a tile corner.
@@ -100,7 +106,8 @@ fn HoldButton(
     #[props(default)] on_hold: Option<Callback<()>>,
     /// Momentary: `on_down` on the press and `on_up` on the release (or on
     /// dragging off), in place of tap and hold.
-    #[props(default)] on_down: Option<Callback<()>>,
+    #[props(default)]
+    on_down: Option<Callback<()>>,
     #[props(default)] on_up: Option<Callback<()>>,
     children: Element,
 ) -> Element {
@@ -290,22 +297,35 @@ pub fn PerformGrid(
     // What each footswitch does right now (the song's and part's jobs).
     let jobs: Vec<String> = (0..5)
         .map(|i| {
-            model
-                .switch_actions
-                .get(i)
-                .cloned()
-                .unwrap_or_else(|| if i < 4 { "stack".into() } else { "tap_tempo".into() })
+            model.switch_actions.get(i).cloned().unwrap_or_else(|| {
+                if i < 4 {
+                    "stack".into()
+                } else {
+                    "tap_tempo".into()
+                }
+            })
         })
         .collect();
     let in_song = mode == 2;
-    let song_changes: Vec<(String, u32)> = model.song_changes.iter().map(|c| (c.patch.clone(), c.count)).collect();
+    let song_changes: Vec<(String, u32)> = model
+        .song_changes
+        .iter()
+        .map(|c| (c.patch.clone(), c.count))
+        .collect();
     let song_parts: Vec<(String, String)> = if in_song {
-        model.parts.iter().map(|p| (p.name.clone(), p.patch.clone())).collect()
+        model
+            .parts
+            .iter()
+            .map(|p| (p.name.clone(), p.patch.clone()))
+            .collect()
     } else {
         Vec::new()
     };
     let part_name = if in_song {
-        model.parts.get(model.part_index as usize).map(|p| p.name.clone())
+        model
+            .parts
+            .get(model.part_index as usize)
+            .map(|p| p.name.clone())
     } else {
         None
     };
@@ -322,11 +342,22 @@ pub fn PerformGrid(
         let at = model.part_index as usize;
         match job {
             "parts" => (
-                model.parts.get(at + 1).map_or_else(next_song, |p| p.name.clone()),
-                at.checked_sub(1).and_then(|i| model.parts.get(i)).map_or(String::new(), |p| p.name.clone()),
+                model
+                    .parts
+                    .get(at + 1)
+                    .map_or_else(next_song, |p| p.name.clone()),
+                at.checked_sub(1)
+                    .and_then(|i| model.parts.get(i))
+                    .map_or(String::new(), |p| p.name.clone()),
             ),
             "sections" => {
-                let sec = |i: usize| model.parts.get(i).map(|p| p.section.clone()).unwrap_or_default();
+                let sec = |i: usize| {
+                    model
+                        .parts
+                        .get(i)
+                        .map(|p| p.section.clone())
+                        .unwrap_or_default()
+                };
                 let cur = sec(at);
                 let next = model
                     .parts
@@ -336,7 +367,11 @@ pub fn PerformGrid(
                     .map_or_else(next_song, |p| p.section.clone());
                 // Back: to this section's start from a later part of it, else
                 // the section before.
-                let first = (0..=at).rev().take_while(|&i| sec(i).eq_ignore_ascii_case(&cur)).last().unwrap_or(at);
+                let first = (0..=at)
+                    .rev()
+                    .take_while(|&i| sec(i).eq_ignore_ascii_case(&cur))
+                    .last()
+                    .unwrap_or(at);
                 let back = if first < at {
                     cur.clone()
                 } else {
@@ -347,8 +382,13 @@ pub fn PerformGrid(
             "songs" => {
                 let i = model.song_index as usize;
                 (
-                    model.songs.get(i + 1).map_or("end of the set".into(), |s| s.name.clone()),
-                    i.checked_sub(1).and_then(|i| model.songs.get(i)).map_or(String::new(), |s| s.name.clone()),
+                    model
+                        .songs
+                        .get(i + 1)
+                        .map_or("end of the set".into(), |s| s.name.clone()),
+                    i.checked_sub(1)
+                        .and_then(|i| model.songs.get(i))
+                        .map_or(String::new(), |s| s.name.clone()),
                 )
             }
             _ => (String::new(), String::new()),
@@ -375,16 +415,42 @@ pub fn PerformGrid(
         let i = model.song_index as usize;
         let (back, on) = if in_song {
             (
-                i.checked_sub(1).and_then(|p| model.songs.get(p)).map_or("start of set".to_string(), |s| s.name.clone()),
-                model.songs.get(i + 1).map_or("end of set".to_string(), |s| s.name.clone()),
+                i.checked_sub(1)
+                    .and_then(|p| model.songs.get(p))
+                    .map_or("start of set".to_string(), |s| s.name.clone()),
+                model
+                    .songs
+                    .get(i + 1)
+                    .map_or("end of set".to_string(), |s| s.name.clone()),
             )
         } else {
             ("Profile".to_string(), "Profile".to_string())
         };
         vec![
-            ChordMark { gap: 0, label: back, icon: "‹", trailing: false, tint: "#a78bfa", onclick: (in_song).then(|| call("prev")) },
-            ChordMark { gap: 2, label: "Tuner".to_string(), icon: "♪", trailing: false, tint: "#22c55e", onclick: Some(call("tuner")) },
-            ChordMark { gap: 3, label: on, icon: "›", trailing: true, tint: "#a78bfa", onclick: (in_song).then(|| call("next")) },
+            ChordMark {
+                gap: 0,
+                label: back,
+                icon: "‹",
+                trailing: false,
+                tint: "#a78bfa",
+                onclick: (in_song).then(|| call("prev")),
+            },
+            ChordMark {
+                gap: 2,
+                label: "Tuner".to_string(),
+                icon: "♪",
+                trailing: false,
+                tint: "#22c55e",
+                onclick: Some(call("tuner")),
+            },
+            ChordMark {
+                gap: 3,
+                label: on,
+                icon: "›",
+                trailing: true,
+                tint: "#a78bfa",
+                onclick: (in_song).then(|| call("next")),
+            },
         ]
     };
     let current_song = model
@@ -788,14 +854,18 @@ fn StackTile(
     #[props(default)] compact: bool,
     /// The footswitch (0-based) this tile is, when it is one of 1–5 — its
     /// job can then be changed from the menu.
-    #[props(default)] footswitch: Option<usize>,
+    #[props(default)]
+    footswitch: Option<usize>,
     /// The part that is up (Setlist mode).
-    #[props(default)] part: Option<String>,
+    #[props(default)]
+    part: Option<String>,
     #[props(default)] in_song: bool,
     /// The song's parts `(name, patch)` (Setlist mode), for the part menu.
-    #[props(default)] parts: Vec<(String, String)>,
+    #[props(default)]
+    parts: Vec<(String, String)>,
     /// The song's changes to profile patches `(patch, count)`.
-    #[props(default)] changes: Vec<(String, u32)>,
+    #[props(default)]
+    changes: Vec<(String, u32)>,
 ) -> Element {
     // Callbacks made once per site, not once per render (see `stable`).
     let cbs = crate::stable::use_stable();
@@ -938,10 +1008,12 @@ fn ActionTile(
     footswitch: usize,
     job: String,
     /// Where a stepping job goes on a tap, and on a hold.
-    #[props(default)] next: String,
+    #[props(default)]
+    next: String,
     #[props(default)] back: String,
     /// The stack it would play, for turning it back into one from the menu.
-    #[props(default)] stack: Option<PerfStack>,
+    #[props(default)]
+    stack: Option<PerfStack>,
     #[props(default)] part: Option<String>,
     #[props(default)] in_song: bool,
     #[props(default)] compact: bool,
@@ -1075,7 +1147,9 @@ fn SwitchMenu(
                     no_rotate,
                     part: scope_part,
                 };
-                spawn(async move { let _ = r.tune_switch(t).await; });
+                spawn(async move {
+                    let _ = r.tune_switch(t).await;
+                });
             }
         }
     };
@@ -1083,7 +1157,9 @@ fn SwitchMenu(
         let rig = rig.clone();
         move |action: String| {
             if let (Some(r), Some(sw)) = (rig.clone(), footswitch) {
-                spawn(async move { let _ = r.set_switch_action(sw as u32, action, scope_part).await; });
+                spawn(async move {
+                    let _ = r.set_switch_action(sw as u32, action, scope_part).await;
+                });
             }
         }
     };
@@ -1098,7 +1174,9 @@ fn SwitchMenu(
                         let _ = r.reset_switch(i as u32, scope_part).await;
                     }
                     if let Some(sw) = footswitch {
-                        let _ = r.set_switch_action(sw as u32, String::new(), scope_part).await;
+                        let _ = r
+                            .set_switch_action(sw as u32, String::new(), scope_part)
+                            .await;
                     }
                 });
             }
@@ -1330,7 +1408,11 @@ fn BoostTile(
     let style = if active {
         format!("background-color: #fafafa; color: #0a0a0a; {LIT_RING}")
     } else {
-        format!("background-color: {}; color: {};", dim("#fafafa", 0.3), dim("#0a0a0a", 0.45))
+        format!(
+            "background-color: {}; color: {};",
+            dim("#fafafa", 0.3),
+            dim("#0a0a0a", 0.45)
+        )
     };
     rsx! {
         HoldButton {

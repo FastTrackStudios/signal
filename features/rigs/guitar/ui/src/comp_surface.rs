@@ -18,7 +18,6 @@ use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{BlockParam, LiveBlock};
 
-
 use crate::knob::{Knob, KnobSize};
 
 /// What a pointer drag on the display is editing.

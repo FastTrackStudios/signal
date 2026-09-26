@@ -283,8 +283,7 @@ fn window_placement() -> WindowPlacement {
         Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
     }
     let truthy = |v: String| v != "0" && !v.eq_ignore_ascii_case("false");
-    let fullscreen = setting("FTS_WINDOW_FULLSCREEN", "window-fullscreen")
-        .is_some_and(truthy);
+    let fullscreen = setting("FTS_WINDOW_FULLSCREEN", "window-fullscreen").is_some_and(truthy);
     let size = pair("FTS_WINDOW_SIZE", "window-size", 'x');
     let maximized = setting("FTS_WINDOW_MAXIMIZED", "window-maximized")
         .map(truthy)
@@ -1001,8 +1000,8 @@ fn SettingsPanel() -> Element {
 #[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
 #[component]
 fn AccountSettings() -> Element {
-    use signal_account_proto::account::AccountAuthClient;
     use signal_account_proto::AccountStatus;
+    use signal_account_proto::account::AccountAuthClient;
 
     let client = use_resource(connect_account);
     let mut status = use_signal(AccountStatus::default);
@@ -1016,7 +1015,9 @@ fn AccountSettings() -> Element {
             if *refreshed.peek() {
                 return;
             }
-            let Some(Some(c)) = client.read().clone() else { return };
+            let Some(Some(c)) = client.read().clone() else {
+                return;
+            };
             refreshed.set(true);
             spawn(async move {
                 if let Ok(s) = c.status().await {
