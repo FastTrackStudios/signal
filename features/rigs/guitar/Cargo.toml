@@ -18,13 +18,19 @@ workspace = true
 pipewire = []
 
 [dependencies]
+# WAV output for the switch probe (`SIGNAL_SWITCH_PROBE`, session.rs).
+hound = "3.5"
 uuid.workspace = true
+# getrusage — the process's own CPU time, for the bar's CPU meter.
+libc.workspace = true
 signal-rigs-proto.workspace = true
 # The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
 # RigAudioPrefs. The guitar feature is a thin live-handle layer on top.
 signal-sampler.workspace = true
+signal-phones.workspace = true
 # Cross-rig utilities: poison-tolerant locking, panic payload text.
 signal-rig-host.workspace = true
+signal-macromod.workspace = true
 
 # The wire contract this crate's headless backend implements (Rig +
 # AudioSettings services); front-ends consume the same crate's clients.
@@ -41,6 +47,9 @@ fx-blocks.workspace = true
 # Styx-serializable rig definitions (the runtime library files).
 facet.workspace = true
 facet-styx.workspace = true
+# `signal rig web-bundle`: rig.json, and content-addressed asset keys.
+facet-json.workspace = true
+blake3.workspace = true
 # MIDI capture for the core's monitor (native only — the headless core).
 midicore = { workspace = true, features = ["vox", "midir"] }
 tracing.workspace = true

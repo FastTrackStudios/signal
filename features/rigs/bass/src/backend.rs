@@ -179,7 +179,7 @@ impl BassRigBackend {
         // only fires while running, so re-try a missing handle here.
         if tick.tick.is_multiple_of(60)
             && self.inner.midi_handle.lock_ok().is_none()
-            && !midicore::pipewire::input_ports().is_empty()
+            && !midicore::input_ports().is_empty()
         {
             self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortsChanged);
         }
@@ -328,13 +328,13 @@ impl BassRigBackend {
         }
     }
 
-    /// Re-apply the main-output trim: active preset base + master trim.
+    /// Re-apply the main-output fader: the master trim. (The preset's own
+    /// level is applied in the rig's output stage on activation.)
     fn apply_master_trim(&self) {
         let trim = *self.inner.master_trim.lock_ok();
         let guard = self.inner.rig.lock_ok();
         if let Some(prig) = guard.as_ref() {
-            let base = prig.active_patch().map_or(0.0, |p| p.output_trim_db);
-            prig.rig().set_output_trim_db(base + trim);
+            prig.rig().set_output_trim_db(trim);
         }
     }
 
@@ -550,7 +550,7 @@ impl RigBackend for BassRigBackend {
     }
 
     fn midi_ports(&self) -> Vec<String> {
-        midicore::pipewire::input_ports()
+        midicore::input_ports()
     }
 
     fn on_midi_ports_changed(&self, ports: &[String]) {
@@ -691,7 +691,7 @@ impl BassRigSvc for BassRigBackend {
     }
 
     fn midi_ports(&self) -> Vec<String> {
-        midicore::pipewire::input_ports()
+        midicore::input_ports()
     }
 
     fn set_midi_port(&self, name: String) {

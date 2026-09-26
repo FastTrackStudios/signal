@@ -105,12 +105,24 @@ pub fn Knob(
     /// Accent color override.
     #[props(default)]
     color: Option<String>,
+    /// A logarithmic sweep (for times and frequencies, `min > 0`): each part
+    /// of the travel covers the same *ratio*, so 1–30 ms of attack is not
+    /// crammed into the bottom sliver of a 0.1–200 ms knob.
+    #[props(default)]
+    log: bool,
 ) -> Element {
-    // Drag state: (start_y, start_normalized) while a drag is live.
+    // Drag state: (start_y, start_normalized) while a drag is live — only
+    // for the local shield, when no app-root drag bus is above.
     let mut drag = use_signal(|| None::<(f64, f64)>);
+    let bus = crate::drag_bus::DragBus::try_use();
 
     let range = (max - min).max(1e-6);
-    let val = f64::from(((value - min) / range).clamp(0.0, 1.0));
+    let log = log && min > 0.0 && max > min;
+    let val = if log {
+        f64::from((value.max(min) / min).ln() / (max / min).ln()).clamp(0.0, 1.0)
+    } else {
+        f64::from(((value - min) / range).clamp(0.0, 1.0))
+    };
 
     let d = size.diameter();
     let body_d = size.body_diameter();
@@ -147,7 +159,8 @@ pub fn Knob(
     };
 
     let apply = move |norm: f64| {
-        on_change.call((norm.clamp(0.0, 1.0) as f32).mul_add(range, min));
+        let n = norm.clamp(0.0, 1.0) as f32;
+        on_change.call(if log { min * (max / min).powf(n) } else { n.mul_add(range, min) });
     };
 
     rsx! {
@@ -159,7 +172,16 @@ pub fn Knob(
                 style: "position: relative; width: {d}px; height: {d}px; \
                         display: flex; align-items: center; justify-content: center;",
                 onpointerdown: move |e: PointerEvent| {
-                    drag.set(Some((e.client_coordinates().y, val)));
+                    let y0 = e.client_coordinates().y;
+                    match bus {
+                        // The root follows the drag across the whole window.
+                        Some(bus) => bus.begin(move |ev| {
+                            if let crate::drag_bus::DragEvent::Move { y, .. } = ev {
+                                apply(val + (y0 - y) / SENSITIVITY);
+                            }
+                        }),
+                        None => drag.set(Some((y0, val))),
+                    }
                 },
                 onwheel: move |e: WheelEvent| {
                     let step = if e.delta().strip_units().y < 0.0 { 0.02 } else { -0.02 };
@@ -178,14 +200,19 @@ pub fn Knob(
                               inset 0 1px 1px rgba(255,255,255,0.07), \
                               inset 0 -1px 1px rgba(0,0,0,0.25); \
                             border: 1px solid rgba(255,255,255,0.04); \
-                            position: absolute; z-index: 1;",
+                            position: absolute;",
                 }
 
                 svg {
                     width: "{d}",
                     height: "{d}",
                     view_box: "0 0 {d} {d}",
-                    style: "position: absolute; z-index: 2; pointer-events: none;",
+                    // No z-index on either layer: document order already
+                    // paints the arc over the body, and a z-index hoists the
+                    // element into its stacking context — above any scrolling
+                    // ancestor's clip, so a knob scrolled out of a pane was
+                    // still drawn (Blitz).
+                    style: "position: absolute; pointer-events: none;",
                     path {
                         d: "{track_path}",
                         fill: "none",
@@ -217,8 +244,10 @@ pub fn Knob(
                         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
                 "{label}"
             }
-            // Drag shield: while a drag is live, a fullscreen layer owns the
-            // pointer — moving off the knob no longer drops the gesture.
+            // Drag shield, for a host with no drag bus: a layer that owns the
+            // pointer while a drag is live. (Blitz lays `fixed` out as
+            // `absolute`, so it only covers the enclosing panel — which is
+            // why the rig routes drags through its root instead.)
             if drag().is_some() {
                 div {
                     class: "fixed inset-0",

@@ -12,9 +12,7 @@
 
 pub use fts_audio_ui::paint::lane::rgb;
 
-#[cfg(not(target_arch = "wasm32"))]
 pub use delay_ui::viz::DelayViz;
-#[cfg(not(target_arch = "wasm32"))]
 pub use reverb_ui::viz::ReverbViz;
 
 /// Mark this scope dirty ~40 times a second, for as long as it lives.
@@ -23,10 +21,4 @@ pub use reverb_ui::viz::ReverbViz;
 /// in the DOM — the movement is inside a widget's scene. Any of the effect
 /// crates' clocks would do; this is the rig's name for one, so a panel that
 /// mounts no visualiser of its own can still ask to be redrawn.
-#[cfg(not(target_arch = "wasm32"))]
 pub use delay_ui::viz::use_repaint_clock;
-
-/// The wasm remote has no custom-widget surface to paint into, so it has no
-/// clock to run either — its panels are DOM, and the DOM redraws itself.
-#[cfg(target_arch = "wasm32")]
-pub fn use_repaint_clock() {}

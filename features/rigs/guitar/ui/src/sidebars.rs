@@ -7,23 +7,110 @@
 //! [`PerformanceModel`], so they work identically on desktop and web.
 
 use dioxus::prelude::*;
-use signal_widgets::{Picker, PickerSize};
+use signal_widgets::Picker;
 
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{PatchInfo, PerformanceModel, PresetInfo};
 
+use crate::kit::{ListRow, MenuItem, Picked};
+use crate::theme::LINE;
 use crate::perform::folder_color;
 
 /// Section eyebrow shared by every sidebar group.
+
+// Profile-list row layout, as inline styles Blitz honours (see the
+// `blitz-design` skill): the name takes the slack and clips; the preset and
+// its variation are a fixed right-aligned cell that clips (no
+// `text-overflow` in Blitz).
+const PATCH_ROW: &str = "display: flex; align-items: center; gap: 8px; min-width: 0; \
+                         margin-left: 16px; padding: 4px 8px; text-align: left; cursor: pointer;";
+const NAME_CELL: &str =
+    "flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-align: left;";
+// Preset over its variation, right-aligned: two short lines instead of one
+// "Preset · Variation" that the cell clipped before the variation began.
+const PRESET_STACK: &str = "flex-shrink: 0; width: 96px; display: flex; flex-direction: column; \
+                            align-items: flex-end; overflow: hidden; line-height: 1.15;";
+const PRESET_LINE: &str = "max-width: 96px; overflow: hidden; white-space: nowrap;";
+
+/// A patch's preset and the variation of it that it plays.
 #[component]
-fn PanelLabel(label: &'static str) -> Element {
+fn PresetCell(preset: String, variation: String) -> Element {
     rsx! {
-        div { class: "px-3 py-2 border-b border-border flex-shrink-0",
-            h3 { class: "text-[10px] font-semibold text-muted-foreground uppercase tracking-wider",
-                "{label}"
+        div { style: "{PRESET_STACK}",
+            span { class: "text-[9px] font-mono opacity-50", style: "{PRESET_LINE}", "{preset}" }
+            if !variation.is_empty() {
+                span { class: "text-[9px] font-mono opacity-80", style: "{PRESET_LINE}", "{variation}" }
             }
         }
     }
+}
+
+#[component]
+fn PanelLabel(label: &'static str, #[props(default)] count: String, #[props(default)] children: Element) -> Element {
+    rsx! {
+        div { style: "padding: 8px 12px; flex: 1 1 0; min-width: 0;",
+            crate::kit::SectionHeader { label: label.to_string(), count, {children} }
+        }
+    }
+}
+
+/// Fire a rig call without waiting — the next `Perf` event redraws.
+fn send<F, Fut>(rig: &Option<RigClient>, call: F)
+where
+    F: FnOnce(RigClient) -> Fut + 'static,
+    Fut: std::future::Future<Output = ()> + 'static,
+{
+    if let Some(r) = rig.clone() {
+        spawn(async move { call(r).await });
+    }
+}
+
+/// A patch's menu: rename, delete.
+fn patch_items(name: &str, all: &[String]) -> Vec<MenuItem> {
+    let others: Vec<String> = all.iter().filter(|n| !n.eq_ignore_ascii_case(name)).cloned().collect();
+    vec![
+        MenuItem::head(format!("Patch · {name}")),
+        MenuItem::name("rename", "Rename…", "Rename", name, others),
+        MenuItem::delete("delete", "Delete patch", None),
+    ]
+}
+
+/// A stack's menu: rename, delete (its patches stay).
+fn stack_items(name: &str, all: &[String]) -> Vec<MenuItem> {
+    let others: Vec<String> = all.iter().filter(|n| !n.eq_ignore_ascii_case(name)).cloned().collect();
+    vec![
+        MenuItem::head(format!("Stack · {name}")),
+        MenuItem::name("rename", "Rename…", "Rename", name, others),
+        MenuItem::delete("delete", "Delete stack (patches stay)", None),
+    ]
+}
+
+/// A profile's menu: load, rename, duplicate, delete (refused while it plays).
+fn profile_items(p: &signal_guitar_proto::ProfileEntry, all: &[String]) -> Vec<MenuItem> {
+    let others: Vec<String> = all.iter().filter(|n| !n.eq_ignore_ascii_case(&p.name)).cloned().collect();
+    vec![
+        MenuItem::head(format!("Profile · {}", p.name)),
+        MenuItem::run("load", "Load").unless(p.active.then(|| "Playing".to_string())),
+        MenuItem::name("rename", "Rename…", "Rename", &p.name, others),
+        MenuItem::name(
+            "duplicate",
+            "Duplicate…",
+            "Duplicate",
+            crate::module_sidebar::next_name(&p.name, all),
+            all.to_vec(),
+        ),
+        MenuItem::delete(
+            "delete",
+            "Delete profile",
+            if p.active {
+                Some("Playing — load another profile first".to_string())
+            } else if all.len() <= 1 {
+                Some("The only profile".to_string())
+            } else {
+                None
+            },
+        ),
+    ]
 }
 
 /// Left sidebar — the profile tree over the preset pool.
@@ -53,32 +140,35 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                     Some(r) => (
                         r.patches().await.unwrap_or_default(),
                         r.presets().await.unwrap_or_default(),
+                        r.library().await.unwrap_or_default().profiles,
                     ),
-                    None => (Vec::new(), Vec::new()),
+                    None => (Vec::new(), Vec::new(), Vec::new()),
                 }
             }
         }
     });
-    let (patch_list, preset_list): (Vec<PatchInfo>, Vec<PresetInfo>) =
-        data.read().clone().unwrap_or_default();
+    let (patch_list, preset_list, profiles): (
+        Vec<PatchInfo>,
+        Vec<PresetInfo>,
+        Vec<signal_guitar_proto::ProfileEntry>,
+    ) = data.read().clone().unwrap_or_default();
 
-    // The patch picked in the tree — the target of a preset click.
+    // The patch picked in the tree.
     let mut selected_patch = use_signal(|| None::<usize>);
     // Creation forms (toggled by the + buttons) + inline rename state.
     let mut adding_stack = use_signal(|| false);
     let mut adding_patch = use_signal(|| false);
-    let mut adding_preset = use_signal(|| false);
     let mut new_name = use_signal(String::new);
-    let mut new_path = use_signal(String::new);
     let mut new_stack_sel = use_signal(String::new);
     let mut new_preset_sel = use_signal(String::new);
     // (kind, original) — kind: "patch" | "preset"; the row shows an input.
     let mut renaming = use_signal(|| None::<(String, String)>);
     let mut rename_text = use_signal(String::new);
-    let selected_preset_name = selected_patch()
-        .and_then(|i| patch_list.get(i))
-        .map(|p| p.preset.clone());
 
+    let patch_names: Vec<String> = patch_list.iter().map(|p| p.name.clone()).collect();
+    let stack_names: Vec<String> = model.stacks.iter().map(|s| s.name.clone()).collect();
+    let profile_names: Vec<String> = profiles.iter().map(|p| p.name.clone()).collect();
+    let mut adding_profile = use_signal(|| false);
     // Group patches by stack, in the stacks' own order.
     let mut groups: Vec<(String, Vec<(usize, PatchInfo)>)> = model
         .stacks
@@ -205,7 +295,10 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                     }
                 }
             }
-            div { class: "flex-1 overflow-y-auto min-h-0 p-2 flex flex-col gap-0.5",
+            div {
+                class: "flex-1 min-h-0 p-2 flex flex-col gap-0.5",
+                // Blitz: `overflow-y: scroll` scrolls; `auto` is dropped.
+                style: "overflow-y: scroll; scrollbar-width: thin;",
                 div { class: "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-bold",
                     span { class: "w-2 h-2 rounded-full bg-current opacity-60" }
                     if model.profile_name.is_empty() { "— no profile —" } else { "{model.profile_name}" }
@@ -221,7 +314,8 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                 let main = patches.first().cloned();
                                 let main_active = main.as_ref().is_some_and(|(_, p)| p.active);
                                 let main_idx = main.as_ref().map(|(i, _)| *i);
-                                let main_preset = main.as_ref().map(|(_, p)| p.preset.clone()).unwrap_or_default();
+                                let main_preset = main.as_ref().map(|(_, p)| p.rig_preset.clone()).unwrap_or_default();
+                                let main_variation = main.as_ref().map(|(_, p)| p.variation.clone()).unwrap_or_default();
                                 rsx! {
                             div {
                                 class: if main_active {
@@ -239,24 +333,33 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                     }
                                 },
                                 span { class: "w-2 h-2 rounded-full flex-shrink-0", style: "background-color: {dot};" }
-                                span { class: "text-xs font-bold uppercase tracking-wider",
+                                span {
+                                    class: "text-xs font-bold uppercase tracking-wider",
+                                    style: "{NAME_CELL}",
                                     "{stack_label}"
                                 }
-                                span { class: "ml-auto text-[9px] font-mono opacity-50 truncate max-w-[80px]", "{main_preset}" }
-                                span {
-                                    class: "ml-auto text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 cursor-pointer",
-                                    title: "Delete stack (patches stay)",
-                                    onclick: {
-                                        let rig = rig.clone();
-                                        let name = stack_label;
-                                        move |_| {
-                                            let name = name.clone();
-                                            if let Some(r) = rig.clone() {
-                                                spawn(async move { let _ = r.delete_stack(name).await; });
+                                PresetCell { preset: main_preset.clone(), variation: main_variation.clone() }
+                                div {
+                                    class: "opacity-0 group-hover:opacity-100",
+                                    style: "display: flex; flex-shrink: 0;",
+                                    crate::kit::ActionMenu {
+                                        items: stack_items(&stack_label, &stack_names),
+                                        size: 18,
+                                        bare: true,
+                                        title: "Stack actions",
+                                        on_pick: {
+                                            let rig = rig.clone();
+                                            let name = stack_label.clone();
+                                            move |p: Picked| {
+                                                let (old, text) = (name.clone(), p.text);
+                                                match p.id {
+                                                    "rename" => send(&rig, move |r| async move { let _ = r.rename_stack(old, text).await; }),
+                                                    "delete" => send(&rig, move |r| async move { let _ = r.delete_stack(old).await; }),
+                                                    _ => {}
+                                                }
                                             }
-                                        }
-                                    },
-                                    "✕"
+                                        },
+                                    }
                                 }
                             }
                                 }
@@ -279,18 +382,23 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                             p.name.clone()
                                         }
                                     };
-                                    let preset = p.preset.clone();
+                                    let preset = p.rig_preset.clone();
+                                    let variation = p.variation.clone();
                                     let is_default = p.default_in_stack;
                                     let is_sel = selected_patch() == Some(i);
                                     rsx! {
-                                        button {
+                                        // A div, not a <button>: Blitz gives a
+                                        // button centred content, which set every
+                                        // name at a different offset.
+                                        div {
                                             key: "{i}",
+                                            style: "{PATCH_ROW}",
                                             class: if p.active {
-                                                "group flex items-center gap-2 rounded-md ml-4 px-2 py-1 text-left text-sm font-bold bg-accent text-accent-foreground"
+                                                "group rounded-md text-sm font-bold bg-accent text-accent-foreground"
                                             } else if is_sel {
-                                                "group flex items-center gap-2 rounded-md ml-4 px-2 py-1 text-left text-sm ring-1 ring-ring text-foreground"
+                                                "group rounded-md text-sm ring-1 ring-ring text-foreground"
                                             } else {
-                                                "group flex items-center gap-2 rounded-md ml-4 px-2 py-1 text-left text-sm text-foreground hover:bg-accent/40"
+                                                "group rounded-md text-sm text-foreground hover:bg-accent/40"
                                             },
                                             onclick: {
                                                 let rig = rig.clone();
@@ -326,7 +434,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                                 }
                                             } else {
                                                 span {
-                                                    class: "truncate",
+                                                    style: "{NAME_CELL}",
                                                     ondoubleclick: {
                                                         let name = name.clone();
                                                         move |e: MouseEvent| {
@@ -343,38 +451,47 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                             if is_default {
                                                 span { class: "text-[9px] opacity-60 flex-shrink-0",
                                                     title: "stack default",
-                                                    "★"
+                                                    fts_chrome::Glyph { icon: fts_chrome::Icon::Star, size: 10 }
                                                 }
-                                            }
-                                            span { class: "ml-auto text-[9px] font-mono opacity-50 truncate max-w-[80px] flex-shrink-0",
-                                                "{preset}"
                                             }
                                             if !p.override_modules.is_empty() {
                                                 span {
-                                                    class: "text-[9px] opacity-70 flex-shrink-0",
+                                                    class: "opacity-70",
+                                                    style: "display: flex; gap: 3px; flex-shrink: 0;",
                                                     title: "overrides: {p.override_modules.join(\", \")}",
-                                                    {p.override_modules.iter().map(|m| crate::icons::module_icon(m)).collect::<String>()}
+                                                    for m in p.override_modules.iter() {
+                                                        crate::icons::ModuleGlyph { key: "{m}", module: m.clone(), size: 10 }
+                                                    }
                                                 }
                                             }
                                             if !p.available {
                                                 span { class: "w-1.5 h-1.5 rounded-full flex-shrink-0",
                                                     style: "background-color: #fde047;" }
                                             }
-                                            span {
-                                                class: "text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-shrink-0 cursor-pointer",
-                                                title: "Delete patch",
-                                                onclick: {
-                                                    let rig = rig.clone();
-                                                    let name = name;
-                                                    move |e: MouseEvent| {
-                                                        e.stop_propagation();
+                                            // Preset last (fixed, right-aligned) so it lines
+                                            // up down the list; icons sit to its left.
+                                            PresetCell { preset: preset.clone(), variation: variation.clone() }
+                                            div {
+                                                class: "opacity-0 group-hover:opacity-100",
+                                                style: "display: flex; flex-shrink: 0;",
+                                                crate::kit::ActionMenu {
+                                                    items: patch_items(&name, &patch_names),
+                                                    size: 18,
+                                                    bare: true,
+                                                    title: "Patch actions",
+                                                    on_pick: {
+                                                        let rig = rig.clone();
                                                         let name = name.clone();
-                                                        if let Some(r) = rig.clone() {
-                                                            spawn(async move { let _ = r.delete_patch(name).await; });
+                                                        move |p: Picked| {
+                                                            let (old, text) = (name.clone(), p.text);
+                                                            match p.id {
+                                                                "rename" => send(&rig, move |r| async move { let _ = r.rename_patch(old, text).await; }),
+                                                                "delete" => send(&rig, move |r| async move { let _ = r.delete_patch(old).await; }),
+                                                                _ => {}
+                                                            }
                                                         }
-                                                    }
-                                                },
-                                                "✕"
+                                                    },
+                                                }
                                             }
                                         }
                                     }
@@ -385,709 +502,83 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                 }
             }
 
-            // ── The preset pool ──
-            div { class: "flex items-center pr-2",
-                PanelLabel { label: "Presets" }
-                button {
-                    class: "ml-auto text-[10px] px-1 rounded border border-border text-muted-foreground hover:text-foreground",
-                    title: "Import a .nam capture as a new preset",
-                    onclick: move |_| { adding_preset.toggle(); new_name.set(String::new()); new_path.set(String::new()); },
-                    "+ import"
-                }
-            }
-            if adding_preset() {
-                div { class: "flex flex-col gap-1 px-2 py-1 flex-shrink-0",
-                    input {
-                        class: "bg-background border border-border rounded px-1.5 py-0.5 text-xs",
-                        placeholder: "Preset name",
-                        value: "{new_name}",
-                        oninput: move |e| new_name.set(e.value()),
-                    }
-                    div { class: "flex gap-1",
-                        input {
-                            class: "flex-1 min-w-0 bg-background border border-border rounded px-1.5 py-0.5 text-xs font-mono",
-                            placeholder: "/path/to/capture.nam",
-                            value: "{new_path}",
-                            oninput: move |e| new_path.set(e.value()),
-                        }
-                        button {
-                            class: "text-xs px-1.5 rounded border border-border hover:bg-accent/40",
-                            onclick: {
-                                let rig = rig.clone();
-                                move |_| {
-                                    let (name, path) = (new_name.peek().clone(), new_path.peek().clone());
-                                    if let (Some(r), false, false) =
-                                        (rig.clone(), name.trim().is_empty(), path.trim().is_empty())
-                                    {
-                                        spawn(async move { let _ = r.add_preset(name, path).await; });
-                                        adding_preset.set(false);
-                                    }
-                                }
-                            },
-                            "add"
+            // ── Every profile — the other rigs a set can move to (Blues,
+            // Rock, Metal…). The same list switches 1 + 2 / 4 + 5 step
+            // through in Profile mode. Each row has the kit's menu: load,
+            // rename, duplicate, delete. ──
+            if !profiles.is_empty() {
+                div { style: "flex-shrink: 0; border-top: 1px solid {LINE}; display: flex; flex-direction: column;",
+                    div { style: "display: flex; align-items: center;",
+                        PanelLabel { label: "Profiles", count: format!("{}", profiles.len()),
+                            crate::kit::Button {
+                                label: "+ New",
+                                small: true,
+                                title: "A new profile — a copy of the one playing",
+                                onclick: move |()| adding_profile.toggle(),
+                            }
                         }
                     }
-                }
-            }
-            if let Some(i) = selected_patch() {
-                if let Some(p) = patch_list.get(i) {
-                    div { class: "px-3 py-1 text-[10px] text-muted-foreground flex-shrink-0",
-                        "click a preset to assign it to "
-                        span { class: "font-bold text-foreground", "{p.name}" }
-                    }
-                }
-            }
-            div { class: "overflow-y-auto min-h-0 max-h-[40%] p-2 flex flex-col gap-0.5 flex-shrink-0",
-                for (i, preset) in preset_list.iter().enumerate() {
-                    {
-                        let name = preset.name.clone();
-                        let used = preset.used_by;
-                        let is_target = selected_preset_name.as_deref() == Some(preset.name.as_str());
-                        rsx! {
-                            button {
-                                key: "{i}",
-                                class: if preset.active {
-                                    "group flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-bold bg-accent text-accent-foreground"
-                                } else if is_target {
-                                    "group flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ring-1 ring-ring text-foreground"
-                                } else {
-                                    "group flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground hover:bg-accent/40"
-                                },
-                                onclick: {
+                    if adding_profile() {
+                        div { style: "padding: 0 8px 8px;",
+                            crate::kit::NamePrompt {
+                                label: "Create",
+                                initial: String::new(),
+                                placeholder: "New profile name",
+                                taken: profile_names.clone(),
+                                on_done: {
                                     let rig = rig.clone();
-                                    move |_| {
-                                        if let (Some(r), Some(patch)) = (rig.clone(), selected_patch()) {
-                                            spawn(async move {
-                                                let _ = r.set_patch_preset(patch as u32, i as u32).await;
-                                            });
+                                    let from = model.profile_name.clone();
+                                    move |n: Option<String>| {
+                                        adding_profile.set(false);
+                                        if let Some(n) = n {
+                                            let from = from.clone();
+                                            send(&rig, move |r| async move { let _ = r.add_profile(n, from).await; });
                                         }
                                     }
                                 },
-                                span { class: "w-2 h-2 rounded-full flex-shrink-0 bg-current opacity-50" }
-                                if renaming() == Some(("preset".to_string(), name.clone())) {
-                                    input {
-                                        class: "flex-1 min-w-0 bg-background border border-border rounded px-1 text-xs",
-                                        value: "{rename_text}",
-                                        autofocus: true,
-                                        oninput: move |e| rename_text.set(e.value()),
-                                        onclick: move |e: MouseEvent| e.stop_propagation(),
-                                        onkeydown: {
-                                            let rig = rig.clone();
-                                            let old_name = name.clone();
-                                            move |e: KeyboardEvent| {
-                                                if e.key() == Key::Enter {
-                                                    let (old_name, new_n) = (old_name.clone(), rename_text.peek().clone());
-                                                    if let Some(r) = rig.clone() {
-                                                        spawn(async move { let _ = r.rename_preset(old_name, new_n).await; });
-                                                    }
-                                                    renaming.set(None);
-                                                } else if e.key() == Key::Escape {
-                                                    renaming.set(None);
-                                                }
-                                            }
-                                        },
-                                    }
-                                } else {
-                                    span {
-                                        class: "truncate",
-                                        ondoubleclick: {
-                                            let name = name.clone();
-                                            move |e: MouseEvent| {
-                                                e.stop_propagation();
-                                                rename_text.set(name.clone());
-                                                renaming.set(Some(("preset".to_string(), name.clone())));
-                                            }
-                                        },
-                                        "{name}"
-                                    }
-                                }
-                                span { class: "ml-auto text-[9px] font-mono opacity-50 flex-shrink-0", "×{used}" }
-                                if used == 0 {
-                                    span {
-                                        class: "text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-shrink-0 cursor-pointer",
-                                        title: "Delete preset",
-                                        onclick: {
-                                            let rig = rig.clone();
-                                            let name = name;
-                                            move |e: MouseEvent| {
-                                                e.stop_propagation();
-                                                let name = name.clone();
-                                                if let Some(r) = rig.clone() {
-                                                    spawn(async move { let _ = r.delete_preset(name).await; });
-                                                }
-                                            }
-                                        },
-                                        "✕"
-                                    }
-                                }
                             }
                         }
                     }
-                }
-            }
-
-            // The levelling tool sits at the foot of the profile tree,
-            // because what it changes is every patch in that tree.
-            PatchLevelling {}
-        }
-    }
-}
-
-/// Right sidebar: the current song's sections on top, setlist management
-/// (jump + reorder) beneath.
-#[component]
-pub fn RightSidebar(model: PerformanceModel) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
-    // The patch list, for telling a section what to recall. Re-fetched when
-    // the model changes, the same way the left sidebar does it: a patch added
-    // or renamed has to appear here too.
-    let mut rev = use_signal(|| 0u64);
-    let mut last = use_signal(|| None::<PerformanceModel>);
-    if last.read().as_ref() != Some(&model) {
-        last.set(Some(model.clone()));
-        rev += 1;
-    }
-    let patches = use_resource({
-        let rig = rig.clone();
-        move || {
-            let _ = rev();
-            let rig = rig.clone();
-            async move {
-                match rig {
-                    Some(r) => r.patches().await.unwrap_or_default(),
-                    None => Vec::new(),
-                }
-            }
-        }
-    });
-    let patch_list: Vec<PatchInfo> = patches.read().clone().unwrap_or_default();
-    // Per-entry key/bpm editor + the add forms.
-    let mut editing_entry = use_signal(|| None::<usize>);
-    let mut edit_key = use_signal(String::new);
-    let mut edit_bpm = use_signal(String::new);
-    let mut add_song_sel = use_signal(String::new);
-    let mut adding_setlist = use_signal(|| false);
-    let mut adding_song = use_signal(|| false);
-    let mut new_name = use_signal(String::new);
-    let mut new_key = use_signal(String::new);
-    let mut new_bpm = use_signal(String::new);
-    let current_song = model
-        .songs
-        .get(model.song_index as usize)
-        .map(|s| s.name.clone())
-        .unwrap_or_default();
-    // Section editing: one form for adding, one slot for the section being
-    // renamed. Both live here rather than per-row so only one can be open.
-    let mut adding_part = use_signal(|| false);
-    let mut new_part = use_signal(String::new);
-    let mut renaming_part = use_signal(|| None::<String>);
-    let mut rename_to = use_signal(String::new);
-    let part_count = model.parts.len();
-
-    rsx! {
-        aside { class: "w-64 flex-shrink-0 flex flex-col border-l border-border bg-card min-h-0",
-            // ── Song sections ──
-            PanelLabel { label: "Song Parts" }
-            div { class: "flex items-center gap-1 px-3 pt-2 flex-shrink-0",
-                div { class: "text-sm font-bold truncate", "{current_song}" }
-                button {
-                    class: "ml-auto rounded px-1.5 py-0.5 text-[10px] border border-border text-muted-foreground hover:bg-accent/40",
-                    onclick: move |_| {
-                        let open = !adding_part();
-                        adding_part.set(open);
-                        if open {
-                            new_part.set(String::new());
-                        }
-                    },
-                    if adding_part() { "×" } else { "+ part" }
-                }
-            }
-            // Naming a new section. A song's structure is the player's, not
-            // something derivable — an "Instrumental 2" exists because the
-            // song has one.
-            if adding_part() && !current_song.is_empty() {
-                div { class: "flex gap-1 px-2 pt-1 flex-shrink-0",
-                    input {
-                        class: "flex-1 min-w-0 rounded bg-input px-1.5 py-0.5 text-[11px]",
-                        placeholder: "Verse / Chorus / Bridge…",
-                        value: "{new_part}",
-                        oninput: move |e| new_part.set(e.value()),
-                        onkeydown: {
-                            let rig = rig.clone();
-                            move |e: KeyboardEvent| {
-                                if e.key() != Key::Enter {
-                                    return;
-                                }
-                                let name = new_part().trim().to_string();
-                                if name.is_empty() {
-                                    return;
-                                }
-                                if let Some(r) = rig.clone() {
-                                    spawn(async move { let _ = r.add_part(name).await; });
-                                }
-                                new_part.set(String::new());
-                            }
-                        },
-                    }
-                    button {
-                        class: "rounded px-2 py-0.5 text-[10px] bg-accent text-accent-foreground",
-                        onclick: {
-                            let rig = rig.clone();
-                            move |_| {
-                                let name = new_part().trim().to_string();
-                                if name.is_empty() {
-                                    return;
-                                }
-                                if let Some(r) = rig.clone() {
-                                    spawn(async move { let _ = r.add_part(name).await; });
-                                }
-                                new_part.set(String::new());
-                            }
-                        },
-                        "Add"
-                    }
-                }
-            }
-            if model.parts.is_empty() && !current_song.is_empty() {
-                div { class: "px-3 py-2 text-[10px] text-muted-foreground leading-snug flex-shrink-0",
-                    "No sections yet. Name them and each can recall a patch and change \
-                     what it needs on top of it."
-                }
-            }
-            div { class: "grid grid-cols-2 gap-1.5 p-2 flex-shrink-0",
-                for (i, part) in model.parts.iter().enumerate() {
-                    {
-                        let name = part.name.clone();
-                        let patch = part.patch.clone();
-                        let is_current = i == model.part_index as usize;
-                        rsx! {
-                            button {
-                                key: "{i}",
-                                class: if is_current {
-                                    "rounded-md px-2 py-2 text-xs font-bold bg-accent text-accent-foreground"
-                                } else {
-                                    "rounded-md px-2 py-2 text-xs text-muted-foreground border border-border hover:bg-accent/40"
-                                },
-                                onclick: {
-                                    let rig = rig.clone();
-                                    move |_| {
-                                        if let Some(r) = rig.clone() {
-                                            spawn(async move { let _ = r.select_part(i as u32).await; });
-                                        }
-                                    }
-                                },
-                                div { class: "flex flex-col items-start leading-tight",
-                                    span { "{name}" }
-                                    if !patch.is_empty() {
-                                        span { class: "text-[9px] opacity-60", "→ {patch}" }
-                                    }
-                                    // What the section changes on top. A
-                                    // section with no patch and two
-                                    // overrides is doing more than one with
-                                    // a patch and none, so the count has to
-                                    // be visible or the row reads as empty.
-                                    if !part.overrides.is_empty() {
-                                        span { class: "text-[9px] opacity-60",
-                                            "± {part.overrides.len()} change"
-                                            if part.overrides.len() != 1 { "s" }
-                                        }
-                                    }
-                                }
-                            }
-                            // Which patch this section recalls. The sidebar is
-                            // where a set is built, so it is where a section
-                            // is told what to do — the perform grid only
-                            // fires it.
-                            Picker {
-                                options: patch_list.iter().map(|p| p.name.clone()).collect::<Vec<String>>(),
-                                selected: name_index(&patch_list.iter().map(|p| p.name.clone()).collect::<Vec<String>>(), &patch),
-                                placeholder: "—".to_string(),
-                                size: PickerSize::Tiny,
-                                on_select: {
-                                    let (rig, part) = (rig.clone(), name.clone());
-                                    let names: Vec<String> = patch_list.iter().map(|p| p.name.clone()).collect();
-                                    move |i: u32| {
-                                        let (Some(r), Some(patch)) = (rig.clone(), names.get(i as usize).cloned()) else {
-                                            return;
-                                        };
-                                        let part = part.clone();
-                                        spawn(async move {
-                                            let _ = r.set_part_patch(part, patch).await;
-                                        });
-                                    }
-                                },
-                            }
-                            // Arranging: rename, move, remove. A song's
-                            // sections get reworked while the song is being
-                            // worked out, and doing that in a text file is
-                            // not something anyone does mid-rehearsal.
-                            div { class: "col-span-2 flex items-center gap-1 -mt-0.5 mb-1",
-                                if renaming_part() == Some(name.clone()) {
-                                    input {
-                                        class: "flex-1 min-w-0 rounded bg-input px-1.5 py-0.5 text-[10px]",
-                                        value: "{rename_to}",
-                                        oninput: move |e| rename_to.set(e.value()),
-                                        onkeydown: {
-                                            let (rig, old) = (rig.clone(), name.clone());
-                                            move |e: KeyboardEvent| {
-                                                if e.key() != Key::Enter {
-                                                    return;
-                                                }
-                                                let new_name = rename_to().trim().to_string();
-                                                if !new_name.is_empty() {
-                                                    if let Some(r) = rig.clone() {
-                                                        let old = old.clone();
-                                                        spawn(async move {
-                                                            let _ = r.rename_part(old, new_name).await;
-                                                        });
-                                                    }
-                                                }
-                                                renaming_part.set(None);
-                                            }
-                                        },
-                                    }
-                                    button {
-                                        class: "rounded px-1 py-0.5 text-[9px] text-muted-foreground hover:bg-accent/40",
-                                        onclick: move |_| renaming_part.set(None),
-                                        "esc"
-                                    }
-                                } else {
-                                    button {
-                                        class: "rounded px-1 py-0.5 text-[9px] text-muted-foreground hover:bg-accent/40",
+                    div { style: "display: flex; flex-direction: column; gap: 1px; padding: 0 8px 8px;",
+                        for p in profiles.iter() {
+                            {
+                                let name = p.name.clone();
+                                let active = p.active;
+                                rsx! {
+                                    ListRow {
+                                        key: "{p.name}",
+                                        title: p.name.clone(),
+                                        note: format!("{}", p.patches),
+                                        live: active,
+                                        small: true,
                                         onclick: {
+                                            let rig = rig.clone();
                                             let name = name.clone();
-                                            move |_| {
-                                                rename_to.set(name.clone());
-                                                renaming_part.set(Some(name.clone()));
-                                            }
-                                        },
-                                        "rename"
-                                    }
-                                    button {
-                                        class: "rounded px-1 py-0.5 text-[9px] text-muted-foreground hover:bg-accent/40 disabled:opacity-30",
-                                        disabled: i == 0,
-                                        onclick: {
-                                            let rig = rig.clone();
-                                            move |_| {
-                                                if let Some(r) = rig.clone() {
-                                                    spawn(async move {
-                                                        let _ = r.move_part(i as u32, i as u32 - 1).await;
-                                                    });
-                                                }
-                                            }
-                                        },
-                                        "↑"
-                                    }
-                                    button {
-                                        class: "rounded px-1 py-0.5 text-[9px] text-muted-foreground hover:bg-accent/40 disabled:opacity-30",
-                                        disabled: i + 1 >= part_count,
-                                        onclick: {
-                                            let rig = rig.clone();
-                                            move |_| {
-                                                if let Some(r) = rig.clone() {
-                                                    spawn(async move {
-                                                        let _ = r.move_part(i as u32, i as u32 + 1).await;
-                                                    });
-                                                }
-                                            }
-                                        },
-                                        "↓"
-                                    }
-                                    button {
-                                        class: "ml-auto rounded px-1 py-0.5 text-[9px] text-muted-foreground hover:bg-destructive/30",
-                                        onclick: {
-                                            let (rig, name) = (rig.clone(), name.clone());
-                                            move |_| {
-                                                if let Some(r) = rig.clone() {
+                                            move |()| {
+                                                if !active {
                                                     let name = name.clone();
-                                                    spawn(async move {
-                                                        let _ = r.remove_part(name).await;
-                                                    });
+                                                    send(&rig, move |r| async move { let _ = r.select_profile(name).await; });
                                                 }
                                             }
                                         },
-                                        "remove"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Setlist management ──
-            PanelLabel { label: "Setlist" }
-            // Which set: XR / CYA / … — switching recalls its first song.
-            div { class: "flex gap-1 px-2 pt-1 flex-wrap",
-                for (si, set) in model.setlists.iter().enumerate() {
-                    {
-                        let set = set.clone();
-                        let active = si == model.setlist_index as usize;
-                        let rig = rig.clone();
-                        rsx! {
-                            button {
-                                key: "{si}",
-                                class: if active {
-                                    "rounded px-1.5 py-0.5 text-[10px] font-bold bg-accent text-accent-foreground"
-                                } else {
-                                    "rounded px-1.5 py-0.5 text-[10px] text-muted-foreground border border-border hover:bg-accent/40"
-                                },
-                                onclick: move |_| {
-                                    if let Some(r) = rig.clone() {
-                                        spawn(async move { let _ = r.select_setlist(si as u32).await; });
-                                    }
-                                },
-                                "{set}"
-                            }
-                        }
-                    }
-                }
-            }
-            div { class: "flex-1 overflow-y-auto min-h-0 p-2 flex flex-col gap-0.5",
-                for (i, song) in model.songs.iter().enumerate() {
-                    {
-                        let name = song.name.clone();
-                        let meta = format!("{} · {}", song.key, song.bpm);
-                        let is_current = i == model.song_index as usize;
-                        let count = model.songs.len();
-                        rsx! {
-                            div {
-                                key: "{i}",
-                                class: if is_current {
-                                    "group flex items-center gap-1 rounded-md px-2 py-1 bg-accent text-accent-foreground"
-                                } else {
-                                    "group flex items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:bg-accent/40"
-                                },
-                                button {
-                                    class: "flex items-center gap-2 flex-1 min-w-0 text-left text-sm",
-                                    onclick: {
-                                        let rig = rig.clone();
-                                        move |_| {
-                                            if let Some(r) = rig.clone() {
-                                                spawn(async move { let _ = r.select_song(i as u32).await; });
-                                            }
-                                        }
-                                    },
-                                    span { class: "font-mono text-[10px] opacity-60 w-4 flex-shrink-0", "{i + 1}" }
-                                    span { class: if is_current { "truncate font-bold" } else { "truncate" }, "{name}" }
-                                    if editing_entry() == Some(i) {
-                                        span { class: "ml-auto flex items-center gap-1 flex-shrink-0",
-                                            input {
-                                                class: "w-8 bg-background border border-border rounded px-1 text-[10px]",
-                                                placeholder: "key",
-                                                value: "{edit_key}",
-                                                onclick: move |e: MouseEvent| e.stop_propagation(),
-                                                oninput: move |e| edit_key.set(e.value()),
-                                            }
-                                            input {
-                                                class: "w-10 bg-background border border-border rounded px-1 text-[10px]",
-                                                placeholder: "bpm",
-                                                value: "{edit_bpm}",
-                                                onclick: move |e: MouseEvent| e.stop_propagation(),
-                                                oninput: move |e| edit_bpm.set(e.value()),
-                                            }
-                                            span {
-                                                class: "text-[10px] cursor-pointer hover:text-foreground",
-                                                onclick: {
-                                                    let rig = rig.clone();
-                                                    move |e: MouseEvent| {
-                                                        e.stop_propagation();
-                                                        let key = edit_key.peek().clone();
-                                                        let bpm = edit_bpm.peek().parse::<u32>().unwrap_or(0);
-                                                        if let Some(r) = rig.clone() {
-                                                            spawn(async move { let _ = r.set_setlist_entry(i as u32, key, bpm).await; });
-                                                        }
-                                                        editing_entry.set(None);
-                                                    }
-                                                },
-                                                "✓"
-                                            }
-                                        }
-                                    } else {
-                                        span { class: "ml-auto font-mono text-[9px] opacity-60 flex-shrink-0", "{meta}" }
-                                        span {
-                                            class: "text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-shrink-0 cursor-pointer",
-                                            title: "Edit key/bpm for this set",
-                                            onclick: {
-                                                let key = song.key.clone();
-                                                let bpm = song.bpm;
-                                                move |e: MouseEvent| {
-                                                    e.stop_propagation();
-                                                    edit_key.set(key.clone());
-                                                    edit_bpm.set(bpm.to_string());
-                                                    editing_entry.set(Some(i));
-                                                }
-                                            },
-                                            "✎"
-                                        }
-                                        span {
-                                            class: "text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-shrink-0 cursor-pointer",
-                                            title: "Remove from set",
-                                            onclick: {
-                                                let rig = rig.clone();
-                                                let setlist = model.setlist_index;
-                                                move |e: MouseEvent| {
-                                                    e.stop_propagation();
-                                                    if let Some(r) = rig.clone() {
-                                                        spawn(async move { let _ = r.remove_setlist_entry(setlist, i as u32).await; });
-                                                    }
-                                                }
-                                            },
-                                            "✕"
-                                        }
-                                    }
-                                }
-                                // Reorder — visible on hover so the list stays calm.
-                                div { class: "flex flex-col opacity-0 group-hover:opacity-100 flex-shrink-0",
-                                    button {
-                                        class: "text-[9px] leading-none px-1 hover:text-foreground disabled:opacity-20",
-                                        disabled: i == 0,
-                                        onclick: {
+                                        menu: profile_items(p, &profile_names),
+                                        on_menu: {
                                             let rig = rig.clone();
-                                            move |_| {
-                                                if i > 0 {
-                                                    if let Some(r) = rig.clone() {
-                                                        spawn(async move { let _ = r.move_song(i as u32, (i - 1) as u32).await; });
-                                                    }
+                                            let name = name.clone();
+                                            move |x: Picked| {
+                                                let (old, text) = (name.clone(), x.text);
+                                                match x.id {
+                                                    "load" => send(&rig, move |r| async move { let _ = r.select_profile(old).await; }),
+                                                    "rename" => send(&rig, move |r| async move { let _ = r.rename_profile(old, text).await; }),
+                                                    "duplicate" => send(&rig, move |r| async move { let _ = r.add_profile(text, old).await; }),
+                                                    "delete" => send(&rig, move |r| async move { let _ = r.delete_profile(old).await; }),
+                                                    _ => {}
                                                 }
                                             }
                                         },
-                                        "▲"
-                                    }
-                                    button {
-                                        class: "text-[9px] leading-none px-1 hover:text-foreground disabled:opacity-20",
-                                        disabled: i + 1 >= count,
-                                        onclick: {
-                                            let rig = rig.clone();
-                                            move |_| {
-                                                if i + 1 < count {
-                                                    if let Some(r) = rig.clone() {
-                                                        spawn(async move { let _ = r.move_song(i as u32, (i + 1) as u32).await; });
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        "▼"
                                     }
                                 }
                             }
-                        }
-                    }
-                }
-            }
-
-            // ── Set building: add a song, new set, new library song ──
-            div { class: "flex flex-col gap-1 p-2 border-t border-border flex-shrink-0",
-                div { class: "flex gap-1",
-                    div { class: "flex-1 min-w-0",
-                        Picker {
-                            options: model
-                                .library_songs
-                                .iter()
-                                .map(|s| format!("{} ({} · {})", s.name, s.key, s.bpm))
-                                .collect::<Vec<String>>(),
-                            selected: name_index(
-                                &model.library_songs.iter().map(|s| s.name.clone()).collect::<Vec<String>>(),
-                                &add_song_sel(),
-                            ),
-                            placeholder: "add song to set…".to_string(),
-                            width: "100%".to_string(),
-                            on_select: {
-                                let names: Vec<String> = model.library_songs.iter().map(|s| s.name.clone()).collect();
-                                move |i: u32| {
-                                    if let Some(n) = names.get(i as usize) {
-                                        add_song_sel.set(n.clone());
-                                    }
-                                }
-                            },
-                        }
-                    }
-                    button {
-                        class: "text-xs px-1.5 rounded border border-border hover:bg-accent/40",
-                        onclick: {
-                            let rig = rig;
-                            let setlist = model.setlist_index;
-                            move |_| {
-                                let song = add_song_sel.peek().clone();
-                                if let (Some(r), false) = (rig.clone(), song.is_empty()) {
-                                    spawn(async move { let _ = r.add_setlist_entry(setlist, song).await; });
-                                }
-                            }
-                        },
-                        "+"
-                    }
-                }
-                div { class: "flex gap-1",
-                    button {
-                        class: "flex-1 text-[10px] px-1 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground",
-                        onclick: move |_| { adding_setlist.toggle(); adding_song.set(false); new_name.set(String::new()); },
-                        "+ setlist"
-                    }
-                    button {
-                        class: "flex-1 text-[10px] px-1 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground",
-                        onclick: move |_| { adding_song.toggle(); adding_setlist.set(false); new_name.set(String::new()); },
-                        "+ song"
-                    }
-                }
-                if adding_setlist() {
-                    div { class: "flex gap-1",
-                        input {
-                            class: "flex-1 min-w-0 bg-background border border-border rounded px-1.5 py-0.5 text-xs",
-                            placeholder: "XR Wednesday 7-15-26",
-                            value: "{new_name}",
-                            oninput: move |e| new_name.set(e.value()),
-                        }
-                        button {
-                            class: "text-xs px-1.5 rounded border border-border hover:bg-accent/40",
-                            onclick: {
-                                let rig = rig.clone();
-                                move |_| {
-                                    let name = new_name.peek().clone();
-                                    if let (Some(r), false) = (rig.clone(), name.trim().is_empty()) {
-                                        spawn(async move { let _ = r.add_setlist(name).await; });
-                                        adding_setlist.set(false);
-                                    }
-                                }
-                            },
-                            "add"
-                        }
-                    }
-                }
-                if adding_song() {
-                    div { class: "flex gap-1",
-                        input {
-                            class: "flex-1 min-w-0 bg-background border border-border rounded px-1.5 py-0.5 text-xs",
-                            placeholder: "Song name",
-                            value: "{new_name}",
-                            oninput: move |e| new_name.set(e.value()),
-                        }
-                        input {
-                            class: "w-8 bg-background border border-border rounded px-1 py-0.5 text-xs",
-                            placeholder: "G",
-                            value: "{new_key}",
-                            oninput: move |e| new_key.set(e.value()),
-                        }
-                        input {
-                            class: "w-11 bg-background border border-border rounded px-1 py-0.5 text-xs",
-                            placeholder: "bpm",
-                            value: "{new_bpm}",
-                            oninput: move |e| new_bpm.set(e.value()),
-                        }
-                        button {
-                            class: "text-xs px-1.5 rounded border border-border hover:bg-accent/40",
-                            onclick: {
-                                let rig = rig.clone();
-                                move |_| {
-                                    let name = new_name.peek().clone();
-                                    let key = new_key.peek().clone();
-                                    let bpm = new_bpm.peek().parse::<u32>().unwrap_or(0);
-                                    if let (Some(r), false) = (rig.clone(), name.trim().is_empty()) {
-                                        spawn(async move { let _ = r.add_song(name, key, bpm).await; });
-                                        adding_song.set(false);
-                                    }
-                                }
-                            },
-                            "add"
                         }
                     }
                 }
@@ -1132,20 +623,21 @@ mod tests {
     }
 }
 
-/// Level every patch to a common loudness, and show what it measured.
+/// Patch levelling, as a chip in the bar: progress while a pass runs, then
+/// what it found, until dismissed. Starting a pass is an action (⌘P →
+/// *Level Patches*), not a panel — it is run once after building patches,
+/// not reached for mid-song.
 ///
-/// The rig's other loudness machinery works a block at a time — a capture held
-/// at unity across its drive range, an amp's own measured level — and none of
-/// it can know that a clean patch lands several dB under a high-gain one,
-/// because that is a property of the whole chain. This runs the measurement
-/// that does know, and shows the numbers, because a player who can see that
-/// the clean patch came in at −27 LUFS can tell the difference between a rig
-/// that is level and a rig that has merely been trimmed.
+/// The spread is the number that says whether the rig needed it: the
+/// distance between its quietest and loudest patch before trimming. The
+/// loudest trim is shown with it, coloured when it is big enough to mean a
+/// patch is built wrong rather than merely unlevel.
 #[component]
-pub fn PatchLevelling() -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+pub fn LevellingChip() -> Element {
     let state = crate::state::use_rig_state();
     let progress = state.levelling.cloned();
+    // Dismissed for this many results — a new pass brings it back.
+    let mut dismissed = use_signal(|| None::<(u32, usize)>);
 
     let running = progress.total > 0 && !progress.complete;
     let pct = if progress.total == 0 {
@@ -1153,9 +645,6 @@ pub fn PatchLevelling() -> Element {
     } else {
         progress.done * 100 / progress.total
     };
-
-    // The spread is the number that says whether the rig needed this: the
-    // distance between its quietest and loudest patch before trimming.
     let spread = {
         let mut lufs: Vec<f32> = progress
             .results
@@ -1169,70 +658,50 @@ pub fn PatchLevelling() -> Element {
             _ => None,
         }
     };
+    let worst = progress
+        .results
+        .iter()
+        .filter(|r| r.lufs.is_finite())
+        .map(|r| r.trim_db)
+        .max_by(|a, b| a.abs().total_cmp(&b.abs()));
+    let unmeasured = progress
+        .results
+        .iter()
+        .filter(|r| !r.lufs.is_finite())
+        .count();
+    let stamp = (progress.total, progress.results.len());
 
+    if !running && (progress.results.is_empty() || dismissed() == Some(stamp)) {
+        return rsx! {};
+    }
     rsx! {
-        div { class: "flex flex-col gap-1 px-2 py-1.5 border-t border-border flex-shrink-0",
-            div { class: "flex items-center gap-1.5",
-                span { class: "text-[9px] font-semibold uppercase tracking-[1.5px] text-muted-foreground",
-                    "Levels"
+        div {
+            style: "display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; \
+                    border-radius: 6px; border: 1px solid #26262b; font-size: 10px; color: #a1a1aa; \
+                    white-space: nowrap; flex-shrink: 0;",
+            title: if running { format!("Measuring {}", progress.patch) } else { "Patch levelling".to_string() },
+            if running {
+                span { "Levelling {progress.done}/{progress.total}" }
+                div { style: "width: 48px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.08); overflow: hidden;",
+                    div { style: "height: 100%; width: {pct}%; background: #22c55e;" }
+                }
+            } else {
+                span { "Levelled" }
+                if let Some(spread) = spread {
+                    span { style: "color: #71717a;", "· spread was {spread:.1} dB" }
+                }
+                if let Some(w) = worst {
+                    span { style: "color: {trim_colour(w)};", "· max trim {w:+.1}" }
+                }
+                if unmeasured > 0 {
+                    span { style: "color: #ef4444;", "· {unmeasured} not measured" }
                 }
                 button {
-                    class: "ml-auto text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground",
-                    disabled: running,
-                    title: "Measure every patch through its whole chain and trim each to the same loudness",
-                    onclick: {
-                        let rig = rig.clone();
-                        move |_| {
-                            if let Some(r) = rig.clone() {
-                                spawn(async move { let _ = r.level_patches().await; });
-                            }
-                        }
-                    },
-                    if running { "measuring…" } else { "Level patches" }
-                }
-            }
-
-            if running {
-                div { class: "flex flex-col gap-0.5",
-                    div { style: "width: 100%; height: 4px; border-radius: 2px; background-color: rgba(0,0,0,0.45); overflow: hidden;",
-                        div { style: "height: 100%; width: {pct}%; background-color: #22c55e;" }
-                    }
-                    span { class: "text-[9px] text-muted-foreground truncate",
-                        "{progress.done}/{progress.total} · {progress.patch}"
-                    }
-                }
-            }
-
-            // Rendering a chain is far from realtime, so a finished pass keeps
-            // its table up: it is the only place the measurement is visible.
-            if !progress.results.is_empty() {
-                if let Some(spread) = spread {
-                    span { class: "text-[9px] text-muted-foreground",
-                        "spread was {spread:.1} dB"
-                    }
-                }
-                div { class: "flex flex-col max-h-40 overflow-y-auto",
-                    for r in progress.results.iter() {
-                        div {
-                            key: "{r.patch}",
-                            class: "flex items-center gap-1 text-[9px] leading-tight py-0.5",
-                            span { class: "flex-1 min-w-0 truncate text-muted-foreground", "{r.patch}" }
-                            if r.lufs.is_finite() {
-                                span { style: "font-variant-numeric: tabular-nums; color: #71717a;", "{r.lufs:.1}" }
-                                span {
-                                    style: "font-variant-numeric: tabular-nums; width: 42px; text-align: right; color: {trim_colour(r.trim_db)};",
-                                    "{r.trim_db:+.1}"
-                                }
-                            } else {
-                                // Unmeasured, and said so: a dash cannot be
-                                // mistaken for a level that was checked.
-                                span {
-                                    style: "font-variant-numeric: tabular-nums; width: 62px; text-align: right; color: #ef4444;",
-                                    "not measured"
-                                }
-                            }
-                        }
-                    }
+                    style: "display: flex; align-items: center; border: none; background: transparent; \
+                            color: #71717a; cursor: pointer; padding: 0;",
+                    title: "Dismiss",
+                    onclick: move |_| dismissed.set(Some(stamp)),
+                    fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 10 }
                 }
             }
         }

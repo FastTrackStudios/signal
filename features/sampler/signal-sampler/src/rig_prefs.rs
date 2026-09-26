@@ -9,7 +9,7 @@ use facet::Facet;
 /// Empty-string / `0` mean "unset" (use the system default) rather than
 /// `Option`, because the styx config is both written and re-read and the
 /// serializer can't round-trip a serialized `None`.
-#[derive(Clone, Debug, PartialEq, Eq, Facet)]
+#[derive(Clone, Debug, PartialEq, Facet)]
 pub struct RigAudioPrefs {
     /// Input device substring (matched against device names). Empty = system
     /// default input.
@@ -48,6 +48,25 @@ pub struct RigAudioPrefs {
     pub phones_mix_in_l: usize,
     #[facet(default)]
     pub phones_mix_in_r: usize,
+    /// Play the monitor mix from the separate headphone-mixer process
+    /// (`signal-phones`) instead of this engine, so it keeps playing when
+    /// the rig overruns, stops or crashes. Needs `phones_routing`.
+    #[facet(default)]
+    pub phones_mixer: bool,
+    /// Let the rig open a built-in microphone as its input. Off by default —
+    /// the laptop mic through the laptop speakers feeds back the moment the
+    /// rig opens (see `daw_audio_io::input_guard`). `allow_builtin_mic true`
+    /// in the rig's styx turns it on.
+    #[facet(default)]
+    pub allow_builtin_mic: bool,
+    /// NAM level calibration: the interface's full-scale input level, dBu.
+    /// `0` means the MiniFuse instrument input's +11.5 dBu (at minimum
+    /// gain — turning the gain up lowers it by as much).
+    #[facet(default)]
+    pub input_calibration_dbu: f32,
+    /// Turn NAM level calibration off (models fed and heard as-is).
+    #[facet(default)]
+    pub nam_calibration_off: bool,
 }
 
 impl Default for RigAudioPrefs {
@@ -65,11 +84,47 @@ impl Default for RigAudioPrefs {
             phones_out_r: 0,
             phones_mix_in_l: 0,
             phones_mix_in_r: 0,
+            phones_mixer: false,
+            allow_builtin_mic: false,
+            input_calibration_dbu: 0.0,
+            nam_calibration_off: false,
         }
     }
 }
 
 impl RigAudioPrefs {
+    /// The MiniFuse instrument input's full scale at minimum gain.
+    pub const DEFAULT_INPUT_CALIBRATION_DBU: f32 = 11.5;
+
+    /// The interface calibration NAM blocks are levelled against, or `None`
+    /// when calibration is off.
+    #[must_use]
+    pub fn nam_calibration(&self) -> Option<f32> {
+        if self.nam_calibration_off {
+            return None;
+        }
+        Some(if self.input_calibration_dbu == 0.0 {
+            Self::DEFAULT_INPUT_CALIBRATION_DBU
+        } else {
+            self.input_calibration_dbu
+        })
+    }
+}
+
+impl RigAudioPrefs {
+    /// The routing, zeros resolved to the live-rig conventions: `(main,
+    /// phones, monitor-mix in)` pairs, 0-based — main on 3-4, phones on
+    /// 1-2, the mix in on 3-4. Meaningful with `phones_routing` on.
+    #[must_use]
+    pub fn resolved_routing(&self) -> ((usize, usize), (usize, usize), (usize, usize)) {
+        let pair = |l: usize, r: usize, d: (usize, usize)| if l == 0 && r == 0 { d } else { (l, r) };
+        (
+            pair(self.main_out_l, self.main_out_r, (2, 3)),
+            pair(self.phones_out_l, self.phones_out_r, (0, 1)),
+            pair(self.phones_mix_in_l, self.phones_mix_in_r, (2, 3)),
+        )
+    }
+
     /// Input device substring, or `None` if unset (use default).
     #[must_use]
     pub fn input_name(&self) -> Option<&str> {
@@ -106,6 +161,7 @@ impl From<&RigAudioPrefs> for daw_audio_io::AudioIoPrefs {
             sample_rate: p.sample_rate,
             buffer_size: p.buffer_size,
             want_input: true,
+            allow_builtin_mic: p.allow_builtin_mic,
             // The guitar rig keeps the engine's default node name; the caller
             // overrides it where a process runs more than one engine.
             node_name: String::new(),

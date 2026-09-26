@@ -1,0 +1,27 @@
+[package]
+name = "signal-guitar-worklet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Browser guitar rig — the AudioWorklet chain runner and the NAM Web Worker pool"
+
+# `cdylib` is the wasm-bindgen bundle the worklet and the NAM workers load
+# (one module, two entry points); `rlib` keeps the native tests linking.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# prepare_chain / RigBlock / the assets registry / the dual-amp stage.
+signal-sampler = { workspace = true }
+signal-plugin-host = { workspace = true }
+facet = { workspace = true }
+facet-json = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }
+
+[lints]
+workspace = true

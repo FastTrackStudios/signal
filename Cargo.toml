@@ -34,6 +34,7 @@ members = [
     "crates/signal/space/proto",
     "crates/signal/storage",
     "crates/signal/account",
+    "crates/signal/account-proto",
     "crates/signal/tone3000",
     "crates/signal/tone3000-proto",
     "crates/signal/tone3000-ui",
@@ -58,10 +59,12 @@ members = [
     "features/rigs/guitar",
     "features/rigs/guitar/proto",
     "features/rigs/guitar/ui",
+    "features/rigs/guitar/phones",
     "features/rigs/keys",
     "features/rigs/keys/proto",
     "features/rigs/keys/ui",
     "features/rigs/keys/worklet",
+    "features/rigs/guitar/worklet",
     "features/rigs/orchestra",
     "features/rigs/synth",
     "features/rigs/synth/proto",
@@ -115,6 +118,7 @@ neural-amp-modeler = { git = "https://github.com/FastTrackStudios/neural-amp-mod
 tone3000 = "0.1"
 signal-account = { path = "crates/signal/account" }
 signal-tone3000 = { path = "crates/signal/tone3000" }
+signal-account-proto = { path = "crates/signal/account-proto" }
 signal-tone3000-proto = { path = "crates/signal/tone3000-proto" }
 signal-tone3000-ui = { path = "crates/signal/tone3000-ui" }
 audiocore-core = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
@@ -291,10 +295,12 @@ signal-bass-ui = { path = "features/rigs/bass/ui" }
 signal-guitar = { path = "features/rigs/guitar" }
 signal-guitar-proto = { path = "features/rigs/guitar/proto" }
 signal-guitar-ui = { path = "features/rigs/guitar/ui" }
+signal-phones = { path = "features/rigs/guitar/phones" }
 signal-keys = { path = "features/rigs/keys" }
 signal-keys-proto = { path = "features/rigs/keys/proto" }
 signal-keys-ui = { path = "features/rigs/keys/ui" }
 signal-keys-worklet = { path = "features/rigs/keys/worklet" }
+signal-guitar-worklet = { path = "features/rigs/guitar/worklet" }
 openwurli-dsp = { path = "features/rigs/wurli/openwurli-dsp" }
 signal-orchestra = { path = "features/rigs/orchestra" }
 signal-drums = { path = "features/rigs/drums" }
@@ -828,12 +834,12 @@ pipewire-sys = { git = "https://gitlab.freedesktop.org/pipewire/pipewire-rs.git"
 # Rebased branches are parked on the fork at fts-focus-2026-08 (onto
 # main) and fts-focus-2026-08b (onto db12391a, the last commit with
 # the `incremental` feature) so the rebase does not have to be redone.
-blitz-dom = { git = "https://github.com/FastTrackStudios/blitz", rev = "296b18780ae439349572f1b64605d484703061fe" }
-blitz-traits = { git = "https://github.com/FastTrackStudios/blitz", rev = "296b18780ae439349572f1b64605d484703061fe" }
-blitz-paint = { git = "https://github.com/FastTrackStudios/blitz", rev = "296b18780ae439349572f1b64605d484703061fe" }
-blitz-shell = { git = "https://github.com/FastTrackStudios/blitz", rev = "296b18780ae439349572f1b64605d484703061fe" }
-blitz-net = { git = "https://github.com/FastTrackStudios/blitz", rev = "296b18780ae439349572f1b64605d484703061fe" }
-blitz-html = { git = "https://github.com/FastTrackStudios/blitz", rev = "296b18780ae439349572f1b64605d484703061fe" }
+blitz-dom = { path = "../blitz/packages/blitz-dom" }
+blitz-traits = { path = "../blitz/packages/blitz-traits" }
+blitz-paint = { path = "../blitz/packages/blitz-paint" }
+blitz-shell = { path = "../blitz/packages/blitz-shell" }
+blitz-net = { path = "../blitz/packages/blitz-net" }
+blitz-html = { path = "../blitz/packages/blitz-html" }
 # Vendored one-line fix: quote scalars containing `<`/`>` — upstream
 # (facet-rs/facet) styx-format emits them bare but styx-parse rejects
 # them, so serialized keybind configs (`keys "<C-s>"`) could not be
@@ -1072,6 +1078,73 @@ opt-level = 3
 [profile.dev.package.trigger-dsp]
 opt-level = 3
 
+# The render stack, at full opt in dev too. The window is Blitz: every frame
+# runs style (stylo), layout (taffy), text (parley/skrifa/swash) and paint
+# (vello/wgpu), and at the dev default of opt-level 1 a debug build drew its UI
+# slowly enough to watch. They are dependencies — compiled once and cached,
+# never rebuilt by an edit here — so this costs one slower first dev build and
+# makes `cargo build` (dev, incremental) a usable way to run the app.
+[profile.dev.package.blitz-dom]
+opt-level = 3
+[profile.dev.package.blitz-paint]
+opt-level = 3
+[profile.dev.package.blitz-shell]
+opt-level = 3
+[profile.dev.package.blitz-traits]
+opt-level = 3
+[profile.dev.package.anyrender]
+opt-level = 3
+[profile.dev.package.anyrender_vello]
+opt-level = 3
+[profile.dev.package.vello]
+opt-level = 3
+[profile.dev.package.vello_encoding]
+opt-level = 3
+[profile.dev.package.wgpu]
+opt-level = 3
+[profile.dev.package.wgpu-core]
+opt-level = 3
+[profile.dev.package.wgpu-hal]
+opt-level = 3
+[profile.dev.package.naga]
+opt-level = 3
+[profile.dev.package.stylo]
+opt-level = 3
+[profile.dev.package.selectors]
+opt-level = 3
+[profile.dev.package.taffy]
+opt-level = 3
+[profile.dev.package.parley]
+opt-level = 3
+[profile.dev.package.skrifa]
+opt-level = 3
+[profile.dev.package.read-fonts]
+opt-level = 3
+[profile.dev.package.swash]
+opt-level = 3
+[profile.dev.package.fontique]
+opt-level = 3
+[profile.dev.package.peniko]
+opt-level = 3
+[profile.dev.package.kurbo]
+opt-level = 3
+[profile.dev.package.dioxus-core]
+opt-level = 3
+[profile.dev.package.dioxus-native-dom]
+opt-level = 3
+
+# Local iteration at release speed: `--profile release-fast`. Same
+# optimisation as `release`, but incremental and split into many codegen
+# units, so an edit to one crate recompiles that crate's changed parts rather
+# than the crate whole — minutes instead of a quarter hour after touching
+# signal-sampler. The code it makes is a little slower than `release`; audio
+# does not notice. Never ship from it: distributables and CI stay on
+# `release`.
+[profile.release-fast]
+inherits = "release"
+incremental = true
+codegen-units = 256
+
 # ── LOCAL ARCHITECT OVERRIDE — DO NOT COMMIT ──────────────────────────
 #
 # W13 (browser keys rig) needs `EngineHost::cross_origin_isolated` for the
@@ -1105,6 +1178,50 @@ opt-level = 3
 # with equivalent guarantees — see libs/vendor/dioxus-native-dom/UPSTREAM.md.
 [patch."https://github.com/DioxusLabs/dioxus"]
 dioxus-native-dom = { path = "libs/vendor/dioxus-native-dom" }
+
+# Local neural-amp-modeler-rs checkout (../neural-amp-modeler-rs): the pure
+# engine's wasm speed-up (5x, bit-identical) lives there until it is tagged.
+# Machine-specific, like the processor and daw tables.
+[patch."https://github.com/FastTrackStudios/neural-amp-modeler-rs"]
+neural-amp-modeler = { path = "../neural-amp-modeler-rs" }
+
+# Local processor checkout (../processor), so the FX, their UIs and
+# fts-audio-ui can be edited alongside signal without cutting a tag — the
+# same arrangement as the daw table below. Machine-specific, like that one.
+[patch."https://github.com/FastTrackStudios/processor"]
+chorus-dsp = { path = "../processor/features/fx/modulation/chorus-dsp" }
+comp = { path = "../processor/features/fx/comp/comp" }
+comp-dsp = { path = "../processor/features/fx/comp/comp-dsp" }
+comp-profiles = { path = "../processor/features/fx/comp/comp-profiles" }
+comp-ui = { path = "../processor/features/fx/comp/comp-ui" }
+delay = { path = "../processor/features/fx/delay/delay" }
+delay-dsp = { path = "../processor/features/fx/delay/delay-dsp" }
+delay-profiles = { path = "../processor/features/fx/delay/delay-profiles" }
+delay-ui = { path = "../processor/features/fx/delay/delay-ui" }
+dsp-core = { path = "../processor/features/fx/dsp-core" }
+eq = { path = "../processor/features/fx/eq/eq" }
+eq-dsp = { path = "../processor/features/fx/eq/eq-dsp" }
+eq-profiles = { path = "../processor/features/fx/eq/eq-profiles" }
+eq-ui = { path = "../processor/features/fx/eq/eq-ui" }
+fts-audio-ui = { path = "../processor/libs/ui/fts-audio-ui" }
+fx-blocks = { path = "../processor/features/fx/fx-blocks" }
+modulation = { path = "../processor/features/fx/modulation/modulation" }
+modulation-profiles = { path = "../processor/features/fx/modulation/modulation-profiles" }
+modulation-ui = { path = "../processor/features/fx/modulation/modulation-ui" }
+musical-time = { path = "../processor/features/fx/musical-time/musical-time" }
+musical-time-ui = { path = "../processor/features/fx/musical-time/musical-time-ui" }
+pattern-ui = { path = "../processor/features/fx/modulation/pattern-ui" }
+reverb = { path = "../processor/features/fx/reverb/reverb" }
+reverb-dsp = { path = "../processor/features/fx/reverb/reverb-dsp" }
+reverb-profiles = { path = "../processor/features/fx/reverb/reverb-profiles" }
+reverb-ui = { path = "../processor/features/fx/reverb/reverb-ui" }
+saturate-dsp = { path = "../processor/features/fx/saturate/saturate-dsp" }
+spectrum-analyzer = { path = "../processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer" }
+spectrum-analyzer-dsp = { path = "../processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer-dsp" }
+spectrum-analyzer-ui = { path = "../processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer-ui" }
+trem-dsp = { path = "../processor/features/fx/modulation/trem-dsp" }
+tune = { path = "../processor/features/fx/tune/tune" }
+wah-dsp = { path = "../processor/features/fx/modulation/wah-dsp" }
 
 [patch."https://github.com/FastTrackStudios/daw"]
 audio-controls = { path = "../daw/features/audio/audio-controls" }

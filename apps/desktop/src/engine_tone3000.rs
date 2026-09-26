@@ -49,7 +49,7 @@ pub fn extend_account(
     )
 }
 
-async fn account_callback(
+pub(crate) async fn account_callback(
     State(account): State<std::sync::Arc<signal_account::Account>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Html<String> {
@@ -79,6 +79,39 @@ async fn account_callback(
     }
 }
 
+/// The host:port an account's redirect URI names, for binding a listener —
+/// `127.0.0.1:4040` when the URI is not a parseable `http(s)` URL (a custom
+/// scheme, say) or names no explicit port.
+pub(crate) fn callback_listen_addr(account: &signal_account::Account) -> String {
+    url::Url::parse(&account.config().redirect_uri)
+        .ok()
+        .and_then(|u| u.host_str().map(|h| format!("{h}:{}", u.port().unwrap_or(4040))))
+        .unwrap_or_else(|| "127.0.0.1:4040".to_string())
+}
+
+/// Both callback routes, standalone — for embedded desktop mode, which has
+/// no [`EngineHost`] (no `/vox`, no web bundle; the rig stays in-process on
+/// purpose, so other devices on the LAN cannot reach it). The OAuth redirect
+/// still needs *something* listening on the registered port, so
+/// `rig_engine::bootstrap_blocking` binds this — best-effort, and only these
+/// two routes: sign-in works the same way whichever engine mode is picked,
+/// without embedded mode gaining the network surface Supervised mode is for.
+pub(crate) fn standalone_callback_router(
+    account: std::sync::Arc<signal_account::Account>,
+    tone3000: Tone3000Backend,
+) -> Router {
+    let account_path = callback_path(&account.config().redirect_uri);
+    let t3k_path = callback_path(tone3000.redirect_uri());
+    Router::new()
+        .route(&account_path, get(account_callback))
+        .with_state(account)
+        .merge(
+            Router::new()
+                .route(&t3k_path, get(callback))
+                .with_state(tone3000),
+        )
+}
+
 /// Mount the callback route on the engine's HTTP server.
 pub fn extend(host: EngineHost, backend: Tone3000Backend) -> EngineHost {
     let path = callback_path(backend.redirect_uri());
@@ -95,7 +128,7 @@ pub fn extend(host: EngineHost, backend: Tone3000Backend) -> EngineHost {
 /// Taken from the URI rather than hard-coded, because the URI is what is
 /// registered with TONE3000 and the two must agree: a redirect we do not
 /// serve is a sign-in that dead-ends in the browser.
-fn callback_path(redirect_uri: &str) -> String {
+pub(crate) fn callback_path(redirect_uri: &str) -> String {
     url::Url::parse(redirect_uri)
         .ok()
         .map(|u| u.path().to_string())
@@ -103,7 +136,7 @@ fn callback_path(redirect_uri: &str) -> String {
         .unwrap_or_else(|| signal_tone3000::config::CALLBACK_PATH.to_string())
 }
 
-async fn callback(
+pub(crate) async fn callback(
     State(backend): State<Tone3000Backend>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Html<String> {

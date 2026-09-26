@@ -132,7 +132,7 @@ async fn embedded_clients() -> Option<GuitarClients> {
 /// authorization page is a web application, and every surface here reaches a
 /// browser differently. Native shells hand it to the desktop environment; the
 /// web build is already in a browser and opens a tab.
-fn open_externally(url: String) {
+pub(crate) fn open_externally(url: String) {
     if url.is_empty() {
         return;
     }
@@ -171,35 +171,15 @@ fn open_externally(url: String) {
 #[component]
 pub fn SignalWorkspace() -> Element {
     let mut selected = use_signal(crate::rigs::load_last);
-    // Level 1 of the chrome: which rig. The rig list is the left rail's
-    // sub-rail and the crumb's menu — the `‹ Rigs` bar this used to draw was
-    // a whole bar spent on one button.
+    // Level 1 of the chrome: which rig. Switching rigs is rare, so it lives
+    // in the top bar only — the "Guitar ▾" crumb's menu — not in a rail.
     let level = fts_chrome::use_chrome_level(1);
-    let chrome = level.chrome();
 
     let pick = use_callback(move |rig: Option<Rig>| {
         selected.set(rig);
         crate::rigs::store_last(rig);
     });
 
-    chrome.set_sub_rail(
-        Rig::ALL
-            .iter()
-            .copied()
-            .filter(|k| available(*k))
-            .map(|k| {
-                fts_chrome::RailItem::new(
-                    k.slug(),
-                    k.label(),
-                    crate::rigs::icon(k),
-                    selected() == Some(k),
-                    Callback::new(move |()| pick.call(Some(k))),
-                )
-            })
-            .collect(),
-    );
-    // The sub-rail belongs to Signal — leaving the workspace takes it away.
-    use_drop(move || chrome.set_sub_rail(Vec::new()));
 
     let Some(kind) = selected() else {
         level.crumbs(vec![fts_chrome::Crumb::here("Rigs")]);
@@ -228,7 +208,7 @@ pub fn SignalWorkspace() -> Element {
     ]);
 
     rsx! {
-        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
             match kind {
                 Rig::Guitar => rsx! { GuitarRigView {} },
                 Rig::Bass => rsx! { BassRigView {} },
@@ -397,7 +377,7 @@ fn GuitarRigView() -> Element {
         .map(|(_, c)| c.clone());
     rsx! {
         document::Style { {SIGNAL_TAILWIND} }
-        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
             match state {
                 Some((rig, stream, settings, tones, tones_stream)) => {
                     let _ = provide_context(rig);
@@ -512,7 +492,7 @@ fn BassRigView() -> Element {
         .filter(|(g, _)| *g == generation())
         .map(|(_, c)| c.clone());
     rsx! {
-        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
             match state {
                 Some((rig, stream)) => {
                     let _ = provide_context(rig);
@@ -595,7 +575,7 @@ fn DrumRigView() -> Element {
         .filter(|(g, _)| *g == generation())
         .map(|(_, c)| c.clone());
     rsx! {
-        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
             match state {
                 Some((rig, stream)) => {
                     let _ = provide_context(rig);
@@ -677,7 +657,7 @@ fn KeysRigView() -> Element {
         .filter(|(g, _)| *g == generation())
         .map(|(_, c)| c.clone());
     rsx! {
-        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
             match state {
                 Some((rig, stream)) => {
                     let _ = provide_context(rig);
@@ -759,7 +739,7 @@ fn SynthRigView() -> Element {
         .filter(|(g, _)| *g == generation())
         .map(|(_, c)| c.clone());
     rsx! {
-        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
             match state {
                 Some((rig, stream)) => {
                     let _ = provide_context(rig);

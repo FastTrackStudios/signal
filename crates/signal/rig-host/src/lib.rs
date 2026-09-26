@@ -38,7 +38,7 @@ use daw::service::handle::DawHandle as _;
 use daw::standalone::Standalone;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::audio_engine::AudioEngine;
-#[cfg(all(not(target_arch = "wasm32"), target_os = "linux"))]
+#[cfg(all(not(target_arch = "wasm32"), any(target_os = "linux", target_os = "macos")))]
 use daw::standalone::audio_engine::DuplexAudioEngine;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::metering::Meters;
@@ -108,7 +108,7 @@ impl HostedEngine for AudioEngine {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 impl HostedEngine for DuplexAudioEngine {
     fn open(
         daw: Standalone,
@@ -127,17 +127,34 @@ impl HostedEngine for DuplexAudioEngine {
     }
 }
 
-/// The duplex host's engine: the native `PipeWire` `pw_filter` engine where
-/// available, the cpal engine (with a live input stream) elsewhere.
-#[cfg(all(not(target_arch = "wasm32"), target_os = "linux"))]
+/// The duplex host's engine: one realtime callback that reads the input and
+/// writes the output in the same cycle — `PipeWire` `pw_filter` on Linux, a
+/// CoreAudio HAL IOProc on macOS. The cpal engine (elsewhere) runs input and
+/// output as two streams bridged by a ring, and that ring is latency: it
+/// drains one block per output callback, so every frame queued in it by a
+/// stall or a start-up offset stays queued for as long as the stream runs.
+#[cfg(all(not(target_arch = "wasm32"), any(target_os = "linux", target_os = "macos")))]
 pub type DuplexEngine = DuplexAudioEngine;
-#[cfg(all(not(target_arch = "wasm32"), not(target_os = "linux")))]
+#[cfg(all(not(target_arch = "wasm32"), not(any(target_os = "linux", target_os = "macos"))))]
 pub type DuplexEngine = AudioEngine;
 
+/// The native output-only engine ([`start_output_native`](RigProject::start_output_native)).
+/// macOS keeps the cpal engine: CoreAudio's buffer size is per process per
+/// device, so a keys rig asking for 256 frames on the interface the guitar
+/// rig plays through would raise the guitar's buffer with it.
+#[cfg(all(not(target_arch = "wasm32"), target_os = "linux"))]
+pub type OutputEngine = DuplexAudioEngine;
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "linux")))]
+pub type OutputEngine = AudioEngine;
+
 /// A running duplex (live-input) rig host — `Send`-only under the native
-/// `PipeWire` engine; serialize access through a `Mutex` like the guitar rig.
+/// engines; serialize access through a `Mutex` like the guitar rig.
 #[cfg(not(target_arch = "wasm32"))]
 pub type DuplexRigHost = RigHost<DuplexEngine>;
+
+/// A running native output-only rig host (the keys rig).
+#[cfg(not(target_arch = "wasm32"))]
+pub type OutputRigHost = RigHost<OutputEngine>;
 
 /// A seeded rig project **before** the engine opens.
 ///
@@ -273,16 +290,15 @@ impl RigProject {
         self,
         prefs: &AudioIoPrefs,
         node_name: &str,
-    ) -> eyre::Result<DuplexRigHost> {
+    ) -> eyre::Result<OutputRigHost> {
         let mut io = prefs.clone();
         io.want_input = false;
         io.node_name = node_name.to_string();
-        self.start_with::<DuplexEngine>(&io)
+        self.start_with::<OutputEngine>(&io)
     }
 
-    /// Open the duplex (live input → FX chain → output) engine — the native
-    /// `PipeWire` `pw_filter` engine on Linux with the `pipewire` feature, the
-    /// cpal engine elsewhere. `want_input` is forced on.
+    /// Open the duplex (live input → FX chain → output) engine — see
+    /// [`DuplexEngine`]. `want_input` is forced on.
     ///
     /// # Errors
     ///

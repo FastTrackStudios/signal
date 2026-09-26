@@ -2,9 +2,17 @@
 //!
 //! A guitar cab is a (mostly) linear, time-invariant filter, captured as a short
 //! impulse response (`.wav`). [`Convolver`] applies it by **direct time-domain
-//! FIR convolution**: mono in (guitar amps are mono), one multiply-accumulate
-//! per IR tap per sample, output broadcast to both channels (stereo width comes
-//! from later stereo effects, not the cab).
+//! FIR convolution** — exact and zero-latency: mono in (guitar amps are mono),
+//! output broadcast to both channels (stereo width comes from later stereo
+//! effects, not the cab).
+//!
+//! Each output sample is one contiguous dot product: the input history is kept
+//! twice, back to back, so the last `taps` samples are always one slice, and
+//! the IR is stored reversed to line up with it. Summed in 8 independent lanes
+//! the loop vectorises (NEON / AVX). The old per-tap wrap-around index kept it
+//! scalar and made a 4096-tap cab the most expensive block in the rig (~20 %
+//! of a 64-frame budget); an IR's silent tail is trimmed at load too
+//! ([`trim_tail`]).
 //!
 //! IRs are truncated to [`MAX_TAPS`] — cab IRs are routinely trimmed to 1–2k
 //! taps with no audible loss, and direct convolution stays cheap there. A
@@ -20,11 +28,13 @@ pub const MAX_TAPS: usize = 4096;
 /// A loaded cabinet IR + its delay-line state. Mono in / mono out (broadcast to
 /// stereo by [`process_interleaved`](Self::process_interleaved)).
 pub struct Convolver {
-    /// The impulse response, `ir[0]` = newest-sample coefficient.
+    /// The impulse response, reversed: `ir[taps - 1]` is the newest-sample
+    /// coefficient, so it lines up with the history window oldest → newest.
     ir: Vec<f32>,
-    /// Circular delay line of the last `ir.len()` mono input samples.
+    /// The last `taps` mono inputs, stored twice (`2 * taps`): the window
+    /// ending at the newest sample is always `hist[write + 1 ..= write + taps]`.
     hist: Vec<f32>,
-    /// Next write position in `hist`.
+    /// Where the next sample goes (in `0..taps`).
     write: usize,
     /// IR file path — for the UI label.
     pub ir_path: String,
@@ -50,8 +60,7 @@ impl Convolver {
                 .map_err(|e| format!("open IR {e}"))?;
 
         // Channel 0 only (guitar cabs are captured mono per mic).
-        let mut ir: Vec<f32> = loaded.channels.into_iter().next().unwrap_or_default();
-        ir.truncate(MAX_TAPS);
+        let ir: Vec<f32> = loaded.channels.into_iter().next().unwrap_or_default();
         if ir.is_empty() {
             return Err(format!("IR {} has no samples", path.display()));
         }
@@ -61,24 +70,39 @@ impl Convolver {
             .and_then(|s| s.to_str())
             .unwrap_or("Cab IR")
             .to_string();
-        let taps = ir.len();
-        Ok(Self {
-            ir,
-            hist: vec![0.0; taps],
-            write: 0,
-            ir_path: path.to_string_lossy().to_string(),
-            display_name,
-            prepared: true,
-        })
+        let mut conv = Self::from_ir(ir, display_name);
+        conv.ir_path = path.to_string_lossy().to_string();
+        Ok(conv)
+    }
+
+    /// Load a cabinet IR from a file's bytes (any format the decoder takes;
+    /// `name` is the key the rig knows it by) — the browser path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bytes do not decode or hold no samples.
+    pub fn from_bytes(bytes: &[u8], name: &str) -> Result<Self, String> {
+        let ext = name.rsplit_once('.').map(|(_, e)| e);
+        let loaded =
+            fts_sample::decode_bytes(bytes, ext).map_err(|e| format!("decode IR {name}: {e}"))?;
+        let ir: Vec<f32> = loaded.channels.into_iter().next().unwrap_or_default();
+        if ir.is_empty() {
+            return Err(format!("IR {name} has no samples"));
+        }
+        let mut conv = Self::from_ir(ir, crate::assets::stem(name));
+        conv.ir_path = name.to_string();
+        Ok(conv)
     }
 
     /// Build a convolver from an in-memory IR (testing / synthesized cabs).
     pub fn from_ir(ir: Vec<f32>, name: impl Into<String>) -> Self {
-        let ir = if ir.is_empty() { vec![1.0] } else { ir };
-        let taps = ir.len().min(MAX_TAPS);
-        let ir: Vec<f32> = ir.into_iter().take(taps).collect();
+        let mut ir = if ir.is_empty() { vec![1.0] } else { ir };
+        ir.truncate(MAX_TAPS);
+        let taps = trim_tail(&ir);
+        ir.truncate(taps);
+        ir.reverse();
         Self {
-            hist: vec![0.0; ir.len()],
+            hist: vec![0.0; 2 * taps],
             ir,
             write: 0,
             ir_path: String::new(),
@@ -105,20 +129,13 @@ impl Convolver {
     #[inline]
     fn tick(&mut self, x: f32) -> f32 {
         let taps = self.ir.len();
-        self.hist[self.write] = x;
-        let mut pos = self.write; // newest sample
-        self.write = if self.write + 1 == taps {
-            0
-        } else {
-            self.write + 1
-        };
-
-        let mut acc = 0.0f32;
-        for k in 0..taps {
-            acc += self.ir[k] * self.hist[pos];
-            pos = if pos == 0 { taps - 1 } else { pos - 1 };
-        }
-        acc
+        let w = self.write;
+        self.hist[w] = x;
+        self.hist[w + taps] = x;
+        self.write = if w + 1 == taps { 0 } else { w + 1 };
+        // The last `taps` inputs, oldest → newest.
+        let window = &self.hist[w + 1..w + 1 + taps];
+        dot(&self.ir, window)
     }
 
     /// Process one interleaved-stereo block in place: collapse to mono, convolve
@@ -132,6 +149,49 @@ impl Convolver {
             inout[2 * i + 1] = y;
         }
     }
+}
+
+/// `a · b`, summed in 8 independent lanes so it vectorises.
+#[inline]
+fn dot(a: &[f32], b: &[f32]) -> f32 {
+    let n = a.len().min(b.len());
+    let (a, b) = (&a[..n], &b[..n]);
+    let mut lanes = [0.0f32; 8];
+    let (ac, ar) = a.split_at(n - n % 8);
+    let (bc, br) = b.split_at(n - n % 8);
+    for (x, y) in ac.chunks_exact(8).zip(bc.chunks_exact(8)) {
+        for i in 0..8 {
+            lanes[i] = x[i].mul_add(y[i], lanes[i]);
+        }
+    }
+    let mut acc = lanes.iter().sum::<f32>();
+    for (x, y) in ar.iter().zip(br) {
+        acc = x.mul_add(*y, acc);
+    }
+    acc
+}
+
+/// How many taps of `ir` matter: where the energy left in the tail falls
+/// below −70 dB of the whole — a cab IR's padding and noise floor — and at
+/// least 256 taps (and never more than it has). Inaudible, and the cost is
+/// per tap.
+#[must_use]
+pub fn trim_tail(ir: &[f32]) -> usize {
+    let total: f64 = ir.iter().map(|x| f64::from(*x) * f64::from(*x)).sum();
+    if total <= 0.0 {
+        return ir.len();
+    }
+    let floor = total * 1e-7;
+    let mut tail = 0.0f64;
+    let mut keep = ir.len();
+    for (i, x) in ir.iter().enumerate().rev() {
+        tail += f64::from(*x) * f64::from(*x);
+        if tail > floor {
+            keep = i + 1;
+            break;
+        }
+    }
+    keep.max(256.min(ir.len()))
 }
 
 impl std::fmt::Debug for Convolver {
@@ -289,6 +349,36 @@ mod tests {
             );
         }
         assert!(c.is_prepared());
+    }
+
+    /// The vectorised path equals a plain convolution sample for sample, on
+    /// a long IR and a block that wraps the history.
+    #[test]
+    fn matches_direct_convolution() {
+        let mut seed = 1u32;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (seed >> 8) as f32 / (1u32 << 24) as f32 - 0.5
+        };
+        let ir: Vec<f32> = (0..1000).map(|i| rnd() * (-(i as f32) / 200.0).exp()).collect();
+        let x: Vec<f32> = (0..3000).map(|_| rnd()).collect();
+        let mut c = Convolver::from_ir(ir.clone(), "t");
+        let taps = c.taps();
+        for (n, &xn) in x.iter().enumerate() {
+            let mut f = [xn, xn];
+            c.process_interleaved(&mut f);
+            let want: f32 = (0..taps.min(n + 1)).map(|k| ir[k] * x[n - k]).sum();
+            assert!((f[0] - want).abs() < 1e-4, "n {n}: {} vs {want}", f[0]);
+        }
+    }
+
+    /// A padded IR is trimmed where its tail is silent.
+    #[test]
+    fn a_silent_tail_is_trimmed() {
+        let mut ir: Vec<f32> = (0..600).map(|i| (-(i as f32) / 40.0).exp()).collect();
+        ir.extend(std::iter::repeat_n(0.0, 3000));
+        let kept = trim_tail(&ir);
+        assert!(kept < 700 && kept >= 256, "kept {kept}");
     }
 
     #[test]

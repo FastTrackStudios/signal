@@ -40,6 +40,7 @@ const REGISTRY: &[(BlockType, Ctor)] = &[
     (BlockType::Delay, build_delay),
     // Modulation — chorus/flanger/vibrato share chorus-dsp; tremolo is trem-dsp.
     (BlockType::Chorus, build_chorus),
+    (BlockType::Pitch, build_pitch),
     (BlockType::Flanger, build_flanger),
     (BlockType::Vibrato, build_vibrato),
     (BlockType::Trem, build_trem),
@@ -52,51 +53,51 @@ const REGISTRY: &[(BlockType, Ctor)] = &[
     (BlockType::Drive, build_drive),
 ];
 
+/// Set a built-in effect from the block's stored params — through
+/// [`native_writes`](crate::block_params::native_writes), the one conversion
+/// a live write of the same params goes through too, so the two set the
+/// effect identically.
+fn set_stored(block: &RigBlock, mut set: impl FnMut(&str, f64)) {
+    for (name, value) in crate::block_params::native_writes(block).unwrap_or_default() {
+        set(&name, value);
+    }
+}
+
 fn build_chorus(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeMod::chorus(sample_rate as f64);
-    apply_mod_params(block, &mut fx);
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
+}
+/// The octaver / harmony: two shifted voices over the dry (fx-blocks
+/// `NativePitch`, the phase-vocoder shifter).
+fn build_pitch(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativePitch::new(sample_rate as f64);
+    set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 fn build_flanger(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeMod::flanger(sample_rate as f64);
-    apply_mod_params(block, &mut fx);
+    set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 fn build_vibrato(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeMod::vibrato(sample_rate as f64);
-    apply_mod_params(block, &mut fx);
+    set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
-}
-fn apply_mod_params(block: &RigBlock, fx: &mut fx_blocks::NativeMod) {
-    for name in ["mix", "depth", "rate", "engine"] {
-        if let Some(v) = block.param_f32(name) {
-            fx.set_named(name, v as f64);
-        }
-    }
 }
 fn build_trem(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeTrem::new(sample_rate as f64);
-    for name in ["depth", "mix", "rate", "mode"] {
-        if let Some(v) = block.param_f32(name) {
-            fx.set_named(name, v as f64);
-        }
-    }
+    set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 fn build_gate(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeGate::new(sample_rate as f64);
-    for name in ["threshold", "attack", "release"] {
-        if let Some(v) = block.param_f32(name) {
-            fx.set_named(name, v as f64);
-        }
-    }
+    set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 fn build_volume(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeGain::new(sample_rate as f64);
-    if let Some(v) = block.param_f32("gain_db") {
-        fx.set_named("gain_db", v as f64);
-    }
+    set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 fn build_phaser(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
@@ -105,8 +106,12 @@ fn build_phaser(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance>
 fn build_rotary(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
     Box::new(fx_blocks::NativePassthrough::new("Rotary"))
 }
-fn build_boost_pedal(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(fx_blocks::NativePassthrough::new("Boost"))
+/// The clean boost at the head of the drive board: its `drive` is the level
+/// push into the drives (0 dB … +18 dB).
+fn build_boost_pedal(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeBoost::new(sample_rate as f64);
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
 }
 fn build_drive(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
     Box::new(fx_blocks::NativePassthrough::new("Drive"))
@@ -115,43 +120,25 @@ fn build_drive(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> 
 fn build_eq(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeEq::new(sample_rate as f64);
     // Full band set: b{1..24}_{used,on,freq,gain,q,shape}.
-    for b in 0..fx_blocks::EQ_BANDS {
-        for f in 0..fx_blocks::EQ_FIELDS {
-            let name = fx_blocks::eq_param_name(b, f);
-            if let Some(v) = block.param_f32(&name) {
-                fx.set_named(&name, v as f64);
-            }
-        }
-    }
+    set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 
 fn build_comp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeComp::new(sample_rate as f64);
-    for name in [
-        "threshold",
-        "ratio",
-        "attack",
-        "release",
-        "knee",
-        "range",
-        "fold",
-        "style",
-    ] {
-        if let Some(v) = block.param_f32(name) {
-            fx.set_named(name, v as f64);
-        }
-    }
+    // `meter` is which compressor-panel trace this block draws on (0 =
+    // none) — see `fx_blocks::comp_meter`.
+    set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 
 fn build_reverb(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeReverb::new(sample_rate as f64);
-    for name in ["mix", "decay", "size"] {
-        if let Some(v) = block.param_f32(name) {
-            fx.set_named(name, v as f64);
-        }
-    }
+    // Every numeric param the block carries (the block ignores names it does
+    // not have). A fixed list here dropped the algorithm, tone, damping and
+    // modulation a preset set, and the new `dry`: a reverb built as the
+    // default Hall until someone touched a knob live.
+    set_stored(block, |n, v| fx.set_named(n, v));
     if let Some(path) = block.param_str("ir_path") {
         if !path.is_empty() && !fx.load_ir_wav(&path) {
             tracing::warn!("reverb IR failed to load: {path}");
@@ -162,11 +149,9 @@ fn build_reverb(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
 
 fn build_delay(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = fx_blocks::NativeDelay::new(sample_rate as f64);
-    for name in ["mix", "time", "feedback", "pan", "tap_div_l", "tap_div_r"] {
-        if let Some(v) = block.param_f32(name) {
-            fx.set_named(name, v as f64);
-        }
-    }
+    // Every numeric param the block carries — a fixed list dropped the style,
+    // high-pass and repeat dynamics a preset set (and `dry`).
+    set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 
@@ -394,7 +379,7 @@ mod tests {
         assert!(native_dsp_available(BlockType::Rotary));
         assert!(build_native(&RigBlock::of_type(BlockType::Rotary), 48_000).is_some());
         // Pitch has no entry at all — no placeholder, no DSP.
-        assert!(!native_dsp_available(BlockType::Pitch));
-        assert!(build_native(&RigBlock::of_type(BlockType::Pitch), 48_000).is_none());
+        assert!(native_dsp_available(BlockType::Pitch));
+        assert!(build_native(&RigBlock::of_type(BlockType::Pitch), 48_000).is_some());
     }
 }

@@ -11,10 +11,14 @@
 //! additive only; no external stylesheets.
 
 pub mod arc;
+pub mod drag_bus;
+pub mod popup;
 pub mod knob;
 pub mod picker;
 pub mod preset_tree;
 
+pub use drag_bus::{DragBus, DragEvent};
+pub use popup::{PopupHost, PopupLayer};
 pub use knob::{FmtFn, Knob, KnobSize};
 pub use picker::{Picker, PickerSize};
 

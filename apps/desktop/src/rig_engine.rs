@@ -19,6 +19,7 @@ use signal_guitar::proto::audio::AudioSettingsClient;
 use signal_guitar::proto::rig::{Rig as _, RigClient, RigStreamClient};
 #[cfg(feature = "signal-keys-rig")]
 use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
+use signal_account_proto::account::AccountAuthClient;
 use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
 
 /// The embedded rig: the backend + the established in-process clients.
@@ -31,6 +32,12 @@ pub struct RigEngine {
     /// where an older engine may not serve it; in-process it is always here.
     pub tones: Option<Tone3000Client>,
     pub tones_stream: Option<Tone3000StreamClient>,
+    /// The `FastTrackStudio` account (sign in once, TONE3000 — and whatever
+    /// else it gathers — works without a second per-machine authorization).
+    /// `Option` for the same reason `tones` is: the RPC exists once this
+    /// engine is up, but establishing a client is still one more thing that
+    /// can fail, and a UI with no account button is the right degradation.
+    pub account: Option<AccountAuthClient>,
     /// The in-process keys rig (sampler engine) — dormant until the keys
     /// view starts it.
     #[cfg(feature = "signal-keys-rig")]
@@ -86,11 +93,20 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         // case the detachable-GUI rule was written for: no separate engine
         // process to hold the session, so the embedded one holds it.
         let config_dir = signal_sampler::rig_prefs::signal_config_dir();
+        // The FastTrackStudio account — same reasoning as engine_main.rs:
+        // linking TONE3000 to it once means every machine signed in to the
+        // account can download without its own authorization.
+        let account = std::sync::Arc::new(signal_account::Account::new(
+            signal_account::AccountConfig::from_env(&config_dir),
+        ));
         let tone3000 = signal_tone3000::Tone3000Backend::new(signal_tone3000::Config::from_env(
             &config_dir,
             signal_nam::nam_root_from_env(&config_dir.join("nam")),
-        ));
+        ))
+        .with_account(account.clone());
         let router = router.merge_router(tone3000.router());
+        let account_rpc = signal_account::AccountBackend::new(account.clone());
+        let router = router.merge_router(account_rpc.router());
 
         let scope = architect::Scope::new();
         let server = architect::LocalServer::serve(router, scope.clone());
@@ -132,12 +148,46 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
 
         let tones: Option<Tone3000Client> = server.establish().await.ok();
         let tones_stream: Option<Tone3000StreamClient> = server.establish().await.ok();
+        let account_client: Option<AccountAuthClient> = server.establish().await.ok();
+
+        // The OAuth redirect (TONE3000's and the FastTrackStudio account's)
+        // still needs a real listener at the registered `localhost:4040`
+        // URL — embedded mode otherwise has no HTTP surface at all, by
+        // design (see `RigEngine`'s module doc). Best-effort and scoped to
+        // exactly these two routes: a `signal-desktop --engine` already
+        // running on that port keeps the callback (its own `Account`/
+        // `Tone3000Backend` read and write the SAME session files, from the
+        // same config dir, so either one completing a sign-in is enough),
+        // and this one simply does not also try to bind it.
+        {
+            let addr = crate::engine_tone3000::callback_listen_addr(&account);
+            let app = crate::engine_tone3000::standalone_callback_router(
+                account.clone(),
+                tone3000.clone(),
+            );
+            tokio::spawn(async move {
+                match tokio::net::TcpListener::bind(&addr).await {
+                    Ok(listener) => {
+                        tracing::info!(addr, "embedded: sign-in callback listener up");
+                        if let Err(e) = axum::serve(listener, app).await {
+                            tracing::warn!(addr, %e, "embedded: sign-in callback listener died");
+                        }
+                    }
+                    Err(e) => tracing::info!(
+                        addr,
+                        %e,
+                        "embedded: sign-in callback port already taken — a                          signal-desktop --engine on it will serve sign-in                          callbacks instead"
+                    ),
+                }
+            });
+        }
 
         Ok::<_, eyre::Report>(RigEngine {
             rig,
             stream,
             tones,
             tones_stream,
+            account: account_client,
             settings,
             #[cfg(feature = "signal-keys-rig")]
             keys,

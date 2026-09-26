@@ -178,7 +178,7 @@ pub fn rescan_stream_instrumented(
     // empty scan; this brings the polled path in line. A genuine unplug is
     // not lost, only deferred to the next poll, where a *stable* empty list
     // still reads as empty.
-    if had_stream && !before.is_empty() && midicore::pipewire::input_ports().is_empty() {
+    if had_stream && !before.is_empty() && midicore::input_ports().is_empty() {
         tracing::warn!(
             midi.rig = rig,
             midi.ports_before = before.len(),

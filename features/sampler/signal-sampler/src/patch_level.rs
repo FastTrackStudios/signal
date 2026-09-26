@@ -46,9 +46,12 @@ const RENDER_BLOCK: usize = 512;
 
 /// The loudness target patches are levelled to, LUFS.
 ///
-/// −18 LUFS is the same target the patch level-match used, and it leaves
-/// headroom for the peaks a guitar makes above its integrated level.
-pub const TARGET_LUFS: f64 = -18.0;
+/// −23 LUFS (the EBU R128 reference). It was −18, and against a real player's
+/// DI that put the peaks of the hotter patches into the output limiter —
+/// a guitar's peaks sit 15–20 dB above its integrated level, so −18 left
+/// barely a few dB before −1 dBFS. The master trim is where more volume
+/// comes from; the patches themselves keep their headroom.
+pub const TARGET_LUFS: f64 = -23.0;
 
 /// A patch's measured loudness, cached.
 #[derive(Clone, Debug, Facet)]
@@ -94,7 +97,12 @@ impl PatchLevelCache {
     }
 
     #[must_use]
-    pub fn lookup(&self, chain_hash: &str, di_id: &str, sample_rate: u32) -> Option<&PatchLevelEntry> {
+    pub fn lookup(
+        &self,
+        chain_hash: &str,
+        di_id: &str,
+        sample_rate: u32,
+    ) -> Option<&PatchLevelEntry> {
         self.entries.iter().find(|e| {
             e.chain_hash == chain_hash && e.di_id == di_id && e.sample_rate == sample_rate
         })
@@ -134,6 +142,10 @@ pub fn chain_hash(blocks: &[RigBlock]) -> String {
         h.update(format!("{:?}", b.block_type).as_bytes());
         h.update([0]);
         h.update([u8::from(b.bypassed)]);
+        // The NAM trims move the level as surely as a knob does (the drive
+        // compensation writes them), so a trim change is a different chain.
+        h.update(b.input_trim_db.to_bits().to_le_bytes());
+        h.update(b.output_trim_db.to_bits().to_le_bytes());
         let asset = b.asset_path();
         if asset.is_empty() {
             h.update([0]);
@@ -271,9 +283,16 @@ pub fn trim_for_target(blocks: &[RigBlock], sample_rate: u32, target_lufs: f64) 
 #[must_use]
 pub fn level_of(blocks: &[RigBlock], sample_rate: u32) -> Option<f64> {
     let di = DiReference::load_or_synthetic(f64::from(sample_rate));
-    let hash = chain_hash(blocks);
+    // Calibration changes what a chain sounds like without changing the
+    // chain, so it is part of what was measured.
+    let hash = match crate::nam::interface_calibration_dbu() {
+        Some(cal) => format!("{}-cal{cal}", chain_hash(blocks)),
+        None => chain_hash(blocks),
+    };
     {
-        let cache = cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cache = cache()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(hit) = cache.lookup(&hash, &di.id, sample_rate) {
             return Some(hit.lufs);
         }
@@ -284,11 +303,66 @@ pub fn level_of(blocks: &[RigBlock], sample_rate: u32) -> Option<f64> {
     // nothing means something is wrong with the render, not that the patch is
     // silent, and caching it would make the bug permanent and invisible.
     if !lufs.is_finite() || lufs <= SILENCE_LUFS {
-        tracing::warn!(lufs, blocks = blocks.len(), "patch level: rendered silent — not caching");
+        tracing::warn!(
+            lufs,
+            blocks = blocks.len(),
+            "patch level: rendered silent — not caching"
+        );
         return Some(lufs);
     }
     {
-        let mut cache = cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut cache = cache()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        cache.insert(PatchLevelEntry {
+            chain_hash: hash,
+            di_id: di.id.clone(),
+            sample_rate,
+            lufs,
+        });
+        cache.save();
+    }
+    Some(lufs)
+}
+
+/// [`level_of`], with the rendering supplied by the caller: the cache
+/// (keyed on the chain, the DI, the calibration and the rate) is shared, the
+/// renderer is not. The guitar rig measures through its own engine — the live
+/// `GuitarRig`, run offline — and passes that in here, so what is cached is
+/// what the rig plays rather than what a second chain runner thought it would.
+///
+/// `engine` names the renderer and is part of the key: measurements from
+/// different renderers are different measurements, and must not satisfy
+/// each other's lookups.
+pub fn level_cached(
+    blocks: &[RigBlock],
+    sample_rate: u32,
+    engine: &str,
+    render: impl FnOnce(&DiReference) -> Option<f64>,
+) -> Option<f64> {
+    let di = DiReference::load_or_synthetic(f64::from(sample_rate));
+    let chain = match crate::nam::interface_calibration_dbu() {
+        Some(cal) => format!("{}-cal{cal}", chain_hash(blocks)),
+        None => chain_hash(blocks),
+    };
+    let hash = format!("{engine}:{chain}");
+    {
+        let cache = cache()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(hit) = cache.lookup(&hash, &di.id, sample_rate) {
+            return Some(hit.lufs);
+        }
+    }
+    let lufs = render(&di)?;
+    if !lufs.is_finite() || lufs <= SILENCE_LUFS {
+        tracing::warn!(lufs, engine, "patch level: rendered silent — not caching");
+        return Some(lufs);
+    }
+    {
+        let mut cache = cache()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         cache.insert(PatchLevelEntry {
             chain_hash: hash,
             di_id: di.id.clone(),
@@ -302,7 +376,9 @@ pub fn level_of(blocks: &[RigBlock], sample_rate: u32) -> Option<f64> {
 
 /// Forget every measurement — for when the DI changes under them.
 pub fn clear_cache() {
-    let mut cache = cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut cache = cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     *cache = PatchLevelCache::default();
     let _ = std::fs::remove_file(PatchLevelCache::path());
 }
@@ -312,7 +388,8 @@ mod tests {
     use super::*;
 
     fn block(name: &str, gain: f32) -> RigBlock {
-        RigBlock::effect(signal_proto::block::BlockType::Boost, name).with_param("gain", gain.to_string())
+        RigBlock::effect(signal_proto::block::BlockType::Boost, name)
+            .with_param("gain", gain.to_string())
     }
 
     /// A chain hashes by what it is, not what it is called: renaming a patch
@@ -375,10 +452,10 @@ mod tests {
             chain_hash: cache_key.to_string(),
             di_id: "di".to_string(),
             sample_rate: 48_000,
-            lufs: -24.0,
+            lufs: TARGET_LUFS - 6.0,
         });
         let hit = cache.lookup(cache_key, "di", 48_000).expect("inserted");
-        assert!((TARGET_LUFS - hit.lufs - 6.0).abs() < 1e-9, "−24 needs +6");
+        assert!((TARGET_LUFS - hit.lufs - 6.0).abs() < 1e-9, "6 dB under the target needs +6");
         // A second insert for the same chain replaces rather than accumulates.
         cache.insert(PatchLevelEntry {
             chain_hash: cache_key.to_string(),
@@ -387,6 +464,14 @@ mod tests {
             lufs: -20.0,
         });
         assert_eq!(cache.entries.len(), 1);
-        assert!((cache.lookup(cache_key, "di", 48_000).expect("replaced").lufs + 20.0).abs() < 1e-9);
+        assert!(
+            (cache
+                .lookup(cache_key, "di", 48_000)
+                .expect("replaced")
+                .lufs
+                + 20.0)
+                .abs()
+                < 1e-9
+        );
     }
 }

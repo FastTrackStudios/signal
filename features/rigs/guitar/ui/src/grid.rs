@@ -7,6 +7,7 @@
 //! desktop shell — this component is what makes the browser remote a real
 //! editor, not a viewer.
 
+use crate::param_writer::WriteParam;
 use dioxus::prelude::*;
 
 use signal_grid::GridSlot;
@@ -149,7 +150,7 @@ pub fn RigGraph(blocks: Vec<LiveBlock>, nodes: Vec<LiveNode>) -> Element {
                 move |(uuid, name, value): (uuid::Uuid, String, f32)| {
                     if let (Some(r), Some(id)) = (rig.clone(), by_uuid.get(&uuid).cloned()) {
                         spawn(async move {
-                            let _ = r.set_block_param(id, name, value).await;
+                            let _ = r.write_param(id, name, value).await;
                         });
                     }
                 }

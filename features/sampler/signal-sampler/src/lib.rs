@@ -81,8 +81,15 @@
 // filesystem scans, the pack CLI). The wasm32 build keeps the pure engine +
 // tree renderer + the keys lane machinery — see `keys_rig::KeysRig::
 // open_headless` and the browser worklet entry (signal-keys-worklet).
-#[cfg(not(target_arch = "wasm32"))]
+/// What each block of a chain costs (per-block DSP time and latency).
+pub mod block_profile;
+pub mod amp_blend;
+pub mod time_stage;
+pub mod block_gate;
+pub mod block_params;
+pub mod tail_stage;
 pub mod api;
+pub mod assets;
 pub mod audio_soundsource;
 pub mod bank;
 pub mod block;
@@ -115,7 +122,6 @@ pub mod loudness;
 pub mod midi;
 pub mod mixer;
 pub mod module_spec;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod nam;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod nam_calibrate;
@@ -125,11 +131,11 @@ pub mod node_render;
 pub mod nord;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pack_cli;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod patch_level;
 pub mod pack_plan;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pack_rewrite;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod patch_level;
 /// The NI Essential Pianos' Color / Dynamic Range controls, as
 /// velocity-domain transforms.
 ///
@@ -181,7 +187,6 @@ pub use mixer::{
     FxTarget, MixerLayout, MixerMeters, Send as MixerSend, SendStrip,
 };
 pub use module_spec::{ModulePort, ModuleSpec};
-#[cfg(not(target_arch = "wasm32"))]
 pub use nam::NamProcessor;
 pub use native_osc::{NativeOscillator, OscWave};
 pub use node_render::{LeafBackend, RenderNode, build_node_backend};
@@ -192,7 +197,7 @@ pub use preset_spec::{
 };
 pub use rig::{BlockImpl, ModelId, RigBlock, SlotInfo};
 #[cfg(not(target_arch = "wasm32"))]
-pub use rig::{DeviceInfo, GuitarRig};
+pub use rig::{DeviceInfo, GuitarRig, RetiredChain};
 pub use rig_library::{Library, RigPreset, RigScene, RigSection, RigSong};
 #[cfg(not(target_arch = "wasm32"))]
 pub use rig_manager::RigManager;
@@ -200,7 +205,10 @@ pub use rig_node::{Combine, Container, Param, RigNode, Role, Send, Zone};
 #[cfg(not(target_arch = "wasm32"))]
 pub use rig_prefs::RigAudioPrefs;
 #[cfg(not(target_arch = "wasm32"))]
-pub use rig_profile::ProfileRig;
+pub use rig_profile::{
+    CommitStatus, LiveWrite, PreparedReload, ProfileRig, ReloadCommit, ReloadMode, ReloadPlan,
+    ReloadTicket,
+};
 pub use rig_profile::{RigPatch, RigProfile};
 pub use runtime::{
     BufferRef, EngineInstance, LayerRuntime, ModuleInstance, PortRuntime, PresetRuntime,
@@ -215,9 +223,9 @@ pub use soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
 // strings TUI) don't need a direct midicore dependency.
 pub use midicore;
 pub use midicore::MidiEvent;
-pub use midicore::PortSelector as MidiSelection;
 #[cfg(not(target_arch = "wasm32"))]
-pub use midicore::pipewire::MidiInput as MidiInputHandle;
+pub use midicore::MidiInput as MidiInputHandle;
+pub use midicore::PortSelector as MidiSelection;
 pub use spec::LibrarySpec;
 pub use stats::AudioStatsSnapshot;
 
@@ -893,3 +901,6 @@ impl PlayerPatch {
             .map_or(0, |t| t.pre_delay_ms)
     }
 }
+
+/// The drop log's event types and time base (see [`rig::GuitarRig::collect_drops`]).
+pub use daw_audio_io::duplex::{clock_ns, DropEvent, DropKind};

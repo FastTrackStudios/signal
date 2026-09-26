@@ -47,7 +47,7 @@ use signal_proto::block::{BlockCategory, BlockType};
 use facet::Facet;
 
 #[cfg(not(target_arch = "wasm32"))]
-use daw::service::{FxChainContext, FxChains, FxParams, ProjectContext, TrackRef, Tracks};
+use daw::service::{FxChainContext, FxParams, ProjectContext, TrackRef, Tracks};
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::Standalone;
 #[cfg(not(target_arch = "wasm32"))]
@@ -67,7 +67,6 @@ use signal_rig_host::{DuplexRigHost, RigProject};
 
 use crate::convolver::Convolver;
 use crate::mixer::FX_PREPARE_BLOCK;
-#[cfg(not(target_arch = "wasm32"))]
 use crate::nam::NamProcessor;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::rig_prefs::RigAudioPrefs;
@@ -75,16 +74,16 @@ use crate::rig_prefs::RigAudioPrefs;
 /// Max block size the rig prepares models / plugins for. daw's callback block is
 /// normally 64–1024 frames; preparing for [`FX_PREPARE_BLOCK`] keeps us safe
 /// against larger backend buffers without per-block re-preparation.
-#[cfg(not(target_arch = "wasm32"))]
 const MAX_BLOCK: usize = FX_PREPARE_BLOCK as usize;
+/// A block gate's ramp scratch: blocks larger than this skip the ramp.
+const GATE_BLOCK: usize = 2048;
 
 /// Fixed number of FX slots reserved on the rig track. Slot 0 is the
 /// `InputProbe` (input meter); slots `1..=MAX_CHAIN_SLOTS` carry the active
 /// chain's blocks (identity pass-throughs fill unused ones). Reserving a
 /// constant count keeps the project's `fx_chain` (guids) immutable, so patch
 /// switches never rebuild the renderer's snapshot — the swap is pure box-insert.
-#[cfg(not(target_arch = "wasm32"))]
-const MAX_CHAIN_SLOTS: usize = 24;
+const MAX_CHAIN_SLOTS: usize = 40;
 
 /// Identifies a chain resident control-side. Assigned on install; opaque
 /// elsewhere.
@@ -514,6 +513,19 @@ impl RigBlock {
             || self.block_type.category() == BlockCategory::Time
     }
 
+    /// In the Time module — what the global time/FX bypass acts on. An
+    /// explicit module wins over the block type's category, so a reverb
+    /// placed before the amp (module "Pre FX") is not killed by the FX
+    /// switch meant for the delays and reverbs at the end of the chain.
+    #[must_use]
+    pub fn is_time_module(&self) -> bool {
+        if self.module.is_empty() {
+            self.block_type.category() == BlockCategory::Time
+        } else {
+            self.module.eq_ignore_ascii_case("time")
+        }
+    }
+
     #[must_use]
     pub fn is_nam(&self) -> bool {
         !self.nam.is_empty()
@@ -592,6 +604,13 @@ struct InputMeterShared {
     /// Samples still to capture (0 = disarmed). Relaxed atomics — the probe
     /// is the only writer of `capture` while armed.
     capture_remaining: std::sync::atomic::AtomicUsize,
+    /// A test signal that replaces the instrument while set — the DI reference
+    /// looped through the live chain, for levelling patches by what they
+    /// actually output (see [`GuitarRig::start_test_signal`]).
+    inject: std::sync::Mutex<Option<Arc<Vec<f32>>>>,
+    /// Bumped when `inject` changes; the probe re-reads it (and restarts the
+    /// loop) when it sees a new value, so the audio thread only locks then.
+    inject_gen: std::sync::atomic::AtomicU64,
 }
 
 /// Mono window the tuner runs autocorrelation over. At 48 kHz this covers
@@ -708,9 +727,17 @@ struct InputProbe {
     /// Fake-DI loop + cursor (debug input; None in normal operation).
     fake: Option<Vec<f32>>,
     fake_pos: usize,
+    /// The injected test signal (see `InputMeterShared::inject`) + cursor,
+    /// and the generation it was read at.
+    inject: Option<Arc<Vec<f32>>>,
+    inject_pos: usize,
+    inject_gen: u64,
     prepared: bool,
     /// Per-block mono scratch (reused) for the tuner window push.
     mono: Vec<f32>,
+    /// Where the chain's input is kept for the output stage (a voice fading
+    /// out goes on hearing the guitar — see `tail_stage`).
+    share: Option<Arc<crate::tail_stage::InputShare>>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -722,7 +749,16 @@ impl InputProbe {
             mono: Vec::with_capacity(MAX_BLOCK),
             fake: load_fake_di(),
             fake_pos: 0,
+            inject: None,
+            inject_pos: 0,
+            inject_gen: 0,
+            share: None,
         }
+    }
+
+    fn with_share(mut self, share: Arc<crate::tail_stage::InputShare>) -> Self {
+        self.share = Some(share);
+        self
     }
 }
 
@@ -769,20 +805,37 @@ impl PluginInstance for InputProbe {
     ) -> Result<(), PluginError> {
         let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
         let muted = self.shared.input_muted.load(Ordering::Relaxed);
+        // A new test signal (or its removal): re-read it, from the top. Only
+        // locks when the generation moved, and never waits for the lock.
+        let generation = self.shared.inject_gen.load(Ordering::Acquire);
+        if generation != self.inject_gen {
+            if let Ok(slot) = self.shared.inject.try_lock() {
+                self.inject = slot.clone();
+                self.inject_pos = 0;
+                self.inject_gen = generation;
+            }
+        }
         let (mut pk_l, mut pk_r) = (0.0f32, 0.0f32);
         // Reused mono scratch for the tuner window push (off the steady-state
         // alloc path after the first block).
         self.mono.clear();
         self.mono.reserve(frames);
         for i in 0..frames {
-            // Fake-DI debug loop replaces the live input when armed.
-            let (src_l, src_r) = match &self.fake {
-                Some(w) => {
-                    let v = w[self.fake_pos];
-                    self.fake_pos = (self.fake_pos + 1) % w.len();
-                    (v, v)
+            // The test signal, else the fake-DI debug loop, replaces the
+            // live input when armed.
+            let (src_l, src_r) = if let Some(w) = self.inject.as_ref().filter(|w| !w.is_empty()) {
+                let v = w[self.inject_pos];
+                self.inject_pos = (self.inject_pos + 1) % w.len();
+                (v, v)
+            } else {
+                match &self.fake {
+                    Some(w) => {
+                        let v = w[self.fake_pos];
+                        self.fake_pos = (self.fake_pos + 1) % w.len();
+                        (v, v)
+                    }
+                    None => (in_l[i], in_r[i]),
                 }
-                None => (in_l[i], in_r[i]),
             };
             // Muted: the chain gets silence (trails keep ringing) while
             // the meters and the tuner still see the instrument.
@@ -791,6 +844,9 @@ impl PluginInstance for InputProbe {
             pk_l = pk_l.max(src_l.abs());
             pk_r = pk_r.max(src_r.abs());
             self.mono.push((src_l + src_r) * 0.5);
+        }
+        if let Some(share) = &self.share {
+            share.write(&out_l[..frames], &out_r[..frames]);
         }
         self.shared.store(pk_l.max(pk_r));
         self.shared.store_lr(pk_l, pk_r);
@@ -803,6 +859,142 @@ impl PluginInstance for InputProbe {
     }
     fn deactivate(&mut self) {
         self.prepared = false;
+    }
+}
+
+/// What the [`OutputTap`] shares with the control thread.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Default)]
+struct OutputTapShared {
+    /// Captured output, per channel — filled while `remaining > 0`.
+    capture: std::sync::Mutex<(Vec<f32>, Vec<f32>)>,
+    /// Frames still to capture (0 = disarmed).
+    remaining: std::sync::atomic::AtomicUsize,
+    /// Silence what leaves the chain (the capture still sees it) — so a
+    /// levelling pass is not played through the speakers.
+    muted: AtomicBool,
+    /// Capture what is heard — after the patch level and the tails ringing
+    /// under it — rather than the chain's own output (what levelling needs).
+    heard: AtomicBool,
+}
+
+/// The last FX slot on the rig track, after every chain slot: the chain's
+/// real output, captured on request — the measurement point for levelling
+/// patches by what the rig actually plays, trims and all.
+///
+/// It is also where a switch lands: the patch's output level is applied
+/// here (after the capture, so a measurement sees the chain untrimmed), the
+/// incoming chain fades in, and the outgoing ones ring out — see
+/// [`crate::tail_stage`].
+#[cfg(not(target_arch = "wasm32"))]
+struct OutputTap {
+    shared: Arc<OutputTapShared>,
+    prepared: bool,
+    stage: crate::tail_stage::TailStage,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl PluginInstance for OutputTap {
+    fn descriptor(&self) -> PluginDescriptor {
+        PluginDescriptor {
+            id: "signal.rig.output_tap".into(),
+            name: "Output".into(),
+            vendor: "Signal".into(),
+            version: String::new(),
+            format: PluginFormat::Synthetic,
+        }
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        Vec::new()
+    }
+    fn param_value(&mut self, _id: u32) -> Option<f64> {
+        None
+    }
+    fn value_to_text(&mut self, _id: u32, _v: f64) -> Option<String> {
+        None
+    }
+    fn text_to_value(&mut self, _id: u32, _t: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        0
+    }
+    fn prepare(&mut self, _sr: f64, _bs: u32) -> Result<(), PluginError> {
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        _events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
+        let heard = self.shared.heard.load(Ordering::Relaxed);
+        if !heard {
+            self.capture(&in_l[..frames], &in_r[..frames]);
+        }
+        let tails = self.stage.process(
+            &in_l[..frames],
+            &in_r[..frames],
+            &mut out_l[..frames],
+            &mut out_r[..frames],
+        );
+        if tails {
+            // Two separately limited chains can sum past full scale while
+            // one rings out under the other.
+            for s in out_l[..frames].iter_mut().chain(out_r[..frames].iter_mut()) {
+                *s = soft_ceiling(*s);
+            }
+        }
+        if heard {
+            self.capture(&out_l[..frames], &out_r[..frames]);
+        }
+        if self.shared.muted.load(Ordering::Relaxed) {
+            out_l[..frames].fill(0.0);
+            out_r[..frames].fill(0.0);
+        }
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl OutputTap {
+    fn capture(&self, l: &[f32], r: &[f32]) {
+        let remaining = self.shared.remaining.load(Ordering::Relaxed);
+        if remaining > 0 {
+            let take = remaining.min(l.len());
+            // Buffers were reserved when armed; never wait on the lock.
+            if let Ok(mut cap) = self.shared.capture.try_lock() {
+                cap.0.extend_from_slice(&l[..take]);
+                cap.1.extend_from_slice(&r[..take]);
+                self.shared.remaining.store(remaining - take, Ordering::Relaxed);
+            }
+        }
+    }
+}
+
+/// Unity below −0.4 dBFS; above it, a smooth knee into full scale.
+#[cfg(not(target_arch = "wasm32"))]
+fn soft_ceiling(x: f32) -> f32 {
+    const KNEE: f32 = 0.955;
+    let a = x.abs();
+    if a <= KNEE {
+        x
+    } else {
+        let over = (a - KNEE) / (1.0 - KNEE);
+        x.signum() * (KNEE + (1.0 - KNEE) * over.tanh())
     }
 }
 
@@ -924,6 +1116,15 @@ pub struct PreparedChain {
     names: Vec<String>,
     ids: Vec<String>,
     prepare_on_arm: Vec<bool>,
+    /// Each block's type, and whether it is a built-in effect (written live
+    /// as param events), parallel to `boxes`.
+    kinds: Vec<(BlockType, bool)>,
+    /// Each block's bypass (see `block_gate`), parallel to `boxes`.
+    gates: Vec<Arc<crate::block_gate::GateCtl>>,
+    /// What each block was set to as built, parallel to `boxes`.
+    applied: Vec<crate::block_params::BlockState>,
+    /// Where the Time section starts — what rings on after a switch.
+    time_start: usize,
     primary_loudness: Option<f64>,
     primary_expected_sr: Option<f64>,
     primary_input_level_dbu: Option<f64>,
@@ -935,6 +1136,18 @@ impl PreparedChain {
     #[must_use]
     pub fn display_name(&self) -> String {
         self.names.join(" → ")
+    }
+
+    /// The built blocks with their ids, in chain order — for a host that
+    /// runs the chain itself rather than through [`GuitarRig`] (the browser
+    /// worklet). A slot is `None` only while a rig has it armed.
+    #[must_use]
+    pub fn into_blocks(self) -> Vec<(String, Box<dyn PluginInstance>)> {
+        self.ids
+            .into_iter()
+            .zip(self.boxes)
+            .filter_map(|(id, b)| b.map(|b| (id, b)))
+            .collect()
     }
 }
 
@@ -952,6 +1165,25 @@ pub fn prepare_chain(
     block_ids: &[String],
     sample_rate: u32,
 ) -> Result<PreparedChain, String> {
+    prepare_chain_with(blocks, block_ids, sample_rate, &mut |_, _| None)
+}
+
+/// [`prepare_chain`], letting the caller supply a block's processor itself.
+///
+/// `supply(index, block)` runs before each block is built; a `Some` is used
+/// in place of building it. The browser host uses this to put a worker
+/// proxy where a NAM model would run — before the dual-amp stage wraps the
+/// chain, so a proxied Amp R still blends in parallel with Amp L.
+///
+/// # Errors
+///
+/// As [`prepare_chain`].
+pub fn prepare_chain_with(
+    blocks: &[RigBlock],
+    block_ids: &[String],
+    sample_rate: u32,
+    supply: &mut dyn FnMut(usize, &RigBlock) -> Option<Box<dyn PluginInstance>>,
+) -> Result<PreparedChain, String> {
     if blocks.is_empty() {
         return Err("chain has no blocks".into());
     }
@@ -966,6 +1198,7 @@ pub fn prepare_chain(
     let mut ids = Vec::with_capacity(blocks.len());
     // Which slots hold a tail that must be cleared when the chain is armed.
     let mut prepare_on_arm = Vec::with_capacity(blocks.len());
+    let mut kinds = Vec::with_capacity(blocks.len());
     let mut primary_loudness = None;
     let mut primary_expected_sr = None;
     let mut primary_input_level_dbu = None;
@@ -973,8 +1206,14 @@ pub fn prepare_chain(
     let mut primary_captured = false;
 
     for (i, b) in blocks.iter().enumerate() {
+        // `Instant` panics on wasm32-unknown-unknown (no clock).
+        #[cfg(not(target_arch = "wasm32"))]
         let began = std::time::Instant::now();
-        let built = build_block(b, sample_rate)?;
+        let built = match supply(i, b) {
+            Some(boxed) => BuiltBlock::plain(boxed, b.name.clone()),
+            None => build_block(b, sample_rate)?,
+        };
+        #[cfg(not(target_arch = "wasm32"))]
         tracing::trace!(
             block.name = %b.name,
             block.kind = ?b.block_type,
@@ -996,14 +1235,74 @@ pub fn prepare_chain(
                 .unwrap_or_else(|| default_block_id(b.asset_path())),
         );
         prepare_on_arm.push(b.is_time_fx());
+        kinds.push((b.block_type, b.is_native()));
         boxes.push(Some(built.boxed));
     }
 
+    // Each block carries its own bypass (`block_gate`). Delays and reverbs
+    // innermost, so a time stage still splits its input when one is off and
+    // a bypassed one rings out; everything else outermost, so a bypassed
+    // block is skipped exactly as the dual-amp and time stages expect.
+    let block_names: Vec<&str> = blocks.iter().map(|b| b.name.as_str()).collect();
+    let gates: Vec<Arc<crate::block_gate::GateCtl>> = blocks
+        .iter()
+        .map(|b| crate::block_gate::GateCtl::new(b.bypassed))
+        .collect();
+    let stage_roles = crate::time_stage::roles(&block_names);
+    for (i, b) in blocks.iter().enumerate() {
+        if b.is_time_fx() {
+            if let Some(inner) = boxes[i].take() {
+                // The time stage's second block adds only its wet; the stage
+                // carries the dry.
+                let pass = if stage_roles[i] == Some(crate::time_stage::Role::Add) { 0.0 } else { 1.0 };
+                boxes[i] = Some(Box::new(crate::block_gate::BlockGate::new(
+                    inner,
+                    gates[i].clone(),
+                    crate::block_gate::GateMode::Trails,
+                    pass,
+                    GATE_BLOCK,
+                )));
+            }
+        }
+    }
+    let time_start = blocks
+        .iter()
+        .position(RigBlock::is_time_module)
+        .unwrap_or(blocks.len());
+
+    // Two amps loaded: Amp L and Amp R blend in parallel rather than one
+    // driving the other (see `amp_blend`).
+    let r_loaded = blocks
+        .iter()
+        .any(|b| b.name.eq_ignore_ascii_case(crate::amp_blend::AMP_R) && b.is_nam());
+    let roles = crate::amp_blend::roles(&block_names, r_loaded);
+    crate::amp_blend::wrap(&mut boxes, &roles, MAX_BLOCK);
+    // The Time module: its two delays in parallel, and its two reverbs.
+    crate::time_stage::wrap(&mut boxes, &block_names, MAX_BLOCK);
+    for (i, b) in blocks.iter().enumerate() {
+        if !b.is_time_fx() {
+            if let Some(inner) = boxes[i].take() {
+                boxes[i] = Some(Box::new(crate::block_gate::BlockGate::new(
+                    inner,
+                    gates[i].clone(),
+                    crate::block_gate::GateMode::Hard,
+                    1.0,
+                    GATE_BLOCK,
+                )));
+            }
+        }
+    }
+
+    let applied = blocks.iter().map(crate::block_params::BlockState::built).collect();
     Ok(PreparedChain {
         boxes,
         names,
         ids,
         prepare_on_arm,
+        kinds,
+        gates,
+        applied,
+        time_start,
         primary_loudness,
         primary_expected_sr,
         primary_input_level_dbu,
@@ -1017,14 +1316,33 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
     // before touching a loader.
     block.validate()?;
     if block.is_nam() {
-        // wasm32: no NAM — the C++ core doesn't build there.
-        #[cfg(target_arch = "wasm32")]
-        return Err("NAM blocks are not available in the browser build".into());
-        #[cfg(not(target_arch = "wasm32"))]
         {
-            let mut nam = NamProcessor::load(&block.nam, sample_rate as f64, MAX_BLOCK)?;
+            // Installed bytes first (the browser has nothing else; a native
+            // host may pre-load too), else the file the block names.
+            let mut nam = match crate::assets::get(&block.nam) {
+                Some(bytes) => NamProcessor::from_bytes(
+                    &bytes,
+                    block.nam.clone(),
+                    sample_rate as f64,
+                    MAX_BLOCK,
+                )?,
+                #[cfg(not(target_arch = "wasm32"))]
+                None => NamProcessor::load(&block.nam, sample_rate as f64, MAX_BLOCK)?,
+                #[cfg(target_arch = "wasm32")]
+                None => return Err(format!("NAM model not loaded: {}", block.nam)),
+            };
+            let size = crate::nam::model_size();
+            if size < 1.0 {
+                nam.set_slimmable_size(size);
+            }
             nam.input_gain_db = block.input_trim_db;
             nam.output_gain_db = block.output_trim_db;
+            if let Some(iface) = crate::nam::interface_calibration_dbu() {
+                let (cin, cout) =
+                    crate::nam::calibration_for(nam.input_level(), nam.output_level(), iface);
+                nam.calibration_in_db = cin;
+                nam.calibration_out_db = cout;
+            }
             if let Some(exp) = nam.expected_sample_rate() {
                 if (exp - sample_rate as f64).abs() > 1.0 {
                     tracing::warn!(
@@ -1053,7 +1371,10 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
             })
         }
     } else if block.is_cab_ir() {
-        let conv = Convolver::load(&block.ir)?;
+        let conv = match crate::assets::get(&block.ir) {
+            Some(bytes) => Convolver::from_bytes(&bytes, &block.ir)?,
+            None => Convolver::load(&block.ir)?,
+        };
         let dn = conv.display_name.clone();
         Ok(BuiltBlock::plain(Box::new(conv), format!("{dn} (cab)")))
     } else if block.is_plugin() {
@@ -1318,6 +1639,24 @@ struct ResidentChain {
     /// as a burst on the switch, so it is the time blocks — ~0.5 ms each — that
     /// need it and nothing else.
     prepare_on_arm: Vec<bool>,
+    /// Each block's type and built-in-ness, parallel to `boxes`.
+    kinds: Vec<(BlockType, bool)>,
+    /// Each block's bypass, parallel to `boxes` — the chain's own, so it is
+    /// set before the chain plays and travels with it into a tail.
+    gates: Vec<Arc<crate::block_gate::GateCtl>>,
+    /// What each block was last set to — its build's values, then every
+    /// write since — parallel to `boxes`. Updated where writes reach blocks,
+    /// so it is what the blocks hold, whoever wrote.
+    applied: Vec<crate::block_params::BlockState>,
+    /// Where the Time section starts (`boxes.len()`: none).
+    time_start: usize,
+}
+
+/// A chain taken out of the rig by [`GuitarRig::retire_chain`]: whatever of
+/// its blocks were resident, freed when this drops.
+#[cfg(not(target_arch = "wasm32"))]
+pub struct RetiredChain {
+    _chain: ResidentChain,
 }
 
 /// Mutable swap state shared behind a [`Mutex`] so the patch-switch surface
@@ -1332,9 +1671,14 @@ struct SwapState {
     chains: std::collections::HashMap<ModelId, ResidentChain>,
     /// Currently-active chain id, or [`None`] (clean DI passthrough).
     active: Option<ModelId>,
+    /// The chain whose blocks are in the engine now — `active`, unless the
+    /// rig is bypassed (then identities play and `live` is `None`).
+    live: Option<ModelId>,
     /// Patch-level trims (dB).
     input_trim_db: f32,
     output_trim_db: f32,
+    /// The playing patch's output level (dB), applied in the output stage.
+    patch_trim_db: f32,
     bypass: bool,
 }
 
@@ -1344,8 +1688,12 @@ struct SwapState {
 pub struct GuitarRig {
     daw: Standalone,
     // The shared daw host (project + realtime engine + transport); drop =
-    // stop audio.
-    _host: DuplexRigHost,
+    // stop audio. `None` for an offline rig (see `open_offline`).
+    _host: Option<DuplexRigHost>,
+    /// The offline rig's renderer and playhead — the same `ProjectRenderer`
+    /// the realtime callback drives, pulled here by `render_offline` instead
+    /// of by an audio device. `None` for a live rig.
+    offline: Option<std::sync::Mutex<(daw::standalone::audio_engine::render::ProjectRenderer, u64)>>,
     /// Live realtime metrics (render time / block size) from the duplex engine,
     /// driving the rig's DSP-load meter. `None` under the cpal fallback.
     engine_stats: Option<Arc<EngineStats>>,
@@ -1355,6 +1703,10 @@ pub struct GuitarRig {
     slot_guids: Vec<String>,
     /// Input-meter atomic written by the `InputProbe` at slot 0.
     input_meter: Arc<InputMeterShared>,
+    /// The chain's real output (the `OutputTap` after every chain slot).
+    output_tap: Arc<OutputTapShared>,
+    /// The output tap's fx guid — where the tail stage lives.
+    output_guid: String,
 
     pub sample_rate: u32,
     /// Mutable swap state (resident chains + active selection + trims/bypass).
@@ -1406,6 +1758,8 @@ impl GuitarRig {
             phones_out_r: 0,
             phones_mix_in_l: 0,
             phones_mix_in_r: 0,
+            allow_builtin_mic: false,
+            ..RigAudioPrefs::default()
         })
     }
 
@@ -1418,18 +1772,8 @@ impl GuitarRig {
     ///
     /// Returns an error if the audio engine cannot be started or the project cannot be set up.
     pub fn open(prefs: &RigAudioPrefs) -> eyre::Result<Self> {
-        // 1. Seed a one-track project (current, so the FX-chain service
-        //    targets it); arm the track to monitor the hardware input channel.
-        let project = RigProject::new(RIG_PROJECT_NAME);
-        let track_guid = project.add_track(RIG_TRACK_NAME)?;
-        project.arm_input(&track_guid, prefs.input_channel as u32)?;
-
-        // 2. Reserve the fixed FX slots on the track (constant guids). Slot 0
-        //    is the input probe; the rest start as identity pass-throughs.
-        let mut slot_guids = Vec::with_capacity(MAX_CHAIN_SLOTS + 1);
-        for i in 0..=MAX_CHAIN_SLOTS {
-            slot_guids.push(project.add_fx_slot(&track_guid, &format!("rig-slot-{i}"))?);
-        }
+        let (project, track_guid, slot_guids, output_tap_guid) =
+            Self::seed(prefs.input_channel as u32)?;
 
         // 3. Open the duplex realtime engine (`prefs.into()` carries the
         //    device/routing config; the host forces `want_input` on) and the
@@ -1440,18 +1784,8 @@ impl GuitarRig {
         let meters = host.install_meters(1);
         let daw = host.daw().clone();
 
-        // 4. Populate the reserved slots: input probe at 0, identities elsewhere.
-        let input_meter = Arc::new(InputMeterShared::default());
-        {
-            let mut probe = InputProbe::new(input_meter.clone());
-            let _ = probe.prepare(sample_rate as f64, FX_PREPARE_BLOCK);
-            daw.insert_plugin_instance(slot_guids[0].clone(), Box::new(probe));
-            for guid in &slot_guids[1..] {
-                let mut id = Identity::new();
-                let _ = id.prepare(sample_rate as f64, FX_PREPARE_BLOCK);
-                daw.insert_plugin_instance(guid.clone(), Box::new(id));
-            }
-        }
+        let (input_meter, output_tap, output_guid) =
+            Self::populate(&daw, sample_rate, &slot_guids, output_tap_guid);
 
         // 5. Roll the transport so the renderer runs (and the live input flows
         //    through the chain to master) every block.
@@ -1482,28 +1816,207 @@ impl GuitarRig {
             phones_out_r: 0,
             phones_mix_in_l: 0,
             phones_mix_in_r: 0,
+            phones_mixer: prefs.phones_mixer,
+            allow_builtin_mic: prefs.allow_builtin_mic,
+            input_calibration_dbu: prefs.input_calibration_dbu,
+            nam_calibration_off: prefs.nam_calibration_off,
         };
 
-        Ok(Self {
+        Ok(Self::assemble(
             daw,
-            _host: host,
+            Some(host),
+            None,
             engine_stats,
             meters,
             track_guid,
             slot_guids,
             input_meter,
+            output_tap,
+            output_guid,
+            sample_rate,
+            effective,
+        ))
+    }
+
+    /// The rig with no audio device: the identical project, track, slots,
+    /// probe, output tap and — once chains are installed — chains as
+    /// [`open`](Self::open), rendered by the same `ProjectRenderer` the
+    /// realtime callback drives, only pulled by
+    /// [`render_offline`](Self::render_offline) as fast as the CPU allows.
+    ///
+    /// This is how a patch is measured *offline*: not by a second chain
+    /// runner that has to be kept in step with the live one (the old one
+    /// drifted by up to 18 dB on a dimed amp through an IR), but by this one.
+    /// Input comes from [`start_test_signal`](Self::start_test_signal),
+    /// output from the output tap — both exactly where the live rig has them.
+    ///
+    /// # Errors
+    ///
+    /// If the project or its slots cannot be set up.
+    pub fn open_offline(sample_rate: u32) -> eyre::Result<Self> {
+        let (project, track_guid, slot_guids, output_tap_guid) = Self::seed(0)?;
+        let daw = project.daw().clone();
+        let meters = Meters::new(1);
+        daw.set_meters(meters.clone());
+        let (input_meter, output_tap, output_guid) =
+            Self::populate(&daw, sample_rate, &slot_guids, output_tap_guid);
+        let renderer = daw::standalone::audio_engine::render::ProjectRenderer::new(
+            &daw,
+            project.project_guid(),
+            sample_rate,
+        );
+        let prefs = RigAudioPrefs {
+            sample_rate,
+            ..RigAudioPrefs::default()
+        };
+        Ok(Self::assemble(
+            daw,
+            None,
+            Some(std::sync::Mutex::new((renderer, 0))),
+            None,
+            meters,
+            track_guid,
+            slot_guids,
+            input_meter,
+            output_tap,
+            output_guid,
+            sample_rate,
+            prefs,
+        ))
+    }
+
+    /// Steps 1–2, shared by both engines: the one-track project, armed, with
+    /// its fixed FX slots.
+    fn seed(input_channel: u32) -> eyre::Result<(RigProject, String, Vec<String>, String)> {
+        // 1. Seed a one-track project (current, so the FX-chain service
+        //    targets it); arm the track to monitor the hardware input channel.
+        let project = RigProject::new(RIG_PROJECT_NAME);
+        let track_guid = project.add_track(RIG_TRACK_NAME)?;
+        project.arm_input(&track_guid, input_channel)?;
+
+        // 2. Reserve the fixed FX slots on the track (constant guids). Slot 0
+        //    is the input probe; the rest start as identity pass-throughs.
+        let mut slot_guids = Vec::with_capacity(MAX_CHAIN_SLOTS + 1);
+        for i in 0..=MAX_CHAIN_SLOTS {
+            slot_guids.push(project.add_fx_slot(&track_guid, &format!("rig-slot-{i}"))?);
+        }
+        // After every chain slot, and kept out of `slot_guids` so nothing that
+        // walks the chain slots ever sees it.
+        let output_tap_guid = project.add_fx_slot(&track_guid, "rig-output-tap")?;
+        Ok((project, track_guid, slot_guids, output_tap_guid))
+    }
+
+    /// Step 4, shared by both engines: input probe at 0, identities in the
+    /// chain slots, the output tap after them.
+    fn populate(
+        daw: &Standalone,
+        sample_rate: u32,
+        slot_guids: &[String],
+        output_tap_guid: String,
+    ) -> (Arc<InputMeterShared>, Arc<OutputTapShared>, String) {
+        let input_meter = Arc::new(InputMeterShared::default());
+        let share = crate::tail_stage::InputShare::new(MAX_BLOCK);
+        {
+            let mut probe = InputProbe::new(input_meter.clone()).with_share(share.clone());
+            let _ = probe.prepare(sample_rate as f64, FX_PREPARE_BLOCK);
+            daw.insert_plugin_instance(slot_guids[0].clone(), Box::new(probe));
+            for guid in &slot_guids[1..] {
+                let mut id = Identity::new();
+                let _ = id.prepare(sample_rate as f64, FX_PREPARE_BLOCK);
+                daw.insert_plugin_instance(guid.clone(), Box::new(id));
+            }
+        }
+        let output_tap = Arc::new(OutputTapShared::default());
+        daw.insert_plugin_instance(
+            output_tap_guid.clone(),
+            Box::new(OutputTap {
+                shared: output_tap.clone(),
+                prepared: true,
+                stage: crate::tail_stage::TailStage::new(share, f64::from(sample_rate), MAX_BLOCK),
+            }),
+        );
+        (input_meter, output_tap, output_tap_guid)
+    }
+
+    #[expect(clippy::too_many_arguments, reason = "one constructor, two engines")]
+    fn assemble(
+        daw: Standalone,
+        host: Option<DuplexRigHost>,
+        offline: Option<std::sync::Mutex<(daw::standalone::audio_engine::render::ProjectRenderer, u64)>>,
+        engine_stats: Option<Arc<EngineStats>>,
+        meters: Arc<Meters>,
+        track_guid: String,
+        slot_guids: Vec<String>,
+        input_meter: Arc<InputMeterShared>,
+        output_tap: Arc<OutputTapShared>,
+        output_guid: String,
+        sample_rate: u32,
+        prefs: RigAudioPrefs,
+    ) -> Self {
+        Self {
+            daw,
+            _host: host,
+            offline,
+            engine_stats,
+            meters,
+            track_guid,
+            slot_guids,
+            input_meter,
+            output_tap,
+            output_guid,
             sample_rate,
             swap: std::sync::Mutex::new(SwapState {
                 chains: std::collections::HashMap::new(),
                 active: None,
+                live: None,
                 input_trim_db: 0.0,
                 output_trim_db: 0.0,
+                patch_trim_db: 0.0,
                 bypass: false,
             }),
             slots: Vec::new(),
             next_id: 0,
-            prefs: effective,
-        })
+            prefs,
+        }
+    }
+
+    /// Whether this rig renders offline (no audio device).
+    #[must_use]
+    pub fn is_offline(&self) -> bool {
+        self.offline.is_some()
+    }
+
+    /// Render `frames` through the offline rig (no-op for a live one).
+    pub fn render_offline(&self, frames: usize) {
+        /// Well under the slots' prepared maximum (`FX_PREPARE_BLOCK`), and
+        /// the size a realtime callback would plausibly use.
+        const BLOCK: usize = 512;
+        let Some(offline) = &self.offline else { return };
+        let Ok(mut guard) = offline.lock() else { return };
+        let (renderer, playhead) = &mut *guard;
+        let mut left = frames;
+        while left > 0 {
+            let n = left.min(BLOCK);
+            let _ = renderer.render_block(*playhead, n);
+            *playhead += n as u64;
+            left -= n;
+        }
+    }
+
+    /// The next `frames` of the chain's real output, `(left, right)` — the
+    /// one measurement both engines share. Offline, rendered on the spot;
+    /// live, captured as the device plays (blocks until it is, or `timeout`).
+    pub fn measure_output(&self, frames: usize, timeout: std::time::Duration) -> (Vec<f32>, Vec<f32>) {
+        self.arm_output_capture(frames);
+        if self.is_offline() {
+            self.render_offline(frames);
+        } else {
+            let deadline = std::time::Instant::now() + timeout;
+            while self.output_capture_remaining() > 0 && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        }
+        self.take_output_capture()
     }
 
     /// List available input devices (name + channel count + native rate).
@@ -1542,10 +2055,29 @@ impl GuitarRig {
     /// Live phones-bus levels (headphone volume + self-mix) — forwarded to
     /// the duplex engine's lock-free bus for routed interfaces.
     pub fn set_phones_levels(volume: f32, self_mix: f32) {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         daw::standalone::audio_engine::PhonesBus::shared().set(volume, self_mix);
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         let _ = (volume, self_mix); // cpal fallback: no routed phones bus yet
+    }
+
+    /// Whether the engine blends the monitor-mix inputs into the phones
+    /// itself — off while the separate headphone mixer (`signal-phones`)
+    /// plays the mix.
+    pub fn set_phones_blend(on: bool) {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        daw::standalone::audio_engine::PhonesBus::shared().set_blend_mix(on);
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let _ = on;
+    }
+
+    /// Mute the main output pair only (routed interfaces): the phones keep
+    /// the signal.
+    pub fn set_main_pair_mute(on: bool) {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        daw::standalone::audio_engine::PhonesBus::shared().set_main_mute(on);
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let _ = on;
     }
 
     /// Build an FX chain on **this** thread (loading every `.nam` / `.wav` /
@@ -1596,6 +2128,10 @@ impl GuitarRig {
             names,
             ids,
             prepare_on_arm,
+            kinds,
+            gates,
+            applied,
+            time_start,
             primary_loudness,
             primary_expected_sr,
             primary_input_level_dbu,
@@ -1625,6 +2161,10 @@ impl GuitarRig {
                     boxes,
                     block_ids: ids,
                     prepare_on_arm,
+                    kinds,
+                    gates,
+                    applied,
+                    time_start,
                 },
             );
         id
@@ -1653,6 +2193,206 @@ impl GuitarRig {
         self.slots.retain(|s| s.id != id);
     }
 
+    /// Take a chain out of the rig without a gap — the gapless counterpart
+    /// of [`uninstall_model`](Self::uninstall_model), for a chain a reload no
+    /// longer references.
+    ///
+    /// Refuses (returns `None`, keeps it) the chain in the engine now:
+    /// switch away from it first, and it rings out as a tail. A chain still
+    /// ringing is safe to retire — its blocks are not here but in the output
+    /// stage's voice, which owns them until the tail is quiet; the next
+    /// switch collects that voice on the control thread and, the chain being
+    /// gone, drops it there. So nothing a tail voice is rendering is dropped,
+    /// and nothing is dropped on the audio thread.
+    ///
+    /// The returned chain holds whatever blocks were resident; drop it
+    /// wherever freeing them is cheapest (off any lock the caller holds).
+    pub fn retire_chain(&mut self, id: ModelId) -> Option<RetiredChain> {
+        let chain = {
+            let mut swap = self
+                .swap
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if swap.live == Some(id) {
+                return None;
+            }
+            if swap.active == Some(id) {
+                // Bypassed rig remembering this chain: forget it.
+                swap.active = None;
+            }
+            swap.chains.remove(&id)?
+        };
+        self.slots.retain(|s| s.id != id);
+        Some(RetiredChain { _chain: chain })
+    }
+
+    /// The chain in the engine now (`None`: passthrough or bypassed).
+    #[must_use]
+    pub fn live(&self) -> Option<ModelId> {
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .live
+    }
+
+    /// Write param changes to chain `id`'s running blocks — no rebuild, no
+    /// switch: `(slot, write)` with slots in chain order.
+    ///
+    /// Wherever the chain's blocks are: in the engine (under the renderer's
+    /// lock, all writes in one hold, so no block renders half an edit),
+    /// resident, or ringing out in a tail. A built-in effect gets its params
+    /// as param events — exactly the `(id, value)` its build set from the
+    /// same stored params (see [`crate::block_params`]) — a NAM block its
+    /// trims. Everything is resolved before any lock the renderer takes.
+    ///
+    /// `false` if the rig holds no chain `id`.
+    pub fn write_chain_blocks(
+        &self,
+        id: ModelId,
+        writes: &[(usize, crate::block_params::BlockWrite)],
+    ) -> bool {
+        self.write_chain_blocks_with(id, writes, false)
+    }
+
+    /// [`write_chain_blocks`](Self::write_chain_blocks) to a chain that has
+    /// never played (just built): each written block is prepared again after,
+    /// so it starts *at* the written values rather than gliding to them from
+    /// its build's — exactly as if it had been built with them. A chain that
+    /// is playing or ringing is written as usual (a glide is what a playing
+    /// block should do).
+    pub fn write_new_chain_blocks(
+        &self,
+        id: ModelId,
+        writes: &[(usize, crate::block_params::BlockWrite)],
+    ) -> bool {
+        self.write_chain_blocks_with(id, writes, true)
+    }
+
+    fn write_chain_blocks_with(
+        &self,
+        id: ModelId,
+        writes: &[(usize, crate::block_params::BlockWrite)],
+        settle: bool,
+    ) -> bool {
+        let resolved: Vec<(usize, crate::block_params::ResolvedWrite)> = {
+            let swap = self
+                .swap
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let Some(chain) = swap.chains.get(&id) else {
+                return false;
+            };
+            writes
+                .iter()
+                .filter_map(|(slot, w)| {
+                    let (bt, _) = *chain.kinds.get(*slot)?;
+                    crate::block_params::ResolvedWrite::resolve(bt, w).map(|sw| (*slot, sw))
+                })
+                .collect()
+        };
+        self.write_resolved_with(id, resolved, settle)
+    }
+
+    /// Write already-resolved writes to chain `id`'s blocks (as
+    /// [`write_chain_blocks`](Self::write_chain_blocks)).
+    pub fn write_chain_resolved(
+        &self,
+        id: ModelId,
+        writes: &[(usize, crate::block_params::ResolvedWrite)],
+    ) -> bool {
+        self.write_resolved_with(id, writes.to_vec(), false)
+    }
+
+    /// The one place a write reaches a resident block: noted in the chain's
+    /// `applied`, then applied to the block wherever it is (playing,
+    /// resident, or ringing out in the tail).
+    fn write_resolved_with(
+        &self,
+        id: ModelId,
+        resolved: Vec<(usize, crate::block_params::ResolvedWrite)>,
+        settle: bool,
+    ) -> bool {
+        let sr = f64::from(self.sample_rate);
+        let mut swap = self
+            .swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let live = swap.live == Some(id);
+        let Some(chain) = swap.chains.get_mut(&id) else {
+            return false;
+        };
+        if resolved.is_empty() {
+            return true;
+        }
+        for (slot, sw) in &resolved {
+            if let Some(st) = chain.applied.get_mut(*slot) {
+                st.note(sw);
+            }
+        }
+        if live {
+            let guids = &self.slot_guids;
+            self.daw.with_plugin_instances(|map| {
+                for (slot, sw) in &resolved {
+                    if let Some(inst) = guids.get(slot + 1).and_then(|g| map.get_mut(g)) {
+                        sw.apply(inst.as_mut());
+                    }
+                }
+            });
+        } else if chain.boxes.iter().any(Option::is_some) {
+            for (slot, sw) in &resolved {
+                if let Some(Some(inst)) = chain.boxes.get_mut(*slot) {
+                    sw.apply(inst.as_mut());
+                }
+            }
+            if settle {
+                let mut slots: Vec<usize> = resolved.iter().map(|(s, _)| *s).collect();
+                slots.dedup();
+                for slot in slots {
+                    if let Some(Some(inst)) = chain.boxes.get_mut(slot) {
+                        let _ = inst.prepare(sr, FX_PREPARE_BLOCK);
+                    }
+                }
+            }
+        } else {
+            // Ringing out: its blocks are the tail's.
+            self.with_stage(|stage| {
+                if let Some(boxes) = stage.voice_boxes_mut(id) {
+                    for (slot, sw) in &resolved {
+                        if let Some(Some(inst)) = boxes.get_mut(*slot) {
+                            sw.apply(inst.as_mut());
+                        }
+                    }
+                }
+            });
+        }
+        true
+    }
+
+    /// What chain `id`'s blocks were last set to, in slot order (`None` if
+    /// the rig has no such chain).
+    #[must_use]
+    pub fn chain_applied(&self, id: ModelId) -> Option<Vec<crate::block_params::BlockState>> {
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .chains
+            .get(&id)
+            .map(|c| c.applied.clone())
+    }
+
+    /// Chain `id`'s block ids, in slot order (empty if the rig has no such
+    /// chain).
+    #[must_use]
+    pub fn chain_block_ids(&self, id: ModelId) -> Vec<String> {
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .chains
+            .get(&id)
+            .map(|c| c.block_ids.clone())
+            .unwrap_or_default()
+    }
+
     /// Select the active chain — swaps the chain's pre-prepared boxes into the
     /// track's fixed slot guids under daw's renderer per-block lock
     /// (glitch-free), filling unused slots with identity pass-throughs. `None`
@@ -1674,96 +2414,7 @@ impl GuitarRig {
         let bypass = swap.bypass;
         let known = id.filter(|i| swap.chains.contains_key(i));
         let arming = known.filter(|_| !bypass);
-
-        // Re-arming the chain that is already live is the one case that cannot
-        // be prepared ahead: its boxes are in the engine, not in the resident
-        // map, so there is nothing to prepare until they have been taken back.
-        // Handled first, on its own, so the common case — switching to a
-        // *different* patch — stays a single pass.
-        if swap.active.is_some() && swap.active == arming {
-            self.reclaim_active(&mut swap, chain_guids, sr);
-        }
-
-        // ── Phase 1: allocate and prepare, touching nothing the audio thread
-        // can see.
-        //
-        // `prepare` is where a switch spends its time — a reverb sizes its
-        // delay lines, a NAM resets its network — and all of it used to happen
-        // *between* the first slot being swapped and the last. That window is
-        // one where the graph runs half of one patch and half of another,
-        // which is what a player hears as a switch that is neither instant nor
-        // clean. Nothing here is visible to the renderer, so it can take as
-        // long as it takes.
-
-        // Identities to leave behind in the outgoing chain's slots.
-        let mut reclaim_fill: Vec<Option<Box<dyn PluginInstance>>> = if swap.active.is_some() {
-            chain_guids
-                .iter()
-                .map(|_| Some(Self::fresh_identity(sr)))
-                .collect()
-        } else {
-            Vec::new()
-        };
-
-        // The incoming boxes, re-prepared: this clears delay lines and reverb
-        // tails left from this chain's last activation, which would otherwise
-        // dump out as a burst on the switch.
-        let incoming: Vec<Box<dyn PluginInstance>> = match arming {
-            Some(cid) => {
-                let chain = swap.chains.get_mut(&cid).expect("checked contains_key");
-                (0..chain_guids.len())
-                    .map(|slot| {
-                        let mut new_box = match chain.boxes.get_mut(slot) {
-                            Some(slot_box) if slot_box.is_some() => {
-                                slot_box.take().expect("checked is_some")
-                            }
-                            _ => Self::fresh_identity(sr),
-                        };
-                        // Only where a tail could survive; see `prepare_on_arm`.
-                        if chain.prepare_on_arm.get(slot).copied().unwrap_or(true) {
-                            let _ = new_box.prepare(sr, FX_PREPARE_BLOCK);
-                        }
-                        new_box
-                    })
-                    .collect()
-            }
-            // Bypassed, or an id the rig does not hold: clean passthrough.
-            None => chain_guids.iter().map(|_| Self::fresh_identity(sr)).collect(),
-        };
-
-        // ── Phase 2: the swap. Engine mutations only, back to back. ──
-
-        // Clear any per-block bypass (daw `fx_enabled`) from the previous
-        // patch: re-enable every chain slot so a new chain starts with all
-        // blocks live. (Per-block bypass via `set_block_slot_bypass` flips
-        // these flags; they must not leak across a patch switch.)
-        let fx_ctx = FxChainContext::track(self.track_guid.clone());
-        for slot in 1..self.slot_guids.len() {
-            let _ =
-                <Standalone as FxChains>::set_enabled(&self.daw, fx_ctx.clone(), slot as u32, true);
-        }
-
-        // Reclaim the outgoing chain's boxes back into the resident map so it
-        // can be re-armed later.
-        if let Some(prev) = swap.active.take() {
-            if let Some(chain) = swap.chains.get_mut(&prev) {
-                for (slot, guid) in chain_guids.iter().enumerate() {
-                    if slot < chain.boxes.len() {
-                        let Some(fill) = reclaim_fill.get_mut(slot).and_then(Option::take) else {
-                            continue;
-                        };
-                        chain.boxes[slot] = self.daw.insert_plugin_instance(guid.clone(), fill);
-                    }
-                }
-            }
-        }
-
-
-        // Arm.
-        for (guid, new_box) in chain_guids.iter().zip(incoming) {
-            drop(self.daw.insert_plugin_instance(guid.clone(), new_box));
-        }
-
+        let trim_db = swap.patch_trim_db;
         swap.active = match arming {
             Some(cid) => Some(cid),
             // When bypassed, remember the requested (known) id so toggling
@@ -1771,32 +2422,216 @@ impl GuitarRig {
             None if bypass => known,
             None => None,
         };
-    }
 
-    /// Take the live chain's boxes out of the engine and back into the
-    /// resident map, leaving identities in their place.
-    ///
-    /// Only needed when re-arming the chain that is already active — every
-    /// other path reclaims as part of the swap itself.
-    fn reclaim_active(
-        &self,
-        swap: &mut std::sync::MutexGuard<'_, SwapState>,
-        chain_guids: &[String],
-        sr: f64,
-    ) {
-        let Some(prev) = swap.active.take() else {
+        // Already what plays: nothing to swap — only the level.
+        if swap.live == arming {
+            drop(swap);
+            self.with_stage(|stage| stage.set_trim_db(trim_db));
             return;
+        }
+
+        // ── Phase 1: allocate and prepare, touching nothing the audio thread
+        // can see.
+        //
+        // `prepare` is where a switch spends its time — a reverb sizes its
+        // delay lines, a NAM resets its network — and all of it used to happen
+        // *between* the first slot being swapped and the last. Nothing here is
+        // visible to the renderer, so it can take as long as it takes.
+
+        // The incoming boxes, one per slot. A chain that is still ringing out
+        // from an earlier switch has no boxes here — they are in its voice,
+        // and come back out of it in phase 2 as they are (`None` below marks
+        // those slots). Otherwise the time blocks are re-prepared, clearing
+        // what they held from the chain's last activation.
+        let mut resume = false;
+        let mut incoming: Vec<Option<Box<dyn PluginInstance>>> = match arming {
+            Some(cid) => {
+                let chain = swap.chains.get_mut(&cid).expect("checked contains_key");
+                resume = !chain.boxes.is_empty() && chain.boxes.iter().all(Option::is_none);
+                (0..chain_guids.len())
+                    .map(|slot| {
+                        if slot >= chain.boxes.len() {
+                            return Some(Self::fresh_identity(sr));
+                        }
+                        if resume {
+                            return None;
+                        }
+                        let mut new_box = chain.boxes[slot]
+                            .take()
+                            .unwrap_or_else(|| Self::fresh_identity(sr));
+                        // Only where a tail could survive; see `prepare_on_arm`.
+                        if chain.prepare_on_arm.get(slot).copied().unwrap_or(true) {
+                            let _ = new_box.prepare(sr, FX_PREPARE_BLOCK);
+                            // Cleared, it would hear the guitar from the
+                            // first sample at full level: its first repeat
+                            // or reflection lands as a step after the
+                            // crossfade is over. Ramp its input in instead.
+                            if let Some(gate) = chain.gates.get(slot) {
+                                gate.fade_in();
+                            }
+                        }
+                        Some(new_box)
+                    })
+                    .collect()
+            }
+            // Bypassed, or an id the rig does not hold: clean passthrough.
+            None => chain_guids
+                .iter()
+                .map(|_| Some(Self::fresh_identity(sr)))
+                .collect(),
         };
-        if let Some(chain) = swap.chains.get_mut(&prev) {
-            for (slot, guid) in chain_guids.iter().enumerate() {
-                if slot < chain.boxes.len() {
-                    chain.boxes[slot] = self
-                        .daw
-                        .insert_plugin_instance(guid.clone(), Self::fresh_identity(sr));
+        // Where the outgoing chain's blocks will go: its voice, and what the
+        // stage hands back (finished tails, one made room for).
+        let outgoing = swap.live.and_then(|prev| {
+            swap.chains
+                .get(&prev)
+                .map(|c| (prev, c.boxes.len(), c.time_start))
+        });
+        let mut voice_boxes: Vec<Option<Box<dyn PluginInstance>>> =
+            Vec::with_capacity(outgoing.map_or(0, |(_, n, _)| n));
+        let mut displaced: Vec<Option<Box<dyn PluginInstance>>> =
+            Vec::with_capacity(chain_guids.len());
+        let mut returned: Vec<crate::tail_stage::Voice> =
+            Vec::with_capacity(crate::tail_stage::MAX_VOICES + 1);
+        let resume_id = arming.filter(|_| resume);
+        let stage_guid = self.output_guid.as_str();
+
+        // ── Phase 2: the swap — one hold of the renderer's lock, so no block
+        // ever renders half of one chain and half of another. Inserts and
+        // moves only; everything displaced is dropped after.
+        let resumed_ok = self.daw.with_plugin_instances(|map| {
+            // The stage's box out of the map while the slots change around
+            // it, and back in after — no allocation: the key is re-used.
+            let mut tap_box = map.remove(stage_guid);
+            let stage = tap_box
+                .as_mut()
+                .and_then(|p| p.as_any_mut())
+                .and_then(|a| a.downcast_mut::<OutputTap>())
+                .map(|tap| &mut tap.stage);
+            let Some(stage) = stage else {
+                // No stage (should not happen): the old swap, no tails.
+                for (guid, bx) in chain_guids.iter().zip(incoming.iter_mut()) {
+                    if let Some(bx) = bx.take() {
+                        displaced.push(map.insert(guid.clone(), bx));
+                    }
+                }
+                if let Some(t) = tap_box {
+                    map.insert(stage_guid.to_string(), t);
+                }
+                return false;
+            };
+            stage.collect_finished(&mut returned);
+            let mut resumed = false;
+            if let Some(cid) = resume_id {
+                // Still ringing, or finished and just collected: either way
+                // its blocks come back here, as they are.
+                let finished = returned
+                    .iter()
+                    .position(|v| v.chain == cid)
+                    .map(|i| returned.swap_remove(i));
+                if let Some(v) = finished.or_else(|| stage.take(cid)) {
+                    for (slot, bx) in v.boxes.into_iter().enumerate() {
+                        if let Some(dst) = incoming.get_mut(slot) {
+                            *dst = bx;
+                        }
+                    }
+                    resumed = true;
+                }
+            }
+            // A ringing chain whose voice was not there (finished and
+            // collected above, say): its blocks came back to `returned`,
+            // not here — play identities rather than leave the old chain in.
+            for bx in incoming.iter_mut().filter(|b| b.is_none()) {
+                *bx = Some(Self::fresh_identity(sr));
+            }
+            for (slot, (guid, bx)) in chain_guids.iter().zip(incoming.iter_mut()).enumerate() {
+                let Some(bx) = bx.take() else { continue };
+                let old = map.insert(guid.clone(), bx);
+                match outgoing {
+                    Some((_, n, _)) if slot < n => voice_boxes.push(old),
+                    _ => displaced.push(old),
+                }
+            }
+            let voice = outgoing.map(|(prev, _, ts)| {
+                crate::tail_stage::Voice::new(prev, std::mem::take(&mut voice_boxes), ts)
+            });
+            if let Some(v) = stage.switch(voice, trim_db) {
+                returned.push(v);
+            }
+            if let Some(t) = tap_box {
+                map.insert(stage_guid.to_string(), t);
+            }
+            resumed
+        });
+        if resume && !resumed_ok {
+            tracing::warn!(chain = ?arming, "rig switch: a ringing chain's blocks were not found; playing it dry");
+        }
+
+        // Blocks back to their chains; anything whose chain has gone, and
+        // the identities, dropped here — off the audio thread.
+        for v in returned {
+            if let Some(chain) = swap.chains.get_mut(&v.chain) {
+                for (slot, bx) in v.boxes.into_iter().enumerate() {
+                    if let Some(dst) = chain.boxes.get_mut(slot) {
+                        if dst.is_none() {
+                            *dst = bx;
+                        }
+                    }
                 }
             }
         }
-        swap.active = Some(prev);
+        drop(displaced);
+        swap.live = arming;
+    }
+
+    /// Run `f` on the output stage, under the renderer's lock.
+    fn with_stage<R>(&self, f: impl FnOnce(&mut crate::tail_stage::TailStage) -> R) -> Option<R> {
+        self.daw
+            .with_plugin_instance(&self.output_guid, |p| {
+                p.as_any_mut()
+                    .and_then(|a| a.downcast_mut::<OutputTap>())
+                    .map(|tap| f(&mut tap.stage))
+            })
+            .flatten()
+    }
+
+    /// Tails ringing on from earlier switches (diagnostics).
+    #[must_use]
+    pub fn tail_voices(&self) -> usize {
+        self.with_stage(|s| s.ringing()).unwrap_or(0)
+    }
+
+    /// The playing patch's output level (dB). Applied in the output stage —
+    /// smoothed, and captured by a switch so the outgoing patch rings out at
+    /// its own level. Set it before [`set_active`](Self::set_active) and the
+    /// switch lands it with the crossfade.
+    pub fn set_patch_trim_db(&self, db: f32) {
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .patch_trim_db = db;
+    }
+
+    /// Set chain `id`'s bypass mask (one flag per block, in chain order):
+    /// at once when it is not playing, ramped when it is.
+    pub fn set_chain_bypass(&self, id: ModelId, mask: &[bool]) {
+        let swap = self
+            .swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let playing = swap.live == Some(id);
+        if let Some(chain) = swap.chains.get(&id) {
+            for (gate, &on) in chain.gates.iter().zip(mask) {
+                // A chain ringing out keeps its gates as they were until it
+                // plays again (its boxes are out).
+                let ringing = chain.boxes.iter().all(Option::is_none) && !chain.boxes.is_empty();
+                if playing || ringing {
+                    gate.set(on);
+                } else {
+                    gate.set_now(on);
+                }
+            }
+        }
     }
 
     fn fresh_identity(sr: f64) -> Box<dyn PluginInstance> {
@@ -1945,6 +2780,66 @@ impl GuitarRig {
         self.input_meter.take_capture()
     }
 
+    /// Replace the instrument with `samples` (mono, at the rig's rate),
+    /// looped from the top, until [`stop_test_signal`](Self::stop_test_signal).
+    /// The whole live chain — the patch as switched, every trim the backend
+    /// applied — hears it exactly as it would the guitar.
+    pub fn start_test_signal(&self, samples: Arc<Vec<f32>>) {
+        if let Ok(mut slot) = self.input_meter.inject.lock() {
+            *slot = Some(samples);
+        }
+        self.input_meter.inject_gen.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// Back to the instrument.
+    pub fn stop_test_signal(&self) {
+        if let Ok(mut slot) = self.input_meter.inject.lock() {
+            *slot = None;
+        }
+        self.input_meter.inject_gen.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// Silence the rig's output (the output capture still hears the chain).
+    pub fn set_output_muted(&self, muted: bool) {
+        self.output_tap.muted.store(muted, Ordering::Relaxed);
+    }
+
+    /// Capture the next `frames` of the chain's output (per channel).
+    pub fn arm_output_capture(&self, frames: usize) {
+        self.arm_capture_at(frames, false);
+    }
+
+    /// Capture the next `frames` of what is heard: the patch at its level,
+    /// with the tails of earlier patches ringing under it.
+    pub fn arm_heard_capture(&self, frames: usize) {
+        self.arm_capture_at(frames, true);
+    }
+
+    fn arm_capture_at(&self, frames: usize, heard: bool) {
+        self.output_tap.heard.store(heard, Ordering::Relaxed);
+        if let Ok(mut cap) = self.output_tap.capture.lock() {
+            cap.0.clear();
+            cap.1.clear();
+            cap.0.reserve(frames);
+            cap.1.reserve(frames);
+        }
+        self.output_tap.remaining.store(frames, Ordering::Relaxed);
+    }
+
+    /// Frames still to capture (0 once the capture is complete).
+    pub fn output_capture_remaining(&self) -> usize {
+        self.output_tap.remaining.load(Ordering::Relaxed)
+    }
+
+    /// Take the captured output, `(left, right)`.
+    pub fn take_output_capture(&self) -> (Vec<f32>, Vec<f32>) {
+        self.output_tap
+            .capture
+            .lock()
+            .map(|mut c| std::mem::take(&mut *c))
+            .unwrap_or_default()
+    }
+
     /// A snapshot of the most-recent mono input samples (post-input-trim,
     /// pre-amp), newest-last, for pitch detection (the tuner). Up to
     /// `TUNER_WINDOW` frames. Empty until the first block runs.
@@ -1979,6 +2874,15 @@ impl GuitarRig {
         0
     }
 
+    /// Every dropout the engine has seen since `*seen` (a sequence number,
+    /// 0 to start), oldest first — for a drop log. Empty for an offline rig.
+    pub fn collect_drops(&self, seen: &mut u64) -> Vec<daw_audio_io::duplex::DropEvent> {
+        self.engine_stats
+            .as_ref()
+            .map(|s| s.drops.collect(seen))
+            .unwrap_or_default()
+    }
+
     pub fn installs(&self) -> u64 {
         self.slots.len() as u64
     }
@@ -2007,6 +2911,17 @@ impl GuitarRig {
         self.engine_stats
             .as_ref()
             .map_or(0, |s| (s.mean_render_ms() * 1000.0) as u32)
+    }
+
+    /// Whether the audio device reported itself gone (unplugged, powered
+    /// off): the engine is dead and only a reopen brings it back. Always
+    /// false for an offline rig.
+    pub fn stream_failed(&self) -> bool {
+        /// `EngineStats::stream_state`'s error code (both backends).
+        const STATE_ERROR: i32 = -1;
+        self.engine_stats.as_ref().is_some_and(|s| {
+            s.stream_state.load(std::sync::atomic::Ordering::Relaxed) == STATE_ERROR
+        })
     }
 
     /// Blocks rendered since the device opened — the sample count behind
@@ -2131,13 +3046,25 @@ impl GuitarRig {
     /// box swap). `on = true` bypasses the block. Returns `true` if the block was
     /// found and the flag was set.
     pub fn set_block_slot_bypass(&self, block_id: &str, on: bool) -> bool {
-        let Some((slot, _guid)) = self.active_block_slot(block_id) else {
+        let swap = self
+            .swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(chain) = swap.active.and_then(|a| swap.chains.get(&a)) else {
             return false;
         };
-        // Renderer fx_idx = chain slot + 1 (slot 0 is the input probe). Bypass =
-        // disabled; enabled = !on.
-        let fx_ctx = FxChainContext::track(self.track_guid.clone());
-        <Standalone as FxChains>::set_enabled(&self.daw, fx_ctx, (slot + 1) as u32, !on).is_ok()
+        let Some(slot) = chain.block_ids.iter().position(|b| b == block_id) else {
+            return false;
+        };
+        // The block's own gate (`block_gate`): ramped, and a delay or reverb
+        // rings out rather than being cut.
+        match chain.gates.get(slot) {
+            Some(gate) => {
+                gate.set(on);
+                true
+            }
+            None => false,
+        }
     }
 
     /// Set a named parameter on the active chain's block `block_id` to `value`.
@@ -2157,6 +3084,33 @@ impl GuitarRig {
         let Some((slot, guid)) = self.active_block_slot(block_id) else {
             return false;
         };
+
+        // 0. A built-in effect: its own param event, the value as it is —
+        // the write its build makes from the same stored value (see
+        // `block_params`). Once, to the block: not a value kept on the slot
+        // and re-sent every block to whatever chain plays there next.
+        let target = {
+            let swap = self
+                .swap
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            swap.active
+                .and_then(|a| swap.chains.get(&a).map(|c| (a, c.kinds.get(slot).copied())))
+        };
+        if let Some((active, Some((bt, true)))) = target {
+            if crate::block_params::is_known(bt, param_name) {
+                return self.write_chain_blocks(
+                    active,
+                    &[(
+                        slot,
+                        crate::block_params::BlockWrite::Params(vec![(
+                            param_name.to_string(),
+                            f64::from(value),
+                        )]),
+                    )],
+                );
+            }
+        }
 
         // 1. NAM trims — mutate the live instance directly via downcast.
         let nam_applied = self
@@ -2179,6 +3133,20 @@ impl GuitarRig {
                 None
             })
             .flatten();
+        if nam_applied == Some(true) {
+            let w = crate::block_params::ResolvedWrite::Nam {
+                input_db: (param_name == "input_trim").then_some(value),
+                output_db: (param_name == "output_trim").then_some(value),
+            };
+            let mut swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(st) = swap
+                .active
+                .and_then(|a| swap.chains.get_mut(&a))
+                .and_then(|c| c.applied.get_mut(slot))
+            {
+                st.note(&w);
+            }
+        }
         match nam_applied {
             // NAM trim applied.
             Some(true) => return true,
@@ -2255,6 +3223,158 @@ pub use signal_rig_host::uuid_string;
 mod tests {
     use super::*;
 
+    /// Render `secs` offline, capturing what is heard.
+    fn heard(rig: &GuitarRig, secs: f64) -> Vec<f32> {
+        let frames = (secs * f64::from(rig.sample_rate)) as usize;
+        rig.arm_heard_capture(frames);
+        rig.render_offline(frames);
+        rig.take_output_capture().0
+    }
+
+    fn rms(x: &[f32]) -> f32 {
+        (x.iter().map(|s| s * s).sum::<f32>() / x.len().max(1) as f32).sqrt()
+    }
+
+    /// A reverb's tail rings on after switching to a patch without one —
+    /// and the tail is the old patch's, not silence.
+    #[test]
+    fn a_switch_lets_the_old_reverb_ring_out() {
+        let rig = GuitarRig::open_offline(48_000).unwrap();
+        let mut rig = rig;
+        let verb = RigBlock::effect(BlockType::Reverb, "VERB 1")
+            .with_param("mix", "1")
+            .with_param("level", "0")
+            .with_param("dry", "0")
+            .with_param("algorithm", "1")
+            .with_param("decay", "0.8");
+        let a = rig.install_chain(&[verb]).unwrap();
+        let b = rig
+            .install_chain(&[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "0")])
+            .unwrap();
+        // A 50 ms burst, then silence (the test signal loops: make it long).
+        let mut sig = vec![0.0f32; 48_000 * 20];
+        let mut seed = 7u32;
+        for s in sig.iter_mut().take(2_400) {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            *s = ((seed >> 8) as f32 / (1u32 << 24) as f32 - 0.5) * 0.5;
+        }
+        rig.set_active(Some(a));
+        rig.start_test_signal(Arc::new(sig));
+        let before = heard(&rig, 0.3);
+        assert!(rms(&before[4_800..]) > 1e-3, "A's reverb rings before the switch");
+        rig.set_active(Some(b));
+        let after = heard(&rig, 1.0);
+        let late = rms(&after[24_000..]);
+        assert!(late > 1e-4, "A's tail still rings 0.5 s after switching to B: {late}");
+        assert_eq!(rig.tail_voices(), 1);
+    }
+
+    /// Back to a patch whose tail has finished: it plays itself, not dry.
+    #[test]
+    fn switching_back_after_the_tail_has_ended_plays_the_patch() {
+        let mut rig = GuitarRig::open_offline(48_000).unwrap();
+        let loud = rig
+            .install_chain(&[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "6")])
+            .unwrap();
+        let quiet = rig
+            .install_chain(&[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "-6")])
+            .unwrap();
+        rig.start_test_signal(Arc::new(vec![0.25f32; 48_000]));
+        rig.set_active(Some(loud));
+        heard(&rig, 0.1);
+        rig.set_active(Some(quiet));
+        heard(&rig, 0.5);
+        rig.set_active(Some(loud));
+        let out = heard(&rig, 0.1);
+        let last = out[out.len() - 1];
+        assert!((last - 0.25 * 1.995).abs() < 0.01, "A at +6 dB again, not dry: {last}");
+    }
+
+    /// Two levels, one switch: no step between them.
+    #[test]
+    fn a_switch_crossfades_the_two_patches() {
+        let mut rig = GuitarRig::open_offline(48_000).unwrap();
+        let loud = rig
+            .install_chain(&[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "6")])
+            .unwrap();
+        let quiet = rig
+            .install_chain(&[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "-6")])
+            .unwrap();
+        // A slow sine: its own sample-to-sample change is tiny, so any step
+        // is the switch's.
+        let sig: Vec<f32> = (0..48_000 * 4)
+            .map(|i| 0.25 * (std::f32::consts::TAU * 50.0 * i as f32 / 48_000.0).sin())
+            .collect();
+        rig.set_active(Some(loud));
+        rig.start_test_signal(Arc::new(sig));
+        let mut out = heard(&rig, 0.2);
+        rig.set_active(Some(quiet));
+        out.extend(heard(&rig, 0.2));
+        let steady = 0.25 * 2.0 * std::f32::consts::TAU * 50.0 / 48_000.0;
+        let max_jump = out.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0, f32::max);
+        assert!(max_jump < steady * 1.5, "largest step {max_jump} vs a sine's own {steady}");
+    }
+
+    /// A 16-bit mono WAV of `samples` — an IR as the browser would fetch it.
+    fn wav_bytes(samples: &[i16], sample_rate: u32) -> Vec<u8> {
+        let data_len = (samples.len() * 2) as u32;
+        let mut b = Vec::with_capacity(44 + samples.len() * 2);
+        b.extend_from_slice(b"RIFF");
+        b.extend_from_slice(&(36 + data_len).to_le_bytes());
+        b.extend_from_slice(b"WAVEfmt ");
+        b.extend_from_slice(&16u32.to_le_bytes());
+        b.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        b.extend_from_slice(&1u16.to_le_bytes()); // mono
+        b.extend_from_slice(&sample_rate.to_le_bytes());
+        b.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+        b.extend_from_slice(&2u16.to_le_bytes());
+        b.extend_from_slice(&16u16.to_le_bytes());
+        b.extend_from_slice(b"data");
+        b.extend_from_slice(&data_len.to_le_bytes());
+        for s in samples {
+            b.extend_from_slice(&s.to_le_bytes());
+        }
+        b
+    }
+
+    /// The browser has no filesystem: a chain whose model and IR are only
+    /// *registered bytes* (keys that are not paths) still builds and plays.
+    #[test]
+    fn a_chain_builds_from_registered_bytes_alone() {
+        let model = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../rigs/guitar/default-config/models/King of Tone both sides.nam");
+        let amp_key = "web-test://amp.nam";
+        let cab_key = "web-test://cab.wav";
+        crate::assets::install(amp_key, std::fs::read(model).unwrap());
+        let mut ir = vec![0i16; 256];
+        ir[0] = i16::MAX / 2;
+        crate::assets::install(cab_key, wav_bytes(&ir, 48_000));
+
+        let blocks = [
+            RigBlock::nam(amp_key).named("Amp L"),
+            RigBlock::cab_ir(cab_key).named("Cab L"),
+        ];
+        let ids = vec!["amp".to_string(), "cab".to_string()];
+        let mut chain = prepare_chain(&blocks, &ids, 48_000).expect("builds from bytes");
+
+        let events = signal_plugin_host::PluginEvents::default();
+        let input: Vec<f32> = (0..128).map(|i| (i as f32 * 0.05).sin() * 0.3).collect();
+        let mut buf = input.clone();
+        for slot in chain.boxes.iter_mut().flatten() {
+            let (il, ir) = (buf.clone(), buf.clone());
+            let (mut ol, mut or) = (vec![0.0; 128], vec![0.0; 128]);
+            slot.process_block(&il, &ir, &mut ol, &mut or, &events)
+                .unwrap();
+            buf = ol;
+        }
+        assert!(buf.iter().all(|s| s.is_finite()));
+        assert!(buf.iter().any(|s| s.abs() > 1e-6), "the chain made sound");
+
+        // An unregistered key that is not a file fails loudly, not silently.
+        assert!(prepare_chain(&[RigBlock::nam("web-test://missing.nam")], &[], 48_000).is_err());
+        crate::assets::clear();
+    }
+
     #[test]
     fn rig_block_kind_predicates() {
         assert!(RigBlock::nam("a.nam").is_nam());
@@ -2312,9 +3432,9 @@ mod tests {
         assert!(native.is_native());
         assert!(native.has_backend());
 
-        // …while a Native type with no registry entry (Pitch) has no backend
+        // …while a Native type with no registry entry (Wah) has no backend
         // yet, so it's skipped at install.
-        let pending = RigBlock::effect(BlockType::Pitch, "Shifter");
+        let pending = RigBlock::effect(BlockType::Wah, "Wah");
         assert_eq!(pending.implementation(), BlockImpl::Native);
         assert!(!pending.has_backend());
     }

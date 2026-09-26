@@ -41,16 +41,25 @@ impl Account {
     /// - [`AccountError::Issuer`] — the account has not linked that
     ///   provider (`not_linked`), the session lacks the provider's scope
     ///   (`insufficient_scope`), or the request failed.
-    pub async fn linked_token(&self, provider: &str) -> Result<LinkedToken, AccountError> {
-        let token = self.access_token()?;
-        let response = self
-            .http()
+    async fn linked_request(&self, provider: &str, token: &str) -> Result<reqwest::Response, AccountError> {
+        self.http()
             .get(format!("{}/oauth2/linked-token", self.issuer()))
             .query(&[("provider", provider)])
             .bearer_auth(token)
             .send()
             .await
-            .map_err(|e| AccountError::Issuer(e.to_string()))?;
+            .map_err(|e| AccountError::Issuer(e.to_string()))
+    }
+
+    pub async fn linked_token(&self, provider: &str) -> Result<LinkedToken, AccountError> {
+        let mut token = self.fresh_access_token(false).await?;
+        let mut response = self.linked_request(provider, &token).await?;
+        // Refused as expired or unknown: refresh once and ask again, rather
+        // than make the person sign in because a clock drifted.
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            token = self.fresh_access_token(true).await?;
+            response = self.linked_request(provider, &token).await?;
+        }
 
         let status = response.status();
         let text = response

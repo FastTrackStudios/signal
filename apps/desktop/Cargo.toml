@@ -131,6 +131,7 @@ signal = [
     # (engine_tone3000.rs); signal-nam resolves where downloads land.
     "dep:signal-tone3000",
     "dep:signal-account",
+    "dep:signal-account-proto",
     "dep:signal-nam",
     "dep:url",
     "dep:axum",
@@ -320,6 +321,7 @@ signal-space = { workspace = true, optional = true }
 signal-ekit = { workspace = true, optional = true }
 signal-tone3000 = { workspace = true, optional = true }
 signal-account = { workspace = true, optional = true }
+signal-account-proto = { workspace = true, optional = true }
 signal-nam = { workspace = true, optional = true }
 url = { version = "2", optional = true }
 axum = { workspace = true, optional = true }
@@ -346,6 +348,16 @@ include_dir = { workspace = true, optional = true }
 # The native PipeWire duplex backend is Linux-only (cpal's pipewire host);
 # on macOS/other platforms the sampler core falls back to plain cpal
 # (CoreAudio), keeping engine mode buildable on darwin (voyager).
+# ── macOS — the native menu bar (mac_menu.rs): audio stats in the bar,
+# Settings… ⌘, in the app menu. The same objc2 line winit already links.
+[target.'cfg(target_os = "macos")'.dependencies]
+# `midi_hub::init_platform` — the CoreMIDI run-loop thread, first in `main`.
+signal-rig-host = { workspace = true }
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
+# + the status item for `--menubar` (menubar.rs).
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSMenu", "NSMenuItem", "NSEvent", "NSResponder", "NSRunningApplication", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSImage", "NSCell", "NSButtonCell"] }
+
 # ── iPhone (dx build --platform ios) — the in-process rig + phone shell ──
 [target.'cfg(target_os = "ios")'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["mobile", "launch"] }

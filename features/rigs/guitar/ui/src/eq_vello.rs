@@ -10,7 +10,6 @@
 //!
 //! # Why not keep re-hosting it
 //!
-//! [`crate::eq_surface`] draws the same model with the same maths in hand-
 //! written SVG, because that was the only thing a WebView could show. It cost
 //! more than duplication: an SVG re-host has to measure its own element to map
 //! a pointer into graph space, which is asynchronous and unreliable under
@@ -30,13 +29,14 @@
 //! events, and sending seven parameters per frame would put six of them on the
 //! wire for nothing.
 
+use crate::param_writer::WriteParam;
 use dioxus::prelude::*;
 use eq_ui::eq_graph::{AnalyzerSnapshot, EqGraph};
 use eq_ui::eq_graph_model::EqBand;
 use signal_guitar_proto::LiveBlock;
 use signal_guitar_proto::rig::RigClient;
 
-use crate::eq_surface::{NUM_BANDS, bands_of, shape_index};
+use eq_ui::eq_graph_model::EqBandShape;
 
 /// The plugin's graph, driving one rig block over the wire.
 #[component]
@@ -74,7 +74,7 @@ pub fn EqVelloSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                 let id = block_id.clone();
                 let name = format!("b{}_{}", band + 1, field);
                 spawn(async move {
-                    let _ = r.set_block_param(id, name, value).await;
+                    let _ = r.write_param(id, name, value).await;
                 });
             }
         }
@@ -279,4 +279,50 @@ mod tests {
             .collect();
         assert_eq!(fields, vec!["shape"]);
     }
+}
+
+// ── The wire's band model ───────────────────────────────────────────────
+//
+// The rig carries an EQ as flat params (`b3_freq`, `b3_gain`, …); eq-ui
+// speaks `EqBand`. This is the join, and the only place that knows the
+// names.
+
+/// Bands the rig's EQ block carries.
+pub(crate) const NUM_BANDS: usize = 24;
+
+pub(crate) fn shape_index(s: EqBandShape) -> f32 {
+    EqBandShape::all().iter().position(|x| *x == s).unwrap_or(0) as f32
+}
+
+fn shape_from_index(i: usize) -> EqBandShape {
+    EqBandShape::all().get(i).copied().unwrap_or_default()
+}
+
+/// Decode the wire params into the eq-ui band model.
+pub(crate) fn bands_of(block: &LiveBlock) -> Vec<EqBand> {
+    let get = |name: &str, dflt: f32| -> f32 {
+        block
+            .params
+            .iter()
+            .find(|p| p.name == name)
+            .map_or(dflt, |p| p.value)
+    };
+    (0..NUM_BANDS)
+        .map(|i| {
+            let b = i + 1;
+            EqBand {
+                index: i,
+                used: get(&format!("b{b}_used"), 0.0) >= 0.5,
+                enabled: get(&format!("b{b}_on"), 0.0) >= 0.5,
+                frequency: get(&format!("b{b}_freq"), 1000.0),
+                gain: get(&format!("b{b}_gain"), 0.0),
+                q: get(&format!("b{b}_q"), 0.707),
+                shape: shape_from_index(get(&format!("b{b}_shape"), 0.0) as usize),
+                slope: Some(get(&format!("b{b}_slope"), 2.0)),
+                focus: false,
+                stereo_mode: Default::default(),
+                name: String::new(),
+            }
+        })
+        .collect()
 }

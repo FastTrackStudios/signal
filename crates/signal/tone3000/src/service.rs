@@ -198,6 +198,17 @@ impl Tone3000Backend {
     /// every one of those is a reason to fall back to a local session, not
     /// a reason to fail the call.
     async fn brokered_client(&self) -> Option<api::Client> {
+        let token = self.brokered_token().await?;
+        let mut builder =
+            api::Client::builder(&self.inner.cfg.publishable_key).access_token(token);
+        if let Some(base) = &self.inner.cfg.base_url {
+            builder = builder.base_url(base.clone());
+        }
+        Some(builder.build())
+    }
+
+    /// The account's linked TONE3000 token, if the brokered route is up.
+    async fn brokered_token(&self) -> Option<String> {
         let account = self.inner.account.as_ref()?;
         match account
             .linked_token(signal_account::TONE3000_PROVIDER)
@@ -208,12 +219,7 @@ impl Tone3000Backend {
                     login = linked.login.as_deref().unwrap_or_default(),
                     "tone3000: using the account's linked token"
                 );
-                let mut builder = api::Client::builder(&self.inner.cfg.publishable_key)
-                    .access_token(linked.access_token);
-                if let Some(base) = &self.inner.cfg.base_url {
-                    builder = builder.base_url(base.clone());
-                }
-                Some(builder.build())
+                Some(linked.access_token)
             }
             Err(e) => {
                 tracing::debug!(%e, "tone3000: no brokered token — falling back to a local session");
@@ -282,6 +288,16 @@ impl Tone3000Backend {
                 Ok(page) => models.extend(page.data),
                 // A missing architecture is not a missing tone: show what did
                 // come back rather than failing the whole screen.
+                Err(e) => tracing::warn!(tone = tone_id, ?e, "tone3000: models page failed"),
+            }
+        }
+
+        // An IR tone (or any non-NAM format) counts no NAM architecture at
+        // all, so the loop above asks for nothing and the tone listed zero
+        // models. Ask once without the filter.
+        if tone.a1_models_count + tone.a2_models_count + tone.custom_models_count == 0 {
+            match client.models(tone.id).await {
+                Ok(page) => models.extend(page.data),
                 Err(e) => tracing::warn!(tone = tone_id, ?e, "tone3000: models page failed"),
             }
         }
@@ -362,14 +378,21 @@ impl Tone3000Backend {
         progress.model_name.clone_from(&model.name);
         self.inner.downloads.publish(progress.clone());
 
-        // The token is read AFTER the call above, which is what refreshes it
-        // if it was stale — so this is the credential the API just accepted.
-        let tokens = self.inner.session.stored_tokens()?;
+        // The file is fetched with the same credential the API call used:
+        // the account's linked token when there is one — a machine signed in
+        // only through its account has no local session, and reading one
+        // here failed every download there with "not signed in". Otherwise
+        // the local token, read AFTER the call above, which is what
+        // refreshes it if it was stale.
+        let bearer = match self.brokered_token().await {
+            Some(token) => token,
+            None => self.inner.session.stored_tokens()?.access_token,
+        };
         let response = self
             .inner
             .http
             .get(&model.model_url)
-            .bearer_auth(&tokens.access_token)
+            .bearer_auth(&bearer)
             .send()
             .await
             .map_err(|e| SessionError::Api(e.to_string()))?;
@@ -758,6 +781,9 @@ impl Tone3000 for Tone3000Backend {
         }
         if let Some(format) = parse_enum(&query.format) {
             search = search.format(format);
+        }
+        if let Some(arch) = parse_enum(&query.architecture) {
+            search = search.architecture(arch);
         }
         search = search
             .sort(sort_of(&query.sort, query.text.is_empty()))

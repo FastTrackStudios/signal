@@ -55,6 +55,9 @@ const SIGNAL_TAILWIND: &str =
 /// prop would have to be `PartialEq` for a value that is a set of live clients.
 static WIRED: std::sync::OnceLock<Wired> = std::sync::OnceLock::new();
 
+/// What a save made in `RIG_SHOT_TUNE_SAVE` answered, for the panel header.
+static SHOT_STATUS: std::sync::OnceLock<(String, signal_guitar_proto::MacroResult)> = std::sync::OnceLock::new();
+
 struct Wired {
     rig: RigClient,
     stream: RigStreamClient,
@@ -89,20 +92,95 @@ fn main() {
         backend.open_blocking();
         // Leaked on purpose: the server has to outlive the render, and this
         // process exists to take one picture and stop.
-        let server: &'static LocalServer = Box::leak(Box::new(LocalServer::serve(
-            backend.router(),
-            Scope::new(),
-        )));
+        let server: &'static LocalServer =
+            Box::leak(Box::new(LocalServer::serve(backend.router(), Scope::new())));
         let rig: RigClient = server.establish().await.expect("rig client");
         let stream: RigStreamClient = server.establish().await.expect("stream client");
-        let settings: AudioSettingsClient =
-            server.establish().await.expect("settings client");
+        let settings: AudioSettingsClient = server.establish().await.expect("settings client");
         Wired {
             rig,
             stream,
             settings,
         }
     });
+    // `RIG_SHOT_MODE=0|1|2`: the perform mode (Preset / Profile / Setlist),
+    // which picks the left sidebar. Design mode forgets it afterwards.
+    if let Some(mode) = std::env::var("RIG_SHOT_MODE").ok().and_then(|m| m.parse::<u32>().ok()) {
+        let rig = wired.rig.clone();
+        runtime.block_on(async move {
+            let _ = rig.set_perform_mode(mode).await;
+        });
+    }
+    // `RIG_SHOT_SONG=WASHED` (a song of the set that plays) and
+    // `RIG_SHOT_PART=2` (its part, 0-based): the song and part that are up.
+    if let Ok(song) = std::env::var("RIG_SHOT_SONG") {
+        let rig = wired.rig.clone();
+        let part = std::env::var("RIG_SHOT_PART").ok().and_then(|p| p.parse::<u32>().ok());
+        runtime.block_on(async move {
+            if let Ok(perf) = rig.perf().await {
+                if let Some(i) = perf.songs.iter().position(|s| s.name.eq_ignore_ascii_case(&song)) {
+                    let _ = rig.select_song(i as u32).await;
+                    if let Some(p) = part {
+                        let _ = rig.select_part(p).await;
+                    }
+                }
+            }
+        });
+    }
+    // `RIG_SHOT_MACROS=width=0,drive=0.8`: macro knobs moved before the
+    // picture (bar or panel knobs, 0..1).
+    if let Ok(moves) = std::env::var("RIG_SHOT_MACROS") {
+        let rig = wired.rig.clone();
+        runtime.block_on(async move {
+            for (id, v) in moves.split(',').filter_map(|m| m.split_once('=')) {
+                if let Ok(v) = v.trim().parse::<f32>() {
+                    let _ = rig.set_macro(id.trim().to_string(), v).await;
+                }
+            }
+        });
+    }
+    // `RIG_SHOT_TUNE_OPS=0:max:-4;1:off:1` (on `RIG_SHOT_MACRO`'s knob):
+    // tune-mode edits on its params, by their place in its tune list.
+    // `RIG_SHOT_TUNE_SAVE=block` or `block:Name` (or `module…`): then save
+    // them — the answer shows in the panel header.
+    if let Ok(knob) = std::env::var("RIG_SHOT_MACRO") {
+        let rig = wired.rig.clone();
+        runtime.block_on(async move {
+            let Ok(bar) = rig.macros().await else { return };
+            let Some(k) = bar.into_iter().find(|k| k.id == knob) else { return };
+            if let Ok(ops) = std::env::var("RIG_SHOT_TUNE_OPS") {
+                for op in ops.split(';') {
+                    let parts: Vec<&str> = op.split(':').collect();
+                    let [i, op, v] = parts.as_slice() else { continue };
+                    let (Ok(i), Ok(v)) = (i.parse::<usize>(), v.parse::<f32>()) else { continue };
+                    let Some(t) = k.tune.get(i) else { continue };
+                    let _ = rig
+                        .tune_macro(signal_guitar_proto::MacroTune {
+                            knob: t.knob.clone(),
+                            block: t.block.clone(),
+                            param: t.param.clone(),
+                            op: (*op).to_string(),
+                            value: v,
+                            text: String::new(),
+                        })
+                        .await;
+                }
+            }
+            if let Ok(save) = std::env::var("RIG_SHOT_TUNE_SAVE") {
+                let (scope, name) = save.split_once(':').unwrap_or((save.as_str(), ""));
+                if let Ok(r) = rig
+                    .save_macro_tune(signal_guitar_proto::MacroSave {
+                        knob: k.id.clone(),
+                        scope: scope.to_string(),
+                        name: name.to_string(),
+                    })
+                    .await
+                {
+                    let _ = SHOT_STATUS.set((k.id.clone(), r));
+                }
+            }
+        });
+    }
     let _ = WIRED.set(wired);
 
     let _guard = runtime.enter();
@@ -150,6 +228,16 @@ fn Shot() -> Element {
             let _ = provide_context(w.stream.clone());
             let _ = provide_context(w.settings.clone());
         }
+        // `RIG_SHOT_SELECT=Amp` (a module) or `RIG_SHOT_SELECT=DLY 1:delay`
+        // (a block and its type): the right sidebar, open on it.
+        let _ = provide_context(signal_guitar_ui::InitialSelection(shot_selection()));
+        // `RIG_SHOT_MACRO=drive`: that macro's hover panel, held open.
+        let _ = provide_context(signal_guitar_ui::MacroPanelOpen(std::env::var("RIG_SHOT_MACRO").ok()));
+        // `RIG_SHOT_TUNE=1`: that panel in tune mode.
+        let _ = provide_context(signal_guitar_ui::MacroTuneMode(
+            std::env::var("RIG_SHOT_TUNE").map_or(0, |v| v.parse::<u8>().unwrap_or(1)),
+        ));
+        let _ = provide_context(signal_guitar_ui::MacroShotStatus(SHOT_STATUS.get().cloned()));
     });
     rsx! {
         // The same two stylesheets the window mounts. Without them the shot is
@@ -167,8 +255,53 @@ fn Shot() -> Element {
         // Viewport units, not percentages: a percentage height needs a
         // definite height on every ancestor, and in a headless document the
         // chain above this is not one the app controls.
-        div { style: "width: 100vw; height: 100vh;",
+        div { style: "width: 100vw; height: 100vh; position: relative;",
             signal_guitar_ui::GuitarRigRemote {}
+            // `RIG_SHOT_LIBRARY=setlists` (or songs, profiles, patches,
+            // presets, drives): the library picker, open, over the rig.
+            if let Some(kind) = shot_library() {
+                LibraryOver { kind }
+            }
         }
+    }
+}
+
+/// What `RIG_SHOT_SELECT` selects for the right sidebar, if anything.
+fn shot_selection() -> Option<signal_guitar_ui::ModuleSelection> {
+    let v = std::env::var("RIG_SHOT_SELECT").ok()?;
+    Some(match v.split_once(':') {
+        Some((name, block_type)) => signal_guitar_ui::ModuleSelection::Block {
+            name: name.to_string(),
+            block_type: block_type.to_string(),
+        },
+        None => signal_guitar_ui::ModuleSelection::Module(v),
+    })
+}
+
+/// The picker kind `RIG_SHOT_LIBRARY` names, if any.
+fn shot_library() -> Option<signal_guitar_ui::LibraryKind> {
+    use signal_guitar_ui::LibraryKind as K;
+    let v = std::env::var("RIG_SHOT_LIBRARY").ok()?;
+    Some(match v.to_lowercase().as_str() {
+        "songs" => K::Songs,
+        "profiles" => K::Profiles,
+        "patches" => K::Patches,
+        "presets" => K::Presets,
+        "drives" => K::Drives,
+        "all" => K::All,
+        "compositions" => K::Compositions,
+        "amp" => K::AmpModules,
+        "delay" => K::DelayModules,
+        "blocks" => K::BlockPresets,
+        _ => K::Setlists,
+    })
+}
+
+#[component]
+fn LibraryOver(kind: signal_guitar_ui::LibraryKind) -> Element {
+    let state = signal_guitar_ui::use_rig_state();
+    let open = use_signal(|| Some(kind));
+    rsx! {
+        signal_guitar_ui::LibraryPicker { model: (state.perf)(), open }
     }
 }

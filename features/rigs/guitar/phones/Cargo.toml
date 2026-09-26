@@ -1,0 +1,23 @@
+[package]
+name = "signal-phones"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "The headphone mixer: a process of its own that plays the incoming monitor mix into the phones, so the mix keeps playing when the rig overruns, stops or crashes."
+
+[lints]
+workspace = true
+
+[dependencies]
+memmap2.workspace = true
+libc.workspace = true
+tracing.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+daw-audio-io.workspace = true
+tracing-subscriber.workspace = true
+
+[[bin]]
+name = "signal-phones"
+path = "src/bin/signal-phones.rs"

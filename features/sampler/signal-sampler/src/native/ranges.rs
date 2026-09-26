@@ -251,7 +251,7 @@ fn taper_and_unit(param: &str) -> (Taper, Unit) {
     let ends = |suffix: &str| param == suffix || param.ends_with(&format!("_{suffix}"));
 
     // Frequency.
-    if ends("freq") || ends("cutoff") || param == "high_pass" || param == "low_pass" {
+    if ends("freq") || ends("cutoff") || param == "low_cut" || param == "high_cut" || param == "high_pass" || param == "low_pass" {
         return (Taper::Logarithmic, Unit::Hz);
     }
     // A side-chain listen band is a frequency too, named for its end.
@@ -267,7 +267,7 @@ fn taper_and_unit(param: &str) -> (Taper, Unit) {
         return (Taper::Logarithmic, Unit::Ratio);
     }
     // Decibels — linear taper on purpose (see the doc comment).
-    if ends("gain") || ends("threshold") || ends("thr") || param.starts_with("gain_db") {
+    if ends("gain") || ends("threshold") || ends("thr") || param.starts_with("gain_db") || param == "level" {
         return (Taper::Linear, Unit::Decibels);
     }
     // Times. The natives are in milliseconds except `decay_time`, which the
@@ -284,7 +284,7 @@ fn taper_and_unit(param: &str) -> (Taper, Unit) {
         return (Taper::Logarithmic, Unit::Milliseconds);
     }
     // Pitch offsets, in semitones.
-    if param.contains("shift") || ends("detune") || ends("semis") {
+    if param.contains("shift") || ends("detune") || ends("semis") || ends("semitones") {
         return (Taper::Linear, Unit::Semitones);
     }
     // Everything else: a mix, a depth, a mode index, a style. Linear and

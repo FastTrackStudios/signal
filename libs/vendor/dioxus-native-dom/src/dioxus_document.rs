@@ -77,6 +77,14 @@ pub struct DioxusDocument {
     pub(crate) body_element_id: NodeId,
     #[allow(unused)]
     pub(crate) main_element_id: NodeId,
+
+    /// Mutations were applied since the layout was last resolved. The
+    /// window resolves once per frame, but input arrives between frames: a
+    /// pointer event handled against a tree that changed since the last
+    /// resolve walks `layout_parent` links into anonymous boxes the mutation
+    /// freed, and panics ("invalid key", or an unwrap in
+    /// `absolute_position`). An event that finds this set resolves first.
+    pub(crate) layout_stale: std::cell::Cell<bool>,
 }
 
 impl DioxusDocument {
@@ -139,6 +147,7 @@ impl DioxusDocument {
             head_element_id,
             body_element_id,
             main_element_id,
+            layout_stale: std::cell::Cell::new(true),
         }
     }
 
@@ -237,12 +246,18 @@ impl Document for DioxusDocument {
         self.vdom.render_immediate(&mut writer);
         drop(writer);
         drop(inner);
+        self.layout_stale.set(true);
         self.flush_queued_mounted_events();
 
         true
     }
 
     fn handle_ui_event(&mut self, event: UiEvent) {
+        // Bring layout up to date with the mutations before dispatching
+        // against it (see `layout_stale`). At most once per applied batch.
+        if self.layout_stale.replace(false) {
+            self.inner.borrow_mut().resolve_at_last_time();
+        }
         let handler = DioxusEventHandler {
             vdom: &mut self.vdom,
             vdom_state: &mut self.vdom_state,

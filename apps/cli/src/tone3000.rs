@@ -28,6 +28,9 @@ pub enum Command {
     Login,
     /// Forget the local session (a linked account still authorizes).
     Logout,
+    /// Sign in to the FastTrackStudio account in a browser. A TONE3000
+    /// linked to that account then authorizes downloads here too.
+    AccountLogin,
     /// Search the catalog.
     Search {
         /// Free text. Empty browses a shelf instead.
@@ -38,6 +41,12 @@ pub enum Command {
         /// `best-match`, `newest`, `oldest`, `trending`, `downloads`.
         #[arg(long, default_value = "downloads")]
         sort: String,
+        /// `nam` for captures, `ir` for cab impulse responses (`.wav`).
+        #[arg(long, default_value = "nam")]
+        format: String,
+        /// NAM architecture: `1`, `2` (A2), `custom`. Default: any.
+        #[arg(long)]
+        arch: Option<String>,
         #[arg(long, default_value_t = 25)]
         limit: u32,
     },
@@ -77,7 +86,7 @@ pub async fn run(command: Command) -> ExitCode {
     let account = std::sync::Arc::new(signal_account::Account::new(
         signal_account::AccountConfig::from_env(&config_dir),
     ));
-    let backend = Tone3000Backend::new(cfg).with_account(account);
+    let backend = Tone3000Backend::new(cfg).with_account(account.clone());
 
     if !configured {
         // A missing key is a different state from being signed out, and it
@@ -93,6 +102,7 @@ pub async fn run(command: Command) -> ExitCode {
     match command {
         Command::Status => status(&backend, &library, &redirect).await,
         Command::Login => login(&backend, &redirect).await,
+        Command::AccountLogin => account_login(&account).await,
         Command::Logout => {
             backend.sign_out();
             println!("local session forgotten");
@@ -102,8 +112,21 @@ pub async fn run(command: Command) -> ExitCode {
             query,
             gear,
             sort,
+            format,
+            arch,
             limit,
-        } => search(&backend, &query.join(" "), gear, &sort, limit).await,
+        } => {
+            search(
+                &backend,
+                &query.join(" "),
+                gear,
+                &sort,
+                &format,
+                arch.as_deref().unwrap_or(""),
+                limit,
+            )
+            .await
+        }
         Command::Shelf { which } => shelf(&backend, &which).await,
         Command::Show { tone } => show(&backend, &tone_id_from(&tone)).await,
         Command::Fetch { tone, model } => {
@@ -133,13 +156,16 @@ async fn search(
     text: &str,
     gear: Option<String>,
     sort: &str,
+    format: &str,
+    arch: &str,
     limit: u32,
 ) -> ExitCode {
     let page = backend
         .search(ToneQuery {
             text: text.to_string(),
             gears: gear.into_iter().collect(),
-            format: "nam".to_string(),
+            format: format.to_string(),
+            architecture: arch.to_string(),
             sort: sort_key(sort),
             page: 1,
             page_size: limit,
@@ -257,6 +283,44 @@ async fn login(backend: &Tone3000Backend, redirect: &str) -> ExitCode {
     } else {
         eprintln!("sign-in failed: {}", status.error);
         ExitCode::FAILURE
+    }
+}
+
+/// Sign in to the FastTrackStudio account, serving its callback ourselves.
+async fn account_login(account: &signal_account::Account) -> ExitCode {
+    if account.status().signed_in {
+        println!("already signed in as {}", account.status().email);
+        return ExitCode::SUCCESS;
+    }
+    let start = account.begin_sign_in();
+    let port = port_of(&account.config().redirect_uri);
+    let listener = match TcpListener::bind(("127.0.0.1", port)) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("cannot listen on port {port} ({e}) — stop the running Signal app and retry");
+            return ExitCode::FAILURE;
+        }
+    };
+    println!(
+        "Approve the sign-in in your browser. If nothing opens, visit:\n\n{}\n",
+        start.authorize_url
+    );
+    if std::env::var_os("SIGNAL_NO_BROWSER").is_none() {
+        open_browser(&start.authorize_url);
+    }
+    let Some(callback) = wait_for_callback(&listener, SIGN_IN_TIMEOUT) else {
+        eprintln!("timed out waiting for the browser callback");
+        return ExitCode::FAILURE;
+    };
+    match account.complete_sign_in(&callback).await {
+        Ok(status) => {
+            println!("signed in as {}", status.email);
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("sign-in failed: {e}");
+            ExitCode::FAILURE
+        }
     }
 }
 

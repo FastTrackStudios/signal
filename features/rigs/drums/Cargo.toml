@@ -30,7 +30,7 @@ signal-drums-proto.workspace = true
 # Layer/Services composition + dispatchers + PubSub for mounting the services.
 architect = { workspace = true, features = ["vox", "rig"] }
 # Hardware MIDI ports + the drum-map converter for the live input path.
-midicore = { workspace = true, features = ["vox", "midir"] }
+midicore = { workspace = true, features = ["vox", "midir", "native"] }
 # NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs.
 kontrol.workspace = true
 # Built-in FX (NativeEq/NativeComp/NativeReverb) + the plugin-host wrapper, so

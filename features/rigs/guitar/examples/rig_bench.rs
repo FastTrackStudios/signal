@@ -75,7 +75,6 @@ async fn main() {
         }
     }
 
-
     let mut args = std::env::args().skip(1);
     let seconds: u64 = args.next().and_then(|a| a.parse().ok()).unwrap_or(10);
     let warmup: u64 = args.next().and_then(|a| a.parse().ok()).unwrap_or(3);

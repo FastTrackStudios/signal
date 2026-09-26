@@ -36,7 +36,7 @@ signal-proto.workspace = true
 facet.workspace = true
 facet-styx.workspace = true
 # MIDI capture (program changes / footswitch CCs) + the monitor.
-midicore = { workspace = true, features = ["vox", "midir"] }
+midicore = { workspace = true, features = ["vox", "midir", "native"] }
 tracing.workspace = true
 
 [dev-dependencies]

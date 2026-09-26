@@ -19,12 +19,20 @@
 
 use std::path::Path;
 
+pub mod compose;
+pub mod config_watch;
 pub mod design;
+pub mod drop_log;
+pub mod levelling;
+pub mod measure;
 pub mod library;
+pub mod macros;
+pub mod manage;
 pub mod node_store;
 pub mod nodes;
 pub mod profiles;
 pub mod session;
+pub mod web_bundle;
 
 pub use session::GuitarRigBackend;
 // Re-export the wire contract so front-end/app crates get types + clients
