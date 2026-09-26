@@ -2349,8 +2349,6 @@ dependencies = [
  "dioxus",
  "dioxus-native-dom",
  "fts-audio-ui",
- "musical-time",
- "musical-time-ui",
  "vello",
  "web-time",
 ]
