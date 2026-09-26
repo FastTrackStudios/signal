@@ -295,6 +295,104 @@ impl PluginInstance for KeysInstrument {
     }
 }
 
+// ── Output stage ────────────────────────────────────────────────────────────
+
+/// The keys rig's last stage: the master gain, then a soft ceiling at full
+/// scale as the device will see it. It is the last FX on the rig track, and
+/// the track's own pan law (constant power: −3 dB at centre, see
+/// [`TRACK_PAN_LAW`]) still follows it, so the ceiling sits at full scale
+/// *after* that: a mix that fits the device is untouched (the Worship rig
+/// peaks at 0.89 there on 20-note chords), and one that would not — a denser
+/// stack, a master boost of up to +6 dB — is held under it instead of clipping
+/// hard in the interface.
+pub struct OutputStage {
+    /// Master gain (linear, f32 bits), shared with the owning [`KeysRig`].
+    gain: Arc<std::sync::atomic::AtomicU32>,
+    /// The gain applied at the end of the last block; a change ramps from it
+    /// across the next block, so a master move does not click.
+    applied: f32,
+    prepared: bool,
+}
+
+/// What a centred daw track does to its FX output (constant-power pan law).
+const TRACK_PAN_LAW: f32 = std::f32::consts::FRAC_1_SQRT_2;
+
+impl OutputStage {
+    #[must_use]
+    pub fn new(gain: Arc<std::sync::atomic::AtomicU32>) -> Self {
+        let applied = f32::from_bits(gain.load(std::sync::atomic::Ordering::Relaxed));
+        Self {
+            gain,
+            applied,
+            prepared: true,
+        }
+    }
+}
+
+impl PluginInstance for OutputStage {
+    fn descriptor(&self) -> PluginDescriptor {
+        PluginDescriptor {
+            id: "signal.keys.output".into(),
+            name: "Keys Output".into(),
+            vendor: "Signal".into(),
+            version: String::new(),
+            format: PluginFormat::Synthetic,
+        }
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        Vec::new()
+    }
+    fn param_value(&mut self, _id: u32) -> Option<f64> {
+        None
+    }
+    fn value_to_text(&mut self, _id: u32, _v: f64) -> Option<String> {
+        None
+    }
+    fn text_to_value(&mut self, _id: u32, _t: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        0
+    }
+    fn prepare(&mut self, _sr: f64, _bs: u32) -> Result<(), PluginError> {
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        _events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        let n = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
+        let target = f32::from_bits(self.gain.load(std::sync::atomic::Ordering::Relaxed));
+        let start = self.applied;
+        let step = if n > 0 {
+            (target - start) / n as f32
+        } else {
+            0.0
+        };
+        for i in 0..n {
+            let g = start + step * (i + 1) as f32;
+            out_l[i] = crate::rig::soft_ceiling(in_l[i] * g * TRACK_PAN_LAW) / TRACK_PAN_LAW;
+            out_r[i] = crate::rig::soft_ceiling(in_r[i] * g * TRACK_PAN_LAW) / TRACK_PAN_LAW;
+        }
+        self.applied = target;
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+}
+
 // ── Lane programs (per-layer daw tracks) ────────────────────────────────────
 
 /// One layer's compiled program in lane mode: its own composition subtree
@@ -425,10 +523,10 @@ impl WireProgram {
 
 /// The hosted track set in lane mode.
 struct LaneHost {
-    /// The rig folder track (master fader + tail FX + rig meter cell 0).
-    rig_guid: String,
     /// FX slot on the rig track carrying the tail chain, if any.
     tail_fx: Option<String>,
+    /// The rig track's last FX slot: the [`OutputStage`].
+    out_fx: String,
     /// Engine folder tracks: `(name, guid, meter index)`.
     engines: Vec<(String, String, usize)>,
     layers: Vec<LaneTrack>,
@@ -515,19 +613,21 @@ impl KeysRig {
         let project = RigProject::new(KEYS_PROJECT_NAME);
         let track_guid = project.add_track(KEYS_TRACK_NAME)?;
         let fx_guid = project.add_fx_slot(&track_guid, "keys")?;
+        let out_fx = project.add_fx_slot(&track_guid, "keys-out")?;
         let host = project.start_output_native(prefs, KEYS_NODE_NAME)?;
         let sample_rate = host.sample_rate();
         let meters = host.install_meters(1);
         let daw = host.daw().clone();
 
         // Compile + install the preset instrument. The master gain is the
-        // track's daw fader (not baked into the instrument), so it applies
+        // track's output stage (not baked into the instrument), so it applies
         // post-instrument and carries across preset swaps.
         let gain = Arc::new(std::sync::atomic::AtomicU32::new(1.0f32.to_bits()));
         let mut inst = KeysInstrument::new(tree, sample_rate);
         let cells = inst.gain_cells();
         let _ = inst.prepare(sample_rate as f64, PREPARE_BLOCK);
         daw.insert_plugin_instance(fx_guid.clone(), Box::new(inst));
+        daw.insert_plugin_instance(out_fx, Box::new(OutputStage::new(gain.clone())));
 
         host.play();
         tracing::info!(sample_rate, preset = %tree.name, "keys rig started on daw engine");
@@ -715,6 +815,10 @@ impl KeysRig {
             let _ = inst.prepare(sr as f64, PREPARE_BLOCK);
             self.daw.insert_plugin_instance(fx.clone(), Box::new(inst));
         }
+        self.daw.insert_plugin_instance(
+            lanes.out_fx.clone(),
+            Box::new(OutputStage::new(self.gain.clone())),
+        );
     }
 
     /// Re-install ONLY the lane instruments whose tree references
@@ -802,8 +906,8 @@ impl KeysRig {
             self.daw.set_meters(meters.clone());
             self.meters = meters;
             self.hosting = Hosting::Lanes(lanes);
-            // The master fader carries over onto the fresh rig track.
-            self.set_output_gain(self.output_gain());
+            // The master gain is the shared cell the fresh rig track's
+            // output stage reads, so it carries over as is.
         }
         self.install_lane_instruments(program);
         self.preset_name = program.name.clone();
@@ -902,18 +1006,15 @@ impl KeysRig {
         }
     }
 
-    /// Set the master output gain (linear; 1.0 = unity). Applied as a daw
-    /// fader — the keys track in single mode, the rig folder in lane mode —
-    /// so it takes effect on the next block and survives preset swaps.
+    /// Set the master output gain (linear; 1.0 = unity). Applied by the
+    /// [`OutputStage`] — the last FX on the keys track in single mode, on the
+    /// rig folder in lane mode — ahead of its ceiling, so no master setting
+    /// can push the rig past full scale. Takes effect on the next block and
+    /// survives preset swaps.
     pub fn set_output_gain(&self, gain: f32) {
         let gain = gain.max(0.0);
         self.gain
             .store(gain.to_bits(), std::sync::atomic::Ordering::Relaxed);
-        let guid = match &self.hosting {
-            Hosting::Single { track_guid, .. } => track_guid,
-            Hosting::Lanes(l) => &l.rig_guid,
-        };
-        let _ = self.daw.current().track(guid).set_volume(gain as f64);
     }
 
     /// Current master output gain (linear).
@@ -956,7 +1057,8 @@ impl KeysRig {
     }
 
     /// Swap the playable preset (glitch-free re-insert under the renderer
-    /// lock). The master gain lives on the track fader, so it carries over.
+    /// lock). The master gain lives in the track's output stage, so it
+    /// carries over.
     /// Single mode only — lane mode reloads via [`load_lanes`](Self::load_lanes).
     pub fn load_preset(&mut self, tree: &Container) {
         let sr = self.sample_rate;
@@ -1368,7 +1470,10 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
         ),
         None => None,
     };
-    let rig_guid = rig.guid().to_string();
+    let out_fx = rig
+        .add_fx_slot("keys-out")
+        .map_err(|e| err("output fx slot", e))?
+        .into_guid();
     meter += 1;
 
     let mut engines = Vec::new();
@@ -1400,8 +1505,8 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
     tree.finish().map_err(|e| err("close rig folder", e))?;
 
     Ok(LaneHost {
-        rig_guid,
         tail_fx,
+        out_fx,
         engines,
         layers,
     })
@@ -1411,6 +1516,44 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
 mod tests {
     use super::*;
     use signal_plugin_host::PluginMidiEvent;
+
+    #[test]
+    fn the_output_stage_passes_a_fitting_mix_and_holds_full_scale() {
+        // Full scale at the device, seen from before the track's pan law.
+        let full = 1.0 / TRACK_PAN_LAW;
+        let gain = Arc::new(std::sync::atomic::AtomicU32::new(1.0f32.to_bits()));
+        let mut stage = OutputStage::new(gain.clone());
+        let quiet = PluginEvents::default();
+        let input: Vec<f32> = (0..64).map(|i| (i as f32 / 64.0 - 0.5) * 3.2).collect();
+        let (mut l, mut r) = (vec![0.0; 64], vec![0.0; 64]);
+        stage
+            .process_block(&input, &input, &mut l, &mut r, &quiet)
+            .unwrap();
+        for (x, y) in input.iter().zip(&l) {
+            if x.abs() * TRACK_PAN_LAW <= 0.95 {
+                assert!((x - y).abs() < 1e-6, "{x} fits but came out at {y}");
+            }
+            assert!(y.abs() <= full + 1e-6, "{x} came out at {y}");
+        }
+        // +6 dB of master ramps across the block rather than jumping, and a
+        // hot input under it still stays under full scale.
+        gain.store(2.0f32.to_bits(), std::sync::atomic::Ordering::Relaxed);
+        let small = vec![0.1f32; 64];
+        stage
+            .process_block(&small, &small, &mut l, &mut r, &quiet)
+            .unwrap();
+        assert!(
+            l[0] < 0.11 && (l[63] - 0.2).abs() < 1e-6,
+            "{} .. {}",
+            l[0],
+            l[63]
+        );
+        let hot = vec![1.0f32; 64];
+        stage
+            .process_block(&hot, &hot, &mut l, &mut r, &quiet)
+            .unwrap();
+        assert!(l.iter().chain(&r).all(|y| *y <= full + 1e-6));
+    }
 
     /// Device-free: the lane track builder produces the rig/engine/layer
     /// folder layout with balanced folder depths and order-stable meter

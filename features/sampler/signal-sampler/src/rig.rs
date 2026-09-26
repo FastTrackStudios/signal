@@ -988,8 +988,7 @@ impl OutputTap {
 }
 
 /// Unity below −0.4 dBFS; above it, a smooth knee into full scale.
-#[cfg(not(target_arch = "wasm32"))]
-fn soft_ceiling(x: f32) -> f32 {
+pub(crate) fn soft_ceiling(x: f32) -> f32 {
     const KNEE: f32 = 0.955;
     let a = x.abs();
     if a <= KNEE {
