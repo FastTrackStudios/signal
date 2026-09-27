@@ -61,7 +61,7 @@ pub fn PerformStrip(perform: KeysPerform) -> Element {
                 // The band's tempo (shared with the guitar rig's tap) — what
                 // the synced delays follow. Tap to set it.
                 span { style: "font-size: 11px; font-weight: 700; color: #a1a1aa; font-variant-numeric: tabular-nums;",
-                    if perform.tempo_bpm > 0 { "♩ {perform.tempo_bpm}" } else { "♩ —" }
+                    if perform.tempo_bpm > 0 { "{perform.tempo_bpm} BPM" } else { "— BPM" }
                 }
                 button {
                     style: "appearance: none; border: 1px solid #27272a; border-radius: 6px; padding: 3px 10px; \
@@ -123,7 +123,7 @@ pub fn PerformStrip(perform: KeysPerform) -> Element {
                                 span { style: "font-size: 9px; opacity: 0.75; line-height: 1.25;", "{stack.blurb}" }
                                 if stack.tempo_bpm > 0 {
                                     span { style: "font-size: 9px; opacity: 0.6; font-variant-numeric: tabular-nums;",
-                                        "♩ {stack.tempo_bpm}"
+                                        "{stack.tempo_bpm} BPM"
                                     }
                                 }
                             }

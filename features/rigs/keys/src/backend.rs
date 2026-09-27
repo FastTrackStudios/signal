@@ -876,7 +876,7 @@ const MACROS: &[MacroDef] = &[
         default: 1.0,
         min: 0.0,
         max: 1.0,
-        unit: "",
+        unit: "bypass",
     },
     MacroDef {
         id: "amb.algo",
@@ -938,7 +938,7 @@ const MACROS: &[MacroDef] = &[
         default: 0.0,
         min: 0.0,
         max: 1.0,
-        unit: "",
+        unit: "bypass",
     },
     MacroDef {
         id: "dly.algo",
@@ -1208,7 +1208,7 @@ const GLOBALS: &[GlobalDef] = &[
         default: 1.0,
         min: 0.0,
         max: 1.0,
-        unit: "",
+        unit: "bypass",
     },
     GlobalDef {
         key: "amb.algo",
@@ -1259,7 +1259,7 @@ const GLOBALS: &[GlobalDef] = &[
         default: 0.0,
         min: 0.0,
         max: 1.0,
-        unit: "",
+        unit: "bypass",
     },
     GlobalDef {
         key: "dly.algo",
@@ -1279,7 +1279,7 @@ const GLOBALS: &[GlobalDef] = &[
         default: 3.0,
         min: 0.0,
         max: 7.0,
-        unit: "",
+        unit: "div",
     },
     GlobalDef {
         key: "dly.time",

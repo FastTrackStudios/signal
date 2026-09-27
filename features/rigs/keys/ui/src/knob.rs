@@ -15,6 +15,7 @@ pub fn fmt_value(value: f32, unit: &str) -> String {
         "dest" => pick(&["Off", "Pitch", "Cutoff", "Reso", "Level", "Pan", "Width"]),
         "wave" => pick(&["Sine", "Tri", "Saw", "Square", "S&H"]),
         "div" => pick(&["Free", "1/16", "1/8", "1/8.", "1/4", "1/4.", "1/2", "1/1"]),
+        "bypass" => pick(&["On", "Off"]),
         "Hz" if value >= 1000.0 => format!("{:.1}k", value / 1000.0),
         "ms" if value >= 1000.0 => format!("{:.2}s", value / 1000.0),
         "Hz" | "ms" | "v" => format!("{value:.0}"),
@@ -121,7 +122,7 @@ pub fn Knob(
             if bipolar {
                 {format!("{:+.0}%", value * 100.0)}
             } else {
-                {format!("{}{}", fmt_value(value, &unit), if matches!(unit.as_str(), "dB" | "" | "dest" | "wave" | "div") { String::new() } else { format!(" {unit}") })}
+                {format!("{}{}", fmt_value(value, &unit), if matches!(unit.as_str(), "dB" | "" | "dest" | "wave" | "div" | "bypass") { String::new() } else { format!(" {unit}") })}
             }
         }
     };
