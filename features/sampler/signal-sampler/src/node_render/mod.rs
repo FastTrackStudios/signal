@@ -672,6 +672,43 @@ impl RenderNode {
         }
     }
 
+    /// Whether leaf `leaf` of `module` is in this tree.
+
+    pub fn has_leaf(&mut self, module: &str, leaf: &str) -> bool {
+        self.root_engine()
+            .and_then(|e| e.find_leaf(module, leaf))
+            .is_some()
+    }
+
+    /// Write `param` of leaf `leaf` (in `module`) in the processor's OWN
+    /// units — a delay time in ms, a reverb's predelay — straight to it. The
+    /// parameter overlay ([`set_leaf_param`](Self::set_leaf_param)) is the
+    /// 0..1 path, right for the native blocks whose parameters are
+    /// normalized and wrong for the effects whose are not. The value holds
+    /// until the next write (it is the processor's own state now).
+    pub fn set_leaf_plain(&mut self, module: &str, leaf: &str, param: &str, value: f64) -> bool {
+        let Some(id) = self.root_engine().and_then(|e| e.find_leaf(module, leaf)) else {
+            return false;
+        };
+        let Some(LeafBackend::Plugin(p)) = self.leaf_backend_mut(id) else {
+            return false;
+        };
+        let Some(pid) = p
+            .params()
+            .iter()
+            .find(|i| i.name.eq_ignore_ascii_case(param))
+            .map(|i| i.id)
+        else {
+            return false;
+        };
+        let writes = [(pid, value)];
+        let ev = PluginEvents {
+            params: &writes,
+            ..PluginEvents::default()
+        };
+        p.process_block(&[], &[], &mut [], &mut [], &ev).is_ok()
+    }
+
     /// The leaf backend behind leaf `id`, if present in this subtree.
     fn leaf_backend_mut(&mut self, id: usize) -> Option<&mut LeafBackend> {
         match self {

@@ -33,6 +33,8 @@ pub struct VoiceFilter {
     env: Adsr,
     amount: f32,
     base_hz: f32,
+    /// Key-tracking offset in octaves (see `with_keytrack`).
+    key_octaves: f32,
     sample_rate: f32,
     /// Two-pole state-variable lowpass, one per channel: (ic1, ic2).
     state: [(f32, f32); 2],
@@ -40,6 +42,20 @@ pub struct VoiceFilter {
     k: f32,
     /// Coefficients are recomputed every [`FILTER_COEF_EVERY`] frames.
     countdown: u16,
+}
+
+/// The state-variable filter's damping for a 0..1 resonance knob.
+fn resonance_k(resonance: f32) -> f32 {
+    std::f32::consts::SQRT_2 - (std::f32::consts::SQRT_2 - 0.1) * resonance.clamp(0.0, 1.0)
+}
+
+/// A voice's vibrato settings (see [`Voice::with_vibrato`]).
+#[derive(Debug, Clone, Copy)]
+pub struct Vibrato {
+    pub rate_hz: f32,
+    pub cents: f32,
+    pub delay_frames: u32,
+    pub sample_rate: f32,
 }
 
 /// Octaves the filter envelope sweeps at full amount.
@@ -55,19 +71,36 @@ impl VoiceFilter {
             env,
             amount: amount.clamp(-1.0, 1.0),
             base_hz,
+            key_octaves: 0.0,
             sample_rate,
             state: [(0.0, 0.0); 2],
             g: 0.0,
-            // Butterworth: the layer's tone filter carries the resonance.
             k: std::f32::consts::SQRT_2,
             countdown: 0,
         }
     }
 
-    /// Follow the layer's cutoff knob (and amount) while the note is held.
-    pub fn set_base(&mut self, base_hz: f32, amount: f32) {
+    /// Resonance 0..1 (0 = Butterworth, 1 ≈ Q 10). While a voice filter is
+    /// on it is the layer's filter, so it carries the resonance knob.
+    #[must_use]
+    pub fn with_resonance(mut self, resonance: f32) -> Self {
+        self.k = resonance_k(resonance);
+        self
+    }
+
+    /// Key tracking: the cutoff moves `keytrack` octaves per octave played,
+    /// around middle C (60).
+    #[must_use]
+    pub fn with_keytrack(mut self, keytrack: f32, note: u8) -> Self {
+        self.key_octaves = keytrack.clamp(0.0, 1.0) * (f32::from(note) - 60.0) / 12.0;
+        self
+    }
+
+    /// Follow the layer's cutoff, amount and resonance while the note is held.
+    pub fn set_base(&mut self, base_hz: f32, amount: f32, resonance: f32) {
         self.base_hz = base_hz;
         self.amount = amount.clamp(-1.0, 1.0);
+        self.k = resonance_k(resonance);
     }
 
     fn note_off(&mut self) {
@@ -82,7 +115,8 @@ impl VoiceFilter {
                 self.amount * (e - 1.0)
             } else {
                 self.amount * e
-            } * FILTER_ENV_OCTAVES;
+            } * FILTER_ENV_OCTAVES
+                + self.key_octaves;
             let hz = (self.base_hz * octaves.exp2()).clamp(20.0, self.sample_rate * 0.45);
             self.g = (std::f32::consts::PI * hz / self.sample_rate).tan();
         }
@@ -311,6 +345,14 @@ pub struct Voice {
     decay_left: usize,
     /// Per-voice filter envelope (`with_filter_env`); `None` = no filter.
     filter: Option<VoiceFilter>,
+    /// Vibrato (`with_vibrato`): phase and step (cycles/frame), depth in
+    /// cents, frames left before it starts, and its fade-in.
+    vib_phase: f32,
+    vib_inc: f32,
+    vib_cents: f32,
+    vib_wait: u32,
+    vib_fade: f32,
+    vib_fade_step: f32,
     bloom_total: usize,
     bloom_target: f32,
 
@@ -555,6 +597,12 @@ impl Voice {
             sustain: 1.0,
             decay_left: 0,
             filter: None,
+            vib_phase: 0.0,
+            vib_inc: 0.0,
+            vib_cents: 0.0,
+            vib_wait: 0,
+            vib_fade: 0.0,
+            vib_fade_step: 1.0,
             bloom_total: 0,
             bloom_target: 1.0,
             kind,
@@ -628,6 +676,12 @@ impl Voice {
             sustain: 1.0,
             decay_left: 0,
             filter: None,
+            vib_phase: 0.0,
+            vib_inc: 0.0,
+            vib_cents: 0.0,
+            vib_wait: 0,
+            vib_fade: 0.0,
+            vib_fade_step: 1.0,
             bloom_total: 0,
             bloom_target: 1.0,
             kind,
@@ -840,11 +894,29 @@ impl Voice {
         self
     }
 
-    /// Follow the layer's cutoff knob on a held note.
-    pub fn set_filter_base(&mut self, base_hz: f32, amount: f32) {
+    /// Follow the layer's cutoff knobs on a held note.
+    pub fn set_filter_base(&mut self, base_hz: f32, amount: f32, resonance: f32) {
         if let Some(f) = &mut self.filter {
-            f.set_base(base_hz, amount);
+            f.set_base(base_hz, amount, resonance);
         }
+    }
+
+    /// Vibrato: `rate_hz`, `cents` deep, starting `delay_frames` after the
+    /// note and fading in over as long again (at least 50 ms).
+    #[must_use]
+    pub fn with_vibrato(mut self, vib: Vibrato) -> Self {
+        self.set_vibrato(vib);
+        self.vib_wait = vib.delay_frames;
+        let fade = vib.delay_frames.max((vib.sample_rate * 0.05) as u32).max(1);
+        self.vib_fade = 0.0;
+        self.vib_fade_step = 1.0 / fade as f32;
+        self
+    }
+
+    /// Change the vibrato's rate and depth on a held note.
+    pub fn set_vibrato(&mut self, vib: Vibrato) {
+        self.vib_inc = vib.rate_hz / vib.sample_rate.max(1.0);
+        self.vib_cents = vib.cents;
     }
 
     /// CSS legato handoff: spawn this (looping sustain) voice muted, wait
@@ -1282,7 +1354,25 @@ impl Voice {
         // Advance position. During a portamento glide the read rate is nudged
         // by `glide_cents` (ramping to 0) so the pitch scoops into true tuning;
         // the tiny position drift over the ~60 ms glide is inaudible.
+        // Vibrato: a triangle-smoothed sine (parabolic), a few cents either
+        // way, so a linear cents→ratio is exact to well under a cent.
+        let vib = if self.vib_cents > 0.0 {
+            if self.vib_wait > 0 {
+                self.vib_wait -= 1;
+                1.0
+            } else {
+                self.vib_fade = (self.vib_fade + self.vib_fade_step).min(1.0);
+                self.vib_phase = (self.vib_phase + self.vib_inc).fract();
+                let x = self.vib_phase * 2.0 - 1.0; // -1..1
+                let s = 4.0 * x * (1.0 - x.abs()); // parabolic sine
+                1.0 + f64::from(s * self.vib_cents * self.vib_fade)
+                    * (std::f64::consts::LN_2 / 1200.0)
+            }
+        } else {
+            1.0
+        };
         let step = self.bend
+            * vib
             * if self.glide_frames > 0 {
                 let s = self.rate * 2f64.powf(self.glide_cents as f64 / 1200.0);
                 self.glide_cents += self.glide_step;

@@ -797,7 +797,8 @@ const MACROS: &[MacroDef] = &[
         id: "amb.bypass",
         name: "Bypass",
         group: "Ambience",
-        default: 0.0,
+        // Off until asked for: every patch has its own space already.
+        default: 1.0,
         min: 0.0,
         max: 1.0,
         unit: "",
@@ -1129,7 +1130,7 @@ const GLOBALS: &[GlobalDef] = &[
         name: "Bypass",
         group: "Ambience",
         target: Some("amb.bypass"),
-        default: 0.0,
+        default: 1.0,
         min: 0.0,
         max: 1.0,
         unit: "",
@@ -1814,77 +1815,50 @@ impl KeysRigBackend {
     /// voice count changed, otherwise just the live cells and a publish.
     /// Whether this macro is baked into the program and so needs a rebuild
     /// to be heard: the filter's settings, the envelopes' times, unison.
+    /// Knobs whose change builds a new effect engine (a reverb's algorithm
+    /// and decay) — a coalesced rebuild, not a live write. A delay's machine
+    /// switches live.
+    fn macro_rebuilds(id: &str) -> bool {
+        matches!(id, "amb.algo" | "amb.decay")
+    }
+
     fn macro_is_dsp(id: &str) -> bool {
         id.starts_with("filter.")
             || id.starts_with("env1.")
             || id.starts_with("env2.")
             || id.starts_with("vib.")
-            || id == "source.unison"
-            || id == "source.detune"
+            || id.starts_with("tone.")
+            || id.starts_with("amb.")
+            // The delay's note division needs a tempo the rig has none of.
+            || (id.starts_with("dly.") && id != "dly.div")
+            || matches!(id, "fx.chorus" | "fx.delay" | "fx.width")
+            || matches!(
+                id,
+                "source.unison" | "source.detune" | "source.pan" | "source.transpose" | "source.fine"
+            )
     }
 
-    /// One module's DSP values, read from live state (own macros, else the
-    /// macro defaults) — everything [`push_module_dsp`](Self::push_module_dsp)
-    /// writes into the running engine.
-    fn module_dsp_values(&self, layer: &str, module: usize) -> Option<[f32; 15]> {
-        let s = self.inner.state.lock().ok()?;
-        let lane = s.lanes.get(layer)?;
-        lane.modules.get(module)?;
-        let v = |id: &str| Self::module_value(lane, module, id);
-        Some([
-            v("filter.cutoff"),
-            v("filter.reso"),
-            v("filter.env_amt"),
-            v("env1.attack"),
-            v("env1.decay"),
-            v("env1.sustain"),
-            v("env1.release"),
-            v("env2.attack"),
-            v("env2.decay"),
-            v("env2.sustain"),
-            v("env2.release"),
-            v("source.unison"),
-            v("source.detune"),
-            v("vib.rate"),
-            v("vib.depth"),
-        ])
-    }
-
-    /// Push one module's DSP macros — filter cutoff/resonance, the Amp and
-    /// Filter envelope ADSRs, the filter-env amount, unison — into the
-    /// RUNNING engine, live. This replaced the rebuild for these edits: the
-    /// filter and env-amount land in the render tree's parameter overlay,
-    /// the envelopes mutate their control sources in place, and the sampler
-    /// source takes its own unison / attack / release setters. Returns
-    /// `false` when nothing could be applied (engine stopped, lane not
-    /// hosted) — the caller falls back to the rebuild path.
+    /// Push one module's knobs into the RUNNING engine, live: the filter
+    /// and the Amp's pan / width / tone through the parameter overlay, the
+    /// envelopes into their sources, the sampler's voice settings through its
+    /// setters, the effects' values in their own units. Returns `false` when
+    /// that is not enough — nothing hosted, or the chain itself must change
+    /// (an effect switched on or off, a reverb algorithm or decay, which
+    /// build a new engine) — and the caller rebuilds.
     fn push_module_dsp(&self, layer: &str, module_idx: usize) -> bool {
         use signal_sampler::native::AdsrParams;
-        let Some(vals) = self.module_dsp_values(layer, module_idx) else {
-            return false;
+        let set = {
+            let Ok(s) = self.inner.state.lock() else {
+                return false;
+            };
+            if !s.lanes.contains_key(layer) {
+                return false;
+            }
+            Self::module_settings_for(&s.lanes, layer, module_idx)
         };
-        let [
-            cutoff_hz,
-            reso,
-            env_amt,
-            a1,
-            d1,
-            s1,
-            r1,
-            a2,
-            d2,
-            s2,
-            r2,
-            unison,
-            detune,
-            vib_rate,
-            vib_depth,
-        ] = vals;
         // A keys module is "<lane> A"; an imported Omnisphere patch keeps
         // its own "Layer A".."Layer D". Both name their parts alike
-        // ("Soundsource", "Filter 1", "Amp Env", "Filter Env"), so the same
-        // writes reach either; whichever address the lane doesn't have
-        // simply misses.
+        // ("Soundsource", "Filter 1", "Amp", "Amp Env", "Filter Env").
         let slot = signal_synth::engine::module_slot(module_idx);
         let modules = [format!("{layer} {slot}"), format!("Layer {slot}")];
         let Ok(rig) = self.inner.rig.lock() else {
@@ -1897,102 +1871,166 @@ impl KeysRigBackend {
         rig.edit_lane(layer, |inst| {
             let render = inst.render_mut();
             let mut applied = false;
+            let mut rebuild = false;
+            let adsr = |(a, d, sus, r): (f32, f32, f32, f32)| AdsrParams {
+                attack_s: (a / 1000.0).max(0.0),
+                decay_s: (d / 1000.0).max(0.0),
+                sustain: sus.clamp(0.0, 1.0),
+                release_s: (r / 1000.0).max(0.0),
+            };
+            let cutoff_norm = f64::from(signal_sampler::native::NativeFilter::norm_from_cutoff(
+                set.cutoff_hz,
+            ));
             for module in &modules {
-                // Filter block params (normalized on the block's own scale).
-                let cutoff_norm = f64::from(
-                    signal_sampler::native::NativeFilter::norm_from_cutoff(cutoff_hz),
-                );
-                applied |= render.set_leaf_param(module, "Filter 1", "cutoff", cutoff_norm);
-                applied |= render.set_leaf_param(
-                    module,
-                    "Filter 1",
-                    "resonance",
-                    f64::from(reso.clamp(0.0, 1.0)),
-                );
-                // Envelope sources + the env→cutoff amount (synth modules; a
-                // sampler module has no env sources — its voices carry their
-                // own envelope, updated below).
-                let adsr = |a: f32, d: f32, sus: f32, r: f32| AdsrParams {
-                    attack_s: (a / 1000.0).max(0.0),
-                    decay_s: (d / 1000.0).max(0.0),
-                    sustain: sus.clamp(0.0, 1.0),
-                    release_s: (r / 1000.0).max(0.0),
-                };
-                applied |= render.set_env(module, "Amp Env", adsr(a1, d1, s1, r1));
-                applied |= render.set_env(module, "Filter Env", adsr(a2, d2, s2, r2));
-                applied |= render.set_route_depth(
+                if !render.has_leaf(module, "Soundsource") {
+                    continue;
+                }
+                // Envelope sources + the env→cutoff amount (module-level:
+                // a synth module's, an imported patch's route).
+                render.set_env(module, "Amp Env", adsr(set.amp_env));
+                render.set_env(module, "Filter Env", adsr(set.filter_env));
+                let routed = render.set_route_depth(
                     module,
                     "Filter Env",
                     "Filter 1",
                     "cutoff",
-                    env_amt.clamp(-1.0, 1.0),
+                    set.filter_env_depth.clamp(-1.0, 1.0),
                 );
-                // Per-voice synth engine (the oscillator source): full amp +
-                // filter ADSRs, its own lowpass, vibrato. Times map onto the
-                // voice's 8 s segment range, normalized.
-                let seg = |ms: f32| f64::from(((ms.max(0.0) / 1000.0) / 8.0).clamp(0.0, 1.0));
-                applied |= render.set_leaf_param(module, "Soundsource", "amp_attack", seg(a1));
-                render.set_leaf_param(module, "Soundsource", "amp_decay", seg(d1));
-                render.set_leaf_param(
-                    module,
-                    "Soundsource",
-                    "amp_sustain",
-                    f64::from(s1.clamp(0.0, 1.0)),
-                );
-                render.set_leaf_param(module, "Soundsource", "amp_release", seg(r1));
-                render.set_leaf_param(module, "Soundsource", "filter_attack", seg(a2));
-                render.set_leaf_param(module, "Soundsource", "filter_decay", seg(d2));
-                render.set_leaf_param(
-                    module,
-                    "Soundsource",
-                    "filter_sustain",
-                    f64::from(s2.clamp(0.0, 1.0)),
-                );
-                render.set_leaf_param(module, "Soundsource", "filter_release", seg(r2));
-                render.set_leaf_param(module, "Soundsource", "cutoff", cutoff_norm);
-                render.set_leaf_param(
-                    module,
-                    "Soundsource",
-                    "resonance",
-                    f64::from(reso.clamp(0.0, 1.0)),
-                );
-                render.set_leaf_param(
-                    module,
-                    "Soundsource",
-                    "env_amt",
-                    f64::from(f32::midpoint(env_amt.clamp(-1.0, 1.0), 1.0)),
-                );
-                render.set_leaf_param(
-                    module,
-                    "Soundsource",
-                    "vib_rate",
-                    f64::from(vib_rate.clamp(0.1, 12.0) / 12.0),
-                );
-                render.set_leaf_param(
-                    module,
-                    "Soundsource",
-                    "vib_depth",
-                    f64::from(vib_depth.clamp(0.0, 1.0)),
-                );
-
-                // Sampler source: the per-voice amp ADSR + unison.
-                applied |= render.with_sampler_source(module, "Soundsource", |sampler| {
+                // Sampler source: the per-voice ADSR, filter, vibrato,
+                // tuning and unison.
+                let mut voice_filter = false;
+                let sampler = render.with_sampler_source(module, "Soundsource", |sampler| {
                     let engine = sampler.engine_mut();
                     let frames = |ms: f32| ((ms.max(0.0) / 1000.0) * sample_rate as f32) as usize;
-                    engine.set_attack_frames(frames(a1));
-                    engine.set_decay_frames(frames(d1));
-                    engine.set_sustain_level(s1);
-                    engine.set_release_frames(frames(r1));
-                    // Each voice's own filter envelope under the layer's cutoff.
-                    engine.set_filter_env(adsr(a2, d2, s2, r2), env_amt, cutoff_hz);
+                    engine.set_attack_frames(frames(set.amp_env.0));
+                    engine.set_decay_frames(frames(set.amp_env.1));
+                    engine.set_sustain_level(set.amp_env.2);
+                    engine.set_release_frames(frames(set.amp_env.3));
+                    // A patch that routes its own filter envelope keeps it;
+                    // otherwise the voices' own filter carries the knobs.
+                    let (amount, keytrack) = if routed {
+                        (0.0, 0.0)
+                    } else {
+                        (set.filter_env_depth, set.keytrack)
+                    };
+                    engine.set_voice_filter(
+                        adsr(set.filter_env),
+                        amount,
+                        set.cutoff_hz,
+                        set.resonance,
+                        keytrack,
+                    );
+                    voice_filter = engine.voice_filter_on();
+                    engine.set_vibrato(set.vib_rate, set.vib_depth, set.vib_delay_ms);
+                    engine.set_tune(set.transpose, set.fine);
                     engine.set_unison(
-                        (unison.max(1.0).round() as u8).min(8),
-                        detune.clamp(0.0, 2.0) * 100.0,
+                        (set.unison.max(1)).min(8) as u8,
+                        set.detune.clamp(0.0, 2.0) * 100.0,
                         0.7,
                     );
                 });
+                applied |= sampler;
+                // The module's shared filter: opened while the voices filter.
+                let (c, r) = if voice_filter {
+                    (1.0, 0.0)
+                } else {
+                    (cutoff_norm, f64::from(set.resonance.clamp(0.0, 1.0)))
+                };
+                applied |= render.set_leaf_param(module, "Filter 1", "cutoff", c);
+                render.set_leaf_param(module, "Filter 1", "resonance", r);
+                render.set_leaf_param(
+                    module,
+                    "Filter 1",
+                    "drive",
+                    f64::from(set.filter_drive.clamp(0.0, 1.0)),
+                );
+                render.set_leaf_param(
+                    module,
+                    "Filter 1",
+                    "mix",
+                    f64::from(set.filter_mix.clamp(0.0, 1.0)),
+                );
+                // Per-voice synth sources (the oscillator / the wavetable):
+                // ADSRs over an 8 s range, vibrato, tuning, their own filter.
+                let seg = |ms: f32| f64::from(((ms.max(0.0) / 1000.0) / 8.0).clamp(0.0, 1.0));
+                let ss = |r: &mut signal_sampler::node_render::RenderNode, p: &str, v: f64| {
+                    r.set_leaf_param(module, "Soundsource", p, v)
+                };
+                applied |= ss(render, "amp_attack", seg(set.amp_env.0));
+                ss(render, "amp_decay", seg(set.amp_env.1));
+                ss(
+                    render,
+                    "amp_sustain",
+                    f64::from(set.amp_env.2.clamp(0.0, 1.0)),
+                );
+                ss(render, "amp_release", seg(set.amp_env.3));
+                ss(render, "filter_attack", seg(set.filter_env.0));
+                ss(render, "filter_decay", seg(set.filter_env.1));
+                ss(
+                    render,
+                    "filter_sustain",
+                    f64::from(set.filter_env.2.clamp(0.0, 1.0)),
+                );
+                ss(render, "filter_release", seg(set.filter_env.3));
+                ss(render, "cutoff", cutoff_norm);
+                ss(
+                    render,
+                    "resonance",
+                    f64::from(set.resonance.clamp(0.0, 1.0)),
+                );
+                ss(
+                    render,
+                    "env_amt",
+                    f64::from(f32::midpoint(set.filter_env_depth.clamp(-1.0, 1.0), 1.0)),
+                );
+                ss(
+                    render,
+                    "vib_rate",
+                    f64::from(set.vib_rate.clamp(0.0, 12.0) / 12.0),
+                );
+                ss(
+                    render,
+                    "vib_depth",
+                    f64::from(set.vib_depth.clamp(0.0, 1.0)),
+                );
+                ss(render, "tune", f64::from(set.wavetable_tune()));
+                // The Amp: pan, width, tone (normalized).
+                let amp = set.amp_block();
+                for p in amp.params.iter().filter(|p| p.name != "gain") {
+                    if let Ok(v) = p.value.parse::<f64>() {
+                        render.set_leaf_param(module, "Amp", &p.name, v);
+                    }
+                }
+                // Effects: an effect switched on or off changes the chain —
+                // a rebuild; one in place takes its values live, in its own
+                // units. A reverb's algorithm and decay build a new engine,
+                // so a change to either rebuilds too.
+                let want: Vec<signal_sampler::rig::RigBlock> = set.fx_blocks();
+                for name in ["Chorus", "Delay", "Ambience"] {
+                    let wanted = want.iter().find(|b| b.display_name() == name);
+                    let present = render.has_leaf(module, name);
+                    match (wanted, present) {
+                        (Some(b), true) => {
+                            for p in &b.params {
+                                let Ok(v) = p.value.parse::<f64>() else {
+                                    continue;
+                                };
+                                // Algorithm and decay build a new engine:
+                                // those knobs rebuild (`macro_rebuilds`).
+                                if name == "Ambience"
+                                    && matches!(p.name.as_str(), "algorithm" | "decay")
+                                {
+                                    continue;
+                                }
+                                render.set_leaf_plain(module, name, &p.name, v);
+                            }
+                        }
+                        (None, false) => {}
+                        _ => rebuild = true,
+                    }
+                }
             }
-            applied
+            applied && !rebuild
         })
         .unwrap_or(false)
     }
@@ -2405,6 +2443,37 @@ impl KeysRigBackend {
         );
         set.unison = v("source.unison").max(1.0) as u32;
         set.detune = v("source.detune");
+        set.pan = v("source.pan");
+        set.width = v("fx.width");
+        set.transpose = v("source.transpose");
+        set.fine = v("source.fine");
+        set.keytrack = v("filter.keytrack");
+        set.filter_drive = v("filter.drive");
+        set.filter_mix = v("filter.mix");
+        set.vib_rate = v("vib.rate");
+        set.vib_depth = v("vib.depth");
+        set.vib_delay_ms = v("vib.delay");
+        set.warmth = v("tone.warmth");
+        set.body = v("tone.body");
+        set.drive = v("tone.drive");
+        set.chorus = v("fx.chorus");
+        set.ambience = signal_synth::engine::AmbienceSettings {
+            on: v("amb.bypass") < 0.5,
+            algo: v("amb.algo"),
+            size: v("amb.size"),
+            mix: v("amb.mix"),
+            predelay_ms: v("amb.predelay"),
+            decay: v("amb.decay"),
+        };
+        // The Effects page's Delay amount and the Delay section's mix are
+        // one send: whichever is higher.
+        set.delay = signal_synth::engine::DelaySettings {
+            on: v("dly.bypass") < 0.5,
+            style: v("dly.algo"),
+            time_ms: v("dly.time"),
+            feedback: v("dly.feedback"),
+            mix: v("dly.mix").max(v("fx.delay")),
+        };
         set
     }
 
@@ -3637,6 +3706,9 @@ impl KeysRigSvc for KeysRigBackend {
                 &id,
             );
             rebuild = Self::macro_is_dsp(target);
+            if Self::macro_rebuilds(target) {
+                self.rebuild_soon();
+            }
             dsp_targets = targets;
         }
         self.after_global(rebuild, &dsp_targets);
@@ -3702,6 +3774,9 @@ impl KeysRigSvc for KeysRigBackend {
             // Every lane knob for this parameter has been moved from under it.
             Self::rebase_others(&mut s, std::slice::from_ref(&engine), &lanes, target, &id);
             rebuild = Self::macro_is_dsp(target);
+            if Self::macro_rebuilds(target) {
+                self.rebuild_soon();
+            }
             dsp_targets = targets;
         }
         self.after_global(rebuild, &dsp_targets);
@@ -3743,6 +3818,9 @@ impl KeysRigSvc for KeysRigBackend {
             // from under it.
             Self::rebase_others(&mut s, &engines, &lanes, target, &id);
             rebuild = Self::macro_is_dsp(target);
+            if Self::macro_rebuilds(target) {
+                self.rebuild_soon();
+            }
             dsp_targets = targets;
         }
         self.after_global(rebuild, &dsp_targets);
@@ -3779,7 +3857,9 @@ impl KeysRigSvc for KeysRigBackend {
         }
         // DSP macros go live into the running engine (filter / envelopes /
         // unison); the rebuild only remains as the not-yet-hosted fallback.
-        if Self::macro_is_dsp(def.id) && !self.push_module_dsp(&layer, module as usize) {
+        if Self::macro_is_dsp(def.id)
+            && (!self.push_module_dsp(&layer, module as usize) || Self::macro_rebuilds(def.id))
+        {
             self.rebuild_soon();
         }
         if Self::macro_is_dsp(def.id) {

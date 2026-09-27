@@ -7,7 +7,7 @@
 //! `RigBlock.params` configure the instance; runtime parameter writes (the
 //! mod matrix, a UI, a host) arrive later through `PluginEvents.params`.
 
-use signal_plugin_host::PluginInstance;
+use signal_plugin_host::{PluginEvents, PluginInstance};
 use signal_proto::block::BlockType;
 
 use crate::rig::RigBlock;
@@ -282,9 +282,13 @@ fn wavetable_config(block: &RigBlock) -> SynthConfig {
 
 fn build_wavetable(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     // A first-class Soundsource, hosted through the generic leaf adapter.
-    Box::new(SoundsourceLeaf::new(
+    let mut w: Box<dyn PluginInstance> = Box::new(SoundsourceLeaf::new(
         NativeWavetable::new(sample_rate).with_config(wavetable_config(block)),
-    ))
+    ));
+    // Normalized live params the rig's knobs also write (the amp envelope
+    // arrives through `wavetable_config`, in seconds).
+    apply_named(w.as_mut(), block, &["vib_rate", "vib_depth", "tune"]);
+    w
 }
 
 fn build_filter(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
@@ -313,7 +317,9 @@ fn build_filter(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     {
         f = f.with_character(FilterCharacter::Ladder);
     }
-    Box::new(f)
+    let mut f: Box<dyn PluginInstance> = Box::new(f);
+    apply_named(f.as_mut(), block, &["drive", "mix"]);
+    f
 }
 
 fn build_amp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
@@ -321,7 +327,35 @@ fn build_amp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     if let Some(v) = block.param_f32("gain") {
         a = a.with_gain_norm(v);
     }
-    Box::new(a)
+    let mut a: Box<dyn PluginInstance> = Box::new(a);
+    apply_named(
+        a.as_mut(),
+        block,
+        &["pan", "width", "warmth", "body", "drive"],
+    );
+    a
+}
+
+/// Hand `names` from the block's stored params to `inst` in its own units
+/// (its parameter table's), the way a live write would.
+fn apply_named(inst: &mut dyn PluginInstance, block: &RigBlock, names: &[&str]) {
+    let infos = inst.params();
+    let writes: Vec<(u32, f64)> = names
+        .iter()
+        .filter_map(|n| {
+            let v = block.param_f32(n)?;
+            let id = infos.iter().find(|p| p.name == *n)?.id;
+            Some((id, f64::from(v)))
+        })
+        .collect();
+    if writes.is_empty() {
+        return;
+    }
+    let ev = PluginEvents {
+        params: &writes,
+        ..PluginEvents::default()
+    };
+    let _ = inst.process_block(&[], &[], &mut [], &mut [], &ev);
 }
 
 fn build_waveshaper(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {

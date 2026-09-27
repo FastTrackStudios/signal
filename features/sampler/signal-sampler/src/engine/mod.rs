@@ -940,6 +940,16 @@ pub struct SampleEngine {
     /// Zone voices' filter envelope: `(ADSR, amount, cutoff Hz)`. `None` or
     /// amount 0 = no per-voice filter (and no cost).
     filter_env: Option<(crate::native::AdsrParams, f32, f32)>,
+    /// The voice filter's resonance and key tracking (0..1 each). Key
+    /// tracking alone also switches the voice filter on.
+    filter_res: f32,
+    filter_keytrack: f32,
+    /// Vibrato for zone voices; depth 0 = none.
+    vibrato: voice::Vibrato,
+    /// The pitch wheel's factor and the transpose/fine-tune ratio, applied
+    /// together as the voices' bend.
+    wheel_bend: f64,
+    tune_ratio: f64,
     /// Unison playback: `(voices, detune cents, stereo width)`. Every zone
     /// trigger spawns `voices` copies spread symmetrically across ±detune/2
     /// cents and panned by `width`, level-compensated 1/√n. `(1, _, _)` = off.
@@ -1181,6 +1191,16 @@ impl SampleEngine {
             decay_frames: 0,
             sustain_level: 1.0,
             filter_env: None,
+            filter_res: 0.0,
+            filter_keytrack: 0.0,
+            vibrato: voice::Vibrato {
+                rate_hz: 5.0,
+                cents: 0.0,
+                delay_frames: 0,
+                sample_rate: sample_rate as f32,
+            },
+            wheel_bend: 1.0,
+            tune_ratio: 1.0,
             unison: (1, 0.0, 0.0),
             zone_rr_counter: 0,
             zone_rr_random_state: 0x9e37_79b9_7f4a_7c15,
@@ -1522,17 +1542,74 @@ impl SampleEngine {
         amount: f32,
         cutoff_hz: f32,
     ) {
+        self.set_voice_filter(
+            params,
+            amount,
+            cutoff_hz,
+            self.filter_res,
+            self.filter_keytrack,
+        );
+    }
+
+    /// The zone voices' own filter, in full: its envelope and amount, the
+    /// cutoff it works under, resonance and key tracking. It is on when the
+    /// amount or the key tracking is — then it is the layer's filter (the
+    /// caller opens the module's shared one) — and off (no cost) otherwise.
+    /// Held notes follow the cutoff, amount and resonance at once.
+    pub fn set_voice_filter(
+        &mut self,
+        params: crate::native::AdsrParams,
+        amount: f32,
+        cutoff_hz: f32,
+        resonance: f32,
+        keytrack: f32,
+    ) {
         let amount = amount.clamp(-1.0, 1.0);
-        self.filter_env = (amount != 0.0).then_some((params, amount, cutoff_hz));
+        self.filter_res = resonance.clamp(0.0, 1.0);
+        self.filter_keytrack = keytrack.clamp(0.0, 1.0);
+        self.filter_env =
+            (amount != 0.0 || self.filter_keytrack > 0.0).then_some((params, amount, cutoff_hz));
+        let res = self.filter_res;
         for v in self.voices.voices_mut() {
-            v.set_filter_base(cutoff_hz, amount);
+            v.set_filter_base(cutoff_hz, amount, res);
         }
     }
 
-    fn new_voice_filter(&self) -> Option<voice::VoiceFilter> {
+    /// Whether zone voices carry their own filter (see `set_voice_filter`).
+    #[must_use]
+    pub fn voice_filter_on(&self) -> bool {
+        self.filter_env.is_some()
+    }
+
+    fn new_voice_filter(&self, note: u8) -> Option<voice::VoiceFilter> {
         self.filter_env.map(|(params, amount, hz)| {
             voice::VoiceFilter::new(self.sample_rate as f32, params, amount, hz)
+                .with_resonance(self.filter_res)
+                .with_keytrack(self.filter_keytrack, note)
         })
+    }
+
+    /// Vibrato on zone voices: `rate_hz`, `depth` 0..1 (up to 50 cents),
+    /// starting `delay_ms` after each note. Held notes take the new rate and
+    /// depth at once.
+    pub fn set_vibrato(&mut self, rate_hz: f32, depth: f32, delay_ms: f32) {
+        self.vibrato = voice::Vibrato {
+            rate_hz: rate_hz.clamp(0.05, 20.0),
+            cents: depth.clamp(0.0, 1.0) * 50.0,
+            delay_frames: (delay_ms.max(0.0) / 1000.0 * self.sample_rate as f32) as u32,
+            sample_rate: self.sample_rate as f32,
+        };
+        let vib = self.vibrato;
+        for v in self.voices.voices_mut() {
+            v.set_vibrato(vib);
+        }
+    }
+
+    /// Transpose (semitones) plus fine tune (cents) for every voice, sounding
+    /// and new, on top of the pitch wheel.
+    pub fn set_tune(&mut self, semitones: f32, cents: f32) {
+        self.tune_ratio = 2f64.powf(f64::from(semitones * 100.0 + cents) / 1200.0);
+        self.voices.set_bend(self.wheel_bend * self.tune_ratio);
     }
 
     /// Release fade length in frames on note-off (CSS release parameter); the
@@ -1553,7 +1630,8 @@ impl SampleEngine {
         }
         let norm = ((raw as f64 - 8192.0) / 8192.0).clamp(-1.0, 1.0);
         let factor = 2f64.powf(norm * self.bend_range_st as f64 / 12.0);
-        self.voices.set_bend(factor);
+        self.wheel_bend = factor;
+        self.voices.set_bend(factor * self.tune_ratio);
     }
 
     /// Pitch-bend range in semitones (full wheel throw; default 2).

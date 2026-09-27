@@ -113,6 +113,67 @@ pub struct ModuleSettings {
     /// Unison voices + detune, for sampler sources that support them.
     pub unison: u32,
     pub detune: f32,
+    /// Pan −1..1 and stereo width 0..1 (0.5 as recorded), on the Amp.
+    pub pan: f32,
+    pub width: f32,
+    /// Transpose (semitones) and fine tune (cents).
+    pub transpose: f32,
+    pub fine: f32,
+    /// Filter key tracking 0..1, drive 0..1 and wet mix 0..1.
+    pub keytrack: f32,
+    pub filter_drive: f32,
+    pub filter_mix: f32,
+    /// Vibrato: rate (Hz), depth 0..1, delay (ms).
+    pub vib_rate: f32,
+    pub vib_depth: f32,
+    pub vib_delay_ms: f32,
+    /// Tone on the Amp, 0..1: warmth and body 0.5 = flat, drive 0 = clean.
+    pub warmth: f32,
+    pub body: f32,
+    pub drive: f32,
+    /// Chorus amount 0..1 (0 = no chorus).
+    pub chorus: f32,
+    pub ambience: AmbienceSettings,
+    pub delay: DelaySettings,
+}
+
+/// The module's reverb (its "Ambience").
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AmbienceSettings {
+    pub on: bool,
+    /// Algorithm index (the reverb's table).
+    pub algo: f32,
+    pub size: f32,
+    pub mix: f32,
+    pub predelay_ms: f32,
+    pub decay: f32,
+}
+
+/// The module's delay.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DelaySettings {
+    pub on: bool,
+    /// Machine / style index (the delay's table).
+    pub style: f32,
+    pub time_ms: f32,
+    pub feedback: f32,
+    pub mix: f32,
+}
+
+impl AmbienceSettings {
+    /// Whether the reverb is in the chain (on and audible).
+    #[must_use]
+    pub fn active(&self) -> bool {
+        self.on && self.mix > 0.0
+    }
+}
+
+impl DelaySettings {
+    /// Whether the delay is in the chain (on and audible).
+    #[must_use]
+    pub fn active(&self) -> bool {
+        self.on && self.mix > 0.0
+    }
 }
 
 impl Default for ModuleSettings {
@@ -127,11 +188,158 @@ impl Default for ModuleSettings {
             filter_env: (0.0, 0.0, 1.0, 120.0),
             unison: 1,
             detune: 0.1,
+            pan: 0.0,
+            width: 0.5,
+            transpose: 0.0,
+            fine: 0.0,
+            keytrack: 0.0,
+            filter_drive: 0.0,
+            filter_mix: 1.0,
+            vib_rate: 5.0,
+            vib_depth: 0.0,
+            vib_delay_ms: 300.0,
+            warmth: 0.5,
+            body: 0.5,
+            drive: 0.0,
+            chorus: 0.0,
+            // Effects start out: a patch sounds as it was made until a knob
+            // asks for more.
+            ambience: AmbienceSettings {
+                on: false,
+                algo: 1.0,
+                size: 0.5,
+                mix: 0.15,
+                predelay_ms: 20.0,
+                decay: 0.45,
+            },
+            delay: DelaySettings {
+                on: false,
+                style: 0.0,
+                time_ms: 375.0,
+                feedback: 0.35,
+                mix: 0.0,
+            },
         }
     }
 }
 
 impl ModuleSettings {
+    /// Whether sampler voices carry their own filter (envelope amount or key
+    /// tracking set). Then it is the module's filter — the shared chain
+    /// filter opens — and the resonance knob is the voices'.
+    #[must_use]
+    pub fn voice_filter_on(&self) -> bool {
+        self.filter_env_depth != 0.0 || self.keytrack > 0.0
+    }
+
+    /// The module's Amp: unity gain, plus pan, width and tone.
+    #[must_use]
+    pub fn amp_block(&self) -> RigBlock {
+        RigBlock::of_type(BlockType::Amp)
+            .named("Amp")
+            .with_param("gain", "0.5")
+            .with_param(
+                "pan",
+                format!("{:.4}", (self.pan.clamp(-1.0, 1.0) + 1.0) * 0.5),
+            )
+            .with_param("width", format!("{:.4}", self.width.clamp(0.0, 1.0)))
+            .with_param("warmth", format!("{:.4}", self.warmth.clamp(0.0, 1.0)))
+            .with_param("body", format!("{:.4}", self.body.clamp(0.0, 1.0)))
+            .with_param("drive", format!("{:.4}", self.drive.clamp(0.0, 1.0)))
+    }
+
+    /// The module's effects in chain order — Chorus, Delay, Ambience — each
+    /// only when it is on, so an idle module costs nothing. The blocks carry
+    /// their values in the effects' own units.
+    #[must_use]
+    pub fn fx_blocks(&self) -> Vec<RigBlock> {
+        let mut out = Vec::new();
+        if self.chorus > 0.0 {
+            out.push(
+                RigBlock::of_type(BlockType::Chorus)
+                    .named("Chorus")
+                    .with_param("mix", format!("{:.4}", self.chorus.clamp(0.0, 1.0))),
+            );
+        }
+        let d = &self.delay;
+        if d.active() {
+            out.push(
+                RigBlock::of_type(BlockType::Delay)
+                    .named("Delay")
+                    .with_param("style", format!("{:.0}", d.style.clamp(0.0, 13.0)))
+                    .with_param("time", format!("{:.2}", d.time_ms.clamp(2.0, 2500.0)))
+                    .with_param("feedback", format!("{:.4}", d.feedback.clamp(0.0, 0.95)))
+                    .with_param("mix", format!("{:.4}", d.mix.clamp(0.0, 1.0))),
+            );
+        }
+        let a = &self.ambience;
+        if a.active() {
+            out.push(
+                RigBlock::of_type(BlockType::Reverb)
+                    .named("Ambience")
+                    .with_param("algorithm", format!("{:.0}", a.algo.clamp(0.0, 14.0)))
+                    .with_param("size", format!("{:.4}", a.size.clamp(0.0, 1.0)))
+                    .with_param("decay", format!("{:.4}", a.decay.clamp(0.0, 1.0)))
+                    .with_param(
+                        "predelay",
+                        format!("{:.2}", a.predelay_ms.clamp(0.0, 200.0)),
+                    )
+                    .with_param("mix", format!("{:.4}", a.mix.clamp(0.0, 1.0))),
+            );
+        }
+        out
+    }
+
+    /// The sampler source's per-voice params (seconds / Hz / cents / 0..1),
+    /// beyond the amp ADSR: its own filter, vibrato and tuning.
+    fn sampler_voice_params(&self, mut block: RigBlock) -> RigBlock {
+        let secs = |ms: f32| format!("{:.4}", ms.max(0.0) / 1000.0);
+        if self.voice_filter_on() {
+            block = block
+                .with_param("filter_attack", secs(self.filter_env.0))
+                .with_param("filter_decay", secs(self.filter_env.1))
+                .with_param(
+                    "filter_sustain",
+                    format!("{:.4}", self.filter_env.2.clamp(0.0, 1.0)),
+                )
+                .with_param("filter_release", secs(self.filter_env.3))
+                .with_param(
+                    "filter_env_amt",
+                    format!("{:.4}", self.filter_env_depth.clamp(-1.0, 1.0)),
+                )
+                .with_param("filter_cutoff_hz", format!("{:.1}", self.cutoff_hz))
+                .with_param(
+                    "filter_resonance",
+                    format!("{:.4}", self.resonance.clamp(0.0, 1.0)),
+                )
+                .with_param(
+                    "filter_keytrack",
+                    format!("{:.4}", self.keytrack.clamp(0.0, 1.0)),
+                );
+        }
+        if self.vib_depth > 0.0 {
+            block = block
+                .with_param("vib_rate", format!("{:.3}", self.vib_rate))
+                .with_param(
+                    "vib_depth",
+                    format!("{:.4}", self.vib_depth.clamp(0.0, 1.0)),
+                )
+                .with_param("vib_delay_ms", format!("{:.1}", self.vib_delay_ms.max(0.0)));
+        }
+        if self.transpose != 0.0 || self.fine != 0.0 {
+            block = block
+                .with_param("transpose", format!("{:.3}", self.transpose))
+                .with_param("fine", format!("{:.3}", self.fine));
+        }
+        block
+    }
+
+    /// The Wavetable's tune param (0.5 centre, ±24 semitones).
+    #[must_use]
+    pub fn wavetable_tune(&self) -> f32 {
+        (0.5 + (self.transpose + self.fine / 100.0) / 48.0).clamp(0.0, 1.0)
+    }
+
     /// Settings for a bare source, everything else at its default.
     #[must_use]
     pub fn from_source(source: Source) -> Self {
@@ -189,32 +397,7 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
                     "amp_release",
                     format!("{:.4}", set.amp_env.3.max(0.0) / 1000.0),
                 );
-            // Each voice's own filter envelope, below the module cutoff
-            // (the chain's Filter 1). Amount 0 = none.
-            if set.filter_env_depth != 0.0 {
-                block = block
-                    .with_param(
-                        "filter_attack",
-                        format!("{:.4}", set.filter_env.0.max(0.0) / 1000.0),
-                    )
-                    .with_param(
-                        "filter_decay",
-                        format!("{:.4}", set.filter_env.1.max(0.0) / 1000.0),
-                    )
-                    .with_param(
-                        "filter_sustain",
-                        format!("{:.4}", set.filter_env.2.clamp(0.0, 1.0)),
-                    )
-                    .with_param(
-                        "filter_release",
-                        format!("{:.4}", set.filter_env.3.max(0.0) / 1000.0),
-                    )
-                    .with_param(
-                        "filter_env_amt",
-                        format!("{:.4}", set.filter_env_depth.clamp(-1.0, 1.0)),
-                    )
-                    .with_param("filter_cutoff_hz", format!("{:.1}", set.cutoff_hz));
-            }
+            block = set.sampler_voice_params(block);
             if set.unison > 1 {
                 block = block
                     .with_param("unison", set.unison.to_string())
@@ -261,12 +444,16 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
     // scale); Hz is what a player reads. A SYNTH module filters per voice
     // (inside the oscillator), so its chain filter sits wide open; a sampler
     // module keeps the chain filter as its tone control.
-    let chain_cutoff = if matches!(set.source, Source::Synth) {
+    // A sampler whose voices carry their own filter opens it too: the
+    // voices are the filter then.
+    let open = matches!(set.source, Source::Synth)
+        || (matches!(set.source, Source::Sample(_)) && set.voice_filter_on());
+    let chain_cutoff = if open {
         1.0
     } else {
         signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz)
     };
-    let chain_res = if matches!(set.source, Source::Synth) {
+    let chain_res = if open {
         0.0
     } else {
         set.resonance.clamp(0.0, 1.0)
@@ -276,7 +463,9 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
             RigBlock::of_type(BlockType::Filter)
                 .named("Filter 1")
                 .with_param("cutoff", format!("{chain_cutoff:.4}"))
-                .with_param("resonance", format!("{chain_res:.4}")),
+                .with_param("resonance", format!("{chain_res:.4}"))
+                .with_param("drive", format!("{:.4}", set.filter_drive.clamp(0.0, 1.0)))
+                .with_param("mix", format!("{:.4}", set.filter_mix.clamp(0.0, 1.0))),
         )
         .block(BlockType::Filter, "Filter 2");
 
@@ -289,16 +478,10 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
         // starts at zero and is opened by its envelope; a sampler's Amp is
         // just a gain stage at unity, because its voices carry their own
         // envelopes.
-        .add(
-            Container::module("Amp").add(
-                // Unity for every source: the voice's own amp envelope shapes
-                // the level (the old synth-only closed-Amp + env route is gone).
-                RigBlock::of_type(BlockType::Amp)
-                    .named("Amp")
-                    .with_param("gain", "0.5"),
-            ),
-        )
-        .add(fx_rack("FX"))
+        // Unity for every source: the voice's own amp envelope shapes the
+        // level; the Amp carries pan, width and tone.
+        .add(Container::module("Amp").add(set.amp_block()))
+        .add(module_fx(set))
         // Each module routes to the Part's aux rack independently (rigs
         // without an Aux Rack container simply drop the send).
         .send(AUX_RACK, "To Aux")
@@ -389,6 +572,18 @@ pub fn apply_settings_to_omni_layer(
         None => false,
     };
     let cutoff = signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz);
+    let mut is_sampler = false;
+    for_blocks(layer, &mut |b| {
+        if b.display_name() == "Soundsource" && b.block_type == BlockType::Sampler {
+            is_sampler = true;
+        }
+    });
+    // A sample-mode layer the patch gives no filter-envelope route takes the
+    // knobs' as its voices' own filter (as a keys module does), and its
+    // shared filter opens for it.
+    let voice_filter = is_sampler && !routed && set.voice_filter_on();
+    let voice_params = set.sampler_voice_params(RigBlock::of_type(BlockType::Sampler));
+    let amp = set.amp_block();
     for_blocks(layer, &mut |b| match b.display_name().as_str() {
         "Soundsource" => {
             put(b, "amp_attack", secs(set.amp_env.0));
@@ -399,29 +594,62 @@ pub fn apply_settings_to_omni_layer(
                 format!("{:.4}", set.amp_env.2.clamp(0.0, 1.0)),
             );
             put(b, "amp_release", secs(set.amp_env.3));
-            if !routed && b.block_type == BlockType::Sampler && depth != 0.0 {
-                put(b, "filter_attack", secs(set.filter_env.0));
-                put(b, "filter_decay", secs(set.filter_env.1));
+            if b.block_type == BlockType::Sampler {
+                for p in &voice_params.params {
+                    if voice_filter || !p.name.starts_with("filter_") {
+                        put(b, &p.name, p.value.clone());
+                    }
+                }
+            } else if b.block_type == BlockType::Wavetable {
                 put(
                     b,
-                    "filter_sustain",
-                    format!("{:.4}", set.filter_env.2.clamp(0.0, 1.0)),
+                    "vib_rate",
+                    format!("{:.4}", (set.vib_rate / 12.0).clamp(0.0, 1.0)),
                 );
-                put(b, "filter_release", secs(set.filter_env.3));
-                put(b, "filter_env_amt", format!("{depth:.4}"));
-                put(b, "filter_cutoff_hz", format!("{:.1}", set.cutoff_hz));
+                put(
+                    b,
+                    "vib_depth",
+                    format!("{:.4}", set.vib_depth.clamp(0.0, 1.0)),
+                );
+                put(b, "tune", format!("{:.4}", set.wavetable_tune()));
             }
         }
         "Filter 1" => {
-            put(b, "cutoff", format!("{cutoff:.4}"));
+            if voice_filter {
+                put(b, "cutoff", "1.0000".to_string());
+                put(b, "resonance", "0.0000".to_string());
+            } else {
+                put(b, "cutoff", format!("{cutoff:.4}"));
+                put(
+                    b,
+                    "resonance",
+                    format!("{:.4}", set.resonance.clamp(0.0, 1.0)),
+                );
+            }
             put(
                 b,
-                "resonance",
-                format!("{:.4}", set.resonance.clamp(0.0, 1.0)),
+                "drive",
+                format!("{:.4}", set.filter_drive.clamp(0.0, 1.0)),
             );
+            put(b, "mix", format!("{:.4}", set.filter_mix.clamp(0.0, 1.0)));
+        }
+        "Amp" => {
+            // Pan, width and tone; the layer keeps its own gain.
+            for p in amp.params.iter().filter(|p| p.name != "gain") {
+                put(b, &p.name, p.value.clone());
+            }
         }
         _ => {}
     });
+    // The module's effects follow the patch's own, in its FX rack.
+    let fx = set.fx_blocks();
+    if !fx.is_empty() {
+        if let Some(rack) = find_mut(layer, "Layer FX") {
+            for block in fx {
+                rack.children.push(RigNode::Block { block });
+            }
+        }
+    }
     if let Some(fe) = layer
         .modulators
         .iter_mut()
@@ -477,6 +705,20 @@ pub fn signal_layer_single(name: &str, source: Source) -> Container {
 /// A 4-slot FX rack — every rack in the engine (Layer / Common / Aux /
 /// Master) is exactly four slots.
 #[must_use]
+/// A module's FX rack: its active effects, then empty slots up to four.
+fn module_fx(set: &ModuleSettings) -> Container {
+    let blocks = set.fx_blocks();
+    let used = blocks.len();
+    let mut rack = Container::module("FX");
+    for b in blocks {
+        rack = rack.add(b);
+    }
+    for slot in used + 1..=4 {
+        rack = rack.block(BlockType::Custom, format!("FX Slot {slot}"));
+    }
+    rack
+}
+
 pub fn fx_rack(name: &str) -> Container {
     let mut rack = Container::module(name);
     for slot in 1..=4 {
@@ -641,6 +883,46 @@ fn import_rest(patch: &crate::omni_import::OmniPatch) -> ImportedPatch {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn effects_are_in_the_chain_only_when_on_and_take_live_writes() {
+        use signal_sampler::node_render::RenderNode;
+        // Defaults: no effect blocks at all (an idle module costs nothing).
+        let quiet = signal_module_with("Keys A", &ModuleSettings::from_source(Source::Synth));
+        let mut rn = RenderNode::compile(&Container::preset("p").add(quiet), 48_000);
+        rn.prepare(48_000.0, 128);
+        for fx in ["Chorus", "Delay", "Ambience"] {
+            assert!(!rn.has_leaf("Keys A", fx), "{fx} built while off");
+        }
+
+        let mut set = ModuleSettings::from_source(Source::Synth);
+        set.chorus = 0.4;
+        set.delay.on = true;
+        set.delay.mix = 0.3;
+        set.ambience.on = true;
+        set.ambience.mix = 0.2;
+        let busy = signal_module_with("Keys A", &set);
+        let mut rn = RenderNode::compile(&Container::preset("p").add(busy), 48_000);
+        rn.prepare(48_000.0, 128);
+        for fx in ["Chorus", "Delay", "Ambience"] {
+            assert!(rn.has_leaf("Keys A", fx), "{fx} missing while on");
+        }
+        // Plain units: a 700 ms delay, a 60 ms predelay.
+        assert!(rn.set_leaf_plain("Keys A", "Delay", "time", 700.0));
+        assert!(rn.set_leaf_plain("Keys A", "Ambience", "predelay", 60.0));
+        assert!(!rn.set_leaf_plain("Keys A", "Delay", "no_such_param", 1.0));
+        // And the chain renders.
+        let (mut l, mut r) = (vec![0.0f32; 128], vec![0.0f32; 128]);
+        let silence = vec![0.0f32; 128];
+        rn.process(
+            &silence,
+            &silence,
+            &mut l,
+            &mut r,
+            &signal_plugin_host::PluginEvents::default(),
+        );
+        assert!(l.iter().chain(&r).all(|x| x.is_finite()));
+    }
 
     /// End-to-end through the full compiled module chain (per-voice synth →
     /// open chain filter → unity Amp): notes sound, the pitch wheel bends

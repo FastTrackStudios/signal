@@ -136,6 +136,10 @@ pub struct NativeFilter {
     right: [Svf; 4],
     ladder_l: Ladder,
     ladder_r: Ladder,
+    /// Drive into the filter, 0..1 (0 = clean), and the wet mix, 0..1
+    /// (1 = only the filtered signal).
+    drive: f32,
+    mix: f32,
     prepared: bool,
 }
 
@@ -153,6 +157,8 @@ impl NativeFilter {
             right: [Svf::default(); 4],
             ladder_l: Ladder::default(),
             ladder_r: Ladder::default(),
+            drive: 0.0,
+            mix: 1.0,
             prepared: false,
         };
         f.update_coeffs();
@@ -281,12 +287,30 @@ impl PluginInstance for NativeFilter {
                 max: 1.0,
                 default: ((core::f32::consts::FRAC_1_SQRT_2 - 0.5) / 11.5) as f64,
             },
+            // Saturation ahead of the filter (1x..8x into tanh, level
+            // compensated) and the dry/filtered balance.
+            PluginParamInfo {
+                id: 2,
+                name: "drive".into(),
+                min: 0.0,
+                max: 1.0,
+                default: 0.0,
+            },
+            PluginParamInfo {
+                id: 3,
+                name: "mix".into(),
+                min: 0.0,
+                max: 1.0,
+                default: 1.0,
+            },
         ]
     }
     fn param_value(&mut self, id: u32) -> Option<f64> {
         match id {
             0 => Some(Self::norm_from_cutoff(self.cutoff_hz) as f64),
             1 => Some(((self.q - 0.5) / 11.5) as f64),
+            2 => Some(self.drive as f64),
+            3 => Some(self.mix as f64),
             _ => None,
         }
     }
@@ -336,6 +360,8 @@ impl PluginInstance for NativeFilter {
                     self.q = Self::q_from_norm(value as f32);
                     dirty = true;
                 }
+                2 => self.drive = (value as f32).clamp(0.0, 1.0),
+                3 => self.mix = (value as f32).clamp(0.0, 1.0),
                 _ => {}
             }
         }
@@ -343,6 +369,34 @@ impl PluginInstance for NativeFilter {
             self.update_coeffs();
         }
         let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
+        if self.drive > 0.0 || self.mix < 1.0 {
+            // Drive and/or a dry blend: the general path.
+            let g = 1.0 + 7.0 * self.drive;
+            let comp = 1.0 / g.sqrt();
+            let (mix, driven) = (self.mix, self.drive > 0.0);
+            let ladder =
+                self.character == FilterCharacter::Ladder && self.mode == FilterMode::Lowpass;
+            let (mode, sections) = (self.mode, self.sections);
+            for f in 0..frames {
+                let (xl, xr) = (in_l[f], in_r[f]);
+                let (dl, dr) = if driven {
+                    ((xl * g).tanh() * comp, (xr * g).tanh() * comp)
+                } else {
+                    (xl, xr)
+                };
+                let (yl, yr) = if ladder {
+                    (self.ladder_l.tick(dl), self.ladder_r.tick(dr))
+                } else {
+                    (
+                        Self::tick_chain(&mut self.left, sections, mode, dl),
+                        Self::tick_chain(&mut self.right, sections, mode, dr),
+                    )
+                };
+                out_l[f] = xl + (yl - xl) * mix;
+                out_r[f] = xr + (yr - xr) * mix;
+            }
+            return Ok(());
+        }
         if self.character == FilterCharacter::Ladder && self.mode == FilterMode::Lowpass {
             for f in 0..frames {
                 out_l[f] = self.ladder_l.tick(in_l[f]);

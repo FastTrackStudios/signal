@@ -191,6 +191,10 @@ pub struct NativeWavetable {
     cfg: SynthConfig,
     /// Runtime pitch multiplier (param 4 "tune": 0.5 center, ±24 semitones).
     pitch_mult: f32,
+    /// Vibrato: rate (Hz), depth (0..1 → up to 50 cents), phase.
+    vib_rate: f32,
+    vib_depth: f32,
+    vib_phase: f32,
     /// Square pulse width (param 5 "symmetry": 0.5 = symmetric).
     duty: f32,
     /// Harmonia level scale (param 6 "`harm_mix`").
@@ -205,6 +209,9 @@ impl NativeWavetable {
             sample_rate: sample_rate.max(1) as f32,
             cfg: SynthConfig::default(),
             pitch_mult: 1.0,
+            vib_rate: 5.0,
+            vib_depth: 0.0,
+            vib_phase: 0.0,
             duty: 0.5,
             harm_mix: 1.0,
             voices: Vec::new(),
@@ -402,6 +409,9 @@ impl Soundsource for NativeWavetable {
                 "amp_release",
                 (self.cfg.env.release_s / ENV_RANGE_S) as f64,
             ),
+            // Vibrato: rate over 0..12 Hz (the oscillator's scale), depth.
+            mk(11, "vib_rate", (self.vib_rate / 12.0) as f64),
+            mk(12, "vib_depth", self.vib_depth as f64),
         ]
     }
 
@@ -472,6 +482,8 @@ impl Soundsource for NativeWavetable {
                 4 => self.pitch_mult = 2f32.powf((v - 0.5) * 48.0 / 12.0),
                 5 => self.duty = v,
                 6 => self.harm_mix = v,
+                11 => self.vib_rate = (v * 12.0).max(0.05),
+                12 => self.vib_depth = v,
                 7..=10 => {
                     match id {
                         7 => self.cfg.env.attack_s = v * ENV_RANGE_S,
@@ -503,8 +515,19 @@ impl Soundsource for NativeWavetable {
                 }
             }
         }
+        let vib_inc = self.vib_rate / self.sample_rate;
         for f in 0..frames {
             let (mut sl, mut sr) = (0.0f32, 0.0f32);
+            // Vibrato, shared by the voices: a parabolic sine, cents → ratio.
+            let pitch = if self.vib_depth > 0.0 {
+                self.vib_phase = (self.vib_phase + vib_inc).fract();
+                let x = self.vib_phase * 2.0 - 1.0;
+                let sine = 4.0 * x * (1.0 - x.abs());
+                self.pitch_mult
+                    * (1.0 + sine * self.vib_depth * 50.0 * (std::f32::consts::LN_2 / 1200.0))
+            } else {
+                self.pitch_mult
+            };
             for v in &mut self.voices {
                 let e = v.env.tick() * v.amp;
                 if e == 0.0 {
@@ -522,7 +545,7 @@ impl Soundsource for NativeWavetable {
                 let (mut vl, mut vr) = (0.0f32, 0.0f32);
                 let n_unison = self.cfg.unison_voices.clamp(1, 8) as usize;
                 for (si, s) in v.subs.iter_mut().enumerate() {
-                    let inc = s.inc * self.pitch_mult;
+                    let inc = s.inc * pitch;
                     let ph = (s.phase + pm).rem_euclid(1.0);
                     // Harmonia subs (past the unison set) scale by harm_mix.
                     let lvl = if si >= n_unison {

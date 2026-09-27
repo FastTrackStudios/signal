@@ -1544,21 +1544,34 @@ pub(crate) fn build_sample_source(
     if let Some(v) = block.param_f32("amp_release") {
         engine.set_release_frames((v.max(0.0) * sample_rate as f32) as usize);
     }
-    if let (Some(amount), Some(hz)) = (
-        block.param_f32("filter_env_amt"),
-        block.param_f32("filter_cutoff_hz"),
-    ) {
+    if let Some(hz) = block.param_f32("filter_cutoff_hz") {
         let s = |k: &str, d: f32| block.param_f32(k).unwrap_or(d);
-        engine.set_filter_env(
+        engine.set_voice_filter(
             crate::native::AdsrParams {
                 attack_s: s("filter_attack", 0.0).max(0.0),
                 decay_s: s("filter_decay", 0.0).max(0.0),
                 sustain: s("filter_sustain", 1.0).clamp(0.0, 1.0),
                 release_s: s("filter_release", 0.0).max(0.0),
             },
-            amount,
+            s("filter_env_amt", 0.0),
             hz,
+            s("filter_resonance", 0.0),
+            s("filter_keytrack", 0.0),
         );
+    }
+    if let Some(depth) = block.param_f32("vib_depth") {
+        engine.set_vibrato(
+            block.param_f32("vib_rate").unwrap_or(5.0),
+            depth,
+            block.param_f32("vib_delay_ms").unwrap_or(0.0),
+        );
+    }
+    let (st, cents) = (
+        block.param_f32("transpose").unwrap_or(0.0),
+        block.param_f32("fine").unwrap_or(0.0),
+    );
+    if st != 0.0 || cents != 0.0 {
+        engine.set_tune(st, cents);
     }
     // Decode in the background, middle-out from middle C, so the block is
     // playable almost immediately and never blocks the caller (same
