@@ -289,6 +289,9 @@ pub struct KeysStack {
     pub blurb: String,
     /// This stack's scene is the one currently applied.
     pub is_active: bool,
+    /// The tempo pressing it sets (whole BPM); 0 = it leaves the tempo.
+    #[facet(default)]
+    pub tempo_bpm: u32,
 }
 
 /// The live performance model: the profile's stacks + grid mode.
@@ -301,6 +304,9 @@ pub struct KeysPerform {
     /// Grid mode: 0 Preset (browse the library), 1 Profile (stacks),
     /// 2 Setlist (song-adaptive) — mirrors the guitar rig's modes.
     pub perform_mode: u32,
+    /// The band's tempo (whole BPM) the synced delays follow; 0 = none yet.
+    #[facet(default)]
+    pub tempo_bpm: u32,
 }
 
 /// One metered node's post-fader output — an engine, a layer or a module,
@@ -599,6 +605,11 @@ pub mod keys {
         /// Store the mixer's current state into stack `index` (write the
         /// scene from what you're hearing).
         fn capture_stack(&self, index: u32);
+        /// Tap the band's tempo (the same tempo the guitar rig taps):
+        /// two taps or more within ~2.5 s of each other set it.
+        fn tap_tempo(&self);
+        /// Set the band's tempo outright (BPM; 0 is ignored).
+        fn set_tempo(&self, bpm: u32);
         /// Trigger a note from the UI (velocity 0 = note-off).
         fn trigger(&self, note: u32, velocity: u32);
 

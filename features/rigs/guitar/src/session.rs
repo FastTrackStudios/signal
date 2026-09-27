@@ -478,6 +478,7 @@ impl GuitarRigBackend {
         };
         backend.spawn_meter_pump("rig-meter-pump");
         backend.spawn_drive_calibration();
+        backend.spawn_tempo_follow();
         backend
     }
 
@@ -1721,6 +1722,41 @@ impl GuitarRigBackend {
     /// Pre-measure drive curves for every NAM the profile can reach (drive
     /// preset options + the pool presets) — the import-time offline test.
     /// Runs on its own thread; results land in the on-disk cache.
+    /// Follow the band's tempo (`signal_rig_host::tempo`) when another rig
+    /// sets it — the keys rig's tap or a keys stack's song: the delays retime
+    /// as they do on a tap here. Ends when this session is dropped.
+    fn spawn_tempo_follow(&self) {
+        let session = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("guitar-tempo-follow".into())
+            .spawn(move || {
+                let mut seen = signal_rig_host::tempo::generation();
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    // Only this thread's clone left: the session is gone.
+                    if Arc::strong_count(&session.tempo) <= 1 {
+                        return;
+                    }
+                    let now = signal_rig_host::tempo::generation();
+                    if now == seen {
+                        continue;
+                    }
+                    seen = now;
+                    let Some(bpm) = signal_rig_host::tempo::get() else {
+                        continue;
+                    };
+                    let ours = *session.tempo.lock_ok();
+                    if ours.is_some_and(|t| (t - bpm).abs() < 0.05) {
+                        continue; // our own tap, already applied
+                    }
+                    *session.tempo.lock_ok() = Some(bpm);
+                    session.mark_state_dirty();
+                    session.apply_tempo_to_delays();
+                    session.events.publish(RigEvent::Perf(Rig::perf(&session)));
+                }
+            });
+    }
+
     fn spawn_drive_calibration(&self) {
         let backend = self.clone();
         std::thread::spawn(move || backend.run_drive_calibration());

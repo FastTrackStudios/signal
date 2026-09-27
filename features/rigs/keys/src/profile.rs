@@ -90,6 +90,10 @@ pub struct KeysStackDef {
     /// Per-layer state this stack recalls.
     #[facet(default)]
     pub slots: Vec<SceneSlot>,
+    /// The tempo this stack's song runs at (BPM); 0 = pressing it leaves
+    /// the tempo alone.
+    #[facet(default)]
+    pub tempo_bpm: f32,
 }
 
 /// One saved knob value (a module macro id and its value).
@@ -843,6 +847,7 @@ pub fn worship_profile() -> KeysProfile {
         ],
         stacks: vec![
             KeysStackDef {
+                tempo_bpm: 0.0,
                 name: "Spotlight".into(),
                 blurb: "Solo grand — nothing under it".into(),
                 slots: vec![
@@ -862,6 +867,7 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             KeysStackDef {
+                tempo_bpm: 0.0,
                 name: "Verse".into(),
                 blurb: "Piano + soft pad bed".into(),
                 slots: vec![
@@ -881,6 +887,7 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             KeysStackDef {
+                tempo_bpm: 0.0,
                 name: "Energy".into(),
                 blurb: "Full band — piano, EP, synth, pad".into(),
                 slots: vec![
@@ -900,6 +907,7 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             KeysStackDef {
+                tempo_bpm: 0.0,
                 name: "Hooks".into(),
                 blurb: "Lead synth over the piano bed".into(),
                 slots: vec![
@@ -919,6 +927,7 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             KeysStackDef {
+                tempo_bpm: 0.0,
                 name: "Underscore".into(),
                 blurb: "Pad + swell under speaking".into(),
                 slots: vec![

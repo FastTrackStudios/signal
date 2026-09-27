@@ -1437,6 +1437,46 @@ fn is_omni_patch(path: &std::path::Path) -> bool {
         .is_some_and(|e| e.eq_ignore_ascii_case("prt_omn") || e.eq_ignore_ascii_case("mlt_omn"))
 }
 
+/// One more tap at `now`: the tempo of the last (up to) four taps, once
+/// there are two; a gap over 2.5 s starts the count again.
+fn tap_bpm(taps: &mut Vec<std::time::Instant>, now: std::time::Instant) -> Option<f32> {
+    if taps
+        .last()
+        .is_some_and(|t| now.duration_since(*t).as_secs_f32() > 2.5)
+    {
+        taps.clear();
+    }
+    taps.push(now);
+    let n = taps.len();
+    if n > 4 {
+        taps.drain(..n - 4);
+    }
+    (taps.len() >= 2).then(|| {
+        let span = taps[taps.len() - 1].duration_since(taps[0]).as_secs_f32();
+        60.0 * (taps.len() - 1) as f32 / span.max(1e-3)
+    })
+}
+
+#[cfg(test)]
+mod tap_tests {
+    use super::tap_bpm;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn steady_taps_read_their_tempo_and_a_pause_starts_over() {
+        let t0 = Instant::now();
+        let mut taps = Vec::new();
+        assert_eq!(tap_bpm(&mut taps, t0), None, "one tap is no tempo");
+        let mut bpm = None;
+        for i in 1..6 {
+            bpm = tap_bpm(&mut taps, t0 + Duration::from_millis(500 * i));
+        }
+        assert!((bpm.unwrap() - 120.0).abs() < 0.5);
+        // A long pause: the next tap starts a new count.
+        assert_eq!(tap_bpm(&mut taps, t0 + Duration::from_secs(10)), None);
+    }
+}
+
 fn default_macros() -> BTreeMap<String, f32> {
     MACROS
         .iter()
@@ -1590,6 +1630,8 @@ struct Inner {
     rebuild_gen: std::sync::atomic::AtomicU64,
     /// Debounce generation for saving the profile after knob edits.
     save_gen: std::sync::atomic::AtomicU64,
+    /// Recent tempo taps.
+    taps: Mutex<Vec<std::time::Instant>>,
 }
 
 /// The keys-rig backend handle. Cheap to clone (all state shared).
@@ -2414,6 +2456,7 @@ impl KeysRigBackend {
                 pump_started: AtomicBool::new(false),
                 rebuild_gen: std::sync::atomic::AtomicU64::new(0),
                 save_gen: std::sync::atomic::AtomicU64::new(0),
+                taps: Mutex::new(Vec::new()),
             }),
         };
         backend.spawn_meter_pump("keys-meter-pump");
@@ -2439,6 +2482,7 @@ impl KeysRigBackend {
                     }
                     seen = now;
                     let b = Self { inner };
+                    b.publish_perform();
                     let targets: Vec<(String, usize)> = b
                         .inner
                         .state
@@ -3192,10 +3236,12 @@ impl KeysRigBackend {
                     name: st.name.clone(),
                     blurb: st.blurb.clone(),
                     is_active: s.active_stack == Some(i),
+                    tempo_bpm: st.tempo_bpm.max(0.0).round() as u32,
                 })
                 .collect(),
             active_stack: s.active_stack.map_or(u32::MAX, |i| i as u32),
             perform_mode: s.perform_mode,
+            tempo_bpm: signal_rig_host::tempo::get().map_or(0, |b| b.round() as u32),
         }
     }
 
@@ -4371,6 +4417,10 @@ impl KeysRigSvc for KeysRigBackend {
                 }
             }
             s.active_stack = Some(index as usize);
+            // A stack that knows its song's tempo sets it for the band.
+            if stack.tempo_bpm > 0.0 {
+                signal_rig_host::tempo::set(stack.tempo_bpm);
+            }
             rebuild
         };
         if needs_rebuild {
@@ -4411,6 +4461,32 @@ impl KeysRigSvc for KeysRigBackend {
                     muted: lane.muted,
                 })
                 .collect();
+            // The tempo playing now is this stack's song's.
+            stack.tempo_bpm = signal_rig_host::tempo::get().unwrap_or(0.0);
+        }
+        // Scenes belong to the profile: save it.
+        self.remember_macros_soon();
+        self.publish_perform();
+    }
+
+    fn tap_tempo(&self) {
+        let now = std::time::Instant::now();
+        let bpm = {
+            let Ok(mut taps) = self.inner.taps.lock() else {
+                return;
+            };
+            tap_bpm(&mut taps, now)
+        };
+        if let Some(bpm) = bpm {
+            signal_rig_host::tempo::set(bpm);
+            tracing::info!("keys tap tempo: {bpm:.1} BPM");
+        }
+        self.publish_perform();
+    }
+
+    fn set_tempo(&self, bpm: u32) {
+        if bpm > 0 {
+            signal_rig_host::tempo::set(bpm as f32);
         }
         self.publish_perform();
     }

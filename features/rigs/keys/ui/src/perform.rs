@@ -58,6 +58,27 @@ pub fn PerformStrip(perform: KeysPerform) -> Element {
                     }
                 }
                 div { style: "flex: 1;" }
+                // The band's tempo (shared with the guitar rig's tap) — what
+                // the synced delays follow. Tap to set it.
+                span { style: "font-size: 11px; font-weight: 700; color: #a1a1aa; font-variant-numeric: tabular-nums;",
+                    if perform.tempo_bpm > 0 { "♩ {perform.tempo_bpm}" } else { "♩ —" }
+                }
+                button {
+                    style: "appearance: none; border: 1px solid #27272a; border-radius: 6px; padding: 3px 10px; \
+                            font-size: 10px; font-weight: 700; letter-spacing: 0.06em; background: #111114; color: #e4e4e7;",
+                    onclick: {
+                        let rig = rig.clone();
+                        move |_| {
+                            let rig = rig.clone();
+                            spawn(async move {
+                                if let Some(r) = rig {
+                                    let _ = r.tap_tempo().await;
+                                }
+                            });
+                        }
+                    },
+                    "TAP"
+                }
                 span { style: "font-size: 10px; color: #52525b;", "{perform.profile_name}" }
             }
             // The footswitch row.
@@ -100,6 +121,11 @@ pub fn PerformStrip(perform: KeysPerform) -> Element {
                                     {stack.name.to_uppercase()}
                                 }
                                 span { style: "font-size: 9px; opacity: 0.75; line-height: 1.25;", "{stack.blurb}" }
+                                if stack.tempo_bpm > 0 {
+                                    span { style: "font-size: 9px; opacity: 0.6; font-variant-numeric: tabular-nums;",
+                                        "♩ {stack.tempo_bpm}"
+                                    }
+                                }
                             }
                         }
                     }

@@ -878,6 +878,11 @@ impl KeysRigSvc for WebKeysBackend {
         // See press_stack.
     }
 
+    /// The browser rig has no band tempo (no delays synced to one).
+    fn tap_tempo(&self) {}
+
+    fn set_tempo(&self, _bpm: u32) {}
+
     /// No-op: there is no peak to reset without realtime telemetry (see the
     /// `rt` field in `build_status`).
     fn reset_rt_peak(&self) {}
