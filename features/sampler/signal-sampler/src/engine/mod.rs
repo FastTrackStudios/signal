@@ -950,6 +950,10 @@ pub struct SampleEngine {
     /// together as the voices' bend.
     wheel_bend: f64,
     tune_ratio: f64,
+    /// Modulation on top: a pitch offset (semitones) and the voice filter's
+    /// cutoff offset (octaves), written per block by the mod engine.
+    pitch_mod_st: f32,
+    cutoff_mod_oct: f32,
     /// Unison playback: `(voices, detune cents, stereo width)`. Every zone
     /// trigger spawns `voices` copies spread symmetrically across ±detune/2
     /// cents and panned by `width`, level-compensated 1/√n. `(1, _, _)` = off.
@@ -1201,6 +1205,8 @@ impl SampleEngine {
             },
             wheel_bend: 1.0,
             tune_ratio: 1.0,
+            pitch_mod_st: 0.0,
+            cutoff_mod_oct: 0.0,
             unison: (1, 0.0, 0.0),
             zone_rr_counter: 0,
             zone_rr_random_state: 0x9e37_79b9_7f4a_7c15,
@@ -1569,9 +1575,9 @@ impl SampleEngine {
         self.filter_keytrack = keytrack.clamp(0.0, 1.0);
         self.filter_env =
             (amount != 0.0 || self.filter_keytrack > 0.0).then_some((params, amount, cutoff_hz));
-        let res = self.filter_res;
+        let (res, base) = (self.filter_res, cutoff_hz * self.cutoff_mod_oct.exp2());
         for v in self.voices.voices_mut() {
-            v.set_filter_base(cutoff_hz, amount, res);
+            v.set_filter_base(base, amount, res);
         }
     }
 
@@ -1583,6 +1589,7 @@ impl SampleEngine {
 
     fn new_voice_filter(&self, note: u8) -> Option<voice::VoiceFilter> {
         self.filter_env.map(|(params, amount, hz)| {
+            let hz = hz * self.cutoff_mod_oct.exp2();
             voice::VoiceFilter::new(self.sample_rate as f32, params, amount, hz)
                 .with_resonance(self.filter_res)
                 .with_keytrack(self.filter_keytrack, note)
@@ -1609,7 +1616,34 @@ impl SampleEngine {
     /// and new, on top of the pitch wheel.
     pub fn set_tune(&mut self, semitones: f32, cents: f32) {
         self.tune_ratio = 2f64.powf(f64::from(semitones * 100.0 + cents) / 1200.0);
-        self.voices.set_bend(self.wheel_bend * self.tune_ratio);
+        self.apply_bend();
+    }
+
+    /// A modulation pitch offset in semitones (an LFO or Mod Env routed to
+    /// pitch), on every voice.
+    pub fn set_pitch_mod(&mut self, semitones: f32) {
+        if (semitones - self.pitch_mod_st).abs() > 1e-5 {
+            self.pitch_mod_st = semitones;
+            self.apply_bend();
+        }
+    }
+
+    /// A modulation offset in octaves on the voices' own filter cutoff.
+    pub fn set_cutoff_mod(&mut self, octaves: f32) {
+        if (octaves - self.cutoff_mod_oct).abs() > 1e-5 {
+            self.cutoff_mod_oct = octaves;
+            if let Some((_, amount, hz)) = self.filter_env {
+                let (res, base) = (self.filter_res, hz * octaves.exp2());
+                for v in self.voices.voices_mut() {
+                    v.set_filter_base(base, amount, res);
+                }
+            }
+        }
+    }
+
+    fn apply_bend(&mut self) {
+        let m = 2f64.powf(f64::from(self.pitch_mod_st) / 12.0);
+        self.voices.set_bend(self.wheel_bend * self.tune_ratio * m);
     }
 
     /// Release fade length in frames on note-off (CSS release parameter); the
@@ -1631,7 +1665,7 @@ impl SampleEngine {
         let norm = ((raw as f64 - 8192.0) / 8192.0).clamp(-1.0, 1.0);
         let factor = 2f64.powf(norm * self.bend_range_st as f64 / 12.0);
         self.wheel_bend = factor;
-        self.voices.set_bend(factor * self.tune_ratio);
+        self.apply_bend();
     }
 
     /// Pitch-bend range in semitones (full wheel throw; default 2).

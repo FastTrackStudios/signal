@@ -543,6 +543,24 @@ const MACROS: &[MacroDef] = &[
         unit: "ms",
     },
     MacroDef {
+        id: "env3.depth",
+        name: "Depth",
+        group: "Env 3",
+        default: 0.0,
+        min: -1.0,
+        max: 1.0,
+        unit: "",
+    },
+    MacroDef {
+        id: "env3.dest",
+        name: "Dest",
+        group: "Env 3",
+        default: 0.0,
+        min: 0.0,
+        max: 6.0,
+        unit: "dest",
+    },
+    MacroDef {
         id: "env4.delay",
         name: "Delay",
         group: "Env 4",
@@ -596,6 +614,24 @@ const MACROS: &[MacroDef] = &[
         max: 8000.0,
         unit: "ms",
     },
+    MacroDef {
+        id: "env4.depth",
+        name: "Depth",
+        group: "Env 4",
+        default: 0.0,
+        min: -1.0,
+        max: 1.0,
+        unit: "",
+    },
+    MacroDef {
+        id: "env4.dest",
+        name: "Dest",
+        group: "Env 4",
+        default: 0.0,
+        min: 0.0,
+        max: 6.0,
+        unit: "dest",
+    },
     // ── LFOs 1..4 ───────────────────────────────────────────────────────
     MacroDef {
         id: "lfo1.rate",
@@ -622,7 +658,7 @@ const MACROS: &[MacroDef] = &[
         default: 0.0,
         min: 0.0,
         max: 4.0,
-        unit: "",
+        unit: "wave",
     },
     MacroDef {
         id: "lfo1.fade",
@@ -632,6 +668,15 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 4000.0,
         unit: "ms",
+    },
+    MacroDef {
+        id: "lfo1.dest",
+        name: "Dest",
+        group: "LFO 1",
+        default: 0.0,
+        min: 0.0,
+        max: 6.0,
+        unit: "dest",
     },
     MacroDef {
         id: "lfo2.rate",
@@ -658,7 +703,7 @@ const MACROS: &[MacroDef] = &[
         default: 1.0,
         min: 0.0,
         max: 4.0,
-        unit: "",
+        unit: "wave",
     },
     MacroDef {
         id: "lfo2.fade",
@@ -668,6 +713,15 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 4000.0,
         unit: "ms",
+    },
+    MacroDef {
+        id: "lfo2.dest",
+        name: "Dest",
+        group: "LFO 2",
+        default: 0.0,
+        min: 0.0,
+        max: 6.0,
+        unit: "dest",
     },
     MacroDef {
         id: "lfo3.rate",
@@ -694,7 +748,7 @@ const MACROS: &[MacroDef] = &[
         default: 2.0,
         min: 0.0,
         max: 4.0,
-        unit: "",
+        unit: "wave",
     },
     MacroDef {
         id: "lfo3.fade",
@@ -704,6 +758,15 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 4000.0,
         unit: "ms",
+    },
+    MacroDef {
+        id: "lfo3.dest",
+        name: "Dest",
+        group: "LFO 3",
+        default: 0.0,
+        min: 0.0,
+        max: 6.0,
+        unit: "dest",
     },
     MacroDef {
         id: "lfo4.rate",
@@ -730,7 +793,7 @@ const MACROS: &[MacroDef] = &[
         default: 3.0,
         min: 0.0,
         max: 4.0,
-        unit: "",
+        unit: "wave",
     },
     MacroDef {
         id: "lfo4.fade",
@@ -740,6 +803,15 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 4000.0,
         unit: "ms",
+    },
+    MacroDef {
+        id: "lfo4.dest",
+        name: "Dest",
+        group: "LFO 4",
+        default: 0.0,
+        min: 0.0,
+        max: 6.0,
+        unit: "dest",
     },
     // ── Tone / Vibrato / Ambience / Effects (per module) ─────────────────
     MacroDef {
@@ -884,7 +956,7 @@ const MACROS: &[MacroDef] = &[
         default: 3.0,
         min: 0.0,
         max: 7.0,
-        unit: "",
+        unit: "div",
     },
     MacroDef {
         id: "dly.time",
@@ -1867,27 +1939,22 @@ impl KeysRigBackend {
     /// Mod Env. They reach sound on a lane hosting an Omnisphere patch (its
     /// routes are the destinations); a keys module has none.
     fn macro_is_mod(id: &str) -> bool {
-        let lfo = id.strip_prefix("lfo").is_some_and(|rest| {
-            matches!(
-                rest,
-                "1.rate"
-                    | "1.depth"
-                    | "1.shape"
-                    | "2.rate"
-                    | "2.depth"
-                    | "2.shape"
-                    | "3.rate"
-                    | "3.depth"
-                    | "3.shape"
-                    | "4.rate"
-                    | "4.depth"
-                    | "4.shape"
-            )
-        });
-        lfo || matches!(
-            id,
-            "env3.attack" | "env3.decay" | "env3.sustain" | "env3.release"
-        )
+        ["lfo1.", "lfo2.", "lfo3.", "lfo4.", "env3.", "env4."]
+            .iter()
+            .any(|p| id.starts_with(p))
+    }
+
+    /// The modulator knobs an imported patch honours: its own LFOs' rate,
+    /// depth, shape and fade, and its Mod Env's times. Destinations, the
+    /// Mod Env depth and the second Mod Env are a keys module's — an imported
+    /// patch routes its modulators itself.
+    fn mod_reaches_import(id: &str) -> bool {
+        let lfo = ["lfo1.", "lfo2.", "lfo3.", "lfo4."]
+            .iter()
+            .any(|p| id.starts_with(p))
+            && !id.ends_with(".dest");
+        let env = id.starts_with("env3.") && !matches!(id, "env3.depth" | "env3.dest");
+        lfo || env
     }
 
     /// Knobs whose change builds a new effect engine (a reverb's algorithm
@@ -1904,12 +1971,15 @@ impl KeysRigBackend {
             || id.starts_with("vib.")
             || id.starts_with("tone.")
             || id.starts_with("amb.")
-            // The delay's note division needs a tempo the rig has none of.
-            || (id.starts_with("dly.") && id != "dly.div")
+            || id.starts_with("dly.")
             || matches!(id, "fx.chorus" | "fx.delay" | "fx.width")
             || matches!(
                 id,
-                "source.unison" | "source.detune" | "source.pan" | "source.transpose" | "source.fine"
+                "source.unison"
+                    | "source.detune"
+                    | "source.pan"
+                    | "source.transpose"
+                    | "source.fine"
             )
     }
 
@@ -1965,8 +2035,16 @@ impl KeysRigBackend {
                 render.set_env(module, "Amp Env", adsr(set.amp_env));
                 render.set_env(module, "Filter Env", adsr(set.filter_env));
                 render.set_env(module, "Mod Env", adsr(set.mod_env));
-                // The part's LFOs (an imported patch's; shared by its layers,
-                // so addressed by the lane) and their routes' depth.
+                render.set_env(module, "Mod Env 2", adsr(set.mod_env2));
+                for (i, name) in ["Mod Env", "Mod Env 2"].into_iter().enumerate() {
+                    let (d, h) = set.mod_env_dh[i];
+                    render.set_env_timing(module, name, d.max(0.0) / 1000.0, h.max(0.0) / 1000.0);
+                }
+                // An imported patch's LFOs are part-level (addressed by the
+                // lane, their routes the patch's); a keys module's are its
+                // own, routed to the destinations picked.
+                let imported = module.starts_with("Layer ");
+                let lfo_scope = if imported { layer } else { module.as_str() };
                 for (n, &(rate, depth, wave)) in set.lfos.iter().enumerate() {
                     let name = format!("LFO {}", n + 1);
                     let wave = match wave.round() as u32 {
@@ -1976,8 +2054,33 @@ impl KeysRigBackend {
                         4 => signal_sampler::native::LfoWave::SampleHold,
                         _ => signal_sampler::native::LfoWave::Sine,
                     };
-                    render.set_lfo(layer, &name, rate, Some(wave));
-                    render.set_source_depth(layer, &name, depth);
+                    let fade = Some(set.lfo_fade_ms[n].max(0.0) / 1000.0);
+                    render.set_lfo(lfo_scope, &name, rate, Some(wave), fade);
+                    if imported {
+                        render.set_source_depth(layer, &name, depth);
+                    }
+                }
+                if !imported {
+                    // The routes the picked destinations need, against the
+                    // routes the tree has: a different set is a rebuild; the
+                    // same set takes its depths live.
+                    let want = set.mod_routes();
+                    for source in ["LFO 1", "LFO 2", "LFO 3", "LFO 4", "Mod Env", "Mod Env 2"] {
+                        let mut have = render.routes_from(module, source);
+                        have.sort();
+                        let mut need: Vec<(String, String)> = want
+                            .iter()
+                            .filter(|r| r.source == source)
+                            .map(|r| (r.leaf.to_lowercase(), r.param.to_lowercase()))
+                            .collect();
+                        need.sort();
+                        if have != need {
+                            rebuild = true;
+                        }
+                    }
+                    for r in &want {
+                        render.set_route_depth(module, &r.source, r.leaf, r.param, r.depth);
+                    }
                 }
                 let routed = render.set_route_depth(
                     module,
@@ -2314,7 +2417,52 @@ impl KeysRigBackend {
             }),
         };
         backend.spawn_meter_pump("keys-meter-pump");
+        backend.spawn_tempo_watch();
         backend
+    }
+
+    /// Follow the band's tempo (`signal_rig_host::tempo`, the guitar rig's
+    /// tap): when it changes, every module with a synced delay takes the new
+    /// time, live.
+    fn spawn_tempo_watch(&self) {
+        let weak = Arc::downgrade(&self.inner);
+        let _ = std::thread::Builder::new()
+            .name("keys-tempo-watch".into())
+            .spawn(move || {
+                let mut seen = signal_rig_host::tempo::generation();
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    let Some(inner) = weak.upgrade() else { return };
+                    let now = signal_rig_host::tempo::generation();
+                    if now == seen {
+                        continue;
+                    }
+                    seen = now;
+                    let b = Self { inner };
+                    let targets: Vec<(String, usize)> = b
+                        .inner
+                        .state
+                        .lock()
+                        .map(|s| {
+                            s.lanes
+                                .iter()
+                                .flat_map(|(name, lane)| {
+                                    (0..lane.modules.len()).filter_map(move |i| {
+                                        let synced = lane.modules[i]
+                                            .macros
+                                            .get("dly.div")
+                                            .is_some_and(|d| *d >= 0.5);
+                                        synced.then(|| (name.clone(), i))
+                                    })
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    for (lane, i) in targets {
+                        b.push_module_dsp(&lane, i);
+                    }
+                }
+            });
     }
 
     fn program_for(&self, index: usize) -> Option<Container> {
@@ -2608,10 +2756,21 @@ impl KeysRigBackend {
         };
         // The Effects page's Delay amount and the Delay section's mix are
         // one send: whichever is higher.
+        // A note division (1..7) follows the band's tempo when there is one;
+        // 0, or no tempo yet, is the free time in ms.
+        const DIVS: [f32; 7] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 4.0];
+        let div = v("dly.div").round() as usize;
+        let time_ms = match (
+            div.checked_sub(1).and_then(|i| DIVS.get(i)),
+            signal_rig_host::tempo::get(),
+        ) {
+            (Some(factor), Some(bpm)) => 60_000.0 / bpm * factor,
+            _ => v("dly.time"),
+        };
         set.delay = signal_synth::engine::DelaySettings {
             on: fx_on && v("dly.bypass") < 0.5,
             style: v("dly.algo"),
-            time_ms: v("dly.time"),
+            time_ms,
             feedback: v("dly.feedback"),
             mix: v("dly.mix").max(v("fx.delay")),
         };
@@ -2625,6 +2784,23 @@ impl KeysRigBackend {
             v("env3.sustain"),
             v("env3.release"),
         );
+        set.mod_env2 = (
+            v("env4.attack"),
+            v("env4.decay"),
+            v("env4.sustain"),
+            v("env4.release"),
+        );
+        for (i, e) in ["env3", "env4"].into_iter().enumerate() {
+            set.mod_env_dh[i] = (v(&format!("{e}.delay")), v(&format!("{e}.hold")));
+            set.mod_env_depth[i] = v(&format!("{e}.depth"));
+            set.mod_env_dest[i] =
+                signal_synth::engine::ModDest::from_value(v(&format!("{e}.dest")));
+        }
+        for n in 0..4 {
+            set.lfo_fade_ms[n] = v(&format!("lfo{}.fade", n + 1));
+            set.lfo_dest[n] =
+                signal_synth::engine::ModDest::from_value(v(&format!("lfo{}.dest", n + 1)));
+        }
         set
     }
 
@@ -3810,7 +3986,8 @@ impl KeysRigSvc for KeysRigBackend {
                 // level fader), not by a hand-kept flag that drifted.
                 live: (Self::macro_is_dsp(def.id)
                     || def.id == "source.level"
-                    || (Self::macro_is_mod(def.id) && lane.omni_seed.is_some()))
+                    || (Self::macro_is_mod(def.id)
+                        && (lane.omni_seed.is_none() || Self::mod_reaches_import(def.id))))
                     && here.is_some_and(|m| !m.patch.is_empty()),
                 bipolar: false,
                 spread: String::new(),

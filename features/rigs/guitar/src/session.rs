@@ -2169,6 +2169,7 @@ impl GuitarRigBackend {
         *self.part_index.lock_ok() = (st.part_index as usize).min(parts.saturating_sub(1));
         if st.tempo_bpm > 0.0 {
             *self.tempo.lock_ok() = Some(st.tempo_bpm.clamp(40.0, 300.0));
+            signal_rig_host::tempo::set(st.tempo_bpm.clamp(40.0, 300.0));
         }
         if !st.active_patch.is_empty() {
             // Recorded whether or not an engine exists: design mode reads it
@@ -3458,6 +3459,7 @@ impl GuitarRigBackend {
         };
         *self.part_index.lock_ok() = 0;
         *self.tempo.lock_ok() = Some(bpm as f32);
+        signal_rig_host::tempo::set(bpm as f32);
         self.mark_state_dirty();
         let (profile, start_part, defaults, start_patch) = self
             .songs_lib
@@ -6859,6 +6861,7 @@ impl Rig for GuitarRigBackend {
         };
         if let Some(bpm) = new_tempo {
             *self.tempo.lock_ok() = Some(bpm);
+            signal_rig_host::tempo::set(bpm);
             self.mark_state_dirty();
             self.apply_tempo_to_delays();
             self.events.publish(RigEvent::Perf(Rig::perf(self)));

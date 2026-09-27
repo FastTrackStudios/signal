@@ -138,6 +138,8 @@ fn declared(block_type: BlockType, param: &str) -> Option<ParameterRange> {
             // range needs a positive minimum. Declaring log here would fall
             // back to linear anyway and leave the taper field lying about it.
             "attack" | "decay" | "release" => Some(seconds(10.0)),
+            // A Mod Env's delay before its attack and hold at the top.
+            "delay" | "hold" => Some(seconds(10.0)),
             "sustain" => Some(unit_interval),
             _ => None,
         },
@@ -147,6 +149,8 @@ fn declared(block_type: BlockType, param: &str) -> Option<ParameterRange> {
             "wave" => Some(steps(5, 4.0)),
             "sync_beats" => Some(ParameterRange::linear(0.0, 16.0, Unit::Beats)),
             "retrigger" => Some(steps(2, 1.0)),
+            // Fade-in after each note (seconds).
+            "fade" => Some(seconds(10.0)),
             _ => None,
         },
         BlockType::Arpeggiator => match param {

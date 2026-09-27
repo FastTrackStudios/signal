@@ -42,6 +42,9 @@ pub struct ControlLfo {
     phase: f32,
     held: f32,
     rng: u32,
+    /// Fade-in after each note-on (seconds; 0 = none) and where it is.
+    pub fade_s: f32,
+    fade: f32,
 }
 
 impl ControlLfo {
@@ -56,6 +59,8 @@ impl ControlLfo {
             phase: 0.0,
             held: 0.0,
             rng: 0x02F6_E2B1,
+            fade_s: 0.0,
+            fade: 1.0,
         }
     }
 
@@ -117,6 +122,13 @@ impl ControlLfo {
 pub struct ControlEnv {
     env: Adsr,
     held: u32,
+    /// Delay before the attack and hold at the top (seconds), and the
+    /// frames each has left.
+    delay_s: f32,
+    hold_s: f32,
+    delay_left: u32,
+    hold_left: u32,
+    sample_rate: f32,
 }
 
 impl ControlEnv {
@@ -125,7 +137,24 @@ impl ControlEnv {
         Self {
             env: Adsr::new(sample_rate, params),
             held: 0,
+            delay_s: 0.0,
+            hold_s: 0.0,
+            delay_left: 0,
+            hold_left: 0,
+            sample_rate: sample_rate.max(1.0),
         }
+    }
+
+    /// Delay before the attack and hold at full level after it (seconds).
+    #[must_use]
+    pub fn with_delay_hold(mut self, delay_s: f32, hold_s: f32) -> Self {
+        self.delay_s = delay_s.max(0.0);
+        self.hold_s = hold_s.max(0.0);
+        self
+    }
+
+    fn frames(&self, secs: f32) -> u32 {
+        (secs * self.sample_rate) as u32
     }
 
     fn advance(&mut self, events: &PluginEvents<'_>, frames: usize) -> f32 {
@@ -134,11 +163,17 @@ impl ControlEnv {
             match &ev.message {
                 MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0 => {
                     self.held += 1;
-                    self.env.note_on();
+                    self.hold_left = self.frames(self.hold_s);
+                    self.delay_left = self.frames(self.delay_s);
+                    if self.delay_left == 0 {
+                        self.env.note_on();
+                    }
                 }
                 MidiEvent::NoteOn { .. } | MidiEvent::NoteOff { .. } => {
                     self.held = self.held.saturating_sub(1);
                     if self.held == 0 {
+                        self.delay_left = 0;
+                        self.hold_left = 0;
                         self.env.note_off();
                     }
                 }
@@ -148,7 +183,20 @@ impl ControlEnv {
         // Advance through the block; block-rate consumers take the end value.
         let mut v = 0.0;
         for _ in 0..frames {
-            v = self.env.tick();
+            if self.delay_left > 0 {
+                // Waiting out the delay: the envelope has not started.
+                self.delay_left -= 1;
+                if self.delay_left == 0 {
+                    self.env.note_on();
+                }
+                v = self.env.tick();
+            } else if self.hold_left > 0 && !self.env.in_attack() && self.held > 0 {
+                // At the top: hold at full level before the decay.
+                self.hold_left -= 1;
+                v = 1.0;
+            } else {
+                v = self.env.tick();
+            }
         }
         v
     }
@@ -202,7 +250,12 @@ pub trait ControlSource: Send {
     fn set_sample_rate(&mut self, _sample_rate: f32) {}
     /// Live-update an LFO's rate (and wave, when given); `false` for a
     /// source that is not an LFO.
-    fn set_lfo(&mut self, _rate_hz: f32, _wave: Option<LfoWave>) -> bool {
+    fn set_lfo(&mut self, _rate_hz: f32, _wave: Option<LfoWave>, _fade_s: Option<f32>) -> bool {
+        false
+    }
+    /// Live-update an envelope's delay and hold (seconds); `false` for a
+    /// source that is not an envelope.
+    fn set_env_timing(&mut self, _delay_s: f32, _hold_s: f32) -> bool {
         false
     }
     /// Advance through one block; returns the source's current value.
@@ -211,10 +264,13 @@ pub trait ControlSource: Send {
 }
 
 impl ControlSource for ControlLfo {
-    fn set_lfo(&mut self, rate_hz: f32, wave: Option<LfoWave>) -> bool {
+    fn set_lfo(&mut self, rate_hz: f32, wave: Option<LfoWave>, fade_s: Option<f32>) -> bool {
         self.rate_hz = rate_hz.max(0.0);
         if let Some(w) = wave {
             self.wave = w;
+        }
+        if let Some(f) = fade_s {
+            self.fade_s = f.max(0.0);
         }
         true
     }
@@ -224,18 +280,27 @@ impl ControlSource for ControlLfo {
     }
 
     fn tick(&mut self, events: &PluginEvents<'_>, frames: usize, tempo_bpm: f32) -> f32 {
-        if self.retrigger
-            && events.midi.iter().any(|ev| {
-                matches!(
-                    &ev.message,
-                    midicore::MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0
-                )
-            })
-        {
-            self.reset();
+        let note_on = events.midi.iter().any(|ev| {
+            matches!(
+                &ev.message,
+                midicore::MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0
+            )
+        });
+        if note_on {
+            if self.retrigger {
+                self.reset();
+            }
+            // The fade starts over with each note.
+            self.fade = 0.0;
         }
         let sr = self.sample_rate;
-        self.advance(frames, sr, tempo_bpm)
+        let v = self.advance(frames, sr, tempo_bpm);
+        if self.fade_s > 0.0 {
+            self.fade = (self.fade + frames as f32 / (self.fade_s * sr.max(1.0))).min(1.0);
+            v * self.fade
+        } else {
+            v
+        }
     }
 }
 
@@ -247,6 +312,13 @@ impl ControlSource for ControlEnv {
 
     fn set_sample_rate(&mut self, sample_rate: f32) {
         self.env.set_sample_rate(sample_rate);
+        self.sample_rate = sample_rate.max(1.0);
+    }
+
+    fn set_env_timing(&mut self, delay_s: f32, hold_s: f32) -> bool {
+        self.delay_s = delay_s.max(0.0);
+        self.hold_s = hold_s.max(0.0);
+        true
     }
 
     fn tick(&mut self, events: &PluginEvents<'_>, frames: usize, _tempo_bpm: f32) -> f32 {
@@ -354,8 +426,13 @@ impl ModSource {
     }
 
     /// Live-update this source's rate and wave when it is an LFO.
-    pub fn set_lfo(&mut self, rate_hz: f32, wave: Option<LfoWave>) -> bool {
-        self.0.set_lfo(rate_hz, wave)
+    pub fn set_lfo(&mut self, rate_hz: f32, wave: Option<LfoWave>, fade_s: Option<f32>) -> bool {
+        self.0.set_lfo(rate_hz, wave, fade_s)
+    }
+
+    /// Live-update this source's delay and hold when it is an envelope.
+    pub fn set_env_timing(&mut self, delay_s: f32, hold_s: f32) -> bool {
+        self.0.set_env_timing(delay_s, hold_s)
     }
 
     #[must_use]
@@ -470,6 +547,47 @@ mod tests {
             hi = hi.max(v);
         }
         assert!(hi > 0.9 && lo < -0.9, "full bipolar swing, got {lo}..{hi}");
+    }
+
+    #[test]
+    fn env_delay_and_hold_and_lfo_fade() {
+        let on = [PluginMidiEvent {
+            offset: 0,
+            message: ev_note_on(60, 100),
+        }];
+        let ev_on = PluginEvents {
+            params: &[],
+            midi: &on,
+            note_expressions: &[],
+        };
+        // 100 ms delay, 3 ms attack, 200 ms hold, then a 50 ms decay to 0.2.
+        let params = crate::native::AdsrParams {
+            attack_s: 0.003,
+            decay_s: 0.05,
+            sustain: 0.2,
+            release_s: 0.1,
+        };
+        let mut env = ModSource::env(
+            ControlEnv::new(48_000.0, params).with_delay_hold(0.1, 0.2),
+            48_000.0,
+        );
+        assert!(env.tick(&ev_on, 2_400) < 1e-6, "silent through the delay");
+        let _ = env.tick(&no_events(), 2_880); // past the delay + attack
+        assert!(env.tick(&no_events(), 4_800) > 0.999, "held at the top");
+        let _ = env.tick(&no_events(), 9_600); // hold over, decaying
+        assert!(
+            env.tick(&no_events(), 9_600) < 0.25,
+            "decays after the hold"
+        );
+
+        // An LFO with a 1 s fade starts near silent after a note.
+        let mut lfo = ControlLfo::new(LfoWave::Square, 2.0);
+        lfo.fade_s = 1.0;
+        let mut lfo = ModSource::lfo(lfo, 48_000.0);
+        let early = lfo.tick(&ev_on, 480).abs();
+        let _ = lfo.tick(&no_events(), 48_000);
+        let late = lfo.tick(&no_events(), 480).abs();
+        assert!(early < 0.05 && late > 0.95, "fade: {early} -> {late}");
     }
 
     #[test]

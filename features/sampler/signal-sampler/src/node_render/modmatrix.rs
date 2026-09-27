@@ -170,13 +170,50 @@ impl ModEngine {
         name: &str,
         rate_hz: f32,
         wave: Option<crate::native::LfoWave>,
+        fade_s: Option<f32>,
     ) -> bool {
         let module = module.to_lowercase();
         let name = name.to_lowercase();
         let mut hit = false;
         for (i, (path, source_name)) in self.source_paths.iter().enumerate() {
             if *source_name == name && path.contains(&module) {
-                hit |= self.sources[i].set_lfo(rate_hz, wave);
+                hit |= self.sources[i].set_lfo(rate_hz, wave, fade_s);
+            }
+        }
+        hit
+    }
+
+    /// The routes from source `name` (in `module`) as `(leaf name, param
+    /// name)`, lower-cased — what a rebuild check compares against.
+    pub fn routes_from(&self, module: &str, name: &str) -> Vec<(String, String)> {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        self.routes
+            .iter()
+            .filter(|r| {
+                let (path, source_name) = &self.source_paths[r.source];
+                *source_name == name && path.contains(&module)
+            })
+            .filter_map(|r| {
+                let leaf = self.leaf_names.get(r.leaf)?.to_lowercase();
+                let param = self
+                    .leaf_params
+                    .get(r.leaf)?
+                    .iter()
+                    .find(|p| p.id == r.param)?;
+                Some((leaf, param.name.to_lowercase()))
+            })
+            .collect()
+    }
+
+    /// Live-update an envelope source's delay and hold (seconds).
+    pub fn set_env_timing(&mut self, module: &str, name: &str, delay_s: f32, hold_s: f32) -> bool {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        let mut hit = false;
+        for (i, (path, source_name)) in self.source_paths.iter().enumerate() {
+            if *source_name == name && path.contains(&module) {
+                hit |= self.sources[i].set_env_timing(delay_s, hold_s);
             }
         }
         hit
@@ -391,6 +428,7 @@ impl ModCompiler {
                 if block.param_f32("retrigger").unwrap_or(0.0) > 0.0 {
                     lfo = lfo.with_retrigger(true);
                 }
+                lfo.fade_s = block.param_f32("fade").unwrap_or(0.0).max(0.0);
                 ModSource::lfo(lfo, sr)
             }
             BlockType::Envelope | BlockType::MultisegEnvelope => {
@@ -407,7 +445,11 @@ impl ModCompiler {
                 if let Some(v) = block.param_f32("release") {
                     p.release_s = v.max(0.0);
                 }
-                ModSource::env(ControlEnv::new(sr, p), sr)
+                let (delay, hold) = (
+                    block.param_f32("delay").unwrap_or(0.0),
+                    block.param_f32("hold").unwrap_or(0.0),
+                );
+                ModSource::env(ControlEnv::new(sr, p).with_delay_hold(delay, hold), sr)
             }
             _ => return None,
         };

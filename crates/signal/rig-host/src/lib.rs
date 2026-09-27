@@ -66,6 +66,7 @@ pub mod midi;
 pub mod midi_hub;
 pub mod mixer;
 pub mod store;
+pub mod tempo;
 
 /// A realtime engine the host can run on.
 ///

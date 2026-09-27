@@ -141,6 +141,54 @@ pub struct ModuleSettings {
     pub lfos: [(f32, f32, f32); 4],
     /// The Mod Env's `(attack_ms, decay_ms, sustain, release_ms)`.
     pub mod_env: (f32, f32, f32, f32),
+    /// Each LFO's fade-in (ms) and destination (see [`ModDest`]).
+    pub lfo_fade_ms: [f32; 4],
+    pub lfo_dest: [ModDest; 4],
+    /// Both Mod Envs' delay and hold (ms), depth −1..1 and destination; the
+    /// second's ADSR.
+    pub mod_env_dh: [(f32, f32); 2],
+    pub mod_env_depth: [f32; 2],
+    pub mod_env_dest: [ModDest; 2],
+    pub mod_env2: (f32, f32, f32, f32),
+}
+
+/// Where a keys module's LFO or Mod Env goes (the destination picker).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ModDest {
+    #[default]
+    Off,
+    Pitch,
+    Cutoff,
+    Resonance,
+    Level,
+    Pan,
+    Width,
+}
+
+impl ModDest {
+    /// From the picker's 0..6 value.
+    #[must_use]
+    pub fn from_value(v: f32) -> Self {
+        match v.round() as i32 {
+            1 => Self::Pitch,
+            2 => Self::Cutoff,
+            3 => Self::Resonance,
+            4 => Self::Level,
+            5 => Self::Pan,
+            6 => Self::Width,
+            _ => Self::Off,
+        }
+    }
+}
+
+/// One modulation route of a keys module: source, target leaf, target
+/// param, depth (normalized, as the mod matrix takes it).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModuleRoute {
+    pub source: String,
+    pub leaf: &'static str,
+    pub param: &'static str,
+    pub depth: f32,
 }
 
 /// The module's reverb (its "Ambience").
@@ -234,6 +282,12 @@ impl Default for ModuleSettings {
             // The mod engine's own envelope default: an untouched Mod Env
             // re-applies as exactly what the tree compiles.
             mod_env: (3.0, 250.0, 0.8, 150.0),
+            lfo_fade_ms: [0.0; 4],
+            lfo_dest: [ModDest::Off; 4],
+            mod_env_dh: [(0.0, 0.0); 2],
+            mod_env_depth: [0.0; 2],
+            mod_env_dest: [ModDest::Off; 2],
+            mod_env2: (3.0, 250.0, 0.8, 150.0),
         }
     }
 }
@@ -347,6 +401,64 @@ impl ModuleSettings {
                 .with_param("fine", format!("{:.3}", self.fine));
         }
         block
+    }
+
+    /// The module's modulation routes for its picked destinations: LFOs
+    /// (bipolar) at up to ±2 semitones / ±2 octaves / half a parameter's
+    /// range, Mod Envs (unipolar, depth −1..1) at up to 12 semitones / 4
+    /// octaves. A route exists whenever a destination is picked — depth 0
+    /// included — so its depth can move live.
+    #[must_use]
+    pub fn mod_routes(&self) -> Vec<ModuleRoute> {
+        let sampler = matches!(self.source, Source::Sample(_));
+        let synth = matches!(self.source, Source::Synth);
+        let target = |dest: ModDest, env: bool| -> Option<(&'static str, &'static str, f32)> {
+            Some(match dest {
+                ModDest::Off => return None,
+                ModDest::Pitch if sampler => (
+                    "Soundsource",
+                    "pitch_mod",
+                    if env { 12.0 / 24.0 } else { 2.0 / 24.0 },
+                ),
+                ModDest::Pitch => (
+                    "Soundsource",
+                    "tune",
+                    if env { 12.0 / 48.0 } else { 2.0 / 48.0 },
+                ),
+                ModDest::Cutoff if sampler && self.voice_filter_on() => {
+                    ("Soundsource", "cutoff_mod", if env { 0.5 } else { 0.25 })
+                }
+                ModDest::Cutoff if synth => ("Soundsource", "cutoff", if env { 0.4 } else { 0.2 }),
+                ModDest::Cutoff => ("Filter 1", "cutoff", if env { 0.4 } else { 0.2 }),
+                ModDest::Resonance if synth => ("Soundsource", "resonance", 0.5),
+                ModDest::Resonance => ("Filter 1", "resonance", 0.5),
+                ModDest::Level => ("Amp", "gain", 0.5),
+                ModDest::Pan => ("Amp", "pan", 0.5),
+                ModDest::Width => ("Amp", "width", 0.5),
+            })
+        };
+        let mut out = Vec::new();
+        for (i, dest) in self.lfo_dest.iter().enumerate() {
+            if let Some((leaf, param, scale)) = target(*dest, false) {
+                out.push(ModuleRoute {
+                    source: format!("LFO {}", i + 1),
+                    leaf,
+                    param,
+                    depth: self.lfos[i].1.clamp(0.0, 1.0) * scale,
+                });
+            }
+        }
+        for (i, name) in ["Mod Env", "Mod Env 2"].into_iter().enumerate() {
+            if let Some((leaf, param, scale)) = target(self.mod_env_dest[i], true) {
+                out.push(ModuleRoute {
+                    source: name.to_string(),
+                    leaf,
+                    param,
+                    depth: self.mod_env_depth[i].clamp(-1.0, 1.0) * scale,
+                });
+            }
+        }
+        out
     }
 
     /// The Wavetable's tune param (0.5 centre, ±24 semitones).
@@ -495,14 +607,56 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
         // envelopes.
         // Unity for every source: the voice's own amp envelope shapes the
         // level; the Amp carries pan, width and tone.
-        .add(Container::module("Amp").add(set.amp_block()))
+        // "Amp Stage", not "Amp": a route naming "Amp" must find the block,
+        // and a container of the same name took the match.
+        .add(Container::module("Amp Stage").add(set.amp_block()))
         .add(module_fx(set))
         // Each module routes to the Part's aux rack independently (rigs
         // without an Aux Rack container simply drop the send).
         .send(AUX_RACK, "To Aux")
         .modulator_block(envelope("Amp Env", set.amp_env))
         .modulator_block(envelope("Filter Env", set.filter_env))
-        .modulator(BlockType::MultisegEnvelope, "Mod Env")
+        .modulator_block(mod_env("Mod Env", set.mod_env, set.mod_env_dh[0]))
+        .modulator_block(mod_env("Mod Env 2", set.mod_env2, set.mod_env_dh[1]))
+        .with_lfos(set)
+}
+
+/// A Mod Env: an envelope with delay and hold (ms).
+fn mod_env(name: &str, adsr: (f32, f32, f32, f32), (delay, hold): (f32, f32)) -> RigBlock {
+    envelope(name, adsr)
+        .with_param("delay", format!("{:.4}", delay.max(0.0) / 1000.0))
+        .with_param("hold", format!("{:.4}", hold.max(0.0) / 1000.0))
+}
+
+/// A keys module's LFOs (those with a destination) and every picked
+/// destination's route.
+trait WithLfos {
+    fn with_lfos(self, set: &ModuleSettings) -> Self;
+}
+
+impl WithLfos for Container {
+    fn with_lfos(self, set: &ModuleSettings) -> Self {
+        let mut module = self;
+        for (i, &(rate, _, wave)) in set.lfos.iter().enumerate() {
+            if set.lfo_dest[i] == ModDest::Off {
+                continue;
+            }
+            module = module.modulator_block(
+                RigBlock::of_type(BlockType::Lfo)
+                    .named(format!("LFO {}", i + 1))
+                    .with_param("rate", format!("{:.4}", rate.clamp(0.01, 40.0)))
+                    .with_param("wave", format!("{}", wave.round().clamp(0.0, 4.0) as u32))
+                    .with_param(
+                        "fade",
+                        format!("{:.4}", set.lfo_fade_ms[i].max(0.0) / 1000.0),
+                    ),
+            );
+        }
+        for r in set.mod_routes() {
+            module = module.route(r.source, format!("{}.{}", r.leaf, r.param), r.depth);
+        }
+        module
+    }
 }
 
 /// Attach the module's envelope routes — but only where a module-level
@@ -678,6 +832,8 @@ pub fn apply_settings_to_omni_layer(
             format!("{:.4}", set.mod_env.2.clamp(0.0, 1.0)),
         );
         put(me, "release", secs(set.mod_env.3));
+        put(me, "delay", secs(set.mod_env_dh[0].0));
+        put(me, "hold", secs(set.mod_env_dh[0].1));
     }
     if let Some(fe) = layer
         .modulators
@@ -903,6 +1059,25 @@ pub fn apply_lfos_to_omni(tree: &mut Container, lfos: &[(f32, f32, f32); 4]) {
     }
 }
 
+/// The part LFOs' fade-in times (ms) onto an imported patch's tree.
+pub fn apply_lfo_fades_to_omni(tree: &mut Container, fades_ms: &[f32; 4]) {
+    for (i, fade) in fades_ms.iter().enumerate() {
+        let name = format!("LFO {}", i + 1);
+        for m in &mut tree.modulators {
+            if m.display_name() == name {
+                let v = format!("{:.4}", fade.max(0.0) / 1000.0);
+                match m.params.iter_mut().find(|p| p.name == "fade") {
+                    Some(p) => p.value = v,
+                    None => m.params.push(signal_sampler::rig_node::Param {
+                        name: "fade".to_string(),
+                        value: v,
+                    }),
+                }
+            }
+        }
+    }
+}
+
 /// An Omnisphere patch file's LFOs 1–4 as `(rate_hz, depth, wave)` — the
 /// values a lane hosting the patch seeds its LFO knobs from.
 ///
@@ -1013,6 +1188,43 @@ fn import_rest(patch: &crate::omni_import::OmniPatch) -> ImportedPatch {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_picked_destination_builds_its_lfo_and_route_off_builds_none() {
+        use signal_sampler::node_render::RenderNode;
+        let compile = |set: &ModuleSettings| {
+            let m = signal_module_with("Keys A", set);
+            let mut rn = RenderNode::compile(&Container::preset("p").add(m), 48_000);
+            rn.prepare(48_000.0, 128);
+            rn
+        };
+        let mut set = ModuleSettings::from_source(Source::Synth);
+        let mut rn = compile(&set);
+        assert!(rn.routes_from("Keys A", "LFO 1").is_empty());
+
+        set.lfo_dest[0] = ModDest::Level;
+        set.lfos[0].1 = 0.5;
+        set.mod_env_dest[1] = ModDest::Pan;
+        set.mod_env_depth[1] = -0.5;
+        let mut rn = compile(&set);
+        assert_eq!(
+            rn.routes_from("Keys A", "LFO 1"),
+            vec![("amp".into(), "gain".into())]
+        );
+        assert_eq!(
+            rn.routes_from("Keys A", "Mod Env 2"),
+            vec![("amp".into(), "pan".into())]
+        );
+        // Its rate, wave and fade go live.
+        assert!(rn.set_lfo(
+            "Keys A",
+            "LFO 1",
+            3.0,
+            Some(signal_sampler::native::LfoWave::Saw),
+            Some(0.2)
+        ));
+        assert!(rn.set_route_depth("Keys A", "LFO 1", "Amp", "gain", 0.1));
+    }
 
     #[test]
     fn effects_are_in_the_chain_only_when_on_and_take_live_writes() {
@@ -1143,7 +1355,7 @@ mod tests {
             let sources = m.find("Source").expect("source module");
             assert_eq!(sources.blocks().len(), 1, "exactly one Source Block");
             assert_eq!(m.find("Filters").expect("filters").blocks().len(), 2);
-            assert!(m.find("Amp").is_some());
+            assert!(m.find("Amp Stage").is_some());
             assert_eq!(m.find("FX").expect("rack").blocks().len(), 4);
         }
     }

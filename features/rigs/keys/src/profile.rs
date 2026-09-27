@@ -595,10 +595,9 @@ impl KeysProfile {
                     );
                 }
                 // The part's LFOs (shared by its layers) from module A's knobs.
-                signal_synth::engine::apply_lfos_to_omni(
-                    &mut tree,
-                    &module_set(&layer.name, 0).lfos,
-                );
+                let part = module_set(&layer.name, 0);
+                signal_synth::engine::apply_lfos_to_omni(&mut tree, &part.lfos);
+                signal_synth::engine::apply_lfo_fades_to_omni(&mut tree, &part.lfo_fade_ms);
                 let mut lane = Container::layer(&layer.name).add(tree);
                 if !layer.is_full_range() {
                     lane = lane.zone(signal_sampler::rig_node::Zone {

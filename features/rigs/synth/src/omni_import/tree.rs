@@ -320,7 +320,9 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                 };
                 filters.add(f1).add(f2)
             })
-            .add(Container::module("Amp").block(BlockType::Amp, "Amp"))
+            // "Amp Stage": a route onto "Amp" (the patch's amp tremolo) must
+            // find the block, not a container of the same name.
+            .add(Container::module("Amp Stage").block(BlockType::Amp, "Amp"))
             .add(fx_rack_from("Layer FX", &layer.fx))
             .send("Aux Rack", "To Aux")
             .modulator(BlockType::Envelope, "Amp Env")

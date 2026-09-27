@@ -101,6 +101,12 @@ impl Adsr {
         self.level = 0.0;
     }
 
+    /// Still rising (the hold stage waits for this to end).
+    #[must_use]
+    pub fn in_attack(&self) -> bool {
+        self.stage == Stage::Attack
+    }
+
     #[must_use]
     pub fn is_idle(&self) -> bool {
         self.stage == Stage::Idle

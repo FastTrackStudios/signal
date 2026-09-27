@@ -638,9 +638,24 @@ impl RenderNode {
         name: &str,
         rate_hz: f32,
         wave: Option<crate::native::LfoWave>,
+        fade_s: Option<f32>,
     ) -> bool {
         self.root_engine()
-            .is_some_and(|e| e.set_lfo(module, name, rate_hz, wave))
+            .is_some_and(|e| e.set_lfo(module, name, rate_hz, wave, fade_s))
+    }
+
+    /// The routes from source `name` in `module`, as lower-cased
+    /// `(leaf, param)` (see `ModEngine::routes_from`).
+    pub fn routes_from(&mut self, module: &str, name: &str) -> Vec<(String, String)> {
+        self.root_engine()
+            .map(|e| e.routes_from(module, name))
+            .unwrap_or_default()
+    }
+
+    /// Live-update an envelope source's delay and hold (seconds).
+    pub fn set_env_timing(&mut self, module: &str, name: &str, delay_s: f32, hold_s: f32) -> bool {
+        self.root_engine()
+            .is_some_and(|e| e.set_env_timing(module, name, delay_s, hold_s))
     }
 
     /// Scale a source's authored routes to `depth` at the deepest (see
