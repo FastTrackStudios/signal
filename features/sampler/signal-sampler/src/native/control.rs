@@ -200,12 +200,25 @@ pub trait ControlSource: Send {
 
     /// Rate change (voices/coefficients survive).
     fn set_sample_rate(&mut self, _sample_rate: f32) {}
+    /// Live-update an LFO's rate (and wave, when given); `false` for a
+    /// source that is not an LFO.
+    fn set_lfo(&mut self, _rate_hz: f32, _wave: Option<LfoWave>) -> bool {
+        false
+    }
     /// Advance through one block; returns the source's current value.
     /// Bipolar sources return −1..+1, unipolar 0..1.
     fn tick(&mut self, events: &PluginEvents<'_>, frames: usize, tempo_bpm: f32) -> f32;
 }
 
 impl ControlSource for ControlLfo {
+    fn set_lfo(&mut self, rate_hz: f32, wave: Option<LfoWave>) -> bool {
+        self.rate_hz = rate_hz.max(0.0);
+        if let Some(w) = wave {
+            self.wave = w;
+        }
+        true
+    }
+
     fn set_sample_rate(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
     }
@@ -338,6 +351,11 @@ impl ModSource {
     /// Live-update this source's ADSR when it is an envelope.
     pub fn set_env_params(&mut self, sample_rate: f32, params: crate::native::AdsrParams) -> bool {
         self.0.set_env_params(sample_rate, params)
+    }
+
+    /// Live-update this source's rate and wave when it is an LFO.
+    pub fn set_lfo(&mut self, rate_hz: f32, wave: Option<LfoWave>) -> bool {
+        self.0.set_lfo(rate_hz, wave)
     }
 
     #[must_use]

@@ -393,6 +393,284 @@ impl PluginInstance for OutputStage {
     }
 }
 
+// ── Scope stage (Tone / Limiter per layer, engine, rig) ─────────────────────
+
+/// Which mixer scope a [`ScopeStage`] serves.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Scope {
+    Rig,
+    Engine(String),
+    Layer(String),
+}
+
+/// One scope's live settings, shared with its stage: Tone low / mid / high
+/// in dB (f32 bits) and the limiter switch.
+#[derive(Debug, Default)]
+pub struct ScopeCells {
+    low_db: std::sync::atomic::AtomicU32,
+    mid_db: std::sync::atomic::AtomicU32,
+    high_db: std::sync::atomic::AtomicU32,
+    limiter: std::sync::atomic::AtomicBool,
+}
+
+impl ScopeCells {
+    fn tone(&self) -> [f32; 3] {
+        use std::sync::atomic::Ordering::Relaxed;
+        [
+            f32::from_bits(self.low_db.load(Relaxed)),
+            f32::from_bits(self.mid_db.load(Relaxed)),
+            f32::from_bits(self.high_db.load(Relaxed)),
+        ]
+    }
+}
+
+/// Every scope's cells, created on first use and kept across rebuilds (a
+/// rebuilt track's new stage picks up the same cells).
+#[derive(Debug, Default, Clone)]
+pub struct Scopes(Arc<std::sync::Mutex<std::collections::BTreeMap<Scope, Arc<ScopeCells>>>>);
+
+impl Scopes {
+    fn cells(&self, scope: &Scope) -> Arc<ScopeCells> {
+        let mut map = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        map.entry(scope.clone()).or_default().clone()
+    }
+}
+
+/// A scope's own stage on its daw track: a three-band Tone (low shelf
+/// 120 Hz, peak 1 kHz, high shelf 8 kHz, ±12 dB) and a peak limiter holding
+/// the scope under −1 dBFS. Flat and off, it passes audio straight through.
+pub struct ScopeStage {
+    cells: Arc<ScopeCells>,
+    sample_rate: f32,
+    /// The gains the filters were last designed for.
+    designed: [f32; 3],
+    bands: [[Biquad; 2]; 3],
+    /// Limiter gain (≤ 1), recovering at `release` per frame.
+    lim_gain: f32,
+    prepared: bool,
+}
+
+/// Limiter ceiling (−1 dBFS) and release time.
+const LIMIT_CEILING: f32 = 0.891;
+const LIMIT_RELEASE_S: f32 = 0.12;
+
+#[derive(Debug, Clone, Copy, Default)]
+struct Biquad {
+    b: [f32; 3],
+    a: [f32; 2],
+    z: [f32; 2],
+}
+
+impl Biquad {
+    /// RBJ cookbook: `kind` 0 low shelf, 1 peak, 2 high shelf.
+    fn design(kind: u8, hz: f32, gain_db: f32, sr: f32) -> Self {
+        let a = 10f32.powf(gain_db / 40.0);
+        let w = std::f32::consts::TAU * hz / sr;
+        let (sn, cs) = w.sin_cos();
+        let (b, den) = match kind {
+            1 => {
+                let alpha = sn / (2.0 * 0.7);
+                (
+                    [1.0 + alpha * a, -2.0 * cs, 1.0 - alpha * a],
+                    [1.0 + alpha / a, -2.0 * cs, 1.0 - alpha / a],
+                )
+            }
+            _ => {
+                let alpha = sn / 2.0 * std::f32::consts::SQRT_2;
+                let sq = 2.0 * a.sqrt() * alpha;
+                if kind == 0 {
+                    (
+                        [
+                            a * ((a + 1.0) - (a - 1.0) * cs + sq),
+                            2.0 * a * ((a - 1.0) - (a + 1.0) * cs),
+                            a * ((a + 1.0) - (a - 1.0) * cs - sq),
+                        ],
+                        [
+                            (a + 1.0) + (a - 1.0) * cs + sq,
+                            -2.0 * ((a - 1.0) + (a + 1.0) * cs),
+                            (a + 1.0) + (a - 1.0) * cs - sq,
+                        ],
+                    )
+                } else {
+                    (
+                        [
+                            a * ((a + 1.0) + (a - 1.0) * cs + sq),
+                            -2.0 * a * ((a - 1.0) + (a + 1.0) * cs),
+                            a * ((a + 1.0) + (a - 1.0) * cs - sq),
+                        ],
+                        [
+                            (a + 1.0) - (a - 1.0) * cs + sq,
+                            2.0 * ((a - 1.0) - (a + 1.0) * cs),
+                            (a + 1.0) - (a - 1.0) * cs - sq,
+                        ],
+                    )
+                }
+            }
+        };
+        Self {
+            b: [b[0] / den[0], b[1] / den[0], b[2] / den[0]],
+            a: [den[1] / den[0], den[2] / den[0]],
+            z: [0.0; 2],
+        }
+    }
+
+    fn retune(&mut self, other: Self) {
+        self.b = other.b;
+        self.a = other.a;
+    }
+
+    #[inline]
+    fn tick(&mut self, x: f32) -> f32 {
+        let y = self.b[0] * x + self.z[0];
+        self.z[0] = self.b[1] * x - self.a[0] * y + self.z[1];
+        self.z[1] = self.b[2] * x - self.a[1] * y;
+        y
+    }
+}
+
+const TONE_BANDS: [(u8, f32); 3] = [(0, 120.0), (1, 1_000.0), (2, 8_000.0)];
+
+impl ScopeStage {
+    #[must_use]
+    pub fn new(cells: Arc<ScopeCells>, sample_rate: f32) -> Self {
+        let sample_rate = sample_rate.max(1.0);
+        let mut stage = Self {
+            cells,
+            sample_rate,
+            designed: [f32::NAN; 3],
+            bands: [[Biquad::default(); 2]; 3],
+            lim_gain: 1.0,
+            prepared: true,
+        };
+        stage.redesign(stage.cells.tone());
+        stage
+    }
+
+    fn redesign(&mut self, tone: [f32; 3]) {
+        for (i, ((kind, hz), db)) in TONE_BANDS.iter().zip(tone).enumerate() {
+            let q = Biquad::design(*kind, *hz, db, self.sample_rate);
+            for ch in &mut self.bands[i] {
+                ch.retune(q);
+            }
+        }
+        self.designed = tone;
+    }
+}
+
+impl KeysRig {
+    /// Set a scope's Tone (dB, ±12) and limiter. Takes effect on the next
+    /// block, and holds across rebuilds.
+    pub fn set_scope(&self, scope: &Scope, low_db: f32, mid_db: f32, high_db: f32, limiter: bool) {
+        use std::sync::atomic::Ordering::Relaxed;
+        let c = self.scopes.cells(scope);
+        c.low_db.store(low_db.clamp(-12.0, 12.0).to_bits(), Relaxed);
+        c.mid_db.store(mid_db.clamp(-12.0, 12.0).to_bits(), Relaxed);
+        c.high_db
+            .store(high_db.clamp(-12.0, 12.0).to_bits(), Relaxed);
+        c.limiter.store(limiter, Relaxed);
+    }
+}
+
+impl PluginInstance for ScopeStage {
+    fn descriptor(&self) -> PluginDescriptor {
+        PluginDescriptor {
+            id: "signal.keys.scope".into(),
+            name: "Keys Scope".into(),
+            vendor: "Signal".into(),
+            version: String::new(),
+            format: PluginFormat::Synthetic,
+        }
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        Vec::new()
+    }
+    fn param_value(&mut self, _id: u32) -> Option<f64> {
+        None
+    }
+    fn value_to_text(&mut self, _id: u32, _v: f64) -> Option<String> {
+        None
+    }
+    fn text_to_value(&mut self, _id: u32, _t: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        0
+    }
+    fn prepare(&mut self, sr: f64, _bs: u32) -> Result<(), PluginError> {
+        self.sample_rate = sr.max(1.0) as f32;
+        self.designed = [f32::NAN; 3];
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        _events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        let n = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
+        let tone = self.cells.tone();
+        let limiter = self
+            .cells
+            .limiter
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let flat = tone.iter().all(|db| db.abs() < 0.01);
+        out_l[..n].copy_from_slice(&in_l[..n]);
+        out_r[..n].copy_from_slice(&in_r[..n]);
+        if !flat {
+            if tone != self.designed {
+                self.redesign(tone);
+            }
+            for (band, db) in self.bands.iter_mut().zip(tone) {
+                if db.abs() < 0.01 {
+                    continue;
+                }
+                let [bl, br] = band;
+                for i in 0..n {
+                    out_l[i] = bl.tick(out_l[i]);
+                    out_r[i] = br.tick(out_r[i]);
+                }
+            }
+        }
+        if limiter {
+            // Instant attack to the ceiling, exponential release.
+            let rel = (-1.0 / (LIMIT_RELEASE_S * self.sample_rate)).exp();
+            for i in 0..n {
+                let peak = out_l[i].abs().max(out_r[i].abs());
+                let need = if peak > LIMIT_CEILING {
+                    LIMIT_CEILING / peak
+                } else {
+                    1.0
+                };
+                self.lim_gain = if need < self.lim_gain {
+                    need
+                } else {
+                    need + (self.lim_gain - need) * rel
+                };
+                out_l[i] *= self.lim_gain;
+                out_r[i] *= self.lim_gain;
+            }
+        } else {
+            self.lim_gain = 1.0;
+        }
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+}
+
 // ── Lane programs (per-layer daw tracks) ────────────────────────────────────
 
 /// One layer's compiled program in lane mode: its own composition subtree
@@ -527,6 +805,10 @@ struct LaneHost {
     tail_fx: Option<String>,
     /// The rig track's last FX slot: the [`OutputStage`].
     out_fx: String,
+    /// The rig track's [`ScopeStage`] slot (before the output stage).
+    scope_fx: String,
+    /// Each engine folder's [`ScopeStage`] slot: `(engine, fx guid)`.
+    engine_scopes: Vec<(String, String)>,
     /// Engine folder tracks: `(name, guid, meter index)`.
     engines: Vec<(String, String, usize)>,
     layers: Vec<LaneTrack>,
@@ -538,6 +820,8 @@ struct LaneTrack {
     name: String,
     guid: String,
     fx: String,
+    /// The layer track's [`ScopeStage`] slot, after the instrument.
+    scope_fx: String,
     meter: usize,
     /// The lane instrument's module fader/peak cells (module mixing stays
     /// in-tree; layer/engine mixing is the daw track).
@@ -583,6 +867,9 @@ pub struct KeysRig {
     /// is a daw fader (the keys track in single mode, the rig folder in lane
     /// mode), so it survives preset swaps for free.
     gain: Arc<std::sync::atomic::AtomicU32>,
+    /// Each scope's Tone / Limiter settings (rig, engines, layers), shared
+    /// with the stages on their tracks; kept across rebuilds.
+    scopes: Scopes,
 }
 
 impl KeysRig {
@@ -613,6 +900,7 @@ impl KeysRig {
         let project = RigProject::new(KEYS_PROJECT_NAME);
         let track_guid = project.add_track(KEYS_TRACK_NAME)?;
         let fx_guid = project.add_fx_slot(&track_guid, "keys")?;
+        let scope_fx = project.add_fx_slot(&track_guid, "keys-scope")?;
         let out_fx = project.add_fx_slot(&track_guid, "keys-out")?;
         let host = project.start_output_native(prefs, KEYS_NODE_NAME)?;
         let sample_rate = host.sample_rate();
@@ -628,6 +916,14 @@ impl KeysRig {
         let _ = inst.prepare(sample_rate as f64, PREPARE_BLOCK);
         daw.insert_plugin_instance(fx_guid.clone(), Box::new(inst));
         daw.insert_plugin_instance(out_fx, Box::new(OutputStage::new(gain.clone())));
+        let scopes = Scopes::default();
+        daw.insert_plugin_instance(
+            scope_fx,
+            Box::new(ScopeStage::new(
+                scopes.cells(&Scope::Rig),
+                sample_rate as f32,
+            )),
+        );
 
         host.play();
         tracing::info!(sample_rate, preset = %tree.name, "keys rig started on daw engine");
@@ -647,6 +943,7 @@ impl KeysRig {
             preset_name: tree.name.clone(),
             midi_monitor: MidiMonitor::default(),
             gain,
+            scopes,
         })
     }
 
@@ -682,6 +979,7 @@ impl KeysRig {
             preset_name: program.name.clone(),
             midi_monitor: MidiMonitor::default(),
             gain,
+            scopes: Scopes::default(),
         };
         rig.install_lane_instruments(program);
         if let Some(host) = &rig._host {
@@ -759,6 +1057,7 @@ impl KeysRig {
             preset_name: program.name.clone(),
             midi_monitor: MidiMonitor::default(),
             gain,
+            scopes: Scopes::default(),
         };
         rig.install_lane_instruments(program);
         tracing::info!(
@@ -819,6 +1118,29 @@ impl KeysRig {
             lanes.out_fx.clone(),
             Box::new(OutputStage::new(self.gain.clone())),
         );
+        let sr = sr as f32;
+        self.daw.insert_plugin_instance(
+            lanes.scope_fx.clone(),
+            Box::new(ScopeStage::new(self.scopes.cells(&Scope::Rig), sr)),
+        );
+        for (engine, fx) in &lanes.engine_scopes {
+            self.daw.insert_plugin_instance(
+                fx.clone(),
+                Box::new(ScopeStage::new(
+                    self.scopes.cells(&Scope::Engine(engine.clone())),
+                    sr,
+                )),
+            );
+        }
+        for t in &lanes.layers {
+            self.daw.insert_plugin_instance(
+                t.scope_fx.clone(),
+                Box::new(ScopeStage::new(
+                    self.scopes.cells(&Scope::Layer(t.name.clone())),
+                    sr,
+                )),
+            );
+        }
     }
 
     /// Re-install ONLY the lane instruments whose tree references
@@ -1470,6 +1792,10 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
         ),
         None => None,
     };
+    let scope_fx = rig
+        .add_fx_slot("keys-scope")
+        .map_err(|e| err("rig scope slot", e))?
+        .into_guid();
     let out_fx = rig
         .add_fx_slot("keys-out")
         .map_err(|e| err("output fx slot", e))?
@@ -1477,11 +1803,18 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
     meter += 1;
 
     let mut engines = Vec::new();
+    let mut engine_scopes = Vec::new();
     let mut layers = Vec::new();
     for engine in &program.engines {
         let eng = tree
             .folder(&engine.name)
             .map_err(|e| err("engine folder", e))?;
+        engine_scopes.push((
+            engine.name.clone(),
+            eng.add_fx_slot("keys-scope")
+                .map_err(|e| err("engine scope slot", e))?
+                .into_guid(),
+        ));
         engines.push((engine.name.clone(), eng.guid().to_string(), meter));
         meter += 1;
         for layer in &engine.layers {
@@ -1490,11 +1823,16 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
                 .add_fx_slot("keys-lane")
                 .map_err(|e| err("lane fx slot", e))?
                 .into_guid();
+            let scope_fx = track
+                .add_fx_slot("keys-scope")
+                .map_err(|e| err("lane scope slot", e))?
+                .into_guid();
             layers.push(LaneTrack {
                 engine: engine.name.clone(),
                 name: layer.name.clone(),
                 guid: track.guid().to_string(),
                 fx,
+                scope_fx,
                 meter,
                 cells: GainCells::default(),
             });
@@ -1507,6 +1845,8 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
     Ok(LaneHost {
         tail_fx,
         out_fx,
+        scope_fx,
+        engine_scopes,
         engines,
         layers,
     })
@@ -1515,6 +1855,39 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_scope_stage_is_transparent_flat_shapes_tone_and_limits() {
+        let sine = |hz: f32, amp: f32| -> Vec<f32> {
+            (0..9_600)
+                .map(|i| (std::f32::consts::TAU * hz * i as f32 / 48_000.0).sin() * amp)
+                .collect()
+        };
+        let rms = |x: &[f32]| (x[4_800..].iter().map(|v| v * v).sum::<f32>() / 4_800.0).sqrt();
+        let run = |stage: &mut ScopeStage, x: &[f32]| {
+            let (mut l, mut r) = (vec![0.0; x.len()], vec![0.0; x.len()]);
+            stage
+                .process_block(x, x, &mut l, &mut r, &PluginEvents::default())
+                .unwrap();
+            l
+        };
+        let scopes = Scopes::default();
+        let cells = scopes.cells(&Scope::Layer("Keys".into()));
+        let mut stage = ScopeStage::new(cells.clone(), 48_000.0);
+        let low = sine(60.0, 0.1);
+        assert_eq!(run(&mut stage, &low), low, "flat and off passes through");
+
+        use std::sync::atomic::Ordering::Relaxed;
+        cells.low_db.store(12.0f32.to_bits(), Relaxed);
+        let boosted = run(&mut stage, &low);
+        assert!(rms(&boosted) > rms(&low) * 3.0, "low shelf +12 dB");
+
+        cells.low_db.store(0.0f32.to_bits(), Relaxed);
+        cells.limiter.store(true, Relaxed);
+        let hot = sine(440.0, 1.5);
+        let limited = run(&mut stage, &hot);
+        assert!(limited.iter().all(|v| v.abs() <= LIMIT_CEILING + 1e-4));
+    }
     use signal_plugin_host::PluginMidiEvent;
 
     #[test]

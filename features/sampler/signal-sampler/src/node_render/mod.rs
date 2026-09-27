@@ -631,6 +631,25 @@ impl RenderNode {
             .is_some_and(|e| e.set_env(module, name, params))
     }
 
+    /// Live-update an LFO source's rate and wave (see `ModEngine::set_lfo`).
+    pub fn set_lfo(
+        &mut self,
+        module: &str,
+        name: &str,
+        rate_hz: f32,
+        wave: Option<crate::native::LfoWave>,
+    ) -> bool {
+        self.root_engine()
+            .is_some_and(|e| e.set_lfo(module, name, rate_hz, wave))
+    }
+
+    /// Scale a source's authored routes to `depth` at the deepest (see
+    /// `ModEngine::set_source_depth`).
+    pub fn set_source_depth(&mut self, module: &str, name: &str, depth: f32) -> bool {
+        self.root_engine()
+            .is_some_and(|e| e.set_source_depth(module, name, depth))
+    }
+
     /// Live-update a modulation route's depth (e.g. Filter Env → cutoff
     /// amount), addressed by module + source + target.
     pub fn set_route_depth(

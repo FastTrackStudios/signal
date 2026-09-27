@@ -116,6 +116,10 @@ pub struct PatchMacros {
 /// One layer definition inside an engine.
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct LayerDef {
+    /// This layer's own mixer settings — Tone, Limiter, FX Bypass (ids
+    /// without the scope prefix).
+    #[facet(default)]
+    pub scope_values: Vec<MacroValue>,
     /// Container name — unique across the profile (the fader's address).
     pub name: String,
     /// Patch loaded at profile-build time (module A). Empty = an empty lane.
@@ -176,6 +180,7 @@ impl LayerDef {
 
     pub fn new(name: impl Into<String>, patch: impl Into<String>) -> Self {
         Self {
+            scope_values: Vec::new(),
             name: name.into(),
             patch: patch.into(),
             extra_modules: Vec::new(),
@@ -222,6 +227,9 @@ impl LayerDef {
 /// One engine: an instrument part holding parallel layers.
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct EngineDef {
+    /// This engine's own mixer settings (see [`LayerDef::scope_values`]).
+    #[facet(default)]
+    pub scope_values: Vec<MacroValue>,
     /// Engine container name ("Keys", "Aux", "Organ", "Pad").
     pub name: String,
     /// The engine's own fader (dB) — rides all its layers.
@@ -263,6 +271,9 @@ impl EngineDef {
 /// A complete keys profile: the mixer shape plus the stacks that recall it.
 #[derive(Debug, Clone, PartialEq, Default, Facet)]
 pub struct KeysProfile {
+    /// The rig's own mixer settings (see [`LayerDef::scope_values`]).
+    #[facet(default)]
+    pub scope_values: Vec<MacroValue>,
     pub name: String,
     pub engines: Vec<EngineDef>,
     #[facet(default)]
@@ -335,9 +346,14 @@ impl KeysProfile {
                     .find(|l| l.name == layer.name)
                 {
                     layer.patch_macros = s.patch_macros.clone();
+                    layer.scope_values = s.scope_values.clone();
                 }
             }
+            if let Some(e) = saved.engines.iter().find(|e| e.name == engine.name) {
+                engine.scope_values = e.scope_values.clone();
+            }
         }
+        self.scope_values = saved.scope_values.clone();
     }
 
     pub fn engine_order(&self) -> Vec<String> {
@@ -578,6 +594,11 @@ impl KeysProfile {
                         &module_set(&layer.name, i),
                     );
                 }
+                // The part's LFOs (shared by its layers) from module A's knobs.
+                signal_synth::engine::apply_lfos_to_omni(
+                    &mut tree,
+                    &module_set(&layer.name, 0).lfos,
+                );
                 let mut lane = Container::layer(&layer.name).add(tree);
                 if !layer.is_full_range() {
                     lane = lane.zone(signal_sampler::rig_node::Zone {
@@ -653,9 +674,11 @@ impl KeysProfile {
 #[must_use]
 pub fn worship_profile() -> KeysProfile {
     KeysProfile {
+        scope_values: Vec::new(),
         name: "Worship".into(),
         engines: vec![
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Keys".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -682,6 +705,7 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Pad".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -694,6 +718,7 @@ pub fn worship_profile() -> KeysProfile {
                     // 0.44. An earlier draft had module B as a Juno 60 sub —
                     // the patch actually stacks a Prophet 5.
                     LayerDef {
+                        scope_values: Vec::new(),
                         name: "Pad".into(),
                         patch: "OB-8 PWM Big Strings".into(),
                         extra_modules: vec!["Prophet 5 Classic".into()],
@@ -708,6 +733,7 @@ pub fn worship_profile() -> KeysProfile {
                     // choir, which is why the wash sounds vocal rather than
                     // bright.
                     LayerDef {
+                        scope_values: Vec::new(),
                         name: "Shimmer".into(),
                         patch: "Choir Men Ohs - mf".into(),
                         extra_modules: vec!["Choir Women Oos - mf".into()],
@@ -720,12 +746,14 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Organ".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
                 layers: vec![LayerDef::new("Organ A", ""), LayerDef::new("Organ B", "")],
             },
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Bass".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -749,6 +777,7 @@ pub fn worship_profile() -> KeysProfile {
                 layers: vec![LayerDef::new("Bass", "Worship PHAT Bass")],
             },
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Aux".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -761,6 +790,7 @@ pub fn worship_profile() -> KeysProfile {
                     // — the Dulcimer lane. Both its layers are Keyscape
                     // sources played through Omnisphere.
                     LayerDef {
+                        scope_values: Vec::new(),
                         name: "Synth 1".into(),
                         patch: "Dolceola ^ RR Lite".into(),
                         extra_modules: vec!["Clavichord a ^ RR".into()],
@@ -773,6 +803,7 @@ pub fn worship_profile() -> KeysProfile {
                     // "CLUB │ Club Europa Plucking Pulsars" (Club Land), part
                     // level 0.34 — the Trance lane, one soundsource.
                     LayerDef {
+                        scope_values: Vec::new(),
                         name: "Synth 2".into(),
                         patch: "Big Berthas Lead".into(),
                         extra_modules: Vec::new(),
@@ -785,6 +816,7 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Drone".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -800,6 +832,7 @@ pub fn worship_profile() -> KeysProfile {
                 layers: vec![LayerDef::new("Drone", "")],
             },
             EngineDef {
+                scope_values: Vec::new(),
                 name: "SFX".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -1123,6 +1156,7 @@ mod order_tests {
         let saved_order = vec!["SFX".to_string(), "Drone".to_string()];
         let mut fresh = worship_profile();
         fresh.engines.push(EngineDef {
+            scope_values: Vec::new(),
             name: "Brass".into(),
             gain_db: 0.0,
             engine_type: String::new(),
@@ -1271,6 +1305,7 @@ mod order_tests {
         // to Keys rather than the type's own default of Guitar.
         assert_eq!(
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Organ".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -1281,6 +1316,7 @@ mod order_tests {
         );
         assert_eq!(
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Aux".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -1292,6 +1328,7 @@ mod order_tests {
         );
         assert_eq!(
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Anything".into(),
                 gain_db: 0.0,
                 engine_type: "pad".into(),

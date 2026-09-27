@@ -387,14 +387,15 @@ fn LfoShape(shape: f32, depth: f32, accent: String) -> Element {
         let v = match kind {
             0 => (phase * std::f64::consts::TAU).sin(),
             1 => 1.0 - 4.0 * ((phase % 1.0) - 0.5).abs(), // triangle
-            2 => {
+            // The engine's order (as an imported patch's LFOs): 2 saw, 3 square.
+            2 => 2.0 * (phase % 1.0) - 1.0, // saw
+            3 => {
                 if (phase % 1.0) < 0.5 {
                     1.0
                 } else {
                     -1.0
                 }
             } // square
-            3 => 2.0 * (phase % 1.0) - 1.0,               // saw
             _ => ((phase * 12.9898).sin() * 43758.545).fract() * 2.0 - 1.0, // random
         };
         let x = PAD + t * (W - 2.0 * PAD);

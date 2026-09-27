@@ -135,6 +135,12 @@ pub struct ModuleSettings {
     pub chorus: f32,
     pub ambience: AmbienceSettings,
     pub delay: DelaySettings,
+    /// The part's LFOs 1–4 as `(rate_hz, depth, wave)` — depth scales the
+    /// routes an imported patch gives each; wave indexes sine / triangle /
+    /// saw / square / S&H.
+    pub lfos: [(f32, f32, f32); 4],
+    /// The Mod Env's `(attack_ms, decay_ms, sustain, release_ms)`.
+    pub mod_env: (f32, f32, f32, f32),
 }
 
 /// The module's reverb (its "Ambience").
@@ -219,6 +225,15 @@ impl Default for ModuleSettings {
                 feedback: 0.35,
                 mix: 0.0,
             },
+            lfos: [
+                (2.0, 0.0, 0.0),
+                (0.5, 0.0, 1.0),
+                (4.0, 0.0, 2.0),
+                (8.0, 0.0, 3.0),
+            ],
+            // The mod engine's own envelope default: an untouched Mod Env
+            // re-applies as exactly what the tree compiles.
+            mod_env: (3.0, 250.0, 0.8, 150.0),
         }
     }
 }
@@ -650,6 +665,20 @@ pub fn apply_settings_to_omni_layer(
             }
         }
     }
+    if let Some(me) = layer
+        .modulators
+        .iter_mut()
+        .find(|m| m.display_name() == "Mod Env")
+    {
+        put(me, "attack", secs(set.mod_env.0));
+        put(me, "decay", secs(set.mod_env.1));
+        put(
+            me,
+            "sustain",
+            format!("{:.4}", set.mod_env.2.clamp(0.0, 1.0)),
+        );
+        put(me, "release", secs(set.mod_env.3));
+    }
     if let Some(fe) = layer
         .modulators
         .iter_mut()
@@ -771,7 +800,7 @@ pub struct ImportedPatch {
     pub modules: Vec<ImportedModule>,
     /// The patch's LFOs as `(rate_hz, depth, shape)` — Omnisphere's LFOs are
     /// per-part, so every module of the patch shares them. `shape` indexes
-    /// sine / triangle / square / saw / random, matching the LFO panel.
+    /// sine / triangle / saw / square / S&H, as the patch tree's LFOs do.
     pub lfos: Vec<(f32, f32, f32)>,
 }
 
@@ -779,7 +808,9 @@ pub struct ImportedPatch {
 /// the free-run range) until it's swept against the real engine like the
 /// filter knee was.
 fn omni_lfo_hz(v: f32) -> f32 {
-    0.05 * (9.6 * v.clamp(0.0, 1.0)).exp2()
+    // The same curve the patch tree builds its LFOs with (0.05..20 Hz), so a
+    // lane's LFO knobs seeded from here re-apply as exactly the patch's rate.
+    0.05 * 400f32.powf(v.clamp(0.0, 1.0))
 }
 
 /// Read an Omnisphere `.prt_omn` patch and flatten its layers onto module
@@ -819,6 +850,105 @@ pub fn import_omni_layers(path: &std::path::Path) -> Result<Vec<ImportedModule>,
     let xml = std::fs::read_to_string(path).map_err(|e| format!("read {path:?}: {e}"))?;
     let patch = crate::omni_import::parse_patch(&xml)?;
     Ok(patch.layers.iter().take(4).map(imported_module).collect())
+}
+
+/// An imported Omnisphere patch's LFOs 1–4 onto its tree: each "LFO n"
+/// modulator's rate and wave, and its routes scaled so the deepest reaches
+/// the LFO's depth (keeping the patch's proportions and signs). The LFOs
+/// are part-level — every layer shares them.
+pub fn apply_lfos_to_omni(tree: &mut Container, lfos: &[(f32, f32, f32); 4]) {
+    use signal_sampler::rig_node::RigNode;
+    fn walk(c: &mut Container, f: &mut impl FnMut(&mut Container)) {
+        f(c);
+        for child in &mut c.children {
+            if let RigNode::Container { container } = child {
+                walk(container, f);
+            }
+        }
+    }
+    let deepest = lfo_depths(tree);
+    for (i, &(rate, depth, wave)) in lfos.iter().enumerate() {
+        let name = format!("LFO {}", i + 1);
+        let key = name.to_lowercase();
+        let scale = if deepest[i] > 0.0 {
+            Some(depth / deepest[i])
+        } else {
+            None
+        };
+        walk(tree, &mut |c| {
+            for m in &mut c.modulators {
+                if m.display_name() == name {
+                    for (k, v) in [
+                        ("rate", format!("{:.4}", rate.clamp(0.01, 40.0))),
+                        ("wave", format!("{}", wave.round().clamp(0.0, 4.0) as u32)),
+                    ] {
+                        match m.params.iter_mut().find(|p| p.name == k) {
+                            Some(p) => p.value = v,
+                            None => m.params.push(signal_sampler::rig_node::Param {
+                                name: k.to_string(),
+                                value: v,
+                            }),
+                        }
+                    }
+                }
+            }
+            if let Some(scale) = scale {
+                for r in &mut c.mod_routes {
+                    if r.source.key() == key {
+                        r.depth *= scale;
+                    }
+                }
+            }
+        });
+    }
+}
+
+/// An Omnisphere patch file's LFOs 1–4 as `(rate_hz, depth, wave)` — the
+/// values a lane hosting the patch seeds its LFO knobs from.
+///
+/// # Errors
+///
+/// When the file cannot be read or parsed.
+pub fn import_omni_lfos(path: &std::path::Path) -> Result<Vec<(f32, f32, f32)>, String> {
+    let xml = std::fs::read_to_string(path).map_err(|e| format!("read {path:?}: {e}"))?;
+    let patch = crate::omni_import::parse_patch(&xml)?;
+    // Depth as the TREE carries it (routes scaled to their targets, the
+    // unsupported ones dropped) — what `apply_lfos_to_omni` scales against,
+    // so the seeded knobs re-apply as the identity.
+    let tree = crate::omni_import::patch_to_container(
+        &patch,
+        &crate::omni_import::SoundsourceIndex::default(),
+    );
+    let depths = lfo_depths(&tree);
+    Ok(import_rest(&patch)
+        .lfos
+        .into_iter()
+        .zip(depths)
+        .map(|((rate, _, wave), depth)| (rate, depth, wave))
+        .collect())
+}
+
+/// The deepest route (absolute) from each of "LFO 1".."LFO 4" in `tree`.
+fn lfo_depths(tree: &Container) -> [f32; 4] {
+    use signal_sampler::rig_node::RigNode;
+    fn walk(c: &Container, out: &mut [f32; 4]) {
+        for r in &c.mod_routes {
+            let key = r.source.key();
+            for (i, d) in out.iter_mut().enumerate() {
+                if key == format!("lfo {}", i + 1) {
+                    *d = d.max(r.depth.abs());
+                }
+            }
+        }
+        for child in &c.children {
+            if let RigNode::Container { container } = child {
+                walk(container, out);
+            }
+        }
+    }
+    let mut out = [0.0; 4];
+    walk(tree, &mut out);
+    out
 }
 
 /// One Omnisphere layer as a module's settings.

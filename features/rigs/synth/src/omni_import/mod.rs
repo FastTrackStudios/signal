@@ -288,7 +288,119 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(depth(&before), depth(&after));
+        // The LFOs too: seeded from the file, written back, nothing moves.
+        let lfos = crate::engine::import_omni_lfos(&file).unwrap();
+        let mut four = [(2.0, 0.0, 0.0); 4];
+        for (slot, l) in four.iter_mut().zip(&lfos) {
+            *slot = *l;
+        }
+        let mut again = after.clone();
+        crate::engine::apply_lfos_to_omni(&mut again, &four);
+        let lfo = |t: &signal_sampler::rig_node::Container, p: &str| -> Vec<Option<f32>> {
+            t.modulators
+                .iter()
+                .filter(|m| m.display_name().starts_with("LFO"))
+                .map(|m| m.param_f32(p))
+                .collect()
+        };
+        for p in ["rate", "wave"] {
+            let (b, a) = (lfo(&after, p), lfo(&again, p));
+            for (b, a) in b.iter().zip(&a) {
+                if let (Some(b), Some(a)) = (b, a) {
+                    assert!((b - a).abs() < 1e-3, "LFO {p}: {b} -> {a}");
+                }
+            }
+        }
+        let all_depths = |t: &signal_sampler::rig_node::Container| {
+            let mut v: Vec<f32> = Vec::new();
+            fn walk(c: &signal_sampler::rig_node::Container, v: &mut Vec<f32>) {
+                v.extend(c.mod_routes.iter().map(|r| r.depth));
+                for ch in &c.children {
+                    if let signal_sampler::rig_node::RigNode::Container { container } = ch {
+                        walk(container, v);
+                    }
+                }
+            }
+            walk(t, &mut v);
+            v
+        };
+        for (b, a) in all_depths(&after).iter().zip(all_depths(&again)) {
+            assert!((b - a).abs() < 1e-5, "route depth {b} -> {a}");
+        }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Machine-local: every Worship Gig 3 patch survives seeding its knobs
+    /// (layers + LFOs) and writing them back, route for route.
+    /// Skips where the patches are not present.
+    #[test]
+    fn worship_patches_seed_and_reapply_as_the_identity() {
+        let root = std::path::Path::new(
+            "/Volumes/dev-drive/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches/User/Worship Gig 3",
+        );
+        let Ok(dir) = std::fs::read_dir(root) else {
+            eprintln!("skipping: {root:?} not present");
+            return;
+        };
+        let mut checked = 0;
+        for entry in dir.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("prt_omn") {
+                continue;
+            }
+            let xml = std::fs::read_to_string(&path).unwrap();
+            let before =
+                patch_to_container(&parse_patch(&xml).unwrap(), &SoundsourceIndex::default());
+            let mut after = before.clone();
+            for (i, m) in crate::engine::import_omni_layers(&path)
+                .unwrap()
+                .iter()
+                .enumerate()
+            {
+                let set = crate::engine::ModuleSettings {
+                    cutoff_hz: m.cutoff_hz,
+                    resonance: m.resonance,
+                    filter_env_depth: m.filter_env_depth,
+                    amp_env: m.amp_env.unwrap_or((0.0, 0.0, 1.0, 120.0)),
+                    filter_env: m.filter_env.unwrap_or((0.0, 0.0, 1.0, 120.0)),
+                    ..Default::default()
+                };
+                crate::engine::apply_settings_to_omni_layer(&mut after, i, &set);
+            }
+            let mut four = [(2.0, 0.0, 0.0); 4];
+            for (slot, l) in four
+                .iter_mut()
+                .zip(crate::engine::import_omni_lfos(&path).unwrap())
+            {
+                *slot = l;
+            }
+            crate::engine::apply_lfos_to_omni(&mut after, &four);
+            fn depths(c: &signal_sampler::rig_node::Container, v: &mut Vec<(String, f32)>) {
+                v.extend(c.mod_routes.iter().map(|r| (r.source.key(), r.depth)));
+                for ch in &c.children {
+                    if let signal_sampler::rig_node::RigNode::Container { container } = ch {
+                        depths(container, v);
+                    }
+                }
+            }
+            let (mut b, mut a) = (Vec::new(), Vec::new());
+            depths(&before, &mut b);
+            depths(&after, &mut a);
+            assert_eq!(b.len(), a.len(), "{path:?}");
+            for ((src, db), (_, da)) in b.iter().zip(&a) {
+                assert!((db - da).abs() < 1e-4, "{path:?}: {src} depth {db} -> {da}");
+            }
+            let rates = |t: &signal_sampler::rig_node::Container| -> Vec<Option<f32>> {
+                t.modulators.iter().map(|m| m.param_f32("rate")).collect()
+            };
+            for (rb, ra) in rates(&before).iter().zip(rates(&after)) {
+                if let (Some(rb), Some(ra)) = (rb, ra) {
+                    assert!((rb - ra).abs() < 1e-3, "{path:?}: LFO rate {rb} -> {ra}");
+                }
+            }
+            checked += 1;
+        }
+        eprintln!("{checked} Worship patches round-trip");
     }
 
     #[test]

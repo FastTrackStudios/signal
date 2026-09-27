@@ -46,6 +46,9 @@ pub(super) struct CompiledRoute {
     /// Base (unmodulated) normalized value the depth adds onto.
     pub(super) base: f64,
     pub(super) depth: f32,
+    /// The depth the tree was authored with — what a source's depth knob
+    /// scales ([`ModEngine::set_source_depth`]).
+    pub(super) authored: f32,
 }
 
 /// The compiled control-rate modulation engine + send-bus state for one tree.
@@ -159,6 +162,57 @@ impl ModEngine {
 
     /// Live-update a route's depth (e.g. the Filter Env → cutoff amount),
     /// addressed by module + source name + target leaf/param.
+    /// Live-update an LFO source (addressed by module + name, "LFO 1"):
+    /// its rate, and its wave when given.
+    pub fn set_lfo(
+        &mut self,
+        module: &str,
+        name: &str,
+        rate_hz: f32,
+        wave: Option<crate::native::LfoWave>,
+    ) -> bool {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        let mut hit = false;
+        for (i, (path, source_name)) in self.source_paths.iter().enumerate() {
+            if *source_name == name && path.contains(&module) {
+                hit |= self.sources[i].set_lfo(rate_hz, wave);
+            }
+        }
+        hit
+    }
+
+    /// Scale every route from source `name` (in `module`) so the deepest
+    /// one reaches `depth` — the source's depth knob over the routes the
+    /// patch authored, keeping their proportions and signs. `false` when the
+    /// source has no routes (nothing to scale).
+    pub fn set_source_depth(&mut self, module: &str, name: &str, depth: f32) -> bool {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        let ours: Vec<usize> = self
+            .routes
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| {
+                let (path, source_name) = &self.source_paths[r.source];
+                *source_name == name && path.contains(&module)
+            })
+            .map(|(i, _)| i)
+            .collect();
+        let deepest = ours
+            .iter()
+            .map(|&i| self.routes[i].authored.abs())
+            .fold(0.0f32, f32::max);
+        if deepest <= 0.0 {
+            return false;
+        }
+        let scale = depth / deepest;
+        for i in ours {
+            self.routes[i].depth = self.routes[i].authored * scale;
+        }
+        true
+    }
+
     pub fn set_route_depth(
         &mut self,
         module: &str,
@@ -419,6 +473,7 @@ impl ModCompiler {
                         param: p.id,
                         base: p.default,
                         depth: route.depth,
+                        authored: route.depth,
                     });
                     hit = true;
                 }
@@ -445,6 +500,7 @@ mod tests {
             param,
             base,
             depth,
+            authored: depth,
         }
     }
 

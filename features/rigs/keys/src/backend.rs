@@ -140,6 +140,9 @@ struct LaneState {
     /// whole `.prt_omn` gets one module per patch layer, filled from the
     /// patch, so its knobs start where the patch is — see `seed_omni_lanes`.
     omni_seed: Option<PathBuf>,
+    /// FX bypass from this lane's scope or any above it (layer, engine,
+    /// rig): the modules' effects are left out while it is on.
+    fx_gated: bool,
 }
 
 /// What a Global Control captured when it left centre: the value each module
@@ -498,7 +501,7 @@ const MACROS: &[MacroDef] = &[
         id: "env3.attack",
         name: "Attack",
         group: "Env 3",
-        default: 20.0,
+        default: 3.0,
         min: 0.0,
         max: 5000.0,
         unit: "ms",
@@ -516,7 +519,7 @@ const MACROS: &[MacroDef] = &[
         id: "env3.decay",
         name: "Decay",
         group: "Env 3",
-        default: 400.0,
+        default: 250.0,
         min: 0.0,
         max: 5000.0,
         unit: "ms",
@@ -525,7 +528,7 @@ const MACROS: &[MacroDef] = &[
         id: "env3.sustain",
         name: "Sustain",
         group: "Env 3",
-        default: 0.5,
+        default: 0.8,
         min: 0.0,
         max: 1.0,
         unit: "",
@@ -534,7 +537,7 @@ const MACROS: &[MacroDef] = &[
         id: "env3.release",
         name: "Release",
         group: "Env 3",
-        default: 300.0,
+        default: 150.0,
         min: 0.0,
         max: 8000.0,
         unit: "ms",
@@ -1431,11 +1434,32 @@ impl State {
                         globals: BTreeMap::new(),
                         spans: BTreeMap::new(),
                         omni_seed: None,
+                        fx_gated: false,
                     },
                 );
             }
         }
+        // The profile's saved mixer settings (Tone, Limiter, FX Bypass) at
+        // every scope.
+        for engine in &profile.engines {
+            if let Some(e) = self.engines.get_mut(&engine.name) {
+                for v in &engine.scope_values {
+                    e.globals.insert(format!("{ENGINE}{}", v.id), v.value);
+                }
+            }
+            for layer in &engine.layers {
+                if let Some(l) = self.lanes.get_mut(&layer.name) {
+                    for v in &layer.scope_values {
+                        l.globals.insert(format!("{LAYER}{}", v.id), v.value);
+                    }
+                }
+            }
+        }
+        for v in &profile.scope_values {
+            self.rig_globals.insert(format!("{RIG}{}", v.id), v.value);
+        }
         self.profile = profile;
+        KeysRigBackend::refresh_fx_gates(self);
     }
 
     /// Any lane soloed? (Solo silences every un-soloed lane.)
@@ -1646,9 +1670,9 @@ impl KeysRigBackend {
                         min: def.min,
                         max: def.max,
                         unit: def.unit.to_string(),
-                        // A scope parameter (Tone, Limiter, FX bypass) is
-                        // stored but nothing plays it yet — shown dimmed.
-                        live: false,
+                        // A scope's own parameter (Tone, Limiter, FX
+                        // bypass): its track's stage plays it.
+                        live: true,
                         bipolar: false,
                         spread: String::new(),
                     };
@@ -1815,6 +1839,57 @@ impl KeysRigBackend {
     /// voice count changed, otherwise just the live cells and a publish.
     /// Whether this macro is baked into the program and so needs a rebuild
     /// to be heard: the filter's settings, the envelopes' times, unison.
+    /// Recompute every lane's FX gate from the FX Bypass switches of its
+    /// own, its engine's and the rig's scope. Returns whether any changed.
+    fn refresh_fx_gates(s: &mut State) -> bool {
+        let on = |map: &BTreeMap<String, f32>, prefix: &str| {
+            map.get(&format!("{prefix}fx.bypass"))
+                .is_some_and(|v| *v >= 0.5)
+        };
+        let rig = on(&s.rig_globals, RIG);
+        let engines: BTreeMap<String, bool> = s
+            .engines
+            .iter()
+            .map(|(n, e)| (n.clone(), on(&e.globals, ENGINE)))
+            .collect();
+        let mut changed = false;
+        for lane in s.lanes.values_mut() {
+            let gated = rig
+                || engines.get(&lane.engine).copied().unwrap_or(false)
+                || on(&lane.globals, LAYER);
+            changed |= lane.fx_gated != gated;
+            lane.fx_gated = gated;
+        }
+        changed
+    }
+
+    /// Knobs that drive an imported patch's own modulators — its LFOs and
+    /// Mod Env. They reach sound on a lane hosting an Omnisphere patch (its
+    /// routes are the destinations); a keys module has none.
+    fn macro_is_mod(id: &str) -> bool {
+        let lfo = id.strip_prefix("lfo").is_some_and(|rest| {
+            matches!(
+                rest,
+                "1.rate"
+                    | "1.depth"
+                    | "1.shape"
+                    | "2.rate"
+                    | "2.depth"
+                    | "2.shape"
+                    | "3.rate"
+                    | "3.depth"
+                    | "3.shape"
+                    | "4.rate"
+                    | "4.depth"
+                    | "4.shape"
+            )
+        });
+        lfo || matches!(
+            id,
+            "env3.attack" | "env3.decay" | "env3.sustain" | "env3.release"
+        )
+    }
+
     /// Knobs whose change builds a new effect engine (a reverb's algorithm
     /// and decay) — a coalesced rebuild, not a live write. A delay's machine
     /// switches live.
@@ -1889,6 +1964,21 @@ impl KeysRigBackend {
                 // a synth module's, an imported patch's route).
                 render.set_env(module, "Amp Env", adsr(set.amp_env));
                 render.set_env(module, "Filter Env", adsr(set.filter_env));
+                render.set_env(module, "Mod Env", adsr(set.mod_env));
+                // The part's LFOs (an imported patch's; shared by its layers,
+                // so addressed by the lane) and their routes' depth.
+                for (n, &(rate, depth, wave)) in set.lfos.iter().enumerate() {
+                    let name = format!("LFO {}", n + 1);
+                    let wave = match wave.round() as u32 {
+                        1 => signal_sampler::native::LfoWave::Triangle,
+                        2 => signal_sampler::native::LfoWave::Saw,
+                        3 => signal_sampler::native::LfoWave::Square,
+                        4 => signal_sampler::native::LfoWave::SampleHold,
+                        _ => signal_sampler::native::LfoWave::Sine,
+                    };
+                    render.set_lfo(layer, &name, rate, Some(wave));
+                    render.set_source_depth(layer, &name, depth);
+                }
                 let routed = render.set_route_depth(
                     module,
                     "Filter Env",
@@ -2064,6 +2154,18 @@ impl KeysRigBackend {
                 let _rt = keys_runtime().enter();
                 b.rebuild_program();
             });
+    }
+
+    /// A scope's own parameter moved (Tone, Limiter, FX Bypass): Tone and
+    /// Limiter go live onto the scope stages; an FX Bypass that changed a
+    /// lane's gate changes chains, so it rebuilds.
+    fn after_scope_param(&self, regate: bool) {
+        self.apply_mixer();
+        self.remember_macros_soon();
+        if regate {
+            self.rebuild_soon();
+        }
+        self.publish_mixer();
     }
 
     fn after_global(&self, rebuild: bool, targets: &[(String, usize)]) {
@@ -2253,6 +2355,7 @@ impl KeysRigBackend {
                     continue;
                 }
             };
+            let lfos = signal_synth::engine::import_omni_lfos(&path).unwrap_or_default();
             let Ok(mut s) = self.inner.state.lock() else {
                 return;
             };
@@ -2273,6 +2376,13 @@ impl KeysRigBackend {
             }
             for (slot, m) in lane.modules.iter_mut().zip(&layers) {
                 seed_module_macros(&mut slot.macros, m);
+                // The part's LFOs, on every module (they are shared).
+                for (n, (rate, depth, shape)) in lfos.iter().enumerate().take(4) {
+                    let id = format!("lfo{}", n + 1);
+                    set_macro_clamped(&mut slot.macros, &format!("{id}.rate"), *rate);
+                    set_macro_clamped(&mut slot.macros, &format!("{id}.depth"), *depth);
+                    set_macro_clamped(&mut slot.macros, &format!("{id}.shape"), *shape);
+                }
             }
             lane.spans.clear();
             lane.omni_seed = Some(path);
@@ -2352,7 +2462,7 @@ impl KeysRigBackend {
                     let values = m
                         .macros
                         .iter()
-                        .filter(|(id, _)| Self::macro_is_dsp(id))
+                        .filter(|(id, _)| Self::macro_is_dsp(id) || Self::macro_is_mod(id))
                         .map(|(id, v)| crate::profile::MacroValue {
                             id: id.clone(),
                             value: *v,
@@ -2361,6 +2471,36 @@ impl KeysRigBackend {
                     def.remember_macros(&m.patch, i as u32, values);
                 }
             }
+            // Each scope's own settings (Tone, Limiter, FX Bypass).
+            let own =
+                |map: &BTreeMap<String, f32>, prefix: &str| -> Vec<crate::profile::MacroValue> {
+                    map.iter()
+                        .filter_map(|(k, v)| {
+                            k.strip_prefix(prefix).map(|id| crate::profile::MacroValue {
+                                id: id.to_string(),
+                                value: *v,
+                            })
+                        })
+                        .collect()
+                };
+            let State {
+                lanes,
+                engines,
+                rig_globals,
+                profile,
+                ..
+            } = &mut *guard;
+            for (name, lane) in lanes.iter() {
+                if let Some(def) = profile.layer_mut(name) {
+                    def.scope_values = own(&lane.globals, LAYER);
+                }
+            }
+            for e in &mut profile.engines {
+                if let Some(state) = engines.get(&e.name) {
+                    e.scope_values = own(&state.globals, ENGINE);
+                }
+            }
+            profile.scope_values = own(rig_globals, RIG);
         }
         let r#gen = self.inner.save_gen.fetch_add(1, Ordering::AcqRel) + 1;
         let b = self.clone();
@@ -2443,6 +2583,7 @@ impl KeysRigBackend {
         );
         set.unison = v("source.unison").max(1.0) as u32;
         set.detune = v("source.detune");
+        let fx_on = !lane.fx_gated;
         set.pan = v("source.pan");
         set.width = v("fx.width");
         set.transpose = v("source.transpose");
@@ -2456,9 +2597,9 @@ impl KeysRigBackend {
         set.warmth = v("tone.warmth");
         set.body = v("tone.body");
         set.drive = v("tone.drive");
-        set.chorus = v("fx.chorus");
+        set.chorus = if fx_on { v("fx.chorus") } else { 0.0 };
         set.ambience = signal_synth::engine::AmbienceSettings {
-            on: v("amb.bypass") < 0.5,
+            on: fx_on && v("amb.bypass") < 0.5,
             algo: v("amb.algo"),
             size: v("amb.size"),
             mix: v("amb.mix"),
@@ -2468,12 +2609,22 @@ impl KeysRigBackend {
         // The Effects page's Delay amount and the Delay section's mix are
         // one send: whichever is higher.
         set.delay = signal_synth::engine::DelaySettings {
-            on: v("dly.bypass") < 0.5,
+            on: fx_on && v("dly.bypass") < 0.5,
             style: v("dly.algo"),
             time_ms: v("dly.time"),
             feedback: v("dly.feedback"),
             mix: v("dly.mix").max(v("fx.delay")),
         };
+        for (n, lfo) in set.lfos.iter_mut().enumerate() {
+            let id = |k: &str| format!("lfo{}.{k}", n + 1);
+            *lfo = (v(&id("rate")), v(&id("depth")), v(&id("shape")));
+        }
+        set.mod_env = (
+            v("env3.attack"),
+            v("env3.decay"),
+            v("env3.sustain"),
+            v("env3.release"),
+        );
         set
     }
 
@@ -2581,6 +2732,27 @@ impl KeysRigBackend {
             }
         }
         rig.set_output_gain(db_to_linear(s.master_db));
+        // Each scope's Tone and Limiter onto its track's stage.
+        use signal_sampler::keys_rig::Scope;
+        let scope = |map: &BTreeMap<String, f32>, prefix: &str| {
+            let v = |k: &str| map.get(&format!("{prefix}{k}")).copied().unwrap_or(0.0);
+            (
+                v("tone.low"),
+                v("tone.mid"),
+                v("tone.high"),
+                v("limiter") >= 0.5,
+            )
+        };
+        let (l, m, h, lim) = scope(&s.rig_globals, RIG);
+        rig.set_scope(&Scope::Rig, l, m, h, lim);
+        for (name, e) in &s.engines {
+            let (l, m, h, lim) = scope(&e.globals, ENGINE);
+            rig.set_scope(&Scope::Engine(name.clone()), l, m, h, lim);
+        }
+        for (name, lane) in &s.lanes {
+            let (l, m, h, lim) = scope(&lane.globals, LAYER);
+            rig.set_scope(&Scope::Layer(name.clone()), l, m, h, lim);
+        }
     }
 
     /// Rebuild the playable program from the profile (patch assignment
@@ -3636,7 +3808,9 @@ impl KeysRigSvc for KeysRigBackend {
                 unit: def.unit.to_string(),
                 // Lit when it reaches sound (a live DSP parameter or the
                 // level fader), not by a hand-kept flag that drifted.
-                live: (Self::macro_is_dsp(def.id) || def.id == "source.level")
+                live: (Self::macro_is_dsp(def.id)
+                    || def.id == "source.level"
+                    || (Self::macro_is_mod(def.id) && lane.omni_seed.is_some()))
                     && here.is_some_and(|m| !m.patch.is_empty()),
                 bipolar: false,
                 spread: String::new(),
@@ -3683,8 +3857,9 @@ impl KeysRigSvc for KeysRigBackend {
             let engine = lane.engine.clone();
             let Some(target) = def.target else {
                 lane.globals.insert(id, value.clamp(def.min, def.max));
+                let regate = Self::refresh_fx_gates(&mut s);
                 drop(s);
-                self.publish_mixer();
+                self.after_scope_param(regate);
                 return;
             };
             let targets = Self::scope_targets(&s, std::slice::from_ref(&layer));
@@ -3754,8 +3929,9 @@ impl KeysRigSvc for KeysRigBackend {
                 if let Some(e) = s.engines.get_mut(&engine) {
                     e.globals.insert(id, value.clamp(def.min, def.max));
                 }
+                let regate = Self::refresh_fx_gates(&mut s);
                 drop(s);
-                self.publish_mixer();
+                self.after_scope_param(regate);
                 return;
             };
             let lanes = Self::engine_lanes(&s, &engine);
@@ -3801,8 +3977,9 @@ impl KeysRigSvc for KeysRigBackend {
             };
             let Some(target) = def.target else {
                 s.rig_globals.insert(id, value.clamp(def.min, def.max));
+                let regate = Self::refresh_fx_gates(&mut s);
                 drop(s);
-                self.publish_mixer();
+                self.after_scope_param(regate);
                 return;
             };
             let lanes = Self::all_lanes(&s);
@@ -3857,12 +4034,13 @@ impl KeysRigSvc for KeysRigBackend {
         }
         // DSP macros go live into the running engine (filter / envelopes /
         // unison); the rebuild only remains as the not-yet-hosted fallback.
-        if Self::macro_is_dsp(def.id)
+        let reaches = Self::macro_is_dsp(def.id) || Self::macro_is_mod(def.id);
+        if reaches
             && (!self.push_module_dsp(&layer, module as usize) || Self::macro_rebuilds(def.id))
         {
             self.rebuild_soon();
         }
-        if Self::macro_is_dsp(def.id) {
+        if reaches {
             self.remember_macros_soon();
         }
         self.publish_mixer();
