@@ -177,6 +177,8 @@ pub fn translate_route(
         "pdepth" => ("Soundsource", "wt_mix", 1.0),
         // Harmonia mix.
         "Harmmix" => ("Soundsource", "harm_mix", 1.0),
+        // Pan: the Amp's balance, in the same knob units.
+        "pan" => ("Amp", "pan", 1.0),
         _ => return None, // hrdsnc/mogrify/timbre/LFO-param/E1P0/… — later
     };
     let source = translate_source(&route.source)?;
@@ -493,7 +495,13 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             })
             // "Amp Stage": a route onto "Amp" (the patch's amp tremolo) must
             // find the block, not a container of the same name.
-            .add(Container::module("Amp Stage").block(BlockType::Amp, "Amp"))
+            .add(
+                Container::module("Amp Stage").add(
+                    RigBlock::of_type(BlockType::Amp)
+                        .named("Amp")
+                        .with_param("pan", format!("{:.4}", layer.pan)),
+                ),
+            )
             .add(fx_rack_from("Layer FX", &layer.fx))
             .send("Aux Rack", "To Aux")
             .modulator(BlockType::Envelope, "Amp Env")

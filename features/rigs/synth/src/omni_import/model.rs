@@ -39,6 +39,9 @@ pub struct OmniLayer {
     /// octave UP; `semi` 0.48 = 0, each 0.02 lower a semitone up; `tune`
     /// ±48 semitones about 0.5; `tuneFine` ±1 semitone about 0.5).
     pub transpose: f32,
+    /// `OSC pan`, 0..1 (0.5 centre): a balance law (measured: 0.25 puts
+    /// the right side 6 dB down, 0 silences it) — the Amp's own law.
+    pub pan: f32,
     /// Glide on (`OSC portAct`); its time is the part's (`OmniPatch::glide_s`).
     pub glide: bool,
     /// Unison: voice count (1..8), detune 0..1, width 0..1, plus the
@@ -836,6 +839,7 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
                 + (n("tune", 0.5) - 0.5) * 96.0
                 + (n("tuneFine", 0.5) - 0.5) * 2.0;
             layer.glide = n("portAct", 0.0) != 0.0;
+            layer.pan = n("pan", 0.5).clamp(0.0, 1.0);
             layer.fm_depth = osc.num("fm").unwrap_or(0.0).clamp(0.0, 1.0);
             layer.fm_shape = osc.num("fmwf").unwrap_or(0.0).clamp(0.0, 1.0);
             layer.osc_wave = osc.num("type").unwrap_or(0.0).clamp(0.0, 1.0);
