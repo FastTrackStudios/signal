@@ -112,14 +112,22 @@ fn chorus_echo(p: &[f32; 15]) -> RigBlock {
 /// - `P4` diffusion (0 on the echo-like presets);
 /// - `P9` / `P10` the low / high band time multipliers (0 shortens a band
 ///   to ~0.6×, 1 lengthens it ~1.5×) — as low-end and damping here;
+/// - `P6` its level (−14 dB at 0, unity at the 0.885 default);
 /// - `P12` stereo width (0 mono).
 fn pro_verb(p: &[f32; 15]) -> RigBlock {
     let rt = 20.0 * (5.5 * (p[2] - 1.0)).exp();
-    reverb_block(rt, 428.0 * p[3].max(0.0).powf(2.36), p[0], None)
-        .with_param("diffusion", format!("{:.3}", p[4].clamp(0.0, 1.0)))
-        // High multiplier 0.865 (the default) ≈ neutral damping.
-        .with_param("damping", format!("{:.3}", (1.0 - p[10]).clamp(0.0, 1.0)))
-        .with_param("low_end", format!("{:.3}", p[9].clamp(0.0, 1.0)))
+    // P6 is the reverb's level (measured, relative to its 0.885 default).
+    let level = lerp_table(&[(0.0, -14.0), (0.5, -4.2), (0.885, 0.0), (1.0, 1.5)], p[6]);
+    reverb_block(
+        rt,
+        428.0 * p[3].max(0.0).powf(2.36),
+        p[0],
+        Some(pro_verb_wet_db(rt) + level),
+    )
+    .with_param("diffusion", format!("{:.3}", p[4].clamp(0.0, 1.0)))
+    // High multiplier 0.865 (the default) ≈ neutral damping.
+    .with_param("damping", format!("{:.3}", (1.0 - p[10]).clamp(0.0, 1.0)))
+    .with_param("low_end", format!("{:.3}", p[9].clamp(0.0, 1.0)))
 }
 
 /// PRO-Verb's measured wet level (dB re the dry click) for a tail of RT60

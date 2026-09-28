@@ -32,6 +32,8 @@ def set_fx(xml, typ, params, slot=16):
 def render(xml, exe):
     open("/tmp/fx.prt_omn", "w").write(xml)
     hold = "0.05" if os.environ.get("SRC", "click") == "click" else "2.0"
+    if os.environ.get("SRC") == "holdenv":
+        hold = "1.0"
     r = subprocess.run([exe, "/tmp/fx.prt_omn", "/tmp/fx.wav", "--note", os.environ.get("NOTE", "60"), "--hold", hold,
                         "--tail", os.environ.get("TAIL", "4.0")], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     d = open("/tmp/fx.wav", "rb").read(); i = 12
@@ -120,6 +122,11 @@ for spec in _args:
         if tag not in REF or REF[tag] is None:
             REF[tag] = dry_ref(exe)
         x = render(xml, exe)
+        if os.environ.get("SRC") == "holdenv":
+            m = x.mean(1); W = 4800
+            lv = [20*np.log10(np.sqrt(np.mean(m[k:k+W]**2)) + 1e-9) for k in range(0, len(m) - W, W)]
+            print(f"{name:12s} {tag} level/100ms " + " ".join(f"{v:.0f}" for v in lv), flush=True)
+            continue
         if os.environ.get("SRC") == "hold" and os.environ.get("AMOD"):
             print(f"{name:12s} {tag} amod L/R (±dB, Hz) {amod(x)}", flush=True)
             continue
