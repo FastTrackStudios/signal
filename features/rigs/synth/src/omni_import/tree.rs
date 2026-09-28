@@ -134,7 +134,9 @@ pub fn translate_route(
             1.0 / signal_sampler::native::NativeFilter::KNOB_SPAN,
         ),
         "res" => (filter_labels.get(layer_idx)?.as_str(), "resonance", 1.0),
-        "tune" => ("Soundsource", "tune", 1.0),
+        // Measured: a tune row moves ~96 semitones per unit of depth; our
+        // tune param spans 48.
+        "tune" => ("Soundsource", "tune", 2.0),
         // tuneFine is ±1 semitone on a ±24 semitone param.
         "tuneFine" => ("Soundsource", "tune", 1.0 / 24.0),
         // Osc amp tremolo → the layer's Amp gain.
@@ -511,20 +513,21 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
         .add(fx_rack_from("Common FX", &patch.common_fx))
         .add(fx_rack_from("Aux Rack", &patch.aux_fx))
         .modulator(BlockType::ModMatrix, "Mod Matrix");
-    for n in 1..=8usize {
+    for n in 1..=9usize {
         let mut lfo = RigBlock::of_type(BlockType::Lfo).named(format!("LFO {n}"));
-        if let Some((rate, ty, sync, retrig)) = patch.lfos.get(n - 1) {
-            // Normalized rate → Hz (exp sweep 0.05..20; CALIBRATE) and
-            // normalized type → wave index 0..4 (4 = S&H).
+        if let Some(l) = patch.lfos.get(n - 1) {
+            // Measured rate, wave, swing (amplitude) and polarity.
             lfo = lfo
-                .with_param("rate", format!("{:.4}", 0.05 * 400f32.powf(*rate)))
-                .with_param("wave", format!("{}", (ty * 4.0).round() as u32));
-            if *sync {
+                .with_param("rate", format!("{:.4}", l.rate_hz()))
+                .with_param("wave", l.wave().to_string())
+                .with_param("amp", format!("{:.4}", l.swing))
+                .with_param("unipolar", if l.unipolar { "1" } else { "0" });
+            if l.sync {
                 // Tempo-synced: rate index → beats/cycle (CALIBRATE).
-                let beats = [4.0, 2.0, 1.0, 0.5, 0.25, 0.125][(rate * 5.0).round() as usize];
+                let beats = [4.0, 2.0, 1.0, 0.5, 0.25, 0.125][(l.rate * 5.0).round() as usize];
                 lfo = lfo.with_param("sync_beats", format!("{beats}"));
             }
-            if *retrig {
+            if l.retrigger {
                 lfo = lfo.with_param("retrigger", "1");
             }
         }

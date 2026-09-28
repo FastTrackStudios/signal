@@ -27,7 +27,7 @@ mod tree;
 
 pub use index::{SoundsourceIndex, normalize_soundsource_name, resolve_name};
 pub use model::{
-    FilterModel, OmniLayer, OmniModRoute, OmniPatch, classify_filter_full, filter_model,
+    FilterModel, OmniLayer, OmniLfo, OmniModRoute, OmniPatch, classify_filter_full, filter_model,
     omni_cutoff_hz, omni_filter_setting, parse_patch, wavetable_path,
 };
 pub use multi::{OmniMulti, load_multi_file, multi_to_container, parse_multi};

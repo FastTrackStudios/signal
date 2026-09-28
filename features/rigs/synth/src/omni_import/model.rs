@@ -103,6 +103,48 @@ pub struct OmniLayer {
     pub fx: Vec<String>,
 }
 
+/// One part LFO, measured against the real plugin (pitch-tracked).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OmniLfo {
+    /// `rate` knob 0..1 (see [`OmniLfo::rate_hz`]).
+    pub rate: f32,
+    /// `type`: a wave index in steps of 0.02 (see [`OmniLfo::wave`]).
+    pub wave_type: f32,
+    pub sync: bool,
+    pub retrigger: bool,
+    /// `swing`: the LFO's amplitude, 0..1 (≈ linear).
+    pub swing: f32,
+    /// `unidir`: output 0..+1 instead of ±1.
+    pub unipolar: bool,
+}
+
+impl OmniLfo {
+    /// Free-running rate: `48.3 Hz · rate³` (measured 0.2 → 0.39 Hz,
+    /// 0.4642 → 4.76 Hz, 0.8 → 25 Hz), floored at the 0.01 Hz our LFOs
+    /// run down to (rate 0 is a stopped LFO).
+    #[must_use]
+    pub fn rate_hz(&self) -> f32 {
+        (48.3 * self.rate.clamp(0.0, 1.0).powi(3)).max(0.01)
+    }
+
+    /// Signal's LFO wave index (0 sine, 1 triangle, 2 saw, 3 square, 4 S&H,
+    /// 5 falling saw) for Omnisphere's `type` (measured: 0 sine, 0.02 smooth
+    /// random, 0.04 triangle, 0.06 square, 0.08 rising saw, 0.10 falling
+    /// saw, 0.12 stepped, 0.14 sine, 0.16 random). The random shapes read as
+    /// sample-and-hold for now.
+    #[must_use]
+    pub fn wave(&self) -> u32 {
+        match (self.wave_type * 50.0).round() as u32 {
+            2 => 1,
+            3 => 3,
+            4 => 2,
+            5 => 5,
+            1 | 6 | 8 => 4,
+            _ => 0,
+        }
+    }
+}
+
 /// One mod-matrix route (`sourceN` → `targetN`).
 ///
 /// Measured: the route adds `lo + (hi − lo)·source` to the target in the
@@ -129,8 +171,9 @@ pub struct OmniPatch {
     /// Aux FX rack module names.
     pub aux_fx: Vec<String>,
     pub mod_routes: Vec<OmniModRoute>,
-    /// Part LFOs from `LFO_SET`: `(rate 0..1, type 0..1, synced, retrigger)`.
-    pub lfos: Vec<(f32, f32, bool, bool)>,
+    /// The part's nine LFOs from `LFO_SET` (LFO9 is the vibrato LFO every
+    /// factory patch routes to tuneFine).
+    pub lfos: Vec<OmniLfo>,
     pub arp_on: bool,
     /// Arp pattern from `ARPSEQ2`: `(on, velocity, gate 0..1)` per step.
     pub arp_steps: Vec<(bool, u8, f32)>,
@@ -888,12 +931,14 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
 
     if let Some(set) = engine.child("LFO_SET") {
         for lfo in set.children_tagged("LFO") {
-            patch.lfos.push((
-                lfo.num("rate").unwrap_or(0.25).clamp(0.0, 1.0),
-                lfo.num("type").unwrap_or(0.0).clamp(0.0, 1.0),
-                lfo.num("sync").unwrap_or(0.0) != 0.0,
-                lfo.num("resettr").unwrap_or(0.0) != 0.0,
-            ));
+            patch.lfos.push(OmniLfo {
+                rate: lfo.num("rate").unwrap_or(0.25).clamp(0.0, 1.0),
+                wave_type: lfo.num("type").unwrap_or(0.0).clamp(0.0, 1.0),
+                sync: lfo.num("sync").unwrap_or(0.0) != 0.0,
+                retrigger: lfo.num("resettr").unwrap_or(0.0) != 0.0,
+                swing: lfo.num("swing").unwrap_or(1.0).clamp(0.0, 1.0),
+                unipolar: lfo.num("unidir").unwrap_or(0.0) != 0.0,
+            });
         }
     }
 

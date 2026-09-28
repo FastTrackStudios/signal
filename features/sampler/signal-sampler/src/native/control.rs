@@ -26,6 +26,8 @@ pub enum LfoWave {
     Square,
     /// Sample & hold: a new random value each cycle.
     SampleHold,
+    /// A falling ramp.
+    SawDown,
 }
 
 /// A control LFO. Bipolar output −1..+1. Free-rate or tempo-synced, with
@@ -45,6 +47,10 @@ pub struct ControlLfo {
     /// Fade-in after each note-on (seconds; 0 = none) and where it is.
     pub fade_s: f32,
     fade: f32,
+    /// Output amplitude (an LFO's own depth, e.g. Omnisphere's swing).
+    pub amp: f32,
+    /// Output 0..amp instead of −amp..+amp.
+    pub unipolar: bool,
 }
 
 impl ControlLfo {
@@ -61,6 +67,8 @@ impl ControlLfo {
             rng: 0x02F6_E2B1,
             fade_s: 0.0,
             fade: 1.0,
+            amp: 1.0,
+            unipolar: false,
         }
     }
 
@@ -102,6 +110,12 @@ impl ControlLfo {
                 }
             }
             LfoWave::SampleHold => self.held,
+            LfoWave::SawDown => 1.0 - 2.0 * self.phase,
+        };
+        let v = if self.unipolar {
+            (v + 1.0) * 0.5 * self.amp
+        } else {
+            v * self.amp
         };
         let hz = match self.sync_beats {
             Some(beats) => (tempo_bpm.max(1.0) / 60.0) / beats.max(1e-3),

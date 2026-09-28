@@ -963,11 +963,6 @@ pub struct ImportedPatch {
 /// Omnisphere's normalized LFO rate → Hz. Approximate (an exponential over
 /// the free-run range) until it's swept against the real engine like the
 /// filter knee was.
-fn omni_lfo_hz(v: f32) -> f32 {
-    // The same curve the patch tree builds its LFOs with (0.05..20 Hz), so a
-    // lane's LFO knobs seeded from here re-apply as exactly the patch's rate.
-    0.05 * 400f32.powf(v.clamp(0.0, 1.0))
-}
 
 /// Read an Omnisphere `.prt_omn` patch and flatten its layers onto module
 /// settings.
@@ -1169,7 +1164,7 @@ fn import_rest(patch: &crate::omni_import::OmniPatch) -> ImportedPatch {
         .iter()
         .enumerate()
         .take(4)
-        .map(|(i, (rate, kind, _synced, _retrig))| {
+        .map(|(i, l)| {
             let tag = format!("LFO{}", i + 1);
             let depth = patch
                 .mod_routes
@@ -1177,11 +1172,7 @@ fn import_rest(patch: &crate::omni_import::OmniPatch) -> ImportedPatch {
                 .filter(|r| r.source.starts_with(&tag))
                 .map(|r| r.depth.abs())
                 .fold(0.0f32, f32::max);
-            (
-                omni_lfo_hz(*rate),
-                depth.clamp(0.0, 1.0),
-                (kind * 4.0).clamp(0.0, 4.0),
-            )
+            (l.rate_hz(), depth.clamp(0.0, 1.0), l.wave() as f32)
         })
         .collect();
     ImportedPatch {

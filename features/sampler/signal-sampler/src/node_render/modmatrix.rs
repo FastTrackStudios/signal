@@ -419,6 +419,7 @@ impl ModCompiler {
                     2 => LfoWave::Saw,
                     3 => LfoWave::Square,
                     4 => LfoWave::SampleHold,
+                    5 => LfoWave::SawDown,
                     _ => LfoWave::Sine,
                 };
                 let mut lfo = ControlLfo::new(wave, rate);
@@ -429,6 +430,8 @@ impl ModCompiler {
                     lfo = lfo.with_retrigger(true);
                 }
                 lfo.fade_s = block.param_f32("fade").unwrap_or(0.0).max(0.0);
+                lfo.amp = block.param_f32("amp").unwrap_or(1.0).clamp(0.0, 1.0);
+                lfo.unipolar = block.param_f32("unipolar").unwrap_or(0.0) > 0.0;
                 ModSource::lfo(lfo, sr)
             }
             BlockType::Envelope | BlockType::MultisegEnvelope => {
