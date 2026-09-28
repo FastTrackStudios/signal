@@ -357,7 +357,9 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     .with_param("fm_shape", format!("{:.4}", layer.fm_shape));
             }
             if layer.ring_mix > 0.0 {
-                wt = wt.with_param("ring_mix", format!("{:.4}", layer.ring_mix));
+                wt = wt
+                    .with_param("ring_mix", format!("{:.4}", layer.ring_mix))
+                    .with_param("ring_ratio", format!("{:.4}", layer.ring_ratio.max(0.01)));
             }
             for (i, (level, smi, pan, shape)) in layer.harmonia.iter().take(4).enumerate() {
                 let n = i + 1;

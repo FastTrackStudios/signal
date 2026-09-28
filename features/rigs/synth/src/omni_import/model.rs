@@ -116,6 +116,8 @@ pub struct OmniLayer {
     pub fm_ratio: f32,
     /// Ring/AM mix 0..1 (`OSC am`).
     pub ring_mix: f32,
+    /// Ring modulator ratio (`2·AMmodint`).
+    pub ring_ratio: f32,
     /// Active Harmonia voices: (level, interval semitones, pan −1..1, shape).
     pub harmonia: Vec<(f32, f32, f32, f32)>,
     /// Waveshaper when engaged: (drive, crush, reduce, mix).
@@ -953,7 +955,17 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
                 .attr("kind")
                 .and_then(|k| k.trim().parse::<u32>().ok())
                 .unwrap_or(0);
-            layer.ring_mix = osc.num("am").unwrap_or(0.0).clamp(0.0, 1.0);
+            // AM is a ring modulator (measured: carrier suppressed at full):
+            // `am` switches it on, `AMmoddepth` blends dry → ring (as its
+            // square root: half depth already leaves the sidebands 1.5 dB
+            // over the carrier) and
+            // `AMmodint` sets the modulator ratio (2·AMmodint).
+            layer.ring_mix = if n("am", 0.0) > 0.0 {
+                n("AMmoddepth", 1.0).clamp(0.0, 1.0).sqrt()
+            } else {
+                0.0
+            };
+            layer.ring_ratio = 2.0 * n("AMmodint", 0.75).clamp(0.0, 1.0);
             // Unison: the newer UNI element wins; older patches carry the
             // uns*/u* attrs directly on OSC.
             let (on, cnt, dpth, wdth) = match osc.find("UNI") {
