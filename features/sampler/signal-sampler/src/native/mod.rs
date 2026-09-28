@@ -30,7 +30,10 @@ mod wurli;
 pub use adsr::{Adsr, AdsrParams};
 pub use amp::NativeAmp;
 pub use arp::{ArpEngine, ArpStep};
-pub use control::{ControlEnv, ControlLfo, ControlSource, LfoWave, MidiMod, MidiSource, ModSource};
+pub use control::{
+    ControlEnv, ControlLfo, ControlMultiseg, ControlSource, LfoWave, MidiMod, MidiSource,
+    ModSource, SegPoint,
+};
 pub use filter::{FilterCharacter, FilterMode, Ladder, NativeFilter, OnePole, ResonanceMap, Svf};
 pub use freq_shifter::NativeDfs;
 pub use modal::NativeModal;

@@ -21,7 +21,7 @@ def render(xml, exe, tag):
         f.write(xml); p = f.name
     wav = os.path.join(os.getcwd(), f"p_{tag}.wav")
     cmd = [exe, p, wav, "--note", str(NOTE), "--vel", os.environ.get("VEL", "100"),
-           "--hold", str(HOLD), "--tail", "0.1", "--sr", str(SR)]
+           "--hold", str(HOLD), "--tail", os.environ.get("TAIL", "0.1"), "--sr", str(SR)]
     for cc in filter(None, os.environ.get("CC", "").split(",")):
         cmd += ["--cc", cc]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
@@ -70,13 +70,38 @@ def describe(p, dt):
     return out
 
 base = open(os.path.join(HERE, "init_part.prt_omn")).read()
+
+def set_modenv(xml, n, spec, zoom=None):
+    """Replace the Nth part MODENV's points with `l:t:s:c,…` (floats; s an
+    int code, written as hex like the plugin)."""
+    starts = [m.start() for m in re.finditer(r"<MODENV\b", xml)]
+    a = starts[n]; b = xml.index("</MODENV>", a)
+    head = xml[a:xml.index(">", a) + 1]
+    pts = [tuple(v for v in p.split(":")) for p in spec.split(",")]
+    head = re.sub(r'\bc="[^"]*"', f'c="{len(pts):x}"', head)
+    if zoom is not None:
+        head = re.sub(r'\bzoom="[^"]*"', f'zoom="{hexf(float(zoom))}"', head)
+    body = "".join(f'<p l="{hexf(float(l))}"  t="{hexf(float(t))}"  s="{int(sc):x}"  c="{hexf(float(c))}" ></p> '
+                   for l, t, sc, c in pts)
+    return xml[:a] + head + body + xml[b:]
 for spec in _args:
     name, _, edits = spec.partition("=")
     xml = base
     for e in filter(None, edits.split(";")):
-        xml = apply(xml, e)
+        if re.match(r"MODENV\d*=", e):
+            # MODENV<n>=l:t:s:c,…[|zoom]
+            k, _, v = e.partition("=")
+            v, _, z = v.partition("|")
+            xml = set_modenv(xml, int(k[6:] or 0), v, z or None)
+        else:
+            xml = apply(xml, e)
     for tag, exe in (("omni", HARNESS), ("ours", OURS)):
         if tag == "ours" and not os.environ.get("OURS"): continue
         if tag == "omni" and os.environ.get("ONLYOURS"): continue
         p, dt = track(render(xml, exe, tag))
-        print(f"{name:14s} {tag} {describe(p, dt)}", flush=True)
+        if os.environ.get("TRAJ"):
+            # Pitch (cents) every 0.1 s from 0.3 s.
+            step = int(0.1 / dt)
+            print(f"{name:14s} {tag} " + " ".join(f"{v:5.0f}" for v in p[::step]), flush=True)
+        else:
+            print(f"{name:14s} {tag} {describe(p, dt)}", flush=True)

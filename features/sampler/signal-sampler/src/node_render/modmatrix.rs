@@ -434,6 +434,31 @@ impl ModCompiler {
                 lfo.unipolar = block.param_f32("unipolar").unwrap_or(0.0) > 0.0;
                 ModSource::lfo(lfo, sr)
             }
+            // A breakpoint envelope: `points` = "time:level:curve:step;…"
+            // (see `SegPoint`), free-running, `loop` / `sync` (beats).
+            BlockType::MultisegEnvelope if block.param_str("points").is_some() => {
+                let points = block
+                    .param_str("points")
+                    .unwrap_or_default()
+                    .split(';')
+                    .filter_map(|p| {
+                        let mut it = p.split(':').map(|v| v.trim().parse::<f32>().ok());
+                        Some(crate::native::SegPoint {
+                            time: it.next()??,
+                            level: it.next()??,
+                            curve: it.next().flatten().unwrap_or(0.0),
+                            step: it.next().flatten().unwrap_or(0.0) > 0.0,
+                        })
+                    })
+                    .collect();
+                let env = crate::native::ControlMultiseg::new(
+                    points,
+                    block.param_f32("loop").unwrap_or(0.0) > 0.0,
+                    block.param_f32("sync").unwrap_or(0.0) > 0.0,
+                )
+                .with_velocity_sensitivity(block.param_f32("vel_sens").unwrap_or(0.0));
+                ModSource::multiseg(env, sr)
+            }
             BlockType::Envelope | BlockType::MultisegEnvelope => {
                 let mut p = crate::native::AdsrParams::default();
                 if let Some(v) = block.param_f32("attack") {

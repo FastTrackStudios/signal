@@ -145,6 +145,20 @@ impl OmniLfo {
     }
 }
 
+/// One part mod envelope — a free-running breakpoint envelope (measured:
+/// it restarts on note-on and runs its points whatever the key does).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct OmniModEnv {
+    /// `(time, level, curve k, step)`: time in seconds (or beats when
+    /// synced) — one `t` unit is 100 of either; `k = 42·(0.5 − c)` (0 =
+    /// linear) and `step` (the point's `s` bit 0) shape the segment that
+    /// leaves the point.
+    pub points: Vec<(f32, f32, f32, bool)>,
+    pub looping: bool,
+    pub synced: bool,
+    pub velsens: f32,
+}
+
 /// One mod-matrix route (`sourceN` → `targetN`).
 ///
 /// Measured: the route adds `lo + (hi − lo)·source` to the target in the
@@ -171,6 +185,9 @@ pub struct OmniPatch {
     /// Aux FX rack module names.
     pub aux_fx: Vec<String>,
     pub mod_routes: Vec<OmniModRoute>,
+    /// The part's six mod envelopes (`MODENV`, with `MODENVPARAMS` then
+    /// five `MOD_ENV2_2` for their settings).
+    pub mod_envs: Vec<OmniModEnv>,
     /// The part's nine LFOs from `LFO_SET` (LFO9 is the vibrato LFO every
     /// factory patch routes to tuneFine).
     pub lfos: Vec<OmniLfo>,
@@ -927,6 +944,42 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
                 offset: lo,
             });
         }
+    }
+
+    // Mod envelopes: points, plus each one's settings (the first in
+    // MODENVPARAMS, the rest in MOD_ENV2_2, in order).
+    let settings: Vec<&XmlNode> = engine
+        .child("MODENVPARAMS")
+        .into_iter()
+        .chain(engine.children_tagged("MOD_ENV2_2"))
+        .collect();
+    for (i, env) in engine.children_tagged("MODENV").enumerate() {
+        let points = env
+            .children_tagged("p")
+            .map(|p| {
+                let bits = p
+                    .attr("s")
+                    .and_then(|v| u32::from_str_radix(v, 16).ok())
+                    .unwrap_or(0);
+                (
+                    p.num("t").unwrap_or(0.0).max(0.0) * 100.0,
+                    p.num("l").unwrap_or(0.0).clamp(0.0, 1.0),
+                    42.0 * (0.5 - p.num("c").unwrap_or(0.5).clamp(0.0, 1.0)),
+                    bits & 1 != 0,
+                )
+            })
+            .collect();
+        let set = settings.get(i);
+        let flag = |k: &str| set.and_then(|s| s.num(k)).unwrap_or(0.0) != 0.0;
+        patch.mod_envs.push(OmniModEnv {
+            points,
+            looping: flag("lp"),
+            synced: flag("sync"),
+            velsens: set
+                .and_then(|s| s.num("velsens"))
+                .unwrap_or(0.0)
+                .clamp(0.0, 1.0),
+        });
     }
 
     if let Some(set) = engine.child("LFO_SET") {

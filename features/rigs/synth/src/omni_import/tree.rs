@@ -163,7 +163,7 @@ pub fn translate_route(
         "MPE3" => "MPETimbre".to_string(),
         s if s.starts_with("LFO") => format!("LFO {}", &s[3..]),
         s if s.ends_with("FENV") => "Filter Env".to_string(),
-        s if s.starts_with("ModEnv") => "Mod Env".to_string(),
+        s if s.starts_with("ModEnv") => format!("Mod Env {}", &s[6..]),
         _ => return None,
     };
     Some((
@@ -485,8 +485,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                         .with_param("release", format!("{r:.4}"));
                 }
                 fe
-            })
-            .modulator(BlockType::MultisegEnvelope, "Mod Env");
+            });
         // The filter section's own envelope depth (independent of matrix rows).
         // Measured: it moves the cutoff knob `envdpth` settings at full
         // envelope, like a matrix row.
@@ -532,6 +531,22 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             }
         }
         preset = preset.modulator_block(lfo);
+    }
+    for (n, env) in patch.mod_envs.iter().enumerate().take(6) {
+        let points = env
+            .points
+            .iter()
+            .map(|(t, l, k, step)| format!("{t:.4}:{l:.4}:{k:.3}:{}", u8::from(*step)))
+            .collect::<Vec<_>>()
+            .join(";");
+        preset = preset.modulator_block(
+            RigBlock::of_type(BlockType::MultisegEnvelope)
+                .named(format!("Mod Env {}", n + 1))
+                .with_param("points", points)
+                .with_param("loop", if env.looping { "1" } else { "0" })
+                // Measured: a Mod Env's level ignores velocity.
+                .with_param("sync", if env.synced { "1" } else { "0" }),
+        );
     }
     if patch.arp_on {
         let mut arp = RigBlock::of_type(BlockType::Arpeggiator)
