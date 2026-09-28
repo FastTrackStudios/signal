@@ -53,6 +53,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Analog Chorus" => analog_chorus(p),
             "Tape Slammer" => tape_slammer(p),
             "Graphic 12-Band EQ" => graphic_12band(p),
+            "BPM Delay" => bpm_delay(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -351,6 +352,52 @@ fn graphic_12band(p: &[f32; 15]) -> RigBlock {
         b = eq_band(b, i + 1, 0, *hz, 30.0 * (p[i] - 0.5), 1.4);
     }
     b.with_param("output_gain", format!("{:.2}", 44.0 * (p[13] - 0.5)))
+}
+
+/// BPM Delay (measured on a click): `P4` picks a division (`round(P4·50)`:
+/// 4, 2, 1, ½, ¼, ⅛, 1/16, 1/32 beats, then dotted 6 … 3/8, then
+/// triplets 8/3 … 1/6), `P7` the feedback (1 = endless), `P0` the mix,
+/// `P1` the wet level (0.5 → −4 dB), `P5` = 0 silences the echo.
+fn bpm_delay(p: &[f32; 15]) -> RigBlock {
+    const BEATS: [f32; 18] = [
+        4.0,
+        2.0,
+        1.0,
+        0.5,
+        0.25,
+        0.125,
+        0.0625,
+        0.03125,
+        6.0,
+        3.0,
+        1.5,
+        0.75,
+        0.375,
+        8.0 / 3.0,
+        4.0 / 3.0,
+        2.0 / 3.0,
+        1.0 / 3.0,
+        1.0 / 6.0,
+    ];
+    let k = ((p[4] * 50.0).round() as usize).min(BEATS.len() - 1);
+    let m = p[0].clamp(0.0, 1.0);
+    let wet_gain = if p[5] <= 0.0 {
+        0.0
+    } else {
+        p[1].clamp(0.0, 1.0).powf(0.68)
+    };
+    RigBlock::of_type(BlockType::Delay)
+        .with_param("style", "1")
+        .with_param(
+            "time",
+            format!("{:.2}", (BEATS[k] * 60_000.0 / SYNC_BPM).clamp(2.0, 2500.0)),
+        )
+        .with_param("feedback", format!("{:.3}", p[7].clamp(0.0, 0.95)))
+        .with_param("mix", format!("{:.4}", (m.sqrt() * wet_gain).min(1.0)))
+        .with_param("dry", format!("{:.4}", (1.0 - m).sqrt()))
+        // Measured: its echoes sit ~3 dB above our clean delay's.
+        .with_param("level", "3.0")
+        .with_param("tap_div", "7")
 }
 
 /// One EQ band's params (`n` from 1).
