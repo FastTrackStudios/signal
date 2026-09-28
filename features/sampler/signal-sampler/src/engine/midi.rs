@@ -2528,6 +2528,10 @@ impl SampleEngine {
             let (copies, det_cents, width) = self.unison;
             let copies = copies.max(1);
             let comp = 1.0 / (copies as f32).sqrt();
+            // Harmonia: the voice, then each extra voice at its interval, level
+            // and pan (an Omnisphere sample layer's Harmonia).
+            let (stack, n_stack) = self.harmonia_stack();
+            for &(h_semis, h_level, h_pan) in &stack[..n_stack] {
             for k in 0..copies {
                 let off = if copies == 1 {
                     0.0
@@ -2537,13 +2541,13 @@ impl SampleEngine {
                 // Source-vs-output sample-rate compensation (see Voice::with_rate_scale).
                 let sr_scale = data.sample_rate as f64 / self.sample_rate as f64;
                 let u_rate = rate * 2f64.powf((off * det_cents * 0.5) as f64 / 1200.0) * sr_scale;
-                let u_pan = (z.pan + off * width).clamp(-1.0, 1.0);
+                let u_pan = (z.pan + off * width + h_pan).clamp(-1.0, 1.0);
                 let mut voice = Voice::with_rate(
                     data.clone(),
                     note,
                     voice_kind.clone(),
                     u_rate,
-                    gain * comp,
+                    gain * comp * h_level,
                     self.release_frames,
                 )
                 .with_mic_index(mic_index)
@@ -2556,7 +2560,7 @@ impl SampleEngine {
                 .with_amp_points(self.amp_points.clone(), self.sample_rate)
                 .with_filter_env(self.new_voice_filter(note))
                 .with_vibrato(self.vibrato)
-                .with_pitch_cents(transpose_cents)
+                .with_pitch_cents(transpose_cents + f64::from(h_semis) * 100.0)
                 .with_sample_window(
                     z.sample_start as usize,
                     (z.sample_end > 0).then_some(z.sample_end as usize),
@@ -2570,6 +2574,7 @@ impl SampleEngine {
                 }
                 voice.prime_pitch_shifters();
                 self.voices.spawn(voice);
+            }
             }
         }
     }

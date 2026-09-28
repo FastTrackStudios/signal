@@ -946,6 +946,9 @@ pub struct SampleEngine {
     /// Pick zones as if played at this velocity — one dynamic layer of a
     /// multi-dynamic source (an Omnisphere "Choir Men Ohs - mf").
     zone_velocity: Option<u8>,
+    /// Harmonia: extra voices at `(interval semitones, level, pan)` on top of
+    /// the played one — an Omnisphere sample layer's (up to four).
+    harmonia: Vec<(f32, f32, f32)>,
     /// Timbre Shift (semitones): zones are picked for `note − shift` and
     /// played at `note`, so a positive shift plays a lower key pitched up.
     timbre_shift: i32,
@@ -1209,6 +1212,7 @@ impl SampleEngine {
             amp_points: None,
             velocity_sens: None,
             zone_velocity: None,
+            harmonia: Vec::new(),
             timbre_shift: 0,
             filter_env: None,
             filter_res: 0.0,
@@ -1563,6 +1567,20 @@ impl SampleEngine {
     /// velocity law); `None`: velocity only picks the sampled layer.
     pub fn set_velocity_sens(&mut self, s: Option<f32>) {
         self.velocity_sens = s.map(|s| s.clamp(0.0, 1.0));
+    }
+
+    /// Harmonia voices `(interval semitones, level, pan)`, up to four.
+    pub fn set_harmonia(&mut self, voices: Vec<(f32, f32, f32)>) {
+        self.harmonia = voices.into_iter().take(4).collect();
+    }
+
+    /// The voice stack a note plays: itself, then its Harmonia voices.
+    pub(crate) fn harmonia_stack(&self) -> ([(f32, f32, f32); 5], usize) {
+        let mut out = [(0.0, 1.0, 0.0); 5];
+        for (slot, v) in out[1..].iter_mut().zip(&self.harmonia) {
+            *slot = *v;
+        }
+        (out, 1 + self.harmonia.len())
     }
 
     /// Timbre Shift in semitones (see the field); 0 is off.

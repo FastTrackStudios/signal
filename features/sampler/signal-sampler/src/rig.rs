@@ -1549,15 +1549,36 @@ pub(crate) fn build_sample_source(
         let points = crate::native::parse_points(&spec);
         if points.len() >= 2 {
             engine.set_amp_points(Some(
-                crate::native::breakpoints::Breakpoints::with_penultimate_sustain(points),
+                crate::native::breakpoints::Breakpoints::with_penultimate_sustain(points)
+                    .with_synced(block.param_f32("amp_sync").unwrap_or(0.0) > 0.5),
             ));
         }
     }
     if let Some(s) = block.param_f32("vel_sens") {
         engine.set_velocity_sens(Some(s));
     }
+    // One soundsource of a multi-soundsource pack (its zones' articulation).
+    if let Some(a) = block.param_str("articulation").filter(|a| !a.is_empty()) {
+        engine.set_articulation(a);
+    }
     if let Some(v) = block.param_f32("zone_velocity") {
         engine.set_zone_velocity(Some(v.round() as u8));
+    }
+    // Harmonia voices (an Omnisphere sample layer's).
+    let harmonia: Vec<(f32, f32, f32)> = (1..=4)
+        .filter_map(|n| {
+            let level = block.param_f32(&format!("harm{n}_level"))?;
+            (level > 0.0).then(|| {
+                (
+                    block.param_f32(&format!("harm{n}_interval")).unwrap_or(0.0),
+                    level,
+                    block.param_f32(&format!("harm{n}_pan")).unwrap_or(0.0),
+                )
+            })
+        })
+        .collect();
+    if !harmonia.is_empty() {
+        engine.set_harmonia(harmonia);
     }
     if let Some(k) = block.param_f32("timbre_semis") {
         engine.set_timbre_shift(k.round() as i32);

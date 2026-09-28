@@ -14,6 +14,15 @@ pub const OMNISPHERE_PACKS_ROOT: &str =
 /// from an ordinary Omnisphere patch. Override with `FTS_KEYSCAPE_PACKS`.
 pub const KEYSCAPE_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs";
 
+/// Root of the Keyscape **soundsource** packs: one pack per Keyscape library
+/// holding every soundsource Keyscape and Omnisphere name from it (`Dolceola
+/// ^ RR Lite`, `Clavichord a ^ RR`, …) as articulations, built from the
+/// library's `.db` maps (`sc-import keyscape --pack-staging`). Kept apart
+/// from the Keyscape instrument packs, which the keys rig lists as pianos.
+/// Override with `FTS_KEYSCAPE_SOUNDSOURCES`.
+pub const KEYSCAPE_SOUNDSOURCES_ROOT: &str =
+    "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Soundsources";
+
 /// Root of the built NI Essential Piano packs. Not an Omnisphere library, but
 /// indexed here because this is the rig's one name→source lookup and a keys
 /// profile names all three families through it. Override with
@@ -72,6 +81,10 @@ pub fn dynamic_zone_velocity(name: &str) -> Option<u8> {
 #[derive(Debug, Default)]
 pub struct SoundsourceIndex {
     by_name: HashMap<String, PathBuf>,
+    /// Soundsources that are one articulation of a multi-soundsource pack
+    /// (a `<Pack>.soundsources.txt` beside it lists them — the Keyscape
+    /// libraries, one pack per library): lower-cased name → articulation.
+    articulation: HashMap<String, String>,
 }
 
 impl SoundsourceIndex {
@@ -104,6 +117,10 @@ impl SoundsourceIndex {
         idx.scan_dir(Path::new(&keyscape), 0);
         // …and the NI pianos, so one index answers for every family a keys
         // profile can name.
+        // …and the Keyscape soundsources (after the instrument packs: a
+        // soundsource name is exact, and must reach its own pack).
+        let ks = root("FTS_KEYSCAPE_SOUNDSOURCES", KEYSCAPE_SOUNDSOURCES_ROOT);
+        idx.scan_dir(Path::new(&ks), 0);
         let ni = root("FTS_NI_PIANO_PACKS", NI_PIANO_PACKS_ROOT);
         idx.scan_dir(Path::new(&ni), 0);
         // Finally the authored patches. Last so a built pack of the same name
@@ -139,6 +156,14 @@ impl SoundsourceIndex {
                 // A built pack (preferred): <Name>.signalpack.
                 if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                     self.by_name.insert(stem.to_lowercase(), path.clone());
+                    // A multi-soundsource pack names each of its soundsources.
+                    let list = path.with_file_name(format!("{stem}.soundsources.txt"));
+                    if let Ok(names) = std::fs::read_to_string(&list) {
+                        for name in names.lines().map(str::trim).filter(|n| !n.is_empty()) {
+                            self.by_name.insert(name.to_lowercase(), path.clone());
+                            self.articulation.insert(name.to_lowercase(), name.to_string());
+                        }
+                    }
                 }
             } else if path
                 .extension()
@@ -195,6 +220,14 @@ impl SoundsourceIndex {
     ///
     /// Exact matches always win, so this can only rescue a lookup that would
     /// otherwise have failed outright.
+    /// The articulation that selects `name` inside the pack
+    /// [`find_source`](Self::find_source) returns for it, when that pack holds
+    /// several soundsources.
+    #[must_use]
+    pub fn articulation_for(&self, name: &str) -> Option<&str> {
+        self.articulation.get(&name.to_lowercase()).map(String::as_str)
+    }
+
     /// Like [`find`](Self::find), but only a playable source — a pack or a
     /// sample extraction, never a `.prt_omn`. What a patch layer's
     /// soundsource needs: the factory also has patches named after their

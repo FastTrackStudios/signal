@@ -79,6 +79,7 @@ fn test_zone(rr_index: u32) -> crate::spec::ZoneSpec {
         trigger_cc: 0,
         trigger_value_min: 0,
         trigger_value_max: 0,
+        pedal_state: String::new(),
         mic: String::new(),
         articulation: String::new(),
         dynamic: String::new(),
