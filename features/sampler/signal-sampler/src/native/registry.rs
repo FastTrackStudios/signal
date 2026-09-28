@@ -282,7 +282,10 @@ fn wavetable_config(block: &RigBlock) -> SynthConfig {
 /// names real waves (`wave0` / `wave1`, an imported patch's) and they load —
 /// those waves in place of the generated shapes.
 fn wavetable_osc(block: &RigBlock, sample_rate: u32) -> NativeWavetable {
-    let mut osc = NativeWavetable::new(sample_rate).with_config(wavetable_config(block));
+    let mut osc = NativeWavetable::new(sample_rate)
+        .with_config(wavetable_config(block))
+        .with_transpose(block.param_f32("transpose").unwrap_or(0.0))
+        .with_glide(block.param_f32("glide_s").unwrap_or(0.0));
     // Real wavetables (an imported patch's `wave0` / `wave1`), when named and
     // readable; otherwise the generated shapes.
     if let Some(a) = block.param_str("wave0").filter(|p| !p.is_empty()) {

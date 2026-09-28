@@ -34,6 +34,13 @@ pub struct OmniLayer {
     pub filter_res: f32,
     /// `OSC level` (normalized).
     pub level: f32,
+    /// The layer's fixed transposition in semitones, from `OSC oct` / `semi`
+    /// / `tune` / `tuneFine` (measured: `oct` 0.04 = 0, each 0.02 lower is an
+    /// octave UP; `semi` 0.48 = 0, each 0.02 lower a semitone up; `tune`
+    /// ±48 semitones about 0.5; `tuneFine` ±1 semitone about 0.5).
+    pub transpose: f32,
+    /// Glide on (`OSC portAct`); its time is the part's (`OmniPatch::glide_s`).
+    pub glide: bool,
     /// Unison: voice count (1..8), detune 0..1, width 0..1, plus the
     /// octave / analog / drift mode amounts (0..1).
     pub unison_count: u32,
@@ -185,6 +192,9 @@ pub struct OmniPatch {
     /// Aux FX rack module names.
     pub aux_fx: Vec<String>,
     pub mod_routes: Vec<OmniModRoute>,
+    /// Glide time (s) for the layers with glide on: `SYNTHENG portV2`,
+    /// measured ≈ `12.2 s · v^2.12` (0.2 → 0.4 s, 0.4 → 1.75 s).
+    pub glide_s: f32,
     /// The part's six mod envelopes (`MODENV`, with `MODENVPARAMS` then
     /// five `MOD_ENV2_2` for their settings).
     pub mod_envs: Vec<OmniModEnv>,
@@ -820,6 +830,12 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
         layer.am_waves = pair("AMWAVES");
         if let Some(osc) = voice.child("OSC") {
             layer.level = osc.num("level").unwrap_or(0.5);
+            let n = |k: &str, d: f32| osc.num(k).unwrap_or(d);
+            layer.transpose = ((0.04 - n("oct", 0.04)) / 0.02).round() * 12.0
+                + ((0.48 - n("semi", 0.48)) / 0.02).round()
+                + (n("tune", 0.5) - 0.5) * 96.0
+                + (n("tuneFine", 0.5) - 0.5) * 2.0;
+            layer.glide = n("portAct", 0.0) != 0.0;
             layer.fm_depth = osc.num("fm").unwrap_or(0.0).clamp(0.0, 1.0);
             layer.fm_shape = osc.num("fmwf").unwrap_or(0.0).clamp(0.0, 1.0);
             layer.osc_wave = osc.num("type").unwrap_or(0.0).clamp(0.0, 1.0);
@@ -945,6 +961,13 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             });
         }
     }
+
+    patch.glide_s = 12.2
+        * engine
+            .num("portV2")
+            .unwrap_or(0.0)
+            .clamp(0.0, 1.0)
+            .powf(2.12);
 
     // Mod envelopes: points, plus each one's settings (the first in
     // MODENVPARAMS, the rest in MOD_ENV2_2, in order).

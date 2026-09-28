@@ -183,6 +183,9 @@ struct Voice {
     ring_inc: f32,
     /// Base frequency / sample-rate (for runtime detune recompute).
     base_inc: f32,
+    /// Glide: the offset (semitones) it starts from and its progress 0..1.
+    glide_semis: f32,
+    glide_pos: f32,
 }
 
 /// The polyphonic synth-voice oscillator.
@@ -197,6 +200,14 @@ pub struct NativeWavetable {
     wt_mix: f32,
     /// Runtime pitch multiplier (param 4 "tune": 0.5 center, ±24 semitones).
     pitch_mult: f32,
+    /// A fixed transposition (a patch's octave/semitone/tune offsets), any
+    /// size, on top of the live `tune`.
+    transpose_mult: f32,
+    /// Glide (portamento): each new note starts at the last note's pitch
+    /// and arrives over `glide_s` along Omnisphere's measured curve (see
+    /// [`glide_remaining`]). 0 = off.
+    glide_s: f32,
+    last_note: Option<u8>,
     /// Vibrato: rate (Hz), depth (0..1 → up to 50 cents), phase.
     vib_rate: f32,
     vib_depth: f32,
@@ -218,6 +229,9 @@ impl NativeWavetable {
             wt_position: 0.0,
             wt_mix: 0.0,
             pitch_mult: 1.0,
+            transpose_mult: 1.0,
+            glide_s: 0.0,
+            last_note: None,
             vib_rate: 5.0,
             vib_depth: 0.0,
             vib_phase: 0.0,
@@ -225,6 +239,20 @@ impl NativeWavetable {
             harm_mix: 1.0,
             voices: Vec::new(),
         }
+    }
+
+    /// Glide into each note over `seconds` (0 = off).
+    #[must_use]
+    pub fn with_glide(mut self, seconds: f32) -> Self {
+        self.glide_s = seconds.max(0.0);
+        self
+    }
+
+    /// Transpose by `semitones` (fixed; the live `tune` rides on top).
+    #[must_use]
+    pub fn with_transpose(mut self, semitones: f32) -> Self {
+        self.transpose_mult = 2f32.powf(semitones / 12.0);
+        self
     }
 
     /// Play real wavetables instead of the generated shapes: `a` and `b`
@@ -337,9 +365,16 @@ impl NativeWavetable {
         let freq = 440.0 * 2f32.powf((note as f32 - 69.0) / 12.0);
         let amp = (velocity as f32 / 127.0) * 0.15;
         let base_inc = freq / self.sample_rate;
+        let glide_semis = match self.last_note {
+            Some(prev) if self.glide_s > 0.0 && prev != note => f32::from(prev) - f32::from(note),
+            _ => 0.0,
+        };
+        self.last_note = Some(note);
         if let Some(v) = self.voices.iter_mut().find(|v| v.note == note) {
             v.amp = amp;
             v.env.note_on();
+            v.glide_semis = glide_semis;
+            v.glide_pos = 0.0;
         } else {
             let mut env = Adsr::new(self.sample_rate, self.cfg.env);
             env.note_on();
@@ -353,6 +388,8 @@ impl NativeWavetable {
                 ring_phase: 0.0,
                 ring_inc: base_inc * self.cfg.ring_ratio,
                 base_inc,
+                glide_semis,
+                glide_pos: 0.0,
             });
         }
     }
@@ -371,6 +408,17 @@ impl NativeWavetable {
             _ => {}
         }
     }
+}
+
+/// The share of a glide still to go at progress `x` (0..1): Omnisphere's
+/// curve, measured — fast at first, arriving on time:
+/// `(e^(−kx) − e^(−k)) / (1 − e^(−k))`, k = 4.5 (fits glides of 0.95 s and
+/// 1.75 s within ~30 cents).
+#[inline]
+fn glide_remaining(x: f32) -> f32 {
+    const K: f32 = 4.5;
+    let end = (-K).exp();
+    (((-K * x).exp() - end) / (1.0 - end)).max(0.0)
 }
 
 // r[impl signal.soundsource.oscillator]
@@ -554,15 +602,28 @@ impl Soundsource for NativeWavetable {
                 let x = self.vib_phase * 2.0 - 1.0;
                 let sine = 4.0 * x * (1.0 - x.abs());
                 self.pitch_mult
+                    * self.transpose_mult
                     * (1.0 + sine * self.vib_depth * 50.0 * (std::f32::consts::LN_2 / 1200.0))
             } else {
-                self.pitch_mult
+                self.pitch_mult * self.transpose_mult
+            };
+            let glide_step = if self.glide_s > 0.0 {
+                1.0 / (self.glide_s * self.sample_rate)
+            } else {
+                1.0
             };
             for v in &mut self.voices {
                 let e = v.env.tick() * v.amp;
                 if e == 0.0 {
                     continue;
                 }
+                let pitch = if v.glide_semis != 0.0 && v.glide_pos < 1.0 {
+                    let off = v.glide_semis * glide_remaining(v.glide_pos);
+                    v.glide_pos += glide_step;
+                    pitch * (off * (std::f32::consts::LN_2 / 12.0)).exp()
+                } else {
+                    pitch
+                };
                 // FM: one modulator per note phase-offsets every sub. The
                 // modulator is itself a morphing wave (fm_shape; 0 = sine).
                 let pm = if fm_index > 0.0 {

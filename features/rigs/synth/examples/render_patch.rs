@@ -166,10 +166,24 @@ fn main() {
             })
         })
         .collect();
+    // `--prev N`: a note held from late in the pre-roll and released just
+    // after the main note (legato), for glide.
+    let prev = args
+        .iter()
+        .position(|a| a == "--prev")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|v| v.parse::<u8>().ok());
+    let prev_on: Vec<PluginMidiEvent> =
+        prev.map(|k| note_event(true, k, vel)).into_iter().collect();
     for i in 0..40 {
+        let midi: &[PluginMidiEvent] = match i {
+            0 => &ccs,
+            35 => &prev_on,
+            _ => &[],
+        };
         let ev = PluginEvents {
             params: &[],
-            midi: if i == 0 { &ccs } else { &[] },
+            midi,
             note_expressions: &[],
         };
         rn.render(&mut l, &mut r, &ev);
@@ -181,7 +195,13 @@ fn main() {
     let mut t = 0usize;
     while t < total {
         let midi: Vec<PluginMidiEvent> = if t == 0 {
-            vec![note_event(true, note, vel)]
+            let mut m = vec![note_event(true, note, vel)];
+            if let Some(k) = prev {
+                let mut off = note_event(false, k, 0);
+                off.offset = 1;
+                m.push(off);
+            }
+            m
         } else if t <= off_at && off_at < t + block {
             vec![note_event(false, note, 0)]
         } else {

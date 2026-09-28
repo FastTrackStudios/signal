@@ -24,6 +24,8 @@ def render(xml, exe, tag):
            "--hold", str(HOLD), "--tail", os.environ.get("TAIL", "0.1"), "--sr", str(SR)]
     for cc in filter(None, os.environ.get("CC", "").split(",")):
         cmd += ["--cc", cc]
+    if os.environ.get("PREV"):
+        cmd += ["--prev", os.environ["PREV"]]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
     os.unlink(p)
     if r.returncode: raise SystemExit(r.stderr[-1500:])
@@ -38,7 +40,7 @@ def track(x, h=int(os.environ.get("H", "4"))):
     """Instantaneous pitch (cents vs nominal) from harmonic h, hop 5 ms."""
     n, hop, N = 4096, 240, 1 << 16
     w = np.hanning(n); c = F0 * h; out = []
-    for s in range(int(0.3*SR), len(x) - n - int(0.1*SR), hop):
+    for s in range(int(float(os.environ.get("T0", "0.3"))*SR), len(x) - n - int(0.1*SR), hop):
         sp = np.abs(np.fft.rfft(x[s:s+n]*w, N)); df = SR / N
         wide = float(os.environ.get("WIDE", "0.06"))
         lo, hi = int(c*(1-wide)/df), int(c*(1+wide)/df)
@@ -47,6 +49,20 @@ def track(x, h=int(os.environ.get("H", "4"))):
         k2 = k + 0.5*(a-g)/(a-2*b+g)
         out.append(1200*np.log2(k2*df/h/F0))
     return np.array(out), hop / SR
+
+def abs_pitch(x):
+    """The held note's fundamental (cents vs nominal) by harmonic product
+    spectrum over 0.6–1.6 s, searched ±4 octaves."""
+    seg = x[int(0.6*SR):int(1.6*SR)]; N = 1 << 20
+    sp = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), N)); df = SR / N
+    lo, hi = int(F0/16/df), int(min(F0*16, 5000)/df)
+    hps = np.log(sp[lo:hi] + 1e-9)
+    for h in (2, 3, 4):
+        idx = (np.arange(lo, hi) * h)
+        idx = idx[idx < len(sp)]
+        hps[:len(idx)] += np.log(sp[idx] + 1e-9)
+    k = lo + int(np.argmax(hps))
+    return 1200 * np.log2(k * df / F0)
 
 def amp_track(x):
     """Level (dB) in 10 ms windows from 0.3 s, and L/R balance (dB)."""
@@ -107,6 +123,9 @@ for spec in _args:
         if tag == "ours" and not os.environ.get("OURS"): continue
         if tag == "omni" and os.environ.get("ONLYOURS"): continue
         x = render(xml, exe, tag)
+        if os.environ.get("ABS"):
+            print(f"{name:14s} {tag} {abs_pitch(x):8.1f} cents", flush=True)
+            continue
         p, dt = amp_track(x) if os.environ.get("AMP") else track(x)
         if os.environ.get("TRAJ"):
             # Pitch (cents) every 0.1 s from 0.3 s.

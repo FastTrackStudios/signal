@@ -260,6 +260,11 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             // stack (unison / harmonia / FM / ring) as build params.
             let mut wt = RigBlock::of_type(BlockType::Wavetable)
                 .named("Soundsource")
+                .with_param("transpose", format!("{:.4}", layer.transpose))
+                .with_param(
+                    "glide_s",
+                    format!("{:.4}", if layer.glide { patch.glide_s } else { 0.0 }),
+                )
                 // The oscillator's waveform. Omnisphere's `OSC type` is a
                 // selector over its wave list and our `shape` is a continuous
                 // sine→triangle→saw→square morph, so this is a first
@@ -341,6 +346,13 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             let mut sb = RigBlock::sample_lib(spec.to_string_lossy().to_string())
                 .named("Soundsource")
                 .with_param("soundsource", layer.soundsource.clone());
+            // The layer's fixed transposition: whole semitones + cents.
+            if layer.transpose != 0.0 {
+                let st = layer.transpose.trunc();
+                sb = sb
+                    .with_param("transpose", format!("{st}"))
+                    .with_param("fine", format!("{:.2}", (layer.transpose - st) * 100.0));
+            }
             if layer.unison_count > 1 {
                 sb = sb
                     .with_param("unison_voices", layer.unison_count.to_string())
