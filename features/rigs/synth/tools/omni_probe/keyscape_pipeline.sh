@@ -16,14 +16,15 @@ PY=${PY:-/private/tmp/claude-501/-Users-codywright/8eccb40f-5f6d-4a65-b161-c069f
 REPORT=${REPORT:-$LDIR/verification.md}
 mkdir -p "$LDIR"
 if [ $# -gt 0 ]; then packs=("$@"); else
-  mapfile -t all < <(ssh -o HostName=100.68.255.30 thebattleship "ls $RDIR" | grep '\.signalpack$' | sed 's/\.signalpack$//')
+  # (the remote login shell is nushell: run the listing through bash)
+  mapfile -t all < <(echo "ls '$RDIR'" | ssh -o HostName=100.68.255.30 thebattleship bash -s | grep '\.signalpack$' | sed 's/\.signalpack$//')
   packs=(Dolceola Clavichord)
   for p in "${all[@]}"; do [[ "$p" == Dolceola || "$p" == Clavichord ]] || packs+=("$p"); done
 fi
 for L in "${packs[@]}"; do
   grep -q "^## $L\$" "$REPORT" 2>/dev/null && { echo "skip $L (reported)"; continue; }
   echo "== $L"
-  play=$(ssh -o HostName=100.68.255.30 thebattleship "PACKS='$L' $RCHECK $RDIR" 2>&1)
+  play=$(echo "PACKS='$L' '$RCHECK' '$RDIR'" | ssh -o HostName=100.68.255.30 thebattleship bash -s 2>&1)
   { echo "## $L"; echo; echo '```'; echo "$play" | grep -E '^(ok|WARN|FAIL)|ok, .* fail'; echo '```'; } >> "$REPORT"
   if echo "$play" | grep -q '^FAIL'; then
     echo "   playability FAIL — not transferred"; echo "**Not transferred: playability failures.**" >> "$REPORT"; echo >> "$REPORT"; continue
