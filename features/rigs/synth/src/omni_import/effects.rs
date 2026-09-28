@@ -7,6 +7,7 @@
 
 use signal_proto::block::BlockType;
 use signal_sampler::rig::RigBlock;
+use signal_sampler::rig_node::Container;
 
 use super::model::classify_effect;
 
@@ -39,6 +40,70 @@ const CE_DIVISIONS: [f32; 15] = [
 /// A configured native block for Omnisphere effect `name` with params `p`,
 /// or `None` for an empty slot.
 #[must_use]
+/// Effects realized as a small container rather than one block (a
+/// modulator plus its level, or parallel taps), or `None` for the
+/// single-block ones in [`effect_block`].
+#[must_use]
+pub fn effect_chain(name: &str, p: &[f32; 15]) -> Option<Container> {
+    let gain = |db: f32| {
+        RigBlock::of_type(BlockType::Volume).with_param("gain_db", format!("{db:.2}"))
+    };
+    // A mono tremolo swinging `swing_db` at `hz`, and the makeup that puts
+    // its average at `mean_db` (the tremolo alone averages 1 − depth/2).
+    let pulse = |hz: f32, swing_db: f32, mean_db: f32| {
+        let depth = (1.0 - 10f32.powf(-swing_db / 20.0)).clamp(0.0, 1.0);
+        Container::module(name)
+            .add(
+                RigBlock::of_type(BlockType::Trem)
+                    .with_param("rate", format!("{hz:.3}"))
+                    .with_param("depth", format!("{depth:.3}"))
+                    .with_param("mode", "0")
+                    .with_param("mix", "1"),
+            )
+            .add(gain(mean_db - 20.0 * (1.0 - depth / 2.0).log10()))
+    };
+    let _ = p;
+    Some(match name {
+        // Measured at the gig patch's settings on a held saw (120 BPM): a
+        // ~5 dB rise repeating every beat, −1.4 dB on average. Its band
+        // split is not modelled — the level motion is what reads.
+        "Pulsar Split" => pulse(2.0, 5.3, -1.4),
+        // A slow pump (~11 dB over a bar at the gig's settings), −3 dB on
+        // average.
+        "Pump-O-Matic" => pulse(0.5, 10.9, -3.0),
+        // A console stage: −0.8 dB at the gig's settings (its saturation is
+        // not modelled).
+        "Solid State Mix Buss" => Container::module(name).add(gain(-0.8)),
+        // Radio Delay (measured on a click at the gig's settings, 120 BPM):
+        // two taps, 375 and 500 ms (a dotted eighth and a quarter), each
+        // first echo −20.9 dB and every repeat 14.7 dB down; the dry path
+        // −0.8 dB.
+        "Radio Delay" => Container::module(name).add(
+            // One dual delay, its two lines in parallel (routing 3).
+            RigBlock::of_type(BlockType::Delay)
+                .with_param("style", "1")
+                .with_param("style_b", "1")
+                .with_param("routing", "3")
+                .with_param("time", "375.0")
+                .with_param("time_b", "500.0")
+                .with_param("feedback", "0.184")
+                .with_param("feedback_b", "0.184")
+                .with_param("mix", format!("{RADIO_TAP:.4}"))
+                .with_param("mix_b", format!("{RADIO_TAP:.4}"))
+                // Dual routing runs the dry ~0.9 dB under its knob: full
+                // here is Omnisphere's −0.8 dB.
+                .with_param("dry", "1.0")
+                .with_param("level", "0.0")
+                .with_param("tap_div", "7"),
+        ),
+        _ => return None,
+    })
+}
+
+/// Radio Delay's per-tap wet send (fitted so each first echo reads −20.9
+/// dB re the click through our delay).
+const RADIO_TAP: f32 = 0.09;
+
 pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
     if name.is_empty() || name == "No Effect" {
         return None;
@@ -63,6 +128,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Retroplex" => retroplex(p),
             "Tube Limiter" => tube_limiter(p),
             "Precision Compressor" => precision_compressor(p),
+            "Power Filter" => power_filter(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -353,7 +419,70 @@ fn tape_slammer(p: &[f32; 15]) -> RigBlock {
         .with_param("attack", "1")
         .with_param("release", "100")
         .with_param("knee", "6")
-        .with_param("makeup", format!("{:.1}", (20.0 * p[5]).clamp(-24.0, 24.0)))
+        // P5's gain, measured below the threshold (−24 dB in): steep at first,
+        // then ~20 dB per unit.
+        .with_param(
+            "makeup",
+            format!(
+                "{:.1}",
+                lerp_table(
+                    &[
+                        (0.0, 0.0),
+                        (0.1, 1.8),
+                        (0.2, 5.8),
+                        (0.323, 10.8),
+                        (0.5, 16.8),
+                        (0.75, 23.1),
+                        (1.0, 27.8)
+                    ],
+                    p[5]
+                )
+            ),
+        )
+}
+
+/// Power Filter (measured, a held saw through it): a 2-pole filter whose
+/// `P0` sets the corner (0.2 → ~210 Hz, 0.4 → ~1 kHz, 0.6 → ~4.2 kHz, 0.8
+/// → ~10.5 kHz, 1 open), `P1` its resonance, `P3` the type (≈0.03 a steep
+/// highpass, 0 / 0.06 lowpass, ~0.12 a milder band, ≥0.25 out), and `P4`
+/// (input) × `P5` (output) its level, both linear: `20·log10(P4·P5) +
+/// 20.45` dB — the gig bass's 0.48 × 0.71 is +11 dB.
+fn power_filter(p: &[f32; 15]) -> RigBlock {
+    let hz = lerp_table(
+        &[
+            (0.0, 42.0),
+            (0.2, 210.0),
+            (0.4, 1050.0),
+            (0.6, 4200.0),
+            (0.8, 10_500.0),
+            (1.0, 22_000.0),
+        ],
+        p[0],
+    );
+    let t = p[3];
+    let level = |g: f32| {
+        if p[4] <= 0.0 || p[5] <= 0.0 {
+            -120.0
+        } else {
+            20.0 * (p[4] * p[5]).log10() + g
+        }
+    };
+    let q = 1.0 + 4.0 * ((p[1] - 0.2).max(0.0) / 0.8);
+    let b = RigBlock::of_type(BlockType::Eq);
+    if t >= 0.2 {
+        // Out of circuit: a small loss only.
+        return b.with_param("output_gain", "-0.9");
+    }
+    let (b, gain) = if (0.015..0.045).contains(&t) {
+        (eq_band(b, 1, 3, hz.min(20_000.0), 0.0, q), level(20.45))
+    } else if t >= 0.09 {
+        (b, level(20.45) - 6.0)
+    } else if p[0] >= 0.99 {
+        (b, level(20.45))
+    } else {
+        (eq_band(b, 1, 4, hz, 0.0, q), level(20.45))
+    };
+    b.with_param("output_gain", format!("{gain:.2}"))
 }
 
 /// Graphic 12-Band EQ (measured): `P0`..`P11` are ±15 dB bells (0.5

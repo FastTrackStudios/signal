@@ -127,6 +127,12 @@ fn fx_rack_from(name: &str, types: &[String], params: &[[f32; 15]]) -> Container
         let p = params.get(slot).copied().unwrap_or([0.0; 15]);
         // Realize to native DSP with the effect's own settings when we know
         // the unit (see `effects`); otherwise a pass-through placeholder.
+        if let Some(c) = label.and_then(|fx| super::effects::effect_chain(fx, &p)) {
+            // Several blocks for one slot: their own container, so the rack
+            // still reads as four slots.
+            rack = rack.add(c);
+            continue;
+        }
         rack = match label.and_then(|fx| super::effects::effect_block(fx, &p)) {
             Some(block) => rack.add(block),
             None => rack.block(BlockType::Custom, format!("{name} Slot {}", slot + 1)),
