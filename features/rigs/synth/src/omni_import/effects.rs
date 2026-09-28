@@ -62,6 +62,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Velvet Verb" => velvet_verb(p),
             "Retroplex" => retroplex(p),
             "Tube Limiter" => tube_limiter(p),
+            "Precision Compressor" => precision_compressor(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -606,6 +607,21 @@ fn tube_limiter(p: &[f32; 15]) -> RigBlock {
         .with_param("release", "100")
         .with_param("knee", "6")
         .with_param("makeup", format!("{:.1}", drive.clamp(-24.0, 24.0)))
+}
+
+/// Precision Compressor (measured static curves; its program-dependent
+/// timing makes single renders vary, so this is an average): gentle
+/// compression near the top with `P2` the output gain (0 → −3.5, 0.198 →
+/// +2.2, 0.5 → +8.6, 1 → +14.5 dB).
+fn precision_compressor(p: &[f32; 15]) -> RigBlock {
+    let gain = lerp_table(&[(0.0, -3.5), (0.198, 2.2), (0.5, 8.6), (1.0, 14.5)], p[2]);
+    RigBlock::of_type(BlockType::Compressor)
+        .with_param("threshold", "-22")
+        .with_param("ratio", "2")
+        .with_param("attack", "10")
+        .with_param("release", "150")
+        .with_param("knee", "6")
+        .with_param("makeup", format!("{:.1}", gain.clamp(-24.0, 24.0)))
 }
 
 /// One EQ band's params (`n` from 1).
