@@ -92,6 +92,27 @@ fn points_param(points: &[(f32, f32, f32, bool)]) -> String {
         .join(";")
 }
 
+/// The tempo a synced amp envelope's beats are realized at. The voices tick
+/// their amp envelope without the host tempo, so it is fixed at import (the
+/// reference harness's tempo); a filter or mod envelope follows the live
+/// tempo through its `sync` param instead.
+const AMP_SYNC_BPM: f32 = 120.0;
+
+/// A layer's amp envelope points, in seconds.
+fn amp_points_param(layer: &super::model::OmniLayer) -> String {
+    if layer.amp_env_synced {
+        let spb = 60.0 / AMP_SYNC_BPM;
+        let pts: Vec<_> = layer
+            .amp_points
+            .iter()
+            .map(|&(t, l, k, s)| (t * spb, l, k, s))
+            .collect();
+        points_param(&pts)
+    } else {
+        points_param(&layer.amp_points)
+    }
+}
+
 // ── Patch → composition tree ─────────────────────────────────────────────────
 
 pub const LAYER_NAMES: [&str; 4] = ["Layer A", "Layer B", "Layer C", "Layer D"];
@@ -290,7 +311,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             let mut wt = RigBlock::of_type(BlockType::Wavetable)
                 .named("Soundsource")
                 .with_param("transpose", format!("{:.4}", layer.transpose))
-                .with_param("amp_points", points_param(&layer.amp_points))
+                .with_param("amp_points", amp_points_param(layer))
                 .with_param("vel_sens", format!("{:.3}", layer.amp_velsens))
                 .with_param(
                     "glide_s",
@@ -373,7 +394,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     .with_param(format!("harm{n}_shape"), format!("{shape:.4}"));
             }
             osc.add(wt)
-        } else if let Some(spec) = index.find(&layer.soundsource) {
+        } else if let Some(spec) = index.find_source(&layer.soundsource) {
             // Sample mode: unison + the amp ADSR ride the Sampler block
             // (the engine applies them per voice at trigger time).
             let mut sb = RigBlock::sample_lib(spec.to_string_lossy().to_string())
@@ -398,12 +419,27 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     )
                     .with_param("unison_width", format!("{:.4}", layer.unison_width));
             }
-            if let Some((a, d, s, r)) = layer.amp_env {
+            // The amp envelope as the plugin plays it: the AENV breakpoints
+            // (the ADSR params are ignored by Omnisphere), and its velocity
+            // law on top of the velocity layer the sample picks.
+            if layer.amp_points.len() >= 2 {
+                sb = sb
+                    .with_param("amp_points", amp_points_param(layer))
+                    .with_param("amp_attack", "0");
+            } else if let Some((a, d, s, r)) = layer.amp_env {
                 sb = sb
                     .with_param("amp_attack", format!("{a:.4}"))
                     .with_param("amp_decay", format!("{d:.4}"))
                     .with_param("amp_sustain", format!("{s:.4}"))
                     .with_param("amp_release", format!("{r:.4}"));
+            }
+            sb = sb.with_param("vel_sens", format!("{:.3}", layer.amp_velsens));
+            if let Some(v) = super::index::dynamic_zone_velocity(&layer.soundsource) {
+                sb = sb.with_param("zone_velocity", v.to_string());
+            }
+            let timbre = layer.timbre_semis();
+            if timbre != 0 {
+                sb = sb.with_param("timbre_semis", timbre.to_string());
             }
             osc.add(sb)
         } else {
@@ -463,6 +499,8 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     // The part's own gain (measured taper) and headroom.
                     + patch.gain_db
                     + patch.headroom_db
+                    // The filter section's pre/post gain (measured).
+                    + layer.filter_gain_db
                     + if layer.soundsource.is_empty() {
                         SYNTH_LAYER_CAL_DB
                             + if waves_resolve(layer) {
@@ -563,6 +601,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                         .named("Filter Env")
                         .with_param("amp", format!("{env_amp:.4}"))
                         .with_param("points", points_param(&layer.filter_points))
+                        .with_param("sync", if layer.filter_env_synced { "1" } else { "0" })
                         .with_param("sustain", (layer.filter_points.len() - 2).to_string())
                         .with_param("vel_sens", format!("{:.3}", layer.filter_env_velsens))
                 } else {

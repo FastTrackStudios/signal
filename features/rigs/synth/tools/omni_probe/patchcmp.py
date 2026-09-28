@@ -57,3 +57,12 @@ for p in sys.argv[1:]:
     m = ba > -40
     print(f"{name:40s} level {np.mean(lb[:n]-la[:n]):+5.1f} dB (env rms {np.sqrt(np.mean(((lb[:n]-lb[:n].mean())-(la[:n]-la[:n].mean()))**2)):4.1f})  "
           f"spectrum rms {np.sqrt(np.mean((ba[m]-bb[m])**2)):4.1f} dB  | {features(p)}", flush=True)
+    if os.environ.get("BANDS"):
+        # Per 1/3-octave band (ours − Omnisphere, each normalized to its
+        # loudest band), and the loudness curve over time.
+        edges = 50 * 2 ** (np.arange(0, 28) / 3)
+        print("  band Hz  " + " ".join(f"{int(e):>5}" for e in edges[:-1][m]))
+        print("  omni     " + " ".join(f"{v:5.0f}" for v in ba[m]))
+        print("  ours-omni" + " ".join(f"{v:5.0f}" for v in (bb - ba)[m]))
+        print("  t(.25s)  " + " ".join(f"{v:5.0f}" for v in la[:n]))
+        print("  ours     " + " ".join(f"{v:5.0f}" for v in lb[:n]))

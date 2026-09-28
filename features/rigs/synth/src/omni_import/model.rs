@@ -46,6 +46,12 @@ pub struct OmniLayer {
     /// Amp velocity sensitivity (`AENVPARAMS velsens`): measured, the level
     /// is `1 − s + s·(vel/127)²`.
     pub amp_velsens: f32,
+    /// Timbre Shift (`MULTISAMPLE timbre`), 0..1 with 0.5 neutral: the
+    /// soundsource plays the sample recorded at a shifted key, repitched to
+    /// the note — above 0.5 a lower key pitched up (brighter, and at the
+    /// extreme aliased — the "bit crushed" choir), below a higher one
+    /// pitched down. `None`: neutral. See [`OmniLayer::timbre_semis`].
+    pub timbre: Option<f32>,
     /// `OSC pan`, 0..1 (0.5 centre): a balance law (measured: 0.25 puts
     /// the right side 6 dB down, 0 silences it) — the Amp's own law.
     pub pan: f32,
@@ -110,6 +116,14 @@ pub struct OmniLayer {
     /// `FILTER bal` — in parallel, filter 1 weighs `1 − bal²` and filter 2
     /// `1 − (1 − bal)²` (measured; series ignores it).
     pub filter_balance: f32,
+    /// The filter section's pre + post gain (`FILTER gnpre` / `gnpst`), in
+    /// dB relative to their implicit 0.75 — see [`filter_gain_db`]. Applied
+    /// whether or not the filters themselves are on.
+    pub filter_gain_db: f32,
+    /// The amp / filter envelopes run in beats (`*ENVPARAMS sync`): their
+    /// point times are beats, not seconds.
+    pub amp_env_synced: bool,
+    pub filter_env_synced: bool,
     /// FM depth 0..1 (`OSC fm`).
     pub fm_depth: f32,
     /// FM modulator ratio (`2·modint`).
@@ -130,6 +144,62 @@ pub struct OmniLayer {
     pub fx: Vec<String>,
     /// Each Layer FX slot's `P0`..`P14`.
     pub fx_params: Vec<[f32; 15]>,
+}
+
+/// The filter section's pre/post gain knob (`gnpre` / `gnpst`) in dB,
+/// relative to 0.75 — the value a patch without the attribute plays at.
+/// Measured on the plugin with both filters off (the two knobs follow the
+/// same curve within 0.3 dB): about `40·log10(g)` up to 0.75, steeper above.
+#[must_use]
+pub fn filter_gain_db(g: f32) -> f32 {
+    const LAW: [(f32, f32); 11] = [
+        (0.0, -120.0),
+        (0.05, -47.1),
+        (0.133, -30.2),
+        (0.25, -19.2),
+        (0.5, -7.2),
+        (0.75, 0.0),
+        (0.8, 1.05),
+        (0.85, 2.77),
+        (0.9, 4.9),
+        (0.95, 7.1),
+        (1.0, 9.5),
+    ];
+    let g = g.clamp(0.0, 1.0);
+    if g < 0.05 {
+        // Toward silence along the 40·log10 law.
+        return if g <= 0.0 { -120.0 } else { (40.0 * (g / 0.05).log10() - 47.1).max(-120.0) };
+    }
+    for w in LAW.windows(2) {
+        let ((g0, d0), (g1, d1)) = (w[0], w[1]);
+        if g <= g1 {
+            return d0 + (d1 - d0) * (g - g0) / (g1 - g0);
+        }
+    }
+    9.5
+}
+
+/// Timbre Shift's reach each side of centre, in semitones, when realized as
+/// a key remap — **off** (0): measured against the plugin, Omnisphere's
+/// Timbre Shift is not a remap (away from centre no shift fits it within
+/// 12 dB, and at 0 it drops the level ~26 dB), so remapping would only move
+/// the sound somewhere else wrong. `FTS_TIMBRE_RANGE` turns it on for
+/// experiments; the probe is `tools/omni_probe` + `timbre_fit.py` notes in
+/// the memory file.
+pub const TIMBRE_RANGE_SEMIS: f32 = 0.0;
+
+impl OmniLayer {
+    /// The Timbre Shift in whole semitones: the key the sample is taken from
+    /// is the note minus this (positive: a lower key pitched up).
+    #[must_use]
+    pub fn timbre_semis(&self) -> i32 {
+        let range = std::env::var("FTS_TIMBRE_RANGE")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(TIMBRE_RANGE_SEMIS);
+        self.timbre
+            .map_or(0, |t| (2.0 * (t - 0.5) * range).round() as i32)
+    }
 }
 
 /// One part LFO, measured against the real plugin (pitch-tracked).
@@ -860,6 +930,10 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             layer.soundsource = ms.attr("name").unwrap_or("").to_string();
             layer.ss_library = ms.attr("library").unwrap_or("").to_string();
         }
+        layer.timbre = multis
+            .get(i)
+            .and_then(|m| m.num("timbre"))
+            .map(|t| t.clamp(0.0, 1.0));
         if let Some(f) = voice.child("FILTER") {
             layer.filter_name = f.attr("NameStr").unwrap_or("").to_string();
             layer.filter_parallel = f.num("para").unwrap_or(0.0) != 0.0;
@@ -873,6 +947,8 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             layer.filter_res =
                 omni_filter_setting(res, f.num("res1").unwrap_or(0.5)).clamp(0.0, 1.0);
             layer.filter_balance = f.num("bal").unwrap_or(0.5).clamp(0.0, 1.0);
+            layer.filter_gain_db = filter_gain_db(f.num("gnpre").unwrap_or(0.75))
+                + filter_gain_db(f.num("gnpst").unwrap_or(0.75));
             let depth = f.num("envdpth").unwrap_or(0.0).clamp(0.0, 1.0);
             let inv = f.num("envdpthinv").unwrap_or(0.0) != 0.0;
             layer.filter_env_depth = if inv { -depth } else { depth };
@@ -901,6 +977,14 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             .unwrap_or(0.0)
             .clamp(0.0, 1.0);
         layer.amp_points = voice.child("AENV").map(env_points).unwrap_or_default();
+        let synced = |tag: &str| {
+            voice
+                .child(tag)
+                .and_then(|p| p.num("sync"))
+                .is_some_and(|v| v != 0.0)
+        };
+        layer.amp_env_synced = synced("AENVPARAMS");
+        layer.filter_env_synced = synced("FENVPARAMS");
         layer.filter_points = voice.child("FENV").map(env_points).unwrap_or_default();
         layer.filter_env = voice
             .child("FENV")

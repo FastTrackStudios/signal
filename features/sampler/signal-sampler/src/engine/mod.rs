@@ -937,6 +937,18 @@ pub struct SampleEngine {
     /// see `Voice::with_decay`. `(0, 1.0)` = none, the sample as recorded.
     decay_frames: usize,
     sustain_level: f32,
+    /// Zone voices' breakpoint amplitude envelope (an Omnisphere layer's
+    /// AENV) — see `Voice::with_amp_points`. `None`: the ADSR above.
+    amp_points: Option<std::sync::Arc<crate::native::breakpoints::Breakpoints>>,
+    /// Omnisphere's amp velocity law on zone voices, `1 − s + s·v²` with
+    /// `v = vel/127`; `None` leaves velocity to pick the layer only.
+    velocity_sens: Option<f32>,
+    /// Pick zones as if played at this velocity — one dynamic layer of a
+    /// multi-dynamic source (an Omnisphere "Choir Men Ohs - mf").
+    zone_velocity: Option<u8>,
+    /// Timbre Shift (semitones): zones are picked for `note − shift` and
+    /// played at `note`, so a positive shift plays a lower key pitched up.
+    timbre_shift: i32,
     /// Zone voices' filter envelope: `(ADSR, amount, cutoff Hz)`. `None` or
     /// amount 0 = no per-voice filter (and no cost).
     filter_env: Option<(crate::native::AdsrParams, f32, f32)>,
@@ -1194,6 +1206,10 @@ impl SampleEngine {
             attack_frames: spec_attack_frames,
             decay_frames: 0,
             sustain_level: 1.0,
+            amp_points: None,
+            velocity_sens: None,
+            zone_velocity: None,
+            timbre_shift: 0,
             filter_env: None,
             filter_res: 0.0,
             filter_keytrack: 0.0,
@@ -1535,6 +1551,29 @@ impl SampleEngine {
     /// 1.0 = no decay stage.
     pub fn set_sustain_level(&mut self, level: f32) {
         self.sustain_level = level.clamp(0.0, 1.0);
+    }
+
+    /// A breakpoint amplitude envelope for zone voices (notes started
+    /// after), in place of the attack/decay/sustain/release; `None` clears.
+    pub fn set_amp_points(&mut self, bp: Option<crate::native::breakpoints::Breakpoints>) {
+        self.amp_points = bp.map(std::sync::Arc::new);
+    }
+
+    /// Scale zone voices by `1 − s + s·(vel/127)²` (Omnisphere's amp
+    /// velocity law); `None`: velocity only picks the sampled layer.
+    pub fn set_velocity_sens(&mut self, s: Option<f32>) {
+        self.velocity_sens = s.map(|s| s.clamp(0.0, 1.0));
+    }
+
+    /// Timbre Shift in semitones (see the field); 0 is off.
+    pub fn set_timbre_shift(&mut self, semis: i32) {
+        self.timbre_shift = semis.clamp(-48, 48);
+    }
+
+    /// Pin zone selection to one velocity (one dynamic layer); `None`: the
+    /// played velocity.
+    pub fn set_zone_velocity(&mut self, v: Option<u8>) {
+        self.zone_velocity = v.map(|v| v.clamp(1, 127));
     }
 
     /// The zone voices' filter envelope: each new note gets its own ADSR and

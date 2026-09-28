@@ -555,7 +555,12 @@ impl SampleEngine {
         // round-robin within the candidate set.
         let mut pairs = std::mem::take(&mut self.zoned_pairs);
         pairs.clear();
-        self.zoned_candidates(note, velocity, trigger, true, &mut pairs);
+        // A pinned dynamic layer picks the zones; the played velocity still
+        // drives the level.
+        let pick = self.zone_velocity.unwrap_or(velocity);
+        // Timbre Shift: the zones of a shifted key, played at this note.
+        let key = (i32::from(note) - self.timbre_shift).clamp(0, 127) as u8;
+        self.zoned_candidates(key, pick, trigger, true, &mut pairs);
         self.trigger_zoned_groups(pairs, Some(note), velocity, trigger, record_empty_miss);
     }
 
@@ -2483,7 +2488,11 @@ impl SampleEngine {
             // time-preserving shifter; tuning → rate.
             let transpose_cents = semitones * 100.0;
             let rate = 2.0f64.powf((z.tune_cents as f64 + self.master_tune_cents()) / 1200.0);
-            let gain = 10.0f32.powf(z.gain_db / 20.0);
+            let vel_gain = self.velocity_sens.map_or(1.0, |s| {
+                let v = f32::from(velocity) / 127.0;
+                1.0 - s + s * v * v
+            });
+            let gain = 10.0f32.powf(z.gain_db / 20.0) * vel_gain;
             let mic_index = self.mic_index_for(&self.mic_rank_names[rank as usize]);
 
             // Percussion plays one-shot: the sample rings to its natural end
@@ -2533,6 +2542,7 @@ impl SampleEngine {
                 .with_pan(u_pan)
                 .with_attack(self.attack_frames)
                 .with_decay(self.decay_frames, self.sustain_level)
+                .with_amp_points(self.amp_points.clone(), self.sample_rate)
                 .with_filter_env(self.new_voice_filter(note))
                 .with_vibrato(self.vibrato)
                 .with_pitch_cents(transpose_cents)

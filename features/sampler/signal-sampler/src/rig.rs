@@ -1544,6 +1544,24 @@ pub(crate) fn build_sample_source(
     if let Some(v) = block.param_f32("amp_release") {
         engine.set_release_frames((v.max(0.0) * sample_rate as f32) as usize);
     }
+    // An imported layer's breakpoint amp envelope and velocity law.
+    if let Some(spec) = block.param_str("amp_points") {
+        let points = crate::native::parse_points(&spec);
+        if points.len() >= 2 {
+            engine.set_amp_points(Some(
+                crate::native::breakpoints::Breakpoints::with_penultimate_sustain(points),
+            ));
+        }
+    }
+    if let Some(s) = block.param_f32("vel_sens") {
+        engine.set_velocity_sens(Some(s));
+    }
+    if let Some(v) = block.param_f32("zone_velocity") {
+        engine.set_zone_velocity(Some(v.round() as u8));
+    }
+    if let Some(k) = block.param_f32("timbre_semis") {
+        engine.set_timbre_shift(k.round() as i32);
+    }
     if let Some(hz) = block.param_f32("filter_cutoff_hz") {
         let s = |k: &str, d: f32| block.param_f32(k).unwrap_or(d);
         engine.set_voice_filter(

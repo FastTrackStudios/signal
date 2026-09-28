@@ -508,7 +508,7 @@ mod tests {
                     let xml = std::fs::read_to_string(&p).unwrap_or_default();
                     if let Ok(parsed) = parse_patch(&xml) {
                         if parsed.layers.iter().any(|l| {
-                            !l.soundsource.is_empty() && index.find(&l.soundsource).is_some()
+                            !l.soundsource.is_empty() && index.find_source(&l.soundsource).is_some()
                         }) {
                             patch_path = Some(p);
                             break 'outer;

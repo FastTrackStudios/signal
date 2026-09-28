@@ -124,9 +124,11 @@ fn main() {
                 eprintln!("Layer A amp block {:?} {:?}", b.display_name(), b.params);
             }
         }
-        if let Some(osc) = tree.find("Layer A").and_then(|l| l.find("Oscillator")) {
-            for b in osc.blocks() {
-                eprintln!("Layer A osc block {:?} {:?}", b.display_name(), b.params);
+        for n in ["Layer A", "Layer B", "Layer C", "Layer D"] {
+            if let Some(osc) = tree.find(n).and_then(|l| l.find("Oscillator")) {
+                for b in osc.blocks() {
+                    eprintln!("{n} osc block {:?} {:?}", b.display_name(), b.params);
+                }
             }
         }
     }

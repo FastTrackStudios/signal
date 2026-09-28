@@ -343,6 +343,10 @@ pub struct Voice {
     ds_level: f32,
     sustain: f32,
     decay_left: usize,
+    /// A breakpoint amplitude envelope (`with_amp_points` — an Omnisphere
+    /// layer's AENV), in place of the linear release fade: it holds at its
+    /// sustain point while the key is down and runs its own release after.
+    amp_bp: Option<(Arc<crate::native::breakpoints::Breakpoints>, crate::native::breakpoints::EnvPlayer, f32)>,
     /// Per-voice filter envelope (`with_filter_env`); `None` = no filter.
     filter: Option<VoiceFilter>,
     /// Vibrato (`with_vibrato`): phase and step (cycles/frame), depth in
@@ -596,6 +600,7 @@ impl Voice {
             ds_level: 1.0,
             sustain: 1.0,
             decay_left: 0,
+            amp_bp: None,
             filter: None,
             vib_phase: 0.0,
             vib_inc: 0.0,
@@ -675,6 +680,7 @@ impl Voice {
             ds_level: 1.0,
             sustain: 1.0,
             decay_left: 0,
+            amp_bp: None,
             filter: None,
             vib_phase: 0.0,
             vib_inc: 0.0,
@@ -884,6 +890,22 @@ impl Voice {
         } else {
             self.decay_left = decay_frames;
         }
+        self
+    }
+
+    /// Shape the voice with a breakpoint amplitude envelope (`None`: off).
+    /// `sample_rate` is the output rate the envelope advances at.
+    #[must_use]
+    pub fn with_amp_points(
+        mut self,
+        bp: Option<Arc<crate::native::breakpoints::Breakpoints>>,
+        sample_rate: u32,
+    ) -> Self {
+        self.amp_bp = bp.map(|bp| {
+            let mut player = crate::native::breakpoints::EnvPlayer::default();
+            player.note_on();
+            (bp, player, 1.0 / sample_rate.max(1) as f32)
+        });
         self
     }
 
@@ -1127,6 +1149,18 @@ impl Voice {
                     if let Some(f) = &mut self.filter {
                         f.note_off();
                     }
+                    // A breakpoint envelope releases over its own last
+                    // segment (plus a frame so it reaches its end).
+                    let release_frames = match &mut self.amp_bp {
+                        Some((bp, player, dt)) => {
+                            player.note_off(bp);
+                            let tail = bp.sustain.map_or(0.0, |s| {
+                                bp.points.last().map_or(0.0, |l| l.time) - bp.points[s].time
+                            });
+                            (tail / *dt) as usize + 2
+                        }
+                        None => release_frames,
+                    };
                     let frames = release_frames.max(1);
                     // Update the divisor too — `next_frame` computes
                     // `env = frames_remaining / self.release_frames`, so if
@@ -1349,7 +1383,12 @@ impl Voice {
         } else {
             1.0
         };
-        let amp = self.gain * env * flex * bloom * self.ds_level;
+        // A breakpoint envelope replaces the linear release fade.
+        let (env, bp) = match &mut self.amp_bp {
+            Some((bp, player, dt)) => (1.0, player.tick(bp, *dt)),
+            None => (env, 1.0),
+        };
+        let amp = self.gain * env * flex * bloom * self.ds_level * bp;
 
         // Advance position. During a portamento glide the read rate is nudged
         // by `glide_cents` (ramping to 0) so the pitch scoops into true tuning;

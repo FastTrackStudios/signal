@@ -49,6 +49,21 @@ fn root(var: &str, default: &str) -> String {
     default.to_string()
 }
 
+/// The zone velocity that plays the dynamic layer a soundsource name
+/// selects: Omnisphere's multi-dynamic sources (`Choir Men Ohs  ^`) are
+/// picked per layer with a ` - <dyn>` suffix, and our extraction flattens
+/// the layers into one velocity-split folder (soft low, loud high). `None`
+/// when the name selects no layer.
+#[must_use]
+pub fn dynamic_zone_velocity(name: &str) -> Option<u8> {
+    let (_, dynamic) = name.rsplit_once(" - ")?;
+    match dynamic.trim().to_ascii_lowercase().as_str() {
+        "ppp" | "pp" | "p" | "mp" => Some(1),
+        "mf" | "f" | "ff" | "fff" => Some(127),
+        _ => None,
+    }
+}
+
 // ── Soundsource index ────────────────────────────────────────────────────────
 
 /// Name → spec-path index over the local soundsource extraction. A built
@@ -180,6 +195,31 @@ impl SoundsourceIndex {
     ///
     /// Exact matches always win, so this can only rescue a lookup that would
     /// otherwise have failed outright.
+    /// Like [`find`](Self::find), but only a playable source — a pack or a
+    /// sample extraction, never a `.prt_omn`. What a patch layer's
+    /// soundsource needs: the factory also has patches named after their
+    /// soundsources ("Choir Men Ohs - mf"), and a sampler cannot play one.
+    pub fn find_source(&self, name: &str) -> Option<&Path> {
+        let is_source = |p: &Path| {
+            !p.extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("prt_omn") || e.eq_ignore_ascii_case("mlt_omn"))
+        };
+        if let Some(p) = self.by_name.get(&name.to_lowercase()).filter(|p| is_source(p)) {
+            return Some(p.as_path());
+        }
+        if normalize_soundsource_name(name).is_empty() {
+            return None;
+        }
+        let keys: Vec<&str> = self
+            .by_name
+            .iter()
+            .filter(|(_, p)| is_source(p))
+            .map(|(k, _)| k.as_str())
+            .collect();
+        let hit = resolve_name(name, keys.iter().copied())?.to_string();
+        self.by_name.get(&hit).map(std::path::PathBuf::as_path)
+    }
+
     pub fn find(&self, name: &str) -> Option<&Path> {
         if let Some(p) = self.by_name.get(&name.to_lowercase()) {
             return Some(p.as_path());
