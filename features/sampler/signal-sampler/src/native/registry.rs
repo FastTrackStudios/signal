@@ -329,8 +329,23 @@ fn build_filter(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     if let Some(v) = block.param_f32("cutoff") {
         f = f.with_cutoff(NativeFilter::cutoff_from_norm(v));
     }
+    // A filter model's resonance curve (see `ResonanceMap`), passband gain
+    // and ladder compensation.
+    if let (Some(lo), Some(hi)) = (block.param_f32("res_lo"), block.param_f32("res_hi")) {
+        let curve = block.param_f32("res_curve").unwrap_or(1.0);
+        f = f.with_resonance_map(super::ResonanceMap { lo, hi, curve });
+    }
     if let Some(v) = block.param_f32("resonance") {
-        f = f.with_q(NativeFilter::q_from_norm(v));
+        f = f.with_resonance(v);
+    }
+    if let Some(db) = block.param_f32("gain_db") {
+        f = f.with_gain_db(db);
+    }
+    if let Some(v) = block.param_f32("res_shift") {
+        f = f.with_res_shift(v, block.param_f32("res_shift_curve").unwrap_or(1.0));
+    }
+    if let Some(c) = block.param_f32("ladder_comp") {
+        f = f.with_ladder_comp(c);
     }
     if let Some(m) = block
         .params

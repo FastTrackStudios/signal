@@ -237,7 +237,9 @@ mod tests {
         assert_eq!(bank.frames(), 64);
         let inc = 130.8 / 48_000.0;
         let n = 2048;
-        let cycle: Vec<f32> = (0..n).map(|i| bank.sample(0.0, i as f32 / n as f32, inc)).collect();
+        let cycle: Vec<f32> = (0..n)
+            .map(|i| bank.sample(0.0, i as f32 / n as f32, inc))
+            .collect();
         let h = |k: usize| {
             let (mut re, mut im) = (0.0f64, 0.0f64);
             for (i, v) in cycle.iter().enumerate() {
@@ -248,7 +250,13 @@ mod tests {
             re.hypot(im)
         };
         let db = |k: usize| 20.0 * (h(k) / h(1)).log10();
-        eprintln!("frames {} h2 {:.1} h3 {:.1} h4 {:.1}", bank.frames(), db(2), db(3), db(4));
+        eprintln!(
+            "frames {} h2 {:.1} h3 {:.1} h4 {:.1}",
+            bank.frames(),
+            db(2),
+            db(3),
+            db(4)
+        );
         assert!((db(2) + 6.1).abs() < 1.0, "h2 {}", db(2));
         assert!((db(3) + 9.6).abs() < 1.0, "h3 {}", db(3));
     }

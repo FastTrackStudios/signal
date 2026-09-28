@@ -102,7 +102,11 @@ fn main() {
                 for (i, l) in p.layers.iter().enumerate() {
                     eprintln!(
                         "layer {i}: enabled {} level {:.3} ss {:?} waves {:?} shape {:.2}",
-                        l.enabled, l.level, l.soundsource, l.waves.as_ref().map(|w| &w.0), l.osc_shape
+                        l.enabled,
+                        l.level,
+                        l.soundsource,
+                        l.waves.as_ref().map(|w| &w.0),
+                        l.osc_shape
                     );
                 }
             }

@@ -227,7 +227,6 @@ impl NativeWavetable {
         }
     }
 
-    #[must_use]
     /// Play real wavetables instead of the generated shapes: `a` and `b`
     /// crossfaded by `mix` (0 = all `a`), scanned by `position` (0..1 over
     /// the frames). Both live-settable (params 13, 14).

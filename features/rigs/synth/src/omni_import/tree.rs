@@ -6,7 +6,8 @@ use std::path::Path;
 use signal_proto::block::BlockType;
 
 use super::model::{
-    OmniModRoute, OmniPatch, classify_effect, classify_filter_full, classify_type1, omni_cutoff_hz,
+    FilterModel, OmniModRoute, OmniPatch, classify_effect, classify_filter_full, filter_model,
+    omni_cutoff_hz,
 };
 
 /// Omnisphere's normalized cutoff → OUR normalized cutoff param, via the
@@ -17,6 +18,60 @@ fn omni_cutoff_norm(v: f32) -> f32 {
 use super::{SoundsourceIndex, parse_patch};
 use signal_sampler::rig::RigBlock;
 use signal_sampler::rig_node::Container;
+
+/// Configure a filter block as an Omnisphere filter model at a knob setting.
+fn modelled_filter(
+    block: RigBlock,
+    type_n: Option<f32>,
+    name: &str,
+    setting: f32,
+    res: f32,
+    weight: f32,
+) -> RigBlock {
+    let model = type_n.and_then(filter_model).unwrap_or_else(|| {
+        // No measured algorithm: the name's family, generically.
+        let (mode, poles, character) = classify_filter_full(name);
+        FilterModel {
+            name: "by name",
+            mode,
+            poles,
+            ladder: character == "ladder",
+            taper: [1.0; 5],
+            res: if character == "ladder" {
+                (0.0, 3.8, 1.0)
+            } else {
+                (0.5, 12.0, 1.0)
+            },
+            res_shift: 1.0,
+            res_shift_curve: 1.0,
+            gain_db: 0.0,
+            comp: 0.5,
+        }
+    });
+    let hz = model.corner_hz(setting);
+    block
+        .with_param(
+            "cutoff",
+            format!(
+                "{:.4}",
+                signal_sampler::native::NativeFilter::norm_from_cutoff(hz)
+            ),
+        )
+        .with_param("resonance", format!("{:.4}", res.clamp(0.0, 1.0)))
+        .with_param("mode", model.mode)
+        .with_param("poles", model.poles.to_string())
+        .with_param("character", if model.ladder { "ladder" } else { "clean" })
+        .with_param("res_lo", format!("{:.3}", model.res.0))
+        .with_param("res_hi", format!("{:.3}", model.res.1))
+        .with_param("res_curve", format!("{:.3}", model.res.2))
+        .with_param("res_shift", format!("{:.3}", model.res_shift))
+        .with_param("res_shift_curve", format!("{:.3}", model.res_shift_curve))
+        .with_param(
+            "gain_db",
+            format!("{:.1}", model.gain_db + 20.0 * weight.max(1e-6).log10()),
+        )
+        .with_param("ladder_comp", format!("{:.2}", model.comp))
+}
 
 // ── Patch → composition tree ─────────────────────────────────────────────────
 
@@ -342,45 +397,44 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             .param("filter_res", format!("{:.3}", layer.filter_res))
             .add(osc)
             .add({
-                // Filter 1 carries the imported cutoff/resonance when the
-                // section is engaged. The algorithm comes from the
-                // MEASURED type1 table (per-slot fingerprints through the
-                // real engine); the factory name only decides the ladder
-                // character. Cutoff goes through the calibrated
-                // 15 Hz × 2^(9.55·v) curve into our normalized map.
+                // Each engaged filter is its measured model (by `type1` /
+                // `type2`; the factory name only as a fallback), at the
+                // corner the knob taper gives its effective setting.
                 let mut f1 = RigBlock::of_type(BlockType::Filter)
                     .named(filter_label.clone())
                     .with_param("model", layer.filter_name.clone());
-                if layer.filter_active {
-                    let (_, _, character) = classify_filter_full(&layer.filter_name);
-                    let (mode, poles) =
-                        layer
-                            .filter_type1
-                            .and_then(classify_type1)
-                            .unwrap_or_else(|| {
-                                let (m, p, _) = classify_filter_full(&layer.filter_name);
-                                (m, p)
-                            });
-                    f1 = f1
-                        .with_param(
-                            "cutoff",
-                            format!("{:.4}", omni_cutoff_norm(layer.filter_freq)),
-                        )
-                        .with_param("resonance", format!("{:.4}", layer.filter_res))
-                        .with_param("mode", mode)
-                        .with_param("poles", poles.to_string())
-                        .with_param("character", character);
+                // In parallel the balance weighs the two (measured law).
+                let b = layer.filter_balance;
+                let parallel = layer.filter_active && layer.filter_parallel;
+                let (w1, w2) = if parallel {
+                    (1.0 - b * b, 1.0 - (1.0 - b) * (1.0 - b))
+                } else {
+                    (1.0, 1.0)
+                };
+                if layer.filter_active && layer.filter1_on {
+                    f1 = modelled_filter(
+                        f1,
+                        layer.filter_type1,
+                        &layer.filter_name,
+                        layer.filter_freq,
+                        layer.filter_res,
+                        w1,
+                    );
+                } else if parallel && layer.filter2.is_some() {
+                    // A parallel pair with filter 1 off: its branch is silent.
+                    f1 = f1.with_param("gain_db", "-120.0");
                 }
                 let mut f2 = RigBlock::of_type(BlockType::Filter).named("Filter 2");
-                if let Some((freq, res)) = layer.filter2 {
+                if let Some((setting, res)) = layer.filter2 {
                     if layer.filter_active {
-                        f2 = f2
-                            .with_param("cutoff", format!("{:.4}", omni_cutoff_norm(freq)))
-                            .with_param("resonance", format!("{res:.4}"));
+                        f2 = modelled_filter(f2, layer.filter_type2, "", setting, res, w2);
                     }
+                } else if parallel {
+                    // Nothing in the second branch: it must not pass dry audio.
+                    f2 = f2.with_param("gain_db", "-120.0");
                 }
                 // SERIES chains the filters; PARALLEL sums them.
-                let filters = if layer.filter_parallel {
+                let filters = if parallel {
                     Container::parallel("Filters")
                 } else {
                     Container::module("Filters")

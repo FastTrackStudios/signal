@@ -21,10 +21,16 @@ pub struct OmniLayer {
     pub filter_parallel: bool,
     /// `FILTER act=` ≠ 0 ⇒ the filter section is engaged.
     pub filter_active: bool,
-    /// Normalized filter cutoff / resonance (`freq` / `res`).
+    /// Filter 1's effective knob setting: the section's master cutoff
+    /// (`freq`) plus filter 1's own offset (`freq1`) — see
+    /// [`omni_filter_setting`]. Resonance is `res`.
     pub filter_freq: f32,
-    /// Filter 1 algorithm selector (`type1`, a ~50-slot enum at 0.02 steps).
+    /// Filter 1's algorithm (`type1`; see [`filter_model`]).
     pub filter_type1: Option<f32>,
+    /// Filter 1's own switch (`act1`); off, only filter 2 shapes the sound.
+    pub filter1_on: bool,
+    /// Filter 2's algorithm (`type2`), when filter 2 is on.
+    pub filter_type2: Option<f32>,
     pub filter_res: f32,
     /// `OSC level` (normalized).
     pub level: f32,
@@ -73,8 +79,13 @@ pub struct OmniLayer {
     /// Filter-envelope → cutoff depth (signed; `FILTER envdpth`, inverted by
     /// `envdpthinv`).
     pub filter_env_depth: f32,
-    /// Filter 2, when engaged (`act2`): `(freq, res)` normalized.
+    /// Filter 2, when engaged (`act2`): its effective knob setting (master
+    /// `freq` plus its `freq2` offset) and effective resonance (master `res`
+    /// plus its `res2` offset).
     pub filter2: Option<(f32, f32)>,
+    /// `FILTER bal` — in parallel, filter 1 weighs `1 − bal²` and filter 2
+    /// `1 − (1 − bal)²` (measured; series ignores it).
+    pub filter_balance: f32,
     /// FM depth 0..1 (`OSC fm`).
     pub fm_depth: f32,
     /// Ring/AM mix 0..1 (`OSC am`).
@@ -272,6 +283,185 @@ const TYPE1_TABLE: [(&str, u32); 50] = [
     ("allpass", 0),  // 1.00
 ];
 
+/// A measured Omnisphere filter model: how Signal's filter reproduces one
+/// `type1` algorithm. Fitted to the real plugin's response (a saw through
+/// each model at three resonance settings, ÷ the unfiltered saw), see
+/// [`FILTER_MODELS`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FilterModel {
+    /// The factory preset name most patches using it carry.
+    pub name: &'static str,
+    pub mode: &'static str,
+    pub poles: u32,
+    /// Realized as a feedback ladder (else an SVF cascade).
+    pub ladder: bool,
+    /// Its corner as a multiple of the knob taper's reference corner, at
+    /// knob settings 0.15, 0.3, 0.45, 0.6 and 0.75 (models track the knob at
+    /// their own rates) — see [`FilterModel::corner_hz`].
+    pub taper: [f32; 5],
+    /// Resonance knob → Q (SVF) or loop feedback (ladder): `(lo, hi, curve)`
+    /// (see `signal_sampler::native::ResonanceMap`).
+    pub res: (f32, f32, f32),
+    /// Corner multiplier at full resonance (resonance pulls some models'
+    /// corners down), arriving as `res_shift^(resonance^res_shift_curve)`.
+    pub res_shift: f32,
+    pub res_shift_curve: f32,
+    /// Passband level.
+    pub gain_db: f32,
+    /// Ladder passband compensation (0 = the feedback's full level loss).
+    pub comp: f32,
+}
+
+impl FilterModel {
+    /// The model's corner (Hz) at an effective knob setting: the reference
+    /// taper × its own scale there (log-interpolated, held past the ends).
+    #[must_use]
+    pub fn corner_hz(&self, setting: f32) -> f32 {
+        const AT: [f32; 5] = [0.15, 0.3, 0.45, 0.6, 0.75];
+        let scale = if setting <= AT[0] {
+            self.taper[0]
+        } else if setting >= AT[4] {
+            self.taper[4]
+        } else {
+            let i = ((setting - AT[0]) / 0.15).floor() as usize;
+            let t = (setting - AT[i]) / 0.15;
+            (self.taper[i].ln() + t * (self.taper[i + 1].ln() - self.taper[i].ln())).exp()
+        };
+        omni_cutoff_hz(setting) * scale
+    }
+}
+
+/// The factory library's filter models by exact `type1` bits — the value is
+/// an index, and the analog family near 0.99 differs only in its last bits.
+/// These 45 cover 96% of the active filters in the 38k factory patches.
+/// Generated from the harness fit (response ÷ an unfiltered saw, fitted
+/// below 8 kHz); each comment gives the RMS dB error of the fit at resonance
+/// 0, 0.5 and 0.9 and of the corner at the other knob settings.
+#[rustfmt::skip]
+const FILTER_MODELS: &[(u32, FilterModel)] = &[
+    // LPF UVI 2 — 12221 factory uses; fit 0.4 dB at res 0, 1.1/1.0 at res 0.5/0.9; taper fits 0.15:0.5 0.45:0.3 0.6:0.1 0.75:0.1
+    (0x3e6147ae, FilterModel { name: "LPF UVI 2", mode: "lowpass", poles: 2, ladder: false, taper: [1.0595, 1.1225, 1.1892, 1.1892, 1.1892], res: (0.600, 13.022, 0.358), res_shift: 0.625, res_shift_curve: 0.150, gain_db: 0.0, comp: 0.00 }),
+    // LPF Juicy 12db — 8900 factory uses; fit 0.4 dB at res 0, 0.4/0.5 at res 0.5/0.9; taper fits 0.15:0.1 0.45:0.5 0.6:0.5 0.75:0.4
+    (0x3f051eb8, FilterModel { name: "LPF Juicy 12db", mode: "lowpass", poles: 2, ladder: false, taper: [0.2973, 0.3746, 0.5297, 0.6674, 0.6300], res: (0.707, 7.381, 0.935), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 0.0, comp: 0.00 }),
+    // Classic LPF 4-pole — 6513 factory uses; fit 0.5 dB at res 0, 0.3/2.0 at res 0.5/0.9; taper fits 0.15:0.2 0.45:1.0 0.6:0.6 0.75:0.2
+    (0x3f5c28f6, FilterModel { name: "Classic LPF 4-pole", mode: "lowpass", poles: 4, ladder: true, taper: [0.2973, 0.3746, 0.5297, 0.6674, 0.7937], res: (0.000, 3.936, 0.606), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 3.3, comp: 0.12 }),
+    // LPF Power 24db — 5341 factory uses; fit 0.6 dB at res 0, 5.0/7.2 at res 0.5/0.9; taper fits 0.15:0.5 0.45:0.7 0.6:1.3 0.75:1.1
+    (0x3f000000, FilterModel { name: "LPF Power 24db", mode: "lowpass", poles: 3, ladder: true, taper: [0.1180, 0.1114, 0.1768, 0.2973, 0.3746], res: (0.000, 9.600, 0.300), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -2.0, comp: 0.12 }),
+    // LPF Juicy 24db — 3996 factory uses; fit 0.2 dB at res 0, 5.2/7.6 at res 0.5/0.9; taper fits 0.15:0.2 0.45:1.1 0.6:1.0 0.75:0.7
+    (0x3ef5c28f, FilterModel { name: "LPF Juicy 24db", mode: "lowpass", poles: 4, ladder: true, taper: [0.2973, 0.3746, 0.5297, 0.6674, 0.6300], res: (0.000, 4.800, 0.300), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -0.1, comp: 1.00 }),
+    // Classic LPF 2-pole — 1806 factory uses; fit 0.8 dB at res 0, 2.0/3.0 at res 0.5/0.9; taper fits 0.15:0.2 0.45:0.5 0.6:0.3 0.75:0.1
+    (0x3f51eb85, FilterModel { name: "Classic LPF 2-pole", mode: "lowpass", poles: 2, ladder: true, taper: [0.2973, 0.3969, 0.5297, 0.7071, 0.7937], res: (0.000, 3.175, 0.952), res_shift: 0.615, res_shift_curve: 0.488, gain_db: 3.1, comp: 0.38 }),
+    // HPF UVI — 1641 factory uses; fit 0.1 dB at res 0, 0.2/0.2 at res 0.5/0.9; taper fits 0.15:0.1 0.45:0.2 0.6:0.1 0.75:0.1
+    (0x3e851eb8, FilterModel { name: "HPF UVI", mode: "highpass", poles: 2, ladder: false, taper: [1.3348, 1.3348, 1.3348, 1.2599, 1.1225], res: (0.500, 13.011, 0.335), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -0.1, comp: 0.00 }),
+    // LPF Power 12db — 1515 factory uses; fit 0.8 dB at res 0, 1.9/4.7 at res 0.5/0.9; taper fits 0.15:0.8 0.45:1.2 0.6:1.1 0.75:1.1
+    (0x3f1eb852, FilterModel { name: "LPF Power 12db", mode: "lowpass", poles: 2, ladder: true, taper: [0.2102, 0.1984, 0.3150, 0.4719, 0.5297], res: (0.000, 1.985, 0.689), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -2.0, comp: 0.00 }),
+    // Beefy LPF 4-pole — 1326 factory uses; fit 0.8 dB at res 0, 5.7/6.7 at res 0.5/0.9; taper fits 0.15:0.6 0.45:1.0 0.6:1.4 0.75:0.7
+    (0x3f7d70b6, FilterModel { name: "Beefy LPF 4-pole", mode: "lowpass", poles: 3, ladder: true, taper: [0.1768, 0.2227, 0.3150, 0.3969, 0.3969], res: (0.000, 9.600, 0.300), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 4.8, comp: 0.12 }),
+    // Classic LPF 1-pole — 1263 factory uses; fit 1.0 dB at res 0, 1.4/2.5 at res 0.5/0.9; taper fits 0.15:0.5 0.45:2.0 0.6:3.0 0.75:3.7
+    (0x3f4ccccd, FilterModel { name: "Classic LPF 1-pole", mode: "bandpass", poles: 2, ladder: false, taper: [0.1250, 0.1487, 0.1873, 0.1984, 0.1487], res: (0.500, 4.578, 1.979), res_shift: 2.022, res_shift_curve: 0.150, gain_db: 3.5, comp: 0.00 }),
+    // Bandpass Juicy 12db — 953 factory uses; fit 0.1 dB at res 0, 2.2/3.0 at res 0.5/0.9; taper fits 0.15:0.1 0.45:0.2 0.6:0.4 0.75:0.5
+    (0x3f147ae1, FilterModel { name: "Bandpass Juicy 12db", mode: "bandpass", poles: 2, ladder: false, taper: [0.2973, 0.3746, 0.5297, 0.6674, 0.7071], res: (0.707, 0.707, 1.000), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -2.8, comp: 0.00 }),
+    // State Variable 12dB — 770 factory uses; fit 0.7 dB at res 0, 0.6/0.3 at res 0.5/0.9; taper fits 0.15:0.1 0.45:0.7 0.6:1.7 0.75:1.6
+    (0x3f428f5c, FilterModel { name: "State Variable 12dB", mode: "notch", poles: 2, ladder: false, taper: [0.2973, 0.3536, 0.5000, 0.6300, 0.7492], res: (0.707, 11.514, 1.186), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -1.1, comp: 0.00 }),
+    // Classic LPF 8-pole — 753 factory uses; fit 1.0 dB at res 0, 4.0/8.9 at res 0.5/0.9; taper fits 0.15:1.1 0.45:1.2 0.6:1.6 0.75:0.9
+    (0x3f7d70a9, FilterModel { name: "Classic LPF 8-pole", mode: "lowpass", poles: 6, ladder: false, taper: [0.2102, 0.2649, 0.3746, 0.5000, 0.5612], res: (0.500, 1.229, 1.000), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 3.1, comp: 0.00 }),
+    // Classic LPF 3-pole — 726 factory uses; fit 0.3 dB at res 0, 1.6/2.9 at res 0.5/0.9; taper fits 0.15:0.1 0.45:0.7 0.6:0.4 0.75:0.2
+    (0x3f570a3d, FilterModel { name: "Classic LPF 3-pole", mode: "lowpass", poles: 3, ladder: true, taper: [0.2973, 0.3746, 0.5297, 0.6674, 0.7937], res: (0.000, 3.970, 0.689), res_shift: 0.770, res_shift_curve: 1.178, gain_db: 3.2, comp: 0.25 }),
+    // Jupiter LPF 4-pole — 712 factory uses; fit 0.5 dB at res 0, 2.6/6.9 at res 0.5/0.9; taper fits 0.15:0.7 0.45:0.9 0.6:0.5 0.75:0.5
+    (0x3f7d70b1, FilterModel { name: "Jupiter LPF 4-pole", mode: "lowpass", poles: 4, ladder: false, taper: [0.2973, 0.3746, 0.5297, 0.7071, 1.0000], res: (0.707, 3.345, 1.000), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 3.3, comp: 0.00 }),
+    // LPF UVI 3 — 710 factory uses; fit 0.1 dB at res 0, 0.2/0.1 at res 0.5/0.9; taper fits 0.15:0.1 0.45:0.1 0.6:0.1 0.75:0.1
+    (0x3e75c28f, FilterModel { name: "LPF UVI 3", mode: "lowpass", poles: 2, ladder: false, taper: [1.3348, 1.3348, 1.3348, 1.2599, 1.1225], res: (0.500, 6.658, 0.439), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 0.0, comp: 0.00 }),
+    // FATBOY — 663 factory uses; fit 1.1 dB at res 0, 2.8/3.9 at res 0.5/0.9; taper fits 0.15:1.3 0.45:1.3 0.6:1.0 0.75:0.5
+    (0x3e99999a, FilterModel { name: "FATBOY", mode: "lowpass", poles: 4, ladder: false, taper: [0.2806, 0.3536, 0.5000, 0.5946, 0.5946], res: (0.500, 40.000, 0.520), res_shift: 1.124, res_shift_curve: 0.150, gain_db: -0.3, comp: 0.00 }),
+    // LPF Gentle 6db — 656 factory uses; fit 0.3 dB at res 0, 0.7/1.1 at res 0.5/0.9; taper fits 0.15:0.1 0.45:0.8 0.6:1.4 0.75:2.2
+    (0x3e3851ec, FilterModel { name: "LPF Gentle 6db", mode: "lowpass", poles: 1, ladder: true, taper: [0.2227, 0.4719, 0.8409, 1.6818, 1.7818], res: (0.000, 0.410, 0.300), res_shift: 1.136, res_shift_curve: 1.000, gain_db: -0.1, comp: 0.25 }),
+    // HPF Juicy 12db — 611 factory uses; fit 0.2 dB at res 0, 0.3/0.5 at res 0.5/0.9; taper fits 0.15:0.3 0.45:0.3 0.6:0.5 0.75:0.8
+    (0x3f0a3d71, FilterModel { name: "HPF Juicy 12db", mode: "highpass", poles: 2, ladder: false, taper: [0.2973, 0.3746, 0.5297, 0.6300, 0.7071], res: (0.707, 7.381, 0.935), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 0.4, comp: 0.00 }),
+    // HPF Crisp — 562 factory uses; fit 0.0 dB at res 0, 0.2/0.2 at res 0.5/0.9; taper fits 0.15:0.2 0.45:0.3 0.6:0.5 0.75:0.4
+    (0x3e0f5c29, FilterModel { name: "HPF Crisp", mode: "highpass", poles: 2, ladder: false, taper: [0.2360, 0.2227, 0.2973, 0.3536, 0.3969], res: (0.500, 12.565, 0.936), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 0.2, comp: 0.00 }),
+    // Bandpass Juicy 24db — 562 factory uses; fit 1.0 dB at res 0, 5.5/7.7 at res 0.5/0.9; taper fits 0.15:0.8 0.45:1.6 0.6:2.0 0.75:2.1
+    (0x3f19999a, FilterModel { name: "Bandpass Juicy 24db", mode: "bandpass", poles: 4, ladder: false, taper: [0.2973, 0.3746, 0.5297, 0.6674, 0.7492], res: (0.500, 0.500, 1.000), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -9.0, comp: 0.00 }),
+    // Bandpass — 489 factory uses; fit 1.4 dB at res 0, 1.4/1.5 at res 0.5/0.9; taper fits 0.15:1.9 0.45:2.6 0.6:4.8 0.75:4.5
+    (0x3d75c28f, FilterModel { name: "Bandpass", mode: "bandpass", poles: 2, ladder: false, taper: [1.4142, 0.8909, 0.5612, 0.8909, 0.8909], res: (1.000, 3.534, 0.348), res_shift: 1.599, res_shift_curve: 0.150, gain_db: 9.2, comp: 0.00 }),
+    // LPF Warm 12db — 435 factory uses; fit 0.3 dB at res 0, 0.4/0.5 at res 0.5/0.9; taper fits 0.15:0.1 0.45:0.2 0.6:0.1 0.75:0.1
+    (0x3e8f5c29, FilterModel { name: "LPF Warm 12db", mode: "lowpass", poles: 2, ladder: false, taper: [0.2973, 0.3746, 0.5000, 0.6300, 0.7071], res: (0.500, 4.767, 0.519), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -0.0, comp: 0.00 }),
+    // Beefy BPF 4-pole — 427 factory uses; fit 3.0 dB at res 0, 0.5/1.5 at res 0.5/0.9; taper fits 0.15:1.6 0.45:4.4 0.6:6.3 0.75:5.2
+    (0x3f7d70cc, FilterModel { name: "Beefy BPF 4-pole", mode: "bandpass", poles: 4, ladder: false, taper: [0.3337, 0.3746, 0.3746, 0.3746, 0.3746], res: (0.500, 11.767, 1.113), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 9.8, comp: 0.00 }),
+    // LPF Colorful 24db — 411 factory uses; fit 1.6 dB at res 0, 2.4/5.2 at res 0.5/0.9; taper fits 0.15:2.6 0.45:2.9 0.6:2.2 0.75:2.3
+    (0x3d23d70a, FilterModel { name: "LPF Colorful 24db", mode: "lowpass", poles: 6, ladder: false, taper: [0.5000, 0.2500, 0.2227, 0.2649, 0.2806], res: (0.850, 1.774, 1.000), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -4.4, comp: 0.00 }),
+    // HPF Power 12db — 410 factory uses; fit 0.6 dB at res 0, 0.9/1.8 at res 0.5/0.9; taper fits 0.15:0.2 0.45:1.0 0.6:1.7 0.75:2.1
+    (0x3f23d70a, FilterModel { name: "HPF Power 12db", mode: "highpass", poles: 2, ladder: true, taper: [0.2360, 0.1984, 0.3337, 0.5612, 0.6674], res: (0.000, 8.000, 1.869), res_shift: 2.192, res_shift_curve: 1.180, gain_db: 0.3, comp: -0.12 }),
+    // OB LPF 4-pole — 406 factory uses; fit 0.5 dB at res 0, 4.0/6.5 at res 0.5/0.9; taper fits 0.15:0.7 0.45:0.5 0.6:0.6 0.75:0.3
+    (0x3f7d70b3, FilterModel { name: "OB LPF 4-pole", mode: "lowpass", poles: 4, ladder: false, taper: [0.2973, 0.3746, 0.5297, 0.7071, 0.9439], res: (0.600, 7.733, 1.000), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 3.5, comp: 0.00 }),
+    // Classic LPF 6-pole — 395 factory uses; fit 0.6 dB at res 0, 3.9/6.0 at res 0.5/0.9; taper fits 0.15:0.1 0.45:0.7 0.6:0.9 0.75:0.4
+    (0x3f7d70a6, FilterModel { name: "Classic LPF 6-pole", mode: "lowpass", poles: 6, ladder: true, taper: [0.2973, 0.3746, 0.5297, 0.6674, 0.7937], res: (0.000, 2.844, 1.607), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 3.2, comp: -0.25 }),
+    // Beefy LPF 2-pole — 379 factory uses; fit 1.3 dB at res 0, 1.7/3.4 at res 0.5/0.9; taper fits 0.15:0.9 0.45:1.5 0.6:1.1 0.75:0.5
+    (0x3f7d70b5, FilterModel { name: "Beefy LPF 2-pole", mode: "lowpass", poles: 2, ladder: true, taper: [0.3150, 0.3746, 0.4719, 0.5297, 0.5000], res: (0.000, 2.952, 0.300), res_shift: 0.495, res_shift_curve: 0.150, gain_db: 4.6, comp: 0.25 }),
+    // LPF Smooth 24db — 376 factory uses; fit 0.8 dB at res 0, 9.1/11.0 at res 0.5/0.9; taper fits 0.15:2.6 0.45:0.9 0.6:0.6 0.75:0.5
+    (0x3ea3d70a, FilterModel { name: "LPF Smooth 24db", mode: "lowpass", poles: 2, ladder: true, taper: [0.0625, 0.0662, 0.0936, 0.1180, 0.1487], res: (0.000, 8.000, 0.300), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 1.3, comp: 0.50 }),
+    // LPF Crisp 12db — 338 factory uses; fit 0.5 dB at res 0, 0.4/0.5 at res 0.5/0.9; taper fits 0.15:0.2 0.45:0.6 0.6:0.5 0.75:0.3
+    (0x3eeb851f, FilterModel { name: "LPF Crisp 12db", mode: "lowpass", poles: 2, ladder: false, taper: [0.2973, 0.3746, 0.5612, 0.6674, 0.6300], res: (0.500, 10.862, 0.869), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -0.0, comp: 0.00 }),
+    // HPF Juicy 24db — 316 factory uses; fit 0.1 dB at res 0, 1.2/1.9 at res 0.5/0.9; taper fits 0.15:0.5 0.45:0.8 0.6:0.6 0.75:1.8
+    (0x3f0f5c29, FilterModel { name: "HPF Juicy 24db", mode: "highpass", poles: 4, ladder: true, taper: [0.3150, 0.3746, 0.5297, 0.6674, 0.7937], res: (0.000, 4.800, 0.300), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 0.6, comp: 1.00 }),
+    // LPF Edge 24db — 278 factory uses; fit 1.6 dB at res 0, 4.2/7.0 at res 0.5/0.9; taper fits 0.15:4.0 0.45:1.4 0.6:1.9 0.75:2.2
+    (0x3eae147b, FilterModel { name: "LPF Edge 24db", mode: "lowpass", poles: 4, ladder: true, taper: [0.4204, 0.4204, 0.5612, 0.7492, 0.9439], res: (0.000, 3.200, 0.300), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -3.5, comp: 1.00 }),
+    // LPF UVI 1 — 275 factory uses; fit 0.7 dB at res 0, 0.9/1.3 at res 0.5/0.9; taper fits 0.15:1.2 0.45:0.6 0.6:0.4 0.75:0.2
+    (0x3e4ccccd, FilterModel { name: "LPF UVI 1", mode: "lowpass", poles: 4, ladder: true, taper: [0.7937, 0.8409, 0.8909, 0.9439, 0.9439], res: (0.000, 3.372, 0.869), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 2.6, comp: 0.00 }),
+    // ? — 260 factory uses; fit 1.1 dB at res 0, 2.7/3.9 at res 0.5/0.9; taper fits 0.15:1.3 0.45:1.2 0.6:1.0 0.75:0.4
+    (0x3e999999, FilterModel { name: "?", mode: "lowpass", poles: 4, ladder: false, taper: [0.2806, 0.3536, 0.5000, 0.5946, 0.5946], res: (0.500, 40.000, 0.520), res_shift: 1.124, res_shift_curve: 0.150, gain_db: -0.3, comp: 0.00 }),
+    // Sauce LPF 4-pole — 255 factory uses; fit 0.2 dB at res 0, 5.0/7.2 at res 0.5/0.9; taper fits 0.15:0.2 0.45:1.2 0.6:1.0 0.75:0.7
+    (0x3f7d70b0, FilterModel { name: "Sauce LPF 4-pole", mode: "lowpass", poles: 4, ladder: true, taper: [0.2973, 0.3746, 0.5612, 0.6674, 0.6300], res: (0.000, 4.800, 0.300), res_shift: 1.000, res_shift_curve: 1.000, gain_db: 3.6, comp: 0.12 }),
+    // OB LPF 2-pole — 253 factory uses; fit 0.7 dB at res 0, 2.3/3.3 at res 0.5/0.9; taper fits 0.15:0.7 0.45:0.9 0.6:0.7 0.75:0.2
+    (0x3f6b851f, FilterModel { name: "OB LPF 2-pole", mode: "lowpass", poles: 2, ladder: true, taper: [0.2973, 0.3746, 0.5612, 0.7937, 1.1225], res: (0.000, 3.487, 0.300), res_shift: 0.495, res_shift_curve: 0.150, gain_db: 3.0, comp: 0.12 }),
+    // Subtle LPF 1-pole — 253 factory uses; fit 0.3 dB at res 0, 0.7/1.1 at res 0.5/0.9; taper fits 0.15:0.1 0.45:0.9 0.6:1.4 0.75:2.2
+    (0x3f7d70b8, FilterModel { name: "Subtle LPF 1-pole", mode: "lowpass", poles: 1, ladder: true, taper: [0.2227, 0.4719, 0.8409, 1.7818, 1.7818], res: (0.000, 2.036, 3.312), res_shift: 0.564, res_shift_curve: 2.048, gain_db: -0.1, comp: 0.38 }),
+    // Jupiter HPF 4-pole — 247 factory uses; fit 1.4 dB at res 0, 2.3/9.7 at res 0.5/0.9; taper fits 0.15:1.1 0.45:2.2 0.6:3.0 0.75:2.0
+    (0x3f7d70dd, FilterModel { name: "Jupiter HPF 4-pole", mode: "highpass", poles: 6, ladder: false, taper: [0.2102, 0.2649, 0.3536, 0.2649, 0.5297], res: (1.000, 5.405, 0.300), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -3.6, comp: 0.00 }),
+    // Notch — 204 factory uses; fit 0.7 dB at res 0, 0.8/3.6 at res 0.5/0.9; taper fits 0.15:0.1 0.45:0.6 0.6:1.1 0.75:0.2
+    (0x3da3d70a, FilterModel { name: "Notch", mode: "notch", poles: 2, ladder: false, taper: [0.2973, 0.3536, 0.5000, 0.6300, 0.7071], res: (0.850, 0.850, 1.000), res_shift: 1.154, res_shift_curve: 2.048, gain_db: 0.1, comp: 0.00 }),
+    // Bandpass Power 24db — 201 factory uses; fit 2.2 dB at res 0, 2.4/5.9 at res 0.5/0.9; taper fits 0.15:2.0 0.45:3.0 0.6:3.8 0.75:4.8
+    (0x3f333333, FilterModel { name: "Bandpass Power 24db", mode: "bandpass", poles: 4, ladder: false, taper: [0.2102, 0.1984, 0.3150, 0.1984, 0.1984], res: (0.500, 2.829, 1.625), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -12.3, comp: 0.00 }),
+    // Jupiter HPF 2-pole — 184 factory uses; fit 1.4 dB at res 0, 1.6/2.5 at res 0.5/0.9; taper fits 0.15:0.7 0.45:2.2 0.6:3.0 0.75:2.4
+    (0x3f7d70bf, FilterModel { name: "Jupiter HPF 2-pole", mode: "highpass", poles: 3, ladder: true, taper: [0.1487, 0.2102, 0.2500, 0.2102, 0.3969], res: (0.000, 4.033, 0.300), res_shift: 2.022, res_shift_curve: 0.150, gain_db: -2.2, comp: 0.62 }),
+    // Jupiter HPF 1-pole — 180 factory uses; fit 0.8 dB at res 0, 2.0/3.4 at res 0.5/0.9; taper fits 0.15:0.5 0.45:1.6 0.6:2.8 0.75:3.8
+    (0x3f666666, FilterModel { name: "Jupiter HPF 1-pole", mode: "highpass", poles: 2, ladder: true, taper: [0.1250, 0.1487, 0.1669, 0.1984, 0.1487], res: (0.000, 2.256, 0.300), res_shift: 1.798, res_shift_curve: 0.150, gain_db: -1.5, comp: 0.38 }),
+    // Jupiter LPF 2-pole — 164 factory uses; fit 1.0 dB at res 0, 1.6/3.5 at res 0.5/0.9; taper fits 0.15:0.8 0.45:1.1 0.6:0.9 0.75:0.2
+    (0x3f6147ae, FilterModel { name: "Jupiter LPF 2-pole", mode: "lowpass", poles: 2, ladder: true, taper: [0.2973, 0.3969, 0.5946, 0.8909, 1.4142], res: (0.000, 2.544, 0.311), res_shift: 0.495, res_shift_curve: 0.150, gain_db: 3.3, comp: 0.25 }),
+    // State Variable OB — 163 factory uses; fit 0.7 dB at res 0, 6.4/10.3 at res 0.5/0.9; taper fits 0.15:0.1 0.45:1.1 0.6:3.0 0.75:0.5
+    (0x3f7d70d4, FilterModel { name: "State Variable OB", mode: "notch", poles: 2, ladder: false, taper: [0.2973, 0.3746, 0.5000, 0.3746, 0.7492], res: (0.707, 0.707, 1.000), res_shift: 1.000, res_shift_curve: 1.000, gain_db: -1.9, comp: 0.00 }),
+];
+
+/// The model for a `type1` value: exact, else the nearest measured one in
+/// the same family (a few ULPs off), else a generic model from the coarse
+/// slot table. `None` for the gain/colour types that don't filter.
+#[must_use]
+pub fn filter_model(type1: f32) -> Option<FilterModel> {
+    let bits = type1.to_bits();
+    if let Some((_, m)) = FILTER_MODELS.iter().find(|(b, _)| *b == bits) {
+        return Some(*m);
+    }
+    if let Some((_, m)) = FILTER_MODELS
+        .iter()
+        .filter(|(b, _)| b.abs_diff(bits) <= 64)
+        .min_by_key(|(b, _)| b.abs_diff(bits))
+    {
+        return Some(*m);
+    }
+    let (mode, poles) = classify_type1(type1)?;
+    Some(FilterModel {
+        name: "generic",
+        mode,
+        poles,
+        ladder: false,
+        taper: [1.0; 5],
+        res: (0.5, 12.0, 1.0),
+        res_shift: 1.0,
+        res_shift_curve: 1.0,
+        gain_db: 0.0,
+        comp: 0.0,
+    })
+}
+
 /// Look a `type1` value up in the measured table. `None` for "allpass"
 /// (gain/color) slots — callers leave the filter transparent.
 pub fn classify_type1(v: f32) -> Option<(&'static str, u32)> {
@@ -280,11 +470,57 @@ pub fn classify_type1(v: f32) -> Option<(&'static str, u32)> {
     (mode != "allpass").then_some((mode, poles))
 }
 
-/// Filter cutoff: normalized → Hz, measured through the real engine
-/// (knee sweep with keytracking off): **cutoff ≈ 15 Hz × 2^(9.55·v)**.
+/// The filter knob's taper, measured through real Omnisphere: the
+/// Butterworth corner of the plain 12 dB lowpass (`type1` 0.22) at each
+/// effective setting (see [`omni_filter_setting`]). Near `17 kHz · v²` low,
+/// bending upward above ~0.5. Other models' corners are a fixed ratio of
+/// this (their `FilterModel::scale`).
+const CUTOFF_TAPER: [(f32, f32); 17] = [
+    (0.10, 170.0),
+    (0.15, 382.0),
+    (0.20, 680.0),
+    (0.25, 1062.0),
+    (0.30, 1535.0),
+    (0.35, 2095.0),
+    (0.40, 2741.0),
+    (0.45, 3513.0),
+    (0.50, 4374.0),
+    (0.55, 5373.0),
+    (0.60, 6532.0),
+    (0.65, 7810.0),
+    (0.70, 9527.0),
+    (0.75, 11401.0),
+    (0.80, 14063.0),
+    (0.85, 17550.0),
+    (1.00, 34000.0),
+];
+
+/// A filter's effective knob setting: the section's master control (`freq`,
+/// `res`) plus its own filter's offset (`freq1` / `res2` …, 0.5 = none), two
+/// knob units per unit of offset — measured: every (freq, freqN) pair with
+/// the same `freq + 2·(freqN − 0.5)` lands on the same corner, and the same
+/// law holds for resonance.
+#[must_use]
+pub fn omni_filter_setting(freq: f32, freq_n: f32) -> f32 {
+    freq + 2.0 * (freq_n - 0.5)
+}
+
+/// Filter knob setting → the reference corner in Hz ([`CUTOFF_TAPER`]).
 #[must_use]
 pub fn omni_cutoff_hz(v: f32) -> f32 {
-    15.0 * (9.55 * v.clamp(0.0, 1.0)).exp2()
+    let (v0, h0) = CUTOFF_TAPER[0];
+    if v <= v0 {
+        // The low end follows the quadratic law (floored well under audio).
+        return (h0 * (v.max(0.0) / v0).powi(2)).max(8.0);
+    }
+    for w in CUTOFF_TAPER.windows(2) {
+        let ((a, ha), (b, hb)) = (w[0], w[1]);
+        if v <= b {
+            let t = (v - a) / (b - a);
+            return (ha.ln() + t * (hb.ln() - ha.ln())).exp();
+        }
+    }
+    CUTOFF_TAPER[CUTOFF_TAPER.len() - 1].1
 }
 
 /// Coarse filter classification from the factory preset name (`NameStr`).
@@ -459,16 +695,23 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             layer.filter_name = f.attr("NameStr").unwrap_or("").to_string();
             layer.filter_parallel = f.num("para").unwrap_or(0.0) != 0.0;
             layer.filter_active = f.num("act").unwrap_or(0.0) != 0.0;
-            layer.filter_freq = f.num("freq").unwrap_or(0.5);
+            let master = f.num("freq").unwrap_or(0.5);
+            layer.filter_freq = omni_filter_setting(master, f.num("freq1").unwrap_or(0.5));
             layer.filter_type1 = f.num("type1");
-            layer.filter_res = f.num("res").unwrap_or(0.0);
+            layer.filter1_on = f.num("act1").unwrap_or(1.0) != 0.0;
+            // Per-filter resonance is an offset like the cutoff's (0.5 = none).
+            let res = f.num("res").unwrap_or(0.0);
+            layer.filter_res =
+                omni_filter_setting(res, f.num("res1").unwrap_or(0.5)).clamp(0.0, 1.0);
+            layer.filter_balance = f.num("bal").unwrap_or(0.5).clamp(0.0, 1.0);
             let depth = f.num("envdpth").unwrap_or(0.0).clamp(0.0, 1.0);
             let inv = f.num("envdpthinv").unwrap_or(0.0) != 0.0;
             layer.filter_env_depth = if inv { -depth } else { depth };
             if f.num("act2").unwrap_or(0.0) != 0.0 {
+                layer.filter_type2 = f.num("type2");
                 layer.filter2 = Some((
-                    f.num("freq2").unwrap_or(0.5).clamp(0.0, 1.0),
-                    f.num("res2").unwrap_or(0.0).clamp(0.0, 1.0),
+                    omni_filter_setting(master, f.num("freq2").unwrap_or(0.5)),
+                    omni_filter_setting(res, f.num("res2").unwrap_or(0.5)).clamp(0.0, 1.0),
                 ));
             }
         }

@@ -27,8 +27,8 @@ mod tree;
 
 pub use index::{SoundsourceIndex, normalize_soundsource_name, resolve_name};
 pub use model::{
-    OmniLayer, OmniModRoute, OmniPatch, classify_filter_full, omni_cutoff_hz, parse_patch,
-    wavetable_path,
+    FilterModel, OmniLayer, OmniModRoute, OmniPatch, classify_filter_full, filter_model,
+    omni_cutoff_hz, omni_filter_setting, parse_patch, wavetable_path,
 };
 pub use multi::{OmniMulti, load_multi_file, multi_to_container, parse_multi};
 pub use tree::{LAYER_NAMES, load_patch_file, patch_to_container};
@@ -459,9 +459,9 @@ mod tests {
             .find(|b| b.display_name() == "Filter 1")
             .expect("filter 1");
         assert_eq!(f1.param_str("model").as_deref(), Some("LPF Test"));
-        // Omnisphere freq 0.5 → 15·2^(9.55/2) ≈ 411 Hz (calibrated curve) →
-        // our normalized cutoff log10(411/20)/3 ≈ 0.4375.
-        assert!((f1.param_f32("cutoff").unwrap() - 0.4375).abs() < 1e-3);
+        // Omnisphere freq 0.5 (no per-filter offset, no measured `type1`) →
+        // the knob taper's 4374 Hz → our normalized log10(4374/20)/3 ≈ 0.780.
+        assert!((f1.param_f32("cutoff").unwrap() - 0.780).abs() < 1e-3);
         assert_eq!(f1.param_f32("resonance"), Some(0.25));
         // Renders (placeholder-safe).
         let mut rn = signal_sampler::node_render::RenderNode::compile(&tree, 48_000);

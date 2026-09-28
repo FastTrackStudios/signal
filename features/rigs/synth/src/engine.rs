@@ -1138,7 +1138,13 @@ fn imported_module(l: &crate::omni_import::OmniLayer) -> ImportedModule {
         } else {
             -60.0
         },
-        cutoff_hz: crate::omni_import::omni_cutoff_hz(l.filter_freq),
+        cutoff_hz: l
+            .filter_type1
+            .and_then(crate::omni_import::filter_model)
+            .map_or_else(
+                || crate::omni_import::omni_cutoff_hz(l.filter_freq),
+                |m| m.corner_hz(l.filter_freq),
+            ),
         resonance: l.filter_res,
         filter_env_depth: l.filter_env_depth,
         amp_env: l.amp_env.map(secs),
