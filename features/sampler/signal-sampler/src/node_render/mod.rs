@@ -447,6 +447,8 @@ impl RenderNode {
                 bus_l: vec![Vec::new(); bus_count],
                 bus_r: vec![Vec::new(); bus_count],
                 tempo_bpm: 120.0,
+                tempo_followers: mc.tempo_followers,
+                followed_bpm: 0.0,
                 sample_rate: sample_rate as f32,
                 arp: build_arp(resolved),
             }),
@@ -581,6 +583,23 @@ impl RenderNode {
             .map(LeafBackend::params_snapshot)
             .unwrap_or_default();
         let id = mc.leaves.len();
+        // Tempo-synced parameters, resolved to the processor's param ids now
+        // so a tempo change is a plain write on the audio thread.
+        for p in &block.params {
+            let (hz, target) = match (p.name.strip_prefix("sync_ms_"), p.name.strip_prefix("sync_hz_")) {
+                (Some(t), _) => (false, t),
+                (_, Some(t)) => (true, t),
+                _ => continue,
+            };
+            let Ok(beats) = p.value.parse::<f32>() else { continue };
+            if let Some(param_id) = params
+                .iter()
+                .find(|i| i.name.eq_ignore_ascii_case(target))
+                .map(|i| i.id)
+            {
+                mc.tempo_followers.push(modmatrix::TempoFollower { leaf: id, param_id, beats, hz });
+            }
+        }
         mc.leaves.push((
             leaf.id.as_str().to_string(),
             leaf.name.to_lowercase(),
@@ -1182,6 +1201,24 @@ impl RenderNode {
         // buffers down the tree.
         if let Self::Modulated { engine, inner } = self {
             let frames = out_l.len().min(out_r.len());
+            // The band's tempo, when there is one, drives everything synced.
+            if let Some(bpm) = signal_rig_host::tempo::get() {
+                engine.tempo_bpm = bpm;
+            }
+            if (engine.tempo_bpm - engine.followed_bpm).abs() > 1e-3 {
+                engine.followed_bpm = engine.tempo_bpm;
+                crate::native::set_tempo_bpm(engine.tempo_bpm);
+                for f in &engine.tempo_followers {
+                    if let Some(LeafBackend::Plugin(p)) = inner.leaf_backend_mut(f.leaf) {
+                        let writes = [(f.param_id, f.value(engine.tempo_bpm))];
+                        let ev = PluginEvents {
+                            params: &writes,
+                            ..PluginEvents::default()
+                        };
+                        let _ = p.process_block(&[], &[], &mut [], &mut [], &ev);
+                    }
+                }
+            }
             // The arpeggiator rewrites the MIDI stream before anything else
             // (steps replace held notes; CC/bend pass through).
             let arp_midi;

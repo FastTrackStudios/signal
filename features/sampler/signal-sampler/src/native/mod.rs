@@ -41,6 +41,7 @@ pub use modal::NativeModal;
 pub use ranges::{default_of, range_of, ranges_of};
 pub(crate) use registry::build_native_source;
 pub use registry::parse_points;
+pub use breakpoints::{set_tempo_bpm, tempo_bpm};
 pub use registry::{build_native, native_dsp_available};
 pub use wavebank::WaveBank;
 pub use waveshaper::NativeWaveshaper;

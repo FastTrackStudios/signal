@@ -35,7 +35,7 @@ def render(xml, exe):
     if os.environ.get("SRC") == "holdenv":
         hold = "1.0"
     r = subprocess.run([exe, "/tmp/fx.prt_omn", "/tmp/fx.wav", "--note", os.environ.get("NOTE", "60"), "--hold", hold,
-                        "--tail", os.environ.get("TAIL", "4.0")], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+                        "--tail", os.environ.get("TAIL", "4.0"), "--bpm", os.environ.get("BPM", "120")], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     d = open("/tmp/fx.wav", "rb").read(); i = 12
     while i < len(d):
         cid, sz = d[i:i+4], struct.unpack("<I", d[i+4:i+8])[0]

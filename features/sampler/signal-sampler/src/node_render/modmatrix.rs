@@ -85,12 +85,42 @@ pub struct ModEngine {
     /// Send buses (indexed by compile-time bus id), zeroed each block.
     pub(super) bus_l: Vec<Vec<f32>>,
     pub(super) bus_r: Vec<Vec<f32>>,
-    /// Tempo for synced LFOs (set by the host via `RenderNode::set_tempo`).
+    /// Tempo for synced LFOs and envelopes: the band's
+    /// (`signal_rig_host::tempo`) when one is set, else what the host set via
+    /// `RenderNode::set_tempo`.
     pub(super) tempo_bpm: f32,
+    /// Leaf parameters that follow the tempo (see [`TempoFollower`]).
+    pub(super) tempo_followers: Vec<TempoFollower>,
+    /// The tempo they were last written at (0: never).
+    pub(super) followed_bpm: f32,
     /// Sample rate captured at prepare (drives the arp clock).
     pub(super) sample_rate: f32,
     /// MIDI-domain arpeggiator, when the preset carries an active Arp.
     pub(super) arp: Option<crate::native::ArpEngine>,
+}
+
+/// A leaf parameter set from the tempo: a block authored with
+/// `sync_ms_<param> = <beats>` gets `<param>` = that many beats in ms, and
+/// `sync_hz_<param> = <beats>` gets one cycle per that many beats in Hz —
+/// rewritten whenever the tempo moves.
+#[derive(Debug, Clone)]
+pub(crate) struct TempoFollower {
+    pub(crate) leaf: usize,
+    pub(crate) param_id: u32,
+    pub(crate) beats: f32,
+    pub(crate) hz: bool,
+}
+
+impl TempoFollower {
+    #[must_use]
+    pub(crate) fn value(&self, bpm: f32) -> f64 {
+        let beat_s = 60.0 / bpm.max(1.0);
+        if self.hz {
+            f64::from(1.0 / (self.beats.max(1e-3) * beat_s))
+        } else {
+            f64::from(self.beats * beat_s * 1000.0)
+        }
+    }
 }
 
 impl ModEngine {
@@ -369,6 +399,9 @@ pub(super) struct ModCompiler {
     /// resolved route matches on; the name is the fallback for a route that
     /// still points by name.
     pub(super) leaves: Vec<(String, String, Vec<signal_plugin_host::PluginParamInfo>)>,
+    /// Leaf parameters declared tempo-synced (`sync_ms_<param>` /
+    /// `sync_hz_<param>` block params).
+    pub(super) tempo_followers: Vec<TempoFollower>,
     /// Per-leaf lower-cased container path — mirrors `leaves`.
     pub(super) leaf_paths: Vec<Vec<String>>,
     /// Container-name stack during compile (lower-cased), for path capture.
@@ -388,6 +421,7 @@ impl ModCompiler {
             routes: Vec::new(),
             scales: Vec::new(),
             leaves: Vec::new(),
+            tempo_followers: Vec::new(),
             leaf_paths: Vec::new(),
             path: Vec::new(),
             buses: Vec::new(),

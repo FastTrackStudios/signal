@@ -5,13 +5,15 @@ spectrum. usage: patchcmp.py <patch.prt_omn>... (env NOTE, HOLD)"""
 import os, re, struct, subprocess, sys, tempfile
 import numpy as np
 os.environ.setdefault("FTS_SAMPLED_ROOT", "/Volumes/dev-drive/AudioHaven/Sampled")
+# Streaming packs open their zones in the background; give them time.
+os.environ.setdefault("RENDER_PREROLL_MS", "3000")
 HARNESS = "/Volumes/dev-drive/daw/target/release/examples/omni_render"
 OURS = "/Volumes/dev-drive/signal/target/release/examples/render_patch"
 SR = 48000; NOTE = os.environ.get("NOTE", "60"); HOLD = float(os.environ.get("HOLD", "2.0"))
 
 def render(exe, patch):
     wav = os.path.join(tempfile.gettempdir(), f"pc_{os.getpid()}.wav")
-    r = subprocess.run([exe, patch, wav, "--note", NOTE, "--hold", str(HOLD), "--tail", "1.0"],
+    r = subprocess.run([exe, patch, wav, "--note", NOTE, "--hold", str(HOLD), "--tail", "1.0", "--bpm", os.environ.get("BPM", "120")],
                        capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
     if r.returncode: return None
     d = open(wav, "rb").read(); i = 12

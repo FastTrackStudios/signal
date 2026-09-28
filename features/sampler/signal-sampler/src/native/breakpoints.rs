@@ -10,6 +10,22 @@
 //! it is, over that segment's whole duration. A mod envelope has none and
 //! runs free, optionally looping.
 
+/// The tempo synced envelopes run at (BPM as f32 bits). The render graph
+/// publishes the band's tempo here every time it moves (see
+/// `RenderNode::process`), so a voice deep in a source needs no plumbing.
+static TEMPO_BPM: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x42F0_0000); // 120.0
+
+/// Set the tempo synced envelopes follow.
+pub fn set_tempo_bpm(bpm: f32) {
+    TEMPO_BPM.store(bpm.clamp(1.0, 999.0).to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The tempo synced envelopes follow.
+#[must_use]
+pub fn tempo_bpm() -> f32 {
+    f32::from_bits(TEMPO_BPM.load(std::sync::atomic::Ordering::Relaxed))
+}
+
 /// One breakpoint: `level` at `time` (seconds, or beats when synced). Its
 /// `curve` and `step` shape the segment that LEAVES it.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -43,6 +59,8 @@ pub struct Breakpoints {
     pub sustain: Option<usize>,
     /// Free-running: start over at the end.
     pub looping: bool,
+    /// Times are beats, not seconds: the run follows [`tempo_bpm`].
+    pub synced: bool,
 }
 
 impl Breakpoints {
@@ -55,7 +73,21 @@ impl Breakpoints {
             points,
             sustain,
             looping,
+            synced: false,
         }
+    }
+
+    /// The same envelope with its times in beats (following the tempo).
+    #[must_use]
+    pub fn with_synced(mut self, synced: bool) -> Self {
+        self.synced = synced;
+        self
+    }
+
+    /// Seconds per time unit: 1, or a beat at the current tempo.
+    #[must_use]
+    pub fn unit_s(&self) -> f32 {
+        if self.synced { 60.0 / tempo_bpm() } else { 1.0 }
     }
 
     /// An amp/filter envelope: sustain at the penultimate point.
@@ -135,6 +167,8 @@ impl EnvPlayer {
         let Some(t) = self.t else {
             return 0.0;
         };
+        // A synced run advances in beats.
+        let dt = dt / bp.unit_s();
         let v = match (self.released, bp.sustain) {
             (Some((rt, from)), Some(s)) => {
                 let last = bp.points.len() - 1;

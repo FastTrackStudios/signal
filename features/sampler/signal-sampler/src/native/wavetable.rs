@@ -317,6 +317,15 @@ impl NativeWavetable {
         self
     }
 
+    /// The amp envelope's times are beats (it follows the tempo).
+    #[must_use]
+    pub fn with_amp_sync(mut self, synced: bool) -> Self {
+        if let Some(bp) = self.amp_points.take() {
+            self.amp_points = Some(std::sync::Arc::new((*bp).clone().with_synced(synced)));
+        }
+        self
+    }
+
     /// Omnisphere's amp velocity law (see `vel_sens`).
     #[must_use]
     pub fn with_velocity_sensitivity(mut self, sens: f32) -> Self {

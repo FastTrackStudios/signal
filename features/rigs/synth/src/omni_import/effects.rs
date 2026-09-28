@@ -48,14 +48,16 @@ pub fn effect_chain(name: &str, p: &[f32; 15]) -> Option<Container> {
     let gain = |db: f32| {
         RigBlock::of_type(BlockType::Volume).with_param("gain_db", format!("{db:.2}"))
     };
-    // A mono tremolo swinging `swing_db` at `hz`, and the makeup that puts
-    // its average at `mean_db` (the tremolo alone averages 1 − depth/2).
-    let pulse = |hz: f32, swing_db: f32, mean_db: f32| {
+    // A mono tremolo swinging `swing_db` once every `beats` (following the
+    // tempo), and the makeup that puts its average at `mean_db` (the tremolo
+    // alone averages 1 − depth/2).
+    let pulse = |beats: f32, swing_db: f32, mean_db: f32| {
         let depth = (1.0 - 10f32.powf(-swing_db / 20.0)).clamp(0.0, 1.0);
         Container::module(name)
             .add(
                 RigBlock::of_type(BlockType::Trem)
-                    .with_param("rate", format!("{hz:.3}"))
+                    .with_param("rate", format!("{:.3}", SYNC_BPM / 60.0 / beats))
+                    .with_param("sync_hz_rate", format!("{beats}"))
                     .with_param("depth", format!("{depth:.3}"))
                     .with_param("mode", "0")
                     .with_param("mix", "1"),
@@ -67,15 +69,15 @@ pub fn effect_chain(name: &str, p: &[f32; 15]) -> Option<Container> {
         // Measured at the gig patch's settings on a held saw (120 BPM): a
         // ~5 dB rise repeating every beat, −1.4 dB on average. Its band
         // split is not modelled — the level motion is what reads.
-        "Pulsar Split" => pulse(2.0, 5.3, -1.4),
-        // A slow pump (~11 dB over a bar at the gig's settings), −3 dB on
-        // average.
-        "Pump-O-Matic" => pulse(0.5, 10.9, -3.0),
+        "Pulsar Split" => pulse(1.0, 5.3, -1.4),
+        // A slow pump (~11 dB over a bar at the gig's settings, slowing
+        // with the tempo), −3 dB on average.
+        "Pump-O-Matic" => pulse(4.0, 10.9, -3.0),
         // A console stage: −0.8 dB at the gig's settings (its saturation is
         // not modelled).
         "Solid State Mix Buss" => Container::module(name).add(gain(-0.8)),
-        // Radio Delay (measured on a click at the gig's settings, 120 BPM):
-        // two taps, 375 and 500 ms (a dotted eighth and a quarter), each
+        // Radio Delay (measured on a click at the gig's settings): two taps,
+        // a dotted eighth and a quarter (375 / 500 ms at 120 BPM), each
         // first echo −20.9 dB and every repeat 14.7 dB down; the dry path
         // −0.8 dB.
         "Radio Delay" => Container::module(name).add(
@@ -84,8 +86,12 @@ pub fn effect_chain(name: &str, p: &[f32; 15]) -> Option<Container> {
                 .with_param("style", "1")
                 .with_param("style_b", "1")
                 .with_param("routing", "3")
-                .with_param("time", "375.0")
-                .with_param("time_b", "500.0")
+                // A dotted eighth and a quarter, following the tempo
+                // (measured: 500 / 665 ms at 90 BPM).
+                .with_param("time", format!("{:.1}", 0.75 * 60_000.0 / SYNC_BPM))
+                .with_param("time_b", format!("{:.1}", 60_000.0 / SYNC_BPM))
+                .with_param("sync_ms_time", "0.75")
+                .with_param("sync_ms_time_b", "1.0")
                 .with_param("feedback", "0.184")
                 .with_param("feedback_b", "0.184")
                 .with_param("mix", format!("{RADIO_TAP:.4}"))
@@ -538,6 +544,8 @@ fn bpm_delay(p: &[f32; 15]) -> RigBlock {
             "time",
             format!("{:.2}", (BEATS[k] * 60_000.0 / SYNC_BPM).clamp(2.0, 2500.0)),
         )
+        // Follows the tempo live.
+        .with_param("sync_ms_time", format!("{}", BEATS[k]))
         .with_param("feedback", format!("{:.3}", p[7].clamp(0.0, 0.95)))
         .with_param("mix", format!("{:.4}", (m.sqrt() * wet_gain).min(1.0)))
         .with_param("dry", format!("{:.4}", (1.0 - m).sqrt()))

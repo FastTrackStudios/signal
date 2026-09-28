@@ -1167,7 +1167,7 @@ impl Voice {
                             player.note_off(bp);
                             let tail = bp.sustain.map_or(0.0, |s| {
                                 bp.points.last().map_or(0.0, |l| l.time) - bp.points[s].time
-                            });
+                            }) * bp.unit_s();
                             (tail / *dt) as usize + 2
                         }
                         None => release_frames,

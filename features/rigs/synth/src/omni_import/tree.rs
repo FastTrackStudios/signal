@@ -92,25 +92,10 @@ fn points_param(points: &[(f32, f32, f32, bool)]) -> String {
         .join(";")
 }
 
-/// The tempo a synced amp envelope's beats are realized at. The voices tick
-/// their amp envelope without the host tempo, so it is fixed at import (the
-/// reference harness's tempo); a filter or mod envelope follows the live
-/// tempo through its `sync` param instead.
-const AMP_SYNC_BPM: f32 = 120.0;
-
-/// A layer's amp envelope points, in seconds.
+/// A layer's amp envelope points (seconds, or beats when synced — see
+/// `amp_sync`).
 fn amp_points_param(layer: &super::model::OmniLayer) -> String {
-    if layer.amp_env_synced {
-        let spb = 60.0 / AMP_SYNC_BPM;
-        let pts: Vec<_> = layer
-            .amp_points
-            .iter()
-            .map(|&(t, l, k, s)| (t * spb, l, k, s))
-            .collect();
-        points_param(&pts)
-    } else {
-        points_param(&layer.amp_points)
-    }
+    points_param(&layer.amp_points)
 }
 
 // ── Patch → composition tree ─────────────────────────────────────────────────
@@ -318,6 +303,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                 .named("Soundsource")
                 .with_param("transpose", format!("{:.4}", layer.transpose))
                 .with_param("amp_points", amp_points_param(layer))
+                .with_param("amp_sync", if layer.amp_env_synced { "1" } else { "0" })
                 .with_param("vel_sens", format!("{:.3}", layer.amp_velsens))
                 .with_param(
                     "glide_s",
@@ -431,6 +417,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             if layer.amp_points.len() >= 2 {
                 sb = sb
                     .with_param("amp_points", amp_points_param(layer))
+                .with_param("amp_sync", if layer.amp_env_synced { "1" } else { "0" })
                     .with_param("amp_attack", "0");
             } else if let Some((a, d, s, r)) = layer.amp_env {
                 sb = sb
@@ -440,6 +427,19 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     .with_param("amp_release", format!("{r:.4}"));
             }
             sb = sb.with_param("vel_sens", format!("{:.3}", layer.amp_velsens));
+            // Harmonia voices play the soundsource itself at their intervals
+            // (the engine stacks them per note).
+            for (i, (level, smi, pan, _shape)) in layer.harmonia.iter().take(4).enumerate() {
+                let n = i + 1;
+                sb = sb
+                    .with_param(format!("harm{n}_level"), format!("{level:.4}"))
+                    .with_param(format!("harm{n}_interval"), format!("{smi:.1}"))
+                    .with_param(format!("harm{n}_pan"), format!("{pan:.4}"));
+            }
+            // One soundsource of a multi-soundsource pack (Keyscape).
+            if let Some(a) = index.articulation_for(&layer.soundsource) {
+                sb = sb.with_param("articulation", a.to_string());
+            }
             if let Some(v) = super::index::dynamic_zone_velocity(&layer.soundsource) {
                 sb = sb.with_param("zone_velocity", v.to_string());
             }
@@ -466,9 +466,8 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
         let mut osc = osc.block(BlockType::Unison, "Unison");
         // Harmonia only in sample mode when active; in synth mode the wavetable
         // already carries the harmonia voices as its own params.
-        if !layer.soundsource.is_empty() && !layer.harmonia.is_empty() {
-            osc = osc.block(BlockType::Harmonic, "Harmonia");
-        }
+        // (A sample layer's Harmonia rides the Sampler block — see above; the
+        // modal Harmonic block generated its own tone and masked the source.)
         osc = osc
             .block(BlockType::FmOperator, "FM")
             .block(BlockType::RingModulator, "Ring Mod");
@@ -691,9 +690,8 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                 .with_param("amp", format!("{:.4}", l.swing))
                 .with_param("unipolar", if l.unipolar { "1" } else { "0" });
             if l.sync {
-                // Tempo-synced: rate index → beats/cycle (CALIBRATE).
-                let beats = [4.0, 2.0, 1.0, 0.5, 0.25, 0.125][(l.rate * 5.0).round() as usize];
-                lfo = lfo.with_param("sync_beats", format!("{beats}"));
+                // Tempo-synced: the rate picks a note division (measured).
+                lfo = lfo.with_param("sync_beats", format!("{:.5}", l.sync_beats()));
             }
             if l.retrigger {
                 lfo = lfo.with_param("retrigger", "1");

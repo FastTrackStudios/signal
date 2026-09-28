@@ -156,6 +156,8 @@ fn main() {
     let mut rn = RenderNode::compile(&tree, sr);
     let block = 256usize;
     rn.prepare(f64::from(sr), block as u32);
+    // `--bpm`: the host tempo (synced LFOs, envelopes, delays).
+    rn.set_tempo(opt("--bpm", 120.0));
     // Let sample sources finish their first loads before the note (the
     // reference harness pre-rolls too).
     let (mut l, mut r) = (vec![0.0f32; block], vec![0.0f32; block]);

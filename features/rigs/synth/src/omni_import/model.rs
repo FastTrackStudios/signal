@@ -226,6 +226,23 @@ impl OmniLfo {
         (48.3 * self.rate.clamp(0.0, 1.0).powi(3)).max(0.01)
     }
 
+    /// A synced LFO's cycle in beats (measured on the plugin at 120 and 90
+    /// BPM: `rate` picks a note division in 0.02 steps — straight, then the
+    /// shortest, then dotted, then triplets; beyond 16 beats the readings
+    /// are rougher).
+    #[must_use]
+    pub fn sync_beats(&self) -> f32 {
+        const T: [f32; 51] = [
+            128.0, 128.0, 128.0, 128.0, 128.0, 64.0, 64.0, 48.0, 48.0, 32.0, // 0.00–0.18
+            32.0, 24.0, 24.0, 16.0, 16.0, 12.0, 12.0, 8.0, 8.0, 4.0, // 0.20–0.38
+            4.0, 2.0, 2.0, 1.0, 1.0, 0.5, 0.25, 0.25, 0.125, 0.125, // 0.40–0.58
+            0.0625, 0.0625, 1.0 / 24.0, 1.0 / 24.0, 6.0, 6.0, 3.0, 3.0, 1.5, 0.75, // 0.60–0.78
+            0.75, 0.375, 0.375, 8.0 / 3.0, 8.0 / 3.0, 4.0 / 3.0, 4.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0, 1.0 / 3.0, // 0.80–0.98
+            1.0 / 6.0, // 1.00
+        ];
+        T[((self.rate.clamp(0.0, 1.0) * 50.0).round() as usize).min(50)]
+    }
+
     /// Signal's LFO wave index (0 sine, 1 triangle, 2 saw, 3 square, 4 S&H,
     /// 5 falling saw) for Omnisphere's `type` (measured: 0 sine, 0.02 smooth
     /// random, 0.04 triangle, 0.06 square, 0.08 rising saw, 0.10 falling

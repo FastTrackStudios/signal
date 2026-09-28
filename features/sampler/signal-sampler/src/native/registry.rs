@@ -307,7 +307,8 @@ fn wavetable_osc(block: &RigBlock, sample_rate: u32) -> NativeWavetable {
                 .param_str("amp_points")
                 .map(|p| parse_points(&p))
                 .unwrap_or_default(),
-        );
+        )
+        .with_amp_sync(block.param_f32("amp_sync").unwrap_or(0.0) > 0.5);
     // Real wavetables (an imported patch's `wave0` / `wave1`), when named and
     // readable; otherwise the generated shapes.
     if let Some(a) = block.param_str("wave0").filter(|p| !p.is_empty()) {

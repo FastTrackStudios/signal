@@ -17,7 +17,7 @@ SLOT = int(os.environ.get("SLOT", "16"))
 def rend(xml, exe):
     open("/tmp/ev.prt_omn", "w").write(xml)
     subprocess.run([exe, "/tmp/ev.prt_omn", "/tmp/ev.wav", "--note", os.environ.get("NOTE", "48"),
-                    "--hold", "2.0", "--tail", "0.1"], capture_output=True, stdin=subprocess.DEVNULL)
+                    "--hold", "2.0", "--tail", "0.1", "--bpm", os.environ.get("BPM", "120")], capture_output=True, stdin=subprocess.DEVNULL)
     d = open("/tmp/ev.wav", "rb").read(); i = 12
     while i < len(d):
         cid, sz = d[i:i+4], struct.unpack("<I", d[i+4:i+8])[0]
