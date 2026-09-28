@@ -83,6 +83,15 @@ fn modelled_filter(
         .with_param("ladder_comp", format!("{:.2}", model.comp))
 }
 
+/// Breakpoints as the block param "time:level:curve:step;…".
+fn points_param(points: &[(f32, f32, f32, bool)]) -> String {
+    points
+        .iter()
+        .map(|(t, l, k, step)| format!("{t:.5}:{l:.4}:{k:.3}:{}", u8::from(*step)))
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
 // ── Patch → composition tree ─────────────────────────────────────────────────
 
 pub const LAYER_NAMES: [&str; 4] = ["Layer A", "Layer B", "Layer C", "Layer D"];
@@ -264,6 +273,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             let mut wt = RigBlock::of_type(BlockType::Wavetable)
                 .named("Soundsource")
                 .with_param("transpose", format!("{:.4}", layer.transpose))
+                .with_param("amp_points", points_param(&layer.amp_points))
                 .with_param(
                     "glide_s",
                     format!("{:.4}", if layer.glide { patch.glide_s } else { 0.0 }),
@@ -507,19 +517,28 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             .send("Aux Rack", "To Aux")
             .modulator(BlockType::Envelope, "Amp Env")
             .modulator_block({
-                // The filter envelope carries its imported ADSR so the
-                // mod engine gates/sweeps with the patch's own shape.
-                let mut fe = RigBlock::of_type(BlockType::Envelope)
-                    .named("Filter Env")
-                    .with_param("vel_sens", format!("{:.3}", layer.filter_env_velsens));
-                if let Some((a, d, s, r)) = layer.filter_env {
-                    fe = fe
-                        .with_param("attack", format!("{a:.4}"))
-                        .with_param("decay", format!("{d:.4}"))
-                        .with_param("sustain", format!("{s:.4}"))
-                        .with_param("release", format!("{r:.4}"));
+                // The filter envelope: its breakpoints when the patch has
+                // them (sustaining at the penultimate point, like the amp
+                // envelope), else the imported ADSR.
+                if layer.filter_points.len() >= 2 {
+                    RigBlock::of_type(BlockType::MultisegEnvelope)
+                        .named("Filter Env")
+                        .with_param("points", points_param(&layer.filter_points))
+                        .with_param("sustain", (layer.filter_points.len() - 2).to_string())
+                        .with_param("vel_sens", format!("{:.3}", layer.filter_env_velsens))
+                } else {
+                    let mut fe = RigBlock::of_type(BlockType::Envelope)
+                        .named("Filter Env")
+                        .with_param("vel_sens", format!("{:.3}", layer.filter_env_velsens));
+                    if let Some((a, d, s, r)) = layer.filter_env {
+                        fe = fe
+                            .with_param("attack", format!("{a:.4}"))
+                            .with_param("decay", format!("{d:.4}"))
+                            .with_param("sustain", format!("{s:.4}"))
+                            .with_param("release", format!("{r:.4}"));
+                    }
+                    fe
                 }
-                fe
             });
         // The filter section's own envelope depth (independent of matrix rows).
         // Measured: it moves the cutoff knob `envdpth` settings at full
@@ -568,12 +587,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
         preset = preset.modulator_block(lfo);
     }
     for (n, env) in patch.mod_envs.iter().enumerate().take(6) {
-        let points = env
-            .points
-            .iter()
-            .map(|(t, l, k, step)| format!("{t:.4}:{l:.4}:{k:.3}:{}", u8::from(*step)))
-            .collect::<Vec<_>>()
-            .join(";");
+        let points = points_param(&env.points);
         preset = preset.modulator_block(
             RigBlock::of_type(BlockType::MultisegEnvelope)
                 .named(format!("Mod Env {}", n + 1))

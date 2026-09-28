@@ -172,10 +172,60 @@ fn pan_gains(pan: f32) -> (f32, f32) {
     (x.cos(), x.sin())
 }
 
+/// A voice's amp envelope: the ADSR, or an imported breakpoint envelope.
+enum VoiceEnv {
+    Adsr(Adsr),
+    Points {
+        bp: std::sync::Arc<super::breakpoints::Breakpoints>,
+        player: super::breakpoints::EnvPlayer,
+        dt: f32,
+    },
+}
+
+impl VoiceEnv {
+    fn note_on(&mut self) {
+        match self {
+            Self::Adsr(a) => a.note_on(),
+            Self::Points { player, .. } => player.note_on(),
+        }
+    }
+    fn note_off(&mut self) {
+        match self {
+            Self::Adsr(a) => a.note_off(),
+            Self::Points { bp, player, .. } => player.note_off(bp),
+        }
+    }
+    #[inline]
+    fn tick(&mut self) -> f32 {
+        match self {
+            Self::Adsr(a) => a.tick(),
+            Self::Points { bp, player, dt } => player.tick(bp, *dt),
+        }
+    }
+    fn is_idle(&self) -> bool {
+        match self {
+            Self::Adsr(a) => a.is_idle(),
+            Self::Points { bp, player, .. } => player.is_idle(bp),
+        }
+    }
+    /// Live ADSR edits (a breakpoint envelope keeps its imported shape).
+    fn set_params(&mut self, sr: f32, p: AdsrParams) {
+        if let Self::Adsr(a) = self {
+            a.set_params(sr, p);
+        }
+    }
+    fn set_sample_rate(&mut self, sr: f32) {
+        match self {
+            Self::Adsr(a) => a.set_sample_rate(sr),
+            Self::Points { dt, .. } => *dt = 1.0 / sr.max(1.0),
+        }
+    }
+}
+
 struct Voice {
     note: u8,
     amp: f32,
-    env: Adsr,
+    env: VoiceEnv,
     subs: Vec<Sub>,
     fm_phase: f32,
     fm_inc: f32,
@@ -208,6 +258,8 @@ pub struct NativeWavetable {
     /// [`glide_remaining`]). 0 = off.
     glide_s: f32,
     last_note: Option<u8>,
+    /// An imported breakpoint amp envelope (replaces the ADSR).
+    amp_points: Option<std::sync::Arc<super::breakpoints::Breakpoints>>,
     /// Vibrato: rate (Hz), depth (0..1 → up to 50 cents), phase.
     vib_rate: f32,
     vib_depth: f32,
@@ -232,6 +284,7 @@ impl NativeWavetable {
             transpose_mult: 1.0,
             glide_s: 0.0,
             last_note: None,
+            amp_points: None,
             vib_rate: 5.0,
             vib_depth: 0.0,
             vib_phase: 0.0,
@@ -239,6 +292,18 @@ impl NativeWavetable {
             harm_mix: 1.0,
             voices: Vec::new(),
         }
+    }
+
+    /// Shape every note with a breakpoint amp envelope (sustain at the
+    /// penultimate point) instead of the ADSR.
+    #[must_use]
+    pub fn with_amp_points(mut self, points: Vec<super::breakpoints::SegPoint>) -> Self {
+        if points.len() >= 2 {
+            self.amp_points = Some(std::sync::Arc::new(
+                super::breakpoints::Breakpoints::with_penultimate_sustain(points),
+            ));
+        }
+        self
     }
 
     /// Glide into each note over `seconds` (0 = off).
@@ -376,7 +441,14 @@ impl NativeWavetable {
             v.glide_semis = glide_semis;
             v.glide_pos = 0.0;
         } else {
-            let mut env = Adsr::new(self.sample_rate, self.cfg.env);
+            let mut env = match &self.amp_points {
+                Some(bp) => VoiceEnv::Points {
+                    bp: bp.clone(),
+                    player: super::breakpoints::EnvPlayer::default(),
+                    dt: 1.0 / self.sample_rate,
+                },
+                None => VoiceEnv::Adsr(Adsr::new(self.sample_rate, self.cfg.env)),
+            };
             env.note_on();
             self.voices.push(Voice {
                 note,

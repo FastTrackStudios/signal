@@ -281,11 +281,33 @@ fn wavetable_config(block: &RigBlock) -> SynthConfig {
 /// The Wavetable oscillator for `block`: its config, and — when the block
 /// names real waves (`wave0` / `wave1`, an imported patch's) and they load —
 /// those waves in place of the generated shapes.
+/// Breakpoints from a block param: "time:level:curve:step;…" (see
+/// `breakpoints::SegPoint`).
+pub fn parse_points(spec: &str) -> Vec<super::breakpoints::SegPoint> {
+    spec.split(';')
+        .filter_map(|p| {
+            let mut it = p.split(':').map(|v| v.trim().parse::<f32>().ok());
+            Some(super::breakpoints::SegPoint {
+                time: it.next()??,
+                level: it.next()??,
+                curve: it.next().flatten().unwrap_or(0.0),
+                step: it.next().flatten().unwrap_or(0.0) > 0.0,
+            })
+        })
+        .collect()
+}
+
 fn wavetable_osc(block: &RigBlock, sample_rate: u32) -> NativeWavetable {
     let mut osc = NativeWavetable::new(sample_rate)
         .with_config(wavetable_config(block))
         .with_transpose(block.param_f32("transpose").unwrap_or(0.0))
-        .with_glide(block.param_f32("glide_s").unwrap_or(0.0));
+        .with_glide(block.param_f32("glide_s").unwrap_or(0.0))
+        .with_amp_points(
+            block
+                .param_str("amp_points")
+                .map(|p| parse_points(&p))
+                .unwrap_or_default(),
+        );
     // Real wavetables (an imported patch's `wave0` / `wave1`), when named and
     // readable; otherwise the generated shapes.
     if let Some(a) = block.param_str("wave0").filter(|p| !p.is_empty()) {

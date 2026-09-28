@@ -231,51 +231,47 @@ impl ControlEnv {
     }
 }
 
-/// One breakpoint of a [`ControlMultiseg`]: `level` at `time` (seconds, or
-/// beats when synced). Its `curve` and `step` shape the segment that
-/// LEAVES it (measured on Omnisphere's Mod Envs).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SegPoint {
-    pub time: f32,
-    pub level: f32,
-    /// Shape of the segment from this point: `0` linear, `> 0` fast-then-slow,
-    /// `< 0` slow-then-fast (`g(x) = (1 − e^(−kx)) / (1 − e^(−k))`).
-    pub curve: f32,
-    /// Hold this level until the next point, then jump (a step).
-    pub step: bool,
-}
+pub use super::breakpoints::SegPoint;
+use super::breakpoints::{Breakpoints, EnvPlayer};
 
-/// A free-running multi-segment envelope (Omnisphere's Mod Envs): restarts
-/// on every note-on and runs its breakpoints regardless of the key — looping
-/// when asked, tempo-synced when its times are beats. Unipolar 0..1.
+/// A breakpoint envelope as a control source: Omnisphere's Mod Envs (free
+/// running — restart on every note-on, loop when asked, tempo-synced when
+/// their times are beats) and, with a sustain point, its filter envelopes
+/// (hold while a key is down, release from where they are). Unipolar 0..1.
 #[derive(Clone, Debug)]
 pub struct ControlMultiseg {
-    points: Vec<SegPoint>,
-    looping: bool,
-    /// Times are in beats (one cycle of the clock = `60 / bpm` seconds).
+    bp: Breakpoints,
+    player: EnvPlayer,
+    /// Times are in beats (one beat = `60 / bpm` seconds).
     synced: bool,
+    held: u32,
     /// Velocity sensitivity, as [`ControlEnv`]'s.
     vel_sens: f32,
     vel_scale: f32,
-    /// Position in the envelope (seconds or beats), `None` before a note.
-    t: Option<f32>,
     sample_rate: f32,
 }
 
 impl ControlMultiseg {
-    /// Build from breakpoints (sorted by time; the first sets the start).
+    /// Build from breakpoints (sorted by time); free-running.
     #[must_use]
-    pub fn new(mut points: Vec<SegPoint>, looping: bool, synced: bool) -> Self {
-        points.sort_by(|a, b| a.time.total_cmp(&b.time));
+    pub fn new(points: Vec<SegPoint>, looping: bool, synced: bool) -> Self {
         Self {
-            points,
-            looping,
+            bp: Breakpoints::new(points, None, looping),
+            player: EnvPlayer::default(),
             synced,
+            held: 0,
             vel_sens: 0.0,
             vel_scale: 1.0,
-            t: None,
             sample_rate: 48_000.0,
         }
+    }
+
+    /// Hold at point `index` while a key is down, releasing along the last
+    /// segment (an amp/filter envelope: the penultimate point).
+    #[must_use]
+    pub fn with_sustain(mut self, index: usize) -> Self {
+        self.bp = Breakpoints::new(std::mem::take(&mut self.bp.points), Some(index), false);
+        self
     }
 
     #[must_use]
@@ -284,35 +280,10 @@ impl ControlMultiseg {
         self
     }
 
-    fn end(&self) -> f32 {
-        self.points.last().map_or(0.0, |p| p.time)
-    }
-
-    /// The envelope's level at position `t`.
+    /// The envelope's level at position `t` (unreleased).
     #[must_use]
     pub fn level_at(&self, t: f32) -> f32 {
-        let Some(first) = self.points.first() else {
-            return 0.0;
-        };
-        if t <= first.time {
-            return first.level;
-        }
-        for w in self.points.windows(2) {
-            let (a, b) = (w[0], w[1]);
-            if t < b.time {
-                if a.step {
-                    return a.level;
-                }
-                let x = (t - a.time) / (b.time - a.time).max(1e-9);
-                let g = if a.curve.abs() < 1e-3 {
-                    x
-                } else {
-                    (1.0 - (-a.curve * x).exp()) / (1.0 - (-a.curve).exp())
-                };
-                return a.level + (b.level - a.level) * g;
-            }
-        }
-        self.points.last().map_or(0.0, |p| p.level)
+        self.bp.level_at(t)
     }
 }
 
@@ -323,32 +294,30 @@ impl ControlSource for ControlMultiseg {
 
     fn tick(&mut self, events: &PluginEvents<'_>, frames: usize, tempo_bpm: f32) -> f32 {
         for ev in events.midi {
-            if let midicore::MidiEvent::NoteOn { velocity, .. } = &ev.message {
-                if velocity.get() > 0 {
-                    self.t = Some(0.0);
+            match &ev.message {
+                midicore::MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0 => {
+                    self.held += 1;
+                    self.player.note_on();
                     self.vel_scale =
                         1.0 - self.vel_sens + self.vel_sens * f32::from(velocity.get()) / 127.0;
                 }
+                midicore::MidiEvent::NoteOn { .. } | midicore::MidiEvent::NoteOff { .. } => {
+                    self.held = self.held.saturating_sub(1);
+                    if self.held == 0 {
+                        self.player.note_off(&self.bp);
+                    }
+                }
+                _ => {}
             }
         }
-        let Some(t) = self.t else {
-            return 0.0;
-        };
-        let v = self.level_at(t) * self.vel_scale;
-        // Advance (block rate: the value is the block start's).
+        // Block rate: the value is the block start's.
         let secs = frames as f32 / self.sample_rate.max(1.0);
         let dt = if self.synced {
             secs * tempo_bpm.max(1.0) / 60.0
         } else {
             secs
         };
-        let end = self.end();
-        let mut next = t + dt;
-        if self.looping && end > 0.0 && next >= end {
-            next %= end;
-        }
-        self.t = Some(next);
-        v
+        self.player.tick(&self.bp, dt) * self.vel_scale
     }
 }
 

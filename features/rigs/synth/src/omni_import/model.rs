@@ -42,6 +42,10 @@ pub struct OmniLayer {
     /// `OSC pan`, 0..1 (0.5 centre): a balance law (measured: 0.25 puts
     /// the right side 6 dB down, 0 silences it) — the Amp's own law.
     pub pan: f32,
+    /// The amp and filter envelopes' breakpoints (`AENV` / `FENV`), as
+    /// [`OmniModEnv::points`]; they sustain at the penultimate point.
+    pub amp_points: Vec<(f32, f32, f32, bool)>,
+    pub filter_points: Vec<(f32, f32, f32, bool)>,
     /// Glide on (`OSC portAct`); its time is the part's (`OmniPatch::glide_s`).
     pub glide: bool,
     /// Unison: voice count (1..8), detune 0..1, width 0..1, plus the
@@ -728,6 +732,25 @@ fn parse_env_breakpoints(e: &XmlNode) -> Option<(f32, f32, f32, f32)> {
     Some((attack, decay, sustain, release))
 }
 
+/// An envelope's breakpoints as `(seconds or beats, level, curve k, step)`
+/// (measured: one `t` unit is 100; `k = 42·(0.5 − c)`; `s` bit 0 = step).
+fn env_points(env: &XmlNode) -> Vec<(f32, f32, f32, bool)> {
+    env.children_tagged("p")
+        .map(|p| {
+            let bits = p
+                .attr("s")
+                .and_then(|v| u32::from_str_radix(v, 16).ok())
+                .unwrap_or(0);
+            (
+                p.num("t").unwrap_or(0.0).max(0.0) * 100.0,
+                p.num("l").unwrap_or(0.0).clamp(0.0, 1.0),
+                42.0 * (0.5 - p.num("c").unwrap_or(0.5).clamp(0.0, 1.0)),
+                bits & 1 != 0,
+            )
+        })
+        .collect()
+}
+
 /// Parse a `.prt_omn` document into an [`OmniPatch`].
 ///
 /// # Errors
@@ -805,6 +828,8 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             .and_then(|p| p.num("velsens"))
             .unwrap_or(0.0)
             .clamp(0.0, 1.0);
+        layer.amp_points = voice.child("AENV").map(env_points).unwrap_or_default();
+        layer.filter_points = voice.child("FENV").map(env_points).unwrap_or_default();
         layer.filter_env = voice
             .child("FENV")
             .and_then(parse_env_breakpoints)

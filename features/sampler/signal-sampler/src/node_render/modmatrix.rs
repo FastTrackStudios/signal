@@ -459,26 +459,19 @@ impl ModCompiler {
             // A breakpoint envelope: `points` = "time:level:curve:step;…"
             // (see `SegPoint`), free-running, `loop` / `sync` (beats).
             BlockType::MultisegEnvelope if block.param_str("points").is_some() => {
-                let points = block
-                    .param_str("points")
-                    .unwrap_or_default()
-                    .split(';')
-                    .filter_map(|p| {
-                        let mut it = p.split(':').map(|v| v.trim().parse::<f32>().ok());
-                        Some(crate::native::SegPoint {
-                            time: it.next()??,
-                            level: it.next()??,
-                            curve: it.next().flatten().unwrap_or(0.0),
-                            step: it.next().flatten().unwrap_or(0.0) > 0.0,
-                        })
-                    })
-                    .collect();
+                let points =
+                    crate::native::parse_points(&block.param_str("points").unwrap_or_default());
                 let env = crate::native::ControlMultiseg::new(
                     points,
                     block.param_f32("loop").unwrap_or(0.0) > 0.0,
                     block.param_f32("sync").unwrap_or(0.0) > 0.0,
                 )
                 .with_velocity_sensitivity(block.param_f32("vel_sens").unwrap_or(0.0));
+                // An amp/filter envelope holds at its sustain point.
+                let env = match block.param_f32("sustain") {
+                    Some(i) if i >= 0.0 => env.with_sustain(i as usize),
+                    _ => env,
+                };
                 ModSource::multiseg(env, sr)
             }
             BlockType::Envelope | BlockType::MultisegEnvelope => {

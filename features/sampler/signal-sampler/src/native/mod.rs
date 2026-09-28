@@ -15,6 +15,7 @@
 mod adsr;
 mod amp;
 mod arp;
+pub mod breakpoints;
 mod control;
 mod filter;
 mod freq_shifter;
@@ -39,6 +40,7 @@ pub use freq_shifter::NativeDfs;
 pub use modal::NativeModal;
 pub use ranges::{default_of, range_of, ranges_of};
 pub(crate) use registry::build_native_source;
+pub use registry::parse_points;
 pub use registry::{build_native, native_dsp_available};
 pub use wavebank::WaveBank;
 pub use waveshaper::NativeWaveshaper;
