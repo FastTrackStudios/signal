@@ -112,6 +112,8 @@ pub struct OmniLayer {
     pub filter_balance: f32,
     /// FM depth 0..1 (`OSC fm`).
     pub fm_depth: f32,
+    /// FM modulator ratio (`2·modint`).
+    pub fm_ratio: f32,
     /// Ring/AM mix 0..1 (`OSC am`).
     pub ring_mix: f32,
     /// Active Harmonia voices: (level, interval semitones, pan −1..1, shape).
@@ -932,7 +934,17 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             layer.glide = n("portAct", 0.0) != 0.0;
             layer.pan = n("pan", 0.5).clamp(0.0, 1.0);
             layer.amp_cut = 1.0 - n("atrm", 1.0).clamp(0.0, 1.0);
-            layer.fm_depth = osc.num("fm").unwrap_or(0.0).clamp(0.0, 1.0);
+            // FM, measured on a sine carrier: `fm` only switches it on;
+            // `modint` is the modulator ratio (2·modint) and `moddepth` the
+            // deviation — a true FM: the index β ≈ 0.65·moddepth / ratio,
+            // which our phase modulator (β = 3.77·depth) reaches at depth
+            // 0.1725·moddepth / ratio.
+            layer.fm_ratio = 2.0 * n("modint", 0.25).clamp(0.0, 1.0);
+            layer.fm_depth = if n("fm", 0.0) > 0.0 {
+                (0.1725 * n("moddepth", 1.0).clamp(0.0, 1.0) / layer.fm_ratio.max(0.05)).min(1.0)
+            } else {
+                0.0
+            };
             layer.fm_shape = osc.num("fmwf").unwrap_or(0.0).clamp(0.0, 1.0);
             layer.osc_wave = osc.num("type").unwrap_or(0.0).clamp(0.0, 1.0);
             layer.osc_shape = osc.num("pdepth").unwrap_or(0.0).clamp(0.0, 1.0);

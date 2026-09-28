@@ -195,11 +195,13 @@ mod tests {
         assert_eq!(l.level, 0.75);
         assert_eq!(l.fx[0], "Chorus Echo");
         assert_eq!(p.common_fx[0], "PRO-Verb");
-        // Oscillator stack: 8-voice unison at 20 cents, FM 0.25, one
+        // Oscillator stack: 8-voice unison at 20 cents, FM on (ratio
+        // 2·modint → 0.5, index 0.1725·moddepth/ratio → 0.345), one
         // harmonia voice +14 semitones at half level, drive-0.5 waveshaper.
         assert_eq!(l.unison_count, 8);
         assert!((l.unison_detune - 0.2).abs() < 1e-3);
-        assert!((l.fm_depth - 0.25).abs() < 1e-6);
+        assert!((l.fm_depth - 0.345).abs() < 1e-6);
+        assert!((l.fm_ratio - 0.5).abs() < 1e-6);
         assert_eq!(l.harmonia.len(), 1);
         let (level, smi, pan, _shape) = l.harmonia[0];
         assert!((level - 0.5).abs() < 1e-3);

@@ -353,6 +353,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             if layer.fm_depth > 0.0 {
                 wt = wt
                     .with_param("fm_depth", format!("{:.4}", layer.fm_depth))
+                    .with_param("fm_ratio", format!("{:.4}", layer.fm_ratio.max(0.01)))
                     .with_param("fm_shape", format!("{:.4}", layer.fm_shape));
             }
             if layer.ring_mix > 0.0 {
