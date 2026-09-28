@@ -102,6 +102,40 @@ pub fn translate_route(
 
 /// Map a parsed patch onto the Omnisphere composition tree, realizing each
 /// layer's Soundsource block against `index` (unmatched names stay
+/// Omnisphere's layer level taper: `(level, dB relative to level 1.0)`,
+/// measured through the real plugin (init part, layer A, note 48, the held
+/// note's RMS). Read in between by linear interpolation in dB.
+const LEVEL_TAPER: [(f32, f32); 10] = [
+    (0.0, -120.0),
+    (0.05, -56.5),
+    (0.1, -44.5),
+    (0.25, -28.7),
+    (0.4, -20.4),
+    (0.5, -16.6),
+    (0.6, -13.5),
+    (0.75, -9.55),
+    (0.9, -4.6),
+    (1.0, 0.0),
+];
+
+/// A synth-mode layer's calibration: at Omnisphere's default level (0.75)
+/// its held note matches the real plugin's RMS (0.067 at note 48 on the init
+/// part's Jupiter 8 Saw, played from its real wavetable; ours read 0.0380
+/// before the taper).
+const SYNTH_LAYER_CAL_DB: f32 = 14.9;
+
+/// The dB a layer at `level` (0..1) plays at, relative to level 1.0.
+fn layer_level_db(level: f32) -> f32 {
+    let l = level.clamp(0.0, 1.0);
+    for w in LEVEL_TAPER.windows(2) {
+        let ((l0, d0), (l1, d1)) = (w[0], w[1]);
+        if l <= l1 {
+            return d0 + (d1 - d0) * (l - l0) / (l1 - l0);
+        }
+    }
+    0.0
+}
+
 /// placeholders — the structure still routes).
 pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Container {
     // Filter block labels per layer (route targets reference them by name).
@@ -142,6 +176,27 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                 // what it asked for. Calibrating the two axes against the
                 // plugin is a separate pass.
                 .with_param("shape", format!("{:.4}", layer.osc_wave));
+            // The oscillator plays the patch's own waves, read from the
+            // extracted library (measured against Omnisphere: `wf0` is the
+            // waveform heard whenever it is named; frame 0 matches it to
+            // 0.3 dB at mid pitch), with Shape morphing into `wf1`. Missing
+            // files leave the generated shape.
+            {
+                if let Some((a, b)) = &layer.waves {
+                    if let (Some(pa), Some(pb)) =
+                        (super::wavetable_path(a), super::wavetable_path(b))
+                    {
+                        wt = wt
+                            .with_param("wave0", pa.to_string_lossy().to_string())
+                            .with_param("wave1", pb.to_string_lossy().to_string())
+                            .with_param("wt_stride", "1")
+                            .with_param("wt_position", "0")
+                            .with_param("wt_mix", format!("{:.4}", layer.osc_shape));
+                    } else {
+                        tracing::warn!(wave = %a, "omni import: wavetable not in the local extraction — generated shape");
+                    }
+                }
+            }
             if layer.unison_count > 1 {
                 wt = wt
                     .with_param("unison_voices", layer.unison_count.to_string())
@@ -263,6 +318,18 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
         let filter_label = filter_labels[i].clone();
         let mut built = Container::layer(name)
             .param("level", format!("{:.3}", layer.level))
+            // The layer's volume: Omnisphere's level taper (measured), plus
+            // the synth voice's calibration; a layer switched off is silent.
+            .volume(if layer.enabled {
+                layer_level_db(layer.level)
+                    + if layer.soundsource.is_empty() {
+                        SYNTH_LAYER_CAL_DB
+                    } else {
+                        0.0
+                    }
+            } else {
+                -200.0
+            })
             .param(
                 "filter_routing",
                 if layer.filter_parallel {

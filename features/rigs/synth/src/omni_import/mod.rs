@@ -28,6 +28,7 @@ mod tree;
 pub use index::{SoundsourceIndex, normalize_soundsource_name, resolve_name};
 pub use model::{
     OmniLayer, OmniModRoute, OmniPatch, classify_filter_full, omni_cutoff_hz, parse_patch,
+    wavetable_path,
 };
 pub use multi::{OmniMulti, load_multi_file, multi_to_container, parse_multi};
 pub use tree::{LAYER_NAMES, load_patch_file, patch_to_container};
@@ -545,6 +546,63 @@ mod tests {
         assert!(
             heard > 1e-3,
             "imported patch should be audible, rms={heard}"
+        );
+    }
+
+    /// Machine-local: a factory wavetable-oscillator patch plays its own
+    /// waves from the extraction — the layer's Soundsource names them, and it
+    /// sounds. Skips where the factory patches or the wavetables are missing.
+    #[test]
+    fn a_wavetable_patch_plays_its_real_waves() {
+        use signal_plugin_host::{PluginEvents, PluginMidiEvent};
+        let path = Path::new(
+            "/Volumes/dev-drive/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches/Factory/Live Keyboardist/Synths/Synth Brass/KEY │ Memorymoog Swellee.prt_omn",
+        );
+        if !path.exists() || std::env::var_os("FTS_SAMPLED_ROOT").is_none() {
+            eprintln!("skipping: needs the factory patch and FTS_SAMPLED_ROOT");
+            return;
+        }
+        let patch = parse_patch(&std::fs::read_to_string(path).unwrap()).unwrap();
+        assert!(patch.layers[0].waves.is_some(), "the layer names its waves");
+        let tree = patch_to_container(&patch, &SoundsourceIndex::default());
+        let osc = tree
+            .find("Layer A")
+            .unwrap()
+            .find("Oscillator")
+            .unwrap()
+            .blocks()
+            .into_iter()
+            .find(|b| b.display_name() == "Soundsource")
+            .unwrap()
+            .clone();
+        let wave = osc.param_str("wave0").expect("the patch's wave, resolved");
+        assert!(wave.ends_with("Moog Modular Saw.wav"), "{wave}");
+
+        let mut rn = signal_sampler::node_render::RenderNode::compile(&tree, 48_000);
+        rn.prepare(48_000.0, 512);
+        let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+        let midi = [PluginMidiEvent {
+            offset: 0,
+            message: daw::service::MidiEvent::NoteOn {
+                channel: daw::service::Channel::new(0),
+                key: daw::service::KeyNumber::new(48),
+                velocity: daw::service::Velocity::new(100),
+            },
+        }];
+        let mut heard = 0.0f32;
+        for i in 0..200 {
+            let ev = PluginEvents {
+                params: &[],
+                midi: if i == 0 { &midi } else { &[] },
+                note_expressions: &[],
+            };
+            rn.render(&mut l, &mut r, &ev);
+            let rms = (l.iter().map(|s| s * s).sum::<f32>() / l.len() as f32).sqrt();
+            heard = heard.max(rms);
+        }
+        assert!(
+            heard > 1e-3,
+            "the wavetable patch should sound, rms={heard}"
         );
     }
 

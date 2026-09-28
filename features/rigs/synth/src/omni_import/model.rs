@@ -47,6 +47,25 @@ pub struct OmniLayer {
     /// so passing it straight through is a first approximation, not a match —
     /// calibrating the two axes is its own job.
     pub osc_wave: f32,
+    /// `OSC kind=` (kept for reference: measured against Omnisphere it does
+    /// not switch the waveform — `waves` does).
+    pub osc_kind: u32,
+    /// The layer's power switch (`AENVPARAMS onOff`). Measured: in the init
+    /// part only layer A's is on, and only layer A sounds; switching B's on
+    /// brings B in. An off layer is silent whatever else it holds.
+    pub enabled: bool,
+    /// `WAVES wf0= wf1=`: the oscillator's two waves, as Omnisphere names
+    /// them (`~BundleArchives/<category>/…/<wave>.stmwf`). Measured: `wf0` is
+    /// the waveform heard, and Shape (`OSC pdepth`) morphs it into `wf1`.
+    pub waves: Option<(String, String)>,
+    /// `OSC pdepth` — Shape: the wf0 → wf1 morph (0 = all wf0). Measured:
+    /// 0.5 over Jupiter 8 Saw → Square gave the 50/50 mix's even harmonics.
+    pub osc_shape: f32,
+    /// `OSC pwidth` — Symmetry, a waveform warp (0 = none).
+    pub osc_symmetry: f32,
+    /// The FM and AM (ring) modulators' waves (`FMWAVES` / `AMWAVES`).
+    pub fm_waves: Option<(String, String)>,
+    pub am_waves: Option<(String, String)>,
     /// Amplitude AHDSR `(attack_s, decay_s, sustain, release_s)`.
     pub amp_env: Option<(f32, f32, f32, f32)>,
     /// Filter AHDSR `(attack_s, decay_s, sustain, release_s)`.
@@ -127,6 +146,31 @@ fn rack_types(rack: &XmlNode) -> Vec<String> {
 /// Retroplex, amp/console sims, backward FX) stay placeholders until they have
 /// DSP. Parameter fidelity is a later pass — this only picks the block type, so
 /// units realize with sensible native defaults.
+/// The local file for a wave a patch names (`~BundleArchives/<rel>.stmwf`):
+/// the extraction's `.wav` of it (else the raw `.stmwf`) under
+/// `FTS_OMNI_WAVETABLES`, else `$FTS_SAMPLED_ROOT/Synth/Omnisphere-Wavetables`,
+/// else the studio machine's mount. `None` when neither file is there.
+#[must_use]
+pub fn wavetable_path(name: &str) -> Option<std::path::PathBuf> {
+    let rel = name.strip_prefix("~BundleArchives/").unwrap_or(name);
+    let root = std::env::var("FTS_OMNI_WAVETABLES")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var("FTS_SAMPLED_ROOT")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .map(|r| std::path::PathBuf::from(r).join("Synth/Omnisphere-Wavetables"))
+        })
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from("/run/media/AudioHaven/Sampled/Synth/Omnisphere-Wavetables")
+        });
+    let raw = root.join(rel);
+    let wav = raw.with_extension("wav");
+    [wav, raw].into_iter().find(|p| p.exists())
+}
+
 pub fn classify_effect(name: &str) -> Option<BlockType> {
     let k = name.to_ascii_lowercase();
     let has = |subs: &[&str]| subs.iter().any(|s| k.contains(s));
@@ -438,11 +482,39 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             .child("FENV")
             .and_then(parse_env_breakpoints)
             .or_else(|| voice.child("FENVPARAMS").and_then(parse_env));
+        // The wave lists sit inside `OSC` (older files: beside it).
+        let pair = |tag: &str| {
+            voice
+                .child("OSC")
+                .and_then(|o| o.child(tag))
+                .or_else(|| voice.child(tag))
+                .and_then(|w| {
+                    let a = w.attr("wf0").filter(|s| !s.is_empty())?.to_string();
+                    let b = w
+                        .attr("wf1")
+                        .filter(|s| !s.is_empty())
+                        .map_or_else(|| a.clone(), str::to_string);
+                    Some((a, b))
+                })
+        };
+        layer.enabled = voice
+            .child("AENVPARAMS")
+            .and_then(|e| e.num("onOff"))
+            .is_none_or(|v| v != 0.0);
+        layer.waves = pair("WAVES");
+        layer.fm_waves = pair("FMWAVES");
+        layer.am_waves = pair("AMWAVES");
         if let Some(osc) = voice.child("OSC") {
             layer.level = osc.num("level").unwrap_or(0.5);
             layer.fm_depth = osc.num("fm").unwrap_or(0.0).clamp(0.0, 1.0);
             layer.fm_shape = osc.num("fmwf").unwrap_or(0.0).clamp(0.0, 1.0);
             layer.osc_wave = osc.num("type").unwrap_or(0.0).clamp(0.0, 1.0);
+            layer.osc_shape = osc.num("pdepth").unwrap_or(0.0).clamp(0.0, 1.0);
+            layer.osc_symmetry = osc.num("pwidth").unwrap_or(0.0).clamp(0.0, 1.0);
+            layer.osc_kind = osc
+                .attr("kind")
+                .and_then(|k| k.trim().parse::<u32>().ok())
+                .unwrap_or(0);
             layer.ring_mix = osc.num("am").unwrap_or(0.0).clamp(0.0, 1.0);
             // Unison: the newer UNI element wins; older patches carry the
             // uns*/u* attrs directly on OSC.

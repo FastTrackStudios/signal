@@ -179,9 +179,7 @@ pub fn build_native_source(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn
         BlockType::Oscillator => Some(Box::new(
             NativeOscillator::new(sample_rate).with_block_params(block),
         )),
-        BlockType::Wavetable => Some(Box::new(
-            NativeWavetable::new(sample_rate).with_config(wavetable_config(block)),
-        )),
+        BlockType::Wavetable => Some(Box::new(wavetable_osc(block, sample_rate))),
         // City Wurli physically-modeled Wurlitzer 200A (PhysicalModel kind).
         BlockType::Formant => Some(Box::new(NativeWurli::new(sample_rate))),
         _ => None,
@@ -280,11 +278,46 @@ fn wavetable_config(block: &RigBlock) -> SynthConfig {
     cfg
 }
 
+/// The Wavetable oscillator for `block`: its config, and — when the block
+/// names real waves (`wave0` / `wave1`, an imported patch's) and they load —
+/// those waves in place of the generated shapes.
+fn wavetable_osc(block: &RigBlock, sample_rate: u32) -> NativeWavetable {
+    let mut osc = NativeWavetable::new(sample_rate).with_config(wavetable_config(block));
+    // Real wavetables (an imported patch's `wave0` / `wave1`), when named and
+    // readable; otherwise the generated shapes.
+    if let Some(a) = block.param_str("wave0").filter(|p| !p.is_empty()) {
+        let b = block
+            .param_str("wave1")
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| a.clone());
+        let stride = block
+            .param_f32("wt_stride")
+            .map_or(1, |s| s.max(1.0) as usize);
+        // Omnisphere's tables are 64 frames of 4096-sample cycles.
+        let cycle = block
+            .param_f32("wt_cycle")
+            .map_or(4096, |c| (c as usize).next_power_of_two().max(64));
+        let load =
+            |p: &str| super::wavebank::WaveBank::load(std::path::Path::new(p), cycle, stride);
+        match (load(&a), load(&b)) {
+            (Ok(wa), Ok(wb)) => {
+                osc = osc.with_waves(
+                    wa,
+                    wb,
+                    block.param_f32("wt_position").unwrap_or(0.0),
+                    block.param_f32("wt_mix").unwrap_or(0.0),
+                );
+            }
+            (Err(e), _) | (_, Err(e)) => tracing::warn!("wavetable not loaded: {e}"),
+        }
+    }
+    osc
+}
+
 fn build_wavetable(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     // A first-class Soundsource, hosted through the generic leaf adapter.
-    let mut w: Box<dyn PluginInstance> = Box::new(SoundsourceLeaf::new(
-        NativeWavetable::new(sample_rate).with_config(wavetable_config(block)),
-    ));
+    let osc = wavetable_osc(block, sample_rate);
+    let mut w: Box<dyn PluginInstance> = Box::new(SoundsourceLeaf::new(osc));
     // Normalized live params the rig's knobs also write (the amp envelope
     // arrives through `wavetable_config`, in seconds).
     apply_named(w.as_mut(), block, &["vib_rate", "vib_depth", "tune"]);

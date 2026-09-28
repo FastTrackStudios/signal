@@ -189,6 +189,12 @@ struct Voice {
 pub struct NativeWavetable {
     sample_rate: f32,
     cfg: SynthConfig,
+    /// Real wavetables (Omnisphere's wavetable oscillator): the two waves a
+    /// patch names, crossfaded by `wt_mix` and scanned by `wt_position`.
+    /// `None` = the generated classic shapes.
+    waves: Option<[std::sync::Arc<super::wavebank::WaveBank>; 2]>,
+    wt_position: f32,
+    wt_mix: f32,
     /// Runtime pitch multiplier (param 4 "tune": 0.5 center, ±24 semitones).
     pitch_mult: f32,
     /// Vibrato: rate (Hz), depth (0..1 → up to 50 cents), phase.
@@ -208,6 +214,9 @@ impl NativeWavetable {
         Self {
             sample_rate: sample_rate.max(1) as f32,
             cfg: SynthConfig::default(),
+            waves: None,
+            wt_position: 0.0,
+            wt_mix: 0.0,
             pitch_mult: 1.0,
             vib_rate: 5.0,
             vib_depth: 0.0,
@@ -219,6 +228,23 @@ impl NativeWavetable {
     }
 
     #[must_use]
+    /// Play real wavetables instead of the generated shapes: `a` and `b`
+    /// crossfaded by `mix` (0 = all `a`), scanned by `position` (0..1 over
+    /// the frames). Both live-settable (params 13, 14).
+    #[must_use]
+    pub fn with_waves(
+        mut self,
+        a: std::sync::Arc<super::wavebank::WaveBank>,
+        b: std::sync::Arc<super::wavebank::WaveBank>,
+        position: f32,
+        mix: f32,
+    ) -> Self {
+        self.waves = Some([a, b]);
+        self.wt_position = position.clamp(0.0, 1.0);
+        self.wt_mix = mix.clamp(0.0, 1.0);
+        self
+    }
+
     pub fn with_config(mut self, cfg: SynthConfig) -> Self {
         self.cfg = cfg;
         self.cfg.unison_voices = self.cfg.unison_voices.clamp(1, 8);
@@ -412,6 +438,9 @@ impl Soundsource for NativeWavetable {
             // Vibrato: rate over 0..12 Hz (the oscillator's scale), depth.
             mk(11, "vib_rate", (self.vib_rate / 12.0) as f64),
             mk(12, "vib_depth", self.vib_depth as f64),
+            // Wavetable scan position and the wave-A/B crossfade.
+            mk(13, "wt_position", self.wt_position as f64),
+            mk(14, "wt_mix", self.wt_mix as f64),
         ]
     }
 
@@ -484,6 +513,8 @@ impl Soundsource for NativeWavetable {
                 6 => self.harm_mix = v,
                 11 => self.vib_rate = (v * 12.0).max(0.05),
                 12 => self.vib_depth = v,
+                13 => self.wt_position = v,
+                14 => self.wt_mix = v,
                 7..=10 => {
                     match id {
                         7 => self.cfg.env.attack_s = v * ENV_RANGE_S,
@@ -553,7 +584,18 @@ impl Soundsource for NativeWavetable {
                     } else {
                         s.level
                     };
-                    let smp = morph(ph, inc, s.shape, self.duty) * lvl;
+                    let smp = match &self.waves {
+                        Some([a, b]) => {
+                            let x = a.sample(self.wt_position, ph, inc);
+                            let y = if self.wt_mix > 0.0 {
+                                b.sample(self.wt_position, ph, inc)
+                            } else {
+                                x
+                            };
+                            x + (y - x) * self.wt_mix
+                        }
+                        None => morph(ph, inc, s.shape, self.duty),
+                    } * lvl;
                     vl += smp * s.gain_l;
                     vr += smp * s.gain_r;
                     s.phase += inc;
