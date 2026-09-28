@@ -47,6 +47,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
         match name {
             "Chorus Echo" => chorus_echo(p),
             "PRO-Verb" => pro_verb(p),
+            "Studio EQ" => studio_eq(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -129,6 +130,51 @@ fn pro_verb(p: &[f32; 15]) -> RigBlock {
         .with_param("low_end", format!("{:.3}", p[9].clamp(0.0, 1.0)))
         .with_param("mix", format!("{:.4}", m.sqrt()))
         .with_param("dry", format!("{:.4}", (1.0 - m).sqrt()))
+}
+
+/// Studio EQ (measured frequency responses): two bands, each `gain`
+/// (±18 dB about 0.5), `freq` (`20 Hz · 2^(10·P)`), `Q` and a type in 0.02
+/// steps — band 1 (`P0`..`P3`): low shelf / bell / low cut; band 2
+/// (`P4`..`P7`): high shelf / bell / high cut.
+fn studio_eq(p: &[f32; 15]) -> RigBlock {
+    // Q from the half-gain bandwidths: 0.5 → 0.43, 0.75 → 1.3, 1 → 3.9;
+    // wider below.
+    let q = |v: f32| {
+        let k = if v >= 0.5 { 6.4 } else { 3.4 };
+        0.43 * (k * (v - 0.5)).exp2()
+    };
+    let mut b = RigBlock::of_type(BlockType::Eq);
+    for (i, (g, f, w, t, shapes)) in [
+        (p[0], p[1], p[2], p[3], [1u32, 0, 3]),
+        (p[4], p[5], p[6], p[7], [2u32, 0, 4]),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let kind = ((t * 50.0).round() as usize).min(2);
+        let n = i + 1;
+        let f0 = 20.0 * (10.0 * f).exp2();
+        // Measured: a shelf's knob sits at the edge of its transition (the
+        // low shelf's midpoint ~1.7×, the high's ~0.65×) and is steep and
+        // resonant; the low-pass corner sits ~1.6× up, sharper.
+        let (hz, qq) = match (i, kind) {
+            (0, 0) => (f0 * 1.7, q(w) * 2.5),
+            (1, 0) => (f0 * 0.65, q(w) * 2.5),
+            (1, 2) => (f0 * 1.6, q(w) * 2.0),
+            _ => (f0, q(w)),
+        };
+        b = b
+            .with_param(format!("b{n}_used"), "1")
+            .with_param(format!("b{n}_on"), "1")
+            .with_param(format!("b{n}_shape"), shapes[kind].to_string())
+            .with_param(
+                format!("b{n}_freq"),
+                format!("{:.1}", hz.clamp(10.0, 22_000.0)),
+            )
+            .with_param(format!("b{n}_gain"), format!("{:.2}", 36.0 * (g - 0.5)))
+            .with_param(format!("b{n}_q"), format!("{qq:.3}"));
+    }
+    b
 }
 
 #[cfg(test)]
