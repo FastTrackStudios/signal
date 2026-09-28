@@ -57,6 +57,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Vintage Tremolo" => vintage_tremolo(p),
             "Vintage Compressor" => vintage_compressor(p),
             "Multiband Compressor" => multiband_compressor(p),
+            "Magnetic Echo" => magnetic_echo(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -467,6 +468,39 @@ fn multiband_compressor(p: &[f32; 15]) -> RigBlock {
         .with_param("release", "150")
         .with_param("knee", "6")
         .with_param("makeup", format!("{:.1}", makeup.clamp(-24.0, 24.0)))
+}
+
+/// Magnetic Echo (a tape echo, measured on a click): `P3` the time
+/// (`72·e^(2.89·P3)` ms), `P5` the feedback (repeat ratio ≈ `P5^0.8`),
+/// `P1` the echo level (`30·(P1 − 0.5)` dB), `P13` the output
+/// (`30·(P13 − 0.6)` dB), `P0` a linear dry/echo crossfade.
+fn magnetic_echo(p: &[f32; 15]) -> RigBlock {
+    let m = p[0].clamp(0.0, 1.0);
+    let out = 10f32.powf(30.0 * (p[13] - 0.6) / 20.0);
+    let echo = 10f32.powf(30.0 * (p[1] - 0.5) / 20.0);
+    RigBlock::of_type(BlockType::Delay)
+        // Clean: the tape style adds latency and loss the plugin's lacks.
+        .with_param("style", "1")
+        .with_param(
+            "time",
+            format!("{:.2}", (72.0 * (2.89 * p[3]).exp()).clamp(2.0, 2500.0)),
+        )
+        .with_param(
+            "feedback",
+            format!("{:.3}", p[5].clamp(0.0, 1.0).powf(0.8).min(0.95)),
+        )
+        .with_param("mix", format!("{:.4}", (m * echo * out).min(1.0)))
+        // Its echoes sit ~1.5 dB above our clean delay's; gain past unity
+        // rides the wet level.
+        .with_param(
+            "level",
+            format!(
+                "{:.2}",
+                1.5 + (20.0 * (m * echo * out).max(1e-6).log10()).max(0.0)
+            ),
+        )
+        .with_param("dry", format!("{:.4}", ((1.0 - m) * out).min(1.0)))
+        .with_param("tap_div", "7")
 }
 
 /// One EQ band's params (`n` from 1).
