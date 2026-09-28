@@ -299,7 +299,7 @@ mod tests {
             *slot = *l;
         }
         let mut again = after.clone();
-        crate::engine::apply_lfos_to_omni(&mut again, &four);
+        crate::engine::apply_lfos_to_omni(&mut again, &four, None);
         let lfo = |t: &signal_sampler::rig_node::Container, p: &str| -> Vec<Option<f32>> {
             t.modulators
                 .iter()
@@ -378,7 +378,7 @@ mod tests {
             {
                 *slot = l;
             }
-            crate::engine::apply_lfos_to_omni(&mut after, &four);
+            crate::engine::apply_lfos_to_omni(&mut after, &four, None);
             fn depths(c: &signal_sampler::rig_node::Container, v: &mut Vec<(String, f32)>) {
                 v.extend(c.mod_routes.iter().map(|r| (r.source.key(), r.depth)));
                 for ch in &c.children {
@@ -738,4 +738,35 @@ mod tests {
             failed.len()
         );
     }
+
+    /// An untouched lane (its knobs at the seeded baseline) must be the
+    /// imported tree exactly — the knob model is coarser than the patch.
+    #[test]
+    fn untouched_knobs_leave_the_imported_tree_alone() {
+        let before =
+            patch_to_container(&parse_patch(MINI_PATCH).unwrap(), &SoundsourceIndex::default());
+        let mut after = before.clone();
+        let mut set = crate::engine::ModuleSettings {
+            cutoff_hz: 900.0,
+            resonance: 0.3,
+            filter_env_depth: 0.4,
+            amp_env: (5.0, 300.0, 0.7, 250.0),
+            ..Default::default()
+        };
+        set.baseline = Some(Box::new(set.clone()));
+        for i in 0..4 {
+            crate::engine::apply_settings_to_omni_layer(&mut after, i, &set);
+        }
+        let lfos = set.lfos;
+        crate::engine::apply_lfos_to_omni(&mut after, &lfos, Some(&lfos));
+        assert_eq!(format!("{before:?}"), format!("{after:?}"));
+
+        // A moved cutoff moves only the cutoff, relative to the patch.
+        let mut moved = set.clone();
+        moved.cutoff_hz = 1800.0;
+        let mut tweaked = before.clone();
+        crate::engine::apply_settings_to_omni_layer(&mut tweaked, 0, &moved);
+        assert_ne!(format!("{before:?}"), format!("{tweaked:?}"));
+    }
+
 }

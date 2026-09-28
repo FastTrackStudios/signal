@@ -140,6 +140,11 @@ struct LaneState {
     /// whole `.prt_omn` gets one module per patch layer, filled from the
     /// patch, so its knobs start where the patch is — see `seed_omni_lanes`.
     omni_seed: Option<PathBuf>,
+    /// Each module's knobs exactly as the patch seeded them (before the
+    /// player's saved values) — the baseline an Omnisphere lane's knobs are
+    /// applied relative to, so an untouched lane plays the imported patch
+    /// as the importer built it.
+    omni_base: Vec<BTreeMap<String, f32>>,
     /// FX bypass from this lane's scope or any above it (layer, engine,
     /// rig): the modules' effects are left out while it is on.
     fx_gated: bool,
@@ -1546,6 +1551,7 @@ impl State {
                         globals: BTreeMap::new(),
                         spans: BTreeMap::new(),
                         omni_seed: None,
+                        omni_base: Vec::new(),
                         fx_gated: false,
                     },
                 );
@@ -2578,6 +2584,7 @@ impl KeysRigBackend {
             }
             lane.spans.clear();
             lane.omni_seed = Some(path);
+            lane.omni_base = lane.modules.iter().map(|m| m.macros.clone()).collect();
             // The player's saved knobs for this patch go over the patch's own.
             let State { lanes, profile, .. } = &mut *s;
             if let Some(lane) = lanes.get_mut(&name) {
@@ -2747,14 +2754,30 @@ impl KeysRigBackend {
         layer: &str,
         module: usize,
     ) -> signal_synth::engine::ModuleSettings {
-        let mut set = signal_synth::engine::ModuleSettings::default();
         let Some(lane) = lanes.get(layer) else {
-            return set;
+            return signal_synth::engine::ModuleSettings::default();
         };
+        let mut set =
+            Self::settings_from_macros(lane, lane.modules.get(module).map(|m| &m.macros));
+        // An Omnisphere lane: the knobs as seeded, through the same mapping,
+        // so only what the player moved is applied onto the patch.
+        if lane.omni_seed.is_some() {
+            if let Some(base) = lane.omni_base.get(module) {
+                set.baseline = Some(Box::new(Self::settings_from_macros(lane, Some(base))));
+            }
+        }
+        set
+    }
+
+    /// A module's settings from its macro values (defaults for any unset).
+    fn settings_from_macros(
+        lane: &LaneState,
+        macros: Option<&BTreeMap<String, f32>>,
+    ) -> signal_synth::engine::ModuleSettings {
+        let mut set = signal_synth::engine::ModuleSettings::default();
         let v = |id: &str| {
-            lane.modules
-                .get(module)
-                .and_then(|m| m.macros.get(id).copied())
+            macros
+                .and_then(|m| m.get(id).copied())
                 .or_else(|| macro_def(id).map(|d| d.default))
                 .unwrap_or(0.0)
         };
@@ -4801,8 +4824,16 @@ const OMNISPHERE_PATCHES_REL: &str =
 /// authored voice (source + filter + envelopes + unison) that loads onto a
 /// module, spilling onto the next ones when the patch has several layers.
 fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
-    let mut presets = Vec::new();
-    let mut specs = Vec::new();
+    let mut presets: Vec<KeysPreset> = Vec::new();
+    let mut specs: Vec<PathBuf> = Vec::new();
+    // Display name → slot. Factory names collapse once the library prefix is
+    // stripped ("KEY │ American Obesity", "AV │ American Obesity"), and a
+    // user's saved copy of a patch shares its factory name — the gig's
+    // "Worship Gig 3" patches are edited copies of factory ones. A patch
+    // under `User/` is the player's version, so it shadows the factory one;
+    // otherwise the first found stays.
+    let mut slot: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let is_user = |p: &std::path::Path| p.components().any(|c| c.as_os_str() == "User");
     let mut stack = vec![PathBuf::from(root)];
     while let Some(dir) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -4832,15 +4863,27 @@ fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
             }
             // An Omnisphere patch is authored across a layer's modules.
             let tags = tags_for("Synth", &display);
-            presets.push(KeysPreset {
+            let preset = KeysPreset {
                 kind: "Patch".into(),
-                name: display,
+                name: display.clone(),
                 loaded: false,
                 scope: "layer".into(),
                 tags,
                 variants: crate::variations::variation_names(name),
-            });
-            specs.push(patch);
+            };
+            match slot.get(&display) {
+                Some(&i) => {
+                    if is_user(&patch) && !is_user(&specs[i]) {
+                        presets[i] = preset;
+                        specs[i] = patch;
+                    }
+                }
+                None => {
+                    slot.insert(display, presets.len());
+                    presets.push(preset);
+                    specs.push(patch);
+                }
+            }
         }
     }
     (presets, specs)

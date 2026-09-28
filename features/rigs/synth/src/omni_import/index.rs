@@ -27,6 +27,28 @@ pub const NI_PIANO_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Fu
 pub const PATCH_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches";
 
+/// A root: its own override variable, else `default` re-based onto
+/// `FTS_SAMPLED_ROOT` / `FTS_PACK_LIBRARY` when those are set (a drive
+/// mounted elsewhere — `/Volumes/…` on a Mac), else `default` as is. The
+/// keys rig resolves its library the same way, so the two always agree.
+fn root(var: &str, default: &str) -> String {
+    if let Some(v) = std::env::var(var).ok().filter(|s| !s.is_empty()) {
+        return v;
+    }
+    for (prefix, base) in [
+        ("/run/media/AudioHaven/Sampled", "FTS_SAMPLED_ROOT"),
+        ("/run/media/AudioHaven/Signal/Libraries", "FTS_PACK_LIBRARY"),
+    ] {
+        if let (Some(rest), Some(b)) = (
+            default.strip_prefix(prefix),
+            std::env::var(base).ok().filter(|s| !s.is_empty()),
+        ) {
+            return format!("{b}{rest}");
+        }
+    }
+    default.to_string()
+}
+
 // ── Soundsource index ────────────────────────────────────────────────────────
 
 /// Name → spec-path index over the local soundsource extraction. A built
@@ -52,12 +74,10 @@ impl SoundsourceIndex {
     /// pack always wins over the raw styx for the same name.
     #[must_use]
     pub fn scan_default() -> Self {
-        let root = std::env::var("FTS_OMNISPHERE_ROOT")
-            .unwrap_or_else(|_| crate::omni::OMNISPHERE_ROOT.into());
+        let raw = root("FTS_OMNISPHERE_ROOT", crate::omni::OMNISPHERE_ROOT);
         let mut idx = Self::default();
-        idx.scan_dir(Path::new(&root), 0);
-        let packs =
-            std::env::var("FTS_OMNISPHERE_PACKS").unwrap_or_else(|_| OMNISPHERE_PACKS_ROOT.into());
+        idx.scan_dir(Path::new(&raw), 0);
+        let packs = root("FTS_OMNISPHERE_PACKS", OMNISPHERE_PACKS_ROOT);
         // Packs overwrite raw entries.
         idx.scan_dir(Path::new(&packs), 0);
 
@@ -65,16 +85,15 @@ impl SoundsourceIndex {
         // Keyscape soundsource — the gig's "Hammered Dolceola" and "MK-80
         // Rhodes" both do. Those packs live in their own tree, so without this
         // the patch resolves half its layers and quietly plays thin.
-        let keyscape =
-            std::env::var("FTS_KEYSCAPE_PACKS").unwrap_or_else(|_| KEYSCAPE_PACKS_ROOT.into());
+        let keyscape = root("FTS_KEYSCAPE_PACKS", KEYSCAPE_PACKS_ROOT);
         idx.scan_dir(Path::new(&keyscape), 0);
         // …and the NI pianos, so one index answers for every family a keys
         // profile can name.
-        let ni = std::env::var("FTS_NI_PIANO_PACKS").unwrap_or_else(|_| NI_PIANO_PACKS_ROOT.into());
+        let ni = root("FTS_NI_PIANO_PACKS", NI_PIANO_PACKS_ROOT);
         idx.scan_dir(Path::new(&ni), 0);
         // Finally the authored patches. Last so a built pack of the same name
         // wins: a pack is cheaper to play than re-realizing a patch tree.
-        let patches = std::env::var("FTS_OMNISPHERE_PATCHES").unwrap_or_else(|_| PATCH_ROOT.into());
+        let patches = root("FTS_OMNISPHERE_PATCHES", PATCH_ROOT);
         idx.scan_dir(Path::new(&patches), 0);
         idx
     }

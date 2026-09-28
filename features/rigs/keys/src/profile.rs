@@ -586,8 +586,12 @@ impl KeysProfile {
         if !is_patch {
             return None;
         }
-        let index = signal_synth::omni_import::SoundsourceIndex::default();
-        match signal_synth::omni_import::load_patch_file(path, &index) {
+        // The real index: a sample-mode patch's layers name soundsources,
+        // and an empty index would leave them silent. Scanned once.
+        static INDEX: std::sync::OnceLock<signal_synth::omni_import::SoundsourceIndex> =
+            std::sync::OnceLock::new();
+        let index = INDEX.get_or_init(signal_synth::omni_import::SoundsourceIndex::scan_default);
+        match signal_synth::omni_import::load_patch_file(path, index) {
             Ok(mut tree) => {
                 // The lane's knobs (seeded from this patch, one module per
                 // patch layer) ride onto the tree, so a rebuild keeps them.
@@ -600,8 +604,13 @@ impl KeysProfile {
                 }
                 // The part's LFOs (shared by its layers) from module A's knobs.
                 let part = module_set(&layer.name, 0);
-                signal_synth::engine::apply_lfos_to_omni(&mut tree, &part.lfos);
-                signal_synth::engine::apply_lfo_fades_to_omni(&mut tree, &part.lfo_fade_ms);
+                let base = part.baseline.as_deref();
+                signal_synth::engine::apply_lfos_to_omni(&mut tree, &part.lfos, base.map(|b| &b.lfos));
+                signal_synth::engine::apply_lfo_fades_to_omni(
+                    &mut tree,
+                    &part.lfo_fade_ms,
+                    base.map(|b| &b.lfo_fade_ms),
+                );
                 let mut lane = Container::layer(&layer.name).add(tree);
                 if !layer.is_full_range() {
                     lane = lane.zone(signal_sampler::rig_node::Zone {
@@ -713,9 +722,12 @@ pub fn worship_profile() -> KeysProfile {
                 gain_db: 0.0,
                 engine_type: String::new(),
                 // Both lanes are read off the live rig's `Omni Pads` instance
-                // rather than guessed — see `gig_extract omni`. Each patch
-                // stacks two soundsources, which is what modules A and B are
-                // for; levels are the Omnisphere part levels in dB.
+                // rather than guessed — see `gig_extract omni` — and play the
+                // gig's own patches (`User/Worship Gig 3`, edited copies of
+                // the factory ones), imported whole: soundsources, filters,
+                // envelopes, LFOs, mod matrix and effects. The patch fills
+                // one module per layer. Levels are the Omnisphere part levels
+                // in dB.
                 layers: vec![
                     // "KEY │ American Obesity" (Live Keyboardist), part level
                     // 0.44. An earlier draft had module B as a Juno 60 sub —
@@ -723,8 +735,9 @@ pub fn worship_profile() -> KeysProfile {
                     LayerDef {
                         scope_values: Vec::new(),
                         name: "Pad".into(),
-                        patch: "OB-8 PWM Big Strings".into(),
-                        extra_modules: vec!["Prophet 5 Classic".into()],
+                        // OB-8 PWM Big Strings + Prophet 5 Classic.
+                        patch: "American Obesity".into(),
+                        extra_modules: Vec::new(),
                         gain_db: -7.1,
                         key_lo: 0,
                         key_hi: 127,
@@ -738,8 +751,9 @@ pub fn worship_profile() -> KeysProfile {
                     LayerDef {
                         scope_values: Vec::new(),
                         name: "Shimmer".into(),
-                        patch: "Choir Men Ohs - mf".into(),
-                        extra_modules: vec!["Choir Women Oos - mf".into()],
+                        // Choir Men Ohs + Choir Women Oos.
+                        patch: "Gentle Gothics".into(),
+                        extra_modules: Vec::new(),
                         gain_db: -10.5,
                         key_lo: 0,
                         key_hi: 127,
@@ -795,8 +809,9 @@ pub fn worship_profile() -> KeysProfile {
                     LayerDef {
                         scope_values: Vec::new(),
                         name: "Synth 1".into(),
-                        patch: "Dolceola ^ RR Lite".into(),
-                        extra_modules: vec!["Clavichord a ^ RR".into()],
+                        // Dolceola ^ RR Lite + Clavichord a ^ RR.
+                        patch: "Hammered Dolceola".into(),
+                        extra_modules: Vec::new(),
                         gain_db: -9.9,
                         key_lo: 0,
                         key_hi: 127,
@@ -808,7 +823,8 @@ pub fn worship_profile() -> KeysProfile {
                     LayerDef {
                         scope_values: Vec::new(),
                         name: "Synth 2".into(),
-                        patch: "Big Berthas Lead".into(),
+                        // Big Berthas Lead.
+                        patch: "Club Europa Plucking Pulsars".into(),
                         extra_modules: Vec::new(),
                         gain_db: -9.4,
                         key_lo: 0,
