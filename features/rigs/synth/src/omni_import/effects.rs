@@ -59,6 +59,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Multiband Compressor" => multiband_compressor(p),
             "Magnetic Echo" => magnetic_echo(p),
             "Optical Leveling Amp" => optical_leveling_amp(p),
+            "Velvet Verb" => velvet_verb(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -532,6 +533,28 @@ fn optical_leveling_amp(p: &[f32; 15]) -> RigBlock {
         .with_param("release", "300")
         .with_param("knee", "3")
         .with_param("makeup", format!("{:.1}", makeup.clamp(-24.0, 24.0)))
+}
+
+/// Velvet Verb (measured on a click): `P2` decay and `P1` size together
+/// set the RT60 (a decay table at full size, scaled down with size), a
+/// ~31 ms predelay at full size, `P13` the output (~34 dB per unit, 0.365
+/// the default), `P0` the mix.
+fn velvet_verb(p: &[f32; 15]) -> RigBlock {
+    let rt_full = lerp_table(
+        &[
+            (0.0, 1.32),
+            (0.2, 2.13),
+            (0.385, 4.3),
+            (0.6, 15.0),
+            (0.8, 23.7),
+            (1.0, 24.0),
+        ],
+        p[2],
+    );
+    let size = lerp_table(&[(0.0, 0.3), (0.5, 0.55), (0.935, 1.0), (1.0, 1.05)], p[1]);
+    let rt = rt_full * size;
+    let wet = pro_verb_wet_db(rt) - 1.6 + 34.0 * (p[13] - 0.365);
+    reverb_block(rt, 31.0 * p[1].clamp(0.0, 1.0), p[0], Some(wet))
 }
 
 /// One EQ band's params (`n` from 1).
