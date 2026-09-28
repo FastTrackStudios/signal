@@ -336,6 +336,9 @@ fn wavetable_osc(block: &RigBlock, sample_rate: u32) -> NativeWavetable {
             (Err(e), _) | (_, Err(e)) => tracing::warn!("wavetable not loaded: {e}"),
         }
     }
+    if let Some(s) = block.param_f32("vel_sens") {
+        osc = osc.with_velocity_sensitivity(s);
+    }
     osc
 }
 

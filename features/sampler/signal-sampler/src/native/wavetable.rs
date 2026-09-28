@@ -260,6 +260,10 @@ pub struct NativeWavetable {
     last_note: Option<u8>,
     /// An imported breakpoint amp envelope (replaces the ADSR).
     amp_points: Option<std::sync::Arc<super::breakpoints::Breakpoints>>,
+    /// Velocity sensitivity of the amplitude, `None` = linear in velocity
+    /// (the generic voice); `Some(s)` = Omnisphere's measured law,
+    /// `1 − s + s·(vel/127)²`.
+    vel_sens: Option<f32>,
     /// Vibrato: rate (Hz), depth (0..1 → up to 50 cents), phase.
     vib_rate: f32,
     vib_depth: f32,
@@ -285,6 +289,7 @@ impl NativeWavetable {
             glide_s: 0.0,
             last_note: None,
             amp_points: None,
+            vel_sens: None,
             vib_rate: 5.0,
             vib_depth: 0.0,
             vib_phase: 0.0,
@@ -303,6 +308,13 @@ impl NativeWavetable {
                 super::breakpoints::Breakpoints::with_penultimate_sustain(points),
             ));
         }
+        self
+    }
+
+    /// Omnisphere's amp velocity law (see `vel_sens`).
+    #[must_use]
+    pub fn with_velocity_sensitivity(mut self, sens: f32) -> Self {
+        self.vel_sens = Some(sens.clamp(0.0, 1.0));
         self
     }
 
@@ -428,7 +440,12 @@ impl NativeWavetable {
             return self.note_off(note);
         }
         let freq = 440.0 * 2f32.powf((note as f32 - 69.0) / 12.0);
-        let amp = (velocity as f32 / 127.0) * 0.15;
+        let v = velocity as f32 / 127.0;
+        let amp = 0.15
+            * match self.vel_sens {
+                Some(s) => 1.0 - s + s * v * v,
+                None => v,
+            };
         let base_inc = freq / self.sample_rate;
         let glide_semis = match self.last_note {
             Some(prev) if self.glide_s > 0.0 && prev != note => f32::from(prev) - f32::from(note),

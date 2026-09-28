@@ -227,7 +227,7 @@ const LEVEL_TAPER: [(f32, f32); 10] = [
 /// before the taper). Re-measured once the amp envelope's attack was read
 /// from its true peak (it had been reading the sustain point as the peak).
 // +6 dB since the Aux rack stopped summing a second dry copy in.
-const SYNTH_LAYER_CAL_DB: f32 = 19.5;
+const SYNTH_LAYER_CAL_DB: f32 = 19.25;
 
 /// A synth layer with no playable wavetable (the older classic oscillator,
 /// or waves missing locally) plays the generated saw, which runs hotter than
@@ -291,6 +291,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                 .named("Soundsource")
                 .with_param("transpose", format!("{:.4}", layer.transpose))
                 .with_param("amp_points", points_param(&layer.amp_points))
+                .with_param("vel_sens", format!("{:.3}", layer.amp_velsens))
                 .with_param(
                     "glide_s",
                     format!("{:.4}", if layer.glide { patch.glide_s } else { 0.0 }),
@@ -453,8 +454,9 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             // the synth voice's calibration; a layer switched off is silent.
             .volume(if layer.enabled {
                 layer_level_db(layer.level)
-                    // The part's own gain (measured taper).
+                    // The part's own gain (measured taper) and headroom.
                     + patch.gain_db
+                    + patch.headroom_db
                     + if layer.soundsource.is_empty() {
                         SYNTH_LAYER_CAL_DB
                             + if waves_resolve(layer) {

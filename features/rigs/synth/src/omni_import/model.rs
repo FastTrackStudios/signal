@@ -43,6 +43,9 @@ pub struct OmniLayer {
     /// (measured: routes onto `atrm` add to `atrm`, gain = clamp(atrm +
     /// Σ depth·source, 0, 1)). 0 = full, the default.
     pub amp_cut: f32,
+    /// Amp velocity sensitivity (`AENVPARAMS velsens`): measured, the level
+    /// is `1 − s + s·(vel/127)²`.
+    pub amp_velsens: f32,
     /// `OSC pan`, 0..1 (0.5 centre): a balance law (measured: 0.25 puts
     /// the right side 6 dB down, 0 silences it) — the Amp's own law.
     pub pan: f32,
@@ -215,6 +218,9 @@ pub struct OmniPatch {
     /// The part's own gain (`SYNTHENG gain`) in dB relative to the init
     /// part's 0.596 — see [`part_gain_db`].
     pub gain_db: f32,
+    /// The part's headroom (`SYNTHENG hrgain`, an integer flag), measured:
+    /// absent (older patches) the part plays +6 dB; newer patches write it.
+    pub headroom_db: f32,
     /// Glide time (s) for the layers with glide on: `SYNTHENG portV2`,
     /// measured ≈ `12.2 s · v^2.12` (0.2 → 0.4 s, 0.4 → 1.75 s).
     pub glide_s: f32,
@@ -878,6 +884,11 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             .child("AENV")
             .and_then(parse_env_breakpoints)
             .or_else(|| voice.child("AENVPARAMS").and_then(parse_env));
+        layer.amp_velsens = voice
+            .child("AENVPARAMS")
+            .and_then(|p| p.num("velsens"))
+            .unwrap_or(0.5)
+            .clamp(0.0, 1.0);
         layer.filter_env_velsens = voice
             .child("FENVPARAMS")
             .and_then(|p| p.num("velsens"))
@@ -934,8 +945,11 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             // Unison: the newer UNI element wins; older patches carry the
             // uns*/u* attrs directly on OSC.
             let (on, cnt, dpth, wdth) = match osc.find("UNI") {
+                // The OSC's own switch gates it too (measured: unsOn 0
+                // plays one voice whatever UNI says).
                 Some(uni) => (
-                    uni.num("umix").unwrap_or(1.0) > 0.0,
+                    uni.num("umix").unwrap_or(1.0) > 0.0
+                        && osc.num("unsOn").is_none_or(|v| v > 0.0),
                     uni.num("ucnt").unwrap_or(0.0),
                     uni.num("udpth").unwrap_or(0.1),
                     uni.num("uwdth").unwrap_or(0.7),
@@ -1051,6 +1065,12 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
     }
 
     patch.aux_send = engine.num("irsendaux").unwrap_or(0.0).clamp(0.0, 1.0);
+    // An integer flag, not a float: newer patches write "1".
+    patch.headroom_db = if engine.attr("hrgain").is_some() {
+        0.0
+    } else {
+        6.0
+    };
     patch.gain_db = part_gain_db(engine.num("gain").unwrap_or(0.596));
     patch.glide_s = 12.2
         * engine
