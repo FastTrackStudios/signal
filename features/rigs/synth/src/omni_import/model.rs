@@ -119,6 +119,8 @@ pub struct OmniLayer {
     pub dfs: Option<(f32, f32, f32, f32, bool)>,
     /// Layer FX rack: the four `EFFMODULE Type=` names ("No Effect" ⇒ empty).
     pub fx: Vec<String>,
+    /// Each Layer FX slot's `P0`..`P14`.
+    pub fx_params: Vec<[f32; 15]>,
 }
 
 /// One part LFO, measured against the real plugin (pitch-tracked).
@@ -200,8 +202,15 @@ pub struct OmniPatch {
     pub layers: Vec<OmniLayer>,
     /// Common FX rack module names.
     pub common_fx: Vec<String>,
+    /// Each Common FX slot's `P0`..`P14`.
+    pub common_fx_params: Vec<[f32; 15]>,
     /// Aux FX rack module names.
     pub aux_fx: Vec<String>,
+    pub aux_fx_params: Vec<[f32; 15]>,
+    /// The part's aux send (`SYNTHENG irsendaux`, 0..1): the Aux rack
+    /// returns `send × −3 dB` (measured, linear) in parallel with the main
+    /// path. Nearly every factory patch leaves it at 0.
+    pub aux_send: f32,
     pub mod_routes: Vec<OmniModRoute>,
     /// The part's own gain (`SYNTHENG gain`) in dB relative to the init
     /// part's 0.596 — see [`part_gain_db`].
@@ -220,6 +229,14 @@ pub struct OmniPatch {
     pub arp_steps: Vec<(bool, u8, f32)>,
     /// Step length in beats (from tick spacing vs `TICKSPERQUARTER`).
     pub arp_step_beats: f32,
+}
+
+/// One rack's effect parameters (`P0`..`P14`, normalized), slot for slot
+/// with [`rack_types`].
+fn rack_params(rack: &XmlNode) -> Vec<[f32; 15]> {
+    rack.children_tagged("EFFMODULE")
+        .map(|m| std::array::from_fn(|i| m.num(&format!("P{i}")).unwrap_or(0.0)))
+        .collect()
 }
 
 fn rack_types(rack: &XmlNode) -> Vec<String> {
@@ -995,6 +1012,7 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
         }
         if let Some(rack) = voice.child("EFFRACK") {
             layer.fx = rack_types(rack);
+            layer.fx_params = rack_params(rack);
         }
         patch.layers.push(layer);
     }
@@ -1002,9 +1020,11 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
     // Part racks: the SYNTHENG-level EFFRACK is the Common rack.
     if let Some(rack) = engine.child("EFFRACK") {
         patch.common_fx = rack_types(rack);
+        patch.common_fx_params = rack_params(rack);
     }
     if let Some(rack) = engine.child("AUXEFFRACK") {
         patch.aux_fx = rack_types(rack);
+        patch.aux_fx_params = rack_params(rack);
     }
 
     // Mod matrix: flat sourceN/targetN attribute pairs.
@@ -1030,6 +1050,7 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
         }
     }
 
+    patch.aux_send = engine.num("irsendaux").unwrap_or(0.0).clamp(0.0, 1.0);
     patch.gain_db = part_gain_db(engine.num("gain").unwrap_or(0.596));
     patch.glide_s = 12.2
         * engine

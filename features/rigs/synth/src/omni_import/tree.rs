@@ -96,17 +96,18 @@ fn points_param(points: &[(f32, f32, f32, bool)]) -> String {
 
 pub const LAYER_NAMES: [&str; 4] = ["Layer A", "Layer B", "Layer C", "Layer D"];
 
-fn fx_rack_from(name: &str, types: &[String]) -> Container {
+fn fx_rack_from(name: &str, types: &[String], params: &[[f32; 15]]) -> Container {
     let mut rack = Container::module(name);
     for slot in 0..4 {
         let label = types
             .get(slot)
             .map(std::string::String::as_str)
             .filter(|s| !s.is_empty() && *s != "No Effect");
-        rack = match label {
-            // Realize to native DSP when we recognize the unit; otherwise keep
-            // the name on a placeholder slot (renders as pass-through).
-            Some(fx) => rack.block(classify_effect(fx).unwrap_or(BlockType::Custom), fx),
+        let p = params.get(slot).copied().unwrap_or([0.0; 15]);
+        // Realize to native DSP with the effect's own settings when we know
+        // the unit (see `effects`); otherwise a pass-through placeholder.
+        rack = match label.and_then(|fx| super::effects::effect_block(fx, &p)) {
+            Some(block) => rack.add(block),
             None => rack.block(BlockType::Custom, format!("{name} Slot {}", slot + 1)),
         };
     }
@@ -225,7 +226,8 @@ const LEVEL_TAPER: [(f32, f32); 10] = [
 /// part's Jupiter 8 Saw, played from its real wavetable; ours read 0.0380
 /// before the taper). Re-measured once the amp envelope's attack was read
 /// from its true peak (it had been reading the sustain point as the peak).
-const SYNTH_LAYER_CAL_DB: f32 = 13.5;
+// +6 dB since the Aux rack stopped summing a second dry copy in.
+const SYNTH_LAYER_CAL_DB: f32 = 19.5;
 
 /// A synth layer with no playable wavetable (the older classic oscillator,
 /// or waves missing locally) plays the generated saw, which runs hotter than
@@ -534,8 +536,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                         .with_param("tremolo", format!("{:.4}", (1.0 - layer.amp_cut) / 2.0)),
                 ),
             )
-            .add(fx_rack_from("Layer FX", &layer.fx))
-            .send("Aux Rack", "To Aux")
+            .add(fx_rack_from("Layer FX", &layer.fx, &layer.fx_params))
             .modulator(BlockType::Envelope, "Amp Env")
             .modulator_block({
                 // The filter envelope: its breakpoints when the patch has
@@ -601,8 +602,31 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
     };
     let mut preset = Container::preset(title)
         .add(quadzone)
-        .add(fx_rack_from("Common FX", &patch.common_fx))
-        .add(fx_rack_from("Aux Rack", &patch.aux_fx))
+        .add(fx_rack_from(
+            "Common FX",
+            &patch.common_fx,
+            &patch.common_fx_params,
+        ))
+        // The Aux rack returns in parallel with the main path, fed by the
+        // part's aux send (measured: `send × −3 dB`, linear; the dry path
+        // is untouched). A layer send into it summed a second dry copy in.
+        .add(
+            Container::parallel("Aux Split")
+                .add(Container::module("Main"))
+                .add(
+                    Container::module("Aux Return")
+                        .volume(if patch.aux_send > 0.0 {
+                            20.0 * patch.aux_send.log10() - 3.0
+                        } else {
+                            -200.0
+                        })
+                        .add(fx_rack_from(
+                            "Aux Rack",
+                            &patch.aux_fx,
+                            &patch.aux_fx_params,
+                        )),
+                ),
+        )
         .modulator(BlockType::ModMatrix, "Mod Matrix");
     for n in 1..=9usize {
         let mut lfo = RigBlock::of_type(BlockType::Lfo).named(format!("LFO {n}"));

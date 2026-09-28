@@ -19,6 +19,7 @@
 mod xml;
 
 pub use xml::{XmlNode, omni_num, parse_xml};
+pub mod effects;
 mod index;
 mod model;
 mod multi;
