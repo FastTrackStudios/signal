@@ -52,6 +52,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Super Verb" => super_verb(p),
             "Analog Chorus" => analog_chorus(p),
             "Tape Slammer" => tape_slammer(p),
+            "Graphic 12-Band EQ" => graphic_12band(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -335,6 +336,21 @@ fn tape_slammer(p: &[f32; 15]) -> RigBlock {
         .with_param("release", "100")
         .with_param("knee", "6")
         .with_param("makeup", format!("{:.1}", (20.0 * p[5]).clamp(-24.0, 24.0)))
+}
+
+/// Graphic 12-Band EQ (measured): `P0`..`P11` are ±15 dB bells (0.5
+/// flat) at the centres below, `P13` the output gain (0.5 unity, +22 dB at
+/// 1).
+fn graphic_12band(p: &[f32; 15]) -> RigBlock {
+    const CENTRES: [f32; 12] = [
+        32.0, 125.0, 250.0, 450.0, 700.0, 1000.0, 1800.0, 2800.0, 4000.0, 7000.0, 10_000.0,
+        16_000.0,
+    ];
+    let mut b = RigBlock::of_type(BlockType::Eq);
+    for (i, hz) in CENTRES.iter().enumerate() {
+        b = eq_band(b, i + 1, 0, *hz, 30.0 * (p[i] - 0.5), 1.4);
+    }
+    b.with_param("output_gain", format!("{:.2}", 44.0 * (p[13] - 0.5)))
 }
 
 /// One EQ band's params (`n` from 1).

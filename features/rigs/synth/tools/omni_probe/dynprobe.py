@@ -13,7 +13,7 @@ _x = open(os.path.join(HERE, "fxprobe.py")).read()
 exec(_x[_x.index("\ndef set_fx("):_x.index("\ndef render(xml, exe)")])
 os.environ.setdefault("FTS_SAMPLED_ROOT", "/Volumes/dev-drive/AudioHaven/Sampled")
 base = open(os.path.join(HERE, "init_part.prt_omn")).read()
-LEVELS = [0, -6, -12, -18, -24]
+LEVELS = [int(v) for v in os.environ.get("LEVELS", "0,-6,-12,-18,-24").split(",")]
 
 def rend(xml, exe):
     open("/tmp/dy.prt_omn", "w").write(xml)
