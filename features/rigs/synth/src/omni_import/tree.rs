@@ -227,6 +227,18 @@ const LEVEL_TAPER: [(f32, f32); 10] = [
 /// from its true peak (it had been reading the sustain point as the peak).
 const SYNTH_LAYER_CAL_DB: f32 = 13.5;
 
+/// A synth layer with no playable wavetable (the older classic oscillator,
+/// or waves missing locally) plays the generated saw, which runs hotter than
+/// a real wavetable: measured −7.85 dB against Omnisphere's classic saw.
+const GENERATED_SAW_CAL_DB: f32 = -7.85;
+
+/// Whether a layer's named waves resolve to files we can play.
+fn waves_resolve(layer: &super::OmniLayer) -> bool {
+    layer.waves.as_ref().is_some_and(|(a, b)| {
+        super::wavetable_path(a).is_some() && super::wavetable_path(b).is_some()
+    })
+}
+
 /// The dB a layer at `level` (0..1) plays at, relative to level 1.0.
 fn layer_level_db(level: f32) -> f32 {
     let l = level.clamp(0.0, 1.0);
@@ -281,15 +293,11 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     "glide_s",
                     format!("{:.4}", if layer.glide { patch.glide_s } else { 0.0 }),
                 )
-                // The oscillator's waveform. Omnisphere's `OSC type` is a
-                // selector over its wave list and our `shape` is a continuous
-                // sine→triangle→saw→square morph, so this is a first
-                // approximation rather than a match — but carrying it is
-                // strictly better than defaulting, which imported every
-                // synthesis-mode patch with the same waveform regardless of
-                // what it asked for. Calibrating the two axes against the
-                // plugin is a separate pass.
-                .with_param("shape", format!("{:.4}", layer.osc_wave));
+                // With no named waves (older patches' classic oscillator)
+                // Omnisphere plays a saw whatever `OSC type` says (measured:
+                // every type reads as a saw, differing only in its top
+                // roll-off), so the generated shape is a saw.
+                .with_param("shape", format!("{:.4}", 2.0 / 3.0));
             // The oscillator plays the patch's own waves, read from the
             // extracted library (measured against Omnisphere: `wf0` is the
             // waveform heard whenever it is named; frame 0 matches it to
@@ -447,6 +455,11 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     + patch.gain_db
                     + if layer.soundsource.is_empty() {
                         SYNTH_LAYER_CAL_DB
+                            + if waves_resolve(layer) {
+                                0.0
+                            } else {
+                                GENERATED_SAW_CAL_DB
+                            }
                     } else {
                         0.0
                     }
