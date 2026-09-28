@@ -118,6 +118,8 @@ pub struct OmniLayer {
     pub ring_mix: f32,
     /// Ring modulator ratio (`2·AMmodint`).
     pub ring_ratio: f32,
+    /// Hard-sync ratio from `OSC hrdsnc` (1 = off).
+    pub sync_ratio: f32,
     /// Active Harmonia voices: (level, interval semitones, pan −1..1, shape).
     pub harmonia: Vec<(f32, f32, f32, f32)>,
     /// Waveshaper when engaged: (drive, crush, reduce, mix).
@@ -966,6 +968,22 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
                 0.0
             };
             layer.ring_ratio = 2.0 * n("AMmodint", 0.75).clamp(0.0, 1.0);
+            // Hard sync (measured on a sine: the formant's harmonic).
+            let hs = n("hrdsnc", 0.0).clamp(0.0, 1.0);
+            const SYNC: [(f32, f32); 8] = [
+                (0.0, 1.0),
+                (0.25, 1.3),
+                (0.4, 1.6),
+                (0.5, 2.0),
+                (0.6, 2.2),
+                (0.75, 3.0),
+                (0.9, 5.0),
+                (1.0, 10.0),
+            ];
+            layer.sync_ratio = SYNC.windows(2).find(|w| hs <= w[1].0).map_or(10.0, |w| {
+                let t = (hs - w[0].0) / (w[1].0 - w[0].0);
+                (w[0].1.ln() + t * (w[1].1.ln() - w[0].1.ln())).exp()
+            });
             // Unison: the newer UNI element wins; older patches carry the
             // uns*/u* attrs directly on OSC.
             let (on, cnt, dpth, wdth) = match osc.find("UNI") {

@@ -165,6 +165,8 @@ struct Sub {
     gain_r: f32,
     level: f32,
     shape: f32,
+    /// Hard sync: the slave's phase, reset each master cycle.
+    sync_phase: f32,
 }
 
 fn pan_gains(pan: f32) -> (f32, f32) {
@@ -261,6 +263,8 @@ pub struct NativeWavetable {
     last_note: Option<u8>,
     /// An imported breakpoint amp envelope (replaces the ADSR).
     amp_points: Option<std::sync::Arc<super::breakpoints::Breakpoints>>,
+    /// Hard-sync ratio (1 = off).
+    sync_ratio: f32,
     /// Velocity sensitivity of the amplitude, `None` = linear in velocity
     /// (the generic voice); `Some(s)` = Omnisphere's measured law,
     /// `1 − s + s·(vel/127)²`.
@@ -291,6 +295,7 @@ impl NativeWavetable {
             last_note: None,
             amp_points: None,
             vel_sens: None,
+            sync_ratio: 1.0,
             vib_rate: 5.0,
             vib_depth: 0.0,
             vib_phase: 0.0,
@@ -316,6 +321,14 @@ impl NativeWavetable {
     #[must_use]
     pub fn with_velocity_sensitivity(mut self, sens: f32) -> Self {
         self.vel_sens = Some(sens.clamp(0.0, 1.0));
+        self
+    }
+
+    /// Hard sync: the played wave runs at `ratio` × the note (≥ 1) and
+    /// restarts every note cycle — Omnisphere's `hrdsnc`.
+    #[must_use]
+    pub fn with_sync_ratio(mut self, ratio: f32) -> Self {
+        self.sync_ratio = ratio.max(1.0);
         self
     }
 
@@ -417,6 +430,7 @@ impl NativeWavetable {
                 gain_r,
                 level: comp,
                 shape: self.cfg.shape,
+                sync_phase: 0.0,
             });
         }
         for h in self.cfg.harmonia.iter().filter(|h| h.on && h.level > 0.0) {
@@ -434,6 +448,7 @@ impl NativeWavetable {
                 gain_r,
                 level: h.level,
                 shape: h.shape,
+                sync_phase: 0.0,
             });
         }
         subs
@@ -728,9 +743,17 @@ impl Soundsource for NativeWavetable {
                 };
                 let (mut vl, mut vr) = (0.0f32, 0.0f32);
                 let n_unison = self.cfg.unison_voices.clamp(1, 8) as usize;
+                let sync = self.sync_ratio;
                 for (si, s) in v.subs.iter_mut().enumerate() {
-                    let inc = s.inc * pitch;
-                    let ph = (s.phase + pm).rem_euclid(1.0);
+                    let master_inc = s.inc * pitch;
+                    // Hard sync reads a slave running `sync`× the note,
+                    // restarted by the master's cycle (band-limited for the
+                    // slave's rate).
+                    let (inc, ph) = if sync > 1.0 {
+                        (master_inc * sync, (s.sync_phase + pm).rem_euclid(1.0))
+                    } else {
+                        (master_inc, (s.phase + pm).rem_euclid(1.0))
+                    };
                     // Harmonia subs (past the unison set) scale by harm_mix.
                     let lvl = if si >= n_unison {
                         s.level * self.harm_mix
@@ -751,7 +774,15 @@ impl Soundsource for NativeWavetable {
                     } * lvl;
                     vl += smp * s.gain_l;
                     vr += smp * s.gain_r;
-                    s.phase += inc;
+                    s.phase += master_inc;
+                    if sync > 1.0 {
+                        s.sync_phase += inc;
+                        if s.phase >= 1.0 {
+                            // Restart the slave where the master cycle lands.
+                            s.sync_phase = (s.phase - 1.0) * sync;
+                        }
+                        s.sync_phase = s.sync_phase.fract();
+                    }
                     if s.phase >= 1.0 {
                         s.phase -= 1.0;
                     }

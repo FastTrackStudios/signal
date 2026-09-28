@@ -356,6 +356,9 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     .with_param("fm_ratio", format!("{:.4}", layer.fm_ratio.max(0.01)))
                     .with_param("fm_shape", format!("{:.4}", layer.fm_shape));
             }
+            if layer.sync_ratio > 1.0 {
+                wt = wt.with_param("sync_ratio", format!("{:.4}", layer.sync_ratio));
+            }
             if layer.ring_mix > 0.0 {
                 wt = wt
                     .with_param("ring_mix", format!("{:.4}", layer.ring_mix))

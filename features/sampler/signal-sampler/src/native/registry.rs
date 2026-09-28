@@ -339,6 +339,9 @@ fn wavetable_osc(block: &RigBlock, sample_rate: u32) -> NativeWavetable {
     if let Some(s) = block.param_f32("vel_sens") {
         osc = osc.with_velocity_sensitivity(s);
     }
+    if let Some(r) = block.param_f32("sync_ratio") {
+        osc = osc.with_sync_ratio(r);
+    }
     osc
 }
 
