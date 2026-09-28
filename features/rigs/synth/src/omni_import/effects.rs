@@ -55,6 +55,8 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Graphic 12-Band EQ" => graphic_12band(p),
             "BPM Delay" => bpm_delay(p),
             "Vintage Tremolo" => vintage_tremolo(p),
+            "Vintage Compressor" => vintage_compressor(p),
+            "Multiband Compressor" => multiband_compressor(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -417,6 +419,54 @@ fn vintage_tremolo(p: &[f32; 15]) -> RigBlock {
         .with_param("rate", format!("{:.3}", rate.clamp(0.05, 12.0)))
         .with_param("depth", format!("{depth:.3}"))
         .with_param("mix", "1")
+}
+
+/// Piecewise-linear lookup of `x` in `(x, y)` points (held past the ends).
+fn lerp_table(points: &[(f32, f32)], x: f32) -> f32 {
+    if x <= points[0].0 {
+        return points[0].1;
+    }
+    for w in points.windows(2) {
+        if x <= w[1].0 {
+            let t = (x - w[0].0) / (w[1].0 - w[0].0);
+            return w[0].1 + t * (w[1].1 - w[0].1);
+        }
+    }
+    points[points.len() - 1].1
+}
+
+/// Vintage Compressor (measured static curves): `P2` the makeup (0 → 0,
+/// 0.104 → +2, 0.5 → +16.9, 1 → +28 dB), `P0` the threshold (limiting
+/// only at the top of the range, ~−30·P0 dBFS RMS).
+fn vintage_compressor(p: &[f32; 15]) -> RigBlock {
+    let makeup = lerp_table(&[(0.0, 0.0), (0.104, 2.0), (0.5, 16.9), (1.0, 28.0)], p[2]);
+    RigBlock::of_type(BlockType::Compressor)
+        .with_param("threshold", format!("{:.1}", -30.0 * p[0].clamp(0.0, 1.0)))
+        .with_param("ratio", "8")
+        .with_param("attack", "5")
+        .with_param("release", "150")
+        .with_param("knee", "6")
+        .with_param("makeup", format!("{:.1}", makeup.clamp(-24.0, 24.0)))
+}
+
+/// Multiband Compressor (measured static curves, at its default bands):
+/// ~2.5:1 above ~−30 dBFS RMS, `P14` the output (0.5 → +4.3, 0.66 → +9.2,
+/// 1 → +21 dB; silent at 0).
+fn multiband_compressor(p: &[f32; 15]) -> RigBlock {
+    let o = p[14].clamp(0.0, 1.0);
+    let makeup = 0.4
+        + if o >= 0.5 {
+            4.3 + 33.2 * (o - 0.5)
+        } else {
+            4.3 + 20.0 * (o.max(1e-3) / 0.5).log10()
+        };
+    RigBlock::of_type(BlockType::Compressor)
+        .with_param("threshold", "-30")
+        .with_param("ratio", "2.5")
+        .with_param("attack", "10")
+        .with_param("release", "150")
+        .with_param("knee", "6")
+        .with_param("makeup", format!("{:.1}", makeup.clamp(-24.0, 24.0)))
 }
 
 /// One EQ band's params (`n` from 1).
