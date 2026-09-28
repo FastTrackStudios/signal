@@ -211,8 +211,9 @@ const LEVEL_TAPER: [(f32, f32); 10] = [
 /// A synth-mode layer's calibration: at Omnisphere's default level (0.75)
 /// its held note matches the real plugin's RMS (0.067 at note 48 on the init
 /// part's Jupiter 8 Saw, played from its real wavetable; ours read 0.0380
-/// before the taper).
-const SYNTH_LAYER_CAL_DB: f32 = 14.9;
+/// before the taper). Re-measured once the amp envelope's attack was read
+/// from its true peak (it had been reading the sustain point as the peak).
+const SYNTH_LAYER_CAL_DB: f32 = 13.5;
 
 /// The dB a layer at `level` (0..1) plays at, relative to level 1.0.
 fn layer_level_db(level: f32) -> f32 {
