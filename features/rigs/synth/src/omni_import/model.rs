@@ -219,7 +219,7 @@ pub struct OmniPatch {
     /// part's 0.596 — see [`part_gain_db`].
     pub gain_db: f32,
     /// The part's headroom (`SYNTHENG hrgain`, an integer flag), measured:
-    /// absent (older patches) the part plays +6 dB; newer patches write it.
+    /// "1" plays at unity; "0" or absent (older patches) +6 dB.
     pub headroom_db: f32,
     /// Glide time (s) for the layers with glide on: `SYNTHENG portV2`,
     /// measured ≈ `12.2 s · v^2.12` (0.2 → 0.4 s, 0.4 → 1.75 s).
@@ -1065,8 +1065,9 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
     }
 
     patch.aux_send = engine.num("irsendaux").unwrap_or(0.0).clamp(0.0, 1.0);
-    // An integer flag, not a float: newer patches write "1".
-    patch.headroom_db = if engine.attr("hrgain").is_some() {
+    // An integer flag, not a float: "1" is the headroom on; "0" or absent
+    // (older patches) plays the part +6 dB.
+    patch.headroom_db = if engine.attr("hrgain").map(str::trim) == Some("1") {
         0.0
     } else {
         6.0

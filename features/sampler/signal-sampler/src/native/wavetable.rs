@@ -102,7 +102,8 @@ pub struct SynthConfig {
     pub unison_octave: f32,
     /// Analog mode 0..1: static per-voice random detune jitter (±15 cents).
     pub unison_analog: f32,
-    /// Drift 0..1: slow per-voice pitch wander (±8 cents, sub-Hz rates).
+    /// Drift 0..1: slow per-voice pitch wander (±60 cents at full, sub-Hz
+    /// rates; Omnisphere's coherent stack decorrelates in ~1 s at 0.1).
     pub unison_drift: f32,
     /// FM depth 0..1 (phase-modulation index, scaled internally).
     pub fm_depth: f32,
@@ -398,12 +399,15 @@ impl NativeWavetable {
             // Drift: each voice wanders at its own sub-Hz rate.
             let (drift_inc, drift_cents) = if self.cfg.unison_drift > 0.0 {
                 let rate = 0.1 + (jitter(i.wrapping_mul(7).wrapping_add(3)) * 0.5 + 0.5) * 0.6;
-                (rate / self.sample_rate, self.cfg.unison_drift * 8.0)
+                (rate / self.sample_rate, self.cfg.unison_drift * 60.0)
             } else {
                 (0.0, 0.0)
             };
             subs.push(Sub {
-                phase: (i as f32) * 0.37 % 1.0, // decorrelate phases
+                // In phase: Omnisphere's unison starts coherent (measured: an
+                // undetuned, drifting stack starts loud and settles as the
+                // voices drift apart).
+                phase: 0.0,
                 inc,
                 base_inc: inc,
                 drift_phase: jitter(i.wrapping_add(11)) * 0.5 + 0.5,
