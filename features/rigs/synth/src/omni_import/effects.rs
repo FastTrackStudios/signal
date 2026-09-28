@@ -50,6 +50,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Studio EQ" => studio_eq(p),
             "Vintage 2-Band EQ" => vintage_2band(p),
             "Super Verb" => super_verb(p),
+            "Analog Chorus" => analog_chorus(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -286,6 +287,28 @@ fn studio_eq(p: &[f32; 15]) -> RigBlock {
             .with_param(format!("b{n}_q"), format!("{qq:.3}"));
     }
     b
+}
+
+/// Our chorus `depth` for an Omnisphere depth `d` (linear in pitch swing:
+/// ±11 cents at 1.56 Hz for d = 1): ours swings ~`depth^1.7`, so this
+/// linearizes it. Calibrated by pitch-tracking both.
+fn chorus_depth(d: f32) -> f32 {
+    (0.25 * d.max(0.0).powf(0.59)).min(1.0)
+}
+
+/// Analog Chorus (measured, pitch-tracked on a held note): `P1` rate
+/// (`0.3 + 3.4·P1` Hz), `P2` depth (linear; ±0.65 ms of delay swing at 1;
+/// the 0.04 mode runs deeper and 0.61× slower), `P0` mix.
+fn analog_chorus(p: &[f32; 15]) -> RigBlock {
+    let deep = ((p[4] * 50.0).round() as u32) == 2;
+    // The 0.04 mode runs slower (×0.61) and deeper.
+    let depth = chorus_depth(p[2].clamp(0.0, 1.0) * if deep { 4.8 } else { 1.0 });
+    let rate = (0.3 + 3.4 * p[1].clamp(0.0, 1.0)) * if deep { 0.61 } else { 1.0 };
+    let m = p[0].clamp(0.0, 1.0);
+    RigBlock::of_type(BlockType::Chorus)
+        .with_param("rate", format!("{rate:.3}"))
+        .with_param("depth", format!("{depth:.4}"))
+        .with_param("mix", format!("{m:.4}"))
 }
 
 /// One EQ band's params (`n` from 1).
