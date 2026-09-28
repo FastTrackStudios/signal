@@ -46,6 +46,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
     Some(
         match name {
             "Chorus Echo" => chorus_echo(p),
+            "PRO-Verb" => pro_verb(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -88,6 +89,48 @@ fn chorus_echo(p: &[f32; 15]) -> RigBlock {
         .with_param("tap_div", "7")
 }
 
+/// PRO-Verb (measured on a click):
+/// - `P2` decay: RT60 ≈ `20 s · e^(5.5·(P2 − 1))` (0.54 → 1.6 s, 1 → 20 s);
+/// - `P3` predelay ≈ `428 ms · P3^2.36`;
+/// - `P0` mix (as Chorus Echo's, power-complementary);
+/// - `P4` diffusion (0 on the echo-like presets);
+/// - `P9` / `P10` the low / high band time multipliers (0 shortens a band
+///   to ~0.6×, 1 lengthens it ~1.5×) — as low-end and damping here;
+/// - `P12` stereo width (0 mono).
+fn pro_verb(p: &[f32; 15]) -> RigBlock {
+    let rt = 20.0 * (5.5 * (p[2] - 1.0)).exp();
+    let m = p[0].clamp(0.0, 1.0);
+    // Our hall's `decay_time` reads ~1.35× long by RT60 (Schroeder fit),
+    // and its wet energy grows with the tail where PRO-Verb's is partly
+    // normalized: level fitted over RT 0.24–6.6 s.
+    let level_db = 0.3 - 5.8 * rt.max(0.05).log10();
+    // Short tails on the room (the hall bottoms out near half a second),
+    // trimmed: the room runs wetter than PRO-Verb's short settings.
+    let room = rt < 0.8;
+    let level_db = if room {
+        level_db - 6.0 * (0.8 / rt.max(0.05)).log10()
+    } else {
+        level_db
+    };
+    RigBlock::of_type(BlockType::Reverb)
+        .with_param("algorithm", if room { "0" } else { "1" })
+        .with_param(
+            "decay_time",
+            format!("{:.3}", (rt / 1.35).clamp(0.05, 60.0)),
+        )
+        .with_param("level", format!("{level_db:.2}"))
+        .with_param(
+            "predelay",
+            format!("{:.1}", (428.0 * p[3].max(0.0).powf(2.36)).min(200.0)),
+        )
+        .with_param("diffusion", format!("{:.3}", p[4].clamp(0.0, 1.0)))
+        // High multiplier 0.865 (the default) ≈ neutral damping.
+        .with_param("damping", format!("{:.3}", (1.0 - p[10]).clamp(0.0, 1.0)))
+        .with_param("low_end", format!("{:.3}", p[9].clamp(0.0, 1.0)))
+        .with_param("mix", format!("{:.4}", m.sqrt()))
+        .with_param("dry", format!("{:.4}", (1.0 - m).sqrt()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -114,5 +157,19 @@ mod tests {
         let b = ce(0.5, 0.275, 0.06);
         assert!((b.param_f32("mix").unwrap() - 0.7071).abs() < 1e-3);
         assert!((b.param_f32("dry").unwrap() - 0.7071).abs() < 1e-3);
+    }
+
+    #[test]
+    fn pro_verb_decay_and_predelay_follow_the_measured_laws() {
+        let mut p = [0.0; 15];
+        p[0] = 1.0;
+        p[2] = 0.54;
+        p[3] = 1.0;
+        let b = effect_block("PRO-Verb", &p).unwrap();
+        // RT60 1.59 s, realized through the hall's 1.35× long decay knob.
+        assert!((b.param_f32("decay_time").unwrap() - 1.59 / 1.35).abs() < 0.02);
+        // Predelay at full: 428 ms, clamped to our 200 ms.
+        assert!((b.param_f32("predelay").unwrap() - 200.0).abs() < 0.1);
+        assert_eq!(b.param_str("algorithm").as_deref(), Some("1"));
     }
 }

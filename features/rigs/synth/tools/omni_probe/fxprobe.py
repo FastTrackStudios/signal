@@ -32,7 +32,7 @@ def set_fx(xml, typ, params, slot=16):
 def render(xml, exe):
     open("/tmp/fx.prt_omn", "w").write(xml)
     hold = "0.05" if os.environ.get("SRC", "click") == "click" else "2.0"
-    r = subprocess.run([exe, "/tmp/fx.prt_omn", "/tmp/fx.wav", "--note", "60", "--hold", hold,
+    r = subprocess.run([exe, "/tmp/fx.prt_omn", "/tmp/fx.wav", "--note", os.environ.get("NOTE", "60"), "--hold", hold,
                         "--tail", os.environ.get("TAIL", "4.0")], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     d = open("/tmp/fx.wav", "rb").read(); i = 12
     while i < len(d):
