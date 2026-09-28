@@ -76,7 +76,7 @@ impl Breakpoints {
         let Some(first) = self.points.first() else {
             return 0.0;
         };
-        if t <= first.time {
+        if t < first.time {
             return first.level;
         }
         for w in self.points.windows(2) {
@@ -149,7 +149,12 @@ impl EnvPlayer {
                 }
             }
             _ => {
-                let v = bp.level_at(t);
+                // Holding at the sustain point: its own level (several
+                // points can share its time — an instant attack).
+                let v = match bp.sustain {
+                    Some(s) if t >= bp.points[s].time => bp.points[s].level,
+                    _ => bp.level_at(t),
+                };
                 let mut next = t + dt;
                 if let Some(s) = bp.sustain {
                     next = next.min(bp.points[s].time);
@@ -204,6 +209,24 @@ mod tests {
             p.tick(&bp, dt);
         }
         assert!(p.is_idle(&bp));
+    }
+
+    #[test]
+    fn coincident_points_hold_the_sustain_level() {
+        // An instant attack: three points at t = 0, the last the sustain.
+        let bp = Breakpoints::with_penultimate_sustain(vec![
+            pt(0.0, 0.0, 0.0, false),
+            pt(0.0, 1.0, 0.0, false),
+            pt(0.0, 1.0, 0.0, false),
+            pt(0.05, 0.0, 0.0, false),
+        ]);
+        let mut p = EnvPlayer::default();
+        p.note_on();
+        let mut v = 0.0;
+        for _ in 0..10 {
+            v = p.tick(&bp, 0.01);
+        }
+        assert!((v - 1.0).abs() < 1e-6, "{v}");
     }
 
     #[test]
