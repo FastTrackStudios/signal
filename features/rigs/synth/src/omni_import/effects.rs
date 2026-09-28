@@ -51,6 +51,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Vintage 2-Band EQ" => vintage_2band(p),
             "Super Verb" => super_verb(p),
             "Analog Chorus" => analog_chorus(p),
+            "Tape Slammer" => tape_slammer(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -309,6 +310,31 @@ fn analog_chorus(p: &[f32; 15]) -> RigBlock {
         .with_param("rate", format!("{rate:.3}"))
         .with_param("depth", format!("{depth:.4}"))
         .with_param("mix", format!("{m:.4}"))
+}
+
+/// Tape Slammer (measured static curves on a held note): `P2` sets the
+/// threshold (~`−36·P2` dBFS RMS, −32 at 1; above it the output stays put — a
+/// limiter), `P5` the makeup (`20·P5` dB). At its defaults (0.363, 0.114)
+/// it is a +2.3 dB gain on ordinary levels.
+fn tape_slammer(p: &[f32; 15]) -> RigBlock {
+    RigBlock::of_type(BlockType::Compressor)
+        .with_param(
+            "threshold",
+            format!("{:.1}", {
+                // ~−36 dB per unit, flattening at the top (1 → −32 dB).
+                let t = p[2].clamp(0.0, 1.0);
+                if t <= 0.7 {
+                    -36.0 * t
+                } else {
+                    -25.2 - 6.8 * (t - 0.7) / 0.3
+                }
+            }),
+        )
+        .with_param("ratio", "20")
+        .with_param("attack", "1")
+        .with_param("release", "100")
+        .with_param("knee", "6")
+        .with_param("makeup", format!("{:.1}", (20.0 * p[5]).clamp(-24.0, 24.0)))
 }
 
 /// One EQ band's params (`n` from 1).
