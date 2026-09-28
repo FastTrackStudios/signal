@@ -85,6 +85,21 @@ def chorus(x):
         out.append((round(float((np.percentile(p, 98) - np.percentile(p, 2))/2), 1), round(rate, 2)))
     return out
 
+def amod(x):
+    """Held note: the level's modulation — depth (dB, half peak-to-peak)
+    and rate (Hz), per channel, in 5 ms windows over 0.3–1.9 s."""
+    out = []
+    for c in (0, 1):
+        m = x[int(0.3*SR):int(1.9*SR), c]; W = 240
+        e = np.array([20*np.log10(np.sqrt(np.mean(m[k:k+W]**2)) + 1e-9) for k in range(0, len(m) - W, W)])
+        q = e - e.mean(); ac = np.correlate(q, q, "full")[len(q)-1:]; ac /= ac[0] + 1e-12
+        z = np.argmax(ac < 0) if (ac < 0).any() else 0
+        rate = 0.0
+        if z:
+            k = z + int(np.argmax(ac[z:])); rate = SR/W/k if ac[k] > 0.2 else 0.0
+        out.append((round(float((np.percentile(e, 98) - np.percentile(e, 2))/2), 1), round(rate, 2)))
+    return out
+
 def dry_ref(exe):
     xml = base if os.environ.get("SRC", "click") != "click" else set_click(base)
     m = render(xml, exe).mean(1); W = 240
@@ -105,6 +120,9 @@ for spec in _args:
         if tag not in REF or REF[tag] is None:
             REF[tag] = dry_ref(exe)
         x = render(xml, exe)
+        if os.environ.get("SRC") == "hold" and os.environ.get("AMOD"):
+            print(f"{name:12s} {tag} amod L/R (±dB, Hz) {amod(x)}", flush=True)
+            continue
         if os.environ.get("SRC") == "hold":
             print(f"{name:12s} {tag} chorus L/R (±cents, Hz) {chorus(x)}", flush=True)
             continue

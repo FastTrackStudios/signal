@@ -54,6 +54,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Tape Slammer" => tape_slammer(p),
             "Graphic 12-Band EQ" => graphic_12band(p),
             "BPM Delay" => bpm_delay(p),
+            "Vintage Tremolo" => vintage_tremolo(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -398,6 +399,24 @@ fn bpm_delay(p: &[f32; 15]) -> RigBlock {
         // Measured: its echoes sit ~3 dB above our clean delay's.
         .with_param("level", "3.0")
         .with_param("tap_div", "7")
+}
+
+/// Vintage Tremolo (measured on a held note): `P0` rate (2.33 Hz at 0.24,
+/// 6.25 at 0.6, 13.3 at 1; log-interpolated), `P1` depth (0 none … 1
+/// chopping to silence; ours cannot quite, and is ~1.5× gentler below),
+/// `P4` its intensity (0 off).
+fn vintage_tremolo(p: &[f32; 15]) -> RigBlock {
+    let depth = (1.5 * p[1].clamp(0.0, 1.0)).min(1.0) * (p[4] / 0.635).clamp(0.0, 1.0);
+    let r = p[0].clamp(0.0, 1.0);
+    let rate = if r <= 0.6 {
+        2.33 * (6.25f32 / 2.33).powf((r - 0.24) / 0.36)
+    } else {
+        6.25 * (13.33f32 / 6.25).powf((r - 0.6) / 0.4)
+    };
+    RigBlock::of_type(BlockType::Trem)
+        .with_param("rate", format!("{:.3}", rate.clamp(0.05, 12.0)))
+        .with_param("depth", format!("{depth:.3}"))
+        .with_param("mix", "1")
 }
 
 /// One EQ band's params (`n` from 1).
