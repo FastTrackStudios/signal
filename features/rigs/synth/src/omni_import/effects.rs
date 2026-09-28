@@ -61,6 +61,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Optical Leveling Amp" => optical_leveling_amp(p),
             "Velvet Verb" => velvet_verb(p),
             "Retroplex" => retroplex(p),
+            "Tube Limiter" => tube_limiter(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -590,6 +591,21 @@ fn retroplex(p: &[f32; 15]) -> RigBlock {
         // Its echoes sit ~3 dB below our clean delay's.
         .with_param("level", "-3.0")
         .with_param("tap_div", "7")
+}
+
+/// Tube Limiter (measured static curves): `P2` the drive (0 → 0,
+/// 0.1 → +1.9, 0.5 → +16, 1 → +27 dB), `P1` the limit (none at its 0.3
+/// default; ~−35 dBFS RMS at 1).
+fn tube_limiter(p: &[f32; 15]) -> RigBlock {
+    let drive = lerp_table(&[(0.0, 0.0), (0.1003, 1.9), (0.5, 16.2), (1.0, 27.0)], p[2]);
+    let threshold = -15.0 - 20.0 * ((p[1] - 0.3) / 0.7).clamp(0.0, 1.0);
+    RigBlock::of_type(BlockType::Compressor)
+        .with_param("threshold", format!("{threshold:.1}"))
+        .with_param("ratio", "10")
+        .with_param("attack", "2")
+        .with_param("release", "100")
+        .with_param("knee", "6")
+        .with_param("makeup", format!("{:.1}", drive.clamp(-24.0, 24.0)))
 }
 
 /// One EQ band's params (`n` from 1).
