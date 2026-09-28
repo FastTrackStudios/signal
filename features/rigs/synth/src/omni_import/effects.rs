@@ -48,6 +48,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Chorus Echo" => chorus_echo(p),
             "PRO-Verb" => pro_verb(p),
             "Studio EQ" => studio_eq(p),
+            "Vintage 2-Band EQ" => vintage_2band(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -175,6 +176,39 @@ fn studio_eq(p: &[f32; 15]) -> RigBlock {
             .with_param(format!("b{n}_q"), format!("{qq:.3}"));
     }
     b
+}
+
+/// One EQ band's params (`n` from 1).
+fn eq_band(b: RigBlock, n: usize, shape: u32, hz: f32, gain_db: f32, q: f32) -> RigBlock {
+    b.with_param(format!("b{n}_used"), "1")
+        .with_param(format!("b{n}_on"), "1")
+        .with_param(format!("b{n}_shape"), shape.to_string())
+        .with_param(
+            format!("b{n}_freq"),
+            format!("{:.1}", hz.clamp(10.0, 22_000.0)),
+        )
+        .with_param(format!("b{n}_gain"), format!("{gain_db:.2}"))
+        .with_param(format!("b{n}_q"), format!("{q:.3}"))
+}
+
+/// Vintage 2-Band EQ (a Pultec, measured frequency responses): `P0` low
+/// boost (a bell, ~+20 dB at 1) and `P2` low cut (a shelf, ~−20 dB) at the
+/// `P1` selector (`round(P1·50)`, wrapping from 7: 20 / 30 / 50 / 65 / 90 /
+/// 125 / 250 Hz); `P3` high boost (a bell, ~+20 dB) at the `P5` selector
+/// (octaves from 2 kHz) with `P7` its bandwidth; `P6` high cut (a steep
+/// shelf from ~8 kHz, ~−26 dB).
+fn vintage_2band(p: &[f32; 15]) -> RigBlock {
+    const LOW: [f32; 7] = [20.0, 30.0, 50.0, 65.0, 90.0, 125.0, 250.0];
+    let lo = LOW[((p[1] * 50.0).round() as usize) % LOW.len()];
+    let k = ((p[5] * 50.0).round() as i32).rem_euclid(10) as f32;
+    let hi = (2000.0 * (k / 2.0).exp2()).min(20_000.0);
+    // Broad: at the default 0.445 the boost spans octaves (Q ≈ 0.3).
+    let hq = 0.3 * ((0.445 - p[7].clamp(0.0, 1.0)) * 3.0).exp2();
+    let mut b = RigBlock::of_type(BlockType::Eq);
+    b = eq_band(b, 1, 0, lo, 20.0 * p[0], 1.0);
+    b = eq_band(b, 2, 1, lo, -20.0 * p[2], 0.7);
+    b = eq_band(b, 3, 0, hi, 20.0 * p[3], hq);
+    eq_band(b, 4, 2, 15_000.0, -26.0 * p[6], 1.2)
 }
 
 #[cfg(test)]
