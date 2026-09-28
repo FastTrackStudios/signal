@@ -438,6 +438,7 @@ impl RenderNode {
                 sources: mc.sources,
                 source_paths: mc.source_paths,
                 routes: mc.routes,
+                scales: mc.scales,
                 leaf_paths: mc.leaf_paths,
                 leaf_names,
                 leaf_params,

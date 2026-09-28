@@ -411,12 +411,24 @@ pub trait ControlSource: Send {
     fn set_env_timing(&mut self, _delay_s: f32, _hold_s: f32) -> bool {
         false
     }
+    /// Hand over this source's own amplitude (an LFO's depth) so a route
+    /// can modulate it: returns it and leaves the source at full scale.
+    /// `None` for a source without one.
+    fn take_amp(&mut self) -> Option<f32> {
+        None
+    }
     /// Advance through one block; returns the source's current value.
     /// Bipolar sources return −1..+1, unipolar 0..1.
     fn tick(&mut self, events: &PluginEvents<'_>, frames: usize, tempo_bpm: f32) -> f32;
 }
 
 impl ControlSource for ControlLfo {
+    fn take_amp(&mut self) -> Option<f32> {
+        let a = self.amp;
+        self.amp = 1.0;
+        Some(a)
+    }
+
     fn set_lfo(&mut self, rate_hz: f32, wave: Option<LfoWave>, fade_s: Option<f32>) -> bool {
         self.rate_hz = rate_hz.max(0.0);
         if let Some(w) = wave {
@@ -586,6 +598,11 @@ impl ModSource {
     /// Live-update this source's rate and wave when it is an LFO.
     pub fn set_lfo(&mut self, rate_hz: f32, wave: Option<LfoWave>, fade_s: Option<f32>) -> bool {
         self.0.set_lfo(rate_hz, wave, fade_s)
+    }
+
+    /// See [`ControlSource::take_amp`].
+    pub fn take_amp(&mut self) -> Option<f32> {
+        self.0.take_amp()
     }
 
     /// Live-update this source's delay and hold when it is an envelope.

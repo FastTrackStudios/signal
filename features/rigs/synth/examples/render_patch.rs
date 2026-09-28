@@ -5,7 +5,7 @@
 //!
 //! ```text
 //! cargo run -p signal-synth --release --example render_patch -- <patch.prt_omn> <out.wav> \
-//!     [--note 48 --vel 100 --hold 1.5 --tail 0.3 --sr 48000]
+//!     [--note 48 --vel 100 --hold 1.5 --tail 0.3 --sr 48000 --cc 1=127]
 //! ```
 
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
@@ -149,8 +149,30 @@ fn main() {
     // Let sample sources finish their first loads before the note (the
     // reference harness pre-rolls too).
     let (mut l, mut r) = (vec![0.0f32; block], vec![0.0f32; block]);
-    for _ in 0..40 {
-        rn.render(&mut l, &mut r, &PluginEvents::default());
+    // `--cc N=V` controller values, sent with the first pre-roll block.
+    let ccs: Vec<PluginMidiEvent> = args
+        .windows(2)
+        .filter(|w| w[0] == "--cc")
+        .filter_map(|w| {
+            use daw::service::{Channel, ControllerNumber, ControllerValue, MidiEvent};
+            let (n, v) = w[1].split_once('=')?;
+            Some(PluginMidiEvent {
+                offset: 0,
+                message: MidiEvent::ControlChange {
+                    channel: Channel::new(0),
+                    controller: ControllerNumber::new(n.parse().ok()?),
+                    value: ControllerValue::new(v.parse().ok()?),
+                },
+            })
+        })
+        .collect();
+    for i in 0..40 {
+        let ev = PluginEvents {
+            params: &[],
+            midi: if i == 0 { &ccs } else { &[] },
+            note_expressions: &[],
+        };
+        rn.render(&mut l, &mut r, &ev);
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     let total = ((hold + tail) * sr as f32) as usize;

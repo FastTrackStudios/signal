@@ -104,6 +104,30 @@ fn fx_rack_from(name: &str, types: &[String]) -> Container {
     rack
 }
 
+/// An Omnisphere mod source → the modulator or performance source our tree
+/// provides.
+fn translate_source(source: &str) -> Option<String> {
+    // Sources: MIDI performance names map directly; Omnisphere modulator
+    // names map onto the modulator blocks our tree attaches.
+    Some(match source {
+        "Wheel" => "Wheel".to_string(),
+        // Omnisphere's velocity source is squared (measured).
+        "Velo" => "Velocity Squared".to_string(),
+        "After" => "Aftertouch".to_string(),
+        "Bender" => "Bender".to_string(),
+        "Key" => "Key".to_string(),
+        "Alt" => "Alt".to_string(),
+        "Constant" | "Bias1" | "Bias2" => "Constant".to_string(),
+        "Random" | "Random2" | "Random Unipolar" => "Random".to_string(),
+        "MPEv" => "MPEPressure".to_string(),
+        "MPE3" => "MPETimbre".to_string(),
+        s if s.starts_with("LFO") => format!("LFO {}", &s[3..]),
+        s if s.ends_with("FENV") => "Filter Env".to_string(),
+        s if s.starts_with("ModEnv") => format!("Mod Env {}", &s[6..]),
+        _ => return None,
+    })
+}
+
 /// Translate one Omnisphere mod-matrix route into our route model, when the
 /// target is something the runtime drives today.
 ///
@@ -116,6 +140,13 @@ pub fn translate_route(
 ) -> Option<(usize, String, String, f32)> {
     // Targets: "<L> freq" / "<L> res" where <L> is A..D → the layer's Filter 1.
     let (layer_letter, param) = route.target.split_once(' ')?;
+    // A modulator's own depth ("LFO1 swing"): the swing adds depth·source
+    // (measured, linear). Part-level; carried on Layer A, where the part's
+    // LFOs are in scope.
+    if let (Some(n), "swing") = (layer_letter.strip_prefix("LFO"), param) {
+        let source = translate_source(&route.source)?;
+        return Some((0, source, format!("LFO {n}.amp"), route.depth));
+    }
     let layer_idx = match layer_letter {
         "A" => 0,
         "B" => 1,
@@ -139,33 +170,16 @@ pub fn translate_route(
         "tune" => ("Soundsource", "tune", 2.0),
         // tuneFine is ±1 semitone on a ±24 semitone param.
         "tuneFine" => ("Soundsource", "tune", 1.0 / 24.0),
-        // Osc amp tremolo → the layer's Amp gain.
-        "atrm" => ("Amp", "gain", 1.0),
+        // Amp tremolo → the Amp's cut-only tremolo (measured: gain =
+        // clamp(1 + depth·source, 0, 1); the param is 0.5-centred, ±0.5).
+        "atrm" => ("Amp", "tremolo", 0.5),
         // Shape (measured: `pdepth` morphs the played wave toward `wf1`).
         "pdepth" => ("Soundsource", "wt_mix", 1.0),
         // Harmonia mix.
         "Harmmix" => ("Soundsource", "harm_mix", 1.0),
         _ => return None, // hrdsnc/mogrify/timbre/LFO-param/E1P0/… — later
     };
-    // Sources: MIDI performance names map directly; Omnisphere modulator
-    // names map onto the modulator blocks our tree attaches.
-    let source = match route.source.as_str() {
-        "Wheel" => "Wheel".to_string(),
-        // Omnisphere's velocity source is squared (measured).
-        "Velo" => "Velocity Squared".to_string(),
-        "After" => "Aftertouch".to_string(),
-        "Bender" => "Bender".to_string(),
-        "Key" => "Key".to_string(),
-        "Alt" => "Alt".to_string(),
-        "Constant" | "Bias1" | "Bias2" => "Constant".to_string(),
-        "Random" | "Random2" | "Random Unipolar" => "Random".to_string(),
-        "MPEv" => "MPEPressure".to_string(),
-        "MPE3" => "MPETimbre".to_string(),
-        s if s.starts_with("LFO") => format!("LFO {}", &s[3..]),
-        s if s.ends_with("FENV") => "Filter Env".to_string(),
-        s if s.starts_with("ModEnv") => format!("Mod Env {}", &s[6..]),
-        _ => return None,
-    };
+    let source = translate_source(&route.source)?;
     Some((
         layer_idx,
         source,

@@ -48,6 +48,14 @@ def track(x, h=int(os.environ.get("H", "4"))):
         out.append(1200*np.log2(k2*df/h/F0))
     return np.array(out), hop / SR
 
+def amp_track(x):
+    """Level (dB) in 10 ms windows from 0.3 s, and L/R balance (dB)."""
+    hop = 480; out = []
+    for st in range(int(0.3*SR), len(x) - hop - int(0.1*SR), hop):
+        seg = x[st:st+hop]
+        out.append(20*np.log10(np.sqrt(np.mean(seg**2)) + 1e-9))
+    return np.array(out), hop / SR
+
 def describe(p, dt):
     p = p - np.median(p)
     depth = (np.percentile(p, 98) - np.percentile(p, 2)) / 2
@@ -98,10 +106,11 @@ for spec in _args:
     for tag, exe in (("omni", HARNESS), ("ours", OURS)):
         if tag == "ours" and not os.environ.get("OURS"): continue
         if tag == "omni" and os.environ.get("ONLYOURS"): continue
-        p, dt = track(render(xml, exe, tag))
+        x = render(xml, exe, tag)
+        p, dt = amp_track(x) if os.environ.get("AMP") else track(x)
         if os.environ.get("TRAJ"):
             # Pitch (cents) every 0.1 s from 0.3 s.
-            step = int(0.1 / dt)
+            step = max(1, int(float(os.environ.get("TSTEP", "0.1")) / dt))
             print(f"{name:14s} {tag} " + " ".join(f"{v:5.0f}" for v in p[::step]), flush=True)
         else:
             print(f"{name:14s} {tag} {describe(p, dt)}", flush=True)

@@ -18,6 +18,10 @@ pub struct NativeAmp {
     warmth: f32,
     body: f32,
     drive: f32,
+    /// Tremolo, 0..1 (0.5 = none): the gain multiplier is
+    /// `clamp(1 + 2·(tremolo − 0.5), 0, 1)` — it only ever cuts (Omnisphere's
+    /// amp tremolo, measured: a positive swing leaves the level alone).
+    tremolo: f32,
     sample_rate: f32,
     /// One-pole low-pass states for the two shelves, per channel.
     lo: [f32; 2],
@@ -39,6 +43,7 @@ impl NativeAmp {
             warmth: 0.5,
             body: 0.5,
             drive: 0.0,
+            tremolo: 0.5,
             sample_rate: sample_rate.max(1) as f32,
             lo: [0.0; 2],
             hi: [0.0; 2],
@@ -111,6 +116,7 @@ impl PluginInstance for NativeAmp {
             mk(3, "warmth"),
             mk(4, "body"),
             drive,
+            mk(6, "tremolo"),
         ]
     }
     fn param_value(&mut self, id: u32) -> Option<f64> {
@@ -121,6 +127,7 @@ impl PluginInstance for NativeAmp {
             3 => Some(self.warmth as f64),
             4 => Some(self.body as f64),
             5 => Some(self.drive as f64),
+            6 => Some(self.tremolo as f64),
             _ => None,
         }
     }
@@ -164,9 +171,32 @@ impl PluginInstance for NativeAmp {
                 3 => self.warmth = v,
                 4 => self.body = v,
                 5 => self.drive = v,
+                6 => self.tremolo = v,
                 _ => {}
             }
         }
+        // The tremolo's cut rides on the gain for this block.
+        let base_gain = self.gain;
+        self.gain *= (1.0 + 2.0 * (self.tremolo - 0.5)).clamp(0.0, 1.0);
+        let r = self.render(in_l, in_r, out_l, out_r);
+        self.gain = base_gain;
+        r
+    }
+
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+}
+
+impl NativeAmp {
+    /// Tone, pan/width and gain over one block.
+    fn render(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+    ) -> Result<(), PluginError> {
         let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
         let toned =
             (self.warmth - 0.5).abs() > 1e-4 || (self.body - 0.5).abs() > 1e-4 || self.drive > 0.0;
@@ -222,10 +252,6 @@ impl PluginInstance for NativeAmp {
             out_r[f] = (m - s) * gr;
         }
         Ok(())
-    }
-
-    fn deactivate(&mut self) {
-        self.prepared = false;
     }
 }
 

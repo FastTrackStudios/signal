@@ -51,6 +51,16 @@ pub(super) struct CompiledRoute {
     pub(super) authored: f32,
 }
 
+/// A modulated modulator depth: `target`'s output is multiplied by
+/// `clamp(base + Σ depth·source, 0, 1)` (e.g. the mod wheel opening an
+/// LFO's swing — Omnisphere's "LFO1 swing" target).
+#[derive(Clone, Debug)]
+pub(super) struct SourceScale {
+    pub(super) target: usize,
+    pub(super) base: f32,
+    pub(super) terms: Vec<(usize, f32)>,
+}
+
 /// The compiled control-rate modulation engine + send-bus state for one tree.
 #[derive(Default)]
 pub struct ModEngine {
@@ -59,6 +69,8 @@ pub struct ModEngine {
     /// addressing ("which module's Amp Env").
     pub(super) source_paths: Vec<(Vec<String>, String)>,
     pub(super) routes: Vec<CompiledRoute>,
+    /// Modulated modulator depths, applied to the source values each block.
+    pub(super) scales: Vec<SourceScale>,
     /// Per-leaf lower-cased `(container path, display name, params)` — the
     /// live-edit address book (leaf ids index all three).
     pub(super) leaf_paths: Vec<Vec<String>>,
@@ -97,11 +109,19 @@ impl ModEngine {
     pub(super) fn tick(&mut self, events: &PluginEvents<'_>, frames: usize) {
         // Evaluate each source once, then apply every route additively.
         let tempo = self.tempo_bpm;
-        let values: Vec<f32> = self
+        let mut values: Vec<f32> = self
             .sources
             .iter_mut()
             .map(|s| s.tick_at(events, frames, tempo))
             .collect();
+        for sc in &self.scales {
+            let amount = sc.terms.iter().fold(sc.base, |a, &(src, d)| {
+                a + d * values.get(src).copied().unwrap_or(0.0)
+            });
+            if let Some(v) = values.get_mut(sc.target) {
+                *v *= amount.clamp(0.0, 1.0);
+            }
+        }
         accumulate_writes(&self.routes, &values, &self.overlay, &mut self.writes);
     }
 
@@ -343,6 +363,7 @@ pub(super) struct ModCompiler {
     /// Dedup for MIDI sources.
     midi: Vec<(crate::native::MidiMod, usize)>,
     pub(super) routes: Vec<CompiledRoute>,
+    pub(super) scales: Vec<SourceScale>,
     /// Per-leaf (lower-cased display name, params) for target resolution.
     /// Per-leaf `(id, lower-cased display name, params)`. The id is what a
     /// resolved route matches on; the name is the fallback for a route that
@@ -365,6 +386,7 @@ impl ModCompiler {
             scope: Vec::new(),
             midi: Vec::new(),
             routes: Vec::new(),
+            scales: Vec::new(),
             leaves: Vec::new(),
             leaf_paths: Vec::new(),
             path: Vec::new(),
@@ -533,6 +555,25 @@ impl ModCompiler {
             // the name-addressed model always did.
             let bkey = route.target.key();
             let pkey = route.parameter.to_lowercase();
+            // A route onto a modulator's own depth ("amp"): scale that
+            // source rather than a leaf parameter.
+            if pkey == "amp" {
+                if let Some(&(_, target)) = self.scope.iter().rev().find(|(n, _)| *n == bkey) {
+                    match self.scales.iter_mut().find(|s| s.target == target) {
+                        Some(sc) => sc.terms.push((source, route.depth)),
+                        None => {
+                            if let Some(base) = self.sources[target].take_amp() {
+                                self.scales.push(SourceScale {
+                                    target,
+                                    base,
+                                    terms: vec![(source, route.depth)],
+                                });
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
             let mut hit = false;
             for &leaf in subtree {
                 let (id, name, params) = &self.leaves[leaf];
