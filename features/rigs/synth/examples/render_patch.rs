@@ -94,7 +94,10 @@ fn main() {
         opt("--sr", 48_000.0) as u32,
     );
 
-    let tree = load_patch_file(std::path::Path::new(patch), &SoundsourceIndex::default())
+    // The real index, so sample layers resolve their soundsources (an empty
+    // one leaves them silent). Point `FTS_OMNISPHERE_ROOT` etc. at the local
+    // extraction.
+    let tree = load_patch_file(std::path::Path::new(patch), &SoundsourceIndex::scan_default())
         .unwrap_or_else(|e| panic!("import {patch}: {e}"));
     if std::env::var_os("RENDER_DEBUG").is_some() {
         if let Ok(xml) = std::fs::read_to_string(patch) {
