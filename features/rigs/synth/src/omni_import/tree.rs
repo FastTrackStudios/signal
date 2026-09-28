@@ -188,6 +188,9 @@ pub fn translate_route(
         "Harmmix" => ("Soundsource", "harm_mix", 1.0),
         // Pan: the Amp's balance, in the same knob units.
         "pan" => ("Amp", "pan", 1.0),
+        // The filter envelope's depth: a modulated depth on the envelope
+        // itself (the section route then runs at unit depth; see below).
+        "envdpth" => ("Filter Env", "amp", 1.0),
         _ => return None, // hrdsnc/mogrify/timbre/LFO-param/E1P0/… — later
     };
     let source = translate_source(&route.source)?;
@@ -440,6 +443,8 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             // the synth voice's calibration; a layer switched off is silent.
             .volume(if layer.enabled {
                 layer_level_db(layer.level)
+                    // The part's own gain (measured taper).
+                    + patch.gain_db
                     + if layer.soundsource.is_empty() {
                         SYNTH_LAYER_CAL_DB
                     } else {
@@ -510,7 +515,10 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                 Container::module("Amp Stage").add(
                     RigBlock::of_type(BlockType::Amp)
                         .named("Amp")
-                        .with_param("pan", format!("{:.4}", layer.pan)),
+                        .with_param("pan", format!("{:.4}", layer.pan))
+                        // The tremolo's rest point is the layer's base
+                        // amplitude (multiplier = 2·tremolo, clamped 0..1).
+                        .with_param("tremolo", format!("{:.4}", (1.0 - layer.amp_cut) / 2.0)),
                 ),
             )
             .add(fx_rack_from("Layer FX", &layer.fx))
@@ -520,15 +528,25 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                 // The filter envelope: its breakpoints when the patch has
                 // them (sustaining at the penultimate point, like the amp
                 // envelope), else the imported ADSR.
+                let env_amp = if layer_routes[i]
+                    .iter()
+                    .any(|(_, target, _)| target == "Filter Env.amp")
+                {
+                    layer.filter_env_depth.abs()
+                } else {
+                    1.0
+                };
                 if layer.filter_points.len() >= 2 {
                     RigBlock::of_type(BlockType::MultisegEnvelope)
                         .named("Filter Env")
+                        .with_param("amp", format!("{env_amp:.4}"))
                         .with_param("points", points_param(&layer.filter_points))
                         .with_param("sustain", (layer.filter_points.len() - 2).to_string())
                         .with_param("vel_sens", format!("{:.3}", layer.filter_env_velsens))
                 } else {
                     let mut fe = RigBlock::of_type(BlockType::Envelope)
                         .named("Filter Env")
+                        .with_param("amp", format!("{env_amp:.4}"))
                         .with_param("vel_sens", format!("{:.3}", layer.filter_env_velsens));
                     if let Some((a, d, s, r)) = layer.filter_env {
                         fe = fe
@@ -542,13 +560,20 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             });
         // The filter section's own envelope depth (independent of matrix rows).
         // Measured: it moves the cutoff knob `envdpth` settings at full
-        // envelope, like a matrix row.
-        if layer.filter_active && layer.filter_env_depth != 0.0 {
-            built = built.route(
-                "Filter Env",
-                format!("{}.knob", filter_labels[i]),
-                layer.filter_env_depth / signal_sampler::native::NativeFilter::KNOB_SPAN,
-            );
+        // envelope, like a matrix row. When matrix rows modulate the depth
+        // (`envdpth` targets), the envelope's own amp carries the depth and
+        // the route runs at unit depth, so the rows add onto it.
+        let depth_modulated = layer_routes[i]
+            .iter()
+            .any(|(_, target, _)| target == "Filter Env.amp");
+        if layer.filter_active && (layer.filter_env_depth != 0.0 || depth_modulated) {
+            let span = signal_sampler::native::NativeFilter::KNOB_SPAN;
+            let depth = if depth_modulated {
+                layer.filter_env_depth.signum() / span
+            } else {
+                layer.filter_env_depth / span
+            };
+            built = built.route("Filter Env", format!("{}.knob", filter_labels[i]), depth);
         }
         for (source, target, depth) in layer_routes[i].drain(..) {
             built = built.route(source, target, depth);

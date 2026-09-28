@@ -39,6 +39,10 @@ pub struct OmniLayer {
     /// octave UP; `semi` 0.48 = 0, each 0.02 lower a semitone up; `tune`
     /// ±48 semitones about 0.5; `tuneFine` ±1 semitone about 0.5).
     pub transpose: f32,
+    /// `1 − OSC atrm`: how far the layer's base amplitude sits below full
+    /// (measured: routes onto `atrm` add to `atrm`, gain = clamp(atrm +
+    /// Σ depth·source, 0, 1)). 0 = full, the default.
+    pub amp_cut: f32,
     /// `OSC pan`, 0..1 (0.5 centre): a balance law (measured: 0.25 puts
     /// the right side 6 dB down, 0 silences it) — the Amp's own law.
     pub pan: f32,
@@ -199,6 +203,9 @@ pub struct OmniPatch {
     /// Aux FX rack module names.
     pub aux_fx: Vec<String>,
     pub mod_routes: Vec<OmniModRoute>,
+    /// The part's own gain (`SYNTHENG gain`) in dB relative to the init
+    /// part's 0.596 — see [`part_gain_db`].
+    pub gain_db: f32,
     /// Glide time (s) for the layers with glide on: `SYNTHENG portV2`,
     /// measured ≈ `12.2 s · v^2.12` (0.2 → 0.4 s, 0.4 → 1.75 s).
     pub glide_s: f32,
@@ -732,6 +739,37 @@ fn parse_env_breakpoints(e: &XmlNode) -> Option<(f32, f32, f32, f32)> {
     Some((attack, decay, sustain, release))
 }
 
+/// The part gain knob's taper, measured (init part, note 48): dB relative
+/// to its default 0.596. Quadratic below (−40·log10 ratio), steeper at the top.
+const PART_GAIN_TAPER: [(f32, f32); 6] = [
+    (0.3, -11.9),
+    (0.45, -5.0),
+    (0.596, 0.0),
+    (0.75, 4.0),
+    (0.878, 8.0),
+    (1.0, 13.45),
+];
+
+/// `SYNTHENG gain` → dB relative to the init part (see [`PART_GAIN_TAPER`]).
+#[must_use]
+pub fn part_gain_db(g: f32) -> f32 {
+    let (g0, d0) = PART_GAIN_TAPER[0];
+    if g <= g0 {
+        return if g <= 0.0 {
+            -120.0
+        } else {
+            d0 + 40.0 * (g / g0).log10()
+        };
+    }
+    for w in PART_GAIN_TAPER.windows(2) {
+        let ((a, da), (b, db)) = (w[0], w[1]);
+        if g <= b {
+            return da + (db - da) * (g - a) / (b - a);
+        }
+    }
+    PART_GAIN_TAPER[PART_GAIN_TAPER.len() - 1].1
+}
+
 /// An envelope's breakpoints as `(seconds or beats, level, curve k, step)`
 /// (measured: one `t` unit is 100; `k = 42·(0.5 − c)`; `s` bit 0 = step).
 fn env_points(env: &XmlNode) -> Vec<(f32, f32, f32, bool)> {
@@ -865,6 +903,7 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
                 + (n("tuneFine", 0.5) - 0.5) * 2.0;
             layer.glide = n("portAct", 0.0) != 0.0;
             layer.pan = n("pan", 0.5).clamp(0.0, 1.0);
+            layer.amp_cut = 1.0 - n("atrm", 1.0).clamp(0.0, 1.0);
             layer.fm_depth = osc.num("fm").unwrap_or(0.0).clamp(0.0, 1.0);
             layer.fm_shape = osc.num("fmwf").unwrap_or(0.0).clamp(0.0, 1.0);
             layer.osc_wave = osc.num("type").unwrap_or(0.0).clamp(0.0, 1.0);
@@ -991,6 +1030,7 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
         }
     }
 
+    patch.gain_db = part_gain_db(engine.num("gain").unwrap_or(0.596));
     patch.glide_s = 12.2
         * engine
             .num("portV2")

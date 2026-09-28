@@ -418,7 +418,7 @@ fn build_amp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     apply_named(
         a.as_mut(),
         block,
-        &["pan", "width", "warmth", "body", "drive"],
+        &["pan", "width", "warmth", "body", "drive", "tremolo"],
     );
     a
 }

@@ -147,6 +147,8 @@ pub struct ControlEnv {
     /// `1 − s + s·vel/127` of the note that started it (1 = linear).
     vel_sens: f32,
     vel_scale: f32,
+    /// Output amplitude (a depth another route can modulate).
+    amp: f32,
 }
 
 impl ControlEnv {
@@ -162,7 +164,15 @@ impl ControlEnv {
             sample_rate: sample_rate.max(1.0),
             vel_sens: 0.0,
             vel_scale: 1.0,
+            amp: 1.0,
         }
+    }
+
+    /// Output amplitude (see `amp`).
+    #[must_use]
+    pub fn with_amp(mut self, amp: f32) -> Self {
+        self.amp = amp;
+        self
     }
 
     /// Scale the envelope by note velocity (see `vel_sens`).
@@ -227,7 +237,7 @@ impl ControlEnv {
                 v = self.env.tick();
             }
         }
-        v * self.vel_scale
+        v * self.vel_scale * self.amp
     }
 }
 
@@ -248,6 +258,8 @@ pub struct ControlMultiseg {
     /// Velocity sensitivity, as [`ControlEnv`]'s.
     vel_sens: f32,
     vel_scale: f32,
+    /// Output amplitude (a depth another route can modulate).
+    amp: f32,
     sample_rate: f32,
 }
 
@@ -262,8 +274,16 @@ impl ControlMultiseg {
             held: 0,
             vel_sens: 0.0,
             vel_scale: 1.0,
+            amp: 1.0,
             sample_rate: 48_000.0,
         }
+    }
+
+    /// Output amplitude (see `amp`).
+    #[must_use]
+    pub fn with_amp(mut self, amp: f32) -> Self {
+        self.amp = amp;
+        self
     }
 
     /// Hold at point `index` while a key is down, releasing along the last
@@ -317,7 +337,13 @@ impl ControlSource for ControlMultiseg {
         } else {
             secs
         };
-        self.player.tick(&self.bp, dt) * self.vel_scale
+        self.player.tick(&self.bp, dt) * self.vel_scale * self.amp
+    }
+
+    fn take_amp(&mut self) -> Option<f32> {
+        let a = self.amp;
+        self.amp = 1.0;
+        Some(a)
     }
 }
 
@@ -439,6 +465,12 @@ impl ControlSource for ControlLfo {
 }
 
 impl ControlSource for ControlEnv {
+    fn take_amp(&mut self) -> Option<f32> {
+        let a = self.amp;
+        self.amp = 1.0;
+        Some(a)
+    }
+
     fn set_env_params(&mut self, sample_rate: f32, params: crate::native::AdsrParams) -> bool {
         self.env.set_params(sample_rate, params);
         true

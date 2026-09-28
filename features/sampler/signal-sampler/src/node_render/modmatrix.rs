@@ -471,7 +471,8 @@ impl ModCompiler {
                 let env = match block.param_f32("sustain") {
                     Some(i) if i >= 0.0 => env.with_sustain(i as usize),
                     _ => env,
-                };
+                }
+                .with_amp(block.param_f32("amp").unwrap_or(1.0));
                 ModSource::multiseg(env, sr)
             }
             BlockType::Envelope | BlockType::MultisegEnvelope => {
@@ -493,6 +494,7 @@ impl ModCompiler {
                     block.param_f32("hold").unwrap_or(0.0),
                 );
                 let env = ControlEnv::new(sr, p)
+                    .with_amp(block.param_f32("amp").unwrap_or(1.0))
                     .with_delay_hold(delay, hold)
                     .with_velocity_sensitivity(block.param_f32("vel_sens").unwrap_or(0.0));
                 ModSource::env(env, sr)
