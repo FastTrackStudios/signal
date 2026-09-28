@@ -308,7 +308,13 @@ fn wavetable_osc(block: &RigBlock, sample_rate: u32) -> NativeWavetable {
                 .map(|p| parse_points(&p))
                 .unwrap_or_default(),
         )
-        .with_amp_sync(block.param_f32("amp_sync").unwrap_or(0.0) > 0.5);
+        .with_amp_sync(block.param_f32("amp_sync").unwrap_or(0.0) > 0.5)
+        .with_noise((block.param_f32("noise").unwrap_or(0.0) > 0.5).then(|| {
+            super::wavetable::NoiseCfg::from_shape(
+                block.param_f32("noise_shape").unwrap_or(0.0),
+                block.param_f32("noise_symmetry").unwrap_or(0.0),
+            )
+        }));
     // Real wavetables (an imported patch's `wave0` / `wave1`), when named and
     // readable; otherwise the generated shapes.
     if let Some(a) = block.param_str("wave0").filter(|p| !p.is_empty()) {
@@ -342,6 +348,9 @@ fn wavetable_osc(block: &RigBlock, sample_rate: u32) -> NativeWavetable {
     }
     if let Some(r) = block.param_f32("sync_ratio") {
         osc = osc.with_sync_ratio(r);
+    }
+    if let Some(k) = block.param_f32("sync_knob") {
+        osc = osc.with_sync_knob(k);
     }
     osc
 }

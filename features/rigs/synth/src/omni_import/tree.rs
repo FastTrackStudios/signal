@@ -197,6 +197,11 @@ pub fn translate_route(
         "atrm" => ("Amp", "tremolo", 0.5),
         // Shape (measured: `pdepth` morphs the played wave toward `wf1`).
         "pdepth" => ("Soundsource", "wt_mix", 1.0),
+        // Symmetry: on a classic layer, the crossfade between its captured
+        // Symmetry steps (a knob unit spans four); see the classic remap.
+        "pwidth" => ("Soundsource", "wt_mix_sym", 4.0),
+        // Hard sync, in the knob's own units.
+        "hrdsnc" => ("Soundsource", "sync_knob", 1.0),
         // Harmonia mix.
         "Harmmix" => ("Soundsource", "harm_mix", 1.0),
         // Pan: the Amp's balance, in the same knob units.
@@ -248,9 +253,12 @@ const GENERATED_SAW_CAL_DB: f32 = -7.85;
 
 /// Whether a layer's named waves resolve to files we can play.
 fn waves_resolve(layer: &super::OmniLayer) -> bool {
-    layer.waves.as_ref().is_some_and(|(a, b)| {
-        super::wavetable_path(a).is_some() && super::wavetable_path(b).is_some()
-    })
+    match &layer.waves {
+        Some((a, b)) => super::wavetable_path(a).is_some() && super::wavetable_path(b).is_some(),
+        // The classic oscillator plays captured tables (or its noise), in
+        // the same units as the named ones.
+        None => super::model::classic_osc(layer.osc_wave, layer.osc_shape, layer.osc_symmetry).is_some(),
+    }
 }
 
 /// The dB a layer at `level` (0..1) plays at, relative to level 1.0.
@@ -291,6 +299,27 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
         }
     }
 
+    // A classic-oscillator layer's Shape scans its table's frames (its
+    // Symmetry is the table crossfade), so Shape routes move the scan.
+    for (i, layer) in patch.layers.iter().take(4).enumerate() {
+        let classic = layer.soundsource.is_empty()
+            && layer.waves.is_none()
+            && matches!(
+                super::model::classic_osc(layer.osc_wave, layer.osc_shape, layer.osc_symmetry),
+                Some(super::model::ClassicOsc::Tables { .. })
+            );
+        for (_, target, _) in &mut layer_routes[i] {
+            if classic && target == "Soundsource.wt_mix" {
+                *target = "Soundsource.wt_position".to_string();
+            } else if target == "Soundsource.wt_mix_sym" {
+                // Symmetry is the classic tables' crossfade; a named
+                // wavetable has no Symmetry we model.
+                *target = if classic { "Soundsource.wt_mix" } else { "" }.to_string();
+            }
+        }
+        layer_routes[i].retain(|(_, t, _)| !t.is_empty());
+    }
+
     let mut quadzone = Container::parallel("Quadzone").param("mode", "Fader");
     for (i, layer) in patch.layers.iter().take(4).enumerate() {
         let name = LAYER_NAMES[i];
@@ -320,6 +349,27 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             // 0.3 dB at mid pitch), with Shape morphing into `wf1`. Missing
             // files leave the generated shape.
             {
+                if layer.waves.is_none() {
+                    // The classic oscillator, captured from the plugin.
+                    match super::model::classic_osc(layer.osc_wave, layer.osc_shape, layer.osc_symmetry) {
+                        Some(super::model::ClassicOsc::Tables { lo, hi, mix, shape }) => {
+                            wt = wt
+                                .with_param("wave0", lo.to_string_lossy().to_string())
+                                .with_param("wave1", hi.to_string_lossy().to_string())
+                                .with_param("wt_stride", "1")
+                                .with_param("wt_position", format!("{shape:.4}"))
+                                .with_param("wt_mix", format!("{mix:.4}"))
+                                .with_param("classic", "1");
+                        }
+                        Some(super::model::ClassicOsc::Noise { shape, symmetry }) => {
+                            wt = wt
+                                .with_param("noise", "1")
+                                .with_param("noise_shape", format!("{shape:.4}"))
+                                .with_param("noise_symmetry", format!("{symmetry:.4}"));
+                        }
+                        None => {}
+                    }
+                }
                 if let Some((a, b)) = &layer.waves {
                     if let (Some(pa), Some(pb)) =
                         (super::wavetable_path(a), super::wavetable_path(b))
@@ -369,6 +419,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     .with_param("fm_ratio", format!("{:.4}", layer.fm_ratio.max(0.01)))
                     .with_param("fm_shape", format!("{:.4}", layer.fm_shape));
             }
+            wt = wt.with_param("sync_knob", format!("{:.4}", layer.sync_knob));
             if layer.sync_ratio > 1.0 {
                 wt = wt.with_param("sync_ratio", format!("{:.4}", layer.sync_ratio));
             }

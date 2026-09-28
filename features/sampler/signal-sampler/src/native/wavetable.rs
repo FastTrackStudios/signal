@@ -225,7 +225,133 @@ impl VoiceEnv {
     }
 }
 
+/// Omnisphere's hard-sync knob → the slave/master ratio (measured on a
+/// sine: the formant's harmonic), log-interpolated.
+#[must_use]
+pub fn sync_ratio_for_knob(knob: f32) -> f32 {
+    const SYNC: [(f32, f32); 8] = [
+        (0.0, 1.0),
+        (0.25, 1.3),
+        (0.4, 1.6),
+        (0.5, 2.0),
+        (0.6, 2.2),
+        (0.75, 3.0),
+        (0.9, 5.0),
+        (1.0, 10.0),
+    ];
+    let k = knob.clamp(0.0, 1.0);
+    SYNC.windows(2).find(|w| k <= w[1].0).map_or(10.0, |w| {
+        let t = (k - w[0].0) / (w[1].0 - w[0].0);
+        (w[0].1.ln() + t * (w[1].1.ln() - w[0].1.ln())).exp()
+    })
+}
+
+/// A biquad (RBJ), direct form I.
+#[derive(Clone, Copy, Default)]
+struct Bq {
+    b: [f32; 3],
+    a: [f32; 2],
+    x: [f32; 2],
+    y: [f32; 2],
+}
+
+impl Bq {
+    fn new(sr: f32, hz: f32, q: f32, high: bool) -> Self {
+        let w = std::f32::consts::TAU * (hz / sr).min(0.49);
+        let (sn, cs) = w.sin_cos();
+        let al = sn / (2.0 * q);
+        let a0 = 1.0 + al;
+        let b = if high {
+            [(1.0 + cs) / 2.0, -(1.0 + cs), (1.0 + cs) / 2.0]
+        } else {
+            [(1.0 - cs) / 2.0, 1.0 - cs, (1.0 - cs) / 2.0]
+        };
+        Self {
+            b: [b[0] / a0, b[1] / a0, b[2] / a0],
+            a: [-2.0 * cs / a0, (1.0 - al) / a0],
+            ..Self::default()
+        }
+    }
+
+    fn tick(&mut self, x: f32) -> f32 {
+        let y = self.b[0] * x + self.b[1] * self.x[0] + self.b[2] * self.x[1]
+            - self.a[0] * self.y[0]
+            - self.a[1] * self.y[1];
+        self.x = [x, self.x[0]];
+        self.y = [y, self.y[0]];
+        y
+    }
+}
+
+/// Omnisphere's classic Noise oscillator (`OSC type` 0.04), measured: white
+/// noise whatever the note, Shape a steep lowpass (flat at 0, ~10.5 kHz at
+/// 0.5, ~2.8 kHz at 1) and Symmetry toward 0.5 a top-octave band.
+#[derive(Clone, Copy)]
+pub struct NoiseCfg {
+    pub lp_hz: f32,
+    pub hp_mix: f32,
+    pub level: f32,
+}
+
+impl NoiseCfg {
+    /// From the classic oscillator's Shape and Symmetry (0..1).
+    #[must_use]
+    pub fn from_shape(shape: f32, symmetry: f32) -> Self {
+        let s = shape.clamp(0.0, 1.0);
+        // Corner, log-interpolated through the measured points.
+        let lp_hz = if s <= 0.5 {
+            20_000.0 * (10_500.0f32 / 20_000.0).powf(s / 0.5)
+        } else {
+            10_500.0 * (2_800.0f32 / 10_500.0).powf((s - 0.5) / 0.5)
+        };
+        // The level the plugin plays at beyond what the lowpass removes.
+        let extra_db = if s <= 0.5 { -1.8 * s / 0.5 } else { -1.8 - 3.0 * (s - 0.5) / 0.5 };
+        let hp_mix = 1.0 - (2.0 * symmetry.clamp(0.0, 1.0) - 1.0).abs();
+        Self {
+            lp_hz,
+            hp_mix,
+            // White noise at the plugin's −17 dBFS, in wavetable units (the
+            // same plugin-output scale the classic tables were captured in).
+            level: 0.969 * 10f32.powf(extra_db / 20.0),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct NoiseVoice {
+    rng: u32,
+    lp: [Bq; 2],
+    hp: Bq,
+}
+
+impl NoiseVoice {
+    fn new(sr: f32, cfg: &NoiseCfg, seed: u32) -> Self {
+        let q = [0.541, 1.307]; // 4-pole Butterworth
+        Self {
+            rng: seed | 1,
+            lp: [Bq::new(sr, cfg.lp_hz, q[0], false), Bq::new(sr, cfg.lp_hz, q[1], false)],
+            hp: Bq::new(sr, 15_000.0, 0.707, true),
+        }
+    }
+
+    fn tick(&mut self, cfg: &NoiseCfg) -> f32 {
+        self.rng ^= self.rng << 13;
+        self.rng ^= self.rng >> 17;
+        self.rng ^= self.rng << 5;
+        let w = (self.rng as f32 / u32::MAX as f32).mul_add(2.0, -1.0);
+        let lp = if cfg.lp_hz < 19_000.0 {
+            let a = self.lp[0].tick(w);
+            self.lp[1].tick(a)
+        } else {
+            w
+        };
+        let hp = self.hp.tick(w);
+        (lp * (1.0 - 0.87 * cfg.hp_mix) + hp * cfg.hp_mix * 1.6) * cfg.level
+    }
+}
+
 struct Voice {
+    noise: Option<NoiseVoice>,
     note: u8,
     amp: f32,
     env: VoiceEnv,
@@ -277,6 +403,10 @@ pub struct NativeWavetable {
     duty: f32,
     /// Harmonia level scale (param 6 "`harm_mix`").
     harm_mix: f32,
+    /// Hard sync as Omnisphere's knob (param 15); drives `sync_ratio`.
+    sync_knob: f32,
+    /// The classic Noise oscillator in place of the waves (see [`NoiseCfg`]).
+    noise: Option<NoiseCfg>,
     voices: Vec<Voice>,
 }
 
@@ -301,6 +431,8 @@ impl NativeWavetable {
             vib_phase: 0.0,
             duty: 0.5,
             harm_mix: 1.0,
+            sync_knob: 0.0,
+            noise: None,
             voices: Vec::new(),
         }
     }
@@ -314,6 +446,21 @@ impl NativeWavetable {
                 super::breakpoints::Breakpoints::with_penultimate_sustain(points),
             ));
         }
+        self
+    }
+
+    /// Hard sync from Omnisphere's knob (sets the ratio; routes move it).
+    #[must_use]
+    pub fn with_sync_knob(mut self, knob: f32) -> Self {
+        self.sync_knob = knob.clamp(0.0, 1.0);
+        self.sync_ratio = sync_ratio_for_knob(self.sync_knob);
+        self
+    }
+
+    /// Play the classic Noise oscillator instead of the waves.
+    #[must_use]
+    pub fn with_noise(mut self, cfg: Option<NoiseCfg>) -> Self {
+        self.noise = cfg;
         self
     }
 
@@ -495,7 +642,12 @@ impl NativeWavetable {
                 None => VoiceEnv::Adsr(Adsr::new(self.sample_rate, self.cfg.env)),
             };
             env.note_on();
+            let noise = self
+                .noise
+                .as_ref()
+                .map(|c| NoiseVoice::new(self.sample_rate, c, 0x9E37_79B9 ^ (u32::from(note) << 16) ^ self.voices.len() as u32));
             self.voices.push(Voice {
+                noise,
                 note,
                 amp,
                 env,
@@ -605,6 +757,9 @@ impl Soundsource for NativeWavetable {
             // Wavetable scan position and the wave-A/B crossfade.
             mk(13, "wt_position", self.wt_position as f64),
             mk(14, "wt_mix", self.wt_mix as f64),
+            // Hard sync as Omnisphere's knob (0 off … 1 = 10×; see
+            // `sync_ratio_for_knob`), so routes can move it.
+            mk(15, "sync_knob", self.sync_knob as f64),
         ]
     }
 
@@ -679,6 +834,10 @@ impl Soundsource for NativeWavetable {
                 12 => self.vib_depth = v,
                 13 => self.wt_position = v,
                 14 => self.wt_mix = v,
+                15 => {
+                    self.sync_knob = v;
+                    self.sync_ratio = sync_ratio_for_knob(v);
+                }
                 7..=10 => {
                     match id {
                         7 => self.cfg.env.attack_s = v * ENV_RANGE_S,
@@ -751,6 +910,13 @@ impl Soundsource for NativeWavetable {
                     0.0
                 };
                 let (mut vl, mut vr) = (0.0f32, 0.0f32);
+                // The classic Noise oscillator: no pitch, no subs.
+                if let (Some(nv), Some(cfg)) = (v.noise.as_mut(), self.noise.as_ref()) {
+                    let x = nv.tick(cfg);
+                    sl += x * e;
+                    sr += x * e;
+                    continue;
+                }
                 let n_unison = self.cfg.unison_voices.clamp(1, 8) as usize;
                 let sync = self.sync_ratio;
                 for (si, s) in v.subs.iter_mut().enumerate() {
@@ -769,8 +935,10 @@ impl Soundsource for NativeWavetable {
                     } else {
                         s.level
                     };
+                    // Harmonia voices play their own waveform (`harm_shape`),
+                    // never the layer's table.
                     let smp = match &self.waves {
-                        Some([a, b]) => {
+                        Some([a, b]) if si < n_unison => {
                             let x = a.sample(self.wt_position, ph, inc);
                             let y = if self.wt_mix > 0.0 {
                                 b.sample(self.wt_position, ph, inc)
@@ -779,7 +947,7 @@ impl Soundsource for NativeWavetable {
                             };
                             x + (y - x) * self.wt_mix
                         }
-                        None => morph(ph, inc, s.shape, self.duty),
+                        _ => morph(ph, inc, s.shape, self.duty),
                     } * lvl;
                     vl += smp * s.gain_l;
                     vr += smp * s.gain_r;

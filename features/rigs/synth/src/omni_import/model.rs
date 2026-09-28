@@ -134,6 +134,8 @@ pub struct OmniLayer {
     pub ring_ratio: f32,
     /// Hard-sync ratio from `OSC hrdsnc` (1 = off).
     pub sync_ratio: f32,
+    /// `OSC hrdsnc` itself (the knob routes move).
+    pub sync_knob: f32,
     /// Active Harmonia voices: (level, interval semitones, pan −1..1, shape).
     pub harmonia: Vec<(f32, f32, f32, f32)>,
     /// Waveshaper when engaged: (drive, crush, reduce, mix).
@@ -388,6 +390,38 @@ pub fn wavetable_path(name: &str) -> Option<std::path::PathBuf> {
     let raw = root.join(rel);
     let wav = raw.with_extension("wav");
     [wav, raw].into_iter().find(|p| p.exists())
+}
+
+/// Omnisphere's classic (DSP) oscillator — what a synth layer with an empty
+/// `<WAVES>` plays — as captured from the plugin (`tools/omni_probe/
+/// classic_capture.py`): per `OSC type` index and Symmetry step, a table of
+/// 17 frames over Shape, `Omnisphere-Wavetables/Classic/t<idx>_s<step>.wav`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClassicOsc {
+    /// Tables either side of the Symmetry, their crossfade, and the Shape
+    /// (the frame scan).
+    Tables { lo: std::path::PathBuf, hi: std::path::PathBuf, mix: f32, shape: f32 },
+    /// The Noise type (0.04): not a waveform at all.
+    Noise { shape: f32, symmetry: f32 },
+}
+
+/// The Symmetry steps the classic tables were captured at.
+pub const CLASSIC_SYMMETRY_STEPS: usize = 5;
+
+/// The classic oscillator a layer's `type` / Shape / Symmetry select, when
+/// its tables are in the extraction (`None`: fall back to the generated saw).
+#[must_use]
+pub fn classic_osc(wave_type: f32, shape: f32, symmetry: f32) -> Option<ClassicOsc> {
+    let idx = (wave_type * 50.0).round() as u32;
+    if idx == 2 {
+        return Some(ClassicOsc::Noise { shape, symmetry });
+    }
+    let dir = wavetable_path("Classic")?;
+    let pos = symmetry.clamp(0.0, 1.0) * (CLASSIC_SYMMETRY_STEPS - 1) as f32;
+    let (j0, j1) = (pos.floor() as usize, (pos.ceil() as usize).min(CLASSIC_SYMMETRY_STEPS - 1));
+    let table = |j: usize| dir.join(format!("t{idx:02}_s{j}.wav"));
+    let (lo, hi) = (table(j0), table(j1));
+    (lo.exists() && hi.exists()).then(|| ClassicOsc::Tables { lo, hi, mix: pos - j0 as f32, shape })
 }
 
 pub fn classify_effect(name: &str) -> Option<BlockType> {
@@ -1085,6 +1119,7 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
                 let t = (hs - w[0].0) / (w[1].0 - w[0].0);
                 (w[0].1.ln() + t * (w[1].1.ln() - w[0].1.ln())).exp()
             });
+            layer.sync_knob = hs;
             // Unison: the newer UNI element wins; older patches carry the
             // uns*/u* attrs directly on OSC.
             let (on, cnt, dpth, wdth) = match osc.find("UNI") {
