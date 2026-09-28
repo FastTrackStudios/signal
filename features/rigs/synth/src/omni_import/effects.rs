@@ -60,6 +60,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Magnetic Echo" => magnetic_echo(p),
             "Optical Leveling Amp" => optical_leveling_amp(p),
             "Velvet Verb" => velvet_verb(p),
+            "Retroplex" => retroplex(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -555,6 +556,40 @@ fn velvet_verb(p: &[f32; 15]) -> RigBlock {
     let rt = rt_full * size;
     let wet = pro_verb_wet_db(rt) - 1.6 + 34.0 * (p[13] - 0.365);
     reverb_block(rt, 31.0 * p[1].clamp(0.0, 1.0), p[0], Some(wet))
+}
+
+/// Retroplex (measured on a click): the time is `P1` (a table, 100–660 ms)
+/// scaled by the `P3` range (each 0.02 step halves it; 0.04 is ×1), `P2`
+/// the feedback (repeat ratio ≈ `P2^1.6`), `P11` the output
+/// (`20·log10(P11/0.5)` dB), `P0` the mix.
+fn retroplex(p: &[f32; 15]) -> RigBlock {
+    let base = (lerp_table(
+        &[
+            (0.0, 100f32.ln()),
+            (0.25, 125f32.ln()),
+            (0.5, 170f32.ln()),
+            (0.761, 275f32.ln()),
+            (1.0, 660f32.ln()),
+        ],
+        p[1],
+    ))
+    .exp();
+    let k = (p[3] * 50.0).round();
+    let time = base * (2.0 - k).exp2();
+    let m = p[0].clamp(0.0, 1.0);
+    let out = (p[11].max(1e-3) / 0.5).min(2.0);
+    RigBlock::of_type(BlockType::Delay)
+        .with_param("style", "1")
+        .with_param("time", format!("{:.2}", time.clamp(2.0, 2500.0)))
+        .with_param(
+            "feedback",
+            format!("{:.3}", p[2].clamp(0.0, 1.0).powf(1.6).min(0.95)),
+        )
+        .with_param("mix", format!("{:.4}", (m.sqrt() * out).min(1.0)))
+        .with_param("dry", format!("{:.4}", ((1.0 - m).sqrt() * out).min(1.0)))
+        // Its echoes sit ~3 dB below our clean delay's.
+        .with_param("level", "-3.0")
+        .with_param("tap_div", "7")
 }
 
 /// One EQ band's params (`n` from 1).
