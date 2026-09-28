@@ -49,6 +49,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "PRO-Verb" => pro_verb(p),
             "Studio EQ" => studio_eq(p),
             "Vintage 2-Band EQ" => vintage_2band(p),
+            "Super Verb" => super_verb(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -101,36 +102,145 @@ fn chorus_echo(p: &[f32; 15]) -> RigBlock {
 /// - `P12` stereo width (0 mono).
 fn pro_verb(p: &[f32; 15]) -> RigBlock {
     let rt = 20.0 * (5.5 * (p[2] - 1.0)).exp();
-    let m = p[0].clamp(0.0, 1.0);
+    reverb_block(rt, 428.0 * p[3].max(0.0).powf(2.36), p[0], None)
+        .with_param("diffusion", format!("{:.3}", p[4].clamp(0.0, 1.0)))
+        // High multiplier 0.865 (the default) ≈ neutral damping.
+        .with_param("damping", format!("{:.3}", (1.0 - p[10]).clamp(0.0, 1.0)))
+        .with_param("low_end", format!("{:.3}", p[9].clamp(0.0, 1.0)))
+}
+
+/// PRO-Verb's measured wet level (dB re the dry click) for a tail of RT60
+/// `rt` at full mix — what [`reverb_block`]'s level law lands on.
+fn pro_verb_wet_db(rt: f32) -> f32 {
+    -1.5 + 3.5 * (rt.max(0.05) / 1.64).log10()
+}
+
+/// A native reverb with RT60 `rt` (s), `predelay_ms`, mix `m` (power-
+/// complementary) and, when given, a wet level (dB re the dry, at full
+/// mix) to land on instead of PRO-Verb's.
+fn reverb_block(rt: f32, predelay_ms: f32, m: f32, wet_db: Option<f32>) -> RigBlock {
+    let m = m.clamp(0.0, 1.0);
     // Our hall's `decay_time` reads ~1.35× long by RT60 (Schroeder fit),
     // and its wet energy grows with the tail where PRO-Verb's is partly
     // normalized: level fitted over RT 0.24–6.6 s.
-    let level_db = 0.3 - 5.8 * rt.max(0.05).log10();
+    let mut level_db = 0.3 - 5.8 * rt.max(0.05).log10();
     // Short tails on the room (the hall bottoms out near half a second),
     // trimmed: the room runs wetter than PRO-Verb's short settings.
     let room = rt < 0.8;
-    let level_db = if room {
-        level_db - 6.0 * (0.8 / rt.max(0.05)).log10()
-    } else {
-        level_db
-    };
+    if room {
+        level_db -= 6.0 * (0.8 / rt.max(0.05)).log10();
+    }
+    if let Some(w) = wet_db {
+        level_db += w - pro_verb_wet_db(rt);
+    }
     RigBlock::of_type(BlockType::Reverb)
         .with_param("algorithm", if room { "0" } else { "1" })
         .with_param(
             "decay_time",
             format!("{:.3}", (rt / 1.35).clamp(0.05, 60.0)),
         )
-        .with_param("level", format!("{level_db:.2}"))
-        .with_param(
-            "predelay",
-            format!("{:.1}", (428.0 * p[3].max(0.0).powf(2.36)).min(200.0)),
-        )
-        .with_param("diffusion", format!("{:.3}", p[4].clamp(0.0, 1.0)))
-        // High multiplier 0.865 (the default) ≈ neutral damping.
-        .with_param("damping", format!("{:.3}", (1.0 - p[10]).clamp(0.0, 1.0)))
-        .with_param("low_end", format!("{:.3}", p[9].clamp(0.0, 1.0)))
+        .with_param("level", format!("{:.2}", level_db.clamp(-60.0, 12.0)))
+        .with_param("predelay", format!("{:.1}", predelay_ms.clamp(0.0, 200.0)))
         .with_param("mix", format!("{:.4}", m.sqrt()))
         .with_param("dry", format!("{:.4}", (1.0 - m).sqrt()))
+        // The tone the RT/level laws were calibrated at (a caller may
+        // override).
+        .with_param("damping", "0.135")
+        .with_param("low_end", "0.750")
+}
+
+/// Super Verb's rooms (`P3`, 0.02 steps), measured: RT60 (s) and wet level
+/// (dB re the dry click) at size `P1` = 0, 0.5, 1.
+#[rustfmt::skip]
+const SUPER_VERB_ROOMS: [([f32; 3], [f32; 3]); 50] = [
+    ([0.03, 0.19, 0.38], [-28.2, -10.1, -2.9]),
+    ([0.02, 0.30, 1.18], [-19.8, -12.2, 1.6]),
+    ([0.03, 0.33, 0.89], [-11.1, -8.0, 0.7]),
+    ([0.06, 0.57, 1.35], [-3.0, -3.3, -0.8]),
+    ([0.10, 0.97, 1.85], [-12.4, -5.4, -1.8]),
+    ([0.08, 0.79, 1.11], [-0.7, -1.5, -1.2]),
+    ([0.26, 0.61, 2.70], [-0.5, -1.1, 1.3]),
+    ([0.30, 0.54, 3.60], [-6.7, -5.7, -1.6]),
+    ([0.18, 0.66, 1.70], [-9.7, -3.4, 1.9]),
+    ([0.63, 0.98, 2.20], [-9.9, -8.0, -4.2]),
+    ([0.40, 0.95, 2.09], [-7.2, -5.9, -2.5]),
+    ([0.58, 1.17, 2.71], [-3.4, -3.5, -1.7]),
+    ([0.88, 1.37, 3.47], [-4.3, -2.8, 2.0]),
+    ([0.06, 1.30, 2.66], [-1.6, -2.2, 0.2]),
+    ([0.49, 1.16, 1.54], [-6.0, -4.2, -3.6]),
+    ([1.23, 1.57, 6.14], [-5.5, -4.0, 1.5]),
+    ([0.98, 1.99, 4.16], [-5.1, -4.9, -4.6]),
+    ([1.24, 1.71, 4.15], [-4.1, -2.7, 2.2]),
+    ([1.02, 2.60, 6.97], [-4.2, -4.2, -0.9]),
+    ([0.95, 2.88, 6.21], [-6.1, -3.0, 1.1]),
+    ([1.14, 4.62, 6.50], [-0.3, -0.9, 2.4]),
+    ([1.47, 4.55, 8.69], [-5.6, -4.8, 0.5]),
+    ([1.45, 2.13, 7.40], [-4.3, -2.2, 3.0]),
+    ([2.14, 4.74, 12.74], [-0.1, 0.3, 6.2]),
+    ([2.19, 4.87, 13.94], [-2.1, -1.1, 4.8]),
+    ([2.24, 5.33, 12.55], [-3.6, -2.4, -0.2]),
+    ([2.32, 7.13, 20.93], [-4.4, -0.6, 3.6]),
+    ([1.24, 3.57, 5.36], [-3.9, -2.7, -1.4]),
+    ([1.72, 3.44, 8.77], [-5.0, -2.6, 1.4]),
+    ([1.97, 3.41, 6.58], [-3.2, -2.3, 2.2]),
+    ([1.75, 2.63, 5.21], [-1.7, -0.7, 0.9]),
+    ([2.56, 5.98, 9.56], [-5.6, -4.5, 2.0]),
+    ([1.55, 7.25, 18.41], [-7.5, -2.5, 5.0]),
+    ([2.47, 8.22, 19.46], [-6.3, -4.5, -4.5]),
+    ([3.22, 7.36, 21.34], [-1.3, 2.7, 8.8]),
+    ([2.04, 9.06, 18.60], [-5.5, 0.7, 6.1]),
+    ([1.04, 7.56, 19.07], [-6.6, -2.8, -2.4]),
+    ([1.18, 10.86, 14.62], [-4.0, -0.1, 4.5]),
+    ([1.44, 7.26, 19.12], [-9.0, -5.6, -2.6]),
+    ([3.10, 9.45, 18.96], [-10.6, -6.5, 1.2]),
+    ([3.33, 10.34, 14.48], [-4.3, -0.2, 8.3]),
+    ([2.64, 12.17, 22.67], [-6.1, -0.4, 4.0]),
+    ([2.64, 8.32, 24.08], [-7.0, -2.0, 4.9]),
+    ([1.83, 12.37, 23.42], [-4.1, 2.4, 4.8]),
+    ([2.96, 12.80, 21.25], [-10.9, -5.0, -0.4]),
+    ([2.25, 13.10, 14.55], [2.9, 5.9, 18.9]),
+    ([2.99, 8.58, 12.95], [1.6, 1.5, 17.7]),
+    ([2.29, 12.76, 19.99], [-2.8, 1.3, 11.8]),
+    ([2.41, 14.34, 18.64], [-6.8, -1.6, 6.6]),
+    ([2.47, 8.95, 22.55], [-2.9, 0.7, 8.2]),
+];
+
+/// Super Verb (measured on a click): `P3` picks one of 50 rooms, `P1` its
+/// size (RT and wet level from [`SUPER_VERB_ROOMS`], log-interpolated),
+/// `P0` mix, `P8` predelay (~`1000 ms · P8^2.9`), `P10` wet level (0 →
+/// −6 dB, 0.5 unity, 1 → +4 dB), `P13` output level (0.75 unity).
+fn super_verb(p: &[f32; 15]) -> RigBlock {
+    let room = &SUPER_VERB_ROOMS[((p[3] * 50.0).round() as usize).min(49)];
+    let s = p[1].clamp(0.0, 1.0);
+    let (i, t) = if s < 0.5 {
+        (0, s / 0.5)
+    } else {
+        (1, (s - 0.5) / 0.5)
+    };
+    let rt = (room.0[i].ln() + t * (room.0[i + 1].ln() - room.0[i].ln())).exp();
+    let wet = room.1[i] + t * (room.1[i + 1] - room.1[i]);
+    let wet_level = if p[10] < 0.5 {
+        -6.3 * (1.0 - p[10] / 0.5)
+    } else {
+        3.8 * (p[10] - 0.5) / 0.5
+    };
+    const OUT: [(f32, f32); 5] = [
+        (0.0, -60.0),
+        (0.25, -18.8),
+        (0.5, -6.8),
+        (0.75, 0.0),
+        (1.0, 10.0),
+    ];
+    let o = p[13].clamp(0.0, 1.0);
+    let out = OUT.windows(2).find(|w| o <= w[1].0).map_or(10.0, |w| {
+        w[0].1 + (w[1].1 - w[0].1) * (o - w[0].0) / (w[1].0 - w[0].0)
+    });
+    reverb_block(
+        rt,
+        1000.0 * p[8].max(0.0).powf(2.9),
+        p[0],
+        Some(wet + wet_level + out),
+    )
 }
 
 /// Studio EQ (measured frequency responses): two bands, each `gain`
