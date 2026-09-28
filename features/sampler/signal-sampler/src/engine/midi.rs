@@ -2045,7 +2045,13 @@ impl SampleEngine {
             }
             _ => self.piano_trim_db,
         };
-        let gain = 10.0f32.powf(gain_db / 20.0) * gain_scale * makeup * db_to_gain(piano_db);
+        // Omnisphere's amp velocity law, when the engine hosts a patch layer.
+        let vel_law = self.velocity_sens.map_or(1.0, |s| {
+            let v = f32::from(self.last_velocity) / 127.0;
+            1.0 - s + s * v * v
+        });
+        let gain =
+            10.0f32.powf(gain_db / 20.0) * gain_scale * makeup * db_to_gain(piano_db) * vel_law;
         let mic_index = self.mic_index_for(&mic);
 
         // Decoded ENV_FLEX amp envelope for this voice's articulation family
@@ -2203,6 +2209,11 @@ impl SampleEngine {
             .with_start_hold(start_hold)
             .with_pitch_cents(transpose_cents)
             .with_sample_window(start_frame, (sample_end > 0).then_some(sample_end as usize));
+            // A patch layer's breakpoint amp envelope (not on the release
+            // samples, which play after the key).
+            if !matches!(kind, VoiceKind::Release) {
+                voice = voice.with_amp_points(self.amp_points.clone(), self.sample_rate);
+            }
             // Playback-emitted arrival marker: attach the zone's heard-
             // arrival position (FILE frames at the SOURCE rate) so the voice
             // emits the marker when its real playhead crosses it. Underlay

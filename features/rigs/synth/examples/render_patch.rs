@@ -185,10 +185,16 @@ fn main() {
         .and_then(|v| v.parse::<u8>().ok());
     let prev_on: Vec<PluginMidiEvent> =
         prev.map(|k| note_event(true, k, vel)).into_iter().collect();
-    for i in 0..40 {
+    // Pre-roll long enough for streaming packs to open their zones (a
+    // cache miss drops the voice): `RENDER_PREROLL_MS`, default 200.
+    let preroll_blocks = std::env::var("RENDER_PREROLL_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map_or(40, |ms| (ms / 5).max(40));
+    for i in 0..preroll_blocks {
         let midi: &[PluginMidiEvent] = match i {
             0 => &ccs,
-            35 => &prev_on,
+            i if i == preroll_blocks - 5 => &prev_on,
             _ => &[],
         };
         let ev = PluginEvents {

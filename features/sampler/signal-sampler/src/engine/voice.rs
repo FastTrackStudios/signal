@@ -893,6 +893,14 @@ impl Voice {
         self
     }
 
+    /// Scale the voice's level (its gain and target gain) by `k`.
+    #[must_use]
+    pub fn scaled_gain(mut self, k: f32) -> Self {
+        self.gain *= k;
+        self.target_gain *= k;
+        self
+    }
+
     /// Shape the voice with a breakpoint amplitude envelope (`None`: off).
     /// `sample_rate` is the output rate the envelope advances at.
     #[must_use]
@@ -1141,7 +1149,10 @@ impl Voice {
 
     pub fn note_off_with_release_frames(&mut self, release_frames: usize) {
         match self.kind {
-            VoiceKind::Short | VoiceKind::Release => {
+            // A one-shot plays to its end — unless a breakpoint amp envelope
+            // shapes it, which releases with the key like any other voice.
+            VoiceKind::Short if self.amp_bp.is_none() => {}
+            VoiceKind::Release => {
                 // Play to end — do not release early.
             }
             _ => {
