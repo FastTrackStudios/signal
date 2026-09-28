@@ -58,6 +58,7 @@ pub fn effect_block(name: &str, p: &[f32; 15]) -> Option<RigBlock> {
             "Vintage Compressor" => vintage_compressor(p),
             "Multiband Compressor" => multiband_compressor(p),
             "Magnetic Echo" => magnetic_echo(p),
+            "Optical Leveling Amp" => optical_leveling_amp(p),
             _ => RigBlock::of_type(classify_effect(name).unwrap_or(BlockType::Custom)),
         }
         .named(name),
@@ -501,6 +502,36 @@ fn magnetic_echo(p: &[f32; 15]) -> RigBlock {
         )
         .with_param("dry", format!("{:.4}", ((1.0 - m) * out).min(1.0)))
         .with_param("tap_div", "7")
+}
+
+/// Optical Leveling Amp (measured static curves): `P6` peak reduction (a
+/// threshold from −18 dBFS RMS at 0.225 to −42 at 1, ~5:1), `P2` the output
+/// (`28·(P2 − 0.22)` dB), `P8` more gain (±15 dB about 0.5), `P0` a linear
+/// wet/dry blend.
+fn optical_leveling_amp(p: &[f32; 15]) -> RigBlock {
+    let makeup = if p[2] <= 0.0 {
+        -60.0
+    } else {
+        28.0 * (p[2] - 0.22) + 30.0 * (p[8] - 0.5)
+    };
+    // The blend leaves the dry at unity (our compressor's makeup applies
+    // after its blend), so a partial blend folds into the makeup.
+    let m = p[0].clamp(0.0, 1.0);
+    let makeup = 20.0
+        * (m * 10f32.powf(makeup / 20.0) + (1.0 - m))
+            .max(1e-3)
+            .log10();
+    let threshold = lerp_table(
+        &[(0.0, -10.0), (0.225, -18.0), (0.5, -25.0), (1.0, -42.0)],
+        p[6],
+    );
+    RigBlock::of_type(BlockType::Compressor)
+        .with_param("threshold", format!("{threshold:.1}"))
+        .with_param("ratio", "5")
+        .with_param("attack", "10")
+        .with_param("release", "300")
+        .with_param("knee", "3")
+        .with_param("makeup", format!("{:.1}", makeup.clamp(-24.0, 24.0)))
 }
 
 /// One EQ band's params (`n` from 1).
