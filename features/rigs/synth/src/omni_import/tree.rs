@@ -49,7 +49,17 @@ fn modelled_filter(
         }
     });
     let hz = model.corner_hz(setting);
+    // The knob itself, so modulation moves it the way Omnisphere's does.
+    let taper = (0..=30)
+        .map(|i| {
+            let s = signal_sampler::native::NativeFilter::KNOB_MIN + 0.05 * i as f32;
+            format!("{s:.2}:{:.2}", model.corner_hz(s))
+        })
+        .collect::<Vec<_>>()
+        .join(";");
     block
+        .with_param("taper", taper)
+        .with_param("knob_setting", format!("{setting:.4}"))
         .with_param(
             "cutoff",
             format!(
@@ -116,15 +126,21 @@ pub fn translate_route(
     // Pitch targets ride the synth oscillator's tune param; freq/res ride
     // the layer's Filter 1.
     let (block, param, scale): (&str, &str, f32) = match param {
-        "freq" => (filter_labels.get(layer_idx)?.as_str(), "cutoff", 1.0),
+        // The filter's emulated Omnisphere knob: routes add setting units,
+        // and the knob param spans 1.5 settings.
+        "freq" => (
+            filter_labels.get(layer_idx)?.as_str(),
+            "knob",
+            1.0 / signal_sampler::native::NativeFilter::KNOB_SPAN,
+        ),
         "res" => (filter_labels.get(layer_idx)?.as_str(), "resonance", 1.0),
         "tune" => ("Soundsource", "tune", 1.0),
         // tuneFine is ±1 semitone on a ±24 semitone param.
         "tuneFine" => ("Soundsource", "tune", 1.0 / 24.0),
         // Osc amp tremolo → the layer's Amp gain.
         "atrm" => ("Amp", "gain", 1.0),
-        // PWM depth → the square's pulse width (Symmetry axis).
-        "pdepth" => ("Soundsource", "symmetry", 1.0),
+        // Shape (measured: `pdepth` morphs the played wave toward `wf1`).
+        "pdepth" => ("Soundsource", "wt_mix", 1.0),
         // Harmonia mix.
         "Harmmix" => ("Soundsource", "harm_mix", 1.0),
         _ => return None, // hrdsnc/mogrify/timbre/LFO-param/E1P0/… — later
@@ -133,7 +149,8 @@ pub fn translate_route(
     // names map onto the modulator blocks our tree attaches.
     let source = match route.source.as_str() {
         "Wheel" => "Wheel".to_string(),
-        "Velo" => "Velocity".to_string(),
+        // Omnisphere's velocity source is squared (measured).
+        "Velo" => "Velocity Squared".to_string(),
         "After" => "Aftertouch".to_string(),
         "Bender" => "Bender".to_string(),
         "Key" => "Key".to_string(),
@@ -208,7 +225,12 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
     let mut layer_routes: Vec<Vec<(String, String, f32)>> = vec![Vec::new(); 4];
     for route in &patch.mod_routes {
         if let Some((idx, source, target, depth)) = translate_route(route, &filter_labels) {
-            layer_routes[idx].push((source, target, depth));
+            layer_routes[idx].push((source, target.clone(), depth));
+            // `lo` shifts the target whatever the source does (same units).
+            if route.offset != 0.0 && route.depth != 0.0 {
+                let offset = route.offset * depth / route.depth;
+                layer_routes[idx].push(("Constant".to_string(), target, offset));
+            }
         }
     }
 
@@ -450,7 +472,9 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             .modulator_block({
                 // The filter envelope carries its imported ADSR so the
                 // mod engine gates/sweeps with the patch's own shape.
-                let mut fe = RigBlock::of_type(BlockType::Envelope).named("Filter Env");
+                let mut fe = RigBlock::of_type(BlockType::Envelope)
+                    .named("Filter Env")
+                    .with_param("vel_sens", format!("{:.3}", layer.filter_env_velsens));
                 if let Some((a, d, s, r)) = layer.filter_env {
                     fe = fe
                         .with_param("attack", format!("{a:.4}"))
@@ -462,11 +486,13 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             })
             .modulator(BlockType::MultisegEnvelope, "Mod Env");
         // The filter section's own envelope depth (independent of matrix rows).
+        // Measured: it moves the cutoff knob `envdpth` settings at full
+        // envelope, like a matrix row.
         if layer.filter_active && layer.filter_env_depth != 0.0 {
             built = built.route(
                 "Filter Env",
-                format!("{}.cutoff", filter_labels[i]),
-                layer.filter_env_depth,
+                format!("{}.knob", filter_labels[i]),
+                layer.filter_env_depth / signal_sampler::native::NativeFilter::KNOB_SPAN,
             );
         }
         for (source, target, depth) in layer_routes[i].drain(..) {

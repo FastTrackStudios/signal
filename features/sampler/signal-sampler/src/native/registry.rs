@@ -347,6 +347,20 @@ fn build_filter(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     if let Some(c) = block.param_f32("ladder_comp") {
         f = f.with_ladder_comp(c);
     }
+    // An emulated cutoff knob: `taper` = "setting:hz;…", set to `knob_setting`.
+    if let Some(t) = block.param_str("taper") {
+        let points: Vec<(f32, f32)> = t
+            .split(';')
+            .filter_map(|p| {
+                let (s, hz) = p.split_once(':')?;
+                Some((s.trim().parse().ok()?, hz.trim().parse().ok()?))
+            })
+            .collect();
+        if points.len() >= 2 {
+            let setting = block.param_f32("knob_setting").unwrap_or(0.5);
+            f = f.with_taper(points, setting);
+        }
+    }
     if let Some(m) = block
         .params
         .iter()

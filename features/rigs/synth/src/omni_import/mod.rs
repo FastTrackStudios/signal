@@ -432,15 +432,16 @@ mod tests {
         assert!(tree.params.iter().any(|p| p.name == "tag:Author"));
         assert!(tree.params.iter().any(|p| p.name == "mod0"));
         // Two live routes on Layer A: the filter section's own envdpth route
-        // plus the matrix row — both "Filter Env" → cutoff at 0.5.
+        // plus the matrix row — both "Filter Env" → the cutoff knob, half a
+        // knob setting each (the knob param spans 1.5 settings).
         assert_eq!(layer.mod_routes.len(), 2);
         for r in &layer.mod_routes {
             assert_eq!(r.source.key(), "filter env");
             // The layer's first filter is "Filter 1" (the keys-module name);
             // Omnisphere's "LPF Test" is its `model`.
             assert_eq!(r.target.key(), "filter 1");
-            assert_eq!(r.parameter, "cutoff");
-            assert!((r.depth - 0.5).abs() < 1e-6);
+            assert_eq!(r.parameter, "knob");
+            assert!((r.depth - 0.5 / 1.5).abs() < 1e-6, "{}", r.depth);
         }
         // The filter envelope modulator carries its imported ADSR.
         let fe = layer

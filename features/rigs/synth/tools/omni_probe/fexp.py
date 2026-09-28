@@ -33,7 +33,7 @@ def render(xml, exe, tag):
     with tempfile.NamedTemporaryFile("w", suffix=".prt_omn", delete=False) as f:
         f.write(xml); p = f.name
     wav = os.path.join(OUTDIR, f"f_{tag}.wav")
-    r = subprocess.run([exe, p, wav, "--note", str(NOTE), "--vel", "100", "--hold", "1.2", "--tail", "0.1", "--sr", str(SR)], capture_output=True, text=True, timeout=180, stdin=subprocess.DEVNULL)
+    r = subprocess.run([exe, p, wav, "--note", str(NOTE), "--vel", os.environ.get("VEL", "100"), "--hold", "1.2", "--tail", "0.1", "--sr", str(SR)], capture_output=True, text=True, timeout=180, stdin=subprocess.DEVNULL)
     os.unlink(p)
     if r.returncode: raise SystemExit(r.stderr[-1500:])
     d = open(wav, "rb").read(); i = 12
@@ -89,7 +89,9 @@ def ref(exe, tag):
 dump = {}
 for spec in sys.argv[1:]:
     name, _, edits = spec.partition("=")
-    xml = apply(apply(base, "FILTER.act=f:1"), "FILTER.envdpth=f:0")
+    xml = apply(base, "FILTER.act=f:1")
+    if not os.environ.get("KEEPENV"):
+        xml = apply(xml, "FILTER.envdpth=f:0")
     for e in filter(None, edits.split(";")):
         xml = apply(xml, e if "." in e.split("=")[0] else "FILTER." + e)
     for tag, exe in (("omni", HARNESS), ("ours", OURS)):

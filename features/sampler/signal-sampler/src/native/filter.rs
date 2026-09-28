@@ -242,6 +242,12 @@ pub struct NativeFilter {
     ladder_r: Ladder,
     /// Output gain (linear): a model's passband level.
     gain: f32,
+    /// An emulated synth's own cutoff knob: `(setting, Hz)` points over
+    /// settings −0.5..1.0 (log-interpolated). With one, param 4 (`knob`,
+    /// 0..1 over that range) sets the cutoff, so modulation moves the knob
+    /// the way the original's does rather than in octaves.
+    taper: Vec<(f32, f32)>,
+    knob: f32,
     /// Drive into the filter, 0..1 (0 = clean), and the wet mix, 0..1
     /// (1 = only the filtered signal).
     drive: f32,
@@ -269,6 +275,8 @@ impl NativeFilter {
             ladder_l: Ladder::default(),
             ladder_r: Ladder::default(),
             gain: 1.0,
+            taper: Vec::new(),
+            knob: 0.0,
             drive: 0.0,
             mix: 1.0,
             prepared: false,
@@ -349,6 +357,42 @@ impl NativeFilter {
         self.ladder_l.comp = comp;
         self.ladder_r.comp = comp;
         self
+    }
+
+    /// The lowest knob setting param 4 spans; it spans 1.5 settings.
+    pub const KNOB_MIN: f32 = -0.5;
+    pub const KNOB_SPAN: f32 = 1.5;
+
+    /// Emulate a cutoff knob (see `taper`) and set it to `setting`.
+    #[must_use]
+    pub fn with_taper(mut self, points: Vec<(f32, f32)>, setting: f32) -> Self {
+        self.taper = points;
+        self.set_knob((setting - Self::KNOB_MIN) / Self::KNOB_SPAN);
+        self
+    }
+
+    fn set_knob(&mut self, u: f32) {
+        self.knob = u.clamp(0.0, 1.0);
+        let s = Self::KNOB_MIN + Self::KNOB_SPAN * self.knob;
+        if let Some(hz) = Self::taper_hz(&self.taper, s) {
+            self.cutoff_hz = hz;
+            self.update_coeffs();
+        }
+    }
+
+    fn taper_hz(points: &[(f32, f32)], s: f32) -> Option<f32> {
+        let (first, last) = (points.first()?, points.last()?);
+        if s <= first.0 {
+            return Some(first.1);
+        }
+        for w in points.windows(2) {
+            let ((a, ha), (b, hb)) = (w[0], w[1]);
+            if s <= b {
+                let t = (s - a) / (b - a).max(1e-6);
+                return Some((ha.ln() + t * (hb.ln() - ha.ln())).exp());
+            }
+        }
+        Some(last.1)
     }
 
     /// Output gain in dB (a model's passband level).
@@ -532,6 +576,14 @@ impl PluginInstance for NativeFilter {
                 max: 1.0,
                 default: 1.0,
             },
+            // The emulated cutoff knob (inert without a taper).
+            PluginParamInfo {
+                id: 4,
+                name: "knob".into(),
+                min: 0.0,
+                max: 1.0,
+                default: 0.0,
+            },
         ]
     }
     fn param_value(&mut self, id: u32) -> Option<f64> {
@@ -540,6 +592,7 @@ impl PluginInstance for NativeFilter {
             1 => Some(self.resonance as f64),
             2 => Some(self.drive as f64),
             3 => Some(self.mix as f64),
+            4 => Some(self.knob as f64),
             _ => None,
         }
     }
@@ -587,6 +640,8 @@ impl PluginInstance for NativeFilter {
                 }
                 2 => self.drive = (value as f32).clamp(0.0, 1.0),
                 3 => self.mix = (value as f32).clamp(0.0, 1.0),
+                // `set_knob` recomputes the coefficients itself.
+                4 => self.set_knob(value as f32),
                 _ => {}
             }
         }
@@ -809,6 +864,24 @@ mod tests {
         f.prepare(48_000.0, 4_096).unwrap();
         let peak = sine_response(&mut f, 1_000.0, sr);
         assert!(20.0 * (peak / at).log10() > 25.0, "{peak} vs {at}");
+    }
+
+    #[test]
+    fn a_taper_maps_the_knob_to_its_corner() {
+        let taper = vec![(0.0, 100.0), (0.5, 1_000.0), (1.0, 10_000.0)];
+        let mut f = NativeFilter::new(48_000).with_taper(taper, 0.5);
+        assert!((f.cutoff_hz - 1_000.0).abs() < 1.0);
+        // Knob 0..1 spans settings −0.5..1.0: setting 0.25 → √(100·1000).
+        let u = f64::from((0.25 - NativeFilter::KNOB_MIN) / NativeFilter::KNOB_SPAN);
+        let ev = PluginEvents {
+            params: &[(4, u)],
+            midi: &[],
+            note_expressions: &[],
+        };
+        let (i, mut o1, mut o2) = (vec![0.0; 16], vec![0.0; 16], vec![0.0; 16]);
+        f.prepare(48_000.0, 16).unwrap();
+        f.process_block(&i, &i, &mut o1, &mut o2, &ev).unwrap();
+        assert!((f.cutoff_hz - 316.2).abs() < 1.0, "{}", f.cutoff_hz);
     }
 
     #[test]

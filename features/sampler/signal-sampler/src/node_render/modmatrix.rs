@@ -449,7 +449,10 @@ impl ModCompiler {
                     block.param_f32("delay").unwrap_or(0.0),
                     block.param_f32("hold").unwrap_or(0.0),
                 );
-                ModSource::env(ControlEnv::new(sr, p).with_delay_hold(delay, hold), sr)
+                let env = ControlEnv::new(sr, p)
+                    .with_delay_hold(delay, hold)
+                    .with_velocity_sensitivity(block.param_f32("vel_sens").unwrap_or(0.0));
+                ModSource::env(env, sr)
             }
             _ => return None,
         };

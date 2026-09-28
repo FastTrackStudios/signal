@@ -79,6 +79,9 @@ pub struct OmniLayer {
     /// Filter-envelope → cutoff depth (signed; `FILTER envdpth`, inverted by
     /// `envdpthinv`).
     pub filter_env_depth: f32,
+    /// The filter envelope's velocity sensitivity (`FENVPARAMS velsens`):
+    /// measured linear — at 1 it scales by `vel/127`.
+    pub filter_env_velsens: f32,
     /// Filter 2, when engaged (`act2`): its effective knob setting (master
     /// `freq` plus its `freq2` offset) and effective resonance (master `res`
     /// plus its `res2` offset).
@@ -101,11 +104,16 @@ pub struct OmniLayer {
 }
 
 /// One mod-matrix route (`sourceN` → `targetN`).
+///
+/// Measured: the route adds `lo + (hi − lo)·source` to the target in the
+/// target knob's own units (a cutoff route moves the filter *setting*, not
+/// octaves), unipolar, so `depth` is `hi − lo` and `offset` is `lo`.
 #[derive(Debug, Clone)]
 pub struct OmniModRoute {
     pub source: String,
     pub target: String,
     pub depth: f32,
+    pub offset: f32,
 }
 
 /// A parsed `.prt_omn` patch.
@@ -634,12 +642,10 @@ fn parse_env_breakpoints(e: &XmlNode) -> Option<(f32, f32, f32, f32)> {
     if pts.len() < 3 {
         return None;
     }
-    // Peak = first point at the maximum level.
-    let peak_idx = pts
-        .iter()
-        .enumerate()
-        .max_by(|a, b| a.1.0.total_cmp(&b.1.0))
-        .map(|(i, _)| i)?;
+    // Peak = the FIRST point at the maximum level (`max_by` would pick the
+    // last, turning a sustain-at-full envelope's attack into its decay).
+    let top = pts.iter().map(|p| p.0).fold(f32::MIN, f32::max);
+    let peak_idx = pts.iter().position(|p| p.0 >= top)?;
     let last = pts.len() - 1;
     let sus_idx = if last > peak_idx { last - 1 } else { peak_idx };
     let attack = pts[peak_idx].1 * ENV_T_SECONDS;
@@ -721,6 +727,11 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             .child("AENV")
             .and_then(parse_env_breakpoints)
             .or_else(|| voice.child("AENVPARAMS").and_then(parse_env));
+        layer.filter_env_velsens = voice
+            .child("FENVPARAMS")
+            .and_then(|p| p.num("velsens"))
+            .unwrap_or(0.0)
+            .clamp(0.0, 1.0);
         layer.filter_env = voice
             .child("FENV")
             .and_then(parse_env_breakpoints)
@@ -861,13 +872,16 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             ) else {
                 break;
             };
-            if source.is_empty() && target.is_empty() {
+            let off = |s: &str| s.is_empty() || s.eq_ignore_ascii_case("off");
+            if off(source) || off(target) || matrix.num(&format!("mute{n}")).unwrap_or(0.0) != 0.0 {
                 continue;
             }
+            let lo = matrix.num(&format!("lo{n}")).unwrap_or(0.0);
             patch.mod_routes.push(OmniModRoute {
                 source: source.to_string(),
                 target: target.to_string(),
-                depth: matrix.num(&format!("hi{n}")).unwrap_or(0.0),
+                depth: matrix.num(&format!("hi{n}")).unwrap_or(0.0) - lo,
+                offset: lo,
             });
         }
     }

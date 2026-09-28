@@ -129,6 +129,10 @@ pub struct ControlEnv {
     delay_left: u32,
     hold_left: u32,
     sample_rate: f32,
+    /// Velocity sensitivity 0..1: the output scales by
+    /// `1 − s + s·vel/127` of the note that started it (1 = linear).
+    vel_sens: f32,
+    vel_scale: f32,
 }
 
 impl ControlEnv {
@@ -142,7 +146,16 @@ impl ControlEnv {
             delay_left: 0,
             hold_left: 0,
             sample_rate: sample_rate.max(1.0),
+            vel_sens: 0.0,
+            vel_scale: 1.0,
         }
+    }
+
+    /// Scale the envelope by note velocity (see `vel_sens`).
+    #[must_use]
+    pub fn with_velocity_sensitivity(mut self, sens: f32) -> Self {
+        self.vel_sens = sens.clamp(0.0, 1.0);
+        self
     }
 
     /// Delay before the attack and hold at full level after it (seconds).
@@ -163,6 +176,8 @@ impl ControlEnv {
             match &ev.message {
                 MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0 => {
                     self.held += 1;
+                    self.vel_scale =
+                        1.0 - self.vel_sens + self.vel_sens * f32::from(velocity.get()) / 127.0;
                     self.hold_left = self.frames(self.hold_s);
                     self.delay_left = self.frames(self.delay_s);
                     if self.delay_left == 0 {
@@ -198,7 +213,7 @@ impl ControlEnv {
                 v = self.env.tick();
             }
         }
-        v
+        v * self.vel_scale
     }
 }
 
@@ -213,6 +228,9 @@ pub enum MidiMod {
     Bender,
     /// Velocity of the most recent note-on, 0..1.
     Velocity,
+    /// The same, squared — Omnisphere's `Velo` source (measured: a route's
+    /// swing grows as `(vel/127)²`).
+    VelocitySquared,
     /// Note number of the most recent note-on, 0..1 (raw, uncentered).
     Key,
     /// Bipolar key-tracking centered at middle C (note 60): −1..+1 across
@@ -376,6 +394,11 @@ impl ControlSource for MidiSource {
                 (MidiMod::Velocity, MidiEvent::NoteOn { velocity, .. }) if velocity.get() > 0 => {
                     v = velocity.get() as f32 / 127.0;
                 }
+                (MidiMod::VelocitySquared, MidiEvent::NoteOn { velocity, .. })
+                    if velocity.get() > 0 =>
+                {
+                    v = (velocity.get() as f32 / 127.0).powi(2);
+                }
                 (MidiMod::Key, MidiEvent::NoteOn { key, velocity, .. }) if velocity.get() > 0 => {
                     v = key.get() as f32 / 127.0;
                 }
@@ -466,6 +489,7 @@ impl ModSource {
             "after" | "aftertouch" | "pressure" => MidiMod::Aftertouch,
             "bender" | "bend" | "pitchbend" => MidiMod::Bender,
             "velo" | "velocity" => MidiMod::Velocity,
+            "velocity squared" | "velocity²" | "velo2" => MidiMod::VelocitySquared,
             "key" => MidiMod::Key,
             "keytrack" | "key track" | "keytracking" => MidiMod::KeyTrack,
             "random" | "random2" | "random unipolar" => MidiMod::Random,
