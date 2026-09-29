@@ -388,6 +388,15 @@ impl KeysProfile {
         self.scope_values = saved.scope_values.clone();
     }
 
+    /// Take `saved`'s stacks when it has any — they are the player's (built,
+    /// captured and renamed on the switches); the built-in ones only seed a
+    /// profile that has never been saved.
+    pub fn adopt_saved_stacks(&mut self, saved: &Self) {
+        if !saved.stacks.is_empty() {
+            self.stacks = saved.stacks.clone();
+        }
+    }
+
     pub fn engine_order(&self) -> Vec<String> {
         self.engines.iter().map(|e| e.name.clone()).collect()
     }

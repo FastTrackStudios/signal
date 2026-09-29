@@ -307,6 +307,10 @@ pub struct KeysPerform {
     /// The band's tempo (whole BPM) the synced delays follow; 0 = none yet.
     #[facet(default)]
     pub tempo_bpm: u32,
+    /// The switches' MIDI learn: which is waiting for a pedal, and what the
+    /// bound ones answer to (targets `"stack:N"`, `"tap"`).
+    #[facet(default)]
+    pub learn: signal_rigs_proto::SwitchLearn,
 }
 
 /// One metered node's post-fader output — an engine, a layer or a module,
@@ -605,6 +609,19 @@ pub mod keys {
         /// Store the mixer's current state into stack `index` (write the
         /// scene from what you're hearing).
         fn capture_stack(&self, index: u32);
+        /// A new stack at the end, holding the mixer as it is now.
+        fn add_stack(&self, name: String);
+        /// Rename stack `index`.
+        fn rename_stack(&self, index: u32, name: String);
+        /// Remove stack `index`.
+        fn delete_stack(&self, index: u32);
+        /// Learn the next pedal or pad pressed onto switch `target`
+        /// (`"stack:N"`, `"tap"`); [`KeysPerform::learn`] shows it waiting.
+        fn midi_learn(&self, target: String);
+        /// Stop waiting for a pedal.
+        fn midi_learn_cancel(&self);
+        /// Unbind switch `target`.
+        fn midi_unlearn(&self, target: String);
         /// Tap the band's tempo (the same tempo the guitar rig taps):
         /// two taps or more within ~2.5 s of each other set it.
         fn tap_tempo(&self);
@@ -638,3 +655,6 @@ pub mod keys {
 }
 
 pub use keys::{KeysEvent, KeysRig};
+
+/// The switches' MIDI learn state (shared by every rig).
+pub use signal_rigs_proto::SwitchLearn;

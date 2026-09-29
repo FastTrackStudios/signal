@@ -309,6 +309,9 @@ pub struct GuitarRigBackend {
     open_prefs: Arc<Mutex<Option<String>>>,
     /// Footswitch CC mapping (midi.styx — remappable).
     midi_map: Arc<Mutex<crate::profiles::MidiMapDef>>,
+    /// Pedals learned onto switches from their right-click menus — ahead of
+    /// `midi_map`: a learned pedal is its switch's and nothing else's.
+    learn: Arc<Mutex<signal_rig_host::midi_learn::MidiLearn>>,
     /// Keyboard bindings (keymap.styx).
     keymap: Arc<Mutex<Vec<crate::profiles::KeyBindingDef>>>,
     /// Headphone-cue module state (volume/self-mix staged; mute applied).
@@ -458,6 +461,7 @@ impl GuitarRigBackend {
             last_switched: Arc::new(Mutex::new(String::new())),
             open_prefs: Arc::new(Mutex::new(None)),
             midi_map: Arc::new(Mutex::new(lib.midi_map)),
+            learn: Arc::new(Mutex::new(signal_rig_host::midi_learn::MidiLearn::load("guitar"))),
             keymap: Arc::new(Mutex::new(lib.keymap)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
             master_trim: Arc::new(Mutex::new(DEFAULT_MASTER_TRIM_DB)),
@@ -642,9 +646,26 @@ impl GuitarRigBackend {
             // (note, down): a note pedal's switches — `None` for a Note On
             // at velocity 0, resolved against the switch's state below.
             let mut notes: Vec<(u8, Option<bool>)> = Vec::new();
+            // Learned pedals: (switch, pressed), and whether one was learned.
+            let mut fired: Vec<(String, bool)> = Vec::new();
+            let mut learned = false;
             {
                 let mut log = self.midi_log.lock_ok();
                 for msg in stream.drain() {
+                    let [status, d1, d2] = msg.bytes();
+                    let outcome = self.learn.lock_ok().on_raw(status, d1, d2);
+                    match outcome {
+                        signal_rig_host::midi_learn::Outcome::Pass => {}
+                        signal_rig_host::midi_learn::Outcome::Learned { target } => {
+                            tracing::info!(target, "guitar: switch learned");
+                            learned = true;
+                            continue;
+                        }
+                        signal_rig_host::midi_learn::Outcome::Fire { target, pressed } => {
+                            fired.push((target, pressed));
+                            continue;
+                        }
+                    }
                     match msg.to_event() {
                         Some(midicore::MidiEvent::ControlChange {
                             controller, value, ..
@@ -683,6 +704,12 @@ impl GuitarRigBackend {
                         log.drain(0..len - 128);
                     }
                 }
+            }
+            for (target, pressed) in fired {
+                self.fire_switch(&target, pressed);
+            }
+            if learned {
+                self.events.publish(RigEvent::Perf(Rig::perf(self)));
             }
             // Remappable mapping (midi.styx) → the shared gesture engine:
             // gesture switches (tap on short release, hold at 500 ms) +
@@ -1841,6 +1868,32 @@ impl GuitarRigBackend {
     }
 
     /// Footswitch `sw` (0-based) tapped: whatever job it has right now.
+    /// A learned pedal went down (or up): do what its switch does. A stack
+    /// switch is pressed on the way down and, when momentary, let go on the
+    /// way up (`release_stack` ignores a latching one); the rest act on the
+    /// press.
+    fn fire_switch(&self, target: &str, pressed: bool) {
+        tracing::info!(target, pressed, "learned pedal");
+        if let Some(i) = target.strip_prefix("stack:").and_then(|i| i.parse::<u32>().ok()) {
+            if pressed {
+                Rig::press_stack(self, i);
+            } else {
+                Rig::release_stack(self, i);
+            }
+            return;
+        }
+        if !pressed {
+            return;
+        }
+        match target {
+            "tap" => Rig::tap_tempo(self),
+            "fx" => Rig::toggle_fx(self),
+            "boost" => Rig::toggle_boost(self),
+            "tuner" => Rig::toggle_tuner(self),
+            other => tracing::warn!(target = other, "learned pedal for an unknown switch"),
+        }
+    }
+
     fn switch_tap(&self, sw: usize) {
         let job = self.switch_job(sw);
         match job.as_str() {
@@ -4654,6 +4707,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         start_patch: String::new(),
         song_changes: Vec::new(),
         switch_actions: Vec::new(),
+        learn: signal_rigs_proto::SwitchLearn::default(),
     }
 }
 
@@ -5068,6 +5122,13 @@ impl Rig for GuitarRigBackend {
         m.headphone.mixer = self.phones_status.lock_ok().clone();
         m.master_trim_db = *self.master_trim.lock_ok();
         m.revision = *self.revision.lock_ok();
+        m.learn = {
+            let learn = self.learn.lock_ok();
+            signal_rigs_proto::SwitchLearn {
+                learning: learn.learning().map(str::to_string),
+                bindings: learn.labels(),
+            }
+        };
         m
     }
 
@@ -5350,6 +5411,21 @@ impl Rig for GuitarRigBackend {
         }
         self.activate_stack_and_sync(index as usize);
         self.follow_part();
+    }
+
+    fn midi_learn(&self, target: String) {
+        self.learn.lock_ok().learn(&target);
+        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+    }
+
+    fn midi_learn_cancel(&self) {
+        self.learn.lock_ok().cancel();
+        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+    }
+
+    fn midi_unlearn(&self, target: String) {
+        self.learn.lock_ok().clear(&target);
+        self.events.publish(RigEvent::Perf(Rig::perf(self)));
     }
 
     fn release_stack(&self, index: u32) {

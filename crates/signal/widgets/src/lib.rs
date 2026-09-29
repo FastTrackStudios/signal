@@ -16,6 +16,7 @@ pub mod knob;
 pub mod picker;
 pub mod popup;
 pub mod preset_tree;
+pub mod switches;
 
 pub use drag_bus::{DragBus, DragEvent};
 pub use knob::{FmtFn, Knob, KnobSize};
@@ -23,3 +24,7 @@ pub use picker::{Picker, PickerSize};
 pub use popup::{PopupHost, PopupLayer};
 
 pub use preset_tree::PresetTree;
+pub use switches::{
+    HoldButton, LearnBadge, MenuRow, MidiLearnRows, SwitchMenuFrame, SwitchNo, SwitchTile,
+    SwitchesMode, SwitchesToggle,
+};

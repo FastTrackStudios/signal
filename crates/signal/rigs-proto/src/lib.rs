@@ -46,6 +46,38 @@ pub mod rig_core {
 
 pub use rig_core::prelude::*;
 
+// ── Switches: MIDI learn ────────────────────────────────────────────────────
+
+/// A rig's switch MIDI learn, for its switches' badges and menus: which
+/// switch is waiting for a pedal, and what each bound switch answers to.
+/// Targets are the rig's own names for its switches (`"stack:2"`, `"tap"`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Facet)]
+pub struct SwitchLearn {
+    /// The switch waiting for the next pedal or pad, if any.
+    #[facet(default)]
+    pub learning: Option<String>,
+    /// `(target, what it answers to)` — `("stack:2", "CC 101 · ch 1")`.
+    #[facet(default)]
+    pub bindings: Vec<(String, String)>,
+}
+
+impl SwitchLearn {
+    /// What `target` answers to, if bound.
+    #[must_use]
+    pub fn binding(&self, target: &str) -> Option<&str> {
+        self.bindings
+            .iter()
+            .find(|(t, _)| t == target)
+            .map(|(_, l)| l.as_str())
+    }
+
+    /// Whether `target` is waiting for a pedal.
+    #[must_use]
+    pub fn is_learning(&self, target: &str) -> bool {
+        self.learning.as_deref() == Some(target)
+    }
+}
+
 // ── The rig catalogue ───────────────────────────────────────────────────────
 
 /// Every live rig the product has, and the one place that says so.

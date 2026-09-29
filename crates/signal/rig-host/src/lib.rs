@@ -64,6 +64,7 @@ pub mod midi;
 /// every rig, instead of each rig opening its own.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod midi_hub;
+pub mod midi_learn;
 pub mod mixer;
 pub mod store;
 pub mod tempo;

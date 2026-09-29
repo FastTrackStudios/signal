@@ -572,6 +572,7 @@ impl WebKeysBackend {
             stacks: Vec::new(),
             active_stack: u32::MAX,
             perform_mode: s.perform_mode,
+            ..KeysPerform::default()
         }
     }
 
@@ -877,6 +878,14 @@ impl KeysRigSvc for WebKeysBackend {
     fn capture_stack(&self, _index: u32) {
         // See press_stack.
     }
+
+    fn add_stack(&self, _name: String) {}
+    fn rename_stack(&self, _index: u32, _name: String) {}
+    fn delete_stack(&self, _index: u32) {}
+    /// The tab has no hardware MIDI of its own to learn from.
+    fn midi_learn(&self, _target: String) {}
+    fn midi_learn_cancel(&self) {}
+    fn midi_unlearn(&self, _target: String) {}
 
     /// The browser rig has no band tempo (no delays synced to one).
     fn tap_tempo(&self) {}

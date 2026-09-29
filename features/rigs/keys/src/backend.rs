@@ -1639,6 +1639,8 @@ struct Inner {
     wheel: AtomicU32,
     /// That worker, to wake.
     wheel_worker: std::sync::OnceLock<std::thread::Thread>,
+    /// The switches' MIDI learn table (targets `"stack:N"`, `"tap"`).
+    learn: Mutex<signal_rig_host::midi_learn::MidiLearn>,
 }
 
 /// The keys-rig backend handle. Cheap to clone (all state shared).
@@ -2514,6 +2516,7 @@ impl KeysRigBackend {
                 taps: Mutex::new(Vec::new()),
                 wheel: AtomicU32::new(NO_WHEEL),
                 wheel_worker: std::sync::OnceLock::new(),
+                learn: Mutex::new(signal_rig_host::midi_learn::MidiLearn::load("keys")),
             }),
         };
         backend.spawn_meter_pump("keys-meter-pump");
@@ -3443,7 +3446,45 @@ impl KeysRigBackend {
             active_stack: s.active_stack.map_or(u32::MAX, |i| i as u32),
             perform_mode: s.perform_mode,
             tempo_bpm: signal_rig_host::tempo::get().map_or(0, |b| b.round() as u32),
+            learn: self.learn_model(),
         }
+    }
+
+    /// The switches' learn state, for their badges and menus.
+    fn learn_model(&self) -> signal_rigs_proto::SwitchLearn {
+        let learn = self
+            .inner
+            .learn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        signal_rigs_proto::SwitchLearn {
+            learning: learn.learning().map(str::to_string),
+            bindings: learn.labels(),
+        }
+    }
+
+    /// A learned pedal went down (or up): do what its switch does.
+    fn fire_switch(&self, target: &str, pressed: bool) {
+        // Keys switches latch: the press is the switch.
+        if !pressed {
+            return;
+        }
+        if target == "tap" {
+            KeysRigSvc::tap_tempo(self);
+            self.publish_perform();
+        } else if let Some(i) = target.strip_prefix("stack:").and_then(|i| i.parse().ok()) {
+            KeysRigSvc::press_stack(self, i);
+        }
+    }
+
+    /// Everything a stack edit needs after it: renumbered learn targets are
+    /// the caller's; this saves the profile and republishes.
+    fn after_stack_edit(&self) {
+        let profile = self.inner.state.lock().ok().map(|s| s.profile.clone());
+        if let Some(p) = profile {
+            p.save();
+        }
+        self.publish_perform();
     }
 
     fn publish_mixer(&self) {
@@ -3637,6 +3678,41 @@ impl KeysRigBackend {
         // worker and move on — the MIDI thread never waits on the rig state.
         let weak = Arc::downgrade(&self.inner);
         let sink = move |ev: midicore::TimedEvent| {
+            // A learned pedal is a switch's, not a note to play: learn it,
+            // or fire its switch off this thread, and drop it either way.
+            if let (Some(raw), Some(inner)) = (
+                midicore::RawShortMessage::from_event(&ev.event),
+                weak.upgrade(),
+            ) {
+                let [status, d1, d2] = raw.bytes();
+                let outcome = inner
+                    .learn
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .on_raw(status, d1, d2);
+                use signal_rig_host::midi_learn::Outcome;
+                match outcome {
+                    Outcome::Pass => {}
+                    Outcome::Learned { target } => {
+                        tracing::info!(target, "keys: switch learned");
+                        let b = Self { inner };
+                        let _ = std::thread::Builder::new()
+                            .name("keys-learn".into())
+                            .spawn(move || b.publish_perform());
+                        return;
+                    }
+                    Outcome::Fire { target, pressed } => {
+                        let b = Self { inner };
+                        let _ = std::thread::Builder::new()
+                            .name("keys-switch".into())
+                            .spawn(move || {
+                                let _rt = keys_runtime().enter();
+                                b.fire_switch(&target, pressed);
+                            });
+                        return;
+                    }
+                }
+            }
             if let midicore::MidiEvent::ControlChange { controller, value, .. } = &ev.event {
                 if controller.get() == 1 {
                     if let Some(inner) = weak.upgrade() {
@@ -4690,6 +4766,100 @@ impl KeysRigSvc for KeysRigBackend {
         self.publish_perform();
     }
 
+    fn add_stack(&self, name: String) {
+        let name = name.trim().to_string();
+        let index = {
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
+            let name = if name.is_empty() {
+                format!("Stack {}", s.profile.stacks.len() + 1)
+            } else {
+                name
+            };
+            s.profile.stacks.push(crate::profile::KeysStackDef {
+                name,
+                blurb: String::new(),
+                slots: Vec::new(),
+                tempo_bpm: 0.0,
+            });
+            s.profile.stacks.len() - 1
+        };
+        // It holds what is playing now.
+        KeysRigSvc::capture_stack(self, index as u32);
+        self.after_stack_edit();
+    }
+
+    fn rename_stack(&self, index: u32, name: String) {
+        let name = name.trim().to_string();
+        if name.is_empty() {
+            return;
+        }
+        if let Ok(mut s) = self.inner.state.lock() {
+            let Some(stack) = s.profile.stacks.get_mut(index as usize) else {
+                return;
+            };
+            stack.name = name;
+        }
+        self.after_stack_edit();
+    }
+
+    fn delete_stack(&self, index: u32) {
+        let i = index as usize;
+        {
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
+            if i >= s.profile.stacks.len() {
+                return;
+            }
+            s.profile.stacks.remove(i);
+            s.active_stack = match s.active_stack {
+                Some(a) if a == i => None,
+                Some(a) if a > i => Some(a - 1),
+                other => other,
+            };
+        }
+        // The pedals follow their stacks: the removed one's is freed, the
+        // ones after it move down with them.
+        {
+            let mut learn = self
+                .inner
+                .learn
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            learn.renumber("stack:", i);
+        }
+        self.after_stack_edit();
+    }
+
+    fn midi_learn(&self, target: String) {
+        self.inner
+            .learn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .learn(&target);
+        self.publish_perform();
+    }
+
+    fn midi_learn_cancel(&self) {
+        self.inner
+            .learn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .cancel();
+        self.publish_perform();
+    }
+
+    fn midi_unlearn(&self, target: String) {
+        self.inner
+            .learn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear(&target);
+        self.publish_perform();
+    }
+
     fn tap_tempo(&self) {
         let now = std::time::Instant::now();
         let bpm = {
@@ -4860,6 +5030,7 @@ fn load_profile() -> KeysProfile {
                 let mut merged = built_in;
                 merged.apply_order(&saved.engine_order());
                 merged.adopt_saved_macros(&saved);
+                merged.adopt_saved_stacks(&saved);
                 merged
             }
             None => built_in,

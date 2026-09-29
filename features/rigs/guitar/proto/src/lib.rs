@@ -347,6 +347,11 @@ pub struct PerformanceModel {
     /// assignments resolved.
     #[facet(default)]
     pub switch_actions: Vec<String>,
+    /// The switches' MIDI learn: which is waiting for a pedal, and what the
+    /// bound ones answer to (targets `"stack:N"`, `"tap"`, `"fx"`,
+    /// `"boost"`, `"tuner"`).
+    #[facet(default)]
+    pub learn: signal_rigs_proto::SwitchLearn,
 }
 
 /// One patch in the loaded profile — the preset browser's row.
@@ -1384,6 +1389,14 @@ pub mod rig {
         fn play_preset(&self, index: u32);
         /// Tap tempo.
         fn tap_tempo(&self);
+        /// Learn the next pedal or pad pressed onto switch `target`
+        /// (`"stack:N"`, `"tap"`, `"fx"`, `"boost"`, `"tuner"`); the model's
+        /// `learn` shows it waiting. Learned pedals come before `midi.styx`.
+        fn midi_learn(&self, target: String);
+        /// Stop waiting for a pedal.
+        fn midi_learn_cancel(&self);
+        /// Unbind switch `target`.
+        fn midi_unlearn(&self, target: String);
         /// Toggle a block's bypass (by id).
         fn toggle_block_bypass(&self, id: String);
         /// Set a block's bypass explicitly (the rotate controls need set,
@@ -1608,3 +1621,6 @@ mod tests {
         assert_eq!(perf.buffer_latency_ms(), 0.0);
     }
 }
+
+/// The switches' MIDI learn state (shared by every rig).
+pub use signal_rigs_proto::SwitchLearn;
