@@ -18,8 +18,9 @@ signal-desktop --engine  (ws://…/vox)
       + param_changes and telemetry streams
 ```
 
-`crates/signal/surface` (`signal-surface`) holds one adapter per rig
-(`GuitarSurface`, …). Each one:
+`crates/signal/surface` (`signal-surface`) holds one adapter per rig:
+`GuitarSurface` (scope `guitar`) and `KeysSurface` (scope `keys`; its
+address table is in `keys.rs`). Each one:
 
 - builds a frame `Catalog` from the rig's own state. For guitar that is
   `chain()`/`perf()`, with DSP tapers and units from
@@ -58,6 +59,8 @@ Block ids are the rig's (display names, de-duplicated: `DLY 2`).
 cargo build -p signal-desktop && ./target/debug/signal-desktop --engine
 
 # from the frame repo:
+frame --engine ws://127.0.0.1:4040/vox --rig guitar                # play a surface generated from the live catalog
+frame-mcp --engine ws://127.0.0.1:4040/vox --rig guitar            # let a model design against the live catalog
 engine_probe --url ws://127.0.0.1:4040/vox --rig guitar            # catalog + values
 engine_probe --url ws://127.0.0.1:4040/vox --set "DLY 1/mix=0.35"   # round trip
 engine_probe --url ws://127.0.0.1:4040/vox --catalog-out guitar.json
@@ -72,7 +75,8 @@ tag. When bumping the architect stack here, bump frame alongside it.
 
 ## Not done yet
 
-- A `SurfaceEngine` for every rig. The other rigs follow the guitar pattern.
+- A `SurfaceEngine` for bass, drums, synth and ekit. They follow the guitar
+  and keys pattern.
 - Embedding frame surfaces *inside* the Blitz GUI. The pinned dioxus-native
   doesn't expose vello's `register_custom_paint_source`, which a `<canvas>`
   would need. Until it does, frame's own `frame` player runs as a remote.
