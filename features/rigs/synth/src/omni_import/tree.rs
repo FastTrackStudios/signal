@@ -507,11 +507,16 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             }
             osc.add(sb)
         } else {
-            tracing::warn!(
-                soundsource = %layer.soundsource,
-                library = %layer.ss_library,
-                "omni import: soundsource not in the local extraction — placeholder"
-            );
+            // An empty index is a structure-only import (the lane knobs'
+            // seeding reads LFO depths from one) — nothing is missing then,
+            // and a switched-off layer loads nothing on purpose.
+            if layer.enabled && index.len() > 0 {
+                tracing::warn!(
+                    soundsource = %layer.soundsource,
+                    library = %layer.ss_library,
+                    "omni import: soundsource not in the local extraction — placeholder"
+                );
+            }
             osc.block(BlockType::Sampler, &layer.soundsource)
         };
         // The oscillator sub-modules chain in SERIES after the source. The LIVE
