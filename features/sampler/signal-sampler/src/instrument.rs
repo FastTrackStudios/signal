@@ -175,6 +175,10 @@ impl Soundsource for SamplerInstrument {
         SoundsourceKind::Sample
     }
 
+    fn shed_voices(&mut self, level: u8) {
+        self.engine_mut().shed_voices(level);
+    }
+
     fn as_any_mut(&mut self) -> Option<&mut dyn core::any::Any> {
         Some(self)
     }

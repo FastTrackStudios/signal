@@ -114,6 +114,16 @@ pub struct KeysInstrument {
     /// Voices sounding, published at the end of every block so a UI can
     /// read it WITHOUT the daw's plugin lock (see [`KeysRig::active_voices`]).
     voices: Arc<std::sync::atomic::AtomicU32>,
+    /// Blocks since this lane last cut held notes (the CPU guard's pacing).
+    since_cut: u32,
+}
+
+impl Drop for KeysInstrument {
+    fn drop(&mut self) {
+        // Leave the rig-wide count as if this lane had gone silent.
+        let last = self.voices.swap(0, std::sync::atomic::Ordering::Relaxed);
+        TOTAL_VOICES.fetch_sub(i64::from(last), std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 impl KeysInstrument {
@@ -150,6 +160,7 @@ impl KeysInstrument {
             gain,
             cells,
             voices: Arc::new(std::sync::atomic::AtomicU32::new(0)),
+            since_cut: GUARD_CUT_EVERY,
         }
     }
 
@@ -259,11 +270,22 @@ impl PluginInstance for KeysInstrument {
         out_r: &mut [f32],
         events: &PluginEvents<'_>,
     ) -> Result<(), PluginError> {
+        // CPU guard: the rig ran hot last block, or holds more voices than
+        // it can render — shed before this block, not after it is missed.
+        let load = render_load();
+        let total = total_voices();
+        self.since_cut = self.since_cut.saturating_add(1);
+        let cut = load > GUARD_CUT || total > VOICE_CUT;
+        if cut && self.since_cut >= GUARD_CUT_EVERY {
+            self.render.shed_voices(2);
+            self.since_cut = 0;
+        } else if load > GUARD_SHED || total > VOICE_SHED {
+            self.render.shed_voices(1);
+        }
         self.render.process(in_l, in_r, out_l, out_r, events);
-        self.voices.store(
-            self.render.active_voices() as u32,
-            std::sync::atomic::Ordering::Relaxed,
-        );
+        let now = self.render.active_voices() as u32;
+        let before = self.voices.swap(now, std::sync::atomic::Ordering::Relaxed);
+        TOTAL_VOICES.fetch_add(i64::from(now) - i64::from(before), std::sync::atomic::Ordering::Relaxed);
         // A tree swapped out is still finishing its notes: render it into
         // scratch and sum. It gets NO new events — new notes belong to the
         // new tree — so it drains as its voices release, and is dropped the
@@ -530,6 +552,81 @@ impl Lookahead {
         self.at = (i + 1) % self.len;
         (ol, or, (self.sum / self.len as f64) as f32)
     }
+}
+
+// ── CPU guard ────────────────────────────────────────────────────────────────
+//
+// Smashing the keyboard must never break the audio up. Each lane instrument,
+// at the start of its block, reads how long the PREVIOUS block of the whole
+// rig took against its deadline, and sheds voices when it ran hot: release
+// tails first (level 1, over `GUARD_SHED`), then the oldest held notes too
+// (level 2, over `GUARD_CUT`). Every lane reacts in the same block, so the
+// load falls before a block is missed — Kontakt's CPU overload protection.
+
+/// Render load of the last block, as a fraction of its deadline (f32 bits):
+/// the audio engine's own measure when one is running, else whatever a
+/// headless host publishes ([`publish_render_load`]).
+static RENDER_LOAD: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// The running audio engine's stats, when the rig has a device. Replaced on
+/// every device open and read from the audio thread, so it is a raw pointer
+/// to a deliberately leaked `Arc`: an old one stays valid forever (a few
+/// hundred bytes per device open) and a read never takes a lock.
+#[cfg(not(target_arch = "wasm32"))]
+static ENGINE_STATS: std::sync::atomic::AtomicPtr<daw_audio_io::duplex::EngineStats> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_engine_stats(stats: Arc<daw_audio_io::duplex::EngineStats>) {
+    let p = Arc::into_raw(stats).cast_mut();
+    ENGINE_STATS.store(p, std::sync::atomic::Ordering::Release);
+}
+
+/// Publish the last block's render load (fraction of its deadline) for a
+/// host without an audio engine to measure it — the headless stress test.
+pub fn publish_render_load(fraction: f32) {
+    RENDER_LOAD.store(fraction.to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The last block's render load, fraction of the deadline.
+#[must_use]
+pub fn render_load() -> f32 {
+    use std::sync::atomic::Ordering::Relaxed;
+    #[cfg(not(target_arch = "wasm32"))]
+    // SAFETY: only ever set from `Arc::into_raw` of a leaked (never freed)
+    // Arc, so a non-null pointer is valid for the program's life.
+    if let Some(st) = unsafe { ENGINE_STATS.load(std::sync::atomic::Ordering::Acquire).as_ref() } {
+        let frames = st.block_frames.load(Relaxed).max(1);
+        let budget_ns = f64::from(frames) / 48_000.0 * 1e9;
+        return (st.render_ns.load(Relaxed) as f64 / budget_ns) as f32;
+    }
+    f32::from_bits(RENDER_LOAD.load(Relaxed))
+}
+
+/// Shed release tails above this share of the deadline…
+const GUARD_SHED: f32 = 0.75;
+/// …and the oldest held notes too above this.
+const GUARD_CUT: f32 = 0.90;
+/// Blocks between two level-2 cuts in one lane (a quarter of its held notes
+/// each time), so one hot block cannot empty the rig.
+const GUARD_CUT_EVERY: u32 = 4;
+
+/// The rig-wide voice budget: the load guard only sees the PREVIOUS block,
+/// and a forearm on the keys lands thirty notes inside one — so the rig also
+/// sheds by count, proactively. Measured ~5 µs per voice per 128-frame block
+/// here (≈ 380 voices fill the deadline): shed tails past `VOICE_SHED`, cut
+/// the oldest notes past `VOICE_CUT`.
+const VOICE_SHED: i64 = 256;
+const VOICE_CUT: i64 = 320;
+
+/// Voices sounding across every lane (each lane adds the change in its own
+/// count after every block).
+static TOTAL_VOICES: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+/// Voices sounding across the rig, as of the last blocks.
+#[must_use]
+pub fn total_voices() -> i64 {
+    TOTAL_VOICES.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Limiter ceiling (−1 dBFS) and release time.
@@ -1044,6 +1141,9 @@ impl KeysRig {
         let lanes = build_lane_tracks(project.daw(), program)?;
         let track_count = 1 + lanes.engines.len() + lanes.layers.len();
         let host = project.start_output_native(prefs, KEYS_NODE_NAME)?;
+        if let Some(st) = host.stats() {
+            set_engine_stats(st);
+        }
         let sample_rate = host.sample_rate();
         let meters = host.install_meters(track_count);
         let daw = host.daw().clone();

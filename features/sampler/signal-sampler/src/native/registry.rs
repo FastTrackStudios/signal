@@ -343,6 +343,10 @@ fn wavetable_osc(block: &RigBlock, sample_rate: u32) -> NativeWavetable {
             (Err(e), _) | (_, Err(e)) => tracing::warn!("wavetable not loaded: {e}"),
         }
     }
+    // A patch's polyphony in notes (1 = mono).
+    if let Some(n) = block.param_f32("max_notes") {
+        osc.set_max_notes(n.round().max(1.0) as usize);
+    }
     if let Some(s) = block.param_f32("vel_sens") {
         osc = osc.with_velocity_sensitivity(s);
     }

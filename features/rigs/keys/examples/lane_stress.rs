@@ -42,7 +42,18 @@ fn main() {
     }
     let deadline = std::time::Duration::from_secs_f64(f64::from(block) / f64::from(sr));
     let busy = std::env::var_os("LANE_STRESS_BUSY").is_some();
-    let chord = [48u8, 52, 55, 60, 64];
+    // LANE_STRESS_SMASH=N: N keys across the keyboard struck inside ~50 ms,
+    // sustain pedal down the whole time — a forearm on the keys.
+    let smash: usize = std::env::var("LANE_STRESS_SMASH").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let chord: Vec<u8> = if smash > 0 {
+        (0..smash).map(|i| (36 + (i * 53) % 60) as u8).collect()
+    } else {
+        vec![48u8, 52, 55, 60, 64]
+    };
+    if smash > 0 {
+        rig.lock().unwrap().cc(64, 127);
+    }
+    let mut peak_voices = 0usize;
     let per_hit = (sr as usize * 3 / 2) / block as usize;
     let held = per_hit * 2 / 3;
     let (mut times, mut peak, mut nonfinite, mut over) = (Vec::new(), 0.0f32, 0usize, 0usize);
@@ -70,6 +81,12 @@ fn main() {
             for &k in &chord {
                 r.note_on(k, 127);
             }
+        } else if smash > 0 && phase < 20 {
+            // The rest of the forearm lands over the next few blocks.
+            let r = rig.lock().unwrap();
+            for &k in chord.iter().skip(phase).step_by(20) {
+                r.note_on(k, 110);
+            }
         } else if phase == held {
             let r = rig.lock().unwrap();
             for &k in &chord {
@@ -80,6 +97,18 @@ fn main() {
         let out = renderer.render_block(0, block as usize);
         let dt = t.elapsed();
         times.push(dt);
+        // Headless: publish the load the CPU guard would read from the
+        // audio engine, so the guard runs here exactly as in the app.
+        // LANE_STRESS_NO_GUARD=1 leaves the guard blind (load 0), for A/B.
+        let load = if std::env::var_os("LANE_STRESS_NO_GUARD").is_some() {
+            0.0
+        } else {
+            (dt.as_secs_f64() / deadline.as_secs_f64()) as f32
+        };
+        signal_sampler::keys_rig::publish_render_load(load);
+        if b % 32 == 0 {
+            peak_voices = peak_voices.max(rig.lock().unwrap().active_voices());
+        }
         if dt > deadline {
             over += 1;
             println!(
@@ -122,6 +151,7 @@ fn main() {
         pct(0.99),
         pct(1.0)
     );
+    println!("  peak voices {peak_voices}");
     println!("  output peak {:.3} ({:+.1} dBFS); {nonfinite} non-finite samples", peak, 20.0 * peak.max(1e-9).log10());
     if over > 0 || nonfinite > 0 || peak > 1.0 || silent > 0 {
         std::process::exit(1);

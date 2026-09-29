@@ -347,6 +347,11 @@ pub struct Voice {
     /// layer's AENV), in place of the linear release fade: it holds at its
     /// sustain point while the key is down and runs its own release after.
     amp_bp: Option<(Arc<crate::native::breakpoints::Breakpoints>, crate::native::breakpoints::EnvPlayer, f32)>,
+    /// The breakpoint envelope at control rate: evaluated every
+    /// [`ENV_CONTROL_FRAMES`] frames and interpolated between (`a` → `b`,
+    /// `i` frames into the period). Per-sample evaluation made the envelope
+    /// the render thread's top cost when a forearm lands on the keys.
+    bp_ctrl: (f32, f32, u32, bool),
     /// Per-voice filter envelope (`with_filter_env`); `None` = no filter.
     filter: Option<VoiceFilter>,
     /// Vibrato (`with_vibrato`): phase and step (cycles/frame), depth in
@@ -604,6 +609,7 @@ impl Voice {
             sustain: 1.0,
             decay_left: 0,
             amp_bp: None,
+            bp_ctrl: (0.0, 0.0, 0, false),
             filter: None,
             vib_phase: 0.0,
             vib_inc: 0.0,
@@ -685,6 +691,7 @@ impl Voice {
             sustain: 1.0,
             decay_left: 0,
             amp_bp: None,
+            bp_ctrl: (0.0, 0.0, 0, false),
             filter: None,
             vib_phase: 0.0,
             vib_inc: 0.0,
@@ -1411,7 +1418,24 @@ impl Voice {
         };
         // A breakpoint envelope replaces the linear release fade.
         let (env, bp) = match &mut self.amp_bp {
-            Some((bp, player, dt)) => (1.0, player.tick(bp, *dt)),
+            Some((bp, player, dt)) => {
+                // Control rate: the envelope one period ahead, interpolated.
+                let (a, b, i, primed) = &mut self.bp_ctrl;
+                let k = ENV_CONTROL_FRAMES as f32;
+                if !*primed {
+                    *a = player.tick(bp, *dt * k);
+                    *b = player.tick(bp, *dt * k);
+                    *i = 0;
+                    *primed = true;
+                } else if *i >= ENV_CONTROL_FRAMES {
+                    *a = *b;
+                    *b = player.tick(bp, *dt * k);
+                    *i = 0;
+                }
+                let v = *a + (*b - *a) * (*i as f32 / k);
+                *i += 1;
+                (1.0, v)
+            }
             None => (env, 1.0),
         };
         let amp = self.gain * env * flex * bloom * self.ds_level * bp;
@@ -1576,6 +1600,10 @@ fn flush_denormal(x: f32) -> f32 {
 /// auto-retire (see [`Voice::update_decay_retire`]) keeps the *active* count
 /// far below it in practice by freeing faded notes.
 const MAX_VOICES: usize = 160;
+
+/// Frames per control-rate step of a voice's breakpoint envelope (a third of
+/// a millisecond at 48 kHz — well under anything an envelope does audibly).
+const ENV_CONTROL_FRAMES: u32 = 16;
 const STEAL_FADE_FRAMES: usize = 128;
 /// Output magnitude below which a voice is considered inaudible (~ -84 dBFS).
 /// Deliberately deep so a still-audible (even very faint) held note is never
@@ -2098,6 +2126,86 @@ impl VoicePool {
     #[must_use]
     pub fn stolen_count(&self) -> usize {
         self.stolen
+    }
+
+    /// Make room for a new strike of `incoming` under a NOTE limit (a
+    /// patch's voice count counts notes — every mic, Harmonia copy and
+    /// release of a note is one of them): while `max_notes` or more other
+    /// notes are sounding, fade out every voice of the stalest one — a note
+    /// already released first, else the oldest held. Returns notes stolen.
+    pub fn make_room_for_note(&mut self, incoming: u8, max_notes: usize) -> usize {
+        const STEAL_NOTE_FADE: usize = 240; // 5 ms: fast, not a click
+        let mut stolen = 0;
+        loop {
+            // Sounding notes, in first-voice order, with whether all their
+            // voices are already releasing.
+            let mut notes: Vec<(u8, bool)> = Vec::new();
+            for v in &self.voices {
+                if v.state == VoiceState::Done || v.note == incoming {
+                    continue;
+                }
+                // A voice already fading from a steal no longer counts.
+                if matches!(v.state, VoiceState::Releasing { frames_remaining } if frames_remaining <= STEAL_NOTE_FADE) {
+                    continue;
+                }
+                let released = matches!(v.state, VoiceState::Releasing { .. }) || v.kind == VoiceKind::Release;
+                match notes.iter_mut().find(|(n, _)| *n == v.note) {
+                    Some(e) => e.1 &= released,
+                    None => notes.push((v.note, released)),
+                }
+            }
+            if notes.len() < max_notes.max(1) {
+                return stolen;
+            }
+            let victim = notes
+                .iter()
+                .find(|(_, released)| *released)
+                .or_else(|| notes.first())
+                .map(|(n, _)| *n);
+            let Some(victim) = victim else {
+                return stolen;
+            };
+            for v in self.voices.iter_mut().filter(|v| v.note == victim && v.state != VoiceState::Done) {
+                v.ramp_gain(0.0, STEAL_NOTE_FADE);
+                v.state = VoiceState::Releasing { frames_remaining: STEAL_NOTE_FADE };
+            }
+            self.stolen = self.stolen.saturating_add(1);
+            stolen += 1;
+        }
+    }
+
+    /// Shed load under CPU pressure (the keys rig's overload guard).
+    /// `level` 1: fade out every release tail and every voice already
+    /// releasing — the least audible sound in the pool. `level` 2: also fade
+    /// the oldest quarter of the held voices. Fades are quick but not clicks.
+    pub fn shed(&mut self, level: u8) {
+        const SHED_FADE: usize = 1440; // 30 ms at 48 kHz
+        let mut held: Vec<usize> = Vec::new();
+        for (i, v) in self.voices.iter_mut().enumerate() {
+            match v.state {
+                VoiceState::Done => {}
+                VoiceState::Releasing { frames_remaining } => {
+                    if frames_remaining > SHED_FADE {
+                        v.ramp_gain(0.0, SHED_FADE);
+                        v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                    }
+                }
+                _ if v.kind == VoiceKind::Release => {
+                    v.ramp_gain(0.0, SHED_FADE);
+                    v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                }
+                _ => held.push(i),
+            }
+        }
+        if level >= 2 && held.len() >= 4 {
+            // Spawn order is pool order: the first entries are the oldest.
+            for &i in held.iter().take(held.len() / 4) {
+                let v = &mut self.voices[i];
+                v.ramp_gain(0.0, SHED_FADE);
+                v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+            }
+        }
+        self.stolen = self.stolen.saturating_add(1);
     }
 
     /// Mutable iterator over all active voices (used by engine for CC1 updates).

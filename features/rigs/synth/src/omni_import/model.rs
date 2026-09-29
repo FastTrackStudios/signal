@@ -56,6 +56,11 @@ pub struct OmniLayer {
     /// default): the level of the soundsource's key-up release samples, 0 =
     /// none. See [`OmniLayer::release_db`].
     pub release_vol: Option<f32>,
+    /// The part's polyphony in notes (`SYNTHENG poly`, and `legm` = mono):
+    /// measured against the plugin, `1 + ⌊poly × 50⌋` notes (0.01 → 1,
+    /// 0.02 → 2, 0.04 → 3; the gig's Double Felt Grand, 0.38, holds 20), and
+    /// 1 in legato/mono mode. `None` when the patch says nothing.
+    pub max_notes: Option<usize>,
     /// `OSC pan`, 0..1 (0.5 centre): a balance law (measured: 0.25 puts
     /// the right side 6 dB down, 0 silences it) — the Amp's own law.
     pub pan: f32,
@@ -1380,5 +1385,17 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
         }
     }
 
+    // The part's voice count, onto every layer (each layer's source
+    // enforces it for the notes it plays).
+    let max_notes = if engine.num("legm").unwrap_or(0.0) >= 0.5 {
+        Some(1)
+    } else {
+        engine
+            .num("poly")
+            .map(|p| 1 + (p.clamp(0.0, 1.0) * 50.0).floor() as usize)
+    };
+    for layer in &mut patch.layers {
+        layer.max_notes = max_notes;
+    }
     Ok(patch)
 }

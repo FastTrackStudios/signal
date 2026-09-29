@@ -1573,6 +1573,10 @@ pub(crate) fn build_sample_source(
     {
         engine.set_piano_snapshot(s);
     }
+    // A patch's polyphony in notes: a new note past it steals the stalest.
+    if let Some(n) = block.param_f32("max_notes") {
+        engine.set_max_notes(Some(n.round().max(1.0) as usize));
+    }
     // One mic of a multi-mic source (the others silent).
     if let Some(m) = block.param_str("solo_mic").filter(|m| !m.is_empty()) {
         engine.set_solo_mic(Some(m));

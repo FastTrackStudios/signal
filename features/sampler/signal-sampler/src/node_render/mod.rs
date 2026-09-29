@@ -1124,6 +1124,28 @@ impl RenderNode {
     /// their own voice vecs and are not counted). A cheap read for
     /// load/diagnostic panels; `&mut` only because the leaf downcast goes
     /// through `as_any_mut`.
+    /// Shed voices in every source under this node (the rig's CPU guard):
+    /// see [`crate::soundsource::Soundsource::shed_voices`].
+    pub fn shed_voices(&mut self, level: u8) {
+        match self {
+            Self::Leaf {
+                inst: Some(LeafBackend::Source(src)),
+                ..
+            } => src.shed_voices(level),
+            Self::Leaf { .. } => {}
+            Self::Serial(v) | Self::Parallel(v) => {
+                for n in v {
+                    n.shed_voices(level);
+                }
+            }
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.shed_voices(level),
+        }
+    }
+
     pub fn active_voices(&mut self) -> usize {
         match self {
             Self::Leaf {

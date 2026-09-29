@@ -619,6 +619,12 @@ pub(crate) enum ZoneTrigger {
 
 // ── SampleEngine ──────────────────────────────────────────────────────────────────
 
+/// Notes a sampler engine sounds at most unless a patch says otherwise: a
+/// safety bound for live use (smashing the keyboard with the sustain pedal
+/// down must not pile up unbounded voices). Kontakt/Keyscape pianos run a
+/// few dozen notes; this leaves room for a pedalled wash.
+pub const DEFAULT_MAX_NOTES: usize = 48;
+
 /// Real-time sample playback engine for one sample library section.
 pub struct SampleEngine {
     patch: PlayerPatch,
@@ -781,6 +787,9 @@ pub struct SampleEngine {
     /// Scale each key-up release by how far the note's body has decayed
     /// (an Omnisphere soundsource's release follows the note it ends).
     release_follows_body: bool,
+    /// Polyphony in NOTES (a patch's voice count); `None` = the pool's own
+    /// voice cap only.
+    max_notes: Option<usize>,
     /// Mechanical pedal-noise level (linear; default -20 dB). Absolute, scaled
     /// by recent playing velocity.
     mech_noise_gain: f32,
@@ -1190,6 +1199,7 @@ impl SampleEngine {
             release_gain: db_to_gain(-10.0),
             release_level: 1.0,
             release_follows_body: false,
+            max_notes: Some(DEFAULT_MAX_NOTES),
             mech_noise_gain: db_to_gain(-20.0),
             pedal_noise_gain: db_to_gain(-20.0),
             no_pedal_articulation: None,
@@ -1787,6 +1797,16 @@ impl SampleEngine {
                 );
             std::array::from_fn(|k| law.tune_cents(k as u8))
         });
+    }
+
+    /// Polyphony in notes (≥ 1); a new note past it steals the stalest.
+    pub fn set_max_notes(&mut self, n: Option<usize>) {
+        self.max_notes = n.map(|n| n.max(1));
+    }
+
+    /// Shed voices under CPU pressure — see [`VoicePool::shed`].
+    pub fn shed_voices(&mut self, level: u8) {
+        self.voices.shed(level);
     }
 
     /// Play the NI piano with a saved snapshot of its controls (a gig's —

@@ -436,6 +436,10 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     .with_param(format!("harm{n}_pan"), format!("{pan:.4}"))
                     .with_param(format!("harm{n}_shape"), format!("{shape:.4}"));
             }
+            let wt = match layer.max_notes {
+                Some(n) => wt.with_param("max_notes", n.to_string()),
+                None => wt,
+            };
             osc.add(wt)
         } else if let Some(spec) = layer
             .enabled
@@ -504,6 +508,9 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             // Experiment switch: play one mic of a multi-mic soundsource.
             if let Ok(m) = std::env::var("OMNI_SOLO_MIC") {
                 sb = sb.with_param("solo_mic", m);
+            }
+            if let Some(n) = layer.max_notes {
+                sb = sb.with_param("max_notes", n.to_string());
             }
             // The soundsource's key-up releases at the layer's Release Volume.
             sb = sb.with_param(

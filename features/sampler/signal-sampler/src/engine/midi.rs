@@ -99,6 +99,12 @@ impl SampleEngine {
                 velocity
             }
         };
+        // Polyphony: make room before the new note's voices spawn.
+        if let Some(max) = self.max_notes {
+            if velocity > 0 && !self.keyswitch_notes.contains_key(&note) {
+                self.voices.make_room_for_note(note, max);
+            }
+        }
 
         // A pending CC58 velocity-group resolves to its concrete articulation
         // from THIS note's velocity before any routing decision — so the live

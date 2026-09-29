@@ -351,6 +351,8 @@ impl NoiseVoice {
 }
 
 struct Voice {
+    /// Key released: the voice is in its release tail (sheddable first).
+    released: bool,
     noise: Option<NoiseVoice>,
     note: u8,
     amp: f32,
@@ -408,9 +410,20 @@ pub struct NativeWavetable {
     /// The classic Noise oscillator in place of the waves (see [`NoiseCfg`]).
     noise: Option<NoiseCfg>,
     voices: Vec<Voice>,
+    /// Polyphony: sounding notes at most (a patch's voice count); a new note
+    /// past it steals a released voice, else the oldest.
+    max_notes: usize,
 }
 
+/// Polyphony when a patch names none.
+const DEFAULT_MAX_NOTES: usize = 32;
+
 impl NativeWavetable {
+    /// Set the polyphony (sounding notes at most, ≥ 1).
+    pub fn set_max_notes(&mut self, n: usize) {
+        self.max_notes = n.max(1);
+    }
+
     #[must_use]
     pub fn new(sample_rate: u32) -> Self {
         Self {
@@ -434,6 +447,7 @@ impl NativeWavetable {
             sync_knob: 0.0,
             noise: None,
             voices: Vec::new(),
+            max_notes: DEFAULT_MAX_NOTES,
         }
     }
 
@@ -633,6 +647,11 @@ impl NativeWavetable {
             v.glide_semis = glide_semis;
             v.glide_pos = 0.0;
         } else {
+            // At the polyphony limit: steal a released voice, else the oldest.
+            if self.voices.len() >= self.max_notes {
+                let i = self.voices.iter().position(|v| v.released).unwrap_or(0);
+                self.voices.remove(i);
+            }
             let mut env = match &self.amp_points {
                 Some(bp) => VoiceEnv::Points {
                     bp: bp.clone(),
@@ -647,6 +666,7 @@ impl NativeWavetable {
                 .as_ref()
                 .map(|c| NoiseVoice::new(self.sample_rate, c, 0x9E37_79B9 ^ (u32::from(note) << 16) ^ self.voices.len() as u32));
             self.voices.push(Voice {
+                released: false,
                 noise,
                 note,
                 amp,
@@ -666,6 +686,7 @@ impl NativeWavetable {
     fn note_off(&mut self, note: u8) {
         for v in self.voices.iter_mut().filter(|v| v.note == note) {
             v.env.note_off();
+            v.released = true;
         }
     }
 
@@ -694,6 +715,14 @@ fn glide_remaining(x: f32) -> f32 {
 impl Soundsource for NativeWavetable {
     fn kind(&self) -> SoundsourceKind {
         SoundsourceKind::Oscillator
+    }
+
+    fn shed_voices(&mut self, level: u8) {
+        self.voices.retain(|v| !v.released);
+        if level >= 2 && self.voices.len() >= 4 {
+            let n = self.voices.len() / 4;
+            self.voices.drain(..n);
+        }
     }
 
     fn descriptor(&self) -> PluginDescriptor {

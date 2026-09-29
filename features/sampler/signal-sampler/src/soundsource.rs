@@ -52,6 +52,11 @@ pub trait Soundsource: Send {
     /// Release a voice.
     fn note_off(&mut self, note: u8);
 
+    /// Shed voices under CPU pressure (the rig's overload guard): `level` 1
+    /// drops release tails, `level` 2 also the oldest held notes. Sources
+    /// without a voice pool ignore it.
+    fn shed_voices(&mut self, _level: u8) {}
+
     /// Generate one block into `out_l`/`out_r`. `events` carries parameter
     /// writes (from the mod engine), pitch bend, and note expressions.
     ///
