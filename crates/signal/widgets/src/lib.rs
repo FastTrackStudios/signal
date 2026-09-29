@@ -25,6 +25,6 @@ pub use popup::{PopupHost, PopupLayer};
 
 pub use preset_tree::PresetTree;
 pub use switches::{
-    HoldButton, LearnBadge, MenuRow, MidiLearnRows, SwitchMenuFrame, SwitchNo, SwitchTile,
-    SwitchesMode, SwitchesToggle,
+    HoldButton, InlineMenu, LearnBadge, MenuRow, MidiLearnRows, SwitchMenuFrame, SwitchNo,
+    SwitchTile, SwitchesMode, SwitchesToggle, close_menu, open_menu,
 };

@@ -7,12 +7,17 @@
 //! A keys stack is a *scene*: pressing "Verse" rides every layer to that
 //! stack's levels (and loads any patch the scene pins). Level-only recalls
 //! are instant — the mixer's live cells, no audio gap.
+//!
+//! The right-click menus open **upward**, in the app's popup layer: the
+//! strip is the bottom of the window.
 
 use dioxus::prelude::*;
-use signal_keys_proto::KeysPerform;
 use signal_keys_proto::keys::KeysRigClient;
+use signal_keys_proto::{KeysPerform, SwitchLearn};
+use signal_widgets::PopupHost;
 use signal_widgets::switches::{
     MenuRow, MidiLearnRows, SwitchMenuFrame, SwitchTile, SwitchesMode, SwitchesToggle,
+    close_menu, open_menu,
 };
 
 /// Per-stack color — the worship set's shape, left to right: intimate →
@@ -58,29 +63,12 @@ where
 #[component]
 pub fn PerformStrip(perform: KeysPerform) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
+    let host = PopupHost::try_use();
     let switches = use_signal(SwitchesMode::default);
-    // Which switch's menu is open (by target), and a rename in progress.
-    let mut menu = use_signal(|| None::<String>);
-    let mut renaming = use_signal(|| None::<(u32, String)>);
     let mode = switches();
     let compact = mode == SwitchesMode::Compact;
     let learn = perform.learn.clone();
     let tile_height = if compact { "48px" } else { "88px" };
-
-    let learn_rows = |target: String| {
-        let (r1, r2, r3) = (rig.clone(), rig.clone(), rig.clone());
-        rsx! {
-            MidiLearnRows {
-                target: target.clone(),
-                binding: learn.binding(&target).map(str::to_string),
-                learning: learn.is_learning(&target),
-                on_learn: move |t: String| with_rig(&r1, move |r| async move { let _ = r.midi_learn(t).await; }),
-                on_cancel: move |()| with_rig(&r2, |r| async move { let _ = r.midi_learn_cancel().await; }),
-                on_unlearn: move |t: String| with_rig(&r3, move |r| async move { let _ = r.midi_unlearn(t).await; }),
-                on_close: move |()| menu.set(None),
-            }
-        }
-    };
 
     rsx! {
         div {
@@ -146,11 +134,7 @@ pub fn PerformStrip(perform: KeysPerform) -> Element {
                                 Callback::new(move |(): ()| with_rig(&rig, move |r| async move { let _ = r.press_stack(idx).await; }))
                             };
                             let footer = if stack.tempo_bpm > 0 { format!("{} BPM", stack.tempo_bpm) } else { String::new() };
-                            let open = menu().as_deref() == Some(target.as_str());
-                            let rename_now = renaming().filter(|(r, _)| *r == idx).map(|(_, n)| n);
-                            let (rc, rr, rd, ra) = (rig.clone(), rig.clone(), rig.clone(), rig.clone());
-                            let rr2 = rr.clone();
-                            let t_menu = target.clone();
+                            let menu_learn = learn.clone();
                             rsx! {
                                 SwitchTile {
                                     key: "{i}-{stack.name}",
@@ -164,90 +148,12 @@ pub fn PerformStrip(perform: KeysPerform) -> Element {
                                     binding: learn.binding(&target).map(str::to_string),
                                     learning: learn.is_learning(&target),
                                     on_tap: press,
-                                    on_menu: move |()| menu.set(Some(t_menu.clone())),
-                                    on_leave: move |()| {
-                                        // A rename in progress keeps its menu.
-                                        if renaming().is_none() {
-                                            menu.set(None);
-                                        }
-                                    },
-                                    menu_open: open,
-                                    menu: rsx! {
-                                        SwitchMenuFrame { title: format!("Switch {} · {name}", i + 1),
-                                            if let Some(text) = rename_now {
-                                                div { style: "display: flex; gap: 4px; padding: 4px 6px;",
-                                                    input {
-                                                        style: "flex: 1; min-width: 0; padding: 4px 6px; border-radius: 6px; \
-                                                                border: 1px solid #3f3f46; background: #111114; color: #e4e4e7; font-size: 11px;",
-                                                        value: "{text}",
-                                                        autofocus: true,
-                                                        oninput: move |e: FormEvent| renaming.set(Some((idx, e.value()))),
-                                                        onkeydown: {
-                                                            let text = text.clone();
-                                                            move |e: KeyboardEvent| {
-                                                                if e.key() == Key::Enter {
-                                                                    let t = text.clone();
-                                                                    with_rig(&rr, move |r| async move { let _ = r.rename_stack(idx, t).await; });
-                                                                    renaming.set(None);
-                                                                    menu.set(None);
-                                                                } else if e.key() == Key::Escape {
-                                                                    renaming.set(None);
-                                                                }
-                                                            }
-                                                        },
-                                                    }
-                                                    button {
-                                                        style: "appearance: none; border: none; border-radius: 6px; padding: 4px 8px; \
-                                                                font-size: 10px; font-weight: 700; background: #1d4ed8; color: #fff;",
-                                                        onclick: {
-                                                            let text = text.clone();
-                                                            move |_| {
-                                                                let t = text.clone();
-                                                                with_rig(&rr2, move |r| async move { let _ = r.rename_stack(idx, t).await; });
-                                                                renaming.set(None);
-                                                                menu.set(None);
-                                                            }
-                                                        },
-                                                        "Save"
-                                                    }
-                                                }
-                                            } else {
-                                                MenuRow {
-                                                    label: "Save the mix into this stack",
-                                                    mark: "●",
-                                                    onclick: move |()| {
-                                                        with_rig(&rc, move |r| async move { let _ = r.capture_stack(idx).await; });
-                                                        menu.set(None);
-                                                    },
-                                                }
-                                                MenuRow {
-                                                    label: "Rename…",
-                                                    mark: "✎",
-                                                    mark_color: "#a1a1aa".to_string(),
-                                                    onclick: {
-                                                        let name = name.clone();
-                                                        move |()| renaming.set(Some((idx, name.clone())))
-                                                    },
-                                                }
-                                                MenuRow {
-                                                    label: "New stack from the mix",
-                                                    mark: "+",
-                                                    mark_color: "#38bdf8".to_string(),
-                                                    onclick: move |()| {
-                                                        with_rig(&ra, |r| async move { let _ = r.add_stack(String::new()).await; });
-                                                        menu.set(None);
-                                                    },
-                                                }
-                                                MenuRow {
-                                                    label: "Delete stack",
-                                                    danger: true,
-                                                    onclick: move |()| {
-                                                        with_rig(&rd, move |r| async move { let _ = r.delete_stack(idx).await; });
-                                                        menu.set(None);
-                                                    },
-                                                }
-                                                {learn_rows(target.clone())}
-                                            }
+                                    on_menu: move |e: MouseEvent| {
+                                        if let Some(h) = host {
+                                            let (name, learn) = (name.clone(), menu_learn.clone());
+                                            open_menu(h, &e, move || rsx! {
+                                                StackMenu { index: idx, name: name.clone(), learn: learn.clone() }
+                                            });
                                         }
                                     },
                                 }
@@ -262,6 +168,7 @@ pub fn PerformStrip(perform: KeysPerform) -> Element {
                             Callback::new(move |(): ()| with_rig(&rig, |r| async move { let _ = r.tap_tempo().await; }))
                         };
                         let footer = if perform.tempo_bpm > 0 { format!("{} BPM", perform.tempo_bpm) } else { String::new() };
+                        let menu_learn = learn.clone();
                         rsx! {
                             SwitchTile {
                                 key: "tap-{perform.stacks.len()}",
@@ -275,12 +182,10 @@ pub fn PerformStrip(perform: KeysPerform) -> Element {
                                 binding: learn.binding("tap").map(str::to_string),
                                 learning: learn.is_learning("tap"),
                                 on_tap: tap,
-                                on_menu: move |()| menu.set(Some("tap".into())),
-                                on_leave: move |()| menu.set(None),
-                                menu_open: menu().as_deref() == Some("tap"),
-                                menu: rsx! {
-                                    SwitchMenuFrame { title: "Tap tempo".to_string(),
-                                        {learn_rows("tap".to_string())}
+                                on_menu: move |e: MouseEvent| {
+                                    if let Some(h) = host {
+                                        let learn = menu_learn.clone();
+                                        open_menu(h, &e, move || rsx! { TapMenu { learn: learn.clone() } });
                                     }
                                 },
                             }
@@ -299,6 +204,118 @@ pub fn PerformStrip(perform: KeysPerform) -> Element {
                     }
                 }
             }
+        }
+    }
+}
+
+/// A stack switch's menu: set the stack up, and learn a pedal onto it.
+#[component]
+fn StackMenu(index: u32, name: String, learn: SwitchLearn) -> Element {
+    let rig = use_hook(try_consume_context::<KeysRigClient>);
+    let host = PopupHost::try_use();
+    // The new name while renaming.
+    let mut renaming = use_signal(|| None::<String>);
+    let rename = {
+        let rig = rig.clone();
+        move |text: String| {
+            with_rig(&rig, move |r| async move { let _ = r.rename_stack(index, text).await; });
+            close_menu(host);
+        }
+    };
+    let rename2 = rename.clone();
+    let (rc, ra, rd) = (rig.clone(), rig.clone(), rig.clone());
+    rsx! {
+        SwitchMenuFrame { title: format!("Switch {} · {name}", index + 1),
+            if let Some(text) = renaming() {
+                div { style: "display: flex; gap: 4px; padding: 4px 6px;",
+                    input {
+                        style: "flex: 1; min-width: 0; padding: 4px 6px; border-radius: 6px; \
+                                border: 1px solid #3f3f46; background: #111114; color: #e4e4e7; font-size: 11px;",
+                        value: "{text}",
+                        autofocus: true,
+                        oninput: move |e: FormEvent| renaming.set(Some(e.value())),
+                        onkeydown: {
+                            let text = text.clone();
+                            move |e: KeyboardEvent| {
+                                if e.key() == Key::Enter {
+                                    rename(text.clone());
+                                }
+                            }
+                        },
+                    }
+                    button {
+                        style: "appearance: none; border: none; border-radius: 6px; padding: 4px 8px; \
+                                font-size: 10px; font-weight: 700; background: #1d4ed8; color: #fff;",
+                        onclick: move |_| rename2(text.clone()),
+                        "Save"
+                    }
+                }
+            } else {
+                MenuRow {
+                    label: "Save the mix into this stack",
+                    mark: "●",
+                    onclick: move |()| {
+                        with_rig(&rc, move |r| async move { let _ = r.capture_stack(index).await; });
+                        close_menu(host);
+                    },
+                }
+                MenuRow {
+                    label: "Rename…",
+                    mark: "✎",
+                    mark_color: "#a1a1aa".to_string(),
+                    onclick: {
+                        let name = name.clone();
+                        move |()| renaming.set(Some(name.clone()))
+                    },
+                }
+                MenuRow {
+                    label: "New stack from the mix",
+                    mark: "+",
+                    mark_color: "#38bdf8".to_string(),
+                    onclick: move |()| {
+                        with_rig(&ra, |r| async move { let _ = r.add_stack(String::new()).await; });
+                        close_menu(host);
+                    },
+                }
+                MenuRow {
+                    label: "Delete stack",
+                    danger: true,
+                    onclick: move |()| {
+                        with_rig(&rd, move |r| async move { let _ = r.delete_stack(index).await; });
+                        close_menu(host);
+                    },
+                }
+                LearnRows { target: format!("stack:{index}"), learn }
+            }
+        }
+    }
+}
+
+/// The Tap switch's menu: learn a pedal onto it.
+#[component]
+fn TapMenu(learn: SwitchLearn) -> Element {
+    rsx! {
+        SwitchMenuFrame { title: "Tap tempo".to_string(),
+            LearnRows { target: "tap".to_string(), learn }
+        }
+    }
+}
+
+/// A switch menu's MIDI learn rows, on the keys client.
+#[component]
+fn LearnRows(target: String, learn: SwitchLearn) -> Element {
+    let rig = use_hook(try_consume_context::<KeysRigClient>);
+    let host = PopupHost::try_use();
+    let (r1, r2, r3) = (rig.clone(), rig.clone(), rig);
+    rsx! {
+        MidiLearnRows {
+            target: target.clone(),
+            binding: learn.binding(&target).map(str::to_string),
+            learning: learn.is_learning(&target),
+            on_learn: move |t: String| with_rig(&r1, move |r| async move { let _ = r.midi_learn(t).await; }),
+            on_cancel: move |()| with_rig(&r2, |r| async move { let _ = r.midi_learn_cancel().await; }),
+            on_unlearn: move |t: String| with_rig(&r3, move |r| async move { let _ = r.midi_unlearn(t).await; }),
+            on_close: move |()| close_menu(host),
         }
     }
 }

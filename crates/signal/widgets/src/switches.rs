@@ -14,6 +14,8 @@ use std::time::Duration;
 use dioxus::dioxus_core::Task;
 use dioxus::prelude::*;
 
+use crate::PopupHost;
+
 /// A press held this long is a hold, not a tap.
 pub const HOLD_MS: u64 = 500;
 
@@ -217,19 +219,51 @@ pub const MENU_ROW: &str = "display: flex; align-items: center; gap: 8px; paddin
 pub const MENU_HEAD: &str = "padding: 6px 9px 3px; font-size: 9px; letter-spacing: 0.12em; \
                              text-transform: uppercase; color: #71717a;";
 
-/// A switch's right-click menu: a panel over the tile's top-right corner,
-/// headed `title`. The tile closes it when the pointer leaves.
+/// A switch menu's panel, headed `title`. It is placed by whoever shows
+/// it: [`open_menu`] (the app's popup layer, above everything) or
+/// [`InlineMenu`].
 #[component]
 pub fn SwitchMenuFrame(title: String, children: Element) -> Element {
     rsx! {
         div {
-            style: "position: absolute; top: 8px; right: 8px; z-index: 300; max-height: 70vh; overflow-y: auto; \
-                    min-width: 220px; padding: 4px; display: flex; flex-direction: column; gap: 1px; \
-                    border: 1px solid #2b2b31; border-radius: 10px; \
-                    background: #0d0d10; box-shadow: 0 12px 32px #000c;",
+            style: "{MENU_PANEL}",
             // A press inside the menu is the menu's, not the tile's.
             onpointerdown: move |e: PointerEvent| e.stop_propagation(),
             div { style: "{MENU_HEAD}", "{title}" }
+            {children}
+        }
+    }
+}
+
+/// A switch menu's panel style (see [`SwitchMenuFrame`]).
+pub const MENU_PANEL: &str = "min-width: 220px; padding: 4px; display: flex; flex-direction: column; \
+                              gap: 1px; border: 1px solid #2b2b31; border-radius: 10px; \
+                              background: #0d0d10; box-shadow: 0 12px 32px #000c;";
+
+/// Open a switch's menu **above** the pointer, in the app's popup layer —
+/// over every panel, never clipped by the dock the switches sit in. The
+/// switches are at the bottom of the window, so a menu that dropped down
+/// would have nowhere to go.
+pub fn open_menu(host: PopupHost, e: &MouseEvent, render: impl Fn() -> Element + 'static) {
+    let p = e.client_coordinates();
+    host.open_up(p.x - 110.0, p.y - 6.0, 230.0, render, || {});
+}
+
+/// Close the open switch menu. After the click that picked from it is done
+/// (see [`PopupHost`]'s layer: removing the node under a press crashed it).
+pub fn close_menu(host: Option<PopupHost>) {
+    if let Some(h) = host {
+        spawn(async move { h.close() });
+    }
+}
+
+/// A menu drawn in place, over its tile, growing upward from the tile's
+/// bottom — the fallback where the app provides no popup layer.
+#[component]
+pub fn InlineMenu(children: Element) -> Element {
+    rsx! {
+        div {
+            style: "position: absolute; bottom: 8px; right: 8px; z-index: 300; max-height: 70vh; overflow-y: auto;",
             {children}
         }
     }
@@ -315,8 +349,7 @@ pub fn MidiLearnRows(
 }
 
 /// A plain switch tile — name, a line under it, a footer, lit in its
-/// colours when active — with its learn badge and a right-click menu
-/// (`menu`, drawn while `menu_open`). For switches that recall a scene; a
+/// colours when active — with its learn badge and a right-click menu. For switches that recall a scene; a
 /// rig with richer tiles builds its own from the pieces above.
 #[component]
 pub fn SwitchTile(
@@ -333,13 +366,8 @@ pub fn SwitchTile(
     #[props(default)] learning: bool,
     on_tap: Callback<()>,
     #[props(default)] on_hold: Option<Callback<()>>,
-    /// Right-click: open the menu.
-    on_menu: EventHandler<()>,
-    /// Pointer left the tile: close the menu.
-    on_leave: EventHandler<()>,
-    #[props(default)] menu_open: bool,
-    /// The menu, drawn while `menu_open`.
-    menu: Element,
+    /// Right-click: open the tile's menu (see [`open_menu`]).
+    on_menu: EventHandler<MouseEvent>,
 ) -> Element {
     let (bg, fg) = colors;
     let (bg, fg, ring) = if active {
@@ -362,9 +390,8 @@ pub fn SwitchTile(
             style: "position: relative; flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column;",
             oncontextmenu: move |e: MouseEvent| {
                 e.prevent_default();
-                on_menu.call(());
+                on_menu.call(e);
             },
-            onmouseleave: move |_| on_leave.call(()),
             HoldButton {
                 style: format!(
                     "position: relative; height: 100%; width: 100%; display: flex; align-items: center; \
@@ -386,9 +413,6 @@ pub fn SwitchTile(
                 if !footer.is_empty() {
                     span { style: "font-size: 9px; opacity: 0.65; font-variant-numeric: tabular-nums;", "{footer}" }
                 }
-            }
-            if menu_open {
-                {menu}
             }
         }
     }

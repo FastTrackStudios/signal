@@ -64,6 +64,9 @@ pub use signal_keys_proto as proto;
 #[component]
 pub fn KeysRigRemote() -> Element {
     let (state, _rig) = use_keys_state();
+    // Menus drawn over the whole rig (the switches' right-click menus open
+    // upward from the bottom of the window) — see `PopupLayer` below.
+    signal_widgets::PopupHost::provide();
     // Control-view depth: mixer → engine → layer. Shared through context so
     // the cards can open themselves.
     let zoom = use_context_provider(|| Signal::new(Zoom::Mixer));
@@ -121,7 +124,7 @@ pub fn KeysRigRemote() -> Element {
 
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; flex: 1; min-height: 0; \
+            style: "position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; \
                     color: #e4e4e7; font-family: sans-serif; background: #08080a;",
             div { style: "display: flex; flex: 1; min-height: 0;",
                 // The browser — one sidebar, pointed at the selection.
@@ -156,6 +159,8 @@ pub fn KeysRigRemote() -> Element {
             }
             // ── perform strip (every zoom) ──
             PerformStrip { perform: perform.clone() }
+            // Last, so the popups paint over everything above.
+            signal_widgets::PopupLayer {}
         }
     }
 }
