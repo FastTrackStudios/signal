@@ -831,10 +831,14 @@ pub fn worship_profile() -> KeysProfile {
                 // importer resolves it out of the gig / the Spectrasonics user
                 // library. It is the one User patch in the rig, so it exists
                 // nowhere else — back it up.
-                // The gig's bass part plays an octave down (Omnisphere part
-                // Octave −1), so the same hands land in the bass register.
+                // The gig's bass is a split on the main keyboard: the global
+                // rackspace's "Mono Bass" MIDI In (same KeyLab 88 as the keys)
+                // passes notes 0–41 only (MaxNote 0.3228 × 127 = 41, F2), so
+                // the left hand below F#2 plays the bass under the pianos.
+                // Its Omnisphere part plays an octave down (part Octave −1).
                 layers: vec![LayerDef {
                     transpose: -12.0,
+                    key_hi: 41,
                     ..LayerDef::new("Bass", "Worship PHAT Bass")
                 }],
             },
@@ -1181,7 +1185,27 @@ mod tests {
     }
 
     #[test]
-    fn the_worship_piano_lane_plays_the_gig_snapshot() {
+    fn the_worship_bass_is_a_left_hand_split() {
+        let p = worship_profile();
+        let bass = p
+            .engines
+            .iter()
+            .flat_map(|e| &e.layers)
+            .find(|l| l.name == "Bass")
+            .expect("Bass lane");
+        assert_eq!((bass.key_lo, bass.key_hi), (0, 41));
+        let tree = p.build_tree(|name| Some(format!("/patches/{name}.prt_omn")));
+        // The layer, not its like-named engine.
+        let lane = tree
+            .of_role(signal_sampler::rig_node::Role::Layer)
+            .into_iter()
+            .find(|c| c.name == "Bass")
+            .expect("Bass lane in the tree");
+        assert_eq!((lane.zone.key_lo, lane.zone.key_hi), (0, 41));
+    }
+
+    #[test]
+        fn the_worship_piano_lane_plays_the_gig_snapshot() {
         let p = worship_profile();
         let tree = p.build_tree(|name| Some(format!("/packs/{name}.signalpack")));
         let lane = tree.find("Keys 1").expect("Keys 1 lane");
@@ -1379,8 +1403,11 @@ mod order_tests {
         let (resolved, _) = resolve(&lifted.library, &lifted.root, None).expect("resolves");
         let tree = signal_sampler::from_node::to_container(&resolved);
 
+        // Look lanes up as LAYERS: a lane may share its engine's name ("Bass"
+        // in "Bass"), and a plain `find` returns the engine.
+        let layers = tree.of_role(signal_sampler::rig_node::Role::Layer);
         for lane in split_lanes {
-            let found = tree.find(&lane.name).expect(&lane.name);
+            let found = layers.iter().find(|c| c.name == lane.name).expect(&lane.name);
             assert_eq!(found.zone.key_lo, lane.key_lo, "{} key_lo", lane.name);
             assert_eq!(found.zone.key_hi, lane.key_hi, "{} key_hi", lane.name);
         }
