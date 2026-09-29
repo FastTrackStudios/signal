@@ -14962,7 +14962,7 @@ dependencies = [
 [[package]]
 name = "surface-proto"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?tag=v0.1.0#06cdaebcc1a677b76d468c46a23698337ea23139"
+source = "git+https://github.com/FastTrackStudios/frame?tag=v0.1.1#0736bae37372a288548f9ed25b8ee165c65c061c"
 dependencies = [
  "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
  "facet",

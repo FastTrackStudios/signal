@@ -406,7 +406,7 @@ inferno-net = { git = "https://codeberg.org/FastTrackStudios/inferno-control", r
 architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }
 # frame (github.com/FastTrackStudios/frame): the control-surface contract.
 # frame pins this same architect/facet/vox stack; bump both together.
-surface-proto = { git = "https://github.com/FastTrackStudios/frame", tag = "v0.1.0" }
+surface-proto = { git = "https://github.com/FastTrackStudios/frame", tag = "v0.1.1" }
 architect-derive = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }
 architect-rpc-derive = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }
 architect-action-derive = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }

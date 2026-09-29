@@ -83,18 +83,21 @@ pub fn guitar_catalog(chain: &[LiveBlock], perf: &PerformanceModel, patches: &[P
         for p in &b.params {
             let range = param_range(b, &p.name, p.min, p.max, ranges);
             let mut info = ParamInfo::new(format!("{}/{}", b.id, p.name), title(&p.name), range).in_group(b.id.clone());
+            // The block's primary param is what its footprint on a stage
+            // surface should be (the rig's own chain strip shows the same).
+            info.featured = b.param_name.as_deref() == Some(p.name.as_str());
             // The rig doesn't publish defaults on the wire; the value the
             // patch loaded with is the reset target.
             info.default = info.range.to_normalized(f64::from(p.value));
             params.push(info);
         }
-        params.push(ParamInfo::new(format!("{}/on", b.id), format!("{} On", b.name), Range::default()).in_group(b.id.clone()).toggle().short(b.name.clone()));
+        params.push(ParamInfo::new(format!("{}/on", b.id), format!("{} On", b.name), Range::default()).in_group(b.id.clone()).toggle().short(b.name.clone()).featured());
         if !b.options.is_empty() {
             let options: Vec<&str> = b.options.iter().map(String::as_str).collect();
-            params.push(ParamInfo::new(format!("{}/type", b.id), format!("{} Type", b.name), Range::default()).in_group(b.id.clone()).choice(&options));
+            params.push(ParamInfo::new(format!("{}/type", b.id), format!("{} Type", b.name), Range::default()).in_group(b.id.clone()).choice(&options).featured());
         }
     }
-    params.push(ParamInfo::new("rig/master_trim", "Master", Range::linear(-60.0, 12.0, Unit::Db)).in_group("Output").with_default_real(0.0));
+    params.push(ParamInfo::new("rig/master_trim", "Master", Range::linear(-60.0, 12.0, Unit::Db)).in_group("Output").with_default_real(0.0).featured());
 
     let action = |id: &str, name: &str, group: &str| ActionInfo { id: EntryId::new(id), name: name.into(), group: Some(group.into()) };
     let mut actions = vec![

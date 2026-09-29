@@ -7,7 +7,7 @@ fn block(id: &str, bt: BlockType, params: &[(&str, f32, f32, f32)], options: &[&
         block_type: bt,
         name: id.into(),
         bypassed: false,
-        param_name: None,
+        param_name: params.first().map(|p| p.0.to_string()),
         param_value: 0.0,
         param_min: 0.0,
         param_max: 1.0,
@@ -48,6 +48,8 @@ fn catalog_covers_params_toggles_choices_and_actions() {
     assert!(c.param(&ParamAddr::new("rig/master_trim")).is_some());
     assert!(c.action(&EntryId::new("tap_tempo")).is_some());
     assert!(c.stream(&EntryId::new("out_level")).is_some());
+    let featured: Vec<&str> = c.params.iter().filter(|p| p.featured).map(|p| p.addr.0.as_str()).collect();
+    assert_eq!(featured, ["Delay/time", "Delay/on", "Delay 2/mix", "Delay 2/on", "Delay 2/type", "rig/master_trim"]);
 }
 
 #[test]
