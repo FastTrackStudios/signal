@@ -3356,6 +3356,12 @@ impl KeysRigBackend {
         });
         match opened {
             Ok(r) => {
+                // Watch the audio callback: log whenever blocks miss their
+                // deadline — "it runs out of buffer" left no trace before.
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some(stats) = r.engine_stats() {
+                    spawn_engine_watch(stats);
+                }
                 {
                     let mut rig = self
                         .inner
@@ -5389,3 +5395,52 @@ fn keys_audio_prefs() -> AudioIoPrefs {
 
 /// The keys rig's settings name (`rigs/keys-rig.styx`).
 pub const KEYS_RIG_NAME: &str = "Keys Rig";
+
+/// Log the audio callback's health every 2 s while it misbehaves: blocks
+/// over their realtime budget and driver xruns since the last report, the
+/// peak and mean render time against the budget. Quiet while it keeps up.
+#[cfg(not(target_arch = "wasm32"))]
+fn spawn_engine_watch(stats: std::sync::Arc<daw_audio_io::duplex::EngineStats>) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let weak = std::sync::Arc::downgrade(&stats);
+    drop(stats);
+    let _ = std::thread::Builder::new()
+        .name("keys-engine-watch".into())
+        .spawn(move || {
+            let (mut over0, mut xrun0, mut calls0, mut total0) = (0u64, 0u64, 0u64, 0u64);
+            let skips = daw::standalone::audio_engine::render::plugin_stage_skips;
+            let mut skip0 = skips();
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                let Some(st) = weak.upgrade() else {
+                    return;
+                };
+                let (over, xruns) = (st.over_budget.load(Relaxed), st.xruns.load(Relaxed));
+                let (calls, total) = (st.calls.load(Relaxed), st.total_render_ns.load(Relaxed));
+                let frames = st.block_frames.load(Relaxed).max(1);
+                let budget_ms = f64::from(frames) / 48.0;
+                let peak_ms = st.peak_render_ns.swap(0, Relaxed) as f64 / 1e6;
+                let mean_ms = if calls > calls0 {
+                    (total - total0) as f64 / (calls - calls0) as f64 / 1e6
+                } else {
+                    0.0
+                };
+                let skipped = skips();
+                if over > over0 || xruns > xrun0 || skipped > skip0 {
+                    tracing::warn!(
+                        late_blocks = over - over0,
+                        xruns = xruns - xrun0,
+                        // Blocks rendered with no instruments: the plugin map
+                        // was held by a control thread when the block began.
+                        silent_blocks = skipped - skip0,
+                        peak_ms = format!("{peak_ms:.2}"),
+                        mean_ms = format!("{mean_ms:.2}"),
+                        budget_ms = format!("{budget_ms:.2}"),
+                        block = frames,
+                        "keys audio: blocks missed their deadline"
+                    );
+                }
+                (over0, xrun0, calls0, total0, skip0) = (over, xruns, calls, total, skipped);
+            }
+        });
+}

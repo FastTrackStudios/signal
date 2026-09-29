@@ -30,6 +30,8 @@ fn main() {
     let rig = KeysRig::open_headless(sr, &program).expect("open_headless");
     rig.set_scope(&Scope::Rig, 0.0, 0.0, 0.0, true);
     let renderer = ProjectRenderer::new(rig.daw(), rig.project_guid(), sr);
+    // As the backend holds it: behind a mutex, shared with the status poller.
+    let rig = std::sync::Mutex::new(rig);
     renderer.connect_live_midi(256);
     let t0 = std::time::Instant::now();
     while signal_sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 180 {
@@ -39,19 +41,39 @@ fn main() {
         let _ = renderer.render_block(0, block as usize);
     }
     let deadline = std::time::Duration::from_secs_f64(f64::from(block) / f64::from(sr));
+    let busy = std::env::var_os("LANE_STRESS_BUSY").is_some();
     let chord = [48u8, 52, 55, 60, 64];
     let per_hit = (sr as usize * 3 / 2) / block as usize;
     let held = per_hit * 2 / 3;
     let (mut times, mut peak, mut nonfinite, mut over) = (Vec::new(), 0.0f32, 0usize, 0usize);
+    // A UI polls the rig's status (voice count included) while it plays —
+    // that must never cost the audio a block.
+    let skips0 = daw::standalone::audio_engine::render::plugin_stage_skips();
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    std::thread::scope(|scope| {
+    scope.spawn(|| {
+        while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+            if std::env::var_os("LANE_STRESS_OLD_POLL").is_some() {
+                // The old status poll: every lane visited UNDER the daw's
+                // plugin lock (warm_note walks them the same way).
+                let _ = rig.lock().unwrap().warm_note(0, 1);
+            } else {
+                let _ = rig.lock().unwrap().active_voices();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(33));
+        }
+    });
     for b in 0..hits * per_hit {
         let phase = b % per_hit;
         if phase == 0 {
+            let r = rig.lock().unwrap();
             for &k in &chord {
-                rig.note_on(k, 127);
+                r.note_on(k, 127);
             }
         } else if phase == held {
+            let r = rig.lock().unwrap();
             for &k in &chord {
-                rig.note_off(k);
+                r.note_off(k);
             }
         }
         let t = std::time::Instant::now();
@@ -74,13 +96,24 @@ fn main() {
                 peak = peak.max(v.abs());
             }
         }
-        if let Some(rest) = deadline.checked_sub(dt) {
-            std::thread::sleep(rest);
+        // LANE_STRESS_BUSY=1: no sleeping — pure throughput, stable enough
+        // to compare optimisations (a sleeping thread gets moved to
+        // efficiency cores and down-clocked, which swamps small changes).
+        if !busy {
+            if let Some(rest) = deadline.checked_sub(dt) {
+                std::thread::sleep(rest);
+            }
         }
     }
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    });
+    let silent = daw::standalone::audio_engine::render::plugin_stage_skips() - skips0;
+    println!("  {silent} blocks rendered without instruments (plugin map held by a control thread)");
     let mut sorted = times.clone();
     sorted.sort();
     let pct = |p: f64| sorted[((sorted.len() - 1) as f64 * p) as usize].as_secs_f64() * 1e3;
+    let mean = times.iter().map(|d| d.as_secs_f64()).sum::<f64>() / times.len() as f64 * 1e3;
+    println!("  mean {mean:.3} ms per block ({:.0}% of the deadline)", mean / (deadline.as_secs_f64() * 1e3) * 100.0);
     println!(
         "lanes: {} blocks of {block} (deadline {:.2} ms) — median {:.3} ms, p99 {:.3} ms, max {:.3} ms; {over} over deadline",
         times.len(),
@@ -90,7 +123,7 @@ fn main() {
         pct(1.0)
     );
     println!("  output peak {:.3} ({:+.1} dBFS); {nonfinite} non-finite samples", peak, 20.0 * peak.max(1e-9).log10());
-    if over > 0 || nonfinite > 0 || peak > 1.0 {
+    if over > 0 || nonfinite > 0 || peak > 1.0 || silent > 0 {
         std::process::exit(1);
     }
 }

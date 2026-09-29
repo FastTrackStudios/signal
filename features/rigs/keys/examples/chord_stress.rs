@@ -110,10 +110,14 @@ fn main() {
         }
         // Real time between blocks, so streaming / background work keeps up
         // the way it does live.
-        if let Some(rest) = deadline.checked_sub(dt) {
-            std::thread::sleep(rest);
+        if std::env::var_os("LANE_STRESS_BUSY").is_none() {
+            if let Some(rest) = deadline.checked_sub(dt) {
+                std::thread::sleep(rest);
+            }
         }
     }
+    let mean = times.iter().map(|d| d.as_secs_f64()).sum::<f64>() / times.len() as f64 * 1e3;
+    println!("  mean {mean:.3} ms per block");
     let mut sorted = times.clone();
     sorted.sort();
     let pct = |p: f64| sorted[((sorted.len() - 1) as f64 * p) as usize].as_secs_f64() * 1e3;

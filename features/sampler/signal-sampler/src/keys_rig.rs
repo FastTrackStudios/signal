@@ -111,9 +111,18 @@ pub struct KeysInstrument {
     /// Per-Engine/Layer live fader cells from the compile — the mixer's
     /// handles on this instrument.
     cells: GainCells,
+    /// Voices sounding, published at the end of every block so a UI can
+    /// read it WITHOUT the daw's plugin lock (see [`KeysRig::active_voices`]).
+    voices: Arc<std::sync::atomic::AtomicU32>,
 }
 
 impl KeysInstrument {
+    /// The lock-free voice count this instrument publishes each block.
+    #[must_use]
+    pub fn voice_cell(&self) -> Arc<std::sync::atomic::AtomicU32> {
+        Arc::clone(&self.voices)
+    }
+
     #[must_use]
     pub fn new(tree: &Container, sample_rate: u32) -> Self {
         Self::with_gain(
@@ -140,6 +149,7 @@ impl KeysInstrument {
             prepared: false,
             gain,
             cells,
+            voices: Arc::new(std::sync::atomic::AtomicU32::new(0)),
         }
     }
 
@@ -250,6 +260,10 @@ impl PluginInstance for KeysInstrument {
         events: &PluginEvents<'_>,
     ) -> Result<(), PluginError> {
         self.render.process(in_l, in_r, out_l, out_r, events);
+        self.voices.store(
+            self.render.active_voices() as u32,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         // A tree swapped out is still finishing its notes: render it into
         // scratch and sum. It gets NO new events — new notes belong to the
         // new tree — so it drains as its voices release, and is dropped the
@@ -891,6 +905,8 @@ struct LaneTrack {
     /// The lane instrument's module fader/peak cells (module mixing stays
     /// in-tree; layer/engine mixing is the daw track).
     cells: GainCells,
+    /// The lane instrument's published voice count (lock-free).
+    voices: Arc<std::sync::atomic::AtomicU32>,
 }
 
 /// How the rig hosts its program.
@@ -1169,6 +1185,7 @@ impl KeysRig {
                 };
                 let mut inst = KeysInstrument::new(&layer.tree, sr);
                 track.cells = inst.gain_cells();
+                track.voices = inst.voice_cell();
                 let _ = inst.prepare(sr as f64, PREPARE_BLOCK);
                 self.daw
                     .insert_plugin_instance(track.fx.clone(), Box::new(inst));
@@ -1241,6 +1258,7 @@ impl KeysRig {
                 };
                 let mut inst = KeysInstrument::new(&layer.tree, sr);
                 track.cells = inst.gain_cells();
+                track.voices = inst.voice_cell();
                 let _ = inst.prepare(sr as f64, PREPARE_BLOCK);
                 self.daw
                     .insert_plugin_instance(track.fx.clone(), Box::new(inst));
@@ -1706,6 +1724,17 @@ impl KeysRig {
             Hosting::Single { .. } => vec![String::new()],
             Hosting::Lanes(l) => l.layers.iter().map(|t| t.name.clone()).collect(),
         };
+        // Lanes publish their counts each block: sum those, never taking the
+        // plugin lock — a UI polling status under the lock turned every poll
+        // that met an audio block into a block rendered WITHOUT instruments
+        // (daw skips the plugin stage rather than wait): a dropout.
+        if let Hosting::Lanes(l) = &self.hosting {
+            return l
+                .layers
+                .iter()
+                .map(|t| t.voices.load(std::sync::atomic::Ordering::Relaxed) as usize)
+                .sum();
+        }
         layers
             .iter()
             .filter_map(|layer| self.edit_lane(layer, |inst| inst.render_mut().active_voices()))
@@ -1900,6 +1929,7 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
                 scope_fx,
                 meter,
                 cells: GainCells::default(),
+                voices: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             });
             meter += 1;
         }
