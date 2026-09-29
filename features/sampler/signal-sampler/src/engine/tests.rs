@@ -415,9 +415,15 @@ fn piano_color_shifts_which_velocity_layer_plays() {
     eng.set_piano_voice(Some(pv));
     eng.note_on(60, played);
     // (-40 + 150) * -120 mdB at this velocity — the hard layer is louder,
-    // so the trim pulls it back down.
+    // so the trim pulls it back down — on top of the Grandeur's own
+    // note-on voicing at the velocity the note now plays at.
+    let voicing = crate::piano_note_law::NoteOnLaw::of(
+        crate::piano_release::NiPiano::Grandeur,
+        crate::piano_release::Snapshot::Factory,
+    )
+    .gain_db(60, shifted);
     assert!(
-        (eng.piano_trim_db - -13.2).abs() < 0.01,
+        (eng.piano_trim_db - (voicing - 13.2 + crate::piano_release::DRY_GROUP_DB)).abs() < 0.01,
         "compensating trim applied, got {}",
         eng.piano_trim_db
     );
@@ -474,6 +480,43 @@ fn resonance_zones_are_rejected_until_the_pedal_goes_down() {
     eng.set_piano_voice(None);
     eng.cc(64, 0);
     assert!(eng.zone_selected(&reso, 60, 100, ZoneTrigger::Attack));
+}
+
+/// An NI piano's key-up plays the release layer its script picks — from
+/// the struck velocity and the held time — never the key's own velocity.
+#[test]
+fn a_piano_release_plays_the_layer_the_law_picks() {
+    use crate::piano_release::{NiPiano, ReleaseLaw};
+    use crate::piano_voice::{PianoOffsets, PianoVoice};
+    let mut eng = engine_from_styx(
+        "name \"p\"\n\
+             zones (\n\
+               {file \"body.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"DryTones\"}\n\
+               {file \"rel_soft.wav\", key_min 60, key_max 60, root_key 60, vel_min 1, vel_max 13, articulation \"Release\"}\n\
+               {file \"rel_mid.wav\", key_min 60, key_max 60, root_key 60, vel_min 14, vel_max 98, articulation \"Release\"}\n\
+               {file \"rel_hard.wav\", key_min 60, key_max 60, root_key 60, vel_min 99, vel_max 127, articulation \"Release\"}\n\
+             )\n",
+    );
+    eng.set_piano_voice(Some(PianoVoice::new(PianoOffsets::GRANDEUR)));
+    eng.note_on(60, 100);
+    let (vel, _) = eng.strike[60];
+    assert!(vel > 0, "the strike is remembered for the release");
+
+    let law = ReleaseLaw::of(NiPiano::Grandeur);
+    let short = law.release(60, vel, 50.0).expect("a short hold plays a release");
+    let long = law.release(60, vel, 20_000.0).expect("so does a long one");
+    let file = |layer: u8| {
+        let picks = eng.piano_release_zones(60, layer);
+        assert_eq!(picks.len(), 1, "one mic, one round-robin set");
+        eng.patch().spec.zones[picks[0].1[0]].file.clone()
+    };
+    assert_eq!(file(short.layer_velocity), "rel_hard.wav");
+    assert_eq!(file(long.layer_velocity), "rel_soft.wav");
+    // A short, hard release is cut well below unity (before the Release
+    // group's own volume); the long hold's layer 1 is the softest
+    // recording, so it needs less cut.
+    assert!(short.gain_db < -6.0, "{short:?}");
+    assert!(long.fade_in_ms > short.fade_in_ms, "softer layers fade in slower");
 }
 
 #[test]

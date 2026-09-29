@@ -77,9 +77,22 @@ impl SampleEngine {
         // not a note, and must not be re-aimed by a tone control.
         let velocity = match self.piano_voice {
             Some(pv) if velocity > 0 && !self.keyswitch_notes.contains_key(&note) => {
-                let shift = pv.apply(velocity);
-                self.piano_trim_db = shift.trim_db;
-                shift.velocity
+                // The knobs as changes from the snapshot: the snapshot's own
+                // Color — the library's offset included — is already in its
+                // law, so it must not be applied a second time here.
+                let mut delta = pv;
+                delta.offsets.color = 0;
+                let shift = delta.apply(velocity);
+                // Then the script's voicing at the snapshot: the velocity the
+                // note plays at, its velocity table and key term.
+                let law = crate::piano_note_law::NoteOnLaw::of(pv.offsets.piano, pv.snapshot);
+                let (played, law_db) = law.play(note, shift.velocity);
+                let levels = crate::piano_release::SnapshotLevels::of(pv.offsets.piano, pv.snapshot);
+                self.piano_trim_db = law_db
+                    + shift.trim_db
+                    + crate::piano_release::DRY_GROUP_DB
+                    + levels.instrument_db;
+                played
             }
             _ => {
                 self.piano_trim_db = 0.0;
@@ -183,6 +196,7 @@ impl SampleEngine {
         self.set_active_line(li);
         self.held_notes.insert(note, velocity);
         self.note_on_frame.insert(note, self.frames_rendered);
+        self.strike[usize::from(note & 127)] = (velocity, self.piano_trim_db);
         let l = self.line_mut();
         l.order.retain(|&n| n != note);
         l.order.push(note);
@@ -312,6 +326,7 @@ impl SampleEngine {
             );
             self.held_notes.insert(note, velocity);
             self.note_on_frame.insert(note, self.frames_rendered);
+            self.strike[usize::from(note & 127)] = (velocity, self.piano_trim_db);
 
             // Only TRUE legato articulations take the monophonic transition
             // path: a Legato-kind artic, or a main sustain that has a CC2
@@ -378,6 +393,7 @@ impl SampleEngine {
 
         self.held_notes.insert(note, velocity);
         self.note_on_frame.insert(note, self.frames_rendered);
+        self.strike[usize::from(note & 127)] = (velocity, self.piano_trim_db);
         self.deferred_note_off_velocities.remove(&note);
 
         let artic_kind = self
@@ -483,7 +499,7 @@ impl SampleEngine {
             }
             // Recorded release tail (CSS Vsusrel/NVrel) — default OFF
             // (`$4p5kj=0`, spec §6). Only fires when "Releases" is enabled.
-            if self.releases_enabled {
+            if !self.spawn_piano_release(note) && self.releases_enabled {
                 self.spawn_release(note);
             }
             // Held-sustain note-off (spec §6): immediate note_off + overlapping
@@ -1523,6 +1539,98 @@ impl SampleEngine {
         }
     }
 
+    /// An NI piano's key-up: the release sample its release script would
+    /// play (`crate::piano_release`) — the layer and level from the struck
+    /// velocity and held time, faded in. `false` when this engine is not an
+    /// NI piano (the caller falls back to its own release handling); `true`
+    /// otherwise, whether or not the law plays a release for this key.
+    pub(crate) fn spawn_piano_release(&mut self, note: u8) -> bool {
+        let Some(pv) = self.piano_voice else {
+            return false;
+        };
+        let (velocity, _) = self.strike[usize::from(note & 127)];
+        if velocity == 0 {
+            return true;
+        }
+        let held_ms = self.note_on_frame.get(&note).map_or(0.0, |&f| {
+            crate::engine::frames_to_ms(self.frames_rendered.saturating_sub(f), self.sample_rate)
+        });
+        let levels = crate::piano_release::SnapshotLevels::of(pv.offsets.piano, pv.snapshot);
+        // Hammer noise (script 1, `case 7`): the key's hammer sample at the
+        // release velocity, `(vel − 127)·150` mdB, in the Hammer group's
+        // volume — played on every key-up when the snapshot has it on.
+        if let Some(vol) = levels.hammer_volume {
+            let db = (i32::from(velocity) - 127) as f32 * 0.150
+                + crate::piano_release::kontakt_volume_db(vol)
+                + levels.instrument_db;
+            self.spawn_piano_noise(note, "Hammer", velocity, db);
+        }
+        let law = crate::piano_release::ReleaseLaw::of(pv.offsets.piano);
+        let Some(rel) = law.release(note, velocity, held_ms) else {
+            return true;
+        };
+        // The Release group's volume is the snapshot's.
+        let group_db = crate::piano_release::kontakt_volume_db(levels.release_volume) + levels.instrument_db;
+        let picks = self.piano_release_zones(note, rel.layer_velocity);
+        let rr = self.zone_rr_counter;
+        self.zone_rr_counter = rr.wrapping_add(1);
+        let fade = ms_to_frames(rel.fade_in_ms.round() as u32, self.sample_rate);
+        // The release script adds the struck note's Dynamic Range volume
+        // (`%EVENT_PAR[3]` = script 0's absolute `$DynamicRange`, from the
+        // shifted velocity) — not the note's whole voicing.
+        let dyn_db = pv.dynamic_mdb_absolute(velocity, levels.dynamics + pv.dynamic_range) as f32 / 1000.0;
+        let saved = std::mem::replace(&mut self.piano_trim_db, dyn_db);
+        for (_, zones) in picks {
+            let idx = zones[rr % zones.len()];
+            if self.spawn_zone_voice(idx, note, VoiceKind::Release, db_to_gain(rel.gain_db + group_db), None, 0.0) {
+                if let Some(v) = self.voices.last_spawned_mut() {
+                    v.start_fade_in(fade);
+                }
+            }
+        }
+        self.piano_trim_db = saved;
+        true
+    }
+
+    /// One of an NI piano's noise layers (`articulation`: `"Hammer"`…) for
+    /// `note` at `velocity`, `db` from its script — one round-robin pick per
+    /// mic, played through like a release.
+    fn spawn_piano_noise(&mut self, note: u8, articulation: &str, velocity: u8, db: f32) {
+        let picks = self.piano_zones(articulation, note, velocity);
+        let rr = self.zone_rr_counter;
+        self.zone_rr_counter = rr.wrapping_add(1);
+        let saved = std::mem::replace(&mut self.piano_trim_db, 0.0);
+        for (_, zones) in picks {
+            let idx = zones[rr % zones.len()];
+            self.spawn_zone_voice(idx, note, VoiceKind::Release, db_to_gain(db), None, 0.0);
+        }
+        self.piano_trim_db = saved;
+    }
+
+    /// The Release zones covering `note` at `layer_velocity`, grouped by mic
+    /// (each group is one round-robin set).
+    pub(crate) fn piano_release_zones(&self, note: u8, layer_velocity: u8) -> Vec<(String, Vec<usize>)> {
+        self.piano_zones("Release", note, layer_velocity)
+    }
+
+    /// `articulation`'s zones covering `note` at `velocity`, grouped by mic.
+    fn piano_zones(&self, articulation: &str, note: u8, velocity: u8) -> Vec<(String, Vec<usize>)> {
+        let layer_velocity = velocity;
+        let mut picks: Vec<(String, Vec<usize>)> = Vec::new();
+        for (i, z) in self.patch.spec.zones.iter().enumerate() {
+            if z.articulation.eq_ignore_ascii_case(articulation)
+                && (z.key_min..=z.key_max).contains(&note)
+                && (z.vel_min..=z.vel_max).contains(&layer_velocity)
+            {
+                match picks.iter_mut().find(|(m, _)| *m == z.mic) {
+                    Some((_, v)) => v.push(i),
+                    None => picks.push((z.mic.clone(), vec![i])),
+                }
+            }
+        }
+        picks
+    }
+
     /// Pacific release-overlap: spawn the current articulation's release for
     /// `note` and immediately ramp it to silence over `fade_frames` — the
     /// KSP's `legrel` layer (`$wbgz2` faded over `$amble`), the departed
@@ -1875,7 +1983,9 @@ impl SampleEngine {
         } else {
             (0.0, semitones)
         };
-        let tune_cents_total = tune_cents as f64 + self.master_tune_cents();
+        let tune_cents_total = tune_cents as f64
+            + self.master_tune_cents()
+            + f64::from(self.piano_key_cents[usize::from(note & 127)]);
         let rate = 2.0f64.powf(tune_cents_total / 1200.0 + resample_semitones / 12.0);
 
         // Marker position for playback emission (FILE frames): the zone's
@@ -2507,7 +2617,11 @@ impl SampleEngine {
                 (semitones * 100.0, 0.0)
             };
             let rate = 2.0f64.powf(
-                (z.tune_cents as f64 + self.master_tune_cents() + resample_cents) / 1200.0,
+                (z.tune_cents as f64
+                    + self.master_tune_cents()
+                    + f64::from(self.piano_key_cents[usize::from(note & 127)])
+                    + resample_cents)
+                    / 1200.0,
             );
             let vel_gain = self.velocity_sens.map_or(1.0, |s| {
                 let v = f32::from(velocity) / 127.0;
@@ -2753,6 +2867,7 @@ impl SampleEngine {
                         self.held_notes.remove(&note);
                         if self.patch.is_zoned() {
                             self.trigger_zoned(note, velocity, ZoneTrigger::Release, false);
+                            self.spawn_piano_release(note);
                             self.voices
                                 .note_off_with_release_frames(note, Some(release_frames));
                         } else {

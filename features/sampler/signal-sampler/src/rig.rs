@@ -1566,6 +1566,13 @@ pub(crate) fn build_sample_source(
             ));
         }
     }
+    // An NI piano layer played with a gig's snapshot of its controls.
+    if let Some(s) = block
+        .param_str("piano_snapshot")
+        .and_then(|s| crate::piano_release::Snapshot::from_name(&s))
+    {
+        engine.set_piano_snapshot(s);
+    }
     if let Some(s) = block.param_f32("vel_sens") {
         engine.set_velocity_sens(Some(s));
     }

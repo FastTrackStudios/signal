@@ -138,6 +138,8 @@ pub mod patch_level;
 /// velocity-domain transforms.
 ///
 /// See `features/rigs/keys/spec/piano-voice.md`.
+pub mod piano_note_law;
+pub mod piano_release;
 pub mod piano_voice;
 pub mod preset_registry;
 pub mod preset_spec;

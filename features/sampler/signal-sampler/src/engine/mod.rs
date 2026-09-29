@@ -827,6 +827,13 @@ pub struct SampleEngine {
     /// hosting one of those libraries. `None` for everything else, which is
     /// most things — see [`crate::piano_voice`].
     piano_voice: Option<crate::piano_voice::PianoVoice>,
+    /// Per key: the velocity it was last struck at (after the piano voice's
+    /// Color shift) and that note's piano trim — the NI release law's
+    /// inputs, still needed after note-off has cleared `held_notes`.
+    strike: [(u8, f32); 128],
+    /// The NI piano's per-key tuning (cents), from its note-on law —
+    /// every voice of the key (body and release) carries it.
+    piano_key_cents: [f32; 128],
     /// Gain trim (dB) the piano controls computed for the note currently being
     /// dispatched, folded into the voice gain at spawn.
     ///
@@ -1035,6 +1042,15 @@ impl SampleEngine {
     ) -> Self {
         let section = section_id.into();
         let mic = mic_id.into();
+        // An NI Essential Piano pack plays through its instrument's script
+        // (Color / Dynamic Range offsets) from load, whichever path built it
+        // — a keys layer or the bank. Anything else plays flat.
+        let piano_voice = if patch.spec.vendor.to_ascii_lowercase().contains("native") {
+            crate::piano_voice::PianoOffsets::for_library(&patch.spec.name)
+                .map(crate::piano_voice::PianoVoice::new)
+        } else {
+            None
+        };
 
         // Default to a playable articulation. Sustain is preferred; if the
         // spec has no Sustain (e.g. Keyscape Rhodes — all samples are
@@ -1179,7 +1195,15 @@ impl SampleEngine {
             sustain_fade_in: None,
             legato_sustain: false,
             legato_trim: false,
-            piano_voice: None,
+            piano_voice,
+            strike: [(0, 0.0); 128],
+            piano_key_cents: piano_voice.map_or([0.0; 128], |pv| {
+                let law = crate::piano_note_law::NoteOnLaw::of(
+                    pv.offsets.piano,
+                    crate::piano_release::Snapshot::Factory,
+                );
+                std::array::from_fn(|k| law.tune_cents(k as u8))
+            }),
             piano_trim_db: 0.0,
             legato_attack_dip_db: 0.0,
             ab_anchor_frame: 0,
@@ -1747,6 +1771,21 @@ impl SampleEngine {
     /// derives them from a pack name. `None` restores plain behaviour.
     pub fn set_piano_voice(&mut self, voice: Option<crate::piano_voice::PianoVoice>) {
         self.piano_voice = voice;
+        self.piano_key_cents = voice.map_or([0.0; 128], |pv| {
+            let law = crate::piano_note_law::NoteOnLaw::of(
+                    pv.offsets.piano,
+                    crate::piano_release::Snapshot::Factory,
+                );
+            std::array::from_fn(|k| law.tune_cents(k as u8))
+        });
+    }
+
+    /// Play the NI piano with a saved snapshot of its controls (a gig's —
+    /// see [`crate::piano_release::Snapshot`]); nothing for another engine.
+    pub fn set_piano_snapshot(&mut self, snapshot: crate::piano_release::Snapshot) {
+        if let Some(pv) = self.piano_voice.as_mut() {
+            pv.snapshot = snapshot;
+        }
     }
 
     /// The piano controls in force, if any.

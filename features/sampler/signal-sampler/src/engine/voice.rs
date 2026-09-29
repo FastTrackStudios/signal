@@ -955,6 +955,16 @@ impl Voice {
     /// brings the destination sustain up underneath the one-shot bow-change
     /// transition (spec §2.1 step 7). `delay_frames == 0 && fade_frames == 0`
     /// leaves the natural attack unchanged.
+    /// Fade a just-spawned voice in from silence over `frames` (Kontakt's
+    /// `fade_in` on a new event) — the in-place form of
+    /// [`with_fade_in_under`](Self::with_fade_in_under) with no delay.
+    pub fn start_fade_in(&mut self, frames: usize) {
+        if frames > 0 {
+            self.gain = 0.0;
+            self.gain_ramp_frames = frames;
+        }
+    }
+
     #[must_use]
     pub fn with_fade_in_under(mut self, delay_frames: usize, fade_frames: usize) -> Self {
         if delay_frames > 0 || fade_frames > 0 {
