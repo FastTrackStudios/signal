@@ -762,19 +762,33 @@ pub fn worship_profile() -> KeysProfile {
                 // gig's own patches (`User/Worship Gig 3`, edited copies of
                 // the factory ones), imported whole: soundsources, filters,
                 // envelopes, LFOs, mod matrix and effects. The patch fills
-                // one module per layer. Levels are the Omnisphere part levels
-                // in dB.
+                // one module per layer.
+                //
+                // Levels are the gig's, measured through real Omnisphere (the
+                // gig's own Omni Pads multi rendered with `omni_render
+                // OMNI_STATE`, at its part levels and Cutoff knob) and then
+                // through each pad's Pro-Q 3 in the global rackspace, which
+                // this rig does not model: the Pad's is gentle (−1 dB), the
+                // Shimmer's carves the choir's body and presence (−9.9 dB at
+                // 500 Hz, −10 at 2.3 kHz, −12 at 4.2 kHz; −9 dB overall).
+                // Both then share the Pads bus and its reverb *send* (the
+                // Valhalla is 100 % wet, but on a send — the dry pad passes
+                // untouched).
+                //
+                // The gig's Cutoff knob (CC77) swept both pads' global filter
+                // together; here the mod wheel does it (`wheel_cutoff`).
                 layers: vec![
                     // "KEY │ American Obesity" (Live Keyboardist), part level
-                    // 0.44. An earlier draft had module B as a Juno 60 sub —
-                    // the patch actually stacks a Prophet 5.
+                    // 0.44 (−6.2 dB against our unity render) and its Pro-Q
+                    // (−1 dB). An earlier draft had module B as a Juno 60
+                    // sub — the patch actually stacks a Prophet 5.
                     LayerDef {
                         scope_values: Vec::new(),
                         name: "Pad".into(),
                         // OB-8 PWM Big Strings + Prophet 5 Classic.
                         patch: "American Obesity".into(),
                         extra_modules: Vec::new(),
-                        gain_db: -7.1,
+                        gain_db: -7.2,
                         key_lo: 0,
                         key_hi: 127,
                         exclude_global: false,
@@ -782,8 +796,9 @@ pub fn worship_profile() -> KeysProfile {
                         source_params: Vec::new(),
                         transpose: 0.0,
                     },
-                    // "AD │ Gentle Gothics" (Ambient Dreams), part level 0.30.
-                    // Not a synth sparkle at all — it is a men's + women's
+                    // "AD │ Gentle Gothics" (Ambient Dreams), part level 0.30
+                    // (−10.5 dB against our unity render) and its Pro-Q
+                    // (−9 dB). Not a synth sparkle at all — it is a men's + women's
                     // choir, which is why the wash sounds vocal rather than
                     // bright.
                     LayerDef {
@@ -792,7 +807,7 @@ pub fn worship_profile() -> KeysProfile {
                         // Choir Men Ohs + Choir Women Oos.
                         patch: "Gentle Gothics".into(),
                         extra_modules: Vec::new(),
-                        gain_db: -10.5,
+                        gain_db: -19.5,
                         key_lo: 0,
                         key_hi: 127,
                         exclude_global: false,

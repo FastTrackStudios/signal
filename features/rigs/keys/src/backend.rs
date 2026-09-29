@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
@@ -106,6 +106,11 @@ struct State {
     active_stack: Option<usize>,
     /// Grid mode: 0 Preset, 1 Profile (stacks), 2 Setlist.
     perform_mode: u32,
+    /// The mod wheel's hold on [`WHEEL_CUTOFF_ENGINE`]'s cutoffs while it is
+    /// off its rest: the patches it moved (their names, so a patch change
+    /// under it starts afresh) and the offset plus the values it moved them
+    /// from — which are what the profile remembers, never the swept ones.
+    wheel_span: Option<(Vec<String>, (f32, Baseline))>,
 }
 
 /// What the program builders read: the live profile, the patch-name →
@@ -189,29 +194,31 @@ impl Default for ModuleState {
     }
 }
 
-/// **TEMPORARY (2026-09-05): lanes that start switched OFF.**
+/// The engine the mod wheel sweeps the filters of — the gig's pad "Cutoff"
+/// knob (CC77), which moved both Omni Pads parts' global filter cutoff
+/// together (Omnisphere's MIDI-learn `p0_gpfltc` / `p1_gpfltc`). At rest the
+/// patches play as imported; all the way up opens them to 20 kHz, the group
+/// keeping its spacing (see [`KeysRigBackend::drive_global`]).
+const WHEEL_CUTOFF_ENGINE: &str = "Pad";
+
+/// No mod-wheel value waiting for the worker.
+const NO_WHEEL: u32 = u32::MAX;
+
+/// Lanes that start switched OFF — a starting position, not a limitation:
+/// these are ordinary module switches, and turning one on in the mixer works
+/// normally.
 ///
-/// The rig does not currently fit its deadline with the whole Worship stack
-/// live. Render cost is linear in voice count, and 20 notes across all the
-/// layers is ~233 voices: 7.2ms of work in a 5.33ms block, which the player
-/// hears as crackling roughly once a second. With these three off it is
-/// ~136 voices and 4.2ms, i.e. inside the budget with headroom.
-///
-/// This is a starting position, not a limitation — exactly like the engine
-/// mutes above, these are ordinary module switches and turning any of them
-/// back on in the mixer works normally (and will crackle again until the
-/// voice-render loop is block-processed, which is the actual fix).
+/// The pads start on (the voice stealing and the CPU guard keep the whole
+/// stack inside its deadline). Club Europa's pulsing lead (Synth 2) starts
+/// off: a song reaches for it, it is not a bed under everything.
 ///
 /// `FTS_KEYS_ALL_ON=1` starts everything live, for measuring the real thing.
-///
-/// DELETE THIS once `Voice::render_block` hoists its per-frame branch work:
-/// the whole stack is supposed to play.
 fn starts_switched_off(lane: &str) -> bool {
-    const HEAVY: [&str; 3] = ["Pad", "Shimmer", "Synth 2"];
+    const OFF: [&str; 1] = ["Synth 2"];
     if std::env::var_os("FTS_KEYS_ALL_ON").is_some() {
         return false;
     }
-    HEAVY.contains(&lane)
+    OFF.contains(&lane)
 }
 
 impl LaneState {
@@ -1641,6 +1648,11 @@ struct Inner {
     save_gen: std::sync::atomic::AtomicU64,
     /// Recent tempo taps.
     taps: Mutex<Vec<std::time::Instant>>,
+    /// The mod wheel's latest value ([`NO_WHEEL`] when none is pending),
+    /// handed from the MIDI thread to the `keys-wheel` worker.
+    wheel: AtomicU32,
+    /// That worker, to wake.
+    wheel_worker: std::sync::OnceLock<std::thread::Thread>,
 }
 
 /// The keys-rig backend handle. Cheap to clone (all state shared).
@@ -2484,16 +2496,112 @@ impl KeysRigBackend {
                 rebuild_gen: std::sync::atomic::AtomicU64::new(0),
                 save_gen: std::sync::atomic::AtomicU64::new(0),
                 taps: Mutex::new(Vec::new()),
+                wheel: AtomicU32::new(NO_WHEEL),
+                wheel_worker: std::sync::OnceLock::new(),
             }),
         };
         backend.spawn_meter_pump("keys-meter-pump");
         backend.spawn_tempo_watch();
+        backend.spawn_wheel_worker();
         backend
     }
 
     /// Follow the band's tempo (`signal_rig_host::tempo`, the guitar rig's
     /// tap): when it changes, every module with a synced delay takes the new
     /// time, live.
+    /// Hand a mod-wheel value to the `keys-wheel` worker (the latest wins).
+    fn queue_wheel(inner: &Inner, value: u8) {
+        inner
+            .wheel
+            .store(u32::from(value.min(127)), std::sync::atomic::Ordering::Relaxed);
+        if let Some(worker) = inner.wheel_worker.get() {
+            worker.unpark();
+        }
+    }
+
+    /// Apply mod-wheel moves off the MIDI thread, coalesced: a sweep sends
+    /// far more values than the cutoff needs to follow.
+    fn spawn_wheel_worker(&self) {
+        let weak = Arc::downgrade(&self.inner);
+        let worker = std::thread::Builder::new()
+            .name("keys-wheel".into())
+            .spawn(move || loop {
+                std::thread::park_timeout(std::time::Duration::from_millis(500));
+                let Some(inner) = weak.upgrade() else { return };
+                let v = inner.wheel.swap(NO_WHEEL, std::sync::atomic::Ordering::Relaxed);
+                if v != NO_WHEEL {
+                    Self { inner }.wheel_cutoff(v as u8);
+                }
+            });
+        if let Ok(handle) = worker {
+            let _ = self.inner.wheel_worker.set(handle.thread().clone());
+        }
+    }
+
+    /// The mod wheel as the gig's pad Cutoff knob: 0 leaves
+    /// [`WHEEL_CUTOFF_ENGINE`]'s patches as imported, 127 opens them fully.
+    fn wheel_cutoff(&self, value: u8) {
+        let targets = {
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
+            Self::sweep_wheel(&mut s, value)
+        };
+        // Live, like a knob drag — but not remembered: the wheel is a
+        // performance move, not an edit to the patch.
+        if !targets.is_empty() && !self.push_targets_dsp(&targets) {
+            self.rebuild_soon();
+        }
+    }
+
+    /// Move [`WHEEL_CUTOFF_ENGINE`]'s cutoffs for a wheel at `value`; the
+    /// modules touched. Always an offset from where the patches sit — never
+    /// an absolute cutoff, even while they agree — so the wheel at rest is
+    /// exactly the patch.
+    fn sweep_wheel(s: &mut State, value: u8) -> Vec<(String, usize)> {
+        const TARGET: &str = "filter.cutoff";
+        let Some(def) = global_def("e.filter.cutoff") else {
+            return Vec::new();
+        };
+        if !s.engines.contains_key(WHEEL_CUTOFF_ENGINE) {
+            return Vec::new();
+        }
+        let w = f32::from(value.min(127)) / 127.0;
+        let lanes = Self::engine_lanes(s, WHEEL_CUTOFF_ENGINE);
+        let targets = Self::scope_targets(s, &lanes);
+        let patches: Vec<String> = targets
+            .iter()
+            .map(|(lane, i)| {
+                s.lanes
+                    .get(lane)
+                    .and_then(|l| l.modules.get(*i))
+                    .map(|m| m.patch.clone())
+                    .unwrap_or_default()
+            })
+            .collect();
+        // A patch loaded under a raised wheel plays from its own values: the
+        // old baseline describes modules that no longer exist.
+        let held = s.wheel_span.take().filter(|(p, _)| *p == patches);
+        let span = match held {
+            Some((_, span)) => span,
+            None if w > 0.0 => {
+                let base: Baseline = targets
+                    .iter()
+                    .filter_map(|(lane, i)| {
+                        s.lanes
+                            .get(lane)
+                            .map(|l| (lane.clone(), *i, Self::module_value(l, *i, TARGET)))
+                    })
+                    .collect();
+                (0.0, base)
+            }
+            None => return Vec::new(),
+        };
+        s.wheel_span =
+            Self::drive_global(s, def, TARGET, &targets, Some(span), w).map(|span| (patches, span));
+        targets
+    }
+
     fn spawn_tempo_watch(&self) {
         let weak = Arc::downgrade(&self.inner);
         let _ = std::thread::Builder::new()
@@ -2670,7 +2778,12 @@ impl KeysRigBackend {
             let Ok(mut guard) = self.inner.state.lock() else {
                 return;
             };
-            let State { lanes, profile, .. } = &mut *guard;
+            let State {
+                lanes,
+                profile,
+                wheel_span,
+                ..
+            } = &mut *guard;
             for (name, lane) in lanes.iter() {
                 let Some(def) = profile.layer_mut(name) else {
                     continue;
@@ -2679,13 +2792,23 @@ impl KeysRigBackend {
                     if m.patch.is_empty() || m.macros_patch.as_deref() != Some(m.patch.as_str()) {
                         continue;
                     }
+                    // A raised mod wheel is holding this cutoff open: keep
+                    // what it moved it from.
+                    let unswept = wheel_span.as_ref().and_then(|(_, (_, base))| {
+                        base.iter()
+                            .find(|(l, j, _)| l == name && *j == i)
+                            .map(|(_, _, v)| *v)
+                    });
                     let values = m
                         .macros
                         .iter()
                         .filter(|(id, _)| Self::macro_is_dsp(id) || Self::macro_is_mod(id))
                         .map(|(id, v)| crate::profile::MacroValue {
                             id: id.clone(),
-                            value: *v,
+                            value: match unswept {
+                                Some(base) if id == "filter.cutoff" => base,
+                                _ => *v,
+                            },
                         })
                         .collect();
                     def.remember_macros(&m.patch, i as u32, values);
@@ -3476,6 +3599,19 @@ impl KeysRigBackend {
             }
         };
 
+        // The mod wheel also sweeps the pads' cutoff: note the value for the
+        // worker and move on — the MIDI thread never waits on the rig state.
+        let weak = Arc::downgrade(&self.inner);
+        let sink = move |ev: midicore::TimedEvent| {
+            if let midicore::MidiEvent::ControlChange { controller, value, .. } = &ev.event {
+                if controller.get() == 1 {
+                    if let Some(inner) = weak.upgrade() {
+                        Self::queue_wheel(&inner, value.get());
+                    }
+                }
+            }
+            sink(ev);
+        };
         let hub = signal_rig_host::midi_hub::hub();
         let sub = hub.subscribe("keys", port.clone(), sink);
         if let Ok(mut s) = self.inner.state.lock() {
@@ -3845,6 +3981,7 @@ impl KeysRigSvc for KeysRigBackend {
                 rig.cc(1, value.min(127) as u8);
             }
         }
+        Self::queue_wheel(&self.inner, value.min(127) as u8);
     }
 
     fn midi_ports(&self) -> Vec<String> {
@@ -5168,6 +5305,49 @@ mod tests {
             }];
         }
         s
+    }
+
+    /// The mod wheel is the gig's pad Cutoff knob: it opens both pads
+    /// together from where their patches sit, and at rest gives them back.
+    #[test]
+    fn the_mod_wheel_opens_the_pads_and_gives_them_back() {
+        let mut s = keys_state(&[("Pad", 400.0), ("Shimmer", 800.0), ("Keys 2", 3000.0)]);
+        let touched = KeysRigBackend::sweep_wheel(&mut s, 64);
+        assert_eq!(touched.len(), 2, "only the Pad engine: {touched:?}");
+        let (pad, shimmer) = (cutoff(&s, "Pad"), cutoff(&s, "Shimmer"));
+        assert!(pad > 400.0 && shimmer > 800.0, "both opened: {pad} {shimmer}");
+        assert!((shimmer / pad - 2.0).abs() < 1e-2, "and kept their spacing");
+        assert_eq!(cutoff(&s, "Keys 2"), 3000.0, "the pianos are not the wheel's");
+
+        KeysRigBackend::sweep_wheel(&mut s, 127);
+        assert!((cutoff(&s, "Shimmer") - 20_000.0).abs() < 1.0, "fully open at the top");
+
+        KeysRigBackend::sweep_wheel(&mut s, 0);
+        assert!(s.wheel_span.is_none(), "at rest the wheel holds nothing");
+        assert!((cutoff(&s, "Pad") - 400.0).abs() < 1e-2);
+        assert!((cutoff(&s, "Shimmer") - 800.0).abs() < 1e-2);
+    }
+
+    /// Lanes that agree still move from their patch value — the wheel is
+    /// never an absolute cutoff (0 would slam every pad shut).
+    #[test]
+    fn the_mod_wheel_is_an_offset_even_when_the_pads_agree() {
+        let mut s = keys_state(&[("Pad", 800.0), ("Shimmer", 800.0)]);
+        KeysRigBackend::sweep_wheel(&mut s, 1);
+        assert!(cutoff(&s, "Pad") >= 800.0, "{}", cutoff(&s, "Pad"));
+    }
+
+    /// A patch swapped in under a raised wheel is not rewritten to the old
+    /// patch's values when the wheel comes back.
+    #[test]
+    fn a_patch_change_under_the_wheel_starts_afresh() {
+        let mut s = keys_state(&[("Pad", 400.0), ("Shimmer", 800.0)]);
+        KeysRigBackend::sweep_wheel(&mut s, 100);
+        let lane = s.lanes.get_mut("Pad").expect("lane");
+        lane.modules[0].patch = "another".into();
+        lane.modules[0].macros.insert("filter.cutoff".into(), 1500.0);
+        KeysRigBackend::sweep_wheel(&mut s, 0);
+        assert_eq!(cutoff(&s, "Pad"), 1500.0, "the new patch keeps its own cutoff");
     }
 
     /// The worship profile keeps the piano (Keys A) OUT of the global scope
