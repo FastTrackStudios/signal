@@ -1,4 +1,4 @@
-//! `render_patch` — render an Omnisphere `.prt_omn` through Signal's own
+//! `render_patch` — render an Omnisphere `.prt_omn` (or a `.signalpack`) through Signal's own
 //! engine to a WAV, timed like daw's `omni_render` (the real-Omnisphere
 //! reference harness): the note starts at 0, is held `--hold` s, then the tail
 //! runs `--tail` s. Render both, compare them.
@@ -97,8 +97,24 @@ fn main() {
     // The real index, so sample layers resolve their soundsources (an empty
     // one leaves them silent). Point `FTS_OMNISPHERE_ROOT` etc. at the local
     // extraction.
-    let tree = load_patch_file(std::path::Path::new(patch), &SoundsourceIndex::scan_default())
-        .unwrap_or_else(|e| panic!("import {patch}: {e}"));
+    // A `.signalpack` plays as a keys layer would hold it: one Sampler block
+    // as the Soundsource of an Oscillator module (NI / Keyscape pianos).
+    let tree = if patch.ends_with(".signalpack") {
+        use signal_sampler::rig_node::Container;
+        let mut src = signal_sampler::RigBlock::sample_lib(patch.as_str());
+        src.name = "Soundsource".into();
+        // `--source-param name=value`: build-time params on the Sampler
+        // block, as a keys layer sets them (e.g. `piano_snapshot=worship`).
+        for kv in args.windows(2).filter(|w| w[0] == "--source-param").map(|w| &w[1]) {
+            if let Some((k, v)) = kv.split_once('=') {
+                src = src.with_param(k, v);
+            }
+        }
+        Container::preset("pack").add(Container::module("Oscillator").add(src))
+    } else {
+        load_patch_file(std::path::Path::new(patch), &SoundsourceIndex::scan_default())
+            .unwrap_or_else(|e| panic!("import {patch}: {e}"))
+    };
     if std::env::var_os("RENDER_DEBUG").is_some() {
         if let Ok(xml) = std::fs::read_to_string(patch) {
             if let Ok(p) = signal_synth::omni_import::parse_patch(&xml) {
