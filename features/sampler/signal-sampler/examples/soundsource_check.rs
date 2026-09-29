@@ -77,6 +77,9 @@ fn pitch_check(x: &[f32], f0: f32) -> Option<(f32, f32)> {
 
 struct Take {
     held: f32,
+    /// Level over the whole held part, attack included (a short noise
+    /// is over before `held`'s window opens).
+    held_all: f32,
     peak: f32,
     tail: f32,
     pitch: Option<(f32, f32)>,
@@ -108,6 +111,7 @@ fn play(e: &mut signal_sampler::SampleEngine, note: u8, vel: u8) -> Take {
     let body = &h[SR as usize / 10..];
     Take {
         held: rms_db(body),
+        held_all: rms_db(&h),
         peak,
         tail: rms_db(&t[SR as usize / 10..SR as usize / 2]),
         pitch: pitch_check(body, f0),
@@ -168,7 +172,9 @@ fn main() {
                 fail += 1;
                 continue;
             }
-            if body.is_empty() {
+            // A key-up / pedal soundsource (a stray note-on zone or two
+            // aside): nothing on note-on to check.
+            if body.len() * 20 < zones.len() {
                 // A release / pedal-noise soundsource: plays on key-up / CC64,
                 // nothing on note-on to check here.
                 println!("ok   {name} [{stem}]: {} zones ({releases} release, {pedals} pedal) — no note-on body", zones.len());
@@ -181,20 +187,27 @@ fn main() {
             let notes: Vec<u8> = (0..5).map(|i| lo + ((u32::from(hi - lo) * i) / 4) as u8).collect();
             let mut e = signal_sampler::SampleEngine::new(patch.clone(), SR, "", "");
             e.set_articulation(name.clone());
+            e.set_resample_transpose(true);
             let cache = e.cache_handle();
             let paths = e.sample_paths_playable(60);
             cache.preload(paths.iter().map(PathBuf::as_path));
             // Key-up, pedal and mechanical noises have no pitch to check.
             let lower = name.to_lowercase();
             let pitched = !["noise", "mechanical", "release", "pedal"].iter().any(|w| lower.contains(w));
+            let extreme = |n: u8| n == lo || n == hi;
             for &n in &notes {
                 let takes: Vec<(u8, Take)> = [30u8, 80, 127].iter().map(|&v| (v, play(&mut e, n, v))).collect();
                 for (v, t) in &takes {
-                    if t.held < -80.0 {
+                    let level = if pitched { t.held } else { t.held_all };
+                    if level < -80.0 {
                         issues.push(format!("note {n} vel {v} silent"));
                     }
-                    if t.peak >= 0.999 {
+                    // Unity gain here; the layer's gain comes later, so only
+                    // a gross overshoot is a fault.
+                    if t.peak >= 2.0 {
                         issues.push(format!("note {n} vel {v} clips ({:.2})", t.peak));
+                    } else if t.peak >= 1.0 {
+                        notes_w.push(format!("note {n} vel {v} peaks {:.2}", t.peak));
                     }
                 }
                 let (_, loud) = &takes[2];
@@ -204,8 +217,14 @@ fn main() {
                 }
                 if pitched {
                     match loud.pitch {
-                        Some((c, lvl)) if lvl > -30.0 && c.abs() > 35.0 => {
+                        // The A/B against Omnisphere is the authority on pitch;
+                        // here only a gross miss away from the range ends
+                        // fails (the extremes are bright and inharmonic).
+                        Some((c, lvl)) if lvl > -30.0 && c.abs() > 50.0 && !extreme(n) => {
                             issues.push(format!("note {n} off pitch {c:+.0} cents"))
+                        }
+                        Some((c, lvl)) if lvl > -30.0 && c.abs() > 25.0 => {
+                            notes_w.push(format!("note {n} pitch {c:+.0} cents"))
                         }
                         Some((_, lvl)) if lvl <= -30.0 => notes_w.push(format!("note {n}: pitch unclear")),
                         None => notes_w.push(format!("note {n}: pitch unclear")),

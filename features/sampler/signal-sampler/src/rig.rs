@@ -1447,6 +1447,18 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
     }
 }
 
+/// Sample-block preloads still running in this process (each block opens
+/// its zones on a background thread; a note whose zone isn't open yet is
+/// dropped). A host that must not lose the first notes — a render, a rig
+/// coming up — waits for [`preloads_pending`] to reach 0.
+static PRELOADS_PENDING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// How many sample-block preloads are still running (see [`PRELOADS_PENDING`]).
+#[must_use]
+pub fn preloads_pending() -> usize {
+    PRELOADS_PENDING.load(std::sync::atomic::Ordering::Acquire)
+}
+
 /// Build a sample block's **Sample Soundsource** — the `SampleEngine`
 /// wrapped as a [`SamplerInstrument`](crate::SamplerInstrument), same as the
 /// sampler TUI's loading path (`PlayerPatch::load/from_pack` +
@@ -1564,6 +1576,9 @@ pub(crate) fn build_sample_source(
     if let Some(v) = block.param_f32("zone_velocity") {
         engine.set_zone_velocity(Some(v.round() as u8));
     }
+    if block.param_str("transpose_mode").is_some_and(|m| m == "resample") {
+        engine.set_resample_transpose(true);
+    }
     // Harmonia voices (an Omnisphere sample layer's).
     let harmonia: Vec<(f32, f32, f32)> = (1..=4)
         .filter_map(|n| {
@@ -1641,10 +1656,13 @@ pub(crate) fn build_sample_source(
     }
     let label = name.clone();
     #[cfg(not(target_arch = "wasm32"))]
+    PRELOADS_PENDING.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+    #[cfg(not(target_arch = "wasm32"))]
     if let Err(err) = std::thread::Builder::new()
         .name(format!("signal-preload:{label}"))
         .spawn(move || {
             let stats = cache.preload(paths.iter().map(std::path::PathBuf::as_path));
+            PRELOADS_PENDING.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
             tracing::info!(
                 library = %label,
                 loaded = stats.loaded,
@@ -1657,6 +1675,7 @@ pub(crate) fn build_sample_source(
             );
         })
     {
+        PRELOADS_PENDING.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
         tracing::warn!(err = %err, "failed to spawn sample block preload thread");
     }
     // wasm32: no streamer thread, so this runs synchronously on the caller —

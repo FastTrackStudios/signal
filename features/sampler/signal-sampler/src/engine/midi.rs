@@ -551,6 +551,7 @@ impl SampleEngine {
         trigger: ZoneTrigger,
         record_empty_miss: bool,
     ) {
+
         // Bucket matching zones by mic id so each mic gets its own
         // round-robin within the candidate set.
         let mut pairs = std::mem::take(&mut self.zoned_pairs);
@@ -2497,8 +2498,17 @@ impl SampleEngine {
             };
             // Same pitch/speed split as spawn_zone_voice_at: transposition →
             // time-preserving shifter; tuning → rate.
-            let transpose_cents = semitones * 100.0;
-            let rate = 2.0f64.powf((z.tune_cents as f64 + self.master_tune_cents()) / 1200.0);
+            // Resample mode (Spectrasonics sources): the key offset is
+            // playback rate, as in Omnisphere; else the time-preserving
+            // shifter carries it.
+            let (transpose_cents, resample_cents) = if self.resample_transpose {
+                (0.0, semitones * 100.0)
+            } else {
+                (semitones * 100.0, 0.0)
+            };
+            let rate = 2.0f64.powf(
+                (z.tune_cents as f64 + self.master_tune_cents() + resample_cents) / 1200.0,
+            );
             let vel_gain = self.velocity_sens.map_or(1.0, |s| {
                 let v = f32::from(velocity) / 127.0;
                 1.0 - s + s * v * v
@@ -2540,7 +2550,9 @@ impl SampleEngine {
                 };
                 // Source-vs-output sample-rate compensation (see Voice::with_rate_scale).
                 let sr_scale = data.sample_rate as f64 / self.sample_rate as f64;
-                let u_rate = rate * 2f64.powf((off * det_cents * 0.5) as f64 / 1200.0) * sr_scale;
+                let h_cents = f64::from(h_semis) * 100.0;
+                let (h_rate, h_shift) = if self.resample_transpose { (h_cents, 0.0) } else { (0.0, h_cents) };
+                let u_rate = rate * 2f64.powf(((off * det_cents * 0.5) as f64 + h_rate) / 1200.0) * sr_scale;
                 let u_pan = (z.pan + off * width + h_pan).clamp(-1.0, 1.0);
                 let mut voice = Voice::with_rate(
                     data.clone(),
@@ -2560,7 +2572,7 @@ impl SampleEngine {
                 .with_amp_points(self.amp_points.clone(), self.sample_rate)
                 .with_filter_env(self.new_voice_filter(note))
                 .with_vibrato(self.vibrato)
-                .with_pitch_cents(transpose_cents + f64::from(h_semis) * 100.0)
+                .with_pitch_cents(transpose_cents + h_shift)
                 .with_sample_window(
                     z.sample_start as usize,
                     (z.sample_end > 0).then_some(z.sample_end as usize),

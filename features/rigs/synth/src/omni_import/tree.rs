@@ -437,7 +437,12 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     .with_param(format!("harm{n}_shape"), format!("{shape:.4}"));
             }
             osc.add(wt)
-        } else if let Some(spec) = index.find_source(&layer.soundsource) {
+        } else if let Some(spec) = layer
+            .enabled
+            // A switched-off layer loads nothing (it would only cost memory).
+            .then(|| index.find_source(&layer.soundsource))
+            .flatten()
+        {
             // Sample mode: unison + the amp ADSR ride the Sampler block
             // (the engine applies them per voice at trigger time).
             let mut sb = RigBlock::sample_lib(spec.to_string_lossy().to_string())
@@ -478,6 +483,8 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     .with_param("amp_release", format!("{r:.4}"));
             }
             sb = sb.with_param("vel_sens", format!("{:.3}", layer.amp_velsens));
+            // Omnisphere transposes a soundsource's zones by resampling.
+            sb = sb.with_param("transpose_mode", "resample");
             // Harmonia voices play the soundsource itself at their intervals
             // (the engine stacks them per note).
             for (i, (level, smi, pan, _shape)) in layer.harmonia.iter().take(4).enumerate() {

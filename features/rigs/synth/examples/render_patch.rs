@@ -193,6 +193,12 @@ fn main() {
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .map_or(40, |ms| (ms / 5).max(40));
+    // Wait for the sample blocks to finish opening their zones (bounded),
+    // so the note never races the preload.
+    let t0 = std::time::Instant::now();
+    while signal_sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 120 {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
     for i in 0..preroll_blocks {
         let midi: &[PluginMidiEvent] = match i {
             0 => &ccs,

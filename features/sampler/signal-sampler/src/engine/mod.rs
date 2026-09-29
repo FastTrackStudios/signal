@@ -949,6 +949,9 @@ pub struct SampleEngine {
     /// Harmonia: extra voices at `(interval semitones, level, pan)` on top of
     /// the played one — an Omnisphere sample layer's (up to four).
     harmonia: Vec<(f32, f32, f32)>,
+    /// Transpose zones by playback rate (resampling, as Omnisphere and
+    /// Keyscape do) instead of the time-preserving shifter.
+    resample_transpose: bool,
     /// Timbre Shift (semitones): zones are picked for `note − shift` and
     /// played at `note`, so a positive shift plays a lower key pitched up.
     timbre_shift: i32,
@@ -1213,6 +1216,7 @@ impl SampleEngine {
             velocity_sens: None,
             zone_velocity: None,
             harmonia: Vec::new(),
+            resample_transpose: false,
             timbre_shift: 0,
             filter_env: None,
             filter_res: 0.0,
@@ -1567,6 +1571,12 @@ impl SampleEngine {
     /// velocity law); `None`: velocity only picks the sampled layer.
     pub fn set_velocity_sens(&mut self, s: Option<f32>) {
         self.velocity_sens = s.map(|s| s.clamp(0.0, 1.0));
+    }
+
+    /// Transpose zones by resampling (pitch and speed together) instead of
+    /// the time-preserving shifter — how Spectrasonics instruments play.
+    pub fn set_resample_transpose(&mut self, on: bool) {
+        self.resample_transpose = on;
     }
 
     /// Harmonia voices `(interval semitones, level, pan)`, up to four.

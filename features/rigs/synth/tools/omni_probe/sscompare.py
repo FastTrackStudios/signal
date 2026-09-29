@@ -14,7 +14,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 os.environ.setdefault("FTS_SAMPLED_ROOT", "/Volumes/dev-drive/AudioHaven/Sampled")
 os.environ.setdefault("FTS_PACK_LIBRARY", "/Volumes/dev-drive/AudioHaven/Signal/Libraries")
 os.environ.setdefault("FTS_OMNISPHERE_ROOT", "/Volumes/dev-drive/AudioHaven/Sampled/Keys/Omnisphere")
-os.environ.setdefault("RENDER_PREROLL_MS", "3000")
+os.environ.setdefault("RENDER_PREROLL_MS", "8000")
 H = "/Volumes/dev-drive/daw/target/release/examples/omni_render"
 O = "/Volumes/dev-drive/signal/target/release/examples/render_patch"
 SR = 48000
