@@ -778,6 +778,9 @@ pub struct SampleEngine {
     /// as mapped, 0 = none) — an Omnisphere layer's soundsource Release
     /// Volume (`relVol`).
     release_level: f32,
+    /// Scale each key-up release by how far the note's body has decayed
+    /// (an Omnisphere soundsource's release follows the note it ends).
+    release_follows_body: bool,
     /// Mechanical pedal-noise level (linear; default -20 dB). Absolute, scaled
     /// by recent playing velocity.
     mech_noise_gain: f32,
@@ -1186,6 +1189,7 @@ impl SampleEngine {
             // Keyscape defaults: release -10 dB, mechanical -20 dB, pedal -20 dB.
             release_gain: db_to_gain(-10.0),
             release_level: 1.0,
+            release_follows_body: false,
             mech_noise_gain: db_to_gain(-20.0),
             pedal_noise_gain: db_to_gain(-20.0),
             no_pedal_articulation: None,
@@ -1959,6 +1963,10 @@ impl SampleEngine {
     /// an Omnisphere layer's soundsource Release Volume.
     pub fn set_release_level_db(&mut self, db: Option<f32>) {
         self.release_level = db.map_or(0.0, db_to_gain);
+        // Omnisphere's release follows the body it ends: measured on the
+        // gig's Hammered Dolceola, a key-up after a 2 s hold (body ~15 dB
+        // down) releases ~15 dB quieter than one after 0.5 s.
+        self.release_follows_body = true;
     }
 
     /// Mechanical pedal-noise level, dB (Keyscape default -20).

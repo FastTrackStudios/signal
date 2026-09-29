@@ -1573,6 +1573,10 @@ pub(crate) fn build_sample_source(
     {
         engine.set_piano_snapshot(s);
     }
+    // One mic of a multi-mic source (the others silent).
+    if let Some(m) = block.param_str("solo_mic").filter(|m| !m.is_empty()) {
+        engine.set_solo_mic(Some(m));
+    }
     // An Omnisphere layer's soundsource Release Volume: dB, or "off".
     match block.param_str("release_db").as_deref() {
         Some("off") => engine.set_release_level_db(None),

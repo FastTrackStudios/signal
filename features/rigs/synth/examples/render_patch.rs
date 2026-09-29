@@ -146,6 +146,21 @@ fn main() {
             }
         }
         for n in ["Layer A", "Layer B", "Layer C", "Layer D"] {
+            if let Some(l) = tree.find(n) {
+                if let Some(f) = l.find("Filters") {
+                    for b in f.blocks() {
+                        eprintln!("{n} filter block {:?} {:?}", b.display_name(), b.params);
+                    }
+                }
+                for m in &l.modulators {
+                    eprintln!("{n} modulator {:?} {:?}", m.display_name(), m.params);
+                }
+                for r in &l.mod_routes {
+                    eprintln!("{n} route {r:?}");
+                }
+            }
+        }
+        for n in ["Layer A", "Layer B", "Layer C", "Layer D"] {
             if let Some(osc) = tree.find(n).and_then(|l| l.find("Oscillator")) {
                 for b in osc.blocks() {
                     eprintln!("{n} osc block {:?} {:?}", b.display_name(), b.params);

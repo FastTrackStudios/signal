@@ -416,6 +416,9 @@ pub struct Voice {
     /// sit a fixed dB UNDER the note body that actually sounded — a soft note
     /// is a genuinely quiet recording, so a fixed-level release would drown it.
     env_peak: f32,
+    /// The loudest `env_peak` this voice has reached — its onset level, for
+    /// how far the body has decayed since ([`VoicePool::note_body_ratio`]).
+    max_peak: f32,
     /// Render-trace correlation id (set at spawn when tracing) — pairs this
     /// voice's lifetime with its `TraceKind::VoiceSpawn`/`VoiceEnd` events.
     pub trace_id: Option<u64>,
@@ -622,6 +625,7 @@ impl Voice {
             has_sounded: false,
             quiet_frames: 0,
             env_peak: 0.0,
+            max_peak: 0.0,
             trace_id: None,
             pitch: None,
         }
@@ -702,6 +706,7 @@ impl Voice {
             has_sounded: false,
             quiet_frames: 0,
             env_peak: 0.0,
+            max_peak: 0.0,
             trace_id: None,
             pitch: None,
         }
@@ -1517,6 +1522,7 @@ impl Voice {
         } else {
             self.env_peak *= ENV_PEAK_DECAY;
         }
+        self.max_peak = self.max_peak.max(self.env_peak);
         if self.state == VoiceState::Done {
             return;
         }
@@ -1737,6 +1743,17 @@ impl VoicePool {
     /// Loudest current peak-follower level among the note's still-sounding
     /// body voices (non-release, not Done). Used to scale a note's release tail
     /// so it sits under the actual body that played. `0.0` if nothing sounds.
+    /// How far `note`'s body has decayed from its onset: its current peak
+    /// over the loudest it reached (0‥1; 1 when nothing has sounded yet).
+    pub fn note_body_ratio(&self, note: u8) -> f32 {
+        let (now, max) = self
+            .voices
+            .iter()
+            .filter(|v| v.note == note && v.kind != VoiceKind::Release && v.state != VoiceState::Done)
+            .fold((0.0f32, 0.0f32), |(n, m), v| (n + v.env_peak, m + v.max_peak));
+        if max <= 1e-9 { 1.0 } else { (now / max).clamp(0.0, 1.0) }
+    }
+
     pub fn note_body_peak(&self, note: u8) -> f32 {
         self.voices
             .iter()

@@ -1196,13 +1196,20 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
                         let act = h.num(&format!("Act{i}")).unwrap_or(0.0) > 0.0;
                         let level = h.num(&format!("lvl{i}")).unwrap_or(0.0) * hrm_lv;
                         if act && level > 0.0 {
-                            // smi normalized 0..1 → ±24 semitones; pan 0..1 → ±1.
-                            let smi = (h.num(&format!("smi{i}")).unwrap_or(0.5) - 0.5) * 48.0;
+                            // Interval: 0.02 per semitone about 0.48 (unison) —
+                            // measured against the plugin (0.62 = +7, 0.64 = +8;
+                            // an unused voice ships 0.48). Fine tune `tun`: about
+                            // ±100 cents about 0.5 (measured, noisily — the
+                            // test voice was a synced classic oscillator).
+                            // pan 0..1 → ±1.
+                            let semis = ((h.num(&format!("smi{i}")).unwrap_or(0.48) - 0.48) / 0.02).round();
+                            let cents = (h.num(&format!("tun{i}")).unwrap_or(0.5) - 0.5) * 200.0;
+                            let smi = semis + cents / 100.0;
                             let pan = h.num(&format!("pan{i}")).unwrap_or(0.5).mul_add(2.0, -1.0);
                             let shape = h.num(&format!("wfm{i}")).unwrap_or(0.0).clamp(0.0, 1.0);
                             layer
                                 .harmonia
-                                .push((level.clamp(0.0, 1.0), smi.round(), pan, shape));
+                                .push((level.clamp(0.0, 1.0), smi, pan, shape));
                         }
                     }
                 }

@@ -432,7 +432,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                 let n = i + 1;
                 wt = wt
                     .with_param(format!("harm{n}_level"), format!("{level:.4}"))
-                    .with_param(format!("harm{n}_interval"), format!("{smi:.1}"))
+                    .with_param(format!("harm{n}_interval"), format!("{smi:.3}"))
                     .with_param(format!("harm{n}_pan"), format!("{pan:.4}"))
                     .with_param(format!("harm{n}_shape"), format!("{shape:.4}"));
             }
@@ -491,7 +491,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                 let n = i + 1;
                 sb = sb
                     .with_param(format!("harm{n}_level"), format!("{level:.4}"))
-                    .with_param(format!("harm{n}_interval"), format!("{smi:.1}"))
+                    .with_param(format!("harm{n}_interval"), format!("{smi:.3}"))
                     .with_param(format!("harm{n}_pan"), format!("{pan:.4}"));
             }
             // One soundsource of a multi-soundsource pack (Keyscape).
@@ -500,6 +500,10 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             }
             if let Some(v) = super::index::dynamic_zone_velocity(&layer.soundsource) {
                 sb = sb.with_param("zone_velocity", v.to_string());
+            }
+            // Experiment switch: play one mic of a multi-mic soundsource.
+            if let Ok(m) = std::env::var("OMNI_SOLO_MIC") {
+                sb = sb.with_param("solo_mic", m);
             }
             // The soundsource's key-up releases at the layer's Release Volume.
             sb = sb.with_param(

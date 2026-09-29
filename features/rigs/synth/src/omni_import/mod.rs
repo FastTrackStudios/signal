@@ -71,7 +71,7 @@ mod tests {
 <OSC level="3f400000" fm="3e800000" am="0" hrmOn="3f800000" hrmLv="3f800000" >
 <UNI umix="3f800000" ucnt="3f800000" udpth="3e4ccccd" uwdth="3f800000" >
 </UNI>
-<HARM Act1="3f800000" lvl1="3f000000" smi1="3f4aaaab" pan1="3f000000" wfm1="0" >
+<HARM Act1="3f800000" lvl1="3f000000" smi1="3f428f5c" pan1="3f000000" wfm1="0" >
 </HARM>
 </OSC>
 <WAVESHAPER act="3f800000" dpth="3f000000" bc="0" srrdc="0" mix="3f800000" >

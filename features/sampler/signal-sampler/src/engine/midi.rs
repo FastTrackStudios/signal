@@ -1880,7 +1880,12 @@ impl SampleEngine {
             if self.release_level <= 0.0 {
                 return false;
             }
-            gain_scale * self.release_level
+            let follow = if self.release_follows_body {
+                self.voices.note_body_ratio(note)
+            } else {
+                1.0
+            };
+            gain_scale * self.release_level * follow
         } else {
             gain_scale
         };
@@ -2654,7 +2659,12 @@ impl SampleEngine {
                 if self.release_level <= 0.0 {
                     continue;
                 }
-                gain * self.release_level
+                let follow = if self.release_follows_body {
+                    self.voices.note_body_ratio(note)
+                } else {
+                    1.0
+                };
+                gain * self.release_level * follow
             } else {
                 gain
             };
