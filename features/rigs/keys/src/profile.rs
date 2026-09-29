@@ -117,6 +117,15 @@ pub struct PatchMacros {
     pub values: Vec<MacroValue>,
 }
 
+/// A build-time parameter for a layer's sample source (the Sampler block's
+/// `params`) — e.g. `piano_snapshot = "worship"`: play an NI piano with a
+/// gig's saved controls rather than the library's defaults.
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct SourceParam {
+    pub name: String,
+    pub value: String,
+}
+
 /// One layer definition inside an engine.
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct LayerDef {
@@ -154,6 +163,9 @@ pub struct LayerDef {
     /// Knob values saved per patch and module (see [`PatchMacros`]).
     #[facet(default)]
     pub patch_macros: Vec<PatchMacros>,
+    /// Build-time params for the lane's sample sources (see [`SourceParam`]).
+    #[facet(default)]
+    pub source_params: Vec<SourceParam>,
 }
 
 impl LayerDef {
@@ -193,6 +205,7 @@ impl LayerDef {
             key_hi: 127,
             exclude_global: false,
             patch_macros: Vec::new(),
+            source_params: Vec::new(),
         }
     }
 
@@ -200,6 +213,16 @@ impl LayerDef {
     #[must_use]
     pub const fn excluded_from_globals(mut self) -> Self {
         self.exclude_global = true;
+        self
+    }
+
+    /// Set a build-time param on the lane's sample sources.
+    #[must_use]
+    pub fn with_source_param(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.source_params.push(SourceParam {
+            name: name.into(),
+            value: value.into(),
+        });
         self
     }
 
@@ -555,6 +578,9 @@ impl KeysProfile {
             })
             .collect();
         let mut lane = signal_synth::engine::signal_layer_with(&layer.name, &settings);
+        if !layer.source_params.is_empty() {
+            stamp_source_params(&mut lane, &layer.source_params);
+        }
         if !layer.is_full_range() {
             lane = lane.zone(signal_sampler::rig_node::Zone {
                 key_lo: layer.key_lo,
@@ -711,7 +737,12 @@ pub fn worship_profile() -> KeysProfile {
                     // The piano under everything: excluded from the engine
                     // and rig globals by default, so a filter sweep or an
                     // envelope change over the rig leaves it alone.
-                    LayerDef::new("Keys 1", "The Grandeur - Piano").excluded_from_globals(),
+                    // The gig's NI pianos play with its saved controls (Color,
+                    // velocity mode, noise levels, instrument volume) — any
+                    // NI piano picked into this lane, not only the Grandeur.
+                    LayerDef::new("Keys 1", "The Grandeur - Piano")
+                        .excluded_from_globals()
+                        .with_source_param("piano_snapshot", "worship"),
                     LayerDef::new("Keys 2", "Double Felt Grand"),
                     LayerDef::new("Keys 3", ""),
                 ],
@@ -743,6 +774,7 @@ pub fn worship_profile() -> KeysProfile {
                         key_hi: 127,
                         exclude_global: false,
                         patch_macros: Vec::new(),
+                        source_params: Vec::new(),
                     },
                     // "AD │ Gentle Gothics" (Ambient Dreams), part level 0.30.
                     // Not a synth sparkle at all — it is a men's + women's
@@ -759,6 +791,7 @@ pub fn worship_profile() -> KeysProfile {
                         key_hi: 127,
                         exclude_global: false,
                         patch_macros: Vec::new(),
+                        source_params: Vec::new(),
                     },
                 ],
             },
@@ -817,6 +850,7 @@ pub fn worship_profile() -> KeysProfile {
                         key_hi: 127,
                         exclude_global: false,
                         patch_macros: Vec::new(),
+                        source_params: Vec::new(),
                     },
                     // "CLUB │ Club Europa Plucking Pulsars" (Club Land), part
                     // level 0.34 — the Trance lane, one soundsource.
@@ -831,6 +865,7 @@ pub fn worship_profile() -> KeysProfile {
                         key_hi: 127,
                         exclude_global: false,
                         patch_macros: Vec::new(),
+                        source_params: Vec::new(),
                     },
                 ],
             },
@@ -963,6 +998,28 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
         ],
+    }
+}
+
+/// Put `params` on every Sampler block under `node` (a lane's sample
+/// sources), replacing a param of the same name.
+fn stamp_source_params(node: &mut signal_sampler::rig_node::Container, params: &[SourceParam]) {
+    use signal_sampler::rig_node::RigNode;
+    for child in &mut node.children {
+        match child {
+            // A sample source is the block that names a sample spec.
+            RigNode::Block { block } if !block.sample.is_empty() => {
+                for p in params {
+                    block.params.retain(|q| q.name != p.name);
+                    block.params.push(signal_sampler::rig_node::Param {
+                        name: p.name.clone(),
+                        value: p.value.clone(),
+                    });
+                }
+            }
+            RigNode::Container { container } => stamp_source_params(container, params),
+            _ => {}
+        }
     }
 }
 
@@ -1107,6 +1164,22 @@ mod tests {
             "unresolved patches:\n  {}",
             missing.join("\n  ")
         );
+    }
+
+    #[test]
+    fn the_worship_piano_lane_plays_the_gig_snapshot() {
+        let p = worship_profile();
+        let tree = p.build_tree(|name| Some(format!("/packs/{name}.signalpack")));
+        let lane = tree.find("Keys 1").expect("Keys 1 lane");
+        let sources: Vec<_> = lane
+            .blocks()
+            .into_iter()
+            .filter(|b| !b.sample.is_empty())
+            .collect();
+        assert!(!sources.is_empty(), "Keys 1 has a sample source");
+        for b in sources {
+            assert_eq!(b.param_str("piano_snapshot").as_deref(), Some("worship"));
+        }
     }
 
     #[test]
