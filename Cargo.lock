@@ -13796,6 +13796,7 @@ dependencies = [
  "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
  "architect-telemetry",
  "signal-guitar-proto",
+ "signal-keys-proto",
  "signal-proto",
  "surface-proto",
  "tokio",

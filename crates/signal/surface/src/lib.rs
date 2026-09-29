@@ -20,6 +20,9 @@
 //! `cycle_boost`, `mute`, `stack/<i>`. Streams: `in_level`, `out_level`
 //! (dBFS, L/R), `gain_reduction`, `spectrum` (96 bins), `tempo`.
 //! Collections: `songs`, `setlists`, `parts`, `patches`.
+//!
+//! [`KeysSurface`] does the same for the keys rig — see [`keys`] for its
+//! address scheme.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -449,6 +452,9 @@ impl Services for GuitarSurface {
         layers![surface_proto::engine::Service, surface_proto::engine::StreamService]
     }
 }
+
+pub mod keys;
+pub use keys::KeysSurface;
 
 #[cfg(test)]
 mod tests;

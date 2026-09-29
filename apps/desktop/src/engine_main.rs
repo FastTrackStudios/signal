@@ -256,6 +256,14 @@ async fn async_main() {
             router
         }
     };
+    // The keys rig the same way, scoped `keys` next to its RigCore.
+    let router = match signal_surface::KeysSurface::connect(&local).await {
+        Ok(surface) => router.merge_router_scoped(Rig::Keys.slug(), architect::Services::into_router(surface)),
+        Err(error) => {
+            tracing::warn!(%error, "frame surface disabled: keys rig unreachable");
+            router
+        }
+    };
 
     // Serve the router over axum (`/vox` + `/health`) and iroh p2p, with the
     // browser remote as the HTTP fallback — all of it in `architect::host`.

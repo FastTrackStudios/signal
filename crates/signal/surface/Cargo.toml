@@ -9,6 +9,7 @@ publish = false
 surface-proto.workspace = true
 signal-guitar-proto.workspace = true
 signal-proto.workspace = true
+signal-keys-proto.workspace = true
 architect = { workspace = true, features = ["vox", "local", "platform"] }
 architect-telemetry.workspace = true
 vox.workspace = true
