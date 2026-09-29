@@ -123,6 +123,9 @@ signal = [
     # Pack distribution: the engine serves its .signalpack library
     # (native-only dep — no-op on the web build, same trick as above).
     "dep:signal-pack-library",
+    # frame control surfaces: the guitar rig as a SurfaceEngine, scoped
+    # `guitar` on /vox (native-only dep — no-op on the web build).
+    "dep:signal-surface",
     "dep:signal-space",
     "dep:signal-space-proto",
     "dep:signal-ekit",
@@ -321,6 +324,8 @@ signal-ekit = { workspace = true, optional = true }
 signal-tone3000 = { workspace = true, optional = true }
 signal-account = { workspace = true, optional = true }
 signal-nam = { workspace = true, optional = true }
+# frame control surfaces over the rigs (SurfaceEngine adapters).
+signal-surface = { workspace = true, optional = true }
 url = { version = "2", optional = true }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }

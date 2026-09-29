@@ -29,6 +29,7 @@ members = [
     "crates/signal/proto",
     "crates/signal/rig-host",
     "crates/signal/rigs-proto",
+    "crates/signal/surface",
     "crates/signal/signal",
     "crates/signal/space",
     "crates/signal/space/proto",
@@ -277,6 +278,7 @@ signal-web = { path = "apps/web" }
 signal-daw-bridge = { path = "crates/signal/daw-bridge" }
 signal-rig-host = { path = "crates/signal/rig-host" }
 signal-rigs-proto = { path = "crates/signal/rigs-proto" }
+signal-surface = { path = "crates/signal/surface" }
 signal-widgets = { path = "crates/signal/widgets" }
 signal-nam = { path = "features/nam" }
 signal-extension = { path = "features/reaper/signal-extension" }
@@ -402,6 +404,9 @@ inferno-net = { git = "https://codeberg.org/FastTrackStudios/inferno-control", r
 # permissions stack, architect-ui + architect-story, architect-telemetry).
 # One tag pin shared by every entry so the whole framework moves together.
 architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }
+# frame (github.com/FastTrackStudios/frame): the control-surface contract.
+# frame pins this same architect/facet/vox stack; bump both together.
+surface-proto = { git = "https://github.com/FastTrackStudios/frame", tag = "v0.1.0" }
 architect-derive = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }
 architect-rpc-derive = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }
 architect-action-derive = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }

@@ -553,12 +553,12 @@ dependencies = [
 [[package]]
 name = "architect"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.7.5#523ae7922a711a2bc7e144f7f1a60a5da7bb20d8"
+source = "git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro#523ae7922a711a2bc7e144f7f1a60a5da7bb20d8"
 dependencies = [
- "architect-action-derive 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.5)",
- "architect-derive 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.5)",
- "architect-permissions 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.5)",
- "architect-rpc-derive 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.5)",
+ "architect-action-derive 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro)",
+ "architect-derive 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro)",
+ "architect-permissions 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro)",
+ "architect-rpc-derive 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro)",
  "async-channel 2.5.0",
  "eyre",
  "facet",
@@ -587,7 +587,7 @@ dependencies = [
 [[package]]
 name = "architect-action-derive"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.7.5#523ae7922a711a2bc7e144f7f1a60a5da7bb20d8"
+source = "git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro#523ae7922a711a2bc7e144f7f1a60a5da7bb20d8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -616,7 +616,7 @@ dependencies = [
 [[package]]
 name = "architect-derive"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.7.5#523ae7922a711a2bc7e144f7f1a60a5da7bb20d8"
+source = "git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro#523ae7922a711a2bc7e144f7f1a60a5da7bb20d8"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -637,7 +637,7 @@ dependencies = [
 [[package]]
 name = "architect-permissions"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.7.5#523ae7922a711a2bc7e144f7f1a60a5da7bb20d8"
+source = "git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro#523ae7922a711a2bc7e144f7f1a60a5da7bb20d8"
 dependencies = [
  "serde",
  "serde_json",
@@ -657,7 +657,7 @@ dependencies = [
 [[package]]
 name = "architect-rpc-derive"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.7.5#523ae7922a711a2bc7e144f7f1a60a5da7bb20d8"
+source = "git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro#523ae7922a711a2bc7e144f7f1a60a5da7bb20d8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3189,7 +3189,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 name = "daw"
 version = "0.1.0"
 dependencies = [
- "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.5)",
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro)",
  "daw-control",
  "daw-module",
  "daw-proto",
@@ -3236,7 +3236,7 @@ dependencies = [
 name = "daw-control"
 version = "0.1.0"
 dependencies = [
- "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.5)",
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro)",
  "daw-proto",
  "eyre",
  "facet",
@@ -3253,7 +3253,7 @@ dependencies = [
 name = "daw-extension-runtime"
 version = "0.1.0"
 dependencies = [
- "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.5)",
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro)",
  "crossbeam-channel",
  "daw-control",
  "daw-module",
@@ -3280,7 +3280,7 @@ dependencies = [
 name = "daw-proto"
 version = "0.1.0"
 dependencies = [
- "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.5)",
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro)",
  "facet",
  "futures",
  "midicore",
@@ -3292,7 +3292,7 @@ dependencies = [
 name = "daw-reaper"
 version = "0.1.0"
 dependencies = [
- "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.5)",
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro)",
  "base64 0.22.1",
  "camino",
  "crossbeam-channel",
@@ -3324,7 +3324,7 @@ dependencies = [
 name = "daw-standalone"
 version = "0.1.0"
 dependencies = [
- "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.5)",
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro)",
  "base64 0.22.1",
  "clack-extensions",
  "clack-host",
@@ -7655,7 +7655,7 @@ dependencies = [
 name = "keyflow-proto"
 version = "0.1.0"
 dependencies = [
- "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.5)",
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro)",
  "color-palette",
  "daw-proto",
  "facet",
@@ -8451,7 +8451,7 @@ dependencies = [
 name = "midicore-proto"
 version = "0.1.0"
 dependencies = [
- "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.5)",
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.7.4-subscribe-intro)",
  "facet",
  "vox",
  "vox-types",
@@ -13178,6 +13178,7 @@ dependencies = [
  "signal-sampler",
  "signal-space",
  "signal-space-proto",
+ "signal-surface",
  "signal-synth-proto",
  "signal-synth-rig",
  "signal-synth-ui",
@@ -13786,6 +13787,20 @@ dependencies = [
  "tokio",
  "utils",
  "uuid",
+]
+
+[[package]]
+name = "signal-surface"
+version = "0.1.0"
+dependencies = [
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
+ "architect-telemetry",
+ "signal-guitar-proto",
+ "signal-proto",
+ "surface-proto",
+ "tokio",
+ "tracing",
+ "vox",
 ]
 
 [[package]]
@@ -14942,6 +14957,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c64fc7232dd8d2e4ac5ce4ef302b1d81e0b80d055b9d77c7c4f51f6aa4c867d6"
 dependencies = [
  "is_ci",
+]
+
+[[package]]
+name = "surface-proto"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/frame?tag=v0.1.0#06cdaebcc1a677b76d468c46a23698337ea23139"
+dependencies = [
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
+ "facet",
+ "serde",
+ "uuid",
+ "vox",
 ]
 
 [[package]]

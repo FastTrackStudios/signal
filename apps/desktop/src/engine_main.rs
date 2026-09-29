@@ -239,6 +239,24 @@ async fn async_main() {
     let local = architect::LocalServer::serve(router.clone(), watch_scope.clone());
     let watch_routes = crate::engine_watch::router(local.clone()).await;
 
+    // ── frame control surfaces ────────────────────────────────────────────
+    // The guitar rig as a frame `SurfaceEngine` (catalog, normalized params,
+    // actions, meters), scoped `guitar` next to its RigCore. It is a vox
+    // client of the rig over the same in-process server as the watch bridge,
+    // so the rig itself is untouched; a surface can't tell it from a remote.
+    let router = match signal_surface::GuitarSurface::connect(
+        &local,
+        std::sync::Arc::new(signal_sampler::native::range_of),
+    )
+    .await
+    {
+        Ok(surface) => router.merge_router_scoped(Rig::Guitar.slug(), architect::Services::into_router(surface)),
+        Err(error) => {
+            tracing::warn!(%error, "frame surface disabled: guitar rig unreachable");
+            router
+        }
+    };
+
     // Serve the router over axum (`/vox` + `/health`) and iroh p2p, with the
     // browser remote as the HTTP fallback — all of it in `architect::host`.
     let config_dir = signal_sampler::rig_prefs::signal_config_dir();
