@@ -32,7 +32,7 @@ pub use model::{
     filter_model, omni_cutoff_hz, omni_filter_setting, parse_patch, wavetable_path,
 };
 pub use multi::{OmniMulti, load_multi_file, multi_to_container, parse_multi};
-pub use tree::{LAYER_NAMES, load_patch_file, patch_to_container};
+pub use tree::{LAYER_NAMES, load_patch_file, load_patch_file_transposed, patch_to_container};
 
 #[cfg(test)]
 use model::classify_effect;

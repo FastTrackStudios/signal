@@ -1573,6 +1573,16 @@ pub(crate) fn build_sample_source(
     {
         engine.set_piano_snapshot(s);
     }
+    // An Omnisphere layer's soundsource Release Volume: dB, or "off".
+    match block.param_str("release_db").as_deref() {
+        Some("off") => engine.set_release_level_db(None),
+        Some(v) => {
+            if let Ok(db) = v.parse::<f32>() {
+                engine.set_release_level_db(Some(db));
+            }
+        }
+        None => {}
+    }
     if let Some(s) = block.param_f32("vel_sens") {
         engine.set_velocity_sens(Some(s));
     }

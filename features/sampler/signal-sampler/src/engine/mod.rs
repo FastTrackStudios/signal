@@ -774,6 +774,10 @@ pub struct SampleEngine {
     /// (linear; default -10 dB, matching Keyscape). Applied to the body's
     /// measured peak at note-off so the release always sits under the note.
     release_gain: f32,
+    /// Level of every key-up release voice this engine spawns (linear; 1 =
+    /// as mapped, 0 = none) — an Omnisphere layer's soundsource Release
+    /// Volume (`relVol`).
+    release_level: f32,
     /// Mechanical pedal-noise level (linear; default -20 dB). Absolute, scaled
     /// by recent playing velocity.
     mech_noise_gain: f32,
@@ -1181,6 +1185,7 @@ impl SampleEngine {
             note_strike_vel: [0; 128],
             // Keyscape defaults: release -10 dB, mechanical -20 dB, pedal -20 dB.
             release_gain: db_to_gain(-10.0),
+            release_level: 1.0,
             mech_noise_gain: db_to_gain(-20.0),
             pedal_noise_gain: db_to_gain(-20.0),
             no_pedal_articulation: None,
@@ -1950,6 +1955,12 @@ impl SampleEngine {
     pub fn set_release_gain_db(&mut self, db: f32) {
         self.release_gain = db_to_gain(db.clamp(-60.0, 0.0));
     }
+    /// Level of the key-up release voices, dB (`None` = no releases at all):
+    /// an Omnisphere layer's soundsource Release Volume.
+    pub fn set_release_level_db(&mut self, db: Option<f32>) {
+        self.release_level = db.map_or(0.0, db_to_gain);
+    }
+
     /// Mechanical pedal-noise level, dB (Keyscape default -20).
     pub fn set_mech_noise_gain_db(&mut self, db: f32) {
         self.mech_noise_gain = db_to_gain(db.clamp(-60.0, 6.0));

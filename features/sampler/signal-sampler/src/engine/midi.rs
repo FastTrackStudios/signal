@@ -1875,6 +1875,15 @@ impl SampleEngine {
         pitch_offset: f64,
         start_offset: usize,
     ) -> bool {
+        // The layer's release volume; off means no key-up voice at all.
+        let gain_scale = if matches!(kind, VoiceKind::Release) {
+            if self.release_level <= 0.0 {
+                return false;
+            }
+            gain_scale * self.release_level
+        } else {
+            gain_scale
+        };
         // Copy out the zone fields up front so no borrow of `self.patch`
         // outlives the `&mut self` cache-miss bookkeeping below.
         let z = &self.patch.spec.zones[idx];
@@ -2639,6 +2648,15 @@ impl SampleEngine {
                 VoiceKind::Short
             } else {
                 VoiceKind::Zoned
+            };
+            // The layer's release volume; off means no key-up voice at all.
+            let gain = if matches!(voice_kind, VoiceKind::Release) {
+                if self.release_level <= 0.0 {
+                    continue;
+                }
+                gain * self.release_level
+            } else {
+                gain
             };
             // Stem class: releases follow the parent articulation; direct
             // triggers are classed by their zone's articulation.

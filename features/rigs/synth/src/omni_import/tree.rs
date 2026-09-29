@@ -501,6 +501,11 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             if let Some(v) = super::index::dynamic_zone_velocity(&layer.soundsource) {
                 sb = sb.with_param("zone_velocity", v.to_string());
             }
+            // The soundsource's key-up releases at the layer's Release Volume.
+            sb = sb.with_param(
+                "release_db",
+                layer.release_db().map_or_else(|| "off".to_string(), |db| format!("{db:.2}")),
+            );
             let timbre = layer.timbre_semis();
             if timbre != 0 {
                 sb = sb.with_param("timbre_semis", timbre.to_string());
@@ -812,10 +817,26 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
 /// Returns an error if the file cannot be read or if the XML cannot be parsed
 /// as a valid Omnisphere patch or multi.
 pub fn load_patch_file(path: &Path, index: &SoundsourceIndex) -> Result<Container, String> {
+    load_patch_file_transposed(path, index, 0.0)
+}
+
+/// [`load_patch_file`] with every layer moved `semitones` — a multi part's
+/// own Octave/Semi setting (the gig's bass part plays an octave down), which
+/// lives on the part, not in the patch.
+pub fn load_patch_file_transposed(
+    path: &Path,
+    index: &SoundsourceIndex,
+    semitones: f32,
+) -> Result<Container, String> {
     if path.extension().is_some_and(|e| e == "mlt_omn") {
         return super::multi::load_multi_file(path, index);
     }
     let xml = std::fs::read_to_string(path).map_err(|e| format!("read {path:?}: {e}"))?;
-    let patch = parse_patch(&xml)?;
+    let mut patch = parse_patch(&xml)?;
+    if semitones != 0.0 {
+        for layer in &mut patch.layers {
+            layer.transpose += semitones;
+        }
+    }
     Ok(patch_to_container(&patch, index))
 }

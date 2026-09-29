@@ -52,6 +52,10 @@ pub struct OmniLayer {
     /// extreme aliased — the "bit crushed" choir), below a higher one
     /// pitched down. `None`: neutral. See [`OmniLayer::timbre_semis`].
     pub timbre: Option<f32>,
+    /// Soundsource Release Volume (`MULTISAMPLE relVol`), 0..1 (0.75 the
+    /// default): the level of the soundsource's key-up release samples, 0 =
+    /// none. See [`OmniLayer::release_db`].
+    pub release_vol: Option<f32>,
     /// `OSC pan`, 0..1 (0.5 centre): a balance law (measured: 0.25 puts
     /// the right side 6 dB down, 0 silences it) — the Amp's own law.
     pub pan: f32,
@@ -192,6 +196,32 @@ pub const TIMBRE_RANGE_SEMIS: f32 = 0.0;
 
 impl OmniLayer {
     /// The Timbre Shift in whole semitones: the key the sample is taken from
+    /// The release samples' level (dB, relative to `relVol` = 1), `None`
+    /// when they are off. Measured against the plugin (Double Felt Grand, key
+    /// 60, the release isolated as the difference from `relVol` = 0): not a
+    /// power law, so a table, interpolated.
+    #[must_use]
+    pub fn release_db(&self) -> Option<f32> {
+        const LAW: [(f32, f32); 9] = [
+            (0.0, -60.0),
+            (0.125, -40.7),
+            (0.25, -28.6),
+            (0.375, -21.6),
+            (0.5, -16.6),
+            (0.625, -12.7),
+            (0.75, -9.5),
+            (0.875, -5.7),
+            (1.0, 0.0),
+        ];
+        let v = self.release_vol.unwrap_or(0.75);
+        if v <= 0.0 {
+            return None;
+        }
+        let i = LAW.iter().position(|&(x, _)| x >= v).unwrap_or(LAW.len() - 1).max(1);
+        let ((x0, y0), (x1, y1)) = (LAW[i - 1], LAW[i]);
+        Some(y0 + (y1 - y0) * (v - x0) / (x1 - x0).max(1e-6))
+    }
+
     /// is the note minus this (positive: a lower key pitched up).
     #[must_use]
     pub fn timbre_semis(&self) -> i32 {
@@ -984,6 +1014,10 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
         layer.timbre = multis
             .get(i)
             .and_then(|m| m.num("timbre"))
+            .map(|t| t.clamp(0.0, 1.0));
+        layer.release_vol = multis
+            .get(i)
+            .and_then(|m| m.num("relVol"))
             .map(|t| t.clamp(0.0, 1.0));
         if let Some(f) = voice.child("FILTER") {
             layer.filter_name = f.attr("NameStr").unwrap_or("").to_string();

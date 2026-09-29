@@ -73,6 +73,11 @@ fn source_only(c: &signal_sampler::rig_node::Container) -> signal_sampler::rig_n
 }
 
 fn main() {
+    // `RUST_LOG=warn` surfaces the sampler's streaming / import warnings.
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .try_init();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let (Some(patch), Some(out)) = (args.first(), args.get(1)) else {
         eprintln!(

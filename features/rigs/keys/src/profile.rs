@@ -166,6 +166,10 @@ pub struct LayerDef {
     /// Build-time params for the lane's sample sources (see [`SourceParam`]).
     #[facet(default)]
     pub source_params: Vec<SourceParam>,
+    /// Transpose (semitones) of an Omnisphere lane's whole patch — the gig
+    /// part's own Octave setting, which lives on the part, not the patch.
+    #[facet(default)]
+    pub transpose: f32,
 }
 
 impl LayerDef {
@@ -206,6 +210,7 @@ impl LayerDef {
             exclude_global: false,
             patch_macros: Vec::new(),
             source_params: Vec::new(),
+            transpose: 0.0,
         }
     }
 
@@ -617,7 +622,7 @@ impl KeysProfile {
         static INDEX: std::sync::OnceLock<signal_synth::omni_import::SoundsourceIndex> =
             std::sync::OnceLock::new();
         let index = INDEX.get_or_init(signal_synth::omni_import::SoundsourceIndex::scan_default);
-        match signal_synth::omni_import::load_patch_file(path, index) {
+        match signal_synth::omni_import::load_patch_file_transposed(path, index, layer.transpose) {
             Ok(mut tree) => {
                 // The lane's knobs (seeded from this patch, one module per
                 // patch layer) ride onto the tree, so a rebuild keeps them.
@@ -775,6 +780,7 @@ pub fn worship_profile() -> KeysProfile {
                         exclude_global: false,
                         patch_macros: Vec::new(),
                         source_params: Vec::new(),
+                        transpose: 0.0,
                     },
                     // "AD │ Gentle Gothics" (Ambient Dreams), part level 0.30.
                     // Not a synth sparkle at all — it is a men's + women's
@@ -792,6 +798,7 @@ pub fn worship_profile() -> KeysProfile {
                         exclude_global: false,
                         patch_macros: Vec::new(),
                         source_params: Vec::new(),
+                        transpose: 0.0,
                     },
                 ],
             },
@@ -824,7 +831,12 @@ pub fn worship_profile() -> KeysProfile {
                 // importer resolves it out of the gig / the Spectrasonics user
                 // library. It is the one User patch in the rig, so it exists
                 // nowhere else — back it up.
-                layers: vec![LayerDef::new("Bass", "Worship PHAT Bass")],
+                // The gig's bass part plays an octave down (Omnisphere part
+                // Octave −1), so the same hands land in the bass register.
+                layers: vec![LayerDef {
+                    transpose: -12.0,
+                    ..LayerDef::new("Bass", "Worship PHAT Bass")
+                }],
             },
             EngineDef {
                 scope_values: Vec::new(),
@@ -851,6 +863,7 @@ pub fn worship_profile() -> KeysProfile {
                         exclude_global: false,
                         patch_macros: Vec::new(),
                         source_params: Vec::new(),
+                        transpose: 0.0,
                     },
                     // "CLUB │ Club Europa Plucking Pulsars" (Club Land), part
                     // level 0.34 — the Trance lane, one soundsource.
@@ -866,6 +879,7 @@ pub fn worship_profile() -> KeysProfile {
                         exclude_global: false,
                         patch_macros: Vec::new(),
                         source_params: Vec::new(),
+                        transpose: 0.0,
                     },
                 ],
             },

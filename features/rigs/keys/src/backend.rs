@@ -1689,6 +1689,15 @@ fn artefacts() -> signal_keys_proto::KeysRealtime {
 }
 
 impl KeysRigBackend {
+    /// The profile's full program exactly as the rig would build it now —
+    /// lanes seeded, knobs applied — without opening audio. For offline
+    /// probes (`examples/lane_render`).
+    #[doc(hidden)]
+    pub fn debug_profile_program(&self) -> Option<Container> {
+        self.prepare_lanes();
+        self.profile_program()
+    }
+
     /// What a module currently holds for `id` (its own value, else the
     /// macro's default).
     fn module_value(lane: &LaneState, index: usize, id: &str) -> f32 {
