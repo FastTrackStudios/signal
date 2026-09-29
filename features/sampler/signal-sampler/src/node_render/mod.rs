@@ -644,6 +644,35 @@ impl RenderNode {
             .is_some_and(|e| e.set_leaf_param(module, leaf, param, value))
     }
 
+    /// A leaf parameter's current base (normalized 0..1): the live overlay
+    /// if one is set, else the value the block was built with — what
+    /// [`set_leaf_param`](Self::set_leaf_param) would be moving it from.
+    /// `None` when the leaf or parameter is not in this tree.
+    pub fn leaf_param_value(&mut self, module: &str, leaf: &str, param: &str) -> Option<f64> {
+        let (id, pid, overlaid) = {
+            let e = self.root_engine()?;
+            let id = e.find_leaf(module, leaf)?;
+            let pkey = param.to_lowercase();
+            let pid = e.leaf_params[id]
+                .iter()
+                .find(|p| p.name.to_lowercase() == pkey)?
+                .id;
+            let overlaid = e
+                .overlay
+                .get(id)
+                .and_then(|o| o.iter().find(|(p, _)| *p == pid))
+                .map(|(_, v)| *v);
+            (id, pid, overlaid)
+        };
+        if overlaid.is_some() {
+            return overlaid;
+        }
+        match self.leaf_backend_mut(id)? {
+            LeafBackend::Plugin(p) => p.param_value(pid),
+            LeafBackend::Source(_) => None,
+        }
+    }
+
     /// Live-update a modulator envelope's ADSR ("amp env" / "filter env"),
     /// addressed by its owning `module` container.
     pub fn set_env(&mut self, module: &str, name: &str, params: crate::native::AdsrParams) -> bool {

@@ -106,11 +106,11 @@ struct State {
     active_stack: Option<usize>,
     /// Grid mode: 0 Preset, 1 Profile (stacks), 2 Setlist.
     perform_mode: u32,
-    /// The mod wheel's hold on [`WHEEL_CUTOFF_ENGINE`]'s cutoffs while it is
-    /// off its rest: the patches it moved (their names, so a patch change
-    /// under it starts afresh) and the offset plus the values it moved them
-    /// from — which are what the profile remembers, never the swept ones.
-    wheel_span: Option<(Vec<String>, (f32, Baseline))>,
+    /// The filters the mod wheel moves, by `(lane, module, leaf)`: the
+    /// cutoff it moves each from (the patch's, normalized) and the last it
+    /// wrote. A reading that is no longer the last write means the lane was
+    /// rebuilt under it, and the reading is the patch's value again.
+    wheel_filters: BTreeMap<(String, String, String), (f64, f64)>,
 }
 
 /// What the program builders read: the live profile, the patch-name →
@@ -198,27 +198,20 @@ impl Default for ModuleState {
 /// knob (CC77), which moved both Omni Pads parts' global filter cutoff
 /// together (Omnisphere's MIDI-learn `p0_gpfltc` / `p1_gpfltc`). At rest the
 /// patches play as imported; all the way up opens them to 20 kHz, the group
-/// keeping its spacing (see [`KeysRigBackend::drive_global`]).
+/// keeping its spacing (see `KeysRigBackend::wheel_cutoff`).
 const WHEEL_CUTOFF_ENGINE: &str = "Pad";
 
 /// No mod-wheel value waiting for the worker.
 const NO_WHEEL: u32 = u32::MAX;
 
-/// Lanes that start switched OFF — a starting position, not a limitation:
-/// these are ordinary module switches, and turning one on in the mixer works
-/// normally.
+/// Lanes that start muted — a starting position, not a limitation: an
+/// ordinary lane mute, undone in the mixer.
 ///
-/// The pads start on (the voice stealing and the CPU guard keep the whole
-/// stack inside its deadline). Club Europa's pulsing lead (Synth 2) starts
-/// off: a song reaches for it, it is not a bed under everything.
-///
-/// `FTS_KEYS_ALL_ON=1` starts everything live, for measuring the real thing.
-fn starts_switched_off(lane: &str) -> bool {
-    const OFF: [&str; 1] = ["Synth 2"];
-    if std::env::var_os("FTS_KEYS_ALL_ON").is_some() {
-        return false;
-    }
-    OFF.contains(&lane)
+/// Club Europa's pulsing lead (Synth 2) starts muted: a song reaches for it,
+/// it is not a bed under everything. (A lane mute, not a module switch: an
+/// imported Omnisphere lane has no module gain for the switch to act on.)
+fn starts_muted(lane: &str) -> bool {
+    lane == "Synth 2"
 }
 
 impl LaneState {
@@ -1526,13 +1519,7 @@ impl State {
                     // the band when a player asks for one, and a drone that
                     // switched itself on at boot would be a fault, not a
                     // feature.
-                    //
-                    // Aux and Pad start muted too, TEMPORARILY, so the piano
-                    // can be judged on its own while the keys rig is being
-                    // worked on — a pad under everything hides exactly the
-                    // attack detail you need to hear. Unmute them in the
-                    // mixer; this only decides where the faders START.
-                    muted: is_drone(&engine.name) || matches!(engine.name.as_str(), "Aux" | "Pad"),
+                    muted: is_drone(&engine.name),
                     ..EngineState::default()
                 },
             );
@@ -1542,7 +1529,7 @@ impl State {
                     LaneState {
                         engine: engine.name.clone(),
                         gain_db: layer.gain_db,
-                        muted: false,
+                        muted: starts_muted(&layer.name),
                         soloed: false,
                         modules: layer
                             .module_patches()
@@ -1550,7 +1537,6 @@ impl State {
                             .map(|patch| ModuleState {
                                 patch,
                                 macros: default_macros(),
-                                enabled: !starts_switched_off(&layer.name),
                                 ..ModuleState::default()
                             })
                             .collect(),
@@ -1720,6 +1706,36 @@ impl KeysRigBackend {
     pub fn debug_profile_lane_program(&self) -> Option<signal_sampler::keys_rig::LaneProgram> {
         self.prepare_lanes();
         self.profile_lane_program()
+    }
+
+    /// Host the profile headless (no audio device) as this backend's own
+    /// rig, at the app's starting levels — so the live paths (knobs, the mod
+    /// wheel) reach it exactly as they do in the app (`examples/rig_render`).
+    #[doc(hidden)]
+    pub fn debug_open_headless(&self, sample_rate: u32) -> bool {
+        let Some(program) = self.debug_profile_lane_program() else {
+            return false;
+        };
+        let Ok(rig) = KeysRig::open_headless(sample_rate, &program) else {
+            return false;
+        };
+        if let Ok(mut slot) = self.inner.rig.lock() {
+            *slot = Some(rig);
+        }
+        self.apply_mixer();
+        true
+    }
+
+    /// Rebuild the hosted program now, as a knob that cannot go live does.
+    #[doc(hidden)]
+    pub fn debug_rebuild(&self) {
+        self.rebuild_program();
+    }
+
+    /// Run `f` on the hosted rig.
+    #[doc(hidden)]
+    pub fn debug_with_rig<R>(&self, f: impl FnOnce(&KeysRig) -> R) -> Option<R> {
+        self.inner.rig.lock().ok()?.as_ref().map(f)
     }
 
     /// What a module currently holds for `id` (its own value, else the
@@ -2538,68 +2554,101 @@ impl KeysRigBackend {
         }
     }
 
-    /// The mod wheel as the gig's pad Cutoff knob: 0 leaves
-    /// [`WHEEL_CUTOFF_ENGINE`]'s patches as imported, 127 opens them fully.
+    /// The mod wheel as the gig's pad Cutoff knob, played live like any
+    /// modulation — never an edit, never a rebuild. At rest (0) every filter
+    /// of [`WHEEL_CUTOFF_ENGINE`]'s lanes sits where its patch put it; up,
+    /// all of them rise by the same number of octaves (the group keeps its
+    /// spacing), the brightest reaching 20 kHz at 127. Moves each layer's
+    /// Omnisphere filters (the cutoff overlay, which the filter envelope's
+    /// routes ride on) and its sampler's per-voice filter.
     fn wheel_cutoff(&self, value: u8) {
-        let targets = {
+        use signal_sampler::native::NativeFilter;
+        const LEAVES: [&str; 2] = ["Filter 1", "Filter 2"];
+        type Key = (String, String, String);
+        let w = f32::from(value.min(127)) / 127.0;
+        let (lanes, mut known) = {
             let Ok(mut s) = self.inner.state.lock() else {
                 return;
             };
-            Self::sweep_wheel(&mut s, value)
-        };
-        // Live, like a knob drag — but not remembered: the wheel is a
-        // performance move, not an edit to the patch.
-        if !targets.is_empty() && !self.push_targets_dsp(&targets) {
-            self.rebuild_soon();
-        }
-    }
-
-    /// Move [`WHEEL_CUTOFF_ENGINE`]'s cutoffs for a wheel at `value`; the
-    /// modules touched. Always an offset from where the patches sit — never
-    /// an absolute cutoff, even while they agree — so the wheel at rest is
-    /// exactly the patch.
-    fn sweep_wheel(s: &mut State, value: u8) -> Vec<(String, usize)> {
-        const TARGET: &str = "filter.cutoff";
-        let Some(def) = global_def("e.filter.cutoff") else {
-            return Vec::new();
-        };
-        if !s.engines.contains_key(WHEEL_CUTOFF_ENGINE) {
-            return Vec::new();
-        }
-        let w = f32::from(value.min(127)) / 127.0;
-        let lanes = Self::engine_lanes(s, WHEEL_CUTOFF_ENGINE);
-        let targets = Self::scope_targets(s, &lanes);
-        let patches: Vec<String> = targets
-            .iter()
-            .map(|(lane, i)| {
-                s.lanes
-                    .get(lane)
-                    .and_then(|l| l.modules.get(*i))
-                    .map(|m| m.patch.clone())
-                    .unwrap_or_default()
-            })
-            .collect();
-        // A patch loaded under a raised wheel plays from its own values: the
-        // old baseline describes modules that no longer exist.
-        let held = s.wheel_span.take().filter(|(p, _)| *p == patches);
-        let span = match held {
-            Some((_, span)) => span,
-            None if w > 0.0 => {
-                let base: Baseline = targets
-                    .iter()
-                    .filter_map(|(lane, i)| {
-                        s.lanes
-                            .get(lane)
-                            .map(|l| (lane.clone(), *i, Self::module_value(l, *i, TARGET)))
-                    })
-                    .collect();
-                (0.0, base)
+            if !s.engines.contains_key(WHEEL_CUTOFF_ENGINE) {
+                return;
             }
-            None => return Vec::new(),
+            (
+                Self::engine_lanes(&s, WHEEL_CUTOFF_ENGINE),
+                std::mem::take(&mut s.wheel_filters),
+            )
         };
-        s.wheel_span =
-            Self::drive_global(s, def, TARGET, &targets, Some(span), w).map(|span| (patches, span));
-        targets
+        let modules = |lane: &str| -> Vec<String> {
+            (0..4)
+                .flat_map(|i| {
+                    let slot = signal_synth::engine::module_slot(i);
+                    [format!("{lane} {slot}"), format!("Layer {slot}")]
+                })
+                .collect()
+        };
+        let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(rig) = rig.as_ref() else {
+            return;
+        };
+        // Where every filter sits now — the patch's value, unless the wheel
+        // put it there.
+        let mut bases: Vec<(Key, f64)> = Vec::new();
+        for lane in &lanes {
+            rig.edit_lane(lane, |inst| {
+                let render = inst.render_mut();
+                for module in modules(lane) {
+                    if !render.has_leaf(&module, "Soundsource") {
+                        continue;
+                    }
+                    for leaf in LEAVES {
+                        let Some(now) = render.leaf_param_value(&module, leaf, "cutoff") else {
+                            continue;
+                        };
+                        let key = (lane.clone(), module.clone(), leaf.to_string());
+                        let base = match known.get(&key) {
+                            Some(&(base, wrote)) if (now - wrote).abs() < 1e-6 => base,
+                            _ => now,
+                        };
+                        bases.push((key, base));
+                    }
+                }
+            });
+        }
+        // The group's reach: the brightest filter still closed opens fully.
+        let leader = bases
+            .iter()
+            .map(|(_, b)| *b)
+            .filter(|b| *b < 0.999)
+            .fold(None::<f64>, |m, b| Some(m.map_or(b, |m: f64| m.max(b))));
+        let span = leader.map_or(0.0, |b| {
+            (20_000.0 / NativeFilter::cutoff_from_norm(b as f32)).log2().max(0.0)
+        });
+        let octaves = w * span;
+        known.clear();
+        for lane in &lanes {
+            rig.edit_lane(lane, |inst| {
+                let render = inst.render_mut();
+                for (key, base) in bases.iter().filter(|(k, _)| k.0 == *lane) {
+                    let hz = NativeFilter::cutoff_from_norm(*base as f32) * octaves.exp2();
+                    let v = if *base >= 0.999 {
+                        *base
+                    } else {
+                        f64::from(NativeFilter::norm_from_cutoff(hz.min(20_000.0)))
+                    };
+                    render.set_leaf_param(&key.1, &key.2, "cutoff", v);
+                    known.insert(key.clone(), (*base, v));
+                }
+                for module in modules(lane) {
+                    render.with_sampler_source(&module, "Soundsource", |sampler| {
+                        sampler.engine_mut().set_cutoff_mod(octaves);
+                    });
+                }
+            });
+        }
+        drop(rig);
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.wheel_filters = known;
+        }
     }
 
     fn spawn_tempo_watch(&self) {
@@ -2778,12 +2827,7 @@ impl KeysRigBackend {
             let Ok(mut guard) = self.inner.state.lock() else {
                 return;
             };
-            let State {
-                lanes,
-                profile,
-                wheel_span,
-                ..
-            } = &mut *guard;
+            let State { lanes, profile, .. } = &mut *guard;
             for (name, lane) in lanes.iter() {
                 let Some(def) = profile.layer_mut(name) else {
                     continue;
@@ -2792,23 +2836,13 @@ impl KeysRigBackend {
                     if m.patch.is_empty() || m.macros_patch.as_deref() != Some(m.patch.as_str()) {
                         continue;
                     }
-                    // A raised mod wheel is holding this cutoff open: keep
-                    // what it moved it from.
-                    let unswept = wheel_span.as_ref().and_then(|(_, (_, base))| {
-                        base.iter()
-                            .find(|(l, j, _)| l == name && *j == i)
-                            .map(|(_, _, v)| *v)
-                    });
                     let values = m
                         .macros
                         .iter()
                         .filter(|(id, _)| Self::macro_is_dsp(id) || Self::macro_is_mod(id))
                         .map(|(id, v)| crate::profile::MacroValue {
                             id: id.clone(),
-                            value: match unswept {
-                                Some(base) if id == "filter.cutoff" => base,
-                                _ => *v,
-                            },
+                            value: *v,
                         })
                         .collect();
                     def.remember_macros(&m.patch, i as u32, values);
@@ -5307,47 +5341,19 @@ mod tests {
         s
     }
 
-    /// The mod wheel is the gig's pad Cutoff knob: it opens both pads
-    /// together from where their patches sit, and at rest gives them back.
+    /// The rig starts with the pads and synths audible — a muted ENGINE hides
+    /// its lanes however they are switched — and Club Europa muted.
     #[test]
-    fn the_mod_wheel_opens_the_pads_and_gives_them_back() {
-        let mut s = keys_state(&[("Pad", 400.0), ("Shimmer", 800.0), ("Keys 2", 3000.0)]);
-        let touched = KeysRigBackend::sweep_wheel(&mut s, 64);
-        assert_eq!(touched.len(), 2, "only the Pad engine: {touched:?}");
-        let (pad, shimmer) = (cutoff(&s, "Pad"), cutoff(&s, "Shimmer"));
-        assert!(pad > 400.0 && shimmer > 800.0, "both opened: {pad} {shimmer}");
-        assert!((shimmer / pad - 2.0).abs() < 1e-2, "and kept their spacing");
-        assert_eq!(cutoff(&s, "Keys 2"), 3000.0, "the pianos are not the wheel's");
-
-        KeysRigBackend::sweep_wheel(&mut s, 127);
-        assert!((cutoff(&s, "Shimmer") - 20_000.0).abs() < 1.0, "fully open at the top");
-
-        KeysRigBackend::sweep_wheel(&mut s, 0);
-        assert!(s.wheel_span.is_none(), "at rest the wheel holds nothing");
-        assert!((cutoff(&s, "Pad") - 400.0).abs() < 1e-2);
-        assert!((cutoff(&s, "Shimmer") - 800.0).abs() < 1e-2);
-    }
-
-    /// Lanes that agree still move from their patch value — the wheel is
-    /// never an absolute cutoff (0 would slam every pad shut).
-    #[test]
-    fn the_mod_wheel_is_an_offset_even_when_the_pads_agree() {
-        let mut s = keys_state(&[("Pad", 800.0), ("Shimmer", 800.0)]);
-        KeysRigBackend::sweep_wheel(&mut s, 1);
-        assert!(cutoff(&s, "Pad") >= 800.0, "{}", cutoff(&s, "Pad"));
-    }
-
-    /// A patch swapped in under a raised wheel is not rewritten to the old
-    /// patch's values when the wheel comes back.
-    #[test]
-    fn a_patch_change_under_the_wheel_starts_afresh() {
-        let mut s = keys_state(&[("Pad", 400.0), ("Shimmer", 800.0)]);
-        KeysRigBackend::sweep_wheel(&mut s, 100);
-        let lane = s.lanes.get_mut("Pad").expect("lane");
-        lane.modules[0].patch = "another".into();
-        lane.modules[0].macros.insert("filter.cutoff".into(), 1500.0);
-        KeysRigBackend::sweep_wheel(&mut s, 0);
-        assert_eq!(cutoff(&s, "Pad"), 1500.0, "the new patch keeps its own cutoff");
+    fn the_worship_rig_starts_with_the_pads_on_and_club_europa_muted() {
+        let mut s = State::default();
+        s.adopt_profile(worship_profile());
+        for engine in ["Keys", "Pad", "Bass", "Aux"] {
+            assert!(!s.engines.get(engine).expect("engine").muted, "{engine} starts muted");
+        }
+        for lane in ["Pad", "Shimmer", "Synth 1"] {
+            assert!(!s.lanes.get(lane).expect("lane").muted, "{lane} starts muted");
+        }
+        assert!(s.lanes.get("Synth 2").expect("lane").muted, "Club Europa starts audible");
     }
 
     /// The worship profile keeps the piano (Keys A) OUT of the global scope
