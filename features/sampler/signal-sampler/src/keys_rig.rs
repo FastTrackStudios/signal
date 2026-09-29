@@ -279,6 +279,7 @@ impl PluginInstance for KeysInstrument {
         if cut && self.since_cut >= GUARD_CUT_EVERY {
             self.render.shed_voices(2);
             self.since_cut = 0;
+            GUARD_CUTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         } else if load > GUARD_SHED || total > VOICE_SHED {
             self.render.shed_voices(1);
         }
@@ -605,11 +606,23 @@ pub fn render_load() -> f32 {
 
 /// Shed release tails above this share of the deadline…
 const GUARD_SHED: f32 = 0.75;
-/// …and the oldest held notes too above this.
-const GUARD_CUT: f32 = 0.90;
-/// Blocks between two level-2 cuts in one lane (a quarter of its held notes
-/// each time), so one hot block cannot empty the rig.
-const GUARD_CUT_EVERY: u32 = 4;
+/// …and cut held notes only on a real overrun. The app runs a heavy rig at
+/// 70–80% of its deadline in normal playing, so anything lower cut chords
+/// that were keeping up fine (it once left one note standing).
+const GUARD_CUT: f32 = 1.0;
+/// Blocks between two cuts in one lane (one note each, ~85 ms apart at
+/// 128 frames), so the guard trims a pile-up gradually and a single hot
+/// block cannot empty the rig.
+const GUARD_CUT_EVERY: u32 = 32;
+
+/// Times the guard has cut a held note (all lanes), for the log.
+static GUARD_CUTS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many held notes the CPU guard has cut so far.
+#[must_use]
+pub fn guard_cuts() -> u64 {
+    GUARD_CUTS.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 /// The rig-wide voice budget: the load guard only sees the PREVIOUS block,
 /// and a forearm on the keys lands thirty notes inside one — so the rig also

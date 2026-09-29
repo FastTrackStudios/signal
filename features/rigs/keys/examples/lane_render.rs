@@ -64,7 +64,19 @@ fn main() {
     let (mut ol, mut or) = (Vec::with_capacity(total), Vec::with_capacity(total));
     let mut t = 0;
     while t < total {
-        let midi = if t == 0 { vec![ev(true, note, 100)] } else if t <= off && off < t + block { vec![ev(false, note, 0)] } else { vec![] };
+        // LANE_CHORD="64,67": more notes struck with the main one.
+        let chord: Vec<u8> = std::env::var("LANE_CHORD")
+            .ok()
+            .map(|v| v.split(',').filter_map(|k| k.trim().parse().ok()).collect())
+            .unwrap_or_default();
+        let keys: Vec<u8> = std::iter::once(note).chain(chord).collect();
+        let midi: Vec<PluginMidiEvent> = if t == 0 {
+            keys.iter().map(|&k| ev(true, k, 100)).collect()
+        } else if t <= off && off < t + block {
+            keys.iter().map(|&k| ev(false, k, 0)).collect()
+        } else {
+            vec![]
+        };
         l.fill(0.0);
         r.fill(0.0);
         rn.render(&mut l, &mut r, &PluginEvents { params: &[], midi: &midi, note_expressions: &[] });

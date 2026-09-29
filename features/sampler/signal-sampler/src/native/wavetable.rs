@@ -719,9 +719,8 @@ impl Soundsource for NativeWavetable {
 
     fn shed_voices(&mut self, level: u8) {
         self.voices.retain(|v| !v.released);
-        if level >= 2 && self.voices.len() >= 4 {
-            let n = self.voices.len() / 4;
-            self.voices.drain(..n);
+        if level >= 2 && self.voices.len() > 16 {
+            self.voices.remove(0);
         }
     }
 

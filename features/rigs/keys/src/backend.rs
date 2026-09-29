@@ -5410,6 +5410,7 @@ fn spawn_engine_watch(stats: std::sync::Arc<daw_audio_io::duplex::EngineStats>) 
             let (mut over0, mut xrun0, mut calls0, mut total0) = (0u64, 0u64, 0u64, 0u64);
             let skips = daw::standalone::audio_engine::render::plugin_stage_skips;
             let mut skip0 = skips();
+            let mut cut0 = signal_sampler::keys_rig::guard_cuts();
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 let Some(st) = weak.upgrade() else {
@@ -5426,21 +5427,25 @@ fn spawn_engine_watch(stats: std::sync::Arc<daw_audio_io::duplex::EngineStats>) 
                     0.0
                 };
                 let skipped = skips();
-                if over > over0 || xruns > xrun0 || skipped > skip0 {
+                let cuts = signal_sampler::keys_rig::guard_cuts();
+                if over > over0 || xruns > xrun0 || skipped > skip0 || cuts > cut0 {
                     tracing::warn!(
                         late_blocks = over - over0,
                         xruns = xruns - xrun0,
                         // Blocks rendered with no instruments: the plugin map
                         // was held by a control thread when the block began.
                         silent_blocks = skipped - skip0,
+                        // Held notes the CPU guard cut to keep up.
+                        guard_cuts = cuts - cut0,
+                        voices = signal_sampler::keys_rig::total_voices(),
                         peak_ms = format!("{peak_ms:.2}"),
                         mean_ms = format!("{mean_ms:.2}"),
                         budget_ms = format!("{budget_ms:.2}"),
                         block = frames,
-                        "keys audio: blocks missed their deadline"
+                        "keys audio: under strain"
                     );
                 }
-                (over0, xrun0, calls0, total0, skip0) = (over, xruns, calls, total, skipped);
+                (over0, xrun0, calls0, total0, skip0, cut0) = (over, xruns, calls, total, skipped, cuts);
             }
         });
 }

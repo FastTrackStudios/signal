@@ -60,6 +60,7 @@ fn main() {
     // A UI polls the rig's status (voice count included) while it plays —
     // that must never cost the audio a block.
     let skips0 = daw::standalone::audio_engine::render::plugin_stage_skips();
+    let cuts0 = signal_sampler::keys_rig::guard_cuts();
     let stop = std::sync::atomic::AtomicBool::new(false);
     std::thread::scope(|scope| {
     scope.spawn(|| {
@@ -100,10 +101,14 @@ fn main() {
         // Headless: publish the load the CPU guard would read from the
         // audio engine, so the guard runs here exactly as in the app.
         // LANE_STRESS_NO_GUARD=1 leaves the guard blind (load 0), for A/B.
+        // LANE_STRESS_LOAD_FLOOR=0.9: the app runs heavier than this bare
+        // harness (UI, meters, other rigs); publish at least this load so
+        // the guard is tested where the app actually sits.
+        let floor: f32 = std::env::var("LANE_STRESS_LOAD_FLOOR").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
         let load = if std::env::var_os("LANE_STRESS_NO_GUARD").is_some() {
             0.0
         } else {
-            (dt.as_secs_f64() / deadline.as_secs_f64()) as f32
+            ((dt.as_secs_f64() / deadline.as_secs_f64()) as f32).max(floor)
         };
         signal_sampler::keys_rig::publish_render_load(load);
         if b % 32 == 0 {
@@ -152,8 +157,12 @@ fn main() {
         pct(1.0)
     );
     println!("  peak voices {peak_voices}");
+    let cuts = signal_sampler::keys_rig::guard_cuts() - cuts0;
+    println!("  {cuts} held notes cut by the CPU guard");
+    // Ordinary chords must come through whole, whatever the load.
+    let chord_cut = smash == 0 && cuts > 0;
     println!("  output peak {:.3} ({:+.1} dBFS); {nonfinite} non-finite samples", peak, 20.0 * peak.max(1e-9).log10());
-    if over > 0 || nonfinite > 0 || peak > 1.0 || silent > 0 {
+    if over > 0 || nonfinite > 0 || peak > 1.0 || silent > 0 || chord_cut {
         std::process::exit(1);
     }
 }

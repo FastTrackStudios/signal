@@ -1601,6 +1601,10 @@ fn flush_denormal(x: f32) -> f32 {
 /// far below it in practice by freeing faded notes.
 const MAX_VOICES: usize = 160;
 
+/// Held notes the CPU guard never cuts below, per voice pool — a two-handed
+/// chord with the pedal down stays whole.
+const SHED_NOTE_FLOOR: usize = 16;
+
 /// Frames per control-rate step of a voice's breakpoint envelope (a third of
 /// a millisecond at 48 kHz — well under anything an envelope does audibly).
 const ENV_CONTROL_FRAMES: u32 = 16;
@@ -2197,12 +2201,26 @@ impl VoicePool {
                 _ => held.push(i),
             }
         }
-        if level >= 2 && held.len() >= 4 {
-            // Spawn order is pool order: the first entries are the oldest.
-            for &i in held.iter().take(held.len() / 4) {
-                let v = &mut self.voices[i];
-                v.ramp_gain(0.0, SHED_FADE);
-                v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+        if level >= 2 {
+            // One note — the oldest held — and only while the lane holds more
+            // than a big chord's worth: the guard trims a runaway pile-up, it
+            // never thins a chord. Spawn order is pool order.
+            let mut notes: Vec<u8> = Vec::new();
+            for &i in &held {
+                let n = self.voices[i].note;
+                if !notes.contains(&n) {
+                    notes.push(n);
+                }
+            }
+            if notes.len() > SHED_NOTE_FLOOR {
+                let victim = notes[0];
+                for &i in &held {
+                    let v = &mut self.voices[i];
+                    if v.note == victim {
+                        v.ramp_gain(0.0, SHED_FADE);
+                        v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                    }
+                }
             }
         }
         self.stolen = self.stolen.saturating_add(1);
