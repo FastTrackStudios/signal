@@ -1701,6 +1701,15 @@ impl KeysRigBackend {
         self.profile_program()
     }
 
+    /// The profile as the per-lane daw-track program the app plays —
+    /// lanes seeded, knobs applied — without opening audio
+    /// (`examples/lane_stress`).
+    #[doc(hidden)]
+    pub fn debug_profile_lane_program(&self) -> Option<signal_sampler::keys_rig::LaneProgram> {
+        self.prepare_lanes();
+        self.profile_lane_program()
+    }
+
     /// What a module currently holds for `id` (its own value, else the
     /// macro's default).
     fn module_value(lane: &LaneState, index: usize, id: &str) -> f32 {
