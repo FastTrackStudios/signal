@@ -974,6 +974,11 @@ fn env_points(env: &XmlNode) -> Vec<(f32, f32, f32, bool)> {
         .collect()
 }
 
+/// The fewest notes a polyphonic part plays: the gig's own voice counts
+/// (the Dolceola's 12, Club Europa's 8) cut real chords in the rig, so a
+/// polyphonic part never steals below this. A mono part stays 1.
+pub const MIN_POLY_NOTES: usize = 14;
+
 /// Parse a `.prt_omn` document into an [`OmniPatch`].
 ///
 /// # Errors
@@ -1392,7 +1397,7 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
     } else {
         engine
             .num("poly")
-            .map(|p| 1 + (p.clamp(0.0, 1.0) * 50.0).floor() as usize)
+            .map(|p| (1 + (p.clamp(0.0, 1.0) * 50.0).floor() as usize).max(MIN_POLY_NOTES))
     };
     for layer in &mut patch.layers {
         layer.max_notes = max_notes;
