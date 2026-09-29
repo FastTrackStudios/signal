@@ -1576,6 +1576,9 @@ impl State {
         for v in &profile.scope_values {
             self.rig_globals.insert(format!("{RIG}{}", v.id), v.value);
         }
+        // The rig's output limiter is a safety net, on unless a profile
+        // turns it off: five hard notes stacked in one lane clip otherwise.
+        self.rig_globals.entry(format!("{RIG}limiter")).or_insert(1.0);
         self.profile = profile;
         KeysRigBackend::refresh_fx_gates(self);
     }

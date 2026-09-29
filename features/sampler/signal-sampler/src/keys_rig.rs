@@ -450,7 +450,72 @@ pub struct ScopeStage {
     bands: [[Biquad; 2]; 3],
     /// Limiter gain (≤ 1), recovering at `release` per frame.
     lim_gain: f32,
+    /// The lookahead limiter's state (sized at prepare).
+    look: Lookahead,
     prepared: bool,
+}
+
+/// Lookahead window: long enough to ease the gain down across a piano's
+/// attack instead of clamping it sample by sample (which crunches), short
+/// enough to be no latency anyone plays against.
+const LOOKAHEAD_S: f32 = 0.0015;
+
+/// A lookahead peak limiter that cannot overshoot: each sample's required
+/// gain (ceiling / peak) goes through a sliding **minimum** over the window,
+/// then a **moving average** over the same window, applied to the audio
+/// delayed by that window. The average at a peak's (delayed) position spans
+/// only minima that already include the peak, so the gain is fully down when
+/// it arrives — and it got there along a smooth ramp.
+#[derive(Default)]
+struct Lookahead {
+    len: usize,
+    /// Required gains (a ring of `len + 1`, newest at `req_at`).
+    req: Vec<f32>,
+    req_at: usize,
+    /// Sliding minima awaiting the average (a ring), and their sum.
+    mins: Vec<f32>,
+    sum: f64,
+    /// The delayed audio (rings).
+    dl: Vec<f32>,
+    dr: Vec<f32>,
+    at: usize,
+}
+
+impl Lookahead {
+    fn resize(&mut self, sample_rate: f32) {
+        let len = ((LOOKAHEAD_S * sample_rate).round() as usize).max(1);
+        *self = Self {
+            len,
+            // One more than the delay: the minimum at a peak's delayed
+            // position then provably spans the peak itself.
+            req: vec![1.0; len + 1],
+            req_at: 0,
+            mins: vec![1.0; len],
+            sum: len as f64,
+            dl: vec![0.0; len],
+            dr: vec![0.0; len],
+            at: 0,
+        };
+    }
+
+    /// Push one frame; returns the delayed frame and the smoothed gain for it.
+    #[inline]
+    fn push(&mut self, l: f32, r: f32, ceiling: f32) -> (f32, f32, f32) {
+        let peak = l.abs().max(r.abs());
+        let need = if peak > ceiling { ceiling / peak } else { 1.0 };
+        let i = self.at;
+        self.req[self.req_at] = need;
+        self.req_at = (self.req_at + 1) % self.req.len();
+        let min = self.req.iter().copied().fold(1.0f32, f32::min);
+        self.sum += f64::from(min) - f64::from(self.mins[i]);
+        self.mins[i] = min;
+        // The frame leaving the delay line is the one written `len` ago.
+        let (ol, or) = (self.dl[i], self.dr[i]);
+        self.dl[i] = l;
+        self.dr[i] = r;
+        self.at = (i + 1) % self.len;
+        (ol, or, (self.sum / self.len as f64) as f32)
+    }
 }
 
 /// Limiter ceiling (−1 dBFS) and release time.
@@ -543,8 +608,10 @@ impl ScopeStage {
             designed: [f32::NAN; 3],
             bands: [[Biquad::default(); 2]; 3],
             lim_gain: 1.0,
+            look: Lookahead::default(),
             prepared: true,
         };
+        stage.look.resize(sample_rate);
         stage.redesign(stage.cells.tone());
         stage
     }
@@ -602,6 +669,7 @@ impl PluginInstance for ScopeStage {
     fn prepare(&mut self, sr: f64, _bs: u32) -> Result<(), PluginError> {
         self.sample_rate = sr.max(1.0) as f32;
         self.designed = [f32::NAN; 3];
+        self.look.resize(self.sample_rate);
         self.prepared = true;
         Ok(())
     }
@@ -641,22 +709,19 @@ impl PluginInstance for ScopeStage {
             }
         }
         if limiter {
-            // Instant attack to the ceiling, exponential release.
+            // Lookahead attack (see `Lookahead`), exponential release.
             let rel = (-1.0 / (LIMIT_RELEASE_S * self.sample_rate)).exp();
             for i in 0..n {
-                let peak = out_l[i].abs().max(out_r[i].abs());
-                let need = if peak > LIMIT_CEILING {
-                    LIMIT_CEILING / peak
-                } else {
-                    1.0
-                };
+                let (l, r, need) = self.look.push(out_l[i], out_r[i], LIMIT_CEILING);
                 self.lim_gain = if need < self.lim_gain {
                     need
                 } else {
                     need + (self.lim_gain - need) * rel
                 };
-                out_l[i] *= self.lim_gain;
-                out_r[i] *= self.lim_gain;
+                // A last guard at the ceiling (never engaged unless the
+                // window is shorter than a sample's worth of rise).
+                out_l[i] = (l * self.lim_gain).clamp(-LIMIT_CEILING, LIMIT_CEILING);
+                out_r[i] = (r * self.lim_gain).clamp(-LIMIT_CEILING, LIMIT_CEILING);
             }
         } else {
             self.lim_gain = 1.0;
@@ -1888,6 +1953,44 @@ mod tests {
         let limited = run(&mut stage, &hot);
         assert!(limited.iter().all(|v| v.abs() <= LIMIT_CEILING + 1e-4));
     }
+    /// The rig limiter holds a hot signal under the ceiling WITHOUT
+    /// distorting it: once the gain settles, the output is the input scaled,
+    /// not the input clipped (the old sample-by-sample clamp crunched).
+    #[test]
+    fn the_lookahead_limiter_holds_the_ceiling_cleanly() {
+        let scopes = ScopeCells::default();
+        let cells = Arc::new(scopes);
+        cells.limiter.store(true, std::sync::atomic::Ordering::Relaxed);
+        let mut stage = ScopeStage::new(cells, 48_000.0);
+        let n = 48_128; // a whole number of 256-frame blocks
+        let hot: Vec<f32> = (0..n)
+            .map(|i| 1.5 * (i as f32 * 440.0 * std::f32::consts::TAU / 48_000.0).sin())
+            .collect();
+        let (mut ol, mut or) = (vec![0.0; n], vec![0.0; n]);
+        let ev = PluginEvents { params: &[], midi: &[], note_expressions: &[] };
+        for c in 0..n / 256 {
+            let r = c * 256..(c + 1) * 256;
+            stage
+                .process_block(&hot[r.clone()], &hot[r.clone()], &mut ol[r.clone()], &mut or[r], &ev)
+                .unwrap();
+        }
+        assert!(ol.iter().all(|v| v.abs() <= LIMIT_CEILING + 1e-5), "over the ceiling");
+        // Settled second half: output = k · input delayed, k constant.
+        let d = stage.look.len;
+        let tail = n / 2..n - 1;
+        let k = ol[tail.clone()].iter().map(|v| v.abs()).fold(0.0f32, f32::max) / 1.5;
+        let err = tail
+            .map(|i| (ol[i] - k * hot[i - d]).abs())
+            .fold(0.0f32, f32::max);
+        let lag = (0..400)
+            .min_by(|&x, &y| {
+                let e = |d: usize| (n / 2..n / 2 + 2000).map(|i| (ol[i] - k * hot[i - d]).abs()).sum::<f32>();
+                e(x).total_cmp(&e(y))
+            })
+            .unwrap();
+        assert!(err < 0.01, "distortion {err} (window {d}, best lag {lag}, k {k})");
+    }
+
     use signal_plugin_host::PluginMidiEvent;
 
     #[test]
