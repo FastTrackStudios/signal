@@ -1593,18 +1593,190 @@ impl Voice {
         let num_frames = output.len() / 2;
         let mut rendered = 0;
         let mut block_peak = 0.0f32;
-        for i in 0..num_frames {
+        let mut i = 0;
+        while i < num_frames {
+            // The common case — a plain sample playing or fading, nothing
+            // else moving — runs in `render_fast`, many frames at a time;
+            // anything else (and the frame that ends a run) goes through
+            // `next_frame`.
+            if FAST_STATS.load(std::sync::atomic::Ordering::Relaxed) {
+                fast_stats(self);
+            }
+            if FAST_PATH.load(std::sync::atomic::Ordering::Relaxed) && self.fast_ok() {
+                let n = self.render_fast(&mut output[i * 2..num_frames * 2], &mut block_peak);
+                i += n;
+                rendered += n;
+                if i >= num_frames {
+                    break;
+                }
+            }
             let (l, r) = self.next_frame();
             output[i * 2] += l;
             output[i * 2 + 1] += r;
             block_peak = block_peak.max(l.abs()).max(r.abs());
             rendered += 1;
+            i += 1;
             if self.is_done() {
                 break;
             }
         }
         self.update_decay_retire(block_peak, rendered);
         rendered
+    }
+
+    /// Nothing but the sample, its gain (and its ramp) and its envelopes (the
+    /// fade, the flex envelope, the breakpoint envelope) is moving: no hold,
+    /// attack delay, bloom, decay, pitch shift, filter, vibrato, glide,
+    /// reverse or ping-pong loop, no marker to emit. Then
+    /// [`render_fast`](Self::render_fast) plays it.
+    #[inline]
+    fn fast_ok(&self) -> bool {
+        (matches!(self.state, VoiceState::Playing)
+            || matches!(self.state, VoiceState::Releasing { frames_remaining } if frames_remaining > 0))
+            && self.start_hold == 0
+            && self.release_hold == 0
+            && self.attack_delay == 0
+            && self.bloom_frames == 0
+            && self.decay_left == 0
+            && self.pitch.is_none()
+            && self.filter.is_none()
+            && self.vib_cents <= 0.0
+            && self.glide_frames == 0
+            && !self.reverse
+            && !(self.alternating_loop && self.loop_range.is_some())
+            && (self.marker_arrival_file.is_none() || self.arrival_emitted.is_some())
+    }
+
+    /// Play frames while [`fast_ok`](Self::fast_ok) holds, reading straight
+    /// from the run of samples that holds them — `next_frame`'s arithmetic,
+    /// in its order, without its per-frame branches and per-frame sample
+    /// lookups. Adds into `out` (interleaved), folds the output peak into
+    /// `peak`, returns the frames played; it stops before any frame
+    /// `next_frame` has to decide (the end of the sample, the end of the run,
+    /// the loop seam, the end of the fade).
+    fn render_fast(&mut self, out: &mut [f32], peak: &mut f32) -> usize {
+        let frames = out.len() / 2;
+        let idx0 = self.position as usize;
+        if idx0 >= self.end_frame || idx0 < self.start_frame {
+            return 0;
+        }
+        let ch = self.data.channels.max(1) as usize;
+        let last = self.end_frame.saturating_sub(1);
+        // `next_frame`'s constants for this run.
+        let bloom = if self.bloom_total > 0 {
+            let t = 1.0 - self.bloom_frames as f32 / self.bloom_total as f32;
+            1.0 + (self.bloom_target - 1.0) * t
+        } else {
+            1.0
+        };
+        let step = self.bend * 1.0f64 * self.rate;
+        let seam = match (self.loop_range, self.loop_xfade > 0) {
+            (Some((_, loop_end)), true) => loop_end as f64 - self.loop_xfade as f64,
+            _ => f64::INFINITY,
+        };
+        let Some((span, base)) = self.data.span_cursored(idx0, &mut self.stream_cursor) else {
+            return 0;
+        };
+        let span_end = base + span.len() / ch;
+        let (mut position, mut state) = (self.position, self.state.clone());
+        let mut n = 0;
+        let mut furthest = 0usize;
+        while n < frames {
+            let idx = position as usize;
+            // Frames `next_frame` decides: past the sample, at its last
+            // frame, out of this run, at the loop seam, the fade's end.
+            if idx >= self.end_frame || idx < self.start_frame || idx + 1 > last {
+                break;
+            }
+            if idx < base || idx + 1 >= span_end || position >= seam {
+                break;
+            }
+            // The gain ramp (attack), as `next_frame` steps it.
+            if self.gain_ramp_frames > 0 {
+                self.gain += (self.target_gain - self.gain) / self.gain_ramp_frames as f32;
+                self.gain_ramp_frames -= 1;
+                if self.stage1_run > 0 {
+                    self.stage1_run -= 1;
+                    if self.stage1_run == 0 && self.stage2_frames > 0 {
+                        self.gain_ramp_frames = self.stage2_frames;
+                        self.stage2_frames = 0;
+                    }
+                }
+            } else {
+                self.gain = self.target_gain;
+            }
+            let env = match &mut state {
+                VoiceState::Playing => 1.0f32,
+                VoiceState::Releasing { frames_remaining } => {
+                    if *frames_remaining == 0 {
+                        break;
+                    }
+                    let t = *frames_remaining as f32 / self.release_frames.max(1) as f32;
+                    *frames_remaining -= 1;
+                    t
+                }
+                VoiceState::Done => break,
+            };
+            let frac = (position - idx as f64) as f32;
+            let (a, b) = ((idx - base) * ch, (idx + 1 - base) * ch);
+            let ((l0, r0), (l1, r1)) = if ch >= 2 {
+                ((span.get(a), span.get(a + 1)), (span.get(b), span.get(b + 1)))
+            } else {
+                let (x, y) = (span.get(a), span.get(b));
+                ((x, x), (y, y))
+            };
+            furthest = b;
+            let (l, r) = (l0 + (l1 - l0) * frac, r0 + (r1 - r0) * frac);
+            // The envelopes, as `next_frame` steps them.
+            let flex = match &mut self.flex {
+                Some(f) => f.next(!matches!(state, VoiceState::Playing)),
+                None => 1.0,
+            };
+            let (env, bp) = match &mut self.amp_bp {
+                Some((bpts, player, dt)) => {
+                    let (a, b, i, primed) = &mut self.bp_ctrl;
+                    let k = ENV_CONTROL_FRAMES as f32;
+                    if !*primed {
+                        *a = player.tick(bpts, *dt * k);
+                        *b = player.tick(bpts, *dt * k);
+                        *i = 0;
+                        *primed = true;
+                    } else if *i >= ENV_CONTROL_FRAMES {
+                        *a = *b;
+                        *b = player.tick(bpts, *dt * k);
+                        *i = 0;
+                    }
+                    let v = *a + (*b - *a) * (*i as f32 / k);
+                    *i += 1;
+                    (1.0, v)
+                }
+                None => (env, 1.0),
+            };
+            let amp = self.gain * env * flex * bloom * self.ds_level * bp;
+            position += step;
+            if let Some((loop_start, loop_end)) = self.loop_range {
+                if position >= loop_end as f64 {
+                    let len = (loop_end - loop_start) as f64;
+                    position = loop_start as f64 + (position - loop_end as f64) % len;
+                }
+            }
+            let (ol, or) = (
+                flush_denormal(l * amp * self.pan_l),
+                flush_denormal(r * amp * self.pan_r),
+            );
+            out[n * 2] += ol;
+            out[n * 2 + 1] += or;
+            *peak = peak.max(ol.abs()).max(or.abs());
+            n += 1;
+        }
+        self.position = position;
+        self.state = state;
+        self.frames_out += n as u64;
+        // The read-ahead the per-frame reads would have issued.
+        if n > 0 {
+            self.stream_cursor.touch(base * ch + furthest);
+        }
+        n
     }
 
     /// Free a voice that has decayed to silence. Once a voice has actually
@@ -1666,6 +1838,40 @@ thread_local! {
 /// Flush denormals to zero. On `no_std`/embedded and WASM targets the host may
 /// not set hardware FTZ/DAZ, so a denormal on a quiet release tail can spike
 /// CPU. The branch is predictable (almost always false) and cheap.
+/// Count why voices miss the fast path ([`FAST_MISS`]) — diagnostics.
+pub static FAST_STATS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Voice-blocks missing the fast path, per reason: not sounding, start hold,
+/// release hold, attack delay, gain ramp, bloom, decay, pitch shift,
+/// filter, flex envelope, breakpoint envelope, vibrato, glide, reverse,
+/// ping-pong loop, marker.
+pub static FAST_MISS: [std::sync::atomic::AtomicU64; 16] = [const { std::sync::atomic::AtomicU64::new(0) }; 16];
+
+fn fast_stats(v: &Voice) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let reasons = [
+        !(matches!(v.state, VoiceState::Playing) || matches!(v.state, VoiceState::Releasing { frames_remaining } if frames_remaining > 0)),
+        v.start_hold != 0, v.release_hold != 0, v.attack_delay != 0, false,
+        v.bloom_frames != 0, v.decay_left != 0, v.pitch.is_some(), v.filter.is_some(),
+        false, false, v.vib_cents > 0.0, v.glide_frames != 0, v.reverse,
+        v.alternating_loop && v.loop_range.is_some(),
+        !(v.marker_arrival_file.is_none() || v.arrival_emitted.is_some()),
+    ];
+    for (i, r) in reasons.iter().enumerate() {
+        if *r { FAST_MISS[i].fetch_add(1, Relaxed); }
+    }
+}
+
+/// The voices' fast path on (the default) or off — off only to check it
+/// against the per-frame path (`set_fast_path`).
+static FAST_PATH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Play voices through their per-frame path only (`false`), for comparing it
+/// with the fast path; `true` restores the fast path.
+pub fn set_fast_path(on: bool) {
+    FAST_PATH.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 #[inline(always)]
 fn flush_denormal(x: f32) -> f32 {
     if x.abs() < 1.0e-30 { 0.0 } else { x }

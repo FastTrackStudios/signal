@@ -39,6 +39,14 @@ fn main() {
     // every 10 ms — each a project mutation, as a knob drag or a stack press
     // sends them — while the rig plays.
     let control = std::env::var_os("LANE_STRESS_CONTROL").is_some();
+    // LANE_STRESS_SLOW=1: voices through their per-frame path only — to
+    // check the fast path against it (the output hash must match).
+    if std::env::var_os("LANE_STRESS_SLOW").is_some() {
+        signal_sampler::engine::voice::set_fast_path(false);
+    }
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let stats = std::env::var_os("LANE_STRESS_FAST_STATS").is_some();
+    signal_sampler::engine::voice::FAST_STATS.store(stats, std::sync::atomic::Ordering::Relaxed);
     let lanes: Vec<String> = rig
         .cell_peaks()
         .into_iter()
@@ -161,6 +169,7 @@ fn main() {
             );
         }
         for v in &out.samples {
+            hash = (hash ^ u64::from(v.to_bits())).wrapping_mul(0x0100_0000_01b3);
             if !v.is_finite() {
                 nonfinite += 1;
             } else {
@@ -227,6 +236,17 @@ fn main() {
     // Ordinary chords must come through whole, whatever the load.
     let chord_cut = smash == 0 && cuts > 0;
     println!("  output peak {:.3} ({:+.1} dBFS); {nonfinite} non-finite samples", peak, 20.0 * peak.max(1e-9).log10());
+    println!("  output hash {hash:016x}");
+    if stats {
+        let names = ["not sounding", "start hold", "release hold", "attack delay", "gain ramp", "bloom", "decay",
+                     "pitch shift", "filter", "flex env", "breakpoint env", "vibrato", "glide", "reverse", "ping-pong", "marker"];
+        for (n, c) in names.iter().zip(signal_sampler::engine::voice::FAST_MISS.iter()) {
+            let c = c.load(std::sync::atomic::Ordering::Relaxed);
+            if c > 0 {
+                println!("  fast path missed ({n}): {c} voice-blocks");
+            }
+        }
+    }
     if over > 0 || nonfinite > 0 || peak > 1.0 || silent > 0 || chord_cut {
         std::process::exit(1);
     }
