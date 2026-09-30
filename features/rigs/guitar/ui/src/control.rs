@@ -248,6 +248,10 @@ pub fn ZoomPanel(
     /// module's presets in the right sidebar.
     #[props(default)]
     module: Option<&'static str>,
+    /// No border: the content (a face) runs edge to edge against the next
+    /// module instead of sitting in a card.
+    #[props(default)]
+    flush: bool,
 ) -> Element {
     let mut zoomed = use_signal(|| false);
     let select = try_use_context::<crate::module_sidebar::SelectedModule>();
@@ -266,7 +270,7 @@ pub fn ZoomPanel(
         ""
     };
     rsx! {
-        div { class: "relative flex flex-col flex-1 border border-border bg-card min-h-0 overflow-hidden",
+        div { class: if flush { "relative flex flex-col flex-1 bg-card min-h-0 overflow-hidden" } else { "relative flex flex-col flex-1 border border-border bg-card min-h-0 overflow-hidden" },
             onclick: move |_| {
                 if let (Some(m), Some(sel)) = (module, select) {
                     sel.set(crate::module_sidebar::Selection::Module(m.to_string()));
@@ -1174,7 +1178,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                             },
                             if let Some(f) = lane_face.clone() {
                                 div { class: "absolute inset-0 flex justify-center", style: "background: #0b0c0f;",
-                                    crate::rig_faces::BlockFace { block: b.clone(), face: f }
+                                    crate::rig_faces::BlockFace { block: b.clone(), face: f, fill: true }
                                 }
                             } else {
                                 {delay_lane(taps.clone(), win_ms, !dim, color, W, quarter, div_label(b),
@@ -1384,7 +1388,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                             },
                             if let Some(f) = lane_face.clone() {
                                 div { class: "absolute inset-0 flex justify-center", style: "background: #0b0c0f;",
-                                    crate::rig_faces::BlockFace { block: b.clone(), face: f }
+                                    crate::rig_faces::BlockFace { block: b.clone(), face: f, fill: true }
                                 }
                             } else {
                             {reverb_lane(
@@ -1724,8 +1728,8 @@ fn ModGroupPanel(
                 }
             }
             if let Some(f) = mod_face.clone() {
-                div { class: "relative flex-1 min-h-0 flex justify-center", style: "padding: 3px;",
-                    crate::rig_faces::BlockFace { block: cur.clone(), face: f }
+                div { class: "relative flex-1 min-h-0 flex",
+                    crate::rig_faces::BlockFace { block: cur.clone(), face: f, fill: true }
                 }
             } else {
             // LFO trace — flat while the group is bypassed (the panel's
@@ -3041,6 +3045,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                                 ZoomPanel {
                                     title: "Post Comp".to_string(),
+                                    flush: post_comp_face.is_some(),
                                     left_power_on: post_comp.as_ref().map(|b| !b.bypassed),
                                     if let Some(c) = post_comp.clone() {
                                         // The unit, laid out to fill the box.
@@ -3064,7 +3069,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     div { class: "flex gap-0 min-h-0 w-full", style: if FRAME_ROWS { "flex: 1 1 0%; min-height: 150px;" } else { "flex: 2 1 0%; min-height: 150px;" },
                         div { class: "min-h-0 h-full flex flex-col gap-0", style: "flex: 1 1 0%;",
                             if !bpre {
-                                ZoomPanel { title: "Modulation".to_string(),
+                                ZoomPanel { title: "Modulation".to_string(), flush: true,
                                     bypassed: group_bypassed(&blocks, &MOD_KINDS, false),
                                     ModGroupPanel {
                                         title: "Mod",
@@ -3074,7 +3079,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                     }
                                 }
                             }
-                            ZoomPanel { title: if bpre { "Pre Motion".to_string() } else { "Motion".to_string() },
+                            ZoomPanel { title: if bpre { "Pre Motion".to_string() } else { "Motion".to_string() }, flush: true,
                                 bypassed: group_bypassed(&blocks, &MOTION_KINDS, bpre),
                                 ModGroupPanel {
                                     title: "Motion",
@@ -3104,6 +3109,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
                                 title: if bpre { "Pre Delay".to_string() } else { "Delay".to_string() },
+                                flush: true,
                                 module: if bpre { None } else { Some("Delay") },
                                 power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Delay && is_pre_fx(b) == bpre && !b.bypassed)),
                                 on_power: Some(cbs.cb({
@@ -3131,6 +3137,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
                                 title: if bpre { "Pre Verb".to_string() } else { "Reverb".to_string() },
+                                flush: true,
                                 module: if bpre { None } else { Some("Reverb") },
                                 power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Reverb && is_pre_fx(b) == bpre && !b.bypassed)),
                                 on_power: Some(cbs.cb({

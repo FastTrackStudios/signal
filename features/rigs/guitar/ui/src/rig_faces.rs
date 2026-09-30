@@ -300,6 +300,11 @@ pub fn BlockFace(
     /// instead of its height.
     #[props(default)]
     across: bool,
+    /// Fill the box exactly, edge to edge (the face stretched to it): for a
+    /// face made for its box's proportions, a lane or a panel, so no strip
+    /// of the host shows beside it.
+    #[props(default)]
+    fill: bool,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut values = values_of(&block, &face.ns);
@@ -317,7 +322,9 @@ pub fn BlockFace(
     targets.extend(extra);
     // A face with variants fills its panel (it reflows to the box); one
     // without keeps its own proportion.
-    let boxed = if across {
+    let boxed = if fill {
+        "width: 100%; height: 100%; min-width: 0; min-height: 0;".to_string()
+    } else if across {
         format!("width: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-width: 0;")
     } else if face.variants.is_empty() {
         format!("height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0;")
@@ -329,6 +336,7 @@ pub fn BlockFace(
             FrameSurface {
                 key: "{block.id}-{face.face}",
                 name: face.face.clone(),
+                stretch: fill,
                 variants: face.variants.clone(),
                 values,
                 on_edit: move |(addr, value): (String, f64)| {
