@@ -2984,14 +2984,10 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                     title: "Post Comp".to_string(),
                                     left_power_on: post_comp.as_ref().map(|b| !b.bypassed),
                                     if let Some(c) = post_comp.clone() {
-                                        // The unit across the top, what it
-                                        // is doing below.
+                                        // The unit, laid out to fill the box.
                                         if let Some(f) = post_comp_face.clone() {
-                                            div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
-                                                crate::rig_faces::BlockFace { block: c.clone(), face: f, across: true }
-                                                div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
-                                                    LiveComp { block: c, state }
-                                                }
+                                            div { style: "display: flex; width: 100%; height: 100%; min-height: 0;",
+                                                crate::rig_faces::BlockFace { block: c.clone(), face: f }
                                             }
                                         } else {
                                             LiveComp { block: c, state }
