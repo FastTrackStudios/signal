@@ -467,16 +467,88 @@ fn BlockPanel(
     }
 }
 
-/// The Drives row: the drive board's slots in chain order, each its
-/// pedal's face or a card, in panels sharing the row.
+/// The Drives row, as a pedalboard: the drive board's slots in chain
+/// order, each its pedal's face (or a card) standing on the board's rails,
+/// the pedals joined by patch cables into their side jacks — the cables
+/// take whatever width the pedals leave — a lead in from the guitar and
+/// one out to the amps, and the daisy-chained power along the top.
 #[component]
 pub fn DrivesRow(blocks: Vec<LiveBlock>) -> Element {
     let faces = use_faces();
     let slots: Vec<LiveBlock> = blocks.iter().filter(|b| matches!(b.block_type, BlockType::Boost | BlockType::Drive)).cloned().collect();
+    let last = slots.len().saturating_sub(1);
     rsx! {
-        Row {
-            for b in slots {
-                BlockPanel { key: "{b.id}", face: (!b.empty).then(|| faces.drive(&b.preset).cloned()).flatten(), block: b.clone(), card: PEDAL }
+        div { style: "position: relative; display: flex; flex-direction: row; align-items: stretch; width: 100%; height: 100%; min-height: 0; box-sizing: border-box; padding: {BOARD_PAD_TOP}px 0 {BOARD_PAD_BOTTOM}px 0; background: {BOARD};",
+            // The power: one lead along the top, a drop into each pedal.
+            div { style: "position: absolute; left: 0; right: 0; top: 4px; height: 3px; border-radius: 2px; background: {CORD}; pointer-events: none;" }
+            Cable { end: CableEnd::In }
+            for (i, b) in slots.into_iter().enumerate() {
+                div { key: "{b.id}", style: "position: relative; height: 100%; min-height: 0; flex: 0 0 auto; display: flex;",
+                    div { style: "position: absolute; left: 50%; top: -{BOARD_PAD_TOP}px; width: 3px; height: {BOARD_PAD_TOP + 4}px; margin-left: -1px; background: {CORD}; pointer-events: none;" }
+                    if let Some(f) = (!b.empty).then(|| faces.drive(&b.preset).cloned()).flatten() {
+                        BlockFace { block: b.clone(), face: f }
+                    } else {
+                        NameCard { block: b.clone(), aspect: PEDAL }
+                    }
+                }
+                Cable { end: if i == last { CableEnd::Out } else { CableEnd::Between } }
+            }
+        }
+    }
+}
+
+/// The board under the pedals: dark anodised rails across it, barely lit
+/// along their top edges (the board stays behind the pedals; the black
+/// cables still read against it), the gaps between them black. One gradient, hard
+/// stops.
+const BOARD: &str = "linear-gradient(180deg, #0b0b0c 0%, #0b0b0c 3%, #34373c 3%, #282a2e 4%, #222428 18%, #1c1d21 20%, #0b0b0c 20%, #0b0b0c 24%, #34373c 24%, #282a2e 25%, #222428 41%, #1c1d21 43%, #0b0b0c 43%, #0b0b0c 47%, #34373c 47%, #282a2e 48%, #222428 64%, #1c1d21 66%, #0b0b0c 66%, #0b0b0c 70%, #34373c 70%, #282a2e 71%, #222428 87%, #1c1d21 89%, #0b0b0c 89%, #0b0b0c 100%)";
+/// A cable's black.
+const CORD: &str = "#050506";
+/// The board shows above and below the pedals (the power runs above).
+const BOARD_PAD_TOP: u32 = 12;
+const BOARD_PAD_BOTTOM: u32 = 8;
+/// Where a pedal's side jacks sit, down its height (the faces' jacks).
+const JACK_AT: f64 = 60.0;
+
+#[derive(Clone, Copy, PartialEq)]
+enum CableEnd {
+    /// The lead in from the guitar, to the first pedal.
+    In,
+    /// A patch cable, pedal to pedal.
+    Between,
+    /// The lead out to the amps, from the last pedal.
+    Out,
+}
+
+/// A cable in a gap of the board: a patch cable sagging from one pedal's
+/// jack to the next's, right-angle plugs at both ends; or a lead running
+/// off the board's edge.
+#[component]
+fn Cable(end: CableEnd) -> Element {
+    let flex = if end == CableEnd::Between { "1 1 0%; min-width: 40px;" } else { "0 1 36px; min-width: 18px;" };
+    let plug = |side: &str| format!("position: absolute; {side}: 0; top: {JACK_AT}%; width: 12px; height: 12px; margin-top: -6px; border-radius: 2px; background: linear-gradient(180deg, #e9eaec 0%, #8e9196 55%, #4a4c50 100%); pointer-events: none;");
+    let boot = |side: &str| format!("position: absolute; {side}: 10px; top: {JACK_AT}%; width: 10px; height: 16px; margin-top: -8px; border-radius: 3px; background: linear-gradient(90deg, #1b1b1d 0%, #2c2c30 50%, #151517 100%); pointer-events: none;");
+    rsx! {
+        div { style: "position: relative; flex: {flex} height: 100%; pointer-events: none;",
+            match end {
+                CableEnd::Between => rsx! {
+                    div { style: "{plug(\"left\")}" }
+                    div { style: "{boot(\"left\")}" }
+                    div { style: "{plug(\"right\")}" }
+                    div { style: "{boot(\"right\")}" }
+                    // The cable, sagging between the boots.
+                    div { style: "position: absolute; left: 14px; right: 14px; top: {JACK_AT}%; bottom: 4%; border: 5px solid {CORD}; border-top: none; border-radius: 0 0 26px 26px; pointer-events: none;" }
+                },
+                CableEnd::In => rsx! {
+                    div { style: "{plug(\"right\")}" }
+                    div { style: "{boot(\"right\")}" }
+                    div { style: "position: absolute; left: 0; right: 18px; top: {JACK_AT}%; height: 5px; margin-top: -2px; background: {CORD}; pointer-events: none;" }
+                },
+                CableEnd::Out => rsx! {
+                    div { style: "{plug(\"left\")}" }
+                    div { style: "{boot(\"left\")}" }
+                    div { style: "position: absolute; left: 18px; right: 0; top: {JACK_AT}%; height: 5px; margin-top: -2px; background: {CORD}; pointer-events: none;" }
+                },
             }
         }
     }
