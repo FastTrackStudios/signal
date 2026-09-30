@@ -887,6 +887,10 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     &[
                         ("mix", "1"),
                         ("level", "-20"),
+                        // Stored (Digital, the engine's default) so a preset
+                        // or snapshot can switch its machine: an override
+                        // only sets a param the block has.
+                        ("style", "1"),
                         ("time", "600"),
                         ("feedback", "0.62"),
                         ("tap_div_l", "1"),
