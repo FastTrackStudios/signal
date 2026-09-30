@@ -79,8 +79,10 @@ mod native {
     /// Edits the widget heard, for the component to hand on.
     type Edits = Rc<RefCell<Vec<(String, f64)>>>;
 
+    /// How often a face is asked whether it has anything to draw.
+    const TICK: std::time::Duration = std::time::Duration::from_millis(33);
+
     pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool) -> Element {
-        crate::fx_viz::use_repaint_clock();
         let live: Shared = use_hook(|| {
             let path = super::design_dir().join(&name);
             let dir = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
@@ -96,6 +98,34 @@ mod native {
             Rc::new(RefCell::new(opened))
         });
         let edits: Edits = use_hook(|| Rc::new(RefCell::new(Vec::new())));
+        // Redraw only when there is something to draw: a changed value, a
+        // part moving, a reloaded design, an edit to hand on. A still face
+        // costs nothing — no clock re-rendering it (and the page's layout
+        // with it) forty times a second.
+        let update = use_hook(dioxus_core::schedule_update);
+        use_future({
+            let (live, edits): (Shared, Edits) = (Rc::clone(&live), Rc::clone(&edits));
+            move || {
+                let (live, edits, update): (Shared, Edits, _) = (Rc::clone(&live), Rc::clone(&edits), update.clone());
+                async move {
+                    loop {
+                        architect::platform::sleep(TICK).await;
+                        let redraw = match live.borrow_mut().as_mut() {
+                            Ok(l) => {
+                                if l.poll_reload() {
+                                    tracing::info!(target: "frame", "frame surface reloaded");
+                                }
+                                l.needs_redraw()
+                            }
+                            Err(_) => false,
+                        };
+                        if redraw || !edits.borrow().is_empty() {
+                            update();
+                        }
+                    }
+                }
+            }
+        });
         // The block's values, whenever they differ from what was last
         // given (a param being dragged keeps the hand's).
         let mut applied: Signal<Vec<(String, f64)>> = use_signal(Vec::new);

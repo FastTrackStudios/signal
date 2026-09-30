@@ -146,6 +146,15 @@ fn main() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
     }
+    // NVIDIA: sleep, don't spin, while a frame waits on the GPU. Its driver
+    // busy-waits in present by default, which on a large window was a
+    // third of the UI thread; this measured ~60% → ~38% of a core at
+    // 5120x1440. Other drivers ignore it; a value already set wins.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("__GL_YIELD").is_none() {
+        // SAFETY: single-threaded, before the renderer or any thread starts.
+        unsafe { std::env::set_var("__GL_YIELD", "USLEEP") };
+    }
 
     // `--keys` / `--workspace X --rig Y`: open straight to a place instead of
     // wherever the app was last left. Before the engine branch so `--engine`

@@ -1395,7 +1395,7 @@ fn TapTempoTile(
             },
             onmouseleave: move |_| menu.set(false),
         HoldButton {
-            class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full transition-shadow duration-100 opacity-90 hover:opacity-100".to_string(),
+            class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full opacity-90 hover:opacity-100".to_string(),
             style: format!("background-color: #27272a; color: #d4d4d8; {ring}"),
             on_tap,
             SwitchNo { no: 5 }
@@ -1449,7 +1449,7 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
     let needle = 50.0 + r.cents.clamp(-50.0, 50.0);
     rsx! {
         button {
-            class: "relative flex items-center gap-2 rounded-lg px-2 text-left transition-all duration-100 min-h-0 overflow-hidden",
+            class: "relative flex items-center gap-2 rounded-lg px-2 text-left min-h-0 overflow-hidden",
             style: if in_tune {
                 "background-color: #14532d; border: 1px solid #22c55e;"
             } else {
@@ -1468,7 +1468,7 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
                 div { class: "absolute left-1/2 top-0 bottom-0 w-px bg-white/40" }
                 if r.active {
                     div {
-                        class: "absolute top-0 bottom-0 w-0.5 rounded transition-all duration-75",
+                        class: "absolute top-0 bottom-0 w-0.5 rounded",
                         style: if in_tune { "left: {needle}%; background-color: #22c55e;" } else { "left: {needle}%; background-color: #eab308;" },
                     }
                 }
@@ -1550,7 +1550,7 @@ pub fn TunerOverlay(on_close: EventHandler<()>) -> Element {
                 // Needle.
                 if r.active {
                     div {
-                        class: "absolute top-0 bottom-0 w-1 rounded transition-all duration-75",
+                        class: "absolute top-0 bottom-0 w-1 rounded",
                         style: "left: {needle_pct}%; background-color: {needle_color};",
                     }
                 }

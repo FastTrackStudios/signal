@@ -48,11 +48,20 @@ pub fn Indicator(
     let mut open = use_signal(|| false);
     let showing = open() || pinned;
     // The blink's phase, local so only the indicator redraws.
+    // It only ticks while flashing: a steady indicator re-renders nothing.
     let mut lit = use_signal(|| true);
+    let mut flashing = use_signal(|| flash);
+    if *flashing.peek() != flash {
+        flashing.set(flash);
+    }
     use_future(move || async move {
         loop {
             architect::platform::sleep(std::time::Duration::from_millis(550)).await;
-            lit.toggle();
+            if *flashing.peek() {
+                lit.toggle();
+            } else if !*lit.peek() {
+                lit.set(true);
+            }
         }
     });
     let on = !flash || lit();

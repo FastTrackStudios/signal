@@ -247,7 +247,11 @@ pub fn use_rig_state() -> RigViewState {
                                 let fallen = prev.get(i).copied().unwrap_or(-90.0) - 1.3; // per frame at ~30 Hz ≈ 40 dB/s
                                 out.push(fresh.max(fallen).max(-90.0));
                             }
-                            spectrum.set(out);
+                            // A silent input decays to the floor and stays
+                            // there: don't re-render every reader for that.
+                            if *spectrum.peek() != out {
+                                spectrum.set(out);
+                            }
                         }
                         RigEvent::CompWave(trace) => {
                             // A soft 3-tap along time keeps the rolling traces
@@ -263,9 +267,11 @@ pub fn use_rig_state() -> RigViewState {
                                     .collect()
                             };
                             let entry = (smooth(&trace.input), smooth(&trace.gr), trace.gr_db);
-                            comp_wave.with_mut(|m| {
-                                m.insert(trace.block, entry);
-                            });
+                            if comp_wave.peek().get(&trace.block) != Some(&entry) {
+                                comp_wave.with_mut(|m| {
+                                    m.insert(trace.block, entry);
+                                });
+                            }
                         }
                     }
                 }
