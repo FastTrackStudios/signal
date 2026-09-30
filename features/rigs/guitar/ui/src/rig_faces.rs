@@ -325,7 +325,7 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>) -> Element {
         .filter_map(|(_, f)| f.as_ref())
         .flat_map(|f| f.also.iter().map(|(_, name)| name.to_lowercase()))
         .collect();
-    let items: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = picked
+    let mut items: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = picked
         .into_iter()
         .filter(|(b, _)| !absorbed.contains(&b.name.to_lowercase()))
         .map(|(b, f)| {
@@ -341,6 +341,10 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>) -> Element {
             (b, f, extra)
         })
         .collect();
+    // The delay first: in the rig it sits ahead of the spring and the
+    // tremolo (the John Mayer chain's slapback before its tank). A face
+    // takes the room its proportion asks, so the tank spans two pedals.
+    items.sort_by_key(|(b, _, _)| b.block_type != BlockType::Delay);
     rsx! {
         div { style: "display: flex; flex-direction: row; justify-content: space-evenly; align-items: stretch; gap: 12px; width: 100%; height: 100%; min-height: 0; padding: 8px; box-sizing: border-box;",
             for (b, f, extra) in items {
