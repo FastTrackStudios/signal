@@ -40,6 +40,11 @@ pub fn PresetStepper(
     /// The name's colour.
     #[props(default = "#e4e4e7".to_string())]
     accent: String,
+    /// Show even with no presets of its type yet (the name still opens
+    /// the browser, to save the first) — a separator's section; a face's
+    /// corner hides it instead.
+    #[props(default)]
+    show_empty: bool,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let select = try_use_context::<crate::module_sidebar::SelectedModule>();
@@ -52,7 +57,13 @@ pub fn PresetStepper(
         .collect();
     let playing = comp.active_blocks.iter().find(|b| b.block.eq_ignore_ascii_case(&block)).map(|b| b.preset.clone()).unwrap_or_default();
     let at = names.iter().position(|n| n.eq_ignore_ascii_case(&playing));
-    let label = if playing.is_empty() { "—".to_string() } else { playing.clone() };
+    let label = if !playing.is_empty() {
+        playing.clone()
+    } else if names.is_empty() {
+        "No presets yet".to_string()
+    } else {
+        "—".to_string()
+    };
     let step = {
         let (rig, block, names) = (rig.clone(), block.clone(), names.clone());
         move |dir: i32| {
@@ -70,7 +81,7 @@ pub fn PresetStepper(
         }
     };
     // Nothing to step through (no presets of its type): no stepper.
-    if names.is_empty() {
+    if names.is_empty() && !show_empty {
         return rsx! {};
     }
     let arrow = "font-size: 11px; line-height: 1; color: #a1a1aa; padding: 0 3px; cursor: pointer;";

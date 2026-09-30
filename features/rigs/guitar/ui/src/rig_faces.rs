@@ -696,21 +696,15 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
         .collect();
     items.sort_by_key(|(b, _, _)| b.block_type != BlockType::Delay);
     // The delay and the reverb as lanes, stacked — delay on top — in the
-    // Time module's form; the rest (the tremolo) beside them.
+    // Time module's form and one lane's width, at the right; the rest (the
+    // tremolo) before them — for the look, not the chain's order.
     let laned = |(b, f, _): &(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)| f.is_some() && matches!(b.block_type, BlockType::Delay | BlockType::Reverb);
     let lanes: Vec<(LiveBlock, FaceEntry, Vec<(String, LiveBlock)>)> = items.iter().filter(|i| laned(i)).filter_map(|(b, f, e)| f.clone().map(|f| (b.clone(), f, e.clone()))).collect();
     let items: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = items.into_iter().filter(|i| !laned(i)).collect();
     rsx! {
         Row {
-            if !lanes.is_empty() {
-                div { style: "flex: 0.8 1 0%; min-width: 0; height: 100%; display: flex; flex-direction: column; border-right: 1px solid #1d1f24;",
-                    for (b, f, extra) in lanes {
-                        div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
-                            BlockFace { block: b.clone(), face: f, extra, fill: true }
-                        }
-                    }
-                }
-            }
+            // Room to come, then the tremolo, then the lanes at the right.
+            div { style: "flex: 1 1 0%; min-width: 0;" }
             for (b, f, extra) in items {
                 if let Some(f) = f {
                     // The pedal, then what its block is doing — a delay's
@@ -733,6 +727,19 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                     }
                 } else {
                     BlockPanel { key: "{b.id}", block: b.clone(), face: None, card: PEDAL }
+                }
+            }
+            if !lanes.is_empty() {
+                // One Time lane's width, pinned to the right: the bottom row
+                // gives its Time module 4/5 of what its 150 px separator
+                // leaves, a lane half of that; this row has its separator
+                // too, so a lane is 40 % of what this row is given.
+                div { style: "flex: 0 0 40%; min-width: 0; height: 100%; display: flex; flex-direction: column; border-left: 1px solid #1d1f24;",
+                    for (b, f, extra) in lanes {
+                        div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                            BlockFace { block: b.clone(), face: f, extra, fill: true }
+                        }
+                    }
                 }
             }
         }
