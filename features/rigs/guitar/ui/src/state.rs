@@ -68,6 +68,10 @@ pub fn use_rig_state() -> RigViewState {
     let rig_stream = use_hook(try_consume_context::<RigStreamClient>);
 
     let mut running = use_signal(|| false);
+    // Visualisers and frame faces move only while audio runs: stopped,
+    // there is nothing to show moving, and a moving picture keeps the whole
+    // window redrawing.
+    use_context_provider(|| fts_audio_ui::animate::Animate(running));
     let mut audio_error = use_signal(String::new);
     let mut in_level = use_signal(|| 0.0f64);
     let mut out_level = use_signal(|| 0.0f64);

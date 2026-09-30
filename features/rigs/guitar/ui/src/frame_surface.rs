@@ -79,8 +79,14 @@ mod native {
     /// Edits the widget heard, for the component to hand on.
     type Edits = Rc<RefCell<Vec<(String, f64)>>>;
 
-    /// How often a face is asked whether it has anything to draw.
-    const TICK: std::time::Duration = std::time::Duration::from_millis(33);
+    /// The UI's frame rate: `FTS_MAX_FPS`, as the window paces its own
+    /// redraws (30 unless set; 0 = unpaced).
+    fn max_fps() -> u32 {
+        std::env::var("FTS_MAX_FPS").ok().and_then(|v| v.parse().ok()).unwrap_or(30)
+    }
+
+    /// How often the design's files are checked for a new version.
+    const RELOAD_POLL: std::time::Duration = std::time::Duration::from_millis(250);
 
     pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool) -> Element {
         let live: Shared = use_hook(|| {
@@ -90,6 +96,7 @@ mod native {
             let (markup, catalog) = frame_live::face_paths(&dir, &stem);
             let opened = LiveSurface::open(&markup, catalog).map(|mut l| {
                 l.set_stretch(stretch);
+                l.set_max_fps(max_fps());
                 l
             }).map_err(|e| {
                 tracing::warn!(target: "frame", surface = %markup.display(), error = %e, "frame surface did not open");
@@ -98,29 +105,22 @@ mod native {
             Rc::new(RefCell::new(opened))
         });
         let edits: Edits = use_hook(|| Rc::new(RefCell::new(Vec::new())));
-        // Redraw only when there is something to draw: a changed value, a
-        // part moving, a reloaded design, an edit to hand on. A still face
-        // costs nothing — no clock re-rendering it (and the page's layout
-        // with it) forty times a second.
+        // The face redraws itself: its widget tells Blitz when it has
+        // something new to draw or is moving, and hands edits back through
+        // `update`. All this loop does is notice a regenerated design; the
+        // reloaded face is then new to draw.
         let update = use_hook(dioxus_core::schedule_update);
         use_future({
-            let (live, edits): (Shared, Edits) = (Rc::clone(&live), Rc::clone(&edits));
+            let live: Shared = Rc::clone(&live);
             move || {
-                let (live, edits, update): (Shared, Edits, _) = (Rc::clone(&live), Rc::clone(&edits), update.clone());
+                let live: Shared = Rc::clone(&live);
                 async move {
                     loop {
-                        architect::platform::sleep(TICK).await;
-                        let redraw = match live.borrow_mut().as_mut() {
-                            Ok(l) => {
-                                if l.poll_reload() {
-                                    tracing::info!(target: "frame", "frame surface reloaded");
-                                }
-                                l.needs_redraw()
-                            }
-                            Err(_) => false,
-                        };
-                        if redraw || !edits.borrow().is_empty() {
-                            update();
+                        architect::platform::sleep(RELOAD_POLL).await;
+                        if let Ok(l) = live.borrow_mut().as_mut()
+                            && l.poll_reload()
+                        {
+                            tracing::info!(target: "frame", "frame surface reloaded");
                         }
                     }
                 }
@@ -135,9 +135,13 @@ mod native {
             }
             applied.set(values);
         }
-        let attr = use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(FrameWidget { live: Rc::clone(&live), edits: Rc::clone(&edits), target: None }));
-        // The repaint clock runs this body ~40 times a second; the edits
-        // go out from a task, not from inside a render.
+        // Held still while nothing runs (see `fts_audio_ui::animate`).
+        let animate = fts_audio_ui::animate::animating();
+        if let Ok(l) = live.borrow_mut().as_mut() {
+            l.set_animate(animate);
+        }
+        let attr = use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(FrameWidget { live: Rc::clone(&live), edits: Rc::clone(&edits), update: update.clone(), target: None }));
+        // The edits go out from a task, not from inside a render.
         let heard: Vec<(String, f64)> = std::mem::take(&mut *edits.borrow_mut());
         if let Some(handler) = on_edit
             && !heard.is_empty()
@@ -161,6 +165,8 @@ mod native {
     struct FrameWidget {
         live: Shared,
         edits: Edits,
+        /// Re-renders the component, which hands the edits on.
+        update: std::sync::Arc<dyn Fn() + Send + Sync>,
         /// The texture Blitz holds for us, and its size.
         target: Option<(ResourceId, (u32, u32))>,
     }
@@ -179,10 +185,15 @@ mod native {
         frame_live::Modifiers { fine: m.shift(), alt: m.ctrl() || m.meta(), option: m.alt() }
     }
 
-    fn hand_on(edits: &Edits, live: &mut LiveSurface) {
+    fn hand_on(edits: &Edits, live: &mut LiveSurface, update: &(dyn Fn() + Send + Sync)) {
+        let mut any = false;
         for (addr, value) in live.take_edits() {
             tracing::debug!(target: "frame", %addr, value, "frame edit");
             edits.borrow_mut().push((addr, value));
+            any = true;
+        }
+        if any {
+            update();
         }
     }
 
@@ -224,7 +235,13 @@ mod native {
                 }
                 _ => {}
             }
-            hand_on(&self.edits, live);
+            hand_on(&self.edits, live, &*self.update);
+        }
+
+        /// Something new to draw or still moving: Blitz draws a frame for
+        /// it, and keeps drawing (paced) while it moves.
+        fn needs_redraw(&self) -> bool {
+            self.live.try_borrow().is_ok_and(|l| l.as_ref().is_ok_and(LiveSurface::is_moving))
         }
 
         fn paint(&mut self, render_ctx: &mut dyn RenderContext, _styles: &ComputedStyles, width: u32, height: u32, scale: f64) -> Scene {
@@ -262,7 +279,7 @@ mod native {
                     }
                     Err(e) => tracing::warn!(target: "frame", error = %e, "frame render failed"),
                 }
-                hand_on(&self.edits, live);
+                hand_on(&self.edits, live, &*self.update);
             }
             if let Some((id, _)) = self.target {
                 scene.fill(

@@ -442,13 +442,15 @@ fn viz_of(b: &LiveBlock, tempo_bpm: u32) -> Element {
     }
 }
 
-/// A unit's face without a block in the chain yet: drawn, not bound.
+/// A unit's face without a block in the chain yet: drawn, not bound, and
+/// off — so nothing on it moves.
 #[component]
 fn UnboundFace(face: FaceEntry) -> Element {
     let (w, h) = face.size;
+    let off = vec![(format!("{}/on", face.ns), 0.0)];
     rsx! {
         div { style: "height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0; opacity: 0.9;",
-            FrameSurface { name: face.face.clone() }
+            FrameSurface { name: face.face.clone(), values: off }
         }
     }
 }
@@ -492,7 +494,7 @@ pub fn InputRow(blocks: Vec<LiveBlock>) -> Element {
                 if let Some(p) = picture {
                     div { style: "flex: 1 1 0%; min-width: 0; height: 100%; display: flex; border-left: 1px solid #1d1f24;",
                         div { style: "width: 100%; height: 100%;",
-                            FrameSurface { name: p.face.clone(), stretch: true, values: filter.as_ref().map(|b| values_of(b, &p.ns)).unwrap_or_default() }
+                            FrameSurface { name: p.face.clone(), stretch: true, values: filter.as_ref().map_or_else(|| vec![(format!("{}/on", p.ns), 0.0)], |b| values_of(b, &p.ns)) }
                         }
                     }
                 }

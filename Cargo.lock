@@ -5866,6 +5866,7 @@ dependencies = [
  "anyrender_vello 0.12.0",
  "architect-ui",
  "blitz-dom",
+ "blitz-traits",
  "bytemuck",
  "dioxus",
  "dioxus-native-dom",
