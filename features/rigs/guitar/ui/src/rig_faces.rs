@@ -321,9 +321,10 @@ pub fn BlockFace(
     /// instead of its height.
     #[props(default)]
     across: bool,
-    /// Fill the box exactly, edge to edge (the face stretched to it): for a
-    /// face made for its box's proportions, a lane or a panel, so no strip
-    /// of the host shows beside it.
+    /// Fill the box exactly, edge to edge: the face laid out for the box's
+    /// proportions (frame's responsive mode — its picture widens or
+    /// narrows, its controls keep their shape), so no strip of the host
+    /// shows beside it and nothing is squashed.
     #[props(default)]
     fill: bool,
     /// Live values the face shows that aren't params (a meter's level):
@@ -362,7 +363,7 @@ pub fn BlockFace(
             FrameSurface {
                 key: "{block.id}-{face.face}",
                 name: face.face.clone(),
-                stretch: fill,
+                responsive: fill,
                 variants: face.variants.clone(),
                 values,
                 on_edit: move |(addr, value): (String, f64)| {

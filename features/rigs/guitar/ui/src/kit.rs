@@ -901,6 +901,10 @@ pub fn PresetBar(
     #[props(default)]
     large: bool,
     #[props(default)] placeholder: String,
+    /// Stacked for a narrow column: the controls (▾ ‹ › ⋯) in a strip on
+    /// top, the eyebrow, the name large and the snapshot under it.
+    #[props(default)]
+    stacked: bool,
     /// Extra inline style for the bar (width, flex).
     #[props(default)]
     style: String,
@@ -993,6 +997,76 @@ pub fn PresetBar(
             }
         }
     };
+    if stacked {
+        let btn = "display: flex; align-items: center; justify-content: center; flex: 1 1 0; min-width: 0; padding: 0; border: none; background: transparent; cursor: pointer; font-size: 12px;";
+        return rsx! {
+            div {
+                style: "position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow: visible; {style}",
+                onclick: move |e: MouseEvent| e.stop_propagation(),
+                // The controls, a strip across the top.
+                div { style: "display: flex; align-items: stretch; height: 22px; border: 1px solid {LINE_STRONG}; background: {FIELD}; border-radius: 4px; overflow: visible;",
+                    button {
+                        style: "{btn} color: {MUTED}; background: {drop_bg};",
+                        title: "Choose {label}",
+                        onpointerdown: move |e: PointerEvent| e.stop_propagation(),
+                        onclick: {
+                            let mut toggle = toggle.clone();
+                            move |e: MouseEvent| {
+                                e.stop_propagation();
+                                toggle(&e);
+                            }
+                        },
+                        fts_chrome::Glyph { icon: fts_chrome::Icon::ChevronDown, size: 10 }
+                    }
+                    if let Some(s) = on_step {
+                        button { style: "{btn} color: {MUTED}; border-left: 1px solid {LINE};", title: "Previous",
+                            onpointerdown: move |e: PointerEvent| e.stop_propagation(),
+                            onclick: move |e: MouseEvent| { e.stop_propagation(); s.call(-1); }, "‹" }
+                        button { style: "{btn} color: {MUTED}; border-left: 1px solid {LINE};", title: "Next",
+                            onpointerdown: move |e: PointerEvent| e.stop_propagation(),
+                            onclick: move |e: MouseEvent| { e.stop_propagation(); s.call(1); }, "›" }
+                    }
+                    if let Some(h) = on_menu.filter(|_| !menu.is_empty()) {
+                        div { style: "display: flex; align-items: center; justify-content: center; flex: 1 1 0; border-left: 1px solid {LINE};",
+                            ActionMenu { items: menu.clone(), on_pick: h, size: 18, bare: true, title: "{label} actions" }
+                        }
+                    }
+                }
+                // What plays: the name large, the snapshot under it.
+                div {
+                    style: "display: flex; flex-direction: column; gap: 2px; min-width: 0; cursor: pointer; line-height: 1.15;",
+                    title: if modified { format!("{label}: {name} — edited, not saved") } else { format!("{label}: {name}") },
+                    onpointerdown: move |e: PointerEvent| e.stop_propagation(),
+                    onclick: {
+                        let mut toggle = toggle.clone();
+                        move |e: MouseEvent| {
+                            e.stop_propagation();
+                            match on_label {
+                                Some(cb) => cb.call(()),
+                                None => toggle(&e),
+                            }
+                        }
+                    },
+                    div { style: "display: flex; align-items: center; gap: 5px; min-width: 0;",
+                        if modified || live {
+                            Dot { live, modified, size: 6 }
+                        }
+                        span { style: "font-size: 14px; font-weight: 700; color: {TEXT}; overflow: hidden; min-width: 0;",
+                            if name.is_empty() { "{empty}" } else { "{name}" }
+                        }
+                    }
+                    if !sub.is_empty() {
+                        span { style: "font-size: 10px; color: {MUTED}; overflow: hidden;", "{sub}" }
+                    }
+                }
+                if open() && host.is_none() {
+                    div { style: "position: absolute; top: 26px; left: 0; z-index: 300;",
+                        PickList { options: options.clone(), on_pick, on_close: move |()| open.set(false) }
+                    }
+                }
+            }
+        };
+    }
     rsx! {
         div {
             style: "position: relative; display: flex; align-items: stretch; height: {height}; min-width: 0; \

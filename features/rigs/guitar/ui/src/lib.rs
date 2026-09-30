@@ -18,6 +18,7 @@ pub use modulation_ui::viz as mod_viz;
 /// The plugin's own vello EQ editor — native only (a painted scene needs a
 /// Blitz host natively, a canvas in a browser).
 mod eq_vello;
+mod face_chrome;
 /// Pages designed in frame, running live (hot-reloaded from their files).
 mod frame_surface;
 /// The rig's blocks drawn with frame faces, chosen by what is loaded.

@@ -1216,6 +1216,8 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                                 class: if lane_face.is_some() { "absolute right-1 top-1 flex items-center gap-1 px-1" } else { "absolute right-0 inset-y-0 flex items-center gap-1 pr-1 pl-3" },
                                 style: if lane_face.is_some() { "background: rgba(8,8,8,0.7); border-radius: 4px;" } else { "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);" },
                                 onclick: move |e: MouseEvent| e.stop_propagation(),
+                                // Its preset (the name opens the browser).
+                                crate::face_chrome::PresetStepper { block: b.name.clone(), block_type: "delay".to_string(), accent: color.to_string() }
                                 // One timing division per delay (drives
                                 // both sides).
                                 {
@@ -1440,6 +1442,8 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                                 class: if lane_face.is_some() { "absolute right-1 top-1 flex items-center gap-1.5 px-1" } else { "absolute right-0 inset-y-0 flex items-center gap-1.5 pr-1 pl-3" },
                                 style: if lane_face.is_some() { "background: rgba(8,8,8,0.7); border-radius: 4px;" } else { "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);" },
                                 onclick: move |e: MouseEvent| e.stop_propagation(),
+                                // Its preset (the name opens the browser).
+                                crate::face_chrome::PresetStepper { block: b.name.clone(), block_type: "reverb".to_string(), accent: color.to_string() }
                                 div { class: "flex flex-col items-end",
                                     span { style: "font-size:7px; text-transform:uppercase; color:#8a8a92;", "Time" }
                                     span { style: "font-family:ui-monospace,monospace; font-size:10px; color:{color};",
@@ -1728,6 +1732,8 @@ fn ModGroupPanel(
                 if tempo_divisions && mod_face.is_some() {
                     {speed_picker.clone()}
                 }
+                // Its preset (the name opens the browser).
+                crate::face_chrome::PresetStepper { block: cur.name.clone(), block_type: cur.block_type.as_str().to_string(), accent: group_color.to_string() }
             }
             if let Some(f) = mod_face.clone() {
                 div { class: "relative flex-1 min-h-0 flex",
@@ -1842,6 +1848,9 @@ fn ModuleControls(
     /// head or a panel's corner.
     #[props(default)]
     style: String,
+    /// Stacked, for a separator column (see [`crate::kit::PresetBar`]).
+    #[props(default)]
+    stacked: bool,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let library = try_use_context::<crate::library::OpenLibrary>();
@@ -1878,6 +1887,7 @@ fn ModuleControls(
             sub: played.clone(),
             modified,
             compact: true,
+            stacked,
             style: "flex-shrink: 0; {style}",
             options,
             on_pick: {
@@ -2743,6 +2753,18 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
             }
         }
     });
+    // For the faces: the libraries and what plays (their preset
+    // steppers), and which faces show their visualiser instead.
+    let face_presets = use_context_provider(|| crate::face_chrome::FacePresets(Signal::new(Default::default())));
+    use_context_provider(|| crate::face_chrome::VizMode(Signal::new(std::collections::HashSet::new())));
+    use_effect(move || {
+        if let Some(c) = compositions.read().as_ref() {
+            let mut s = face_presets.0;
+            if *s.peek() != *c {
+                s.set(c.clone());
+            }
+        }
+    });
     let pick_of = |module: &str| {
         compositions.read().as_ref().and_then(|c| {
             c.active_modules
@@ -2774,6 +2796,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     let post_comp = find_block(&blocks, BlockType::Compressor, "Post Comp");
     let post_comp_face = crate::rig_faces::use_faces().post_comp;
     let trim_face = crate::rig_faces::use_faces().trim;
+    let viz = try_use_context::<crate::face_chrome::VizMode>();
     let comp_title = "Compressor";
 
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
@@ -3054,13 +3077,24 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                     flush: post_comp_face.is_some(),
                                     left_power_on: post_comp.as_ref().map(|b| !b.bypassed),
                                     if let Some(c) = post_comp.clone() {
-                                        // The unit, laid out to fill the box.
-                                        if let Some(f) = post_comp_face.clone() {
-                                            div { style: "display: flex; width: 100%; height: 100%; min-height: 0;",
+                                        // The unit, laid out to fill the box
+                                        // — or, switched, what it is doing.
+                                        if let Some(f) = post_comp_face.clone().filter(|_| !crate::face_chrome::shows_viz(viz, &c.name)) {
+                                            div { style: "position: relative; display: flex; width: 100%; height: 100%; min-height: 0;",
                                                 crate::rig_faces::BlockFace { block: c.clone(), face: f }
+                                                div { style: "position: absolute; left: 6px; top: 6px;",
+                                                    crate::face_chrome::VizToggle { block: c.name.clone() }
+                                                }
                                             }
                                         } else {
-                                            LiveComp { block: c, state }
+                                            div { style: "position: relative; display: flex; width: 100%; height: 100%; min-height: 0;",
+                                                LiveComp { block: c.clone(), state }
+                                                if post_comp_face.is_some() {
+                                                    div { style: "position: absolute; left: 6px; bottom: 6px;",
+                                                        crate::face_chrome::VizToggle { block: c.name.clone() }
+                                                    }
+                                                }
+                                            }
                                         }
                                     } else {
                                         {empty_slot("Post Comp")}
@@ -3108,8 +3142,25 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 }
                             }
                         }
-                        // The Time module — delays and reverbs — under one
-                        // preset head, like the board's rows.
+                        // The Time module's separator: a column between the
+                        // modulation and the time effects, holding the
+                        // module's presets — the Time pick, and the Delay and
+                        // Reverb picks it references. (Each lane's own
+                        // preset is on its face.)
+                        if !bpre {
+                            div { style: "flex: 0 0 150px; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: space-between; padding: 12px 10px; box-sizing: border-box; background: linear-gradient(180deg, #111216 0%, #0a0b0d 100%); border-left: 1px solid #23252b; border-right: 1px solid #23252b;",
+                                for (label, color, rule, kind, pick) in [
+                                    ("Time module", "#e4e4e7", "#52525b", crate::library::Kind::TimeModules, time_pick.clone()),
+                                    ("Delay", "#60a5fa", "#3b82f6", crate::library::Kind::DelayModules, delay_pick.clone()),
+                                    ("Reverb", "#c4b5fd", "#a78bfa", crate::library::Kind::ReverbModules, reverb_pick.clone()),
+                                ] {
+                                    div { style: "display: flex; flex-direction: column; gap: 6px; border-left: 2px solid {rule}; padding-left: 7px;",
+                                        span { style: "font-size: 9px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: {color};", "{label}" }
+                                        ModuleControls { kind, pick, modules: all_modules.clone(), edited: edited.clone(), stacked: true, style: "width: 100%;" }
+                                    }
+                                }
+                            }
+                        }
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 4 1 0%;",
                         div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%;",
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
@@ -3168,15 +3219,6 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 ReverbPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm, pre: bpre }
                             }
                         }
-                        }
-                        if !bpre {
-                            // The Time module — a Delay pick and a Reverb pick — and
-                            // the two it references, side by side.
-                            div { class: "flex gap-0", style: "height: 22px; width: 100%;",
-                                ModuleControls { kind: crate::library::Kind::TimeModules, pick: time_pick, modules: all_modules.clone(), edited: edited.clone(), style: "height: 22px; flex: 1 1 0%;" }
-                                ModuleControls { kind: crate::library::Kind::DelayModules, pick: delay_pick, modules: all_modules.clone(), edited: edited.clone(), style: "height: 22px; flex: 1 1 0%;" }
-                                ModuleControls { kind: crate::library::Kind::ReverbModules, pick: reverb_pick, modules: all_modules.clone(), edited: edited.clone(), style: "height: 22px; flex: 1 1 0%;" }
-                            }
                         }
                         }
                     }

@@ -52,6 +52,10 @@ pub fn FrameSurface(
     /// rather than shrinking into it.
     #[props(default)]
     variants: Vec<(String, f64)>,
+    /// Lay the face out for the box's proportions (frame's responsive
+    /// mode): its picture widens or narrows, its controls keep their shape.
+    #[props(default)]
+    responsive: bool,
 ) -> Element {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -61,21 +65,21 @@ pub fn FrameSurface(
         let key = format!("{name}|{}", variants.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(","));
         rsx! {
             for k in [key] {
-                NativeFace { key: "{k}", name: name.clone(), values: values.clone(), on_edit, stretch, variants: variants.clone() }
+                NativeFace { key: "{k}", name: name.clone(), values: values.clone(), on_edit, stretch, variants: variants.clone(), responsive }
             }
         }
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let _ = (name, values, on_edit, stretch, variants);
+        let _ = (name, values, on_edit, stretch, variants, responsive);
         rsx! { div { style: "width: 100%; height: 100%;" } }
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[component]
-fn NativeFace(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>) -> Element {
-    native::mount(name, values, on_edit, stretch, variants)
+fn NativeFace(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool) -> Element {
+    native::mount(name, values, on_edit, stretch, variants, responsive)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -135,7 +139,7 @@ mod native {
         }
     }
 
-    fn open_face(name: &str, stretch: bool) -> Result<LiveSurface, String> {
+    fn open_face(name: &str, stretch: bool, responsive: bool) -> Result<LiveSurface, String> {
         let path = super::design_dir().join(name);
         let dir = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
         let stem = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
@@ -143,6 +147,7 @@ mod native {
         LiveSurface::open(&markup, catalog)
             .map(|mut l| {
                 l.set_stretch(stretch);
+                l.set_responsive(responsive);
                 l.set_max_fps(max_fps());
                 l
             })
@@ -163,14 +168,14 @@ mod native {
     /// How often the design's files are checked for a new version.
     const RELOAD_POLL: std::time::Duration = std::time::Duration::from_millis(250);
 
-    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>) -> Element {
+    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool) -> Element {
         let live: Shared = use_hook(|| {
             let opened = if variants.is_empty() {
-                open_face(&name, stretch).map(|l| Surfaces { all: vec![(1.0, l)], active: 0 })
+                open_face(&name, stretch, responsive).map(|l| Surfaces { all: vec![(1.0, l)], active: 0 })
             } else {
                 variants
                     .iter()
-                    .map(|(n, aspect)| open_face(n, stretch).map(|l| (*aspect, l)))
+                    .map(|(n, aspect)| open_face(n, stretch, responsive).map(|l| (*aspect, l)))
                     .collect::<Result<Vec<_>, _>>()
                     .map(|all| Surfaces { all, active: 0 })
             };
