@@ -238,6 +238,12 @@ mod native {
             hand_on(&self.edits, live, &*self.update);
         }
 
+        /// The texture the face is: Blitz can draw it over the page as a
+        /// layer, so a frame where only faces move repaints only them.
+        fn composite_texture(&self) -> Option<ResourceId> {
+            self.target.map(|(id, _)| id)
+        }
+
         /// Something new to draw or still moving: Blitz draws a frame for
         /// it, and keeps drawing (paced) while it moves.
         fn needs_redraw(&self) -> bool {

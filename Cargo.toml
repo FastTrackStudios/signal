@@ -844,6 +844,11 @@ blitz-paint = { path = "../blitz/packages/blitz-paint" }
 blitz-shell = { path = "../blitz/packages/blitz-shell" }
 blitz-net = { path = "../blitz/packages/blitz-net" }
 blitz-html = { path = "../blitz/packages/blitz-html" }
+# The renderer seam and vello window renderer, vendored in the blitz fork
+# for layered compositing (a cached page with frame faces drawn over it,
+# so a frame where only faces move skips Blitz's paint and vello).
+anyrender = { path = "../blitz/vendor/anyrender" }
+anyrender_vello = { path = "../blitz/vendor/anyrender_vello" }
 # Vendored one-line fix: quote scalars containing `<`/`>` — upstream
 # (facet-rs/facet) styx-format emits them bare but styx-parse rejects
 # them, so serialized keybind configs (`keys "<C-s>"`) could not be

@@ -351,8 +351,6 @@ checksum = "fb5dfbc6d8d2675589ccbe4d0fd61df2419075625f8c1a62325e718e2b0049f9"
 [[package]]
 name = "anyrender"
 version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c79ab67fa5a03a47b088c5c9dfc8ad727e2a3a1921517cdf4b642433f925d50"
 dependencies = [
  "kurbo 0.13.1",
  "peniko 0.6.1",
@@ -418,8 +416,6 @@ dependencies = [
 [[package]]
 name = "anyrender_vello"
 version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93f297de95eb39e5e6b38e4f4d0b28a880f9fb56ee095e49d8a365a7eb4d6af8"
 dependencies = [
  "anyrender 0.11.1",
  "debug_timer 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -14068,6 +14064,7 @@ dependencies = [
  "architect-telemetry",
  "axum",
  "base64 0.22.1",
+ "blitz-shell",
  "daw-proto",
  "dioxus",
  "dioxus-native",
