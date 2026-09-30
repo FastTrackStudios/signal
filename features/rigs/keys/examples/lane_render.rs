@@ -70,13 +70,21 @@ fn main() {
             .map(|v| v.split(',').filter_map(|k| k.trim().parse().ok()).collect())
             .unwrap_or_default();
         let keys: Vec<u8> = std::iter::once(note).chain(chord).collect();
-        let midi: Vec<PluginMidiEvent> = if t == 0 {
-            keys.iter().map(|&k| ev(true, k, 100)).collect()
-        } else if t <= off && off < t + block {
-            keys.iter().map(|&k| ev(false, k, 0)).collect()
-        } else {
-            vec![]
-        };
+        // LANE_STAGGER_MS=150: each chord note that much after the one
+        // before (omni_render's OMNI_STAGGER_MS), all released together.
+        let stagger = std::env::var("LANE_STAGGER_MS")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .map_or(0, |ms| (ms / 1000.0 * sr as f32) as usize);
+        let mut midi: Vec<PluginMidiEvent> = keys
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| (t..t + block).contains(&(i * stagger)))
+            .map(|(_, &k)| ev(true, k, 100))
+            .collect();
+        if t <= off && off < t + block {
+            midi.extend(keys.iter().map(|&k| ev(false, k, 0)));
+        }
         l.fill(0.0);
         r.fill(0.0);
         rn.render(&mut l, &mut r, &PluginEvents { params: &[], midi: &midi, note_expressions: &[] });

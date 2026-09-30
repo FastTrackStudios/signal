@@ -2174,6 +2174,7 @@ impl VoicePool {
                 v.state = VoiceState::Releasing { frames_remaining: STEAL_NOTE_FADE };
             }
             self.stolen = self.stolen.saturating_add(1);
+            NOTE_STEALS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             stolen += 1;
         }
     }
@@ -2872,4 +2873,15 @@ mod tests {
             worst_run * 512 * 1000 / sr as usize,
         );
     }
+}
+
+/// Notes stolen at a polyphony limit, process-wide (every sampler pool and
+/// wavetable oscillator) — for a rig's health log: a note cut short by a
+/// voice limit sounds like a note cut short by anything else.
+pub static NOTE_STEALS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many notes polyphony limits have stolen so far (process-wide).
+#[must_use]
+pub fn note_steals() -> u64 {
+    NOTE_STEALS.load(std::sync::atomic::Ordering::Relaxed)
 }

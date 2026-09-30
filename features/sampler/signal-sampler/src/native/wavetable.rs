@@ -651,6 +651,8 @@ impl NativeWavetable {
             if self.voices.len() >= self.max_notes {
                 let i = self.voices.iter().position(|v| v.released).unwrap_or(0);
                 self.voices.remove(i);
+                crate::engine::voice::NOTE_STEALS
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
             let mut env = match &self.amp_points {
                 Some(bp) => VoiceEnv::Points {

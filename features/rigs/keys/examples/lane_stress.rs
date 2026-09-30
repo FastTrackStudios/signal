@@ -76,6 +76,8 @@ fn main() {
     // that must never cost the audio a block.
     let skips0 = daw::standalone::audio_engine::render::plugin_stage_skips();
     let cuts0 = signal_sampler::keys_rig::guard_cuts();
+    let sheds0 = signal_sampler::keys_rig::guard_sheds();
+    let steals0 = signal_sampler::engine::voice::note_steals();
     let stop = std::sync::atomic::AtomicBool::new(false);
     std::thread::scope(|scope| {
     scope.spawn(|| {
@@ -192,6 +194,11 @@ fn main() {
     println!("  peak voices {peak_voices}");
     let cuts = signal_sampler::keys_rig::guard_cuts() - cuts0;
     println!("  {cuts} held notes cut by the CPU guard");
+    println!(
+        "  {} lane-blocks shed release tails; {} notes stolen at a polyphony limit",
+        signal_sampler::keys_rig::guard_sheds() - sheds0,
+        signal_sampler::engine::voice::note_steals() - steals0
+    );
     // Ordinary chords must come through whole, whatever the load.
     let chord_cut = smash == 0 && cuts > 0;
     println!("  output peak {:.3} ({:+.1} dBFS); {nonfinite} non-finite samples", peak, 20.0 * peak.max(1e-9).log10());

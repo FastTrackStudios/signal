@@ -5774,6 +5774,8 @@ fn spawn_engine_watch(
             let skips = daw::standalone::audio_engine::render::plugin_stage_skips;
             let mut skip0 = skips();
             let mut cut0 = signal_sampler::keys_rig::guard_cuts();
+            let mut shed0 = signal_sampler::keys_rig::guard_sheds();
+            let mut steal0 = signal_sampler::engine::voice::note_steals();
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 let Some(st) = weak.upgrade() else {
@@ -5791,6 +5793,19 @@ fn spawn_engine_watch(
                 };
                 let skipped = skips();
                 let cuts = signal_sampler::keys_rig::guard_cuts();
+                let sheds = signal_sampler::keys_rig::guard_sheds();
+                let steals = signal_sampler::engine::voice::note_steals();
+                // Notes cut short: by the guard shedding release tails, or
+                // by a lane's polyphony limit. Either sounds like a sample
+                // ending early, so say which.
+                if sheds > shed0 || steals > steal0 {
+                    tracing::warn!(
+                        tail_sheds = sheds - shed0,
+                        notes_stolen = steals - steal0,
+                        voices = signal_sampler::keys_rig::total_voices(),
+                        "keys audio: notes cut short"
+                    );
+                }
                 // Taken every tick, so each report covers its own window.
                 let worst = daw.take_block_profile();
                 if over > over0 || xruns > xrun0 || skipped > skip0 || cuts > cut0 {
@@ -5828,6 +5843,7 @@ fn spawn_engine_watch(
                     );
                 }
                 (over0, xrun0, calls0, total0, skip0, cut0) = (over, xruns, calls, total, skipped, cuts);
+                (shed0, steal0) = (sheds, steals);
             }
         });
 }
