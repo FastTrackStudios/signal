@@ -1154,7 +1154,8 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                     };
                     let mut taps = stems(t_l, true);
                     taps.extend(stems(t_r, false));
-                    let lane_face = face_of(b);
+                    // Light on top, dark underneath.
+                    let lane_face = face_of(b).map(|f| if di > 0 { f.darkened() } else { f });
                     rsx! {
                         div {
                             key: "lane{di}",
@@ -1364,7 +1365,8 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                     .iter()
                     .map(|(t, l)| (x_of_t(*t), *l))
                     .collect();
-                    let lane_face = face_of(b);
+                    // Light on top, dark underneath.
+                    let lane_face = face_of(b).map(|f| if vi > 0 { f.darkened() } else { f });
                     rsx! {
                         div {
                             key: "lane{vi}",

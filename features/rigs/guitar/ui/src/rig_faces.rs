@@ -41,6 +41,21 @@ pub struct FaceEntry {
     /// Face params that aren't the block's own, and the block param each
     /// drives.
     pub maps: Vec<ParamMap>,
+    /// The same face in its dark finish, where it has one: a Time lane
+    /// underneath another draws this, so the pair reads light over dark.
+    pub dark: Option<String>,
+}
+
+impl FaceEntry {
+    /// This face in its dark finish (itself when it has none).
+    #[must_use]
+    pub fn darkened(&self) -> Self {
+        let mut f = self.clone();
+        if let Some(d) = &self.dark {
+            f.face.clone_from(d);
+        }
+        f
+    }
 }
 
 /// A face param (`<ns>/<face>`) standing for block param `param`.
@@ -162,7 +177,8 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
                 .collect()
         })
         .unwrap_or_default();
-    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps })
+    let dark = v.get("dark").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
+    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark })
 }
 
 impl Faces {
