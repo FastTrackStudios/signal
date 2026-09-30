@@ -3799,6 +3799,43 @@ impl GuitarRigBackend {
                                 <(String, Vec<String>, u32)>::default()
                             }
                         };
+                        // An amp's capture file: its Amp module
+                        // snapshot's `nam` (Amp L) or `nam2` (Amp R), else
+                        // the pool preset the patch points at — what the
+                        // amp plays, for the surface to name (and draw).
+                        let asset = if block.block_type == BlockType::Amp {
+                            let def = self.profile_def.lock_ok();
+                            let right = name.eq_ignore_ascii_case("Amp R");
+                            let own = def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&patch.name));
+                            let composed = own.and_then(|own| {
+                                let pick = crate::compose::module_picks(&comp, own)
+                                    .into_iter()
+                                    .find(|m| m.module.eq_ignore_ascii_case("Amp"))?;
+                                let module = comp.module("Amp", &pick.preset)?;
+                                let snap = module
+                                    .snapshots
+                                    .iter()
+                                    .find(|s| s.name.eq_ignore_ascii_case(&pick.snapshot))
+                                    .or_else(|| module.snapshots.first())?;
+                                Some(if right { snap.nam2.clone() } else { snap.nam.clone() })
+                            });
+                            let pooled = || {
+                                let preset = if right {
+                                    own.map(|p| p.preset2.clone()).unwrap_or_default()
+                                } else {
+                                    pool_preset_of(&def, &patch.name).unwrap_or_default()
+                                };
+                                def.presets
+                                    .iter()
+                                    .find(|p| p.name.eq_ignore_ascii_case(&preset))
+                                    .map(|p| p.nam.clone())
+                                    .unwrap_or_default()
+                            };
+                            let path = composed.filter(|n| !n.is_empty()).unwrap_or_else(pooled);
+                            std::path::Path::new(&path).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default()
+                        } else {
+                            String::new()
+                        };
                         out.push(LiveBlock {
                             id: id.clone(),
                             engine: 0,
@@ -3819,7 +3856,7 @@ impl GuitarRigBackend {
                                     Self::stored_level(&comp, &level_drives, &level_pool, &h)
                                 }),
                                 detail: String::new(),
-                                asset: String::new(),
+                                asset,
                                 empty: false,
                         });
                     }
