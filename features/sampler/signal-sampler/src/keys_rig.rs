@@ -116,8 +116,12 @@ pub struct KeysInstrument {
     voices: Arc<std::sync::atomic::AtomicU32>,
     /// Blocks since this lane last cut held notes (the CPU guard's pacing).
     since_cut: u32,
-    /// Consecutive blocks the rig has run hot (over `GUARD_SHED`).
+    /// Consecutive blocks the rig has run hot (over `GUARD_SHED`)…
     hot: u32,
+    /// …and over its deadline (`GUARD_CUT`).
+    over: u32,
+    /// What this lane had cut short, for the health log.
+    health: Arc<crate::lane_health::LaneHealth>,
 }
 
 impl Drop for KeysInstrument {
@@ -164,6 +168,8 @@ impl KeysInstrument {
             voices: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             since_cut: GUARD_CUT_EVERY,
             hot: 0,
+            over: 0,
+            health: crate::lane_health::LaneHealth::register(&tree.name),
         }
     }
 
@@ -275,19 +281,25 @@ impl PluginInstance for KeysInstrument {
     ) -> Result<(), PluginError> {
         // CPU guard: the rig ran hot last block, or holds more voices than
         // it can render — shed before this block, not after it is missed.
-        match guard_step(&mut self.hot, &mut self.since_cut, render_load(), total_voices()) {
+        // Voices faded or stolen in this lane's block count to this lane.
+        let _health = crate::lane_health::Scope::enter(&self.health);
+        let streaks = (&mut self.hot, &mut self.over);
+        match guard_step(streaks, &mut self.since_cut, render_load(), total_voices()) {
             Guard::CutNote => {
                 self.render.shed_voices(2);
+                self.health.cut();
                 GUARD_CUTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
-            Guard::ShedTails => {
+            Guard::ShedTails { by_load } => {
                 self.render.shed_voices(1);
+                self.health.shed(by_load);
                 GUARD_SHEDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
             Guard::Keep => {}
         }
         self.render.process(in_l, in_r, out_l, out_r, events);
         let now = self.render.active_voices() as u32;
+        self.health.voices(now);
         let before = self.voices.swap(now, std::sync::atomic::Ordering::Relaxed);
         TOTAL_VOICES.fetch_add(i64::from(now) - i64::from(before), std::sync::atomic::Ordering::Relaxed);
         // A tree swapped out is still finishing its notes: render it into
@@ -620,6 +632,12 @@ const GUARD_SHED_BLOCKS: u32 = 4;
 /// 70–80% of its deadline in normal playing, so anything lower cut chords
 /// that were keeping up fine (it once left one note standing).
 const GUARD_CUT: f32 = 1.0;
+/// Overruns in a row before a held note is cut.
+const GUARD_CUT_BLOCKS: u32 = 2;
+/// The voice count only sheds while the CPU is past this share of the
+/// deadline — busy enough that a pile-up could overrun before the load
+/// guard sees it.
+const GUARD_CROWDED: f32 = 0.75;
 /// Blocks between two cuts in one lane (one note each, ~85 ms apart at
 /// 128 frames), so the guard trims a pile-up gradually and a single hot
 /// block cannot empty the rig.
@@ -629,28 +647,41 @@ const GUARD_CUT_EVERY: u32 = 32;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Guard {
     Keep,
-    /// Fade release tails and releasing notes (level 1).
-    ShedTails,
+    /// Fade old release tails (level 1) — because the rig ran hot for a
+    /// while (`by_load`), or held more voices than its budget.
+    ShedTails { by_load: bool },
     /// Also fade the oldest held notes (level 2).
     CutNote,
 }
 
 /// One block of the CPU guard for one lane: `load` is the last block's
-/// share of its deadline, `total` the rig's voices; `hot` counts the hot
-/// blocks in a row and `since_cut` the blocks since this lane last cut.
+/// share of its deadline, `total` the rig's voices; `hot` and `over` count
+/// the blocks in a row over `GUARD_SHED` and `GUARD_CUT`, `since_cut` the
+/// blocks since this lane last cut.
 ///
-/// Tails go on a hot STREAK, not a hot block: the rig runs 70–80% of its
-/// deadline in normal playing, and one block over the line is the
-/// scheduler, not a pile-up. A real overrun, or more voices than the
-/// deadline can hold, acts at once.
-fn guard_step(hot: &mut u32, since_cut: &mut u32, load: f32, total: i64) -> Guard {
+/// It acts on SUSTAINED load. One block over the line is the scheduler or
+/// a cold sample read, not a pile-up — and the block is already late, so
+/// cutting notes after it saves nothing. The voice count is only an early
+/// warning while the CPU is already busy (`GUARD_CROWDED`): measured, the
+/// Worship rig at its busiest in a pedalled passage (420 voices) ran at
+/// 68% of its deadline, and shedding there cut notes for nothing.
+fn guard_step(
+    (hot, over): (&mut u32, &mut u32),
+    since_cut: &mut u32,
+    load: f32,
+    total: i64,
+) -> Guard {
     *since_cut = since_cut.saturating_add(1);
     *hot = if load > GUARD_SHED { hot.saturating_add(1) } else { 0 };
-    if (load > GUARD_CUT || total > VOICE_CUT) && *since_cut >= GUARD_CUT_EVERY {
+    *over = if load > GUARD_CUT { over.saturating_add(1) } else { 0 };
+    let crowded = load > GUARD_CROWDED;
+    if (*over >= GUARD_CUT_BLOCKS || (total > VOICE_CUT && crowded)) && *since_cut >= GUARD_CUT_EVERY {
         *since_cut = 0;
         Guard::CutNote
-    } else if *hot >= GUARD_SHED_BLOCKS || total > VOICE_SHED {
-        Guard::ShedTails
+    } else if *hot >= GUARD_SHED_BLOCKS {
+        Guard::ShedTails { by_load: true }
+    } else if total > VOICE_SHED && crowded {
+        Guard::ShedTails { by_load: false }
     } else {
         Guard::Keep
     }
@@ -676,11 +707,16 @@ pub fn guard_cuts() -> u64 {
 
 /// The rig-wide voice budget: the load guard only sees the PREVIOUS block,
 /// and a forearm on the keys lands thirty notes inside one — so the rig also
-/// sheds by count, proactively. Measured ~5 µs per voice per 128-frame block
-/// here (≈ 380 voices fill the deadline): shed tails past `VOICE_SHED`, cut
-/// the oldest notes past `VOICE_CUT`.
-const VOICE_SHED: i64 = 256;
-const VOICE_CUT: i64 = 320;
+/// sheds by count, proactively.
+///
+/// Measured on the Worship rig (`lane_stress`, guard off): 3–7 µs per voice
+/// per 128-frame block depending on the lanes playing, so the 2.67 ms
+/// deadline holds ~390–620 voices. It was 256 / 320 — about 60% of the
+/// deadline — and a pedalled piano passage reached it all the time,
+/// fading every release tail in the rig. Shed old tails past `VOICE_SHED`,
+/// cut the oldest notes past `VOICE_CUT`.
+const VOICE_SHED: i64 = 384;
+const VOICE_CUT: i64 = 512;
 
 /// Voices sounding across every lane (each lane adds the change in its own
 /// count after every block).
@@ -2150,14 +2186,17 @@ mod guard_tests {
     use super::*;
 
     fn run(loads: &[f32], total: i64) -> Vec<Guard> {
-        let (mut hot, mut since) = (0, GUARD_CUT_EVERY);
-        loads.iter().map(|&l| guard_step(&mut hot, &mut since, l, total)).collect()
+        let (mut hot, mut over, mut since) = (0, 0, GUARD_CUT_EVERY);
+        loads
+            .iter()
+            .map(|&l| guard_step((&mut hot, &mut over), &mut since, l, total))
+            .collect()
     }
 
     #[test]
     fn a_busy_block_sheds_nothing() {
         // Normal playing: 70–80%, and the odd block well over the line.
-        let g = run(&[0.78, 0.95, 0.7, 0.96, 0.8, 0.93, 0.75], 60);
+        let g = run(&[0.78, 0.95, 0.7, 0.96, 0.8, 0.93, 0.75, 1.26, 0.6], 60);
         assert!(g.iter().all(|a| *a == Guard::Keep), "{g:?}");
     }
 
@@ -2165,15 +2204,23 @@ mod guard_tests {
     fn a_hot_streak_sheds_tails() {
         let g = run(&[0.95, 0.95, 0.95, 0.95, 0.95], 60);
         assert_eq!(&g[..3], &[Guard::Keep; 3]);
-        assert_eq!(g[3], Guard::ShedTails);
-        assert_eq!(g[4], Guard::ShedTails);
+        assert_eq!(g[3], Guard::ShedTails { by_load: true });
+        assert_eq!(g[4], Guard::ShedTails { by_load: true });
     }
 
     #[test]
-    fn an_overrun_or_a_pile_up_acts_at_once() {
-        assert_eq!(run(&[1.3], 60)[0], Guard::CutNote);
-        assert_eq!(run(&[0.3], VOICE_SHED + 1)[0], Guard::ShedTails);
-        assert_eq!(run(&[0.3], VOICE_CUT + 1)[0], Guard::CutNote);
+    fn overruns_in_a_row_cut() {
+        assert_eq!(run(&[1.3], 60), vec![Guard::Keep]);
+        assert_eq!(run(&[1.3, 1.2], 60)[1], Guard::CutNote);
+    }
+
+    /// Many voices on an idle CPU is a pedalled passage, not a pile-up.
+    #[test]
+    fn the_voice_count_only_warns_when_the_cpu_is_busy() {
+        assert_eq!(run(&[0.68], VOICE_SHED + 40), vec![Guard::Keep]);
+        assert_eq!(run(&[0.8], VOICE_SHED + 40), vec![Guard::ShedTails { by_load: false }]);
+        assert_eq!(run(&[0.5], VOICE_CUT + 1), vec![Guard::Keep]);
+        assert_eq!(run(&[0.8], VOICE_CUT + 1), vec![Guard::CutNote]);
     }
 }
 

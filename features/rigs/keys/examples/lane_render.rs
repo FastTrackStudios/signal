@@ -62,6 +62,7 @@ fn main() {
     let total = ((hold + 1.0) * sr as f32) as usize;
     let off = (hold * sr as f32) as usize;
     let (mut ol, mut or) = (Vec::with_capacity(total), Vec::with_capacity(total));
+    let mut voice_log: Vec<usize> = Vec::new();
     let mut t = 0;
     while t < total {
         // LANE_CHORD="64,67": more notes struck with the main one.
@@ -90,6 +91,10 @@ fn main() {
         rn.render(&mut l, &mut r, &PluginEvents { params: &[], midi: &midi, note_expressions: &[] });
         ol.extend_from_slice(&l);
         or.extend_from_slice(&r);
+        // Voices sounding, every half second (sampler sources).
+        if t % (sr as usize / 2) < block {
+            voice_log.push(rn.active_voices());
+        }
         // Streaming voices refill in the background: run at a sane pace.
         std::thread::sleep(std::time::Duration::from_micros(1500));
         t += block;
@@ -104,6 +109,10 @@ fn main() {
         })
         .collect();
     println!("{lane} note {note}: dB per 0.5 s: {}", levels.join(" "));
+    println!(
+        "{lane} note {note}: voices per 0.5 s: {}",
+        voice_log.iter().map(ToString::to_string).collect::<Vec<_>>().join(" ")
+    );
     if let Some(out) = args.get(3) {
         let n = ol.len();
         let mut b = Vec::with_capacity(44 + n * 8);

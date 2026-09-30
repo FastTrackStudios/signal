@@ -114,6 +114,7 @@ pub mod from_node;
 pub mod gapless;
 pub mod instrument;
 pub mod keys_rig;
+pub mod lane_health;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod kit_tracks;
 pub mod loudness;

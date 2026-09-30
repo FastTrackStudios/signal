@@ -653,6 +653,7 @@ impl NativeWavetable {
                 self.voices.remove(i);
                 crate::engine::voice::NOTE_STEALS
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                crate::lane_health::stolen();
             }
             let mut env = match &self.amp_points {
                 Some(bp) => VoiceEnv::Points {

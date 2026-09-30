@@ -1586,6 +1586,12 @@ impl SampleEngine {
         self.solo_mic = mic_id.filter(|m| !m.is_empty());
     }
 
+    /// Whether this engine's zones record a mic named `name` (any case).
+    #[must_use]
+    pub fn has_mic(&self, name: &str) -> bool {
+        self.mic_rank_names.iter().any(|m| m.eq_ignore_ascii_case(name))
+    }
+
     /// Attack envelope length in frames for sustained notes (CSS attack
     /// parameter). 0 = the sample's natural attack.
     pub fn set_attack_frames(&mut self, frames: usize) {

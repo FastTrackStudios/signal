@@ -571,7 +571,10 @@ impl KeysProfile {
         // not a sample source: the importer builds it (a synthesis-mode patch
         // as a Wavetable voice), inside the lane's own layer so its fader,
         // mute and scenes are the lane's as any other.
-        if let Some(lane) = Self::omni_lane(layer, resolve, module_set) {
+        if let Some(mut lane) = Self::omni_lane(layer, resolve, module_set) {
+            if !layer.source_params.is_empty() {
+                stamp_source_params(&mut lane, &layer.source_params);
+            }
             return lane;
         }
         let sources: Vec<signal_synth::Source> = layer
@@ -885,12 +888,23 @@ pub fn worship_profile() -> KeysProfile {
                         // Dolceola ^ RR Lite + Clavichord a ^ RR.
                         patch: "Hammered Dolceola".into(),
                         extra_modules: Vec::new(),
-                        gain_db: -9.9,
+                        // One mic, as Omnisphere plays a Keyscape soundsource
+                        // (one pre-mixed recording): both mics summed was
+                        // twice the voices — 8 a strike, the lane alone 263
+                        // in a pedalled passage, driving the rig past its
+                        // budget — and the roomier, louder sound noted
+                        // against Omnisphere. Stereo Mics measured closest
+                        // (level and two of four shape/decay checks); +2 dB
+                        // keeps the level the two mics had.
+                        gain_db: -7.9,
                         key_lo: 0,
                         key_hi: 127,
                         exclude_global: false,
                         patch_macros: Vec::new(),
-                        source_params: Vec::new(),
+                        source_params: vec![SourceParam {
+                            name: "prefer_mic".into(),
+                            value: "Stereo Mics".into(),
+                        }],
                         transpose: 0.0,
                     },
                     // "CLUB │ Club Europa Plucking Pulsars" (Club Land), part

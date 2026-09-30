@@ -284,6 +284,8 @@ impl SampleEngine {
     /// `line`, and spawned voices are tagged with it. The channel-less
     /// [`note_on`](Self::note_on) uses line 0 (live single-line play).
     pub fn note_on_line(&mut self, line: LineId, note: u8, velocity: u8) {
+        // Everything this note-on spawns is one strike to a polyphony limit.
+        self.voices.begin_strike();
         self.set_active_line(line);
         self.last_velocity = velocity;
         if velocity == 0 {
@@ -447,6 +449,8 @@ impl SampleEngine {
 
     /// Line-addressed note-off (see [`note_on_line`](Self::note_on_line)).
     pub fn note_off_line(&mut self, line: LineId, note: u8) {
+        // Release samples this note-off triggers are a strike of their own.
+        self.voices.begin_strike();
         self.set_active_line(line);
         let release_velocity = self.cc1;
         self.note_off_with_velocity_on_line(note, release_velocity);

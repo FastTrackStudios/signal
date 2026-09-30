@@ -69,6 +69,8 @@ fn main() {
         rig.lock().unwrap().cc(64, 127);
     }
     let mut peak_voices = 0usize;
+    // (voices, block ms) per block — what a voice costs.
+    let mut cost: Vec<(f64, f64)> = Vec::new();
     let per_hit = (sr as usize * 3 / 2) / block as usize;
     let held = per_hit * 2 / 3;
     let (mut times, mut peak, mut nonfinite, mut over) = (Vec::new(), 0.0f32, 0usize, 0usize);
@@ -140,9 +142,9 @@ fn main() {
             ((dt.as_secs_f64() / deadline.as_secs_f64()) as f32).max(floor)
         };
         signal_sampler::keys_rig::publish_render_load(load);
-        if b % 32 == 0 {
-            peak_voices = peak_voices.max(rig.lock().unwrap().active_voices());
-        }
+        let voices_now = rig.lock().unwrap().active_voices();
+        peak_voices = peak_voices.max(voices_now);
+        cost.push((voices_now as f64, dt.as_secs_f64() * 1e3));
         // Realtime mode: where the block went (reset every block).
         let profile = rig.lock().unwrap().daw().take_block_profile();
         if dt > deadline {
@@ -192,6 +194,29 @@ fn main() {
         pct(1.0)
     );
     println!("  peak voices {peak_voices}");
+    // Least squares: block ms = base + per_voice × voices.
+    {
+        let n = cost.len() as f64;
+        let (sx, sy) = cost.iter().fold((0.0, 0.0), |(a, b), (x, y)| (a + x, b + y));
+        let (mx, my) = (sx / n, sy / n);
+        let (sxy, sxx) = cost.iter().fold((0.0, 0.0), |(a, b), (x, y)| {
+            (a + (x - mx) * (y - my), b + (x - mx) * (x - mx))
+        });
+        let slope = if sxx > 0.0 { sxy / sxx } else { 0.0 };
+        let base = my - slope * mx;
+        let fit = |v: f64| base + slope * v;
+        println!(
+            "  cost: {:.1} µs per voice per block + {:.2} ms base; the {:.2} ms deadline holds ~{:.0} voices",
+            slope * 1e3,
+            base,
+            deadline.as_secs_f64() * 1e3,
+            (deadline.as_secs_f64() * 1e3 - base) / slope.max(1e-9)
+        );
+        for v in [128.0, 256.0, 384.0, 512.0] {
+            print!("  [{v:.0} voices → {:.2} ms]", fit(v));
+        }
+        println!();
+    }
     let cuts = signal_sampler::keys_rig::guard_cuts() - cuts0;
     println!("  {cuts} held notes cut by the CPU guard");
     println!(

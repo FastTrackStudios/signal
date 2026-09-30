@@ -1577,6 +1577,11 @@ pub(crate) fn build_sample_source(
     if let Some(n) = block.param_f32("max_notes") {
         engine.set_max_notes(Some(n.round().max(1.0) as usize));
     }
+    // One mic of a multi-mic source, when the source has it — else every
+    // mic plays (a missing name must never silence the source).
+    if let Some(m) = block.param_str("prefer_mic").filter(|m| engine.has_mic(m)) {
+        engine.set_solo_mic(Some(m));
+    }
     // One mic of a multi-mic source (the others silent).
     if let Some(m) = block.param_str("solo_mic").filter(|m| !m.is_empty()) {
         engine.set_solo_mic(Some(m));

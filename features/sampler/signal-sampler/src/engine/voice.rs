@@ -323,6 +323,10 @@ pub struct Voice {
     /// Engine `frames_rendered` at spawn — the base for stamping emissions
     /// with absolute output frames.
     spawn_frame: u64,
+    /// The strike (note-on, or the note-off that triggered release samples)
+    /// that spawned this voice — shared by every mic and layer sample of it;
+    /// what a polyphony limit counts. Set by [`VoicePool::spawn`].
+    strike: u32,
     /// Output frames this voice has produced (holds included — they occupy
     /// real output time).
     frames_out: u64,
@@ -601,6 +605,7 @@ impl Voice {
             start_hold: 0,
             marker_arrival_file: None,
             spawn_frame: 0,
+            strike: 0,
             frames_out: 0,
             arrival_emitted: None,
             arrival_drained: false,
@@ -683,6 +688,7 @@ impl Voice {
             start_hold: 0,
             marker_arrival_file: None,
             spawn_frame: 0,
+            strike: 0,
             frames_out: 0,
             arrival_emitted: None,
             arrival_drained: false,
@@ -1661,6 +1667,9 @@ pub struct VoicePool {
     /// timing — is bit-identical to the full mix. Offline analysis only.
     solo_notes: Option<std::collections::BTreeSet<u8>>,
     solo_scratch: Vec<f32>,
+    /// The current strike, stamped on every voice spawned (see
+    /// [`begin_strike`](Self::begin_strike)).
+    strike: u32,
 }
 
 impl Default for VoicePool {
@@ -1680,6 +1689,7 @@ impl VoicePool {
             bend: 1.0,
             solo_notes: None,
             solo_scratch: Vec::new(),
+            strike: 0,
         }
     }
 
@@ -1694,6 +1704,7 @@ impl VoicePool {
             bend: 1.0,
             solo_notes: None,
             solo_scratch: Vec::new(),
+            strike: 0,
         }
     }
 
@@ -1726,10 +1737,18 @@ impl VoicePool {
         }
     }
 
+    /// A new strike begins: the voices spawned from here on (every mic and
+    /// layer sample of one note-on, or the release samples of one note-off)
+    /// count as one note to a polyphony limit.
+    pub fn begin_strike(&mut self) {
+        self.strike = self.strike.wrapping_add(1);
+    }
+
     pub fn spawn(&mut self, voice: Voice) {
         let mut voice = voice;
         // New voices sound at the current wheel position.
         voice.bend = self.bend;
+        voice.strike = self.strike;
         // Remove done voices first
         self.voices.retain(|v| !v.is_done());
 
@@ -2132,24 +2151,54 @@ impl VoicePool {
         self.stolen
     }
 
-    /// Make room for a new strike of `incoming` under a NOTE limit (a
-    /// patch's voice count counts notes — every mic, Harmonia copy and
-    /// release of a note is one of them): while `max_notes` or more other
-    /// notes are sounding, fade out every voice of the stalest one — a note
-    /// already released first, else the oldest held. Returns notes stolen.
+    /// Make room for a new strike of `incoming`.
+    ///
+    /// **Other keys**, under a limit of `max_notes` sounding keys (a patch's
+    /// voice count counts notes — every mic, layer sample and release of a
+    /// key is one of them): while that many other keys are sounding, fade out
+    /// every voice of the stalest — a key already released first, else the
+    /// oldest held. Returns keys stolen.
+    ///
+    /// **The same key**, re-struck: its strike before this one rings on (the
+    /// overlap a player hears), anything older fades over
+    /// [`REPEAT_FADE`] — the new strike takes the string over, as on the
+    /// instrument. Without it, repeats of one note under the sustain pedal
+    /// piled up with no limit (a Dolceola lane reached 232 voices in a plain
+    /// worship passage). Counting each strike against the note limit instead
+    /// held the voices down but stole the chord under a pedalled melody.
     pub fn make_room_for_note(&mut self, incoming: u8, max_notes: usize) -> usize {
         const STEAL_NOTE_FADE: usize = 240; // 5 ms: fast, not a click
+        // A voice with no more than a repeat fade left — a steal, a repeat,
+        // a release nearly over — no longer counts.
+        let fading = |v: &Voice| {
+            matches!(v.state, VoiceState::Releasing { frames_remaining } if frames_remaining <= REPEAT_FADE)
+        };
+        // The same key: keep the latest strike, fade the older ones.
+        let mut strikes: Vec<u32> = Vec::new();
+        for v in &self.voices {
+            if v.note == incoming && v.state != VoiceState::Done && !fading(v) && !strikes.contains(&v.strike) {
+                strikes.push(v.strike);
+            }
+        }
+        if strikes.len() >= MAX_REPEAT_STRIKES {
+            let keep = &strikes[strikes.len() + 1 - MAX_REPEAT_STRIKES..];
+            for v in self.voices.iter_mut().filter(|v| {
+                v.note == incoming && v.state != VoiceState::Done && !keep.contains(&v.strike)
+            }) {
+                if !fading(v) {
+                    v.ramp_gain(0.0, REPEAT_FADE);
+                    v.state = VoiceState::Releasing { frames_remaining: REPEAT_FADE };
+                }
+            }
+        }
+        // Other keys, under the note limit.
         let mut stolen = 0;
         loop {
-            // Sounding notes, in first-voice order, with whether all their
+            // Sounding keys, in first-voice order, with whether all their
             // voices are already releasing.
             let mut notes: Vec<(u8, bool)> = Vec::new();
             for v in &self.voices {
-                if v.state == VoiceState::Done || v.note == incoming {
-                    continue;
-                }
-                // A voice already fading from a steal no longer counts.
-                if matches!(v.state, VoiceState::Releasing { frames_remaining } if frames_remaining <= STEAL_NOTE_FADE) {
+                if v.state == VoiceState::Done || v.note == incoming || fading(v) {
                     continue;
                 }
                 let released = matches!(v.state, VoiceState::Releasing { .. }) || v.kind == VoiceKind::Release;
@@ -2175,33 +2224,46 @@ impl VoicePool {
             }
             self.stolen = self.stolen.saturating_add(1);
             NOTE_STEALS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            crate::lane_health::stolen();
             stolen += 1;
         }
     }
 
     /// Shed load under CPU pressure (the keys rig's overload guard).
-    /// `level` 1: fade out every release tail and every voice already
-    /// releasing — the least audible sound in the pool. `level` 2: also fade
-    /// the oldest quarter of the held voices. Fades are quick but not clicks.
+    ///
+    /// `level` 1: fade the OLD release tails — voices past the middle of
+    /// their release, most of their level already gone. A note just let go
+    /// of keeps ringing: that is the one a player hears end early (a
+    /// Dolceola note rings for a second after key-up). `level` 2, a real
+    /// overload: every releasing voice and release sample, and the oldest
+    /// held note of a pile-up. Fades are quick but not clicks. Every voice
+    /// faded is counted to the lane (`lane_health`).
     pub fn shed(&mut self, level: u8) {
         const SHED_FADE: usize = 1440; // 30 ms at 48 kHz
         let mut held: Vec<usize> = Vec::new();
+        let mut faded = 0usize;
         for (i, v) in self.voices.iter_mut().enumerate() {
             match v.state {
                 VoiceState::Done => {}
                 VoiceState::Releasing { frames_remaining } => {
-                    if frames_remaining > SHED_FADE {
+                    let old = frames_remaining < v.release_frames / 2;
+                    if frames_remaining > SHED_FADE && (level >= 2 || old) {
                         v.ramp_gain(0.0, SHED_FADE);
                         v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                        faded += 1;
                     }
                 }
                 _ if v.kind == VoiceKind::Release => {
-                    v.ramp_gain(0.0, SHED_FADE);
-                    v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                    if level >= 2 {
+                        v.ramp_gain(0.0, SHED_FADE);
+                        v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                        faded += 1;
+                    }
                 }
                 _ => held.push(i),
             }
         }
+        crate::lane_health::faded(faded);
         if level >= 2 {
             // One note — the oldest held — and only while the lane holds more
             // than a big chord's worth: the guard trims a runaway pile-up, it
@@ -2215,13 +2277,16 @@ impl VoicePool {
             }
             if notes.len() > SHED_NOTE_FLOOR {
                 let victim = notes[0];
+                let mut cut = 0usize;
                 for &i in &held {
                     let v = &mut self.voices[i];
                     if v.note == victim {
                         v.ramp_gain(0.0, SHED_FADE);
                         v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                        cut += 1;
                     }
                 }
+                crate::lane_health::faded(cut);
             }
         }
         self.stolen = self.stolen.saturating_add(1);
@@ -2317,6 +2382,73 @@ mod tests {
 
     fn voice(gain: f32) -> Voice {
         Voice::new(sample(), 60, VoiceKind::SustainLo, 0, gain, 128)
+    }
+
+    /// A strike of `note` with `mics` voices.
+    fn strike(pool: &mut VoicePool, note: u8, mics: usize) {
+        pool.begin_strike();
+        for _ in 0..mics {
+            pool.spawn(Voice::new(sample(), note, VoiceKind::SustainLo, 0, 1.0, 128));
+        }
+    }
+
+    fn sounding(pool: &VoicePool) -> usize {
+        pool.voices
+            .iter()
+            .filter(|v| !matches!(v.state, VoiceState::Done | VoiceState::Releasing { .. }))
+            .count()
+    }
+
+    /// Under the pedal, repeats of one key must not pile up (a Dolceola
+    /// lane held 232 voices): the latest strike and the one before ring, the
+    /// older ones fade — and nothing is stolen.
+    #[test]
+    fn a_re_struck_key_rings_its_last_two_strikes() {
+        let mut pool = VoicePool::new();
+        for _ in 0..20 {
+            pool.make_room_for_note(72, 4);
+            strike(&mut pool, 72, 3);
+        }
+        assert_eq!(sounding(&pool), 2 * 3, "two strikes of three mics each");
+        assert_eq!(pool.stolen_count(), 0);
+    }
+
+    /// A melody re-struck over a held chord takes nothing from the chord.
+    #[test]
+    fn a_pedalled_melody_does_not_steal_the_chord() {
+        let mut pool = VoicePool::new();
+        for n in [48, 55, 60] {
+            pool.make_room_for_note(n, 4);
+            strike(&mut pool, n, 3);
+        }
+        for _ in 0..10 {
+            pool.make_room_for_note(72, 4);
+            strike(&mut pool, 72, 3);
+        }
+        for n in [48, 55, 60] {
+            assert!(
+                pool.voices.iter().filter(|v| v.note == n).all(|v| v.state == VoiceState::Playing),
+                "chord note {n} kept"
+            );
+        }
+        assert_eq!(pool.stolen_count(), 0);
+    }
+
+    /// Every mic of a key is one note: four three-mic keys fit a limit of
+    /// four; a fifth steals the oldest key, all its mics together.
+    #[test]
+    fn a_keys_mics_are_one_note() {
+        let mut pool = VoicePool::new();
+        for n in [60, 64, 67, 72] {
+            pool.make_room_for_note(n, 4);
+            strike(&mut pool, n, 3);
+        }
+        assert_eq!(sounding(&pool), 12);
+        assert_eq!(pool.stolen_count(), 0);
+        pool.make_room_for_note(76, 4);
+        strike(&mut pool, 76, 3);
+        assert_eq!(sounding(&pool), 12);
+        assert!(pool.voices.iter().filter(|v| v.note == 60).all(|v| v.state != VoiceState::Playing));
     }
 
     /// A mono sine `freq_hz` recorded at `sr`, `secs` long.
@@ -2874,6 +3006,12 @@ mod tests {
         );
     }
 }
+
+/// Strikes of one key that ring at once: the new one and the one before.
+pub const MAX_REPEAT_STRIKES: usize = 2;
+/// How long an older strike of a re-struck key takes to fade (100 ms at
+/// 48 kHz) — the new strike taking the string over, not a cut.
+pub const REPEAT_FADE: usize = 4800;
 
 /// Notes stolen at a polyphony limit, process-wide (every sampler pool and
 /// wavetable oscillator) — for a rig's health log: a note cut short by a
