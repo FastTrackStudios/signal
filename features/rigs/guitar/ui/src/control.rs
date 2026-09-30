@@ -1154,8 +1154,10 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                     rsx! {
                         div {
                             key: "lane{di}",
-                            class: if is_sel { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
-                            style: if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", di * 2) } else { format!("order: {}; border-left: 2px solid transparent;", di * 2) },
+                            // A face carries its own controls, so every lane is live at
+                            // full brightness: no dimming, hover or selection tint.
+                            class: if is_sel || lane_face.is_some() { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
+                            style: if lane_face.is_some() { format!("order: {};", di * 2) } else if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", di * 2) } else { format!("order: {}; border-left: 2px solid transparent;", di * 2) },
                             onclick: {
                                 let name = b.name.clone();
                                 move |e: MouseEvent| {
@@ -1362,8 +1364,10 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                     rsx! {
                         div {
                             key: "lane{vi}",
-                            class: if is_sel { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
-                            style: if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", vi * 2) } else { format!("order: {}; border-left: 2px solid transparent;", vi * 2) },
+                            // A face carries its own controls, so every lane is live at
+                            // full brightness: no dimming, hover or selection tint.
+                            class: if is_sel || lane_face.is_some() { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
+                            style: if lane_face.is_some() { format!("order: {};", vi * 2) } else if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", vi * 2) } else { format!("order: {}; border-left: 2px solid transparent;", vi * 2) },
                             onclick: {
                                 let name = b.name.clone();
                                 move |e: MouseEvent| {

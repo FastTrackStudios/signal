@@ -55,13 +55,27 @@ pub fn FrameSurface(
 ) -> Element {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        native::mount(name, values, on_edit, stretch, variants)
+        // Keyed by the face: another face (a lane switched to another
+        // algorithm) is a new surface, opened on it, not the old one kept.
+        // A one-item list, so the key is honoured wherever this sits.
+        let key = format!("{name}|{}", variants.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(","));
+        rsx! {
+            for k in [key] {
+                NativeFace { key: "{k}", name: name.clone(), values: values.clone(), on_edit, stretch, variants: variants.clone() }
+            }
+        }
     }
     #[cfg(target_arch = "wasm32")]
     {
         let _ = (name, values, on_edit, stretch, variants);
         rsx! { div { style: "width: 100%; height: 100%;" } }
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[component]
+fn NativeFace(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>) -> Element {
+    native::mount(name, values, on_edit, stretch, variants)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -197,11 +211,14 @@ mod native {
             }
             applied.set(values);
         }
-        // Held still while nothing runs (see `fts_audio_ui::animate`).
-        let animate = fts_audio_ui::animate::animating();
+        // A face always moves: its lamps, tape and wavefronts are the unit
+        // at work, not a picture of the audio, and each face holds its own
+        // still when its effect is off (`param(<ns>/on)`). Only a face-less
+        // visualiser waits for audio (`fts_audio_ui::animate`). A face is a
+        // layer of its own, so moving costs one texture, not the page.
         if let Ok(s) = live.borrow_mut().as_mut() {
             for l in s.each_mut() {
-                l.set_animate(animate);
+                l.set_animate(true);
             }
         }
         let attr = use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(FrameWidget { live: Rc::clone(&live), edits: Rc::clone(&edits), update: update.clone(), target: None }));
