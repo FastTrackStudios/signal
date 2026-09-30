@@ -46,6 +46,8 @@ pub struct Faces {
     pub eq: Option<FaceEntry>,
     /// Pedals for the pre effects, by block preset name.
     pub pre: Vec<FaceEntry>,
+    /// Pictures of what a block is doing, by its kind (`reverb`).
+    pub pictures: Vec<FaceEntry>,
 }
 
 const SET: &str = "rig-faces";
@@ -85,7 +87,7 @@ impl Faces {
                 return Self::default();
             };
             let list = |k: &str| doc.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default();
-            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), pre: list("pre") }
+            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), pre: list("pre"), pictures: list("pictures") }
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -103,6 +105,12 @@ impl Faces {
     #[must_use]
     pub fn pre(&self, preset: &str) -> Option<&FaceEntry> {
         pick(&self.pre, preset)
+    }
+
+    /// The picture for a kind of block (`reverb`).
+    #[must_use]
+    pub fn picture(&self, kind: &str) -> Option<&FaceEntry> {
+        pick(&self.pictures, kind)
     }
 
     /// The face for an amp's capture file.
@@ -186,7 +194,7 @@ pub fn BlockFace(block: LiveBlock, face: FaceEntry, #[props(default)] extra: Vec
     let mut targets: Vec<(String, LiveBlock)> = vec![(face.ns.clone(), block.clone())];
     targets.extend(extra);
     rsx! {
-        div { style: "height: 100%; aspect-ratio: {w} / {h}; flex: 0 1 auto; min-width: 0; min-height: 0;",
+        div { style: "height: 100%; max-width: 100%; aspect-ratio: {w} / {h}; flex: 0 1 auto; min-width: 0; min-height: 0;",
             FrameSurface {
                 key: "{block.id}-{face.face}",
                 name: face.face.clone(),
@@ -220,7 +228,7 @@ pub fn NameCard(block: LiveBlock, aspect: (f64, f64)) -> Element {
     let lamp = if on { "#4ade80" } else { "#3a3d44" };
     rsx! {
         div {
-            style: "height: 100%; aspect-ratio: {w} / {h}; flex: 0 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; padding: 10px; border-radius: 10px; border: 1px solid #2a2d33; background: #15171b; opacity: {opacity};",
+            style: "height: 100%; width: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; padding: 10px; box-sizing: border-box; opacity: {opacity};",
             onclick: move |_| {
                 if empty {
                     return;
@@ -244,28 +252,65 @@ pub fn NameCard(block: LiveBlock, aspect: (f64, f64)) -> Element {
 
 /// The height-to-width a pedal card stands in (a Standard pedal).
 const PEDAL: (f64, f64) = (180.0, 286.0);
+/// The height-to-width an amp card stands in.
+const AMP: (f64, f64) = (792.0, 392.0);
 
-/// The Drives row: the drive board's slots in chain order, each its
-/// pedal's face or a card.
+/// A panel in a row: its own ground, flush against its neighbours (no
+/// gaps, no padding), taking `weight` of the row's width — a face's
+/// proportion, so the row is shared the way the faces would share it.
 #[component]
-pub fn DrivesRow(blocks: Vec<LiveBlock>) -> Element {
-    let faces = use_faces();
-    let slots: Vec<LiveBlock> = blocks.iter().filter(|b| matches!(b.block_type, BlockType::Boost | BlockType::Drive)).cloned().collect();
+fn Panel(weight: f64, children: Element) -> Element {
     rsx! {
-        div { style: "display: flex; flex-direction: row; justify-content: space-evenly; align-items: stretch; gap: 12px; width: 100%; height: 100%; min-height: 0; padding: 8px; box-sizing: border-box;",
-            for b in slots {
-                if let Some(f) = (!b.empty).then(|| faces.drive(&b.preset).cloned()).flatten() {
-                    BlockFace { key: "{b.id}", block: b.clone(), face: f }
-                } else {
-                    NameCard { key: "{b.id}", block: b.clone(), aspect: PEDAL }
-                }
+        div {
+            style: "flex: {weight} 1 0%; min-width: 0; height: 100%; min-height: 0; display: flex; flex-direction: row; align-items: stretch; justify-content: center; background: #121317; border-right: 1px solid #1d1f24; box-sizing: border-box; overflow: hidden;",
+            {children}
+        }
+    }
+}
+
+/// A row of panels, flush, the full width and height it is given.
+#[component]
+fn Row(children: Element) -> Element {
+    rsx! {
+        div { style: "display: flex; flex-direction: row; align-items: stretch; width: 100%; height: 100%; min-height: 0; gap: 0; padding: 0;",
+            {children}
+        }
+    }
+}
+
+fn ratio((w, h): (f64, f64)) -> f64 {
+    if h > 0.0 { w / h } else { 1.0 }
+}
+
+/// A block in its panel: its face, or its card.
+#[component]
+fn BlockPanel(block: LiveBlock, face: Option<FaceEntry>, card: (f64, f64)) -> Element {
+    let size = face.as_ref().map_or(card, |f| f.size);
+    rsx! {
+        Panel { weight: ratio(size),
+            if let Some(f) = face {
+                BlockFace { block, face: f }
+            } else {
+                NameCard { block, aspect: card }
             }
         }
     }
 }
 
-/// The height-to-width an amp card stands in.
-const AMP: (f64, f64) = (792.0, 392.0);
+/// The Drives row: the drive board's slots in chain order, each its
+/// pedal's face or a card, in panels sharing the row.
+#[component]
+pub fn DrivesRow(blocks: Vec<LiveBlock>) -> Element {
+    let faces = use_faces();
+    let slots: Vec<LiveBlock> = blocks.iter().filter(|b| matches!(b.block_type, BlockType::Boost | BlockType::Drive)).cloned().collect();
+    rsx! {
+        Row {
+            for b in slots {
+                BlockPanel { key: "{b.id}", face: (!b.empty).then(|| faces.drive(&b.preset).cloned()).flatten(), block: b.clone(), card: PEDAL }
+            }
+        }
+    }
+}
 
 /// The Amp row: every loaded amp, its face or a card; with one amp, the
 /// Amp EQ's graph beside it; the gate's picture on the right.
@@ -284,41 +329,41 @@ pub fn AmpRow(blocks: Vec<LiveBlock>) -> Element {
     let eq = blocks.iter().find(|b| b.block_type == BlockType::Eq && b.name.eq_ignore_ascii_case("Amp EQ")).cloned();
     let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
     let one = amps.len() == 1;
+    // The Amp module's pick names the amp ("Vibroverb + Dumble · Clean").
+    let amp_label = amps.first().map(|b| b.preset.clone()).unwrap_or_default();
     rsx! {
-        div { style: "display: flex; flex-direction: row; justify-content: space-between; align-items: stretch; gap: 12px; width: 100%; height: 100%; min-height: 0; padding: 8px; box-sizing: border-box;",
+        Row {
             for b in amps {
-                if let Some(f) = faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).cloned() {
-                    BlockFace { key: "{b.id}", block: b.clone(), face: f }
-                } else {
-                    NameCard { key: "{b.id}", block: b.clone(), aspect: AMP }
-                }
+                BlockPanel { key: "{b.id}", face: faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).cloned(), block: b.clone(), card: AMP }
             }
             if one {
                 if let (Some(e), Some(f)) = (eq, faces.eq.clone()) {
-                    BlockFace { block: e, face: f }
+                    BlockPanel { block: e, face: Some(f), card: AMP }
                 }
             }
-            div { style: "flex: 1 1 0%;" }
+            // Kept for the Amp module's presets: what is loaded now.
+            Panel { weight: 1.2,
+                PresetsPanel { label: amp_label }
+            }
             if let (Some(g), Some(f)) = (gate, faces.gate.clone()) {
-                BlockFace { block: g, face: f }
+                BlockPanel { block: g, face: Some(f), card: (250.0, 392.0) }
             }
         }
     }
 }
 
-/// The pre effects row: the blocks in front of the amp (Pre Delay, Pre
-/// Verb, Pre Motion), each its pedal face (by the block preset loaded) or
-/// a card.
+/// The pre effects row: the blocks in front of the amp, each its pedal's
+/// face (by the block preset loaded) beside a picture of what it is doing
+/// — the delay's repeats, the spring's tail — or a card. The delay first
+/// (the John Mayer chain's slapback ahead of its tank).
 #[component]
-pub fn PreFxRow(blocks: Vec<LiveBlock>) -> Element {
+pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
     let faces = use_faces();
     let pre: Vec<LiveBlock> = blocks
         .iter()
         .filter(|b| b.name.starts_with("Pre ") && !b.name.eq_ignore_ascii_case("Pre Comp"))
         .cloned()
         .collect();
-    // Each block's face, and the blocks a face draws as well (a Gravity
-    // Tank on the Pre Verb draws the Pre Motion too): those get no card.
     let picked: Vec<(LiveBlock, Option<FaceEntry>)> = pre.iter().map(|b| (b.clone(), faces.pre(&b.preset).cloned())).collect();
     let absorbed: Vec<String> = picked
         .iter()
@@ -341,19 +386,64 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>) -> Element {
             (b, f, extra)
         })
         .collect();
-    // The delay first: in the rig it sits ahead of the spring and the
-    // tremolo (the John Mayer chain's slapback before its tank). A face
-    // takes the room its proportion asks, so the tank spans two pedals.
     items.sort_by_key(|(b, _, _)| b.block_type != BlockType::Delay);
     rsx! {
-        div { style: "display: flex; flex-direction: row; justify-content: space-evenly; align-items: stretch; gap: 12px; width: 100%; height: 100%; min-height: 0; padding: 8px; box-sizing: border-box;",
+        Row {
             for (b, f, extra) in items {
                 if let Some(f) = f {
-                    BlockFace { key: "{b.id}", block: b.clone(), face: f, extra }
+                    // The pedal, then what its block is doing — a delay's
+                    // repeats, a reverb's tail. A tremolo shows its pulse on
+                    // its own lamp.
+                    Panel { key: "{b.id}", weight: ratio(f.size) + if shows_viz(&b) { 1.6 } else { 0.0 },
+                        BlockFace { block: b.clone(), face: f.clone(), extra: extra.clone() }
+                        if shows_viz(&b) {
+                            div { style: "flex: 1 1 0%; min-width: 0; height: 100%; position: relative; display: flex; justify-content: center; border-left: 1px solid #1d1f24;",
+                                // A reverb's own picture from frame (its
+                                // springs, the algorithm it runs), else the
+                                // effect's visualiser.
+                                if let Some(p) = (b.block_type == BlockType::Reverb).then(|| faces.picture("reverb").cloned()).flatten() {
+                                    BlockFace { block: b.clone(), face: p }
+                                } else {
+                                    {viz_of(&b, tempo_bpm)}
+                                }
+                            }
+                        }
+                    }
                 } else {
-                    NameCard { key: "{b.id}", block: b.clone(), aspect: PEDAL }
+                    BlockPanel { key: "{b.id}", block: b.clone(), face: None, card: PEDAL }
                 }
             }
+        }
+    }
+}
+
+/// Whether a pre effect's panel carries a picture beside its pedal.
+fn shows_viz(b: &LiveBlock) -> bool {
+    matches!(b.block_type, BlockType::Delay | BlockType::Reverb)
+}
+
+/// What a pre effect is doing, drawn by the effect's own visualiser.
+fn viz_of(b: &LiveBlock, tempo_bpm: u32) -> Element {
+    match b.block_type {
+        BlockType::Delay => rsx! { crate::control::DelayBlockViz { block: b.clone(), tempo_bpm } },
+        BlockType::Reverb => rsx! { crate::control::ReverbBlockViz { block: b.clone(), tempo_bpm } },
+        _ => rsx! { crate::control::ModBlockViz { block: b.clone() } },
+    }
+}
+
+/// The space kept beside the amps for the Amp module's presets: for now,
+/// what is loaded.
+#[component]
+fn PresetsPanel(label: String) -> Element {
+    let (module, snapshot) = label.split_once(" · ").map_or((label.clone(), String::new()), |(m, s)| (m.to_string(), s.to_string()));
+    rsx! {
+        div { style: "display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 6px; width: 100%; height: 100%; padding: 14px; box-sizing: border-box;",
+            div { style: "color: #6b6f78; font-size: 9px; font-weight: 700; letter-spacing: 1.5px;", "AMP MODULE" }
+            div { style: "color: #e8e6e1; font-size: 15px; font-weight: 600;", "{module}" }
+            if !snapshot.is_empty() {
+                div { style: "color: #9a9ea6; font-size: 12px;", "{snapshot}" }
+            }
+            div { style: "color: #4a4d55; font-size: 10px; margin-top: 8px;", "Presets" }
         }
     }
 }

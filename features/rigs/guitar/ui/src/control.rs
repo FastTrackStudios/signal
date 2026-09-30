@@ -2354,6 +2354,72 @@ fn delay_lane(
     rsx! { crate::fx_viz::DelayViz { taps, win_ms, on, beat_ms, division, family, color } }
 }
 
+/// One delay block's picture — its repeats on the time line — for a panel
+/// beside the pedal that draws it.
+#[component]
+pub(crate) fn DelayBlockViz(block: LiveBlock, tempo_bpm: u32) -> Element {
+    let b = &block;
+    let quarter = 60_000.0 / tempo_bpm.max(1) as f32;
+    let win_ms = quarter * 4.0;
+    let fb = param_v(b, "feedback", 0.3).clamp(0.0, 0.98);
+    let mix = level_gain(b).clamp(0.02, 1.0);
+    let time_ms = param_v(b, "time", 350.0);
+    let f_l = div_factor(param_v(b, "tap_div_l", 0.0));
+    let f_r = div_factor(param_v(b, "tap_div_r", 0.0));
+    let t_l = if f_l > 0.0 { quarter * f_l } else { time_ms };
+    let t_r = if f_r > 0.0 { quarter * f_r } else { time_ms };
+    let stems = |side_t: f32, up: bool| -> Vec<(f32, f32, bool)> {
+        let mut out = Vec::new();
+        let (mut amp, mut t) = (mix, side_t);
+        while t <= win_ms && amp > 0.015 && out.len() < 32 {
+            out.push((t, amp, up));
+            amp *= fb;
+            t += side_t;
+        }
+        out
+    };
+    let mut taps = stems(t_l, true);
+    taps.extend(stems(t_r, false));
+    delay_lane(taps, win_ms, !b.bypassed, DELAY_COLORS[0], 0.0, quarter, div_label(b), param_v(b, "style", 1.0) as u32)
+}
+
+/// One reverb block's picture — its tail — for a panel beside its pedal.
+#[component]
+pub(crate) fn ReverbBlockViz(block: LiveBlock, tempo_bpm: u32) -> Element {
+    let b = &block;
+    let decay = param_v(b, "decay", 0.4).clamp(0.02, 1.0);
+    let size = param_v(b, "size", 0.5);
+    let mix = level_gain(b).clamp(0.02, 1.0).max(0.15);
+    let t60 = match verb_seconds(param_v(b, "algorithm", 1.0), param_v(b, "variant", 0.0), decay) {
+        (t, true) => t,
+        (t, false) => t * 0.8f64.mul_add(f64::from(size), 0.6),
+    };
+    reverb_lane(
+        t60 as f32,
+        size,
+        param_v(b, "predelay", 0.0),
+        mix,
+        param_v(b, "damp", 0.0).clamp(0.0, 1.0),
+        param_v(b, "algorithm", 1.0) as u32,
+        !b.bypassed,
+        60_000.0 / tempo_bpm.max(1) as f32,
+        &[],
+        VERB_COLORS[0],
+        b.bypassed,
+        "",
+        "",
+        0.0,
+    )
+}
+
+/// One modulation block's picture (a tremolo's pulse, a chorus's sweep).
+#[component]
+pub(crate) fn ModBlockViz(block: LiveBlock) -> Element {
+    let rate = param_v(&block, "rate", 4.0);
+    let depth = param_v(&block, "depth", 0.5);
+    mod_lane(&block, rate, depth, !block.bypassed, "#ec4899", "", "#ec4899")
+}
+
 /// Which of the effect's engines a rig block is.
 ///
 /// Signal's side of the join: `modulation-ui` owns the pictures and knows
@@ -2848,7 +2914,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 }
                             }
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
-                                crate::rig_faces::PreFxRow { blocks: blocks.clone() }
+                                crate::rig_faces::PreFxRow { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
                             }
                         }
                     }
