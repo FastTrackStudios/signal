@@ -568,6 +568,216 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
     out
 }
 
+/// Where a block's settings live now that presets are the Core module:
+/// in the Core, in the Time module's Delay or Reverb, or with the patch (a
+/// block of its own — the pre effects, pitch, chorus, tremolo…).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Home {
+    Core,
+    Delay,
+    Reverb,
+    Patch,
+}
+
+/// A chain block's home, by its name (see [`crate::profiles::module_of_block`]).
+fn home_of(block: &str) -> Home {
+    let is = |b: &str| block.eq_ignore_ascii_case(b);
+    let starts = |p: &str| block.len() >= p.len() && block[..p.len()].eq_ignore_ascii_case(p);
+    if block.is_empty()
+        || crate::profiles::CORE_BLOCKS.iter().any(|b| is(b))
+        || ["Boost", "Amp L", "Amp R", "Cab L", "Cab R"].iter().any(|b| is(b))
+        || starts("Drive ")
+    {
+        Home::Core
+    } else if starts("DLY") {
+        Home::Delay
+    } else if starts("VERB") {
+        Home::Reverb
+    } else {
+        Home::Patch
+    }
+}
+
+/// A block's storage key, for a block preset made from its overrides.
+fn block_type_of(block: &str) -> Option<&'static str> {
+    let b = block.to_ascii_lowercase();
+    Some(match b.as_str() {
+        "chorus" => "chorus",
+        "flanger" => "flanger",
+        "phaser" => "phaser",
+        "tremolo" | "pre motion" => "trem",
+        "vibrato" => "vibrato",
+        "rotary" => "rotary",
+        "pitch" => "pitch",
+        "pre delay" => "delay",
+        "pre verb" => "reverb",
+        _ => return None,
+    })
+}
+
+/// Presets become the Core module: move what a preset snapshot sets
+/// outside the core tone out of it, keeping every patch's sound.
+///
+/// - The Time lanes' settings (DLY, VERB) become Delay and Reverb module
+///   presets, and a Time preset referencing them — each named for the
+///   Core preset, snapshots of the same content shared — and every patch
+///   on that snapshot picks the Time (or, picking a Time itself, keeps the
+///   old content as its own blocks and overrides).
+/// - Other blocks' settings (the pre effects, chorus, tremolo, pitch…) go
+///   to the patches: a block preset pick stays a pick; overrides alone on
+///   a block become a block preset named for the Core preset and the block
+///   ("John Mayer Chorus") that the patches pick.
+/// - The Core keeps its own: compressor, drives, amps, gate, EQ, post
+///   compressor, its module picks and its level.
+///
+/// Idempotent: a split library has nothing left to move.
+#[must_use]
+pub fn split_core(comp: &Compositions, profiles: &[ProfileDef]) -> (Compositions, Vec<ProfileDef>) {
+    let mut comp = comp.clone();
+    let mut profiles = profiles.to_vec();
+    let mut new_blocks: Vec<BlockPresetDef> = Vec::new();
+    let mut new_modules: Vec<ModulePresetDef> = Vec::new();
+    let add_module = |mods: &mut Vec<ModulePresetDef>, module: &str, preset: &str, snap: ModuleSnapshotDef| -> String {
+        let m = match mods.iter_mut().find(|m| m.module == module && m.name == preset) {
+            Some(m) => m,
+            None => {
+                mods.push(ModulePresetDef { module: module.into(), name: preset.into(), snapshots: Vec::new() });
+                mods.last_mut().expect("just pushed")
+            }
+        };
+        let same = |a: &ModuleSnapshotDef| a.blocks == snap.blocks && a.modules == snap.modules && format!("{:?}", a.overrides) == format!("{:?}", snap.overrides);
+        if let Some(existing) = m.snapshots.iter().find(|x| same(x)) {
+            return existing.name.clone();
+        }
+        let name = if m.snapshots.is_empty() { "Main".to_string() } else { format!("Main {}", m.snapshots.len() + 1) };
+        m.snapshots.push(ModuleSnapshotDef { name: name.clone(), ..snap });
+        name
+    };
+    for preset in &mut comp.presets {
+        let core_name = preset.name.clone();
+        for (index, snap) in preset.snapshots.iter_mut().enumerate() {
+            let (mut delay, mut reverb) = (ModuleSnapshotDef::default(), ModuleSnapshotDef::default());
+            let mut patch_blocks: Vec<BlockChoiceDef> = Vec::new();
+            let mut patch_overrides: Vec<OverrideDef> = Vec::new();
+            let blocks = std::mem::take(&mut snap.blocks);
+            for c in blocks {
+                match home_of(&c.block) {
+                    Home::Core => snap.blocks.push(c),
+                    Home::Delay => delay.blocks.push(c),
+                    Home::Reverb => reverb.blocks.push(c),
+                    Home::Patch => patch_blocks.push(c),
+                }
+            }
+            let overrides = std::mem::take(&mut snap.overrides);
+            for o in overrides {
+                match home_of(&o.block) {
+                    Home::Core => snap.overrides.push(o),
+                    Home::Delay => delay.overrides.push(o),
+                    Home::Reverb => reverb.overrides.push(o),
+                    Home::Patch => patch_overrides.push(o),
+                }
+            }
+            // Overrides alone on a block of its own: a block preset of them.
+            let mut loose: Vec<OverrideDef> = Vec::new();
+            let mut by_block: Vec<(String, Vec<OverrideDef>)> = Vec::new();
+            for o in patch_overrides {
+                let picked = patch_blocks.iter().any(|c| c.block.eq_ignore_ascii_case(&o.block));
+                let simple = o.op == "bypass" || o.op == "set";
+                if picked || !simple || block_type_of(&o.block).is_none() {
+                    loose.push(o);
+                    continue;
+                }
+                match by_block.iter_mut().find(|(b, _)| b.eq_ignore_ascii_case(&o.block)) {
+                    Some((_, v)) => v.push(o),
+                    None => by_block.push((o.block.clone(), vec![o])),
+                }
+            }
+            for (block, list) in by_block {
+                let bypass = list.iter().rev().find(|o| o.op == "bypass").map(|o| o.value >= 0.5);
+                let Some(bypass) = bypass else {
+                    // Params without a bypass: not a whole preset; keep as is.
+                    loose.extend(list);
+                    continue;
+                };
+                let params: Vec<ParamSetDef> = list.iter().filter(|o| o.op == "set").map(|o| ParamSetDef { param: o.param.clone(), value: o.value }).collect();
+                let name = format!("{core_name} {block}");
+                let preset = BlockPresetDef { block_type: block_type_of(&block).unwrap_or_default().to_string(), name: name.clone(), params, bypass, ..BlockPresetDef::default() };
+                match new_blocks.iter().find(|b| b.name == name) {
+                    Some(b) if format!("{:?}{:?}", b.params, b.bypass) != format!("{:?}{:?}", preset.params, preset.bypass) => {
+                        // A different setting under the same name: keep it
+                        // as the overrides it was.
+                        loose.extend(list);
+                        continue;
+                    }
+                    Some(_) => {}
+                    None => new_blocks.push(preset),
+                }
+                patch_blocks.push(BlockChoiceDef { block, preset: name });
+            }
+            let has_time = !(delay.blocks.is_empty() && delay.overrides.is_empty() && reverb.blocks.is_empty() && reverb.overrides.is_empty());
+            let time_pick = has_time.then(|| {
+                let mut time = ModuleSnapshotDef::default();
+                if !(delay.blocks.is_empty() && delay.overrides.is_empty()) {
+                    let s = add_module(&mut new_modules, "Delay", &core_name, delay.clone());
+                    time.modules.push(ModuleChoiceDef { module: "Delay".into(), preset: core_name.clone(), snapshot: s });
+                }
+                if !(reverb.blocks.is_empty() && reverb.overrides.is_empty()) {
+                    let s = add_module(&mut new_modules, "Reverb", &core_name, reverb.clone());
+                    time.modules.push(ModuleChoiceDef { module: "Reverb".into(), preset: core_name.clone(), snapshot: s });
+                }
+                let s = add_module(&mut new_modules, "Time", &core_name, time);
+                ModuleChoiceDef { module: "Time".into(), preset: core_name.clone(), snapshot: s }
+            });
+            if !has_time && patch_blocks.is_empty() && loose.is_empty() {
+                continue;
+            }
+            // Every patch playing this snapshot takes what moved out of it.
+            // A patch naming no snapshot plays the first.
+            let first = index == 0;
+            for profile in &mut profiles {
+                for patch in &mut profile.patches {
+                    let on = patch.rig_preset.eq_ignore_ascii_case(&core_name)
+                        && (patch.snapshot.eq_ignore_ascii_case(&snap.name) || (patch.snapshot.is_empty() && first));
+                    if !on {
+                        continue;
+                    }
+                    let picks_time = patch.modules.iter().any(|m| ["Time", "Delay", "Reverb"].iter().any(|t| m.module.eq_ignore_ascii_case(t)));
+                    let mut blocks: Vec<BlockChoiceDef> = Vec::new();
+                    let mut overrides: Vec<OverrideDef> = Vec::new();
+                    if let Some(t) = &time_pick {
+                        if picks_time {
+                            // It picks its own Time: the old content stays its
+                            // own, over its pick, as it always played.
+                            blocks.extend(delay.blocks.iter().chain(&reverb.blocks).cloned());
+                            overrides.extend(delay.overrides.iter().chain(&reverb.overrides).cloned());
+                        } else {
+                            patch.modules.push(t.clone());
+                        }
+                    }
+                    blocks.extend(patch_blocks.iter().filter(|c| !patch.blocks.iter().any(|x| x.block.eq_ignore_ascii_case(&c.block))).cloned());
+                    overrides.extend(loose.iter().cloned());
+                    // Ahead of the patch's own, so its own still win.
+                    blocks.append(&mut patch.blocks);
+                    patch.blocks = blocks;
+                    overrides.append(&mut patch.overrides);
+                    patch.overrides = overrides;
+                }
+            }
+        }
+    }
+    for m in new_modules {
+        if !comp.modules.iter().any(|x| x.module == m.module && x.name == m.name) {
+            comp.modules.push(m);
+        }
+    }
+    for b in new_blocks {
+        if !comp.blocks.iter().any(|x| x.name == b.name) {
+            comp.blocks.push(b);
+        }
+    }
+    (comp, profiles)
+}
+
 /// A patch's drive slots: the profile's, with the patch's own over them.
 #[must_use]
 pub fn drives_for(def: &ProfileDef, patch: &PatchDef) -> Vec<DriveSlotDef> {
@@ -1718,6 +1928,56 @@ mod golden {
             }
         }
         out
+    }
+
+    /// Presets become the Core: splitting the shipped library changes no
+    /// sound — every chain builds as recorded.
+    #[test]
+    fn splitting_the_core_changes_no_sound() {
+        let (def, comp, drives) = shipped();
+        let (comp2, profiles) = split_core(&comp, std::slice::from_ref(&def));
+        let recorded = std::fs::read_to_string(RECORD).expect("the record");
+        let now = chains(&profiles[0], &comp2, &drives);
+        for (i, (a, b)) in recorded.lines().zip(now.lines()).enumerate() {
+            assert_eq!(a, b, "line {} changed by the split", i + 1);
+        }
+        assert_eq!(recorded.lines().count(), now.lines().count());
+    }
+
+    /// A split library has nothing left to move.
+    #[test]
+    fn splitting_twice_changes_nothing() {
+        let (def, comp, _) = shipped();
+        let (c1, p1) = split_core(&comp, std::slice::from_ref(&def));
+        let (c2, p2) = split_core(&c1, &p1);
+        assert_eq!(format!("{:?}", c1.presets), format!("{:?}", c2.presets));
+        assert_eq!(format!("{:?}", c1.modules), format!("{:?}", c2.modules));
+        assert_eq!(format!("{:?}", c1.blocks.len()), format!("{:?}", c2.blocks.len()));
+        assert_eq!(format!("{:?}", p1[0].patches), format!("{:?}", p2[0].patches));
+    }
+
+    /// John Mayer keeps its core tone; its time effects become a Time
+    /// preset of its name, its chorus and tremolo block presets of its
+    /// name, and its patches pick them.
+    #[test]
+    fn john_mayer_splits_into_its_core_and_what_it_picks() {
+        let (def, comp, _) = shipped();
+        let (comp, profiles) = split_core(&comp, std::slice::from_ref(&def));
+        let jm = comp.preset("John Mayer").expect("the Core preset");
+        for snap in &jm.snapshots {
+            for b in snap.blocks.iter().map(|c| c.block.as_str()).chain(snap.overrides.iter().map(|o| o.block.as_str())) {
+                assert_eq!(home_of(b), Home::Core, "{} keeps only core blocks, not {b}", snap.name);
+            }
+        }
+        for m in ["Time", "Delay", "Reverb"] {
+            assert!(comp.module(m, "John Mayer").is_some(), "a {m} preset named John Mayer");
+        }
+        for b in ["John Mayer Chorus", "John Mayer Tremolo"] {
+            assert!(comp.block_preset(b).is_some(), "the block preset {b}");
+        }
+        for patch in profiles[0].patches.iter().filter(|p| p.rig_preset == "John Mayer") {
+            assert!(patch.modules.iter().any(|m| m.module == "Time" && m.preset == "John Mayer"), "{} picks the Time", patch.name);
+        }
     }
 
     #[test]
