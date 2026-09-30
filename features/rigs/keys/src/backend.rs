@@ -3558,7 +3558,7 @@ impl KeysRigBackend {
                 // deadline — "it runs out of buffer" left no trace before.
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Some(stats) = r.engine_stats() {
-                    spawn_engine_watch(stats);
+                    spawn_engine_watch(stats, r.daw().clone(), r.project_guid().to_string());
                 }
                 {
                     let mut rig = self
@@ -5755,9 +5755,15 @@ pub const KEYS_RIG_NAME: &str = "Keys Rig";
 
 /// Log the audio callback's health every 2 s while it misbehaves: blocks
 /// over their realtime budget and driver xruns since the last report, the
-/// peak and mean render time against the budget. Quiet while it keeps up.
+/// peak and mean render time against the budget — and where the worst block
+/// spent its time (the snapshot and plugin-map waits, the FX stage, the
+/// slowest lane), so a spike says what it was. Quiet while it keeps up.
 #[cfg(not(target_arch = "wasm32"))]
-fn spawn_engine_watch(stats: std::sync::Arc<daw_audio_io::duplex::EngineStats>) {
+fn spawn_engine_watch(
+    stats: std::sync::Arc<daw_audio_io::duplex::EngineStats>,
+    daw: daw::standalone::Standalone,
+    project: String,
+) {
     use std::sync::atomic::Ordering::Relaxed;
     let weak = std::sync::Arc::downgrade(&stats);
     drop(stats);
@@ -5785,7 +5791,26 @@ fn spawn_engine_watch(stats: std::sync::Arc<daw_audio_io::duplex::EngineStats>) 
                 };
                 let skipped = skips();
                 let cuts = signal_sampler::keys_rig::guard_cuts();
+                // Taken every tick, so each report covers its own window.
+                let worst = daw.take_block_profile();
                 if over > over0 || xruns > xrun0 || skipped > skip0 || cuts > cut0 {
+                    if let Some(w) = worst {
+                        let lane = daw
+                            .read_project(&project, |p| {
+                                p.tracks.get(w.slowest_track as usize).map(|t| t.name.clone())
+                            })
+                            .flatten()
+                            .unwrap_or_default();
+                        tracing::warn!(
+                            total_ms = format!("{:.2}", f64::from(w.total_us) / 1e3),
+                            snapshot_ms = format!("{:.2}", f64::from(w.snapshot_us) / 1e3),
+                            plugin_lock_ms = format!("{:.2}", f64::from(w.plugin_lock_us) / 1e3),
+                            fx_ms = format!("{:.2}", f64::from(w.fx_us) / 1e3),
+                            slowest_lane = lane,
+                            slowest_lane_ms = format!("{:.2}", f64::from(w.slowest_track_us) / 1e3),
+                            "keys audio: worst block"
+                        );
+                    }
                     tracing::warn!(
                         late_blocks = over - over0,
                         xruns = xruns - xrun0,

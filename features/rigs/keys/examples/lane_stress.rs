@@ -30,6 +30,21 @@ fn main() {
     let rig = KeysRig::open_headless(sr, &program).expect("open_headless");
     rig.set_scope(&Scope::Rig, 0.0, 0.0, 0.0, true);
     let renderer = ProjectRenderer::new(rig.daw(), rig.project_guid(), sr);
+    // LANE_STRESS_RT=1: the renderer as the live engine runs it — never
+    // waiting on the project lock, snapshots built off the audio thread.
+    if std::env::var_os("LANE_STRESS_RT").is_some() {
+        renderer.set_realtime();
+    }
+    // LANE_STRESS_CONTROL=1: a control thread moving every lane's fader
+    // every 10 ms — each a project mutation, as a knob drag or a stack press
+    // sends them — while the rig plays.
+    let control = std::env::var_os("LANE_STRESS_CONTROL").is_some();
+    let lanes: Vec<String> = rig
+        .cell_peaks()
+        .into_iter()
+        .filter(|(role, _, _)| *role == signal_sampler::rig_node::Role::Layer)
+        .map(|(_, name, _)| name)
+        .collect();
     // As the backend holds it: behind a mutex, shared with the status poller.
     let rig = std::sync::Mutex::new(rig);
     renderer.connect_live_midi(256);
@@ -64,7 +79,19 @@ fn main() {
     let stop = std::sync::atomic::AtomicBool::new(false);
     std::thread::scope(|scope| {
     scope.spawn(|| {
+        let mut tick = 0u32;
         while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+            if control {
+                tick += 1;
+                let r = rig.lock().unwrap();
+                let v = if tick % 2 == 0 { 1.0 } else { 0.99 };
+                for lane in &lanes {
+                    r.set_lane_volume(signal_sampler::rig_node::Role::Layer, lane, v);
+                }
+                drop(r);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                continue;
+            }
             if std::env::var_os("LANE_STRESS_OLD_POLL").is_some() {
                 // The old status poll: every lane visited UNDER the daw's
                 // plugin lock (warm_note walks them the same way).
@@ -114,13 +141,19 @@ fn main() {
         if b % 32 == 0 {
             peak_voices = peak_voices.max(rig.lock().unwrap().active_voices());
         }
+        // Realtime mode: where the block went (reset every block).
+        let profile = rig.lock().unwrap().daw().take_block_profile();
         if dt > deadline {
             over += 1;
             println!(
-                "  late block {:.2} ms at hit {} +{} ms",
+                "  late block {:.2} ms at hit {} +{} ms{}",
                 dt.as_secs_f64() * 1e3,
                 b / per_hit,
-                phase * block as usize * 1000 / sr as usize
+                phase * block as usize * 1000 / sr as usize,
+                profile.map_or(String::new(), |p| format!(
+                    " — snapshot {} µs, plugin lock {} µs, fx {} µs, slowest track #{} {} µs",
+                    p.snapshot_us, p.plugin_lock_us, p.fx_us, p.slowest_track, p.slowest_track_us
+                ))
             );
         }
         for v in &out.samples {

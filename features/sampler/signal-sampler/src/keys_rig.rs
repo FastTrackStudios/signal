@@ -1061,6 +1061,20 @@ pub struct KeysRig {
     /// Each scope's Tone / Limiter settings (rig, engines, layers), shared
     /// with the stages on their tracks; kept across rebuilds.
     scopes: Scopes,
+    /// What each lane track was last given (by track guid): volume, mute,
+    /// solo. A mixer push re-sends every lane, and every daw track op is a
+    /// project mutation — the project lock plus a render snapshot rebuild —
+    /// so the ones that change nothing are not sent. A rebuilt lane has a
+    /// new guid, and starts from nothing.
+    applied: std::sync::Mutex<std::collections::HashMap<String, LaneMix>>,
+}
+
+/// A lane track's last-sent mixer state (see `KeysRig::applied`).
+#[derive(Clone, Copy, Default)]
+struct LaneMix {
+    volume: Option<f64>,
+    muted: Option<bool>,
+    soloed: Option<bool>,
 }
 
 impl KeysRig {
@@ -1135,6 +1149,7 @@ impl KeysRig {
             midi_monitor: MidiMonitor::default(),
             gain,
             scopes,
+            applied: std::sync::Mutex::default(),
         })
     }
 
@@ -1174,6 +1189,7 @@ impl KeysRig {
             midi_monitor: MidiMonitor::default(),
             gain,
             scopes: Scopes::default(),
+            applied: std::sync::Mutex::default(),
         };
         rig.install_lane_instruments(program);
         if let Some(host) = &rig._host {
@@ -1252,6 +1268,7 @@ impl KeysRig {
             midi_monitor: MidiMonitor::default(),
             gain,
             scopes: Scopes::default(),
+            applied: std::sync::Mutex::default(),
         };
         rig.install_lane_instruments(program);
         tracing::info!(
@@ -1454,28 +1471,46 @@ impl KeysRig {
         }
     }
 
-    /// Set a lane's fader (linear; the daw track volume).
+    /// Whether `guid`'s last-sent state `differs` from what is being sent;
+    /// records `set` as sent when it does.
+    fn mix_changed(&self, guid: &str, differs: impl Fn(&LaneMix) -> bool, set: impl Fn(&mut LaneMix)) -> bool {
+        let mut applied = self
+            .applied
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mix = applied.entry(guid.to_string()).or_default();
+        if !differs(mix) {
+            return false;
+        }
+        set(mix);
+        true
+    }
+
+    /// Set a lane's fader (linear; the daw track volume). Unchanged → no op.
     pub fn set_lane_volume(&self, role: Role, name: &str, linear: f32) {
         if let Some(guid) = self.lane_guid(role, name) {
-            let _ = self
-                .daw
-                .current()
-                .track(guid)
-                .set_volume(linear.max(0.0) as f64);
+            let v = f64::from(linear.max(0.0));
+            if self.mix_changed(guid, |m| m.volume != Some(v), |m| m.volume = Some(v)) {
+                let _ = self.daw.current().track(guid).set_volume(v);
+            }
         }
     }
 
     /// Mute a lane (daw track mute; muting an engine folder mutes its sum).
     pub fn set_lane_mute(&self, role: Role, name: &str, muted: bool) {
         if let Some(guid) = self.lane_guid(role, name) {
-            let _ = self.daw.current().track(guid).set_muted(muted);
+            if self.mix_changed(guid, |m| m.muted != Some(muted), |m| m.muted = Some(muted)) {
+                let _ = self.daw.current().track(guid).set_muted(muted);
+            }
         }
     }
 
     /// Solo a lane (daw folder-aware solo: ancestors pass, siblings drop).
     pub fn set_lane_solo(&self, role: Role, name: &str, soloed: bool) {
         if let Some(guid) = self.lane_guid(role, name) {
-            let _ = self.daw.current().track(guid).set_soloed(soloed);
+            if self.mix_changed(guid, |m| m.soloed != Some(soloed), |m| m.soloed = Some(soloed)) {
+                let _ = self.daw.current().track(guid).set_soloed(soloed);
+            }
         }
     }
 
