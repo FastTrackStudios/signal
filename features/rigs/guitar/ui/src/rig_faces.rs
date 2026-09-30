@@ -476,14 +476,15 @@ fn BlockPanel(
 /// take whatever width the pedals leave — a lead in from the guitar and
 /// one out to the amps, and the daisy-chained power along the top.
 #[component]
-pub fn DrivesRow(blocks: Vec<LiveBlock>) -> Element {
+pub fn DrivesRow(
+    blocks: Vec<LiveBlock>,
+    /// Stood at the head of the board, before the pedals and cabled into
+    /// the first: the compressor's visualiser.
+    #[props(default)]
+    leading: Option<Element>,
+) -> Element {
     let faces = use_faces();
     let mut slots: Vec<(LiveBlock, Option<FaceEntry>)> = Vec::new();
-    // The compressor first, as a board has it: the Pre Comp block, when
-    // there is a pedal to draw it.
-    if let (Some(f), Some(c)) = (faces.pre_comp_pedal.clone(), blocks.iter().find(|b| b.block_type == BlockType::Compressor && b.name.eq_ignore_ascii_case("Pre Comp"))) {
-        slots.push((c.clone(), Some(f)));
-    }
     slots.extend(
         blocks
             .iter()
@@ -496,6 +497,13 @@ pub fn DrivesRow(blocks: Vec<LiveBlock>) -> Element {
             // The power: one lead along the top, a drop into each pedal.
             div { style: "position: absolute; left: 0; right: 0; top: 4px; height: 3px; border-radius: 2px; background: {CORD}; pointer-events: none;" }
             Cable { end: CableEnd::In }
+            if let Some(lead) = leading {
+                // Its own dark ground: a unit on the board, not a hole in it.
+                div { style: "position: relative; height: 100%; min-height: 0; flex: 0 1 300px; min-width: 200px; display: flex; background: #0b0c0f; border-radius: 6px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,0.6);",
+                    {lead}
+                }
+                Cable { end: CableEnd::Between }
+            }
             for (i, (b, face)) in slots.into_iter().enumerate() {
                 div { key: "{b.id}", style: "position: relative; height: 100%; min-height: 0; flex: 0 0 auto; display: flex;",
                     div { style: "position: absolute; left: 50%; top: -{BOARD_PAD_TOP}px; width: 3px; height: {BOARD_PAD_TOP + 4}px; margin-left: -1px; background: {CORD}; pointer-events: none;" }

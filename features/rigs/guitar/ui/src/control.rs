@@ -2978,24 +2978,9 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "gap-0 min-h-0 w-full", style: group_style,
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
                                 crate::rig_faces::InputRow { blocks: blocks.clone(),
-                                    // The input compressor, right after the
-                                    // envelope filter: its own picture.
-                                    // The Pre Comp stands at the head of the drive
-                                    // board when it has its pedal; here only
-                                    // without one.
-                                    after_filter: { if crate::rig_faces::use_faces().pre_comp_pedal.is_some() { VNode::empty() } else { rsx! {
-                                        div { class: "min-h-0 h-full flex flex-col", style: "flex: 0.7 1 0%; min-width: 0; border-right: 1px solid #1d1f24;",
-                                            ZoomPanel {
-                                                title: "Pre Comp".to_string(),
-                                                left_power_on: comp.as_ref().map(|b| !b.bypassed),
-                                                if let Some(c) = comp.clone() {
-                                                    LiveComp { block: c, state }
-                                                } else {
-                                                    {empty_slot("Pre Comp")}
-                                                }
-                                            }
-                                        }
-                                    } } },
+                                    // The Pre Comp's visualiser stands at the head of the drive
+                                    // board (see the AMP row).
+                                    after_filter: VNode::empty(),
                                 }
                             }
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
@@ -3008,7 +2993,17 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     if show_amp {
                         div { class: "gap-0 min-h-0 w-full", style: group_style,
                             div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;",
-                                crate::rig_faces::DrivesRow { blocks: blocks.clone() }
+                                crate::rig_faces::DrivesRow { blocks: blocks.clone(),
+                                    // The Pre Comp at the head of the board,
+                                    // as its visualiser.
+                                    leading: comp.clone().map(|c| rsx! {
+                                        ZoomPanel {
+                                            title: "Pre Comp".to_string(),
+                                            left_power_on: Some(!c.bypassed),
+                                            LiveComp { block: c, state }
+                                        }
+                                    }),
+                                }
                             }
                             // Wide: the amps get more of the row, and a
                             // loaded cab stands beside its amp.
