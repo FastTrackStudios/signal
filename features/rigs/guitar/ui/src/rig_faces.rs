@@ -331,6 +331,10 @@ pub fn BlockFace(
     /// (address, value).
     #[props(default)]
     live: Vec<(String, f64)>,
+    /// Show the block's preset in the face's top-right corner (‹ name ›,
+    /// the name opening its presets in the browser).
+    #[props(default)]
+    stepper: bool,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut values = values_of(&block, &face.ns);
@@ -358,8 +362,12 @@ pub fn BlockFace(
     } else {
         "height: 100%; flex: 1 1 0%; min-width: 0; min-height: 0;".to_string()
     };
+    let (step_name, step_type) = (block.name.clone(), block.block_type.as_str().to_string());
     rsx! {
-        div { style: "{boxed}",
+        div { style: "position: relative; {boxed}",
+            if stepper {
+                PresetCorner { block: step_name, block_type: step_type }
+            }
             FrameSurface {
                 key: "{block.id}-{face.face}",
                 name: face.face.clone(),
@@ -660,6 +668,16 @@ fn self_viewing(f: &FaceEntry) -> bool {
     f.face.ends_with("17-pedal-aqua-puss")
 }
 
+/// A block's preset, in a pill over a face's top-right corner.
+#[component]
+pub fn PresetCorner(block: String, block_type: String) -> Element {
+    rsx! {
+        div { style: "position: absolute; right: 6px; top: 6px; z-index: 5; display: flex; align-items: center; padding: 2px 4px; border-radius: 4px; background: rgba(8,8,8,0.72);",
+            crate::face_chrome::PresetStepper { block, block_type, show_empty: true }
+        }
+    }
+}
+
 /// The pre effects row: the blocks in front of the amp, each its pedal's
 /// face (by the block preset loaded) beside a picture of what it is doing
 /// — the delay's repeats, the spring's tail — or a card. The delay first
@@ -711,7 +729,7 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                     // repeats, a reverb's tail. A tremolo shows its pulse on
                     // its own lamp.
                     Panel { key: "{b.id}", weight: if shows_viz(&b) || self_viewing(&f) { 1.0 } else { 0.0 },
-                        BlockFace { block: b.clone(), face: f.clone(), extra: extra.clone(), fill: self_viewing(&f) }
+                        BlockFace { block: b.clone(), face: f.clone(), extra: extra.clone(), fill: self_viewing(&f), stepper: true }
                         if shows_viz(&b) && !self_viewing(&f) {
                             div { style: "flex: 1 1 0%; min-width: 0; height: 100%; position: relative; display: flex; justify-content: center; border-left: 1px solid #1d1f24;",
                                 // A reverb's own picture from frame (its
@@ -737,7 +755,7 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                 div { style: "flex: 0 0 40%; min-width: 0; height: 100%; display: flex; flex-direction: column; border-left: 1px solid #1d1f24;",
                     for (b, f, extra) in lanes {
                         div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
-                            BlockFace { block: b.clone(), face: f, extra, fill: true }
+                            BlockFace { block: b.clone(), face: f, extra, fill: true, stepper: true }
                         }
                     }
                 }
@@ -769,12 +787,19 @@ fn UnboundFace(
     /// Fill the box, laid out for it (frame's responsive mode).
     #[props(default)]
     fill: bool,
+    /// The block it stands for (name, type), to show its preset in the
+    /// corner.
+    #[props(default)]
+    stepper: Option<(String, String)>,
 ) -> Element {
     let (w, h) = face.size;
     let off = vec![(format!("{}/on", face.ns), 0.0)];
     let boxed = if fill { "width: 100%; height: 100%; min-width: 0; min-height: 0;".to_string() } else { format!("height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0;") };
     rsx! {
-        div { style: "{boxed} opacity: 0.9;",
+        div { style: "position: relative; {boxed} opacity: 0.9;",
+            if let Some((block, block_type)) = stepper {
+                PresetCorner { block, block_type }
+            }
             FrameSurface { name: face.face.clone(), values: off, responsive: fill }
         }
     }
@@ -806,8 +831,8 @@ pub fn InputRow(
             // the widest unit here, laid out for its room.
             Panel { weight: 0.9,
                 match (pitch, pitch_face) {
-                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, fill: true } },
-                    (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true } },
+                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, fill: true, stepper: true } },
+                    (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true, stepper: Some(("Pitch".to_string(), "pitch".to_string())) } },
                     _ => rsx! { div { style: "width: 280px; height: 100%; display: flex;", crate::control::PitchStrip {} } },
                 }
             }
@@ -819,8 +844,8 @@ pub fn InputRow(
             }
             Panel { weight: 0.0,
                 match (wah, wah_face) {
-                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f } },
-                    (None, Some(f)) => rsx! { UnboundFace { face: f } },
+                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, stepper: true } },
+                    (None, Some(f)) => rsx! { UnboundFace { face: f, stepper: Some(("Wah".to_string(), "wah".to_string())) } },
                     _ => rsx! {},
                 }
             }
@@ -828,8 +853,8 @@ pub fn InputRow(
             // room left it (laid out for it).
             Panel { weight: 0.8,
                 match (filter.clone(), filter_face) {
-                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, fill: true } },
-                    (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true } },
+                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, fill: true, stepper: true } },
+                    (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true, stepper: Some(("Filter".to_string(), "filter".to_string())) } },
                     _ => rsx! {},
                 }
                 if let Some(p) = picture {

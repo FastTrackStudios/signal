@@ -1733,7 +1733,7 @@ fn ModGroupPanel(
                     {speed_picker.clone()}
                 }
                 // Its preset (the name opens the browser).
-                crate::face_chrome::PresetStepper { block: cur.name.clone(), block_type: cur.block_type.as_str().to_string(), accent: group_color.to_string() }
+                crate::face_chrome::PresetStepper { block: cur.name.clone(), block_type: cur.block_type.as_str().to_string(), accent: group_color.to_string(), show_empty: true }
             }
             if let Some(f) = mod_face.clone() {
                 div { class: "relative flex-1 min-h-0 flex",
@@ -3024,18 +3024,6 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     if show_pre {
                         div { class: "gap-0 min-h-0 w-full", style: group_style,
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
-                                // The input's presets: each unit's block.
-                                ModuleSeparator {
-                                    SepSection { label: "Pitch", color: "#fde047", rule: "#facc15",
-                                        crate::face_chrome::PresetStepper { block: "Pitch".to_string(), block_type: "pitch".to_string(), show_empty: true }
-                                    }
-                                    SepSection { label: "Wah", color: "#fdba74", rule: "#f97316",
-                                        crate::face_chrome::PresetStepper { block: "Wah".to_string(), block_type: "wah".to_string(), show_empty: true }
-                                    }
-                                    SepSection { label: "Envelope filter", color: "#f9a8d4", rule: "#ec4899",
-                                        crate::face_chrome::PresetStepper { block: "Filter".to_string(), block_type: "filter".to_string(), show_empty: true }
-                                    }
-                                }
                                 crate::rig_faces::InputRow { blocks: blocks.clone(),
                                     // The Pre Comp's visualiser stands at the head of the drive
                                     // board (see the AMP row).
@@ -3043,18 +3031,6 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 }
                             }
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
-                                // The pre effects' presets, block by block.
-                                ModuleSeparator {
-                                    SepSection { label: "Pre delay", color: "#60a5fa", rule: "#3b82f6",
-                                        crate::face_chrome::PresetStepper { block: "Pre Delay".to_string(), block_type: "delay".to_string(), show_empty: true }
-                                    }
-                                    SepSection { label: "Pre motion", color: "#f9a8d4", rule: "#ec4899",
-                                        crate::face_chrome::PresetStepper { block: "Pre Motion".to_string(), block_type: "trem".to_string(), show_empty: true }
-                                    }
-                                    SepSection { label: "Pre verb", color: "#c4b5fd", rule: "#a78bfa",
-                                        crate::face_chrome::PresetStepper { block: "Pre Verb".to_string(), block_type: "reverb".to_string(), show_empty: true }
-                                    }
-                                }
                                 crate::rig_faces::PreFxRow { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
                             }
                         }
@@ -3064,14 +3040,18 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     if show_amp {
                         div { class: "gap-0 min-h-0 w-full", style: group_style,
                             div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;",
-                                // The drive module's presets, and the
-                                // compressor's at the head of the board.
+                                // The Core module's separator: the core tone — compressor,
+                                // drives, amps, gate, room, EQ and post compressor —
+                                // and the Drive and Amp modules within it.
                                 ModuleSeparator {
-                                    SepSection { label: "Drive module", color: "#fbbf24", rule: "#f59e0b",
+                                    SepSection { label: "Core module", color: "#e4e4e7", rule: "#52525b",
+                                        span { style: "font-size: 10px; color: #71717a; line-height: 1.3;", "Core presets — coming" }
+                                    }
+                                    SepSection { label: "Drive", color: "#fbbf24", rule: "#f59e0b",
                                         ModuleControls { kind: crate::library::Kind::DriveModules, pick: drive_pick.clone(), modules: all_modules.clone(), edited: edited.clone(), stacked: true, style: "width: 100%;" }
                                     }
-                                    SepSection { label: "Compressor", color: "#fca5a5", rule: "#ef4444",
-                                        crate::face_chrome::PresetStepper { block: "Pre Comp".to_string(), block_type: "compressor".to_string(), accent: "#fecaca".to_string(), show_empty: true }
+                                    SepSection { label: "Amp", color: "#f87171", rule: "#dc2626",
+                                        ModuleControls { kind: crate::library::Kind::AmpModules, pick: amp_pick.clone(), modules: all_modules.clone(), edited: edited.clone(), stacked: true, style: "width: 100%;" }
                                     }
                                 }
                                 crate::rig_faces::DrivesRow { blocks: blocks.clone(),
@@ -3089,12 +3069,6 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             // Wide: the amps get more of the row, and a
                             // loaded cab stands beside its amp.
                             div { style: if wide { "flex: 1.5 1 0%; min-width: 0; min-height: 0; display: flex;" } else { "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;" },
-                                // The amp module's presets.
-                                ModuleSeparator {
-                                    SepSection { label: "Amp module", color: "#f87171", rule: "#dc2626",
-                                        ModuleControls { kind: crate::library::Kind::AmpModules, pick: amp_pick.clone(), modules: all_modules.clone(), edited: edited.clone(), stacked: true, style: "width: 100%;" }
-                                    }
-                                }
                                 crate::rig_faces::AmpRow { blocks: blocks.clone(), cabs: wide, in_db: Some(state.in_peak_db),
                                     // The patch's level and pan, after the gate.
                                     trailing: rsx! {
@@ -3123,21 +3097,15 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // volume (level and boost); the modules follow below.
                     if show_post {
                         div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 0;",
-                            // The post EQ's and compressor's presets.
-                            ModuleSeparator {
-                                SepSection { label: "EQ", color: "#fde68a", rule: "#eab308",
-                                    crate::face_chrome::PresetStepper { block: "Amp EQ".to_string(), block_type: "eq".to_string(), show_empty: true }
-                                }
-                                SepSection { label: "Post comp", color: "#fca5a5", rule: "#ef4444",
-                                    crate::face_chrome::PresetStepper { block: "Post Comp".to_string(), block_type: "compressor".to_string(), show_empty: true }
-                                }
-                            }
                             div { class: "min-h-0 h-full flex flex-col", style: "flex: 3 1 0%;",
                                 ZoomPanel {
                                     title: "EQ".to_string(),
                                     left_power_on: eq.as_ref().map(|b| !b.bypassed),
                                     if let Some(e) = eq.clone() {
-                                        LiveEq { block: e, state }
+                                        div { style: "position: relative; width: 100%; height: 100%;",
+                                            LiveEq { block: e.clone(), state }
+                                            crate::rig_faces::PresetCorner { block: e.name.clone(), block_type: "eq".to_string() }
+                                        }
                                     } else {
                                         {empty_slot("EQ")}
                                     }
@@ -3153,7 +3121,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                         // — or, switched, what it is doing.
                                         if let Some(f) = post_comp_face.clone().filter(|_| !crate::face_chrome::shows_viz(viz, &c.name)) {
                                             div { style: "position: relative; display: flex; width: 100%; height: 100%; min-height: 0;",
-                                                crate::rig_faces::BlockFace { block: c.clone(), face: f }
+                                                crate::rig_faces::BlockFace { block: c.clone(), face: f, stepper: true }
                                                 div { style: "position: absolute; left: 6px; top: 6px;",
                                                     crate::face_chrome::VizToggle { block: c.name.clone() }
                                                 }
@@ -3161,6 +3129,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                         } else {
                                             div { style: "position: relative; display: flex; width: 100%; height: 100%; min-height: 0;",
                                                 LiveComp { block: c.clone(), state }
+                                                crate::rig_faces::PresetCorner { block: c.name.clone(), block_type: "compressor".to_string() }
                                                 if post_comp_face.is_some() {
                                                     div { style: "position: absolute; left: 6px; bottom: 6px;",
                                                         crate::face_chrome::VizToggle { block: c.name.clone() }
