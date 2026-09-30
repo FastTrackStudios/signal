@@ -2460,6 +2460,22 @@ impl GuitarRigBackend {
         self.audition.lock_ok().take();
     }
 
+    /// Put Core preset `preset` (snapshot `snapshot`, its first when
+    /// empty) under the live patch: its core tone. The patch's own Drive and
+    /// Amp picks and its edits on the core's blocks go, so the Core takes —
+    /// what the patch picks around it (Time, block presets…) stays.
+    fn choose_core(&self, preset: String, snapshot: String) {
+        let comp = RigLibrary::load_compositions();
+        let Some(found) = comp.preset(&preset) else {
+            tracing::warn!(%preset, "choose_core: no such Core preset");
+            return;
+        };
+        let snapshot = if snapshot.is_empty() { found.snapshots.first().map(|s| s.name.clone()).unwrap_or_default() } else { snapshot };
+        let name = found.name.clone();
+        self.end_audition();
+        self.edit_live_patch(move |patch| crate::compose::put_core(patch, &name, &snapshot));
+    }
+
     /// Change the live patch's definition, save it, and rebuild so it is heard.
     fn edit_live_patch(&self, edit: impl FnOnce(&mut crate::profiles::PatchDef)) {
         let Some(name) = self.live_patch_name() else {
@@ -6844,8 +6860,54 @@ impl Rig for GuitarRigBackend {
                     })
             }))
             .unwrap_or_default();
+        // The Core presets, as the Core module's presets: each snapshot's
+        // Drive and Amp picks, who plays it.
+        let core_entries: Vec<ModulePresetEntry> = {
+            let active = self.profile_def.lock_ok();
+            let others = self.other_profiles.lock_ok();
+            let all: Vec<&ProfileDef> = std::iter::once(&*active).chain(others.iter()).collect();
+            comp.presets
+                .iter()
+                .zip(&preset_users)
+                .map(|(p, used_by)| ModulePresetEntry {
+                    module: crate::profiles::CORE.to_string(),
+                    name: p.name.clone(),
+                    snapshots: p.snapshots.iter().map(|s| s.name.clone()).collect(),
+                    used_by: used_by.clone(),
+                    snapshot_used_by: p
+                        .snapshots
+                        .iter()
+                        .enumerate()
+                        .map(|(i, s)| {
+                            all.iter()
+                                .flat_map(|prof| prof.patches.iter())
+                                .filter(|x| x.rig_preset.eq_ignore_ascii_case(&p.name) && (x.snapshot.eq_ignore_ascii_case(&s.name) || (x.snapshot.is_empty() && i == 0)))
+                                .map(|x| x.name.clone())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        })
+                        .collect(),
+                    snapshot_info: p
+                        .snapshots
+                        .iter()
+                        .map(|s| signal_guitar_proto::ModuleSnapshotInfo {
+                            modules: s.modules.iter().map(pick).collect(),
+                            blocks: s.blocks.iter().map(|c| signal_guitar_proto::BlockPick { block: c.block.clone(), preset: c.preset.clone() }).collect(),
+                            captures: Vec::new(),
+                            macros: Vec::new(),
+                        })
+                        .collect(),
+                })
+                .collect()
+        };
+        // The Core pick leads what plays: its blocks the core's.
+        let mut active_modules = active_modules;
+        if !active_preset.is_empty() {
+            let core_blocks: Vec<String> = chain.iter().filter(|(n, _)| crate::compose::is_core_block(n)).map(|(n, _)| n.clone()).collect();
+            active_modules.insert(0, ModulePick { module: crate::profiles::CORE.to_string(), preset: active_preset.clone(), snapshot: active_snapshot.clone(), blocks: core_blocks });
+        }
         CompositionModel {
-            modules: comp
+            modules: core_entries.into_iter().chain(comp
                 .modules
                 .iter()
                 .zip(module_users)
@@ -6857,6 +6919,7 @@ impl Rig for GuitarRigBackend {
                     snapshot_used_by,
                     snapshot_info: m.snapshots.iter().map(snapshot_info).collect(),
                 })
+                )
                 .collect(),
             presets: comp
                 .presets
@@ -6930,6 +6993,10 @@ impl Rig for GuitarRigBackend {
     }
 
     fn choose_module(&self, module: String, preset: String, snapshot: String) {
+        if module.eq_ignore_ascii_case(crate::profiles::CORE) {
+            self.choose_core(preset, snapshot);
+            return;
+        }
         let comp = RigLibrary::load_compositions();
         let Some(found) = comp.module(&module, &preset) else {
             tracing::warn!(%module, %preset, "choose_module: no such module preset");
@@ -6982,6 +7049,28 @@ impl Rig for GuitarRigBackend {
 
     fn step_module(&self, module: String, delta: i32) {
         let comp = RigLibrary::load_compositions();
+        if module.eq_ignore_ascii_case(crate::profiles::CORE) {
+            // The live patch's Core: its next (or previous) snapshot, or
+            // the library's first Core with none.
+            let live = self.live_patch_name().and_then(|name| {
+                let def = self.profile_def.lock_ok();
+                def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&name)).map(|p| (p.rig_preset.clone(), p.snapshot.clone()))
+            });
+            let (preset, snapshot) = match live.as_ref().and_then(|(p, s)| comp.preset(p).map(|found| (found, s))) {
+                Some((found, s)) => {
+                    let n = found.snapshots.len().max(1) as i32;
+                    let at = found.snapshots.iter().position(|x| x.name.eq_ignore_ascii_case(s)).unwrap_or(0) as i32;
+                    let next = (at + delta).rem_euclid(n) as usize;
+                    (found.name.clone(), found.snapshots.get(next).map(|x| x.name.clone()).unwrap_or_default())
+                }
+                None => match comp.presets.first() {
+                    Some(p) => (p.name.clone(), String::new()),
+                    None => return,
+                },
+            };
+            self.choose_core(preset, snapshot);
+            return;
+        }
         let current = self
             .live_pick(&comp, &module)
             .and_then(|c| comp.module(&c.module, &c.preset).map(|m| (m, c)));

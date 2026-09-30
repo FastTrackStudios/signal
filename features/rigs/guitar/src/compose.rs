@@ -598,6 +598,24 @@ fn home_of(block: &str) -> Home {
     }
 }
 
+/// Whether the chain block `name` is the Core's (its compressor, drives,
+/// amps, gate, EQ, post compressor).
+#[must_use]
+pub fn is_core_block(name: &str) -> bool {
+    home_of(name) == Home::Core && !name.is_empty()
+}
+
+/// Put Core preset `preset` (snapshot `snapshot`) under `patch`: its core
+/// tone. The patch's own Drive and Amp picks and its edits on the core's
+/// blocks go, so the Core takes; what it picks around the Core stays.
+pub fn put_core(patch: &mut PatchDef, preset: &str, snapshot: &str) {
+    patch.rig_preset = preset.to_string();
+    patch.snapshot = snapshot.to_string();
+    patch.modules.retain(|m| !["Drive", "Amp"].iter().any(|x| m.module.eq_ignore_ascii_case(x)));
+    patch.blocks.retain(|c| !is_core_block(&c.block));
+    patch.overrides.retain(|o| !is_core_block(&o.block));
+}
+
 /// A block's storage key, for a block preset made from its overrides.
 fn block_type_of(block: &str) -> Option<&'static str> {
     let b = block.to_ascii_lowercase();
@@ -1928,6 +1946,22 @@ mod golden {
             }
         }
         out
+    }
+
+    /// Choosing a Core puts it under the patch and clears the patch's own
+    /// core edits — its Drive pick, its Amp EQ edit — keeping what it picks
+    /// around the Core (its Time, its chorus preset).
+    #[test]
+    fn choosing_a_core_keeps_what_the_patch_picks_around_it() {
+        let mut p = shipped().0.patches[0].clone();
+        p.modules = vec![ModuleChoiceDef { module: "Drive".into(), preset: "Klon".into(), snapshot: "On".into() }, ModuleChoiceDef { module: "Time".into(), preset: "John Mayer".into(), snapshot: "Main".into() }];
+        p.blocks = vec![BlockChoiceDef { block: "Chorus".into(), preset: "John Mayer Chorus".into() }, BlockChoiceDef { block: "Amp EQ".into(), preset: "Bright".into() }];
+        p.overrides = vec![OverrideDef::set("", "Amp EQ", "b2_gain", 3.0), OverrideDef::set("", "Tremolo", "rate", 4.0)];
+        put_core(&mut p, "John Mayer", "Dumble");
+        assert_eq!((p.rig_preset.as_str(), p.snapshot.as_str()), ("John Mayer", "Dumble"));
+        assert_eq!(p.modules.iter().map(|m| m.module.as_str()).collect::<Vec<_>>(), vec!["Time"]);
+        assert_eq!(p.blocks.iter().map(|b| b.block.as_str()).collect::<Vec<_>>(), vec!["Chorus"]);
+        assert_eq!(p.overrides.iter().map(|o| o.block.as_str()).collect::<Vec<_>>(), vec!["Tremolo"]);
     }
 
     /// Presets become the Core: splitting the shipped library changes no
