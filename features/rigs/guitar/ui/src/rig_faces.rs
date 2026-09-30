@@ -126,6 +126,8 @@ pub struct Faces {
     /// The compressor pedal at the head of the drive board (the Pre Comp
     /// block).
     pub pre_comp_pedal: Option<FaceEntry>,
+    /// The patch's level and pan (Patch Trim).
+    pub trim: Option<FaceEntry>,
 }
 
 const SET: &str = "rig-faces";
@@ -198,7 +200,7 @@ impl Faces {
                 return Self::default();
             };
             let list = |k: &str| doc.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default();
-            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry), post_comp: doc.get("post_comp").and_then(entry), time_delay: doc.get("time").and_then(|t| t.get("delay")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), time_reverb: doc.get("time").and_then(|t| t.get("reverb")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), modulation: list("modulation"), pre_comp_pedal: doc.get("pre_comp_pedal").and_then(entry) }
+            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry), post_comp: doc.get("post_comp").and_then(entry), time_delay: doc.get("time").and_then(|t| t.get("delay")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), time_reverb: doc.get("time").and_then(|t| t.get("reverb")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), modulation: list("modulation"), pre_comp_pedal: doc.get("pre_comp_pedal").and_then(entry), trim: doc.get("trim").and_then(entry) }
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -324,9 +326,14 @@ pub fn BlockFace(
     /// of the host shows beside it.
     #[props(default)]
     fill: bool,
+    /// Live values the face shows that aren't params (a meter's level):
+    /// (address, value).
+    #[props(default)]
+    live: Vec<(String, f64)>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut values = values_of(&block, &face.ns);
+    values.extend(live);
     for m in &face.maps {
         if let Some(p) = block.params.iter().find(|p| p.name == m.param) {
             values.push((format!("{}/{}", face.ns, m.face), m.to_face(f64::from(p.value))));
@@ -585,6 +592,9 @@ pub fn AmpRow(
     /// Drawn last, after the gate: the patch's level and pan.
     #[props(default = VNode::empty())]
     trailing: Element,
+    /// The input's live peak (dBFS), for the gate's meter.
+    #[props(default)]
+    in_db: Option<Signal<f32>>,
 ) -> Element {
     let faces = use_faces();
     // Every amp the preset loaded: the first always, any other when it
@@ -622,11 +632,25 @@ pub fn AmpRow(
                 }
             }
             if let (Some(g), Some(f)) = (gate, faces.gate.clone()) {
-                BlockPanel { block: g, face: Some(f), card: (250.0, 392.0), weight: 0.0 }
+                if let Some(level) = in_db {
+                    Panel { weight: 0.0,
+                        GateFace { block: g, face: f, level }
+                    }
+                } else {
+                    BlockPanel { block: g, face: Some(f), card: (250.0, 392.0), weight: 0.0 }
+                }
             }
             {trailing}
         }
     }
+}
+
+/// The gate's face with the input's level in its meter: its own
+/// component, so only it redraws as the level moves.
+#[component]
+fn GateFace(block: LiveBlock, face: FaceEntry, level: Signal<f32>) -> Element {
+    let live = vec![(format!("{}/in", face.ns), f64::from(level()))];
+    rsx! { BlockFace { block, face, live } }
 }
 
 /// The pre effects row: the blocks in front of the amp, each its pedal's

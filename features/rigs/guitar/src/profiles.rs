@@ -804,7 +804,8 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             .with_block(in_module(amp_r, "Amp"))
             .with_block(in_module(cab_r, "Amp"))
             .with_block(in_module(
-                on_fx(BlockType::Gate, "Gate", &[("threshold", "-50")]),
+                // Attack and release stored too, so a preset can set them.
+                on_fx(BlockType::Gate, "Gate", &[("threshold", "-50"), ("attack", "1"), ("release", "120")]),
                 "Amp",
             ))
             .with_block(in_module(

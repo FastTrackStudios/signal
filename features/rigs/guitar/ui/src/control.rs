@@ -2773,6 +2773,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     let comp = find_block(&blocks, BlockType::Compressor, "Pre Comp");
     let post_comp = find_block(&blocks, BlockType::Compressor, "Post Comp");
     let post_comp_face = crate::rig_faces::use_faces().post_comp;
+    let trim_face = crate::rig_faces::use_faces().trim;
     let comp_title = "Compressor";
 
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
@@ -3008,15 +3009,20 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             // Wide: the amps get more of the row, and a
                             // loaded cab stands beside its amp.
                             div { style: if wide { "flex: 1.5 1 0%; min-width: 0; min-height: 0; display: flex;" } else { "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;" },
-                                crate::rig_faces::AmpRow { blocks: blocks.clone(), cabs: wide,
+                                crate::rig_faces::AmpRow { blocks: blocks.clone(), cabs: wide, in_db: Some(state.in_peak_db),
                                     // The patch's level and pan, after the gate.
                                     trailing: rsx! {
                                         div { class: "min-h-0 h-full flex flex-col flex-shrink-0", style: "width: 92px;",
-                                            ZoomPanel { title: "Level".to_string(),
-                                                if let Some(t) = trim.clone() {
-                                                    PatchTrimPanel { block: t }
-                                                } else {
-                                                    {empty_slot("Level")}
+                                            if let (Some(t), Some(f)) = (trim.clone(), trim_face.clone()) {
+                                                // Its face, flush in the slot.
+                                                crate::rig_faces::BlockFace { block: t, face: f, fill: true }
+                                            } else {
+                                                ZoomPanel { title: "Level".to_string(),
+                                                    if let Some(t) = trim.clone() {
+                                                        PatchTrimPanel { block: t }
+                                                    } else {
+                                                        {empty_slot("Level")}
+                                                    }
                                                 }
                                             }
                                         }
