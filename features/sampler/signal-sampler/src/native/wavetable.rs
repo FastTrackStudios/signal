@@ -167,6 +167,10 @@ struct Sub {
     shape: f32,
     /// Hard sync: the slave's phase, reset each master cycle.
     sync_phase: f32,
+    /// The wave banks' band-limit level for the last increment read —
+    /// `(increment, level in bank a, level in bank b)`. Choosing a level is a
+    /// `log2`, and the increment changes only with the pitch.
+    mip: (f32, usize, usize),
 }
 
 fn pan_gains(pan: f32) -> (f32, f32) {
@@ -587,6 +591,7 @@ impl NativeWavetable {
                 (0.0, 0.0)
             };
             subs.push(Sub {
+                mip: (f32::NAN, 0, 0),
                 // In phase: Omnisphere's unison starts coherent (measured: an
                 // undetuned, drifting stack starts loud and settles as the
                 // voices drift apart).
@@ -608,6 +613,7 @@ impl NativeWavetable {
             let (gain_l, gain_r) = pan_gains(h.pan);
             let inc = f / self.sample_rate;
             subs.push(Sub {
+                mip: (f32::NAN, 0, 0),
                 phase: 0.0,
                 inc,
                 base_inc: inc,
@@ -970,9 +976,12 @@ impl Soundsource for NativeWavetable {
                     // never the layer's table.
                     let smp = match &self.waves {
                         Some([a, b]) if si < n_unison => {
-                            let x = a.sample(self.wt_position, ph, inc);
+                            if s.mip.0.to_bits() != inc.to_bits() {
+                                s.mip = (inc, a.level_for(inc), b.level_for(inc));
+                            }
+                            let x = a.sample_level(s.mip.1, self.wt_position, ph);
                             let y = if self.wt_mix > 0.0 {
-                                b.sample(self.wt_position, ph, inc)
+                                b.sample_level(s.mip.2, self.wt_position, ph)
                             } else {
                                 x
                             };

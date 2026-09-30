@@ -139,7 +139,16 @@ impl WaveBank {
     #[inline]
     #[must_use]
     pub fn sample(&self, position: f32, phase: f32, inc: f32) -> f32 {
-        let level = &self.levels[self.level_for(inc)];
+        self.sample_level(self.level_for(inc), position, phase)
+    }
+
+    /// [`sample`](Self::sample) at a band-limit level already chosen
+    /// ([`level_for`](Self::level_for)) — for a voice that keeps it while its
+    /// pitch holds.
+    #[inline]
+    #[must_use]
+    pub fn sample_level(&self, level: usize, position: f32, phase: f32) -> f32 {
+        let level = &self.levels[level.min(self.levels.len() - 1)];
         let n = level.len();
         let x = position.clamp(0.0, 1.0) * (n - 1) as f32;
         let i = (x as usize).min(n - 1);

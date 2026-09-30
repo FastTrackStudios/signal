@@ -50,6 +50,20 @@ pub fn shape(k: f32, x: f32) -> f32 {
     }
 }
 
+/// [`shape`] with its denominator `1 − e^(−k)` remembered for the last `k`
+/// (`memo`): an envelope evaluates it every sample and its curve changes
+/// only at a segment edge. The same division — bit-identical.
+#[inline]
+fn shape_memo(memo: &mut (f32, f32), k: f32, x: f32) -> f32 {
+    if k.abs() < 1e-3 {
+        return x;
+    }
+    if memo.0.to_bits() != k.to_bits() {
+        *memo = (k, 1.0 - (-k).exp());
+    }
+    (1.0 - (-k * x).exp()) / memo.1
+}
+
 /// An envelope's points and structure.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Breakpoints {
@@ -105,6 +119,12 @@ impl Breakpoints {
     /// The level at `t` along the (unreleased) run.
     #[must_use]
     pub fn level_at(&self, t: f32) -> f32 {
+        self.level_at_memo(t, &mut (f32::NAN, 0.0))
+    }
+
+    /// [`level_at`](Self::level_at) with the curve's denominator remembered
+    /// across calls (see [`shape_memo`]).
+    fn level_at_memo(&self, t: f32, memo: &mut (f32, f32)) -> f32 {
         let Some(first) = self.points.first() else {
             return 0.0;
         };
@@ -118,7 +138,7 @@ impl Breakpoints {
                     return a.level;
                 }
                 let x = (t - a.time) / (b.time - a.time).max(1e-9);
-                return a.level + (b.level - a.level) * shape(a.curve, x);
+                return a.level + (b.level - a.level) * shape_memo(memo, a.curve, x);
             }
         }
         self.points.last().map_or(0.0, |p| p.level)
@@ -133,6 +153,8 @@ pub struct EnvPlayer {
     /// Released: `(time since release, level at release)`.
     released: Option<(f32, f32)>,
     level: f32,
+    /// The last curve and its denominator (see [`shape_memo`]).
+    memo: (f32, f32),
 }
 
 impl EnvPlayer {
@@ -179,7 +201,7 @@ impl EnvPlayer {
                 if a.step && x < 1.0 {
                     from
                 } else {
-                    from + (b.level - from) * shape(a.curve, x)
+                    from + (b.level - from) * shape_memo(&mut self.memo, a.curve, x)
                 }
             }
             _ => {
@@ -187,7 +209,7 @@ impl EnvPlayer {
                 // points can share its time — an instant attack).
                 let v = match bp.sustain {
                     Some(s) if t >= bp.points[s].time => bp.points[s].level,
-                    _ => bp.level_at(t),
+                    _ => bp.level_at_memo(t, &mut self.memo),
                 };
                 let mut next = t + dt;
                 if let Some(s) = bp.sustain {

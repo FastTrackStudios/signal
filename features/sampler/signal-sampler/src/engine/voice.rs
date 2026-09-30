@@ -456,11 +456,20 @@ pub struct Voice {
 pub struct FlexEnv {
     /// `(len_frames, from_level, to_level, tension)` per segment.
     segs: Vec<(f64, f32, f32, f32)>,
+    /// Per segment, the shape's constants: curvature `a` (0 = linear),
+    /// `1 / (e^a − 1)`, and `e^(a / len)` — one frame's step along it.
+    curve: Vec<(f64, f64, f64)>,
     /// Frames elapsed along the envelope timeline.
     pos: f64,
     /// While `Some`, `pos` is clamped to this value until the voice releases —
     /// the sustain-hold freeze (see struct docs).
     hold_end: Option<f64>,
+    /// Where `pos` is, walked frame by frame: the segment, the frames into
+    /// it, and `e^(a·t/len)` there — so a frame costs a multiply, not two
+    /// `exp`s and a walk of the segment list (it runs per voice per frame).
+    seg: usize,
+    t: f64,
+    eat: f64,
 }
 
 impl FlexEnv {
@@ -493,10 +502,25 @@ impl FlexEnv {
             cum += len;
             from = level;
         }
+        let curve = segs
+            .iter()
+            .map(|&(len, _, _, tension)| {
+                let a = Self::curvature(tension);
+                if a == 0.0 {
+                    (0.0, 0.0, 1.0)
+                } else {
+                    (a, 1.0 / (a.exp() - 1.0), (a / len).exp())
+                }
+            })
+            .collect();
         Some(Self {
             segs,
+            curve,
             pos: 0.0,
             hold_end,
+            seg: 0,
+            t: 0.0,
+            eat: 1.0,
         })
     }
 
@@ -519,6 +543,54 @@ impl FlexEnv {
         }
     }
 
+    /// The shape law's `a` for `tension` — 0 for a (near-)linear segment.
+    fn curvature(tension: f32) -> f64 {
+        let a = (f64::from(tension) - 0.5) * 12.0;
+        if a.abs() < 1.0e-3 { 0.0 } else { a }
+    }
+
+    /// The level where the walk is (see [`level_at`](Self::level_at), the
+    /// same law evaluated from scratch).
+    #[inline]
+    fn level_here(&self) -> f32 {
+        let Some(&(len, from, to, _)) = self.segs.get(self.seg) else {
+            return self.segs.last().map_or(0.0, |s| s.2);
+        };
+        let (a, inv, _) = self.curve[self.seg];
+        let frac = if a == 0.0 {
+            (self.t / len).clamp(0.0, 1.0)
+        } else {
+            ((self.eat - 1.0) * inv).clamp(0.0, 1.0)
+        };
+        from + (to - from) * frac as f32
+    }
+
+    /// One frame along the timeline.
+    #[inline]
+    fn step(&mut self) {
+        self.pos += 1.0;
+        let Some(&(len, ..)) = self.segs.get(self.seg) else {
+            return;
+        };
+        self.t += 1.0;
+        if self.t < len {
+            self.eat *= self.curve[self.seg].2;
+            return;
+        }
+        // Into the next segment(s): re-anchor the exponential there.
+        let mut len = len;
+        while self.t >= len {
+            self.t -= len;
+            self.seg += 1;
+            match self.segs.get(self.seg) {
+                Some(s) => len = s.0,
+                None => return,
+            }
+        }
+        let a = self.curve[self.seg].0;
+        self.eat = if a == 0.0 { 1.0 } else { (a * self.t / len).exp() };
+    }
+
     /// Current envelope level for the present `pos`, without advancing.
     #[inline]
     fn level_at(&self, pos: f64) -> f32 {
@@ -538,10 +610,10 @@ impl FlexEnv {
     /// level. `released` = the voice has received note-off (freeze lifts).
     #[inline]
     fn next(&mut self, released: bool) -> f32 {
-        let lvl = self.level_at(self.pos);
+        let lvl = self.level_here();
         let frozen = !released && self.hold_end.is_some_and(|h| self.pos >= h);
         if !frozen {
-            self.pos += 1.0;
+            self.step();
         }
         lvl
     }
@@ -2397,6 +2469,35 @@ mod tests {
             .iter()
             .filter(|v| !matches!(v.state, VoiceState::Done | VoiceState::Releasing { .. }))
             .count()
+    }
+
+    /// The frame-by-frame walk plays the same envelope as the law
+    /// evaluated from scratch — every curve shape, across segment edges,
+    /// through a sustain hold and after release.
+    #[test]
+    fn flex_env_walk_matches_the_law() {
+        let segs = [
+            (3.0, 1.0, 0.8),
+            (12.5, 0.6, 0.5),
+            (40.0, 0.9, 0.15),
+            (7.3, 0.2, 0.62),
+            (900.0, 0.0, 0.3),
+        ];
+        let mut walk = FlexEnv::from_segments(&segs, 0.0, 48_000, true).expect("env");
+        let law = walk.clone();
+        let mut pos = 0.0f64;
+        let mut worst = 0.0f32;
+        for frame in 0..60_000 {
+            let released = frame > 4_000;
+            let expect = law.level_at(pos);
+            let got = walk.next(released);
+            worst = worst.max((got - expect).abs());
+            let frozen = !released && law.hold_end.is_some_and(|h| pos >= h);
+            if !frozen {
+                pos += 1.0;
+            }
+        }
+        assert!(worst < 1e-4, "walk drifted from the law by {worst}");
     }
 
     /// Under the pedal, repeats of one key must not pile up (a Dolceola

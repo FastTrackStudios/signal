@@ -155,6 +155,9 @@ mod modmatrix;
 pub use modmatrix::ModEngine;
 use modmatrix::{ModCompiler, build_arp};
 
+/// A container gain at or below this (dB) is off: exactly zero.
+pub const OFF_DB: f32 = -120.0;
+
 /// A compiled, renderable node mirroring the container tree.
 pub enum RenderNode {
     /// A leaf (`inst = None` for a placeholder pass-through): a **source**
@@ -540,10 +543,17 @@ impl RenderNode {
                 cells.peaks.insert(id, cell.clone());
                 cell
             });
+            // A gain at or below the floor is OFF — exactly zero, so the
+            // branch sleeps (see the `Gain` arm of `process_inner`). An
+            // imported Omnisphere patch's unused layers are built at −200 dB:
+            // 1e-10, not zero, so they took every note and rendered every
+            // voice (their oscillators, envelopes and filters) to be
+            // multiplied by nothing — ~10% of the keys rig's render.
+            let db_gain = |db: f32| if db <= OFF_DB { 0.0 } else { 10f32.powf(db / 20.0) };
             node = Self::Gain {
                 asleep: false,
-                input: 10f32.powf(container.input_db / 20.0),
-                output: 10f32.powf(container.output_db / 20.0),
+                input: db_gain(container.input_db),
+                output: db_gain(container.output_db),
                 cell,
                 meter,
                 inner: Box::new(node),
