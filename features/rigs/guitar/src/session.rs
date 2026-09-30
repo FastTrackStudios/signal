@@ -230,6 +230,10 @@ pub struct GuitarRigBackend {
     /// The preset tab's audition — `(preset, snapshot)` playing on its own,
     /// outside the profile (see `choose_preset`). `None` = a patch is playing.
     audition: Arc<Mutex<Option<(String, String)>>>,
+    /// The sound browser's audition: the profile and songs as they were when
+    /// it began, and whether a pick has changed them since
+    /// (`browse_audition_end` puts them back).
+    browse_undo: Arc<Mutex<Option<(ProfileDef, Vec<SongDef>, bool)>>>,
     /// Boost engaged (tap toggles; the level is remembered separately).
     boost_on: Arc<Mutex<bool>>,
     /// Boost pedal level in dB (hold rotates through [`BOOST_LEVELS`]).
@@ -430,6 +434,7 @@ impl GuitarRigBackend {
         let backend = Self {
             rig: Arc::new(Mutex::new(None)),
             audition: Arc::new(Mutex::new(None)),
+            browse_undo: Arc::new(Mutex::new(None)),
             boost_on: Arc::new(Mutex::new(false)),
             boost_level: Arc::new(Mutex::new(BOOST_LEVELS[0])),
             blocks: Arc::new(Mutex::new(Vec::new())),
@@ -2626,6 +2631,9 @@ impl GuitarRigBackend {
         let Some(name) = self.live_patch_name() else {
             return;
         };
+        if let Some(undo) = self.browse_undo.lock_ok().as_mut() {
+            undo.2 = true;
+        }
         // In a song, a profile patch's change (a module or preset pick) is
         // the song's: its version of the patch.
         if let Some(song) = self.song_edit_target(&name) {
@@ -7211,6 +7219,30 @@ impl Rig for GuitarRigBackend {
                 None => patch.blocks.push(choice),
             }
         });
+    }
+
+    fn browse_audition_begin(&self) {
+        let mut undo = self.browse_undo.lock_ok();
+        if undo.is_none() {
+            let def = self.profile_def.lock_ok().clone();
+            let songs = self.songs_lib.lock_ok().clone();
+            *undo = Some((def, songs, false));
+        }
+    }
+
+    fn browse_audition_end(&self, keep: bool) {
+        let Some((def, songs, dirty)) = self.browse_undo.lock_ok().take() else {
+            return;
+        };
+        if keep || !dirty {
+            return;
+        }
+        RigLibrary::save_profile(&def);
+        RigLibrary::save_songs(&songs);
+        *self.profile_def.lock_ok() = def;
+        *self.songs_lib.lock_ok() = songs;
+        tracing::info!("browser audition undone: the picks from before it are back");
+        self.reload_for_song();
     }
 
     fn choose_module(&self, module: String, preset: String, snapshot: String) {

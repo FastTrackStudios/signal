@@ -104,6 +104,9 @@ struct State {
     rig_spans: BTreeMap<String, (f32, Baseline)>,
     /// Index of the last pressed stack.
     active_stack: Option<usize>,
+    /// The rig as it was when the browser started auditioning (see
+    /// `audition_begin`), to go back to.
+    audition: Option<Box<Audition>>,
     /// Grid mode: 0 Preset, 1 Profile (stacks), 2 Setlist.
     perform_mode: u32,
     /// The filters the mod wheel moves, by `(lane, module, leaf)`: the
@@ -1505,7 +1508,134 @@ struct EngineState {
     spans: BTreeMap<String, (f32, Baseline)>,
 }
 
+/// What an audition puts back: the profile and the live mixer.
+struct Audition {
+    profile: KeysProfile,
+    lanes: BTreeMap<String, LaneState>,
+    engines: BTreeMap<String, EngineState>,
+    /// Anything was loaded since it started — else there is nothing to undo.
+    dirty: bool,
+}
+
+/// A scope's own settings (Tone, Limiter, FX Bypass) from its live values —
+/// the keys under `prefix`, without it.
+fn own_values(map: &BTreeMap<String, f32>, prefix: &str) -> Vec<crate::profile::MacroValue> {
+    map.iter()
+        .filter_map(|(k, v)| {
+            k.strip_prefix(prefix).map(|id| crate::profile::MacroValue {
+                id: id.to_string(),
+                value: *v,
+            })
+        })
+        .collect()
+}
+
+/// `base`, or `base 2`, `base 3`… — the first `taken` does not hold.
+fn free_name(base: &str, taken: &std::collections::HashSet<String>) -> String {
+    if !taken.contains(base) {
+        return base.to_string();
+    }
+    (2..)
+        .map(|n| format!("{base} {n}"))
+        .find(|c| !taken.contains(c))
+        .unwrap_or_else(|| base.to_string())
+}
+
 impl State {
+    /// A lane's live state as `layer` authors it, in `engine`.
+    fn lane_from_def(engine: &str, layer: &crate::profile::LayerDef) -> LaneState {
+        let mut globals = BTreeMap::new();
+        for v in &layer.scope_values {
+            globals.insert(format!("{LAYER}{}", v.id), v.value);
+        }
+        LaneState {
+            engine: engine.to_string(),
+            gain_db: layer.gain_db,
+            muted: starts_muted(&layer.name),
+            soloed: false,
+            modules: layer
+                .module_patches()
+                .into_iter()
+                .map(|patch| ModuleState {
+                    patch,
+                    macros: default_macros(),
+                    ..ModuleState::default()
+                })
+                .collect(),
+            preset: String::new(),
+            globals,
+            spans: BTreeMap::new(),
+            omni_seed: None,
+            omni_base: Vec::new(),
+            fx_gated: false,
+        }
+    }
+
+    /// Lane `name` as it plays now, as a layer definition: the authored one
+    /// with the live sources, the knobs set on each, its own settings and
+    /// fader. Returns its engine's name too.
+    fn live_layer_def(&self, name: &str) -> Option<(String, crate::profile::LayerDef)> {
+        let (engine, def) = self.profile.layer(name)?;
+        let (engine, mut def) = (engine.name.clone(), def.clone());
+        let lane = self.lanes.get(name)?;
+        let patches: Vec<String> = lane.modules.iter().map(|m| m.patch.clone()).collect();
+        def.patch = patches.first().cloned().unwrap_or_default();
+        def.extra_modules = patches.iter().skip(1).cloned().collect();
+        def.gain_db = lane.gain_db;
+        for (i, m) in lane.modules.iter().enumerate() {
+            if m.patch.is_empty() || m.macros_patch.as_deref() != Some(m.patch.as_str()) {
+                continue;
+            }
+            let values = m
+                .macros
+                .iter()
+                .filter(|(id, _)| {
+                    KeysRigBackend::macro_is_dsp(id) || KeysRigBackend::macro_is_mod(id)
+                })
+                .map(|(id, v)| crate::profile::MacroValue {
+                    id: id.clone(),
+                    value: *v,
+                })
+                .collect();
+            def.remember_macros(&m.patch, i as u32, values);
+        }
+        // Only the knobs for what the lane holds now travel with it.
+        def.patch_macros
+            .retain(|pm| patches.get(pm.module as usize) == Some(&pm.patch));
+        def.scope_values = own_values(&lane.globals, LAYER);
+        Some((engine, def))
+    }
+
+    /// Engine `name` as it plays now (see [`live_layer_def`](Self::live_layer_def)).
+    fn live_engine_def(&self, name: &str) -> Option<crate::profile::EngineDef> {
+        let mut def = self.profile.engine(name)?.clone();
+        def.layers = def
+            .layers
+            .iter()
+            .filter_map(|l| self.live_layer_def(&l.name).map(|(_, d)| d))
+            .collect();
+        if let Some(e) = self.engines.get(name) {
+            def.gain_db = e.gain_db;
+            def.scope_values = own_values(&e.globals, ENGINE);
+        }
+        Some(def)
+    }
+
+    /// Mark the running audition as having changed something.
+    fn touch_audition(&mut self) {
+        if let Some(a) = self.audition.as_mut() {
+            a.dirty = true;
+        }
+    }
+
+    /// Save the profile — unless an audition is running, which saves what it
+    /// keeps when it ends.
+    fn save_profile(&self) {
+        if self.audition.is_none() {
+            self.profile.save();
+        }
+    }
+
     /// Seed the live mixer from a profile's authored defaults.
     fn adopt_profile(&mut self, profile: KeysProfile) {
         self.lanes.clear();
@@ -1524,45 +1654,16 @@ impl State {
                 },
             );
             for layer in &engine.layers {
-                self.lanes.insert(
-                    layer.name.clone(),
-                    LaneState {
-                        engine: engine.name.clone(),
-                        gain_db: layer.gain_db,
-                        muted: starts_muted(&layer.name),
-                        soloed: false,
-                        modules: layer
-                            .module_patches()
-                            .into_iter()
-                            .map(|patch| ModuleState {
-                                patch,
-                                macros: default_macros(),
-                                ..ModuleState::default()
-                            })
-                            .collect(),
-                        preset: String::new(),
-                        globals: BTreeMap::new(),
-                        spans: BTreeMap::new(),
-                        omni_seed: None,
-                        omni_base: Vec::new(),
-                        fx_gated: false,
-                    },
-                );
+                self.lanes
+                    .insert(layer.name.clone(), Self::lane_from_def(&engine.name, layer));
             }
         }
         // The profile's saved mixer settings (Tone, Limiter, FX Bypass) at
-        // every scope.
+        // the engine scope (a lane's come with it, above).
         for engine in &profile.engines {
             if let Some(e) = self.engines.get_mut(&engine.name) {
                 for v in &engine.scope_values {
                     e.globals.insert(format!("{ENGINE}{}", v.id), v.value);
-                }
-            }
-            for layer in &engine.layers {
-                if let Some(l) = self.lanes.get_mut(&layer.name) {
-                    for v in &layer.scope_values {
-                        l.globals.insert(format!("{LAYER}{}", v.id), v.value);
-                    }
                 }
             }
         }
@@ -2485,7 +2586,12 @@ impl KeysRigBackend {
             })
             .map(|(p, _)| p.name.clone())
             .collect();
-        let known: Vec<String> = state.presets.iter().map(|p| p.name.clone()).collect();
+        let known: Vec<String> = state
+            .presets
+            .iter()
+            .filter(|p| !p.user)
+            .map(|p| p.name.clone())
+            .collect();
         let canonical = |want: &str| -> Option<String> {
             use signal_synth::omni_import::resolve_name;
             resolve_name(want, pack_names.iter().map(String::as_str))
@@ -2719,7 +2825,7 @@ impl KeysRigBackend {
                 .iter()
                 .filter_map(|(name, lane)| {
                     let patch = lane.modules.first()?.patch.clone();
-                    let i = s.presets.iter().position(|p| p.name == patch)?;
+                    let i = s.presets.iter().position(|p| !p.user && p.name == patch)?;
                     let path = s.specs.get(i)?.clone();
                     (is_omni_patch(&path) && lane.omni_seed.as_ref() != Some(&path))
                         .then(|| (name.clone(), path, patch))
@@ -2909,6 +3015,9 @@ impl KeysRigBackend {
             .presets
             .iter()
             .zip(s.specs.iter())
+            // A saved engine or layer preset is not a patch a module can
+            // hold — never let one shadow a pack of the same name.
+            .filter(|(p, _)| !p.user)
             .map(|(p, spec)| (p.name.clone(), spec.clone()))
             .collect();
         // Lanes carry the LIVE patch assignment (a stack recall or a browser
@@ -3853,15 +3962,24 @@ impl KeysRigSvc for KeysRigBackend {
     fn status(&self) -> KeysStatus {
         tracing::debug!("keys rpc: status →");
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-        let s = self
-            .inner
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let loaded_preset = s
-            .loaded
-            .and_then(|i| s.presets.get(i))
-            .map(|p| p.name.clone());
+        // What the status needs from the state, taken and the lock let go
+        // BEFORE the rig lock below: a rebuild holds the rig and then takes
+        // the state (`apply_mixer`), so holding the state into a rig lock
+        // here deadlocked the two as soon as loads came quickly (auditioning).
+        let (loaded_preset, midi_port, last_error) = {
+            let s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            (
+                s.loaded
+                    .and_then(|i| s.presets.get(i))
+                    .map(|p| p.name.clone()),
+                s.midi_port.clone(),
+                s.last_error.clone(),
+            )
+        };
         let (master_peak, meters) = if running {
             self.inner
                 .rig
@@ -3967,8 +4085,8 @@ impl KeysRigSvc for KeysRigBackend {
             master_peak,
             meters,
             voices,
-            midi_port: s.midi_port.clone(),
-            last_error: s.last_error.clone(),
+            midi_port,
+            last_error,
             rt,
         }
     }
@@ -4221,6 +4339,24 @@ impl KeysRigSvc for KeysRigBackend {
     }
 
     fn set_layer_patch(&self, layer: String, module: u32, preset: u32) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.touch_audition();
+        }
+        // A saved layer preset is the whole lane, not one module's source.
+        let saved = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.specs.get(preset as usize).cloned())
+            .filter(|p| crate::user_presets::kind_of(p) == Some(crate::user_presets::Kind::Layer));
+        if let Some(file) = saved {
+            match crate::user_presets::read_layer(&file) {
+                Ok(p) => self.apply_layer_preset(&layer, p),
+                Err(e) => self.fail(format!("layer preset: {e}")),
+            }
+            return;
+        }
         // An authored patch (.prt_omn) is a MODULE PRESET, not a bare source:
         // it carries filter, envelopes and unison, and a multi-layer patch
         // spills onto the modules after the one you dropped it on.
@@ -4625,11 +4761,135 @@ impl KeysRigSvc for KeysRigBackend {
         self.publish_mixer();
     }
 
+    fn load_engine_preset(&self, engine: String, preset: u32) {
+        let file = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|mut s| {
+                s.touch_audition();
+                s.specs.get(preset as usize).cloned()
+            })
+            .filter(|p| crate::user_presets::kind_of(p) == Some(crate::user_presets::Kind::Engine));
+        let Some(file) = file else {
+            self.fail(format!("preset {preset} is not an engine preset"));
+            return;
+        };
+        match crate::user_presets::read_engine(&file) {
+            Ok(p) => self.apply_engine_preset(&engine, p),
+            Err(e) => self.fail(format!("engine preset: {e}")),
+        }
+    }
+
+    fn save_engine_preset(&self, engine: String, name: String) {
+        let def = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.live_engine_def(&engine));
+        let Some(def) = def else {
+            self.fail(format!("no engine named {engine}"));
+            return;
+        };
+        let preset = crate::user_presets::EnginePreset {
+            name: name.trim().to_string(),
+            engine: def,
+        };
+        match crate::user_presets::save_engine(&preset) {
+            Ok(path) => tracing::info!(?path, "keys rig: engine preset saved"),
+            Err(e) => return self.fail(format!("engine preset not saved: {e}")),
+        }
+        self.rescan_user_presets();
+    }
+
+    fn save_layer_preset(&self, layer: String, name: String) {
+        let def = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.live_layer_def(&layer));
+        let Some((engine, def)) = def else {
+            self.fail(format!("no lane named {layer}"));
+            return;
+        };
+        let preset = crate::user_presets::LayerPreset {
+            name: name.trim().to_string(),
+            engine,
+            layer: def,
+        };
+        match crate::user_presets::save_layer(&preset) {
+            Ok(path) => tracing::info!(?path, "keys rig: layer preset saved"),
+            Err(e) => return self.fail(format!("layer preset not saved: {e}")),
+        }
+        if let Ok(mut s) = self.inner.state.lock() {
+            if let Some(l) = s.lanes.get_mut(&layer) {
+                l.preset = preset.name.clone();
+            }
+        }
+        self.rescan_user_presets();
+    }
+
+    fn rename_user_preset(&self, preset: u32, name: String) {
+        self.edit_user_preset(preset, |file| crate::user_presets::rename(file, &name, false).map(drop));
+    }
+
+    fn duplicate_user_preset(&self, preset: u32, name: String) {
+        self.edit_user_preset(preset, |file| crate::user_presets::rename(file, &name, true).map(drop));
+    }
+
+    fn delete_user_preset(&self, preset: u32) {
+        self.edit_user_preset(preset, crate::user_presets::delete);
+    }
+
+    fn audition_begin(&self) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            if s.audition.is_none() {
+                s.audition = Some(Box::new(Audition {
+                    profile: s.profile.clone(),
+                    lanes: s.lanes.clone(),
+                    engines: s.engines.clone(),
+                    dirty: false,
+                }));
+            }
+        }
+    }
+
+    fn audition_end(&self, keep: bool) {
+        let restore = {
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
+            let Some(a) = s.audition.take() else {
+                return;
+            };
+            if keep || !a.dirty {
+                if a.dirty {
+                    s.profile.save();
+                }
+                false
+            } else {
+                s.profile = a.profile;
+                s.lanes = a.lanes;
+                s.engines = a.engines;
+                Self::refresh_fx_gates(&mut s);
+                s.profile.save();
+                true
+            }
+        };
+        if restore {
+            self.rebuild_async();
+        }
+    }
+
     fn clear_layer(&self, layer: String, module: u32) {
         {
             let Ok(mut s) = self.inner.state.lock() else {
                 return;
             };
+            s.touch_audition();
             let Some(lane) = s.lanes.get_mut(&layer) else {
                 return;
             };
@@ -4939,6 +5199,163 @@ impl Services for KeysRigBackend {
 
 /// Every distinct `.signalpack` `profile`'s lanes reference, in lane order —
 /// resolved through `index` (patch name → scanned spec path), skipping
+/// Saved engine and layer presets.
+impl KeysRigBackend {
+    /// Record `msg` as the last error and tell the remotes.
+    fn fail(&self, msg: String) {
+        tracing::warn!("keys rig: {msg}");
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.last_error = Some(msg);
+        }
+        self.publish_all();
+    }
+
+    /// Recompile the program off the caller's thread.
+    fn rebuild_async(&self) {
+        let b = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("keys-rebuild".into())
+            .spawn(move || {
+                let _rt = keys_runtime().enter();
+                b.rebuild_program();
+            });
+    }
+
+    /// Re-read the saved presets (they sit after every scanned one, so no
+    /// scanned index moves) and publish the library.
+    fn rescan_user_presets(&self) {
+        let (presets, specs) = crate::user_presets::scan();
+        if let Ok(mut s) = self.inner.state.lock() {
+            let keep = s.presets.iter().position(|p| p.user).unwrap_or(s.presets.len());
+            s.presets.truncate(keep);
+            s.specs.truncate(keep);
+            s.presets.extend(presets);
+            s.specs.extend(specs);
+            let n = s.presets.len();
+            if s.loaded.is_some_and(|i| i >= n) {
+                s.loaded = None;
+            }
+        }
+        self.publish_all();
+    }
+
+    /// Change saved preset `preset`'s file with `edit`, then re-read them.
+    fn edit_user_preset(
+        &self,
+        preset: u32,
+        edit: impl FnOnce(&std::path::Path) -> Result<(), String>,
+    ) {
+        let file = self.inner.state.lock().ok().and_then(|s| {
+            s.presets
+                .get(preset as usize)
+                .filter(|p| p.user)
+                .and_then(|_| s.specs.get(preset as usize).cloned())
+        });
+        let Some(file) = file else {
+            return self.fail(format!("preset {preset} is not a saved preset"));
+        };
+        if let Err(e) = edit(&file) {
+            return self.fail(e);
+        }
+        self.rescan_user_presets();
+    }
+
+    /// Load a saved layer preset into lane `target`: the lane takes its
+    /// sources, knobs and own settings, and keeps its name, key range, fader
+    /// and mute — those belong to where it sits.
+    fn apply_layer_preset(&self, target: &str, preset: crate::user_presets::LayerPreset) {
+        {
+            let Ok(mut guard) = self.inner.state.lock() else {
+                return;
+            };
+            let s = &mut *guard;
+            let Some(def) = s.profile.layer_mut(target) else {
+                drop(guard);
+                return self.fail(format!("no lane named {target}"));
+            };
+            let new = crate::profile::LayerDef {
+                name: def.name.clone(),
+                key_lo: def.key_lo,
+                key_hi: def.key_hi,
+                gain_db: def.gain_db,
+                exclude_global: def.exclude_global,
+                ..preset.layer
+            };
+            *def = new.clone();
+            let Some(old) = s.lanes.get(target) else {
+                return;
+            };
+            let mut lane = State::lane_from_def(&old.engine, &new);
+            lane.gain_db = old.gain_db;
+            lane.muted = old.muted;
+            lane.soloed = old.soloed;
+            lane.preset = preset.name;
+            s.lanes.insert(target.to_string(), lane);
+            s.touch_audition();
+            Self::refresh_fx_gates(s);
+            s.save_profile();
+        }
+        self.rebuild_async();
+    }
+
+    /// Load a saved engine preset into engine `target`: its lanes replace the
+    /// engine's (taking the old lanes' names in order, so stacks that name
+    /// them still find them); the engine keeps its name, type, place and
+    /// fader.
+    fn apply_engine_preset(&self, target: &str, preset: crate::user_presets::EnginePreset) {
+        {
+            let Ok(mut guard) = self.inner.state.lock() else {
+                return;
+            };
+            let s = &mut *guard;
+            let Some(old) = s.profile.engine(target).cloned() else {
+                drop(guard);
+                return self.fail(format!("no engine named {target}"));
+            };
+            let old_names: Vec<String> = old.layers.iter().map(|l| l.name.clone()).collect();
+            let mut taken: std::collections::HashSet<String> = s
+                .profile
+                .engines
+                .iter()
+                .filter(|e| e.name != target)
+                .flat_map(|e| e.layers.iter().map(|l| l.name.clone()))
+                .collect();
+            let mut layers = preset.engine.layers.clone();
+            for (i, l) in layers.iter_mut().enumerate() {
+                let base = old_names
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("{target} {}", i + 1));
+                l.name = free_name(&base, &taken);
+                taken.insert(l.name.clone());
+            }
+            for n in &old_names {
+                s.lanes.remove(n);
+            }
+            for l in &layers {
+                let mut lane = State::lane_from_def(target, l);
+                lane.preset = preset.name.clone();
+                s.lanes.insert(l.name.clone(), lane);
+            }
+            if let Some(e) = s.profile.engine_mut(target) {
+                e.layers = layers;
+                e.scope_values = preset.engine.scope_values.clone();
+            }
+            if let Some(e) = s.engines.get_mut(target) {
+                e.globals.clear();
+                for v in &preset.engine.scope_values {
+                    e.globals.insert(format!("{ENGINE}{}", v.id), v.value);
+                }
+                e.spans.clear();
+            }
+            s.touch_audition();
+            Self::refresh_fx_gates(s);
+            s.save_profile();
+        }
+        self.rebuild_async();
+    }
+}
+
 /// non-pack specs (raw `library.styx` extractions, `.prt_omn` patches): a
 /// browser can only stream built packs, and those lanes are exactly the ones
 /// that stay silent natively too.
@@ -5065,7 +5482,13 @@ fn keys_program(name: &str, spec: String) -> Container {
 /// `scan_keyscape` with same-name non-pack presets removed.
 fn prefer_packs_from_scan() -> (Vec<KeysPreset>, Vec<PathBuf>) {
     let (p, s) = scan_keyscape();
-    prefer_packs(p, s)
+    let (mut p, mut s) = prefer_packs(p, s);
+    // The player's saved engine and layer presets, after everything scanned
+    // — so adding or removing one never moves a scanned preset's index.
+    let (up, us) = crate::user_presets::scan();
+    p.extend(up);
+    s.extend(us);
+    (p, s)
 }
 
 /// Drop a preset whose name is already held by a `.signalpack`.
@@ -5175,6 +5598,7 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
                     scope: "layer".into(),
                     tags,
                     variants,
+                    user: false,
                 });
                 specs.push(styx);
             }
@@ -5239,6 +5663,7 @@ fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
                 scope: "layer".into(),
                 tags,
                 variants: crate::variations::variation_names(name),
+                user: false,
             };
             match slot.get(&display) {
                 Some(&i) => {
@@ -5315,6 +5740,7 @@ fn scan_packs_recursive_as(
                 scope: scope.to_string(),
                 tags,
                 variants: crate::variations::variation_names(name),
+                user: false,
             });
             specs.push(pack);
         }
@@ -5356,6 +5782,7 @@ fn scan_packs(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
                 scope: "layer".into(),
                 tags,
                 variants,
+                user: false,
             });
             specs.push(pack);
         }

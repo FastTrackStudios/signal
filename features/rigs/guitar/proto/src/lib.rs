@@ -1423,6 +1423,15 @@ pub mod rig {
         /// Put block preset `preset` on the active patch's block `block`
         /// (`DLY 1`, `VERB 2`, …) — the patch's own pick, saved and rebuilt.
         fn choose_block(&self, block: String, preset: String);
+        /// Start auditioning from the sound browser: remember the profile's
+        /// picks (and the song's), so arrowing through presets can be undone
+        /// by [`browse_audition_end`](Self::browse_audition_end). A second
+        /// begin keeps the first snapshot. The same process as the keys rig's
+        /// `audition_begin`.
+        fn browse_audition_begin(&self);
+        /// Stop auditioning: keep what is playing, or put back the picks
+        /// from before it began.
+        fn browse_audition_end(&self, keep: bool);
         /// Step the active patch's `module` pick through its preset's
         /// snapshots (`delta` −1 / +1, wrapping). With no pick yet, takes
         /// the module's first preset.

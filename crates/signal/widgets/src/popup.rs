@@ -29,6 +29,9 @@ struct Popup {
     on_close: Option<Rc<dyn Fn()>>,
     /// Grows upward from `y` (its bottom edge there) instead of down.
     above: bool,
+    /// A sheet: nearly the whole root, over a dimmed backdrop (an expanded
+    /// browser), rather than a menu at a point.
+    sheet: bool,
 }
 
 /// The app root's popup layer. `Copy`: a signal handle.
@@ -81,6 +84,30 @@ impl PopupHost {
         self.show(x, y, min_width, Rc::new(render), on_close, true);
     }
 
+    /// Show `render` as a **sheet**: nearly the whole root, over a dimmed
+    /// backdrop — the way a docked panel opens out full size (the sound
+    /// browser's expand). Closes like any popup: a click on the backdrop,
+    /// Escape, or [`close`](Self::close).
+    pub fn open_sheet(self, render: impl Fn() -> Element + 'static, on_close: impl Fn() + 'static) {
+        let mut this = self;
+        this.close();
+        this.open.set(Some(Popup {
+            x: 0.0,
+            y: 0.0,
+            min_width: 0.0,
+            render: Rc::new(render),
+            on_close: Some(Rc::new(on_close)),
+            above: false,
+            sheet: true,
+        }));
+    }
+
+    /// Whether a sheet is showing.
+    #[must_use]
+    pub fn sheet_open(self) -> bool {
+        self.open.read().as_ref().is_some_and(|p| p.sheet)
+    }
+
     fn show(
         mut self,
         x: f64,
@@ -98,6 +125,7 @@ impl PopupHost {
             render,
             on_close: Some(Rc::new(on_close)),
             above,
+            sheet: false,
         }));
     }
 
@@ -140,6 +168,9 @@ pub fn PopupLayer() -> Element {
     // updates have tripped on.
     let (ox, oy, ow, oh) = origin();
     let place = match &popup {
+        Some(p) if p.sheet => {
+            "left: 3%; top: 3%; right: 3%; bottom: 3%; display: flex;".to_string()
+        }
         Some(p) => {
             // Keep the menu on screen — only against a width actually
             // measured (clamping to an unmeasured zero pinned it left).
@@ -163,7 +194,11 @@ pub fn PopupLayer() -> Element {
         }
         None => String::new(),
     };
-    let layer_style = if showing {
+    let dim = popup.as_ref().is_some_and(|p| p.sheet);
+    let layer_style = if dim {
+        // A sheet dims what it covers.
+        "position: absolute; inset: 0; z-index: 900; background: rgba(0,0,0,0.55);"
+    } else if showing {
         // Backdrop: the whole app, so a click anywhere else closes the menu.
         "position: absolute; inset: 0; z-index: 900;"
     } else {

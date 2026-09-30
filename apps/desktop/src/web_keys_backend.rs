@@ -30,6 +30,8 @@
 //! | `set_layer_mute` / `set_engine_mute` / `set_layer_solo` | real: solo logic mirrors the native mixer (any solo silences un-soloed lanes) |
 //! | `set_layer_exclude_global` | stored + rendered; no DSP effect (no Global Controls run in-tab) |
 //! | `set_layer_patch` / `set_layer_variant` / `clear_layer` | stubs (module sources are resolved on the engine); honest `last_error` |
+//! | `load_engine_preset` / `save_*_preset` / `*_user_preset` | stubs (the saved-preset library is on the engine); honest `last_error` |
+//! | `audition_begin` / `audition_end` | no-ops — nothing loads in-tab |
 //! | `set_module_gain` / `set_module_enabled` | stubs — lanes run one fused instrument in-tab, there is no per-module bus |
 //! | `set_drone` | stub — the lane program carries no drone engines |
 //! | `set_engine_order` | real (layout only): reorders the mixer's engine cards |
@@ -562,6 +564,7 @@ impl WebKeysBackend {
             scope: "engine".into(),
             tags,
             variants: Vec::new(),
+            user: false,
         }]
     }
 
@@ -759,6 +762,36 @@ impl KeysRigSvc for WebKeysBackend {
     fn set_layer_variant(&self, _layer: String, _module: u32, _preset: u32, _variant: u32) {
         self.set_error(ENGINE_ONLY);
     }
+
+    fn load_engine_preset(&self, _engine: String, _preset: u32) {
+        self.set_error(ENGINE_ONLY);
+    }
+
+    fn save_engine_preset(&self, _engine: String, _name: String) {
+        self.set_error(ENGINE_ONLY);
+    }
+
+    fn save_layer_preset(&self, _layer: String, _name: String) {
+        self.set_error(ENGINE_ONLY);
+    }
+
+    fn rename_user_preset(&self, _preset: u32, _name: String) {
+        self.set_error(ENGINE_ONLY);
+    }
+
+    fn duplicate_user_preset(&self, _preset: u32, _name: String) {
+        self.set_error(ENGINE_ONLY);
+    }
+
+    fn delete_user_preset(&self, _preset: u32) {
+        self.set_error(ENGINE_ONLY);
+    }
+
+    fn audition_begin(&self) {
+        // Nothing loads in-tab, so there is nothing to put back.
+    }
+
+    fn audition_end(&self, _keep: bool) {}
 
     fn set_drone(&self, _engine: String, _key: u32, _octave: i32, _playing: bool) {
         // The lane program carries no drone engines.
