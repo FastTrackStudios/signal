@@ -1629,10 +1629,16 @@ fn ModGroupPanel(
     let mod_face = crate::rig_faces::use_faces().modulation(cur.block_type.as_str()).cloned();
 
     rsx! {
-        div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
+        div { class: "relative flex flex-col h-full min-h-0", style: "background: #080808;",
             // Header: arrows rotate the engaged member. The right inset keeps
             // the engine picker clear of ZoomPanel's floating expand button.
-            div { class: "flex items-center gap-1 pl-1.5 pt-1 flex-shrink-0", style: "padding-right: 22px;",
+            // With a face, the header is a pill over the face's top-right
+            // corner (which the face keeps clear): the rotation and the
+            // pickers; the face has its own name and On key.
+            div {
+                class: if mod_face.is_some() { "absolute flex items-center gap-1 px-1" } else { "flex items-center gap-1 pl-1.5 pt-1 flex-shrink-0" },
+                style: if mod_face.is_some() { "right: 24px; top: 6px; z-index: 5; background: rgba(8,8,8,0.72); border-radius: 4px; padding-top: 2px; padding-bottom: 2px;" } else { "padding-right: 22px;" },
+                if mod_face.is_none() {
                 button {
                     style: if engaged { "font-size:10px; line-height:1; color:#4ade80;" } else { "font-size:10px; line-height:1; color:#52525b;" },
                     title: if engaged { "Bypass group" } else { "Engage" },
@@ -1656,6 +1662,7 @@ fn ModGroupPanel(
                     fts_chrome::Glyph { icon: fts_chrome::Icon::Power, size: 12 }
                 }
                 span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "{title}" }
+                }
                 button {
                     class: "ml-auto w-4 h-4 rounded-sm border border-border text-[9px] text-muted-foreground hover:text-foreground leading-none",
                     onclick: {
@@ -1717,7 +1724,7 @@ fn ModGroupPanel(
                 }
             }
             if let Some(f) = mod_face.clone() {
-                div { class: "relative flex-1 min-h-0 flex justify-center", style: "padding: 2px 4px 4px;",
+                div { class: "relative flex-1 min-h-0 flex justify-center", style: "padding: 3px;",
                     crate::rig_faces::BlockFace { block: cur.clone(), face: f }
                 }
             } else {
