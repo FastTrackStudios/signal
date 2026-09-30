@@ -2980,7 +2980,10 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 crate::rig_faces::InputRow { blocks: blocks.clone(),
                                     // The input compressor, right after the
                                     // envelope filter: its own picture.
-                                    after_filter: rsx! {
+                                    // The Pre Comp stands at the head of the drive
+                                    // board when it has its pedal; here only
+                                    // without one.
+                                    after_filter: { if crate::rig_faces::use_faces().pre_comp_pedal.is_some() { VNode::empty() } else { rsx! {
                                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 0.7 1 0%; min-width: 0; border-right: 1px solid #1d1f24;",
                                             ZoomPanel {
                                                 title: "Pre Comp".to_string(),
@@ -2992,7 +2995,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                                 }
                                             }
                                         }
-                                    },
+                                    } } },
                                 }
                             }
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex;",

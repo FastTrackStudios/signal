@@ -123,6 +123,9 @@ pub struct Faces {
     /// The Modulation and Motion modules' effects: a face per block type
     /// (chorus, tremolo, vibrato).
     pub modulation: Vec<FaceEntry>,
+    /// The compressor pedal at the head of the drive board (the Pre Comp
+    /// block).
+    pub pre_comp_pedal: Option<FaceEntry>,
 }
 
 const SET: &str = "rig-faces";
@@ -195,7 +198,7 @@ impl Faces {
                 return Self::default();
             };
             let list = |k: &str| doc.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default();
-            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry), post_comp: doc.get("post_comp").and_then(entry), time_delay: doc.get("time").and_then(|t| t.get("delay")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), time_reverb: doc.get("time").and_then(|t| t.get("reverb")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), modulation: list("modulation") }
+            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry), post_comp: doc.get("post_comp").and_then(entry), time_delay: doc.get("time").and_then(|t| t.get("delay")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), time_reverb: doc.get("time").and_then(|t| t.get("reverb")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), modulation: list("modulation"), pre_comp_pedal: doc.get("pre_comp_pedal").and_then(entry) }
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -475,17 +478,28 @@ fn BlockPanel(
 #[component]
 pub fn DrivesRow(blocks: Vec<LiveBlock>) -> Element {
     let faces = use_faces();
-    let slots: Vec<LiveBlock> = blocks.iter().filter(|b| matches!(b.block_type, BlockType::Boost | BlockType::Drive)).cloned().collect();
+    let mut slots: Vec<(LiveBlock, Option<FaceEntry>)> = Vec::new();
+    // The compressor first, as a board has it: the Pre Comp block, when
+    // there is a pedal to draw it.
+    if let (Some(f), Some(c)) = (faces.pre_comp_pedal.clone(), blocks.iter().find(|b| b.block_type == BlockType::Compressor && b.name.eq_ignore_ascii_case("Pre Comp"))) {
+        slots.push((c.clone(), Some(f)));
+    }
+    slots.extend(
+        blocks
+            .iter()
+            .filter(|b| matches!(b.block_type, BlockType::Boost | BlockType::Drive))
+            .map(|b| (b.clone(), (!b.empty).then(|| faces.drive(&b.preset).cloned()).flatten())),
+    );
     let last = slots.len().saturating_sub(1);
     rsx! {
         div { style: "position: relative; display: flex; flex-direction: row; align-items: stretch; width: 100%; height: 100%; min-height: 0; box-sizing: border-box; padding: {BOARD_PAD_TOP}px 0 {BOARD_PAD_BOTTOM}px 0; background: {BOARD};",
             // The power: one lead along the top, a drop into each pedal.
             div { style: "position: absolute; left: 0; right: 0; top: 4px; height: 3px; border-radius: 2px; background: {CORD}; pointer-events: none;" }
             Cable { end: CableEnd::In }
-            for (i, b) in slots.into_iter().enumerate() {
+            for (i, (b, face)) in slots.into_iter().enumerate() {
                 div { key: "{b.id}", style: "position: relative; height: 100%; min-height: 0; flex: 0 0 auto; display: flex;",
                     div { style: "position: absolute; left: 50%; top: -{BOARD_PAD_TOP}px; width: 3px; height: {BOARD_PAD_TOP + 4}px; margin-left: -1px; background: {CORD}; pointer-events: none;" }
-                    if let Some(f) = (!b.empty).then(|| faces.drive(&b.preset).cloned()).flatten() {
+                    if let Some(f) = face {
                         BlockFace { block: b.clone(), face: f }
                     } else {
                         NameCard { block: b.clone(), aspect: PEDAL }
