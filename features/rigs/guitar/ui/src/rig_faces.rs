@@ -776,16 +776,24 @@ pub fn InputRow(
     let (pitch, pitch_face) = unit("pitch", BlockType::Pitch);
     let (wah, wah_face) = unit("wah", BlockType::Wah);
     let (filter, filter_face) = unit("filter", BlockType::Filter);
+    // The doubler: no block of its own yet — its unit, drawn.
+    let doubler_face = pick(&faces.input, "doubler").cloned();
     let picture = faces.filter_picture.clone();
     rsx! {
         Row {
             // The pitch stage: its voices on their ladder, the doubler —
             // the widest unit here, laid out for its room.
-            Panel { weight: 1.3,
+            Panel { weight: 0.9,
                 match (pitch, pitch_face) {
                     (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, fill: true } },
                     (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true } },
                     _ => rsx! { div { style: "width: 280px; height: 100%; display: flex;", crate::control::PitchStrip {} } },
+                }
+            }
+            // The doubler, after the voices.
+            if let Some(f) = doubler_face {
+                Panel { weight: 0.0,
+                    UnboundFace { face: f }
                 }
             }
             Panel { weight: 0.0,
