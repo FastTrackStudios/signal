@@ -289,6 +289,30 @@ fn RemoteEngineForm(generation: Signal<u32>) -> Element {
 
 #[component]
 fn GuitarRigView() -> Element {
+    // The window's width over its height, for the rig's wide layout (the
+    // whole rig on an ultrawide). Blitz has no resize events, so it is
+    // polled from the window a few times a second.
+    let mut aspect = use_signal(|| 1.0_f64);
+    use_context_provider(|| signal_guitar_ui::WindowAspect(aspect));
+    #[cfg(all(not(any(target_arch = "wasm32", target_os = "ios")), not(feature = "webview")))]
+    {
+        let window = dioxus_native::use_window();
+        use_future(move || {
+            let window = window.clone();
+            async move {
+                loop {
+                    let size = window.surface_size();
+                    if size.height > 0 {
+                        let a = f64::from(size.width) / f64::from(size.height);
+                        if (*aspect.peek() - a).abs() > 0.01 {
+                            aspect.set(a);
+                        }
+                    }
+                    architect::platform::sleep(std::time::Duration::from_millis(300)).await;
+                }
+            }
+        });
+    }
     let mut attempts = use_signal(|| 0u32);
     let mut generation = use_signal(|| 0u32);
     // The engine was up and went away (vs never seen) — changes the copy.

@@ -100,6 +100,12 @@ pub fn GuitarRigRemote() -> Element {
     // beside the switches. Measured on the body.
     let mut wide = use_signal(|| false);
     use_context_provider(|| crate::control::WideLayout(wide));
+    if let Some(aspect) = try_use_context::<crate::control::WindowAspect>() {
+        let is_wide = (aspect.0)() >= 2.6;
+        if *wide.peek() != is_wide {
+            wide.set(is_wide);
+        }
+    }
     if *groups.two.peek() != (switches() == Switches::Hidden) {
         let mut two = groups.two;
         two.set(switches() == Switches::Hidden);
@@ -677,16 +683,7 @@ pub fn GuitarRigRemote() -> Element {
             // appeared and the window looked frozen.
             div {
                 class: "flex-1 min-h-0 flex flex-row overflow-hidden",
-                onresize: move |e| {
-                    if let Ok(size) = e.get_content_box_size()
-                        && size.height > 1.0
-                    {
-                        let is_wide = size.width / size.height >= 2.6;
-                        if *wide.peek() != is_wide {
-                            wide.set(is_wide);
-                        }
-                    }
-                },
+
                 style: if library_open().is_some() || palette_open() || audio_open() { "display: none;" } else { "" },
                 // The left sidebar follows the mode: the pool for Preset,
                 // the profile tree for Profile, the set and its songs for

@@ -2545,6 +2545,11 @@ impl Group {
 #[derive(Clone, Copy)]
 pub struct WideLayout(pub Signal<bool>);
 
+/// The window's width over its height, published by the host (which can
+/// see its window) — the rig goes wide at 2.6 : 1 and over.
+#[derive(Clone, Copy)]
+pub struct WindowAspect(pub Signal<f64>);
+
 /// Which groups the Control view shows, most recently picked last: with
 /// the switches up, the last one; with them hidden, the last two, stacked
 /// in signal order. Provided by the host (the top bar picks).
