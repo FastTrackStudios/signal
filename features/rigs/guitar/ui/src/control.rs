@@ -3023,14 +3023,14 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // the pre effects in front of the amp.
                     if show_pre {
                         div { class: "gap-0 min-h-0 w-full", style: group_style,
-                            div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                            div { style: if wide { "flex: 0.85 1 0%; min-width: 0; min-height: 0; display: flex;" } else { "flex: 1 1 0%; min-height: 0; display: flex;" },
                                 crate::rig_faces::InputRow { blocks: blocks.clone(),
                                     // The Pre Comp's visualiser stands at the head of the drive
                                     // board (see the AMP row).
                                     after_filter: VNode::empty(),
                                 }
                             }
-                            div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                            div { style: if wide { "flex: 1.15 1 0%; min-width: 0; min-height: 0; display: flex;" } else { "flex: 1 1 0%; min-height: 0; display: flex;" },
                                 crate::rig_faces::PreFxRow { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
                             }
                         }
@@ -3096,7 +3096,10 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // POST, top: the EQ, the post compressor and the patch's
                     // volume (level and boost); the modules follow below.
                     if show_post {
-                        div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 0;",
+                        // Wide, the EQ and compressor give the modulation
+                        // panels some of their room (as PRE's input row does
+                        // its pre effects', so the lanes stay aligned).
+                        div { class: "flex gap-0 min-h-0 w-full", style: if wide { "flex: 0.85 1 0%; min-width: 0; min-height: 0;" } else { "flex: 1 1 0%; min-height: 0;" },
                             div { class: "min-h-0 h-full flex flex-col", style: "flex: 3 1 0%;",
                                 ZoomPanel {
                                     title: "EQ".to_string(),
@@ -3147,8 +3150,10 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     if show_time {
                     // Time section: stereo delay + stereo reverb + modulation —
                     // or, on PRE, the Pre FX module's motion, delay and reverb.
-                    div { class: "flex gap-0 min-h-0 w-full", style: if FRAME_ROWS { "flex: 1 1 0%; min-height: 150px;" } else { "flex: 2 1 0%; min-height: 150px;" },
-                        div { class: "min-h-0 h-full flex flex-col gap-0", style: "flex: 1 1 0%;",
+                    div { class: "flex gap-0 min-h-0 w-full", style: if FRAME_ROWS && wide { "flex: 1.15 1 0%; min-width: 0; min-height: 150px;" } else if FRAME_ROWS { "flex: 1 1 0%; min-height: 150px;" } else { "flex: 2 1 0%; min-height: 150px;" },
+                        // Modulation and motion side by side, each the row's
+                        // full height.
+                        div { class: "min-h-0 h-full flex gap-0", style: "flex: 1 1 0%; min-width: 0; flex-direction: row;",
                             if !bpre {
                                 ZoomPanel { title: "Modulation".to_string(), flush: true,
                                     bypassed: group_bypassed(&blocks, &MOD_KINDS, false),
@@ -3201,7 +3206,9 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 }
                             }
                         }
-                        div { class: "min-h-0 h-full flex flex-col", style: "flex: 4 1 0%;",
+                        // The Time module: 65 % of this half, the Pre FX
+                        // lanes above taking half that — the lanes line up.
+                        div { class: "min-h-0 h-full flex flex-col", style: if FRAME_ROWS && wide { "flex: 0 0 65%; min-width: 0;" } else { "flex: 4 1 0%;" },
                         div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%;",
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {

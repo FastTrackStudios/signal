@@ -749,10 +749,9 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
             }
             if !lanes.is_empty() {
                 // One Time lane's width, pinned to the right: the bottom row
-                // gives its Time module 4/5 of what its 150 px separator
-                // leaves, a lane half of that; this row has its separator
-                // too, so a lane is 40 % of what this row is given.
-                div { style: "flex: 0 0 40%; min-width: 0; height: 100%; display: flex; flex-direction: column; border-left: 1px solid #1d1f24;",
+                // gives its Time module 65 % of the same width this row has,
+                // a lane half of that.
+                div { style: "flex: 0 0 32.5%; min-width: 0; height: 100%; display: flex; flex-direction: column; border-left: 1px solid #1d1f24;",
                     for (b, f, extra) in lanes {
                         div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
                             BlockFace { block: b.clone(), face: f, extra, fill: true, stepper: true }
