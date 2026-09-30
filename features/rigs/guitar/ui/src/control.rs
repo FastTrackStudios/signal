@@ -512,7 +512,7 @@ pub(crate) const MOD_ENGINES: [&str; 11] = [
 const TREM_MODES: [&str; 3] = ["Mono", "Stereo", "Harmonic"];
 
 pub(crate) const DELAY_ALGOS: [&str; 13] = [
-    "Tape", "Digital", "dBucket", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum",
+    "Tape", "Digital", "Analog", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum",
     "Oil Can", "MultiTap", "Spectral", "Filter",
 ];
 /// `reverb::AlgorithmType::ALL` order.

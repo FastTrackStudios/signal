@@ -12,7 +12,7 @@ use dioxus::prelude::*;
 
 /// `delay::DelayStyle` order — the `TimeLine` MX machines.
 pub const DELAY_ALGOS: [&str; 13] = [
-    "Tape", "Digital", "dBucket", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum",
+    "Tape", "Digital", "Analog", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum",
     "Oil Can", "MultiTap", "Spectral", "Filter",
 ];
 
