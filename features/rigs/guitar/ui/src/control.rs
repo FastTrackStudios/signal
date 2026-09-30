@@ -2911,7 +2911,23 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     if show_pre {
                         div { class: "gap-0 min-h-0 w-full", style: group_style,
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
-                                crate::rig_faces::InputRow { blocks: blocks.clone() }
+                                crate::rig_faces::InputRow { blocks: blocks.clone(),
+                                    // The input compressor, right after the
+                                    // envelope filter: its own picture.
+                                    after_filter: rsx! {
+                                        div { class: "min-h-0 h-full flex flex-col", style: "flex: 0.7 1 0%; min-width: 0; border-right: 1px solid #1d1f24;",
+                                            ZoomPanel {
+                                                title: "Pre Comp".to_string(),
+                                                left_power_on: comp.as_ref().map(|b| !b.bypassed),
+                                                if let Some(c) = comp.clone() {
+                                                    LiveComp { block: c, state }
+                                                } else {
+                                                    {empty_slot("Pre Comp")}
+                                                }
+                                            }
+                                        }
+                                    },
+                                }
                             }
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
                                 crate::rig_faces::PreFxRow { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
@@ -2928,7 +2944,20 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             // Wide: the amps get more of the row, and a
                             // loaded cab stands beside its amp.
                             div { style: if wide { "flex: 1.5 1 0%; min-width: 0; min-height: 0; display: flex;" } else { "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;" },
-                                crate::rig_faces::AmpRow { blocks: blocks.clone(), cabs: wide }
+                                crate::rig_faces::AmpRow { blocks: blocks.clone(), cabs: wide,
+                                    // The patch's level and pan, after the gate.
+                                    trailing: rsx! {
+                                        div { class: "min-h-0 h-full flex flex-col flex-shrink-0", style: "width: 92px;",
+                                            ZoomPanel { title: "Level".to_string(),
+                                                if let Some(t) = trim.clone() {
+                                                    PatchTrimPanel { block: t }
+                                                } else {
+                                                    {empty_slot("Level")}
+                                                }
+                                            }
+                                        }
+                                    },
+                                }
                             }
                         }
                     }
@@ -2957,15 +2986,6 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                         LiveComp { block: c, state }
                                     } else {
                                         {empty_slot("Post Comp")}
-                                    }
-                                }
-                            }
-                            div { class: "min-h-0 h-full flex flex-col flex-shrink-0", style: "width: 92px;",
-                                ZoomPanel { title: "Volume".to_string(),
-                                    if let Some(t) = trim.clone() {
-                                        PatchTrimPanel { block: t }
-                                    } else {
-                                        {empty_slot("Volume")}
                                     }
                                 }
                             }

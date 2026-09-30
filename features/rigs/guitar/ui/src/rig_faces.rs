@@ -319,7 +319,13 @@ pub fn DrivesRow(blocks: Vec<LiveBlock>) -> Element {
 /// The Amp row: every loaded amp, its face or a card; with one amp, the
 /// Amp EQ's graph beside it; the gate's picture on the right.
 #[component]
-pub fn AmpRow(blocks: Vec<LiveBlock>, #[props(default)] cabs: bool) -> Element {
+pub fn AmpRow(
+    blocks: Vec<LiveBlock>,
+    #[props(default)] cabs: bool,
+    /// Drawn last, after the gate: the patch's level and pan.
+    #[props(default = VNode::empty())]
+    trailing: Element,
+) -> Element {
     let faces = use_faces();
     // Every amp the preset loaded: the first always, any other when it
     // plays something (a stereo module's Amp R).
@@ -358,6 +364,7 @@ pub fn AmpRow(blocks: Vec<LiveBlock>, #[props(default)] cabs: bool) -> Element {
             if let (Some(g), Some(f)) = (gate, faces.gate.clone()) {
                 BlockPanel { block: g, face: Some(f), card: (250.0, 392.0) }
             }
+            {trailing}
         }
     }
 }
@@ -459,7 +466,12 @@ fn UnboundFace(face: FaceEntry) -> Element {
 /// a picture of what it is doing. A unit whose block is not in the chain
 /// yet is drawn but not bound.
 #[component]
-pub fn InputRow(blocks: Vec<LiveBlock>) -> Element {
+pub fn InputRow(
+    blocks: Vec<LiveBlock>,
+    /// Drawn right after the envelope filter: the input compressor.
+    #[props(default = VNode::empty())]
+    after_filter: Element,
+) -> Element {
     let faces = use_faces();
     let unit = |kind: &str, bt: BlockType| -> (Option<LiveBlock>, Option<FaceEntry>) {
         (blocks.iter().find(|b| b.block_type == bt).cloned(), pick(&faces.input, kind).cloned())
@@ -499,6 +511,7 @@ pub fn InputRow(blocks: Vec<LiveBlock>) -> Element {
                     }
                 }
             }
+            {after_filter}
         }
     }
 }
