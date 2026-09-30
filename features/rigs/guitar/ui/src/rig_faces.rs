@@ -4,7 +4,8 @@
 //! pedal preset in each drive slot and a NAM capture in each amp. frame's
 //! `rig-faces/faces.json` only says what those look like — a drive slot's
 //! pedal preset name, or an amp's capture file name, matched against each
-//! entry's words (case-insensitive, first entry wins). Nothing matched, the
+//! entry's words (case-insensitive, first entry wins; `a+b` needs every
+//! word). Nothing matched, the
 //! block is a plain card with its name.
 //!
 //! A face binds to its block by convention: `<ns>/<param>` is the block's
@@ -101,7 +102,8 @@ fn pick<'a>(list: &'a [FaceEntry], name: &str) -> Option<&'a FaceEntry> {
     if name.is_empty() {
         return None;
     }
-    list.iter().find(|e| e.words.iter().any(|w| name.contains(w.as_str())))
+    // `a+b` needs every word; otherwise any one.
+    list.iter().find(|e| e.words.iter().any(|w| w.split('+').all(|part| name.contains(part.trim()))))
 }
 
 /// The manifest, read once per mount (a regenerated set is picked up by
