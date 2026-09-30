@@ -1027,6 +1027,40 @@ pub const LIMITER: &str = "Limiter";
 /// The module holding what sits in front of the amp.
 pub const PRE_FX: &str = "Pre FX";
 
+/// The Core module: the core tone a patch is built on — its compressor,
+/// its drive board (the Drive module), its amps (the Amp module), the gate,
+/// the amp EQ and the post compressor. A patch's preset *is* its Core.
+pub const CORE: &str = "Core";
+
+/// The chain blocks the Core owns besides its drives and amps.
+pub const CORE_BLOCKS: [&str; 4] = [PRE_COMP, "Gate", "Amp EQ", POST_COMP];
+
+/// The module a chain block belongs to: `Core` (compressor, gate, amp EQ,
+/// post compressor), `Drive` / `Amp` (the Core's drive board and amps),
+/// `Delay` / `Reverb` (the Time module's lanes) — or none. Most blocks
+/// belong to no module (the pre effects, pitch, wah, filter, chorus,
+/// tremolo…): a patch picks their block presets directly.
+#[must_use]
+pub fn module_of_block(name: &str, bt: BlockType) -> Option<&'static str> {
+    use signal_proto::BlockCategory;
+    let is = |b: &str| b.eq_ignore_ascii_case(name);
+    if CORE_BLOCKS.iter().any(|b| is(b)) {
+        return Some(CORE);
+    }
+    // The pre effects are blocks of their own, whatever their type.
+    if name.len() > 4 && name[..4].eq_ignore_ascii_case("pre ") {
+        return None;
+    }
+    match bt.category() {
+        BlockCategory::Drive => Some("Drive"),
+        BlockCategory::Amp => Some("Amp"),
+        _ if bt == BlockType::Cabinet => Some("Amp"),
+        _ if bt == BlockType::Delay => Some("Delay"),
+        _ if bt == BlockType::Reverb => Some("Reverb"),
+        _ => None,
+    }
+}
+
 /// Put a patch's level on its trim block, INSIDE the chain and upstream of
 /// the time effects.
 ///
@@ -2536,5 +2570,28 @@ mod slot_tests {
         assert!(empty.empty && empty.pedal.is_empty());
         // A slot assigned a pedal the library no longer has is empty too.
         assert!(slot_pedal("Drive 2", &[slot("Drive 2", "Gone", 0)], &dps).empty);
+    }
+}
+
+#[cfg(test)]
+mod module_of_block_tests {
+    use super::*;
+
+    #[test]
+    fn the_core_owns_its_tone_and_the_rest_are_blocks_of_their_own() {
+        assert_eq!(module_of_block(PRE_COMP, BlockType::Compressor), Some(CORE));
+        assert_eq!(module_of_block("Gate", BlockType::Gate), Some(CORE));
+        assert_eq!(module_of_block("Amp EQ", BlockType::Eq), Some(CORE));
+        assert_eq!(module_of_block(POST_COMP, BlockType::Compressor), Some(CORE));
+        assert_eq!(module_of_block("Drive 1", BlockType::Drive), Some("Drive"));
+        assert_eq!(module_of_block("Amp L", BlockType::Amp), Some("Amp"));
+        assert_eq!(module_of_block("DLY 1", BlockType::Delay), Some("Delay"));
+        assert_eq!(module_of_block("VERB 2", BlockType::Reverb), Some("Reverb"));
+        // The pre effects, pitch, chorus, tremolo: no module's.
+        assert_eq!(module_of_block("Pre Delay", BlockType::Delay), None);
+        assert_eq!(module_of_block("Pre Verb", BlockType::Reverb), None);
+        assert_eq!(module_of_block("Chorus", BlockType::Chorus), None);
+        assert_eq!(module_of_block("Tremolo", BlockType::Trem), None);
+        assert_eq!(module_of_block("Pitch", BlockType::Pitch), None);
     }
 }

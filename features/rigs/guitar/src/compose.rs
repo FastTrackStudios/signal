@@ -335,9 +335,10 @@ pub fn module_picks(comp: &Compositions, patch: &PatchDef) -> Vec<ModuleChoiceDe
     picks
 }
 
-/// The block presets a patch ends up with, one per block: its module
-/// snapshots' (in signal order), then its preset snapshot's, then its own —
-/// the last word per block, as `flatten` applies them.
+/// The block presets a patch ends up with, one per block, in the layers
+/// `flatten` applies them — its Core preset's module picks, its Core
+/// snapshot's own, its module picks, then its own — the last word per
+/// block.
 #[must_use]
 pub fn block_picks(comp: &Compositions, patch: &PatchDef) -> Vec<BlockChoiceDef> {
     let mut out: Vec<BlockChoiceDef> = Vec::new();
@@ -348,25 +349,25 @@ pub fn block_picks(comp: &Compositions, patch: &PatchDef) -> Vec<BlockChoiceDef>
         Some(x) => *x = c.clone(),
         None => out.push(c.clone()),
     };
-    let picks = module_picks(comp, patch);
-    for m in MODULES
-        .iter()
-        .filter_map(|m| picks.iter().find(|p| p.module.eq_ignore_ascii_case(m)))
-        .chain(picks.iter().filter(|p| !MODULES.iter().any(|m| p.module.eq_ignore_ascii_case(m))))
-    {
-        if let Some(snap) = comp
-            .module(&m.module, &m.preset)
-            .and_then(|mp| snapshot(&mp.snapshots, &m.snapshot, |s| &s.name))
-        {
-            snap.blocks.iter().for_each(&mut put);
+    let module_blocks = |layer: &[ModuleChoiceDef], put: &mut dyn FnMut(&BlockChoiceDef)| {
+        for m in in_signal_order(layer) {
+            if let Some(snap) = comp
+                .module(&m.module, &m.preset)
+                .and_then(|mp| snapshot(&mp.snapshots, &m.snapshot, |s| &s.name))
+            {
+                snap.blocks.iter().for_each(&mut *put);
+            }
         }
-    }
+    };
+    let (core, own) = pick_layers(comp, patch);
+    module_blocks(&core, &mut put);
     if let Some(snap) = comp
         .preset(&patch.rig_preset)
         .and_then(|p| snapshot(&p.snapshots, &patch.snapshot, |s| &s.name))
     {
         snap.blocks.iter().for_each(&mut put);
     }
+    module_blocks(&own, &mut put);
     patch.blocks.iter().for_each(&mut put);
     out
 }
@@ -431,7 +432,95 @@ pub fn amp_pool_name(preset: &str, snapshot: &str, slot: &str) -> String {
     format!("{preset} · {snapshot} [{slot}]")
 }
 
+/// A layer's picks in signal order (`MODULES`), then any unknown module.
+fn in_signal_order(picks: &[ModuleChoiceDef]) -> Vec<&ModuleChoiceDef> {
+    MODULES
+        .iter()
+        .filter_map(|m| picks.iter().find(|p| p.module.eq_ignore_ascii_case(m)))
+        .chain(picks.iter().filter(|p| !MODULES.iter().any(|m| p.module.eq_ignore_ascii_case(m))))
+        .collect()
+}
+
+/// The two layers of module picks a patch plays, in the order they apply:
+/// its Core preset's own (its Drive and Amp — less any module the patch
+/// picks itself), then the patch's picks. Each expanded (a Time pick
+/// brings its Delay and Reverb).
+fn pick_layers(comp: &Compositions, patch: &PatchDef) -> (Vec<ModuleChoiceDef>, Vec<ModuleChoiceDef>) {
+    let own = expand_picks(comp, patch.modules.clone());
+    let core: Vec<ModuleChoiceDef> = expand_picks(
+        comp,
+        comp.preset(&patch.rig_preset)
+            .and_then(|p| snapshot(&p.snapshots, &patch.snapshot, |s| &s.name))
+            .map(|s| s.modules.clone())
+            .unwrap_or_default(),
+    )
+    .into_iter()
+    .filter(|c| !own.iter().any(|o| o.module.eq_ignore_ascii_case(&c.module)))
+    .collect();
+    (core, own)
+}
+
+/// Apply one module pick to `patch`: its snapshot's amps (synthesised
+/// pool presets), drives, block presets and overrides.
+fn apply_pick(comp: &Compositions, pick: &ModuleChoiceDef, patch: &mut PatchDef, overrides: &mut Vec<OverrideDef>, synthesised: &mut Vec<PresetDef>) {
+    let Some(module) = comp.module(&pick.module, &pick.preset) else {
+        tracing::warn!(patch = %patch.name, module = %pick.module, preset = %pick.preset, "compose: no such module preset");
+        return;
+    };
+    let Some(snap) = snapshot(&module.snapshots, &pick.snapshot, |s| &s.name) else {
+        return;
+    };
+    if pick.module.eq_ignore_ascii_case("Amp") {
+        let mut pool = |slot: &str, nam: &str, cab: &str, level_db: f32| -> String {
+            if nam.is_empty() {
+                return String::new();
+            }
+            let name = amp_pool_name(&module.name, &snap.name, slot);
+            if !synthesised.iter().any(|p| p.name == name) {
+                synthesised.push(PresetDef {
+                    name: name.clone(),
+                    nam: nam.to_string(),
+                    hash: String::new(),
+                    cab: cab.to_string(),
+                    cab_hash: String::new(),
+                    level_db,
+                });
+            }
+            name
+        };
+        let l = pool("L", &snap.nam, &snap.cab, snap.level_db);
+        if !l.is_empty() {
+            patch.preset = l;
+        }
+        // The patch's own second amp wins over the snapshot's — patch
+        // level is the last word, as with overrides.
+        let r = pool("R", &snap.nam2, &snap.cab2, snap.level2_db);
+        if patch.preset2.is_empty() {
+            patch.preset2 = r;
+        }
+    }
+    for choice in &snap.blocks {
+        overrides.extend(comp.block_overrides(choice));
+    }
+    for d in &snap.drives {
+        match patch.drives.iter_mut().find(|x| x.block.eq_ignore_ascii_case(&d.block)) {
+            Some(x) => *x = d.clone(),
+            None => patch.drives.push(d.clone()),
+        }
+    }
+    overrides.extend(snap.overrides.iter().cloned());
+}
+
 /// Resolve every composed patch into the fields the chain builders play.
+///
+/// A patch is its Core preset — the core tone, and its sound's base —
+/// with what the patch picks around it on top, each layer over the last:
+///
+/// 1. the Core snapshot's own module picks (its Drive and Amp), less any
+///    module the patch picks itself;
+/// 2. the Core snapshot's block presets, overrides and level;
+/// 3. the patch's module picks (Time with its Delay and Reverb, …);
+/// 4. the patch's block presets, then its overrides.
 ///
 /// Patches with no preset and no module picks pass through untouched, so a
 /// profile written before compositions existed builds exactly as before.
@@ -444,69 +533,10 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
         if patch.rig_preset.is_empty() && patch.modules.is_empty() && patch.blocks.is_empty() {
             continue;
         }
-        let picks = module_picks(comp, patch);
+        let (core, own) = pick_layers(comp, patch);
         let mut overrides: Vec<OverrideDef> = Vec::new();
-
-        // Module snapshots first, in signal order, then anything unknown.
-        let ordered = MODULES
-            .iter()
-            .filter_map(|m| picks.iter().find(|p| p.module.eq_ignore_ascii_case(m)))
-            .chain(
-                picks
-                    .iter()
-                    .filter(|p| !MODULES.iter().any(|m| p.module.eq_ignore_ascii_case(m))),
-            );
-        for pick in ordered {
-            let Some(module) = comp.module(&pick.module, &pick.preset) else {
-                tracing::warn!(patch = %patch.name, module = %pick.module, preset = %pick.preset, "compose: no such module preset");
-                continue;
-            };
-            let Some(snap) = snapshot(&module.snapshots, &pick.snapshot, |s| &s.name) else {
-                continue;
-            };
-            if pick.module.eq_ignore_ascii_case("Amp") {
-                let mut pool = |slot: &str, nam: &str, cab: &str, level_db: f32| -> String {
-                    if nam.is_empty() {
-                        return String::new();
-                    }
-                    let name = amp_pool_name(&module.name, &snap.name, slot);
-                    if !synthesised.iter().any(|p| p.name == name) {
-                        synthesised.push(PresetDef {
-                            name: name.clone(),
-                            nam: nam.to_string(),
-                            hash: String::new(),
-                            cab: cab.to_string(),
-                            cab_hash: String::new(),
-                            level_db,
-                        });
-                    }
-                    name
-                };
-                let l = pool("L", &snap.nam, &snap.cab, snap.level_db);
-                if !l.is_empty() {
-                    patch.preset = l;
-                }
-                // The patch's own second amp wins over the snapshot's —
-                // patch level is the last word, as with overrides.
-                let r = pool("R", &snap.nam2, &snap.cab2, snap.level2_db);
-                if patch.preset2.is_empty() {
-                    patch.preset2 = r;
-                }
-            }
-            for choice in &snap.blocks {
-                overrides.extend(comp.block_overrides(choice));
-            }
-            for d in &snap.drives {
-                match patch
-                    .drives
-                    .iter_mut()
-                    .find(|x| x.block.eq_ignore_ascii_case(&d.block))
-                {
-                    Some(x) => *x = d.clone(),
-                    None => patch.drives.push(d.clone()),
-                }
-            }
-            overrides.extend(snap.overrides.iter().cloned());
+        for pick in in_signal_order(&core) {
+            apply_pick(comp, pick, patch, &mut overrides, &mut synthesised);
         }
         if let Some(snap) = comp
             .preset(&patch.rig_preset)
@@ -522,6 +552,9 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
             // an overwrite here threw away, so a patch-level fix could never
             // take.
             patch.level_db += snap.level_db;
+        }
+        for pick in in_signal_order(&own) {
+            apply_pick(comp, pick, patch, &mut overrides, &mut synthesised);
         }
         // The patch's own block presets, over everything above.
         for choice in &patch.blocks {
@@ -734,6 +767,20 @@ mod tests {
             .unwrap();
         assert_eq!(verb.param_f32("level"), Some(db(0.5)));
         assert_eq!(verb.param_f32("mix"), Some(1.0), "fully wet");
+    }
+
+    /// A patch picks around its Core: its own module pick goes on over
+    /// what the Core snapshot sets itself — the Time it picks sets the
+    /// reverb, not the Core snapshot's own override of it.
+    #[test]
+    fn a_patchs_module_pick_goes_on_over_its_core_snapshot() {
+        let mut def = composed("Clean");
+        def.patches[0].modules = vec![choice("Time", "Plate", "Short")];
+        let flat = flatten(&def, &comp());
+        let built = crate::profiles::build_profile(&flat, &drive_presets());
+        let verb = built.patches[0].chain.iter().find(|b| b.name == "VERB 1").unwrap();
+        let db = crate::profiles::mix_to_level_db;
+        assert_eq!(verb.param_f32("level"), Some(db(0.2)), "the patch's Time pick, over the Core snapshot's 0.3");
     }
 
     #[test]
