@@ -194,7 +194,7 @@ pub fn BlockFace(block: LiveBlock, face: FaceEntry, #[props(default)] extra: Vec
     let mut targets: Vec<(String, LiveBlock)> = vec![(face.ns.clone(), block.clone())];
     targets.extend(extra);
     rsx! {
-        div { style: "height: 100%; max-width: 100%; aspect-ratio: {w} / {h}; flex: 0 1 auto; min-width: 0; min-height: 0;",
+        div { style: "height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0;",
             FrameSurface {
                 key: "{block.id}-{face.face}",
                 name: face.face.clone(),
@@ -228,7 +228,7 @@ pub fn NameCard(block: LiveBlock, aspect: (f64, f64)) -> Element {
     let lamp = if on { "#4ade80" } else { "#3a3d44" };
     rsx! {
         div {
-            style: "height: 100%; width: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; padding: 10px; box-sizing: border-box; opacity: {opacity};",
+            style: "height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; padding: 10px; box-sizing: border-box; opacity: {opacity};",
             onclick: move |_| {
                 if empty {
                     return;
@@ -256,13 +256,16 @@ const PEDAL: (f64, f64) = (180.0, 286.0);
 const AMP: (f64, f64) = (792.0, 392.0);
 
 /// A panel in a row: its own ground, flush against its neighbours (no
-/// gaps, no padding), taking `weight` of the row's width — a face's
-/// proportion, so the row is shared the way the faces would share it.
+/// gaps, no padding). Its faces come first — each takes its width from
+/// the row's full height — and the panel grows by `weight` into what the
+/// faces leave (a visualiser fills it, or the panel's ground does). A
+/// panel of weight 0 is exactly its faces.
 #[component]
 fn Panel(weight: f64, children: Element) -> Element {
+    let flex = if weight > 0.0 { format!("{weight} 1 auto") } else { "0 0 auto".to_string() };
     rsx! {
         div {
-            style: "flex: {weight} 1 0%; min-width: 0; height: 100%; min-height: 0; display: flex; flex-direction: row; align-items: stretch; justify-content: center; background: #121317; border-right: 1px solid #1d1f24; box-sizing: border-box; overflow: hidden;",
+            style: "flex: {flex}; height: 100%; min-height: 0; display: flex; flex-direction: row; align-items: stretch; justify-content: center; background: #121317; border-right: 1px solid #1d1f24; box-sizing: border-box; overflow: hidden;",
             {children}
         }
     }
@@ -278,16 +281,11 @@ fn Row(children: Element) -> Element {
     }
 }
 
-fn ratio((w, h): (f64, f64)) -> f64 {
-    if h > 0.0 { w / h } else { 1.0 }
-}
-
 /// A block in its panel: its face, or its card.
 #[component]
 fn BlockPanel(block: LiveBlock, face: Option<FaceEntry>, card: (f64, f64)) -> Element {
-    let size = face.as_ref().map_or(card, |f| f.size);
     rsx! {
-        Panel { weight: ratio(size),
+        Panel { weight: 1.0,
             if let Some(f) = face {
                 BlockFace { block, face: f }
             } else {
@@ -329,8 +327,6 @@ pub fn AmpRow(blocks: Vec<LiveBlock>) -> Element {
     let eq = blocks.iter().find(|b| b.block_type == BlockType::Eq && b.name.eq_ignore_ascii_case("Amp EQ")).cloned();
     let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
     let one = amps.len() == 1;
-    // The Amp module's pick names the amp ("Vibroverb + Dumble · Clean").
-    let amp_label = amps.first().map(|b| b.preset.clone()).unwrap_or_default();
     rsx! {
         Row {
             for b in amps {
@@ -340,10 +336,6 @@ pub fn AmpRow(blocks: Vec<LiveBlock>) -> Element {
                 if let (Some(e), Some(f)) = (eq, faces.eq.clone()) {
                     BlockPanel { block: e, face: Some(f), card: AMP }
                 }
-            }
-            // Kept for the Amp module's presets: what is loaded now.
-            Panel { weight: 1.2,
-                PresetsPanel { label: amp_label }
             }
             if let (Some(g), Some(f)) = (gate, faces.gate.clone()) {
                 BlockPanel { block: g, face: Some(f), card: (250.0, 392.0) }
@@ -394,7 +386,7 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                     // The pedal, then what its block is doing — a delay's
                     // repeats, a reverb's tail. A tremolo shows its pulse on
                     // its own lamp.
-                    Panel { key: "{b.id}", weight: ratio(f.size) + if shows_viz(&b) { 1.6 } else { 0.0 },
+                    Panel { key: "{b.id}", weight: if shows_viz(&b) { 1.0 } else { 0.0 },
                         BlockFace { block: b.clone(), face: f.clone(), extra: extra.clone() }
                         if shows_viz(&b) {
                             div { style: "flex: 1 1 0%; min-width: 0; height: 100%; position: relative; display: flex; justify-content: center; border-left: 1px solid #1d1f24;",
@@ -428,22 +420,5 @@ fn viz_of(b: &LiveBlock, tempo_bpm: u32) -> Element {
         BlockType::Delay => rsx! { crate::control::DelayBlockViz { block: b.clone(), tempo_bpm } },
         BlockType::Reverb => rsx! { crate::control::ReverbBlockViz { block: b.clone(), tempo_bpm } },
         _ => rsx! { crate::control::ModBlockViz { block: b.clone() } },
-    }
-}
-
-/// The space kept beside the amps for the Amp module's presets: for now,
-/// what is loaded.
-#[component]
-fn PresetsPanel(label: String) -> Element {
-    let (module, snapshot) = label.split_once(" · ").map_or((label.clone(), String::new()), |(m, s)| (m.to_string(), s.to_string()));
-    rsx! {
-        div { style: "display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 6px; width: 100%; height: 100%; padding: 14px; box-sizing: border-box;",
-            div { style: "color: #6b6f78; font-size: 9px; font-weight: 700; letter-spacing: 1.5px;", "AMP MODULE" }
-            div { style: "color: #e8e6e1; font-size: 15px; font-weight: 600;", "{module}" }
-            if !snapshot.is_empty() {
-                div { style: "color: #9a9ea6; font-size: 12px;", "{snapshot}" }
-            }
-            div { style: "color: #4a4d55; font-size: 10px; margin-top: 8px;", "Presets" }
-        }
     }
 }
