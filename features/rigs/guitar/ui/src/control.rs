@@ -1601,6 +1601,32 @@ fn ModGroupPanel(
         .enumerate()
         .min_by(|a, b| (a.1 - rate).abs().partial_cmp(&(b.1 - rate).abs()).unwrap())
         .map_or(0, |(i, _)| i);
+    // Speed as a note division, mapped to Hz from the tempo (Motion).
+    let speed_picker = rsx! {
+        Picker {
+            options: ["1/4", "1/8.", "1/8", "1/8T", "1/16", "Golden", "Silver"]
+                .iter().map(|l| (*l).to_string()).collect::<Vec<String>>(),
+            selected: cur_div as u32,
+            size: PickerSize::Tiny,
+            on_select: {
+                let rig = rig.clone();
+                let id = cur.id.clone();
+                let div_hz = div_hz.clone();
+                move |i: u32| {
+                    let hz = div_hz.get(i as usize).copied().unwrap_or(2.0);
+                    if let Some(r) = rig.clone() {
+                        let id = id.clone();
+                        spawn(async move {
+                            let _ = r.write_param(id, "rate".into(), hz).await;
+                        });
+                    }
+                }
+            },
+        }
+    };
+    // The shown effect's face, where it has one: its picture and its
+    // knobs, in place of the trace and the loose knobs.
+    let mod_face = crate::rig_faces::use_faces().modulation(cur.block_type.as_str()).cloned();
 
     rsx! {
         div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
@@ -1686,7 +1712,15 @@ fn ModGroupPanel(
                     },
                     _ => rsx! {},
                 }
+                if tempo_divisions && mod_face.is_some() {
+                    {speed_picker.clone()}
+                }
             }
+            if let Some(f) = mod_face.clone() {
+                div { class: "relative flex-1 min-h-0 flex justify-center", style: "padding: 2px 4px 4px;",
+                    crate::rig_faces::BlockFace { block: cur.clone(), face: f }
+                }
+            } else {
             // LFO trace — flat while the group is bypassed (the panel's
             // BYPASSED badge says so).
             div { class: "relative flex-1", style: "min-height: 14px;",
@@ -1703,26 +1737,7 @@ fn ModGroupPanel(
                     // Speed as a note division, mapped to Hz from the tempo.
                     div { class: "flex flex-col gap-0.5",
                         span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "Speed" }
-                        Picker {
-                            options: ["1/4", "1/8.", "1/8", "1/8T", "1/16", "Golden", "Silver"]
-                                .iter().map(|l| (*l).to_string()).collect::<Vec<String>>(),
-                            selected: cur_div as u32,
-                            size: PickerSize::Tiny,
-                            on_select: {
-                                let rig = rig.clone();
-                                let id = cur.id.clone();
-                                let div_hz = div_hz.clone();
-                                move |i: u32| {
-                                    let hz = div_hz.get(i as usize).copied().unwrap_or(2.0);
-                                    if let Some(r) = rig.clone() {
-                                        let id = id.clone();
-                                        spawn(async move {
-                                            let _ = r.write_param(id, "rate".into(), hz).await;
-                                        });
-                                    }
-                                }
-                            },
-                        }
+                        {speed_picker.clone()}
                     }
                 } else if let Some(p) = param(&cur, "rate") {
                     PKnob {
@@ -1737,6 +1752,7 @@ fn ModGroupPanel(
                         fmt: Some(crate::knob::FmtFn((|v| format!("{v:.2}Hz")) as fn(f32) -> String)),
                     }
                 }
+            }
             }
         }
     }

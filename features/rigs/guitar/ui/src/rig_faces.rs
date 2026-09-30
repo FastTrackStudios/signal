@@ -105,6 +105,9 @@ pub struct Faces {
     pub time_delay: Vec<FaceEntry>,
     /// … and per reverb algorithm.
     pub time_reverb: Vec<FaceEntry>,
+    /// The Modulation and Motion modules' effects: a face per block type
+    /// (chorus, tremolo, vibrato).
+    pub modulation: Vec<FaceEntry>,
 }
 
 const SET: &str = "rig-faces";
@@ -176,7 +179,7 @@ impl Faces {
                 return Self::default();
             };
             let list = |k: &str| doc.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default();
-            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry), post_comp: doc.get("post_comp").and_then(entry), time_delay: doc.get("time").and_then(|t| t.get("delay")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), time_reverb: doc.get("time").and_then(|t| t.get("reverb")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default() }
+            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry), post_comp: doc.get("post_comp").and_then(entry), time_delay: doc.get("time").and_then(|t| t.get("delay")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), time_reverb: doc.get("time").and_then(|t| t.get("reverb")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), modulation: list("modulation") }
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -188,6 +191,14 @@ impl Faces {
     #[must_use]
     pub fn drive(&self, preset: &str) -> Option<&FaceEntry> {
         pick(&self.drives, preset)
+    }
+
+    /// The face for a Modulation or Motion effect, by its block type's
+    /// name (`chorus`, `trem`, `vibrato`).
+    #[must_use]
+    pub fn modulation(&self, block_type: &str) -> Option<&FaceEntry> {
+        let name = block_type.to_lowercase();
+        self.modulation.iter().find(|e| e.words.iter().any(|w| *w == name))
     }
 
     /// The face for a delay machine (`style` name) or reverb algorithm.
