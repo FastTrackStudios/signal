@@ -2443,6 +2443,13 @@ fn eq_panel(block: LiveBlock, spectrum: Vec<f32>) -> Element {
 // ── The Control view ────────────────────────────────────────────────────────
 
 /// The guitar instrument panel — see the module docs for the layout.
+
+/// The Control view's two main rows are pages designed in frame (Drives,
+/// then Amp/Cab) instead of the hand-laid compressor/EQ/gate and time rows.
+const FRAME_ROWS: bool = true;
+/// The section bar's choices: the module, then the seven sections.
+const VIEWS: usize = 8;
+
 #[component]
 pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     // Callbacks made once per site, not once per render (see `stable`).
@@ -2563,6 +2570,13 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
 
     let hp = model.headphone.clone();
+    // Which section the bar shows (0 = the Drive → Amp module). Sections
+    // not yet designed in frame show their hand-laid panels: Input the
+    // dynamics/EQ row, Post-FX and Time the time row.
+    let mut section = use_signal(|| 0usize);
+    let view = section();
+    let show_input = !FRAME_ROWS || view == 1;
+    let show_time = !FRAME_ROWS || view == 6 || view == 7;
 
     rsx! {
         div { class: "flex gap-0 h-full min-h-0 overflow-hidden",
@@ -2583,6 +2597,9 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                 // take a share OF and collapses to its basis — which is zero.
                 // The main surface fills the view; what follows it scrolls in.
                 div { class: "flex flex-col gap-0 min-h-0", style: "flex: 0 0 100%; min-height: 0; display: flex; flex-direction: column;",
+                    // The name bars (the modules' picks and each block's
+                    // loaded model) belong to the hand-laid rows.
+                    if !FRAME_ROWS {
                     // ── The board, two rows of four: the pedals (Boost +
                     // Drive 1-3), then the amp stage (Amp L, Cab L, Amp R,
                     // Cab R) in signal order. A drive or amp chunk is its
@@ -2639,6 +2656,42 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                         CabChunk { cab: cab_r.clone(), amp_loaded: amp_r_preset.is_some() }
                     }
+                    }
+                    // The rig as designed in frame (docs: frame's rig-sections):
+                    // the Drives section on top, the Amp/Cab section under
+                    // it — live pages, hot-reloaded as their files change.
+                    // The hand-laid rows they replace follow, off while
+                    // FRAME_ROWS is on.
+                    if FRAME_ROWS {
+                        // The section bar: the Drive → Amp module, then
+                        // each section; a click switches what shows below.
+                        div { class: "flex-shrink-0 w-full", style: "height: 52px;",
+                            crate::frame_surface::FrameSurface {
+                                name: "00-section-bar".to_string(),
+                                on_edit: move |(addr, value): (String, f64)| {
+                                    if addr == "rig/section" {
+                                        section.set((value * (VIEWS - 1) as f64).round() as usize);
+                                    }
+                                },
+                            }
+                        }
+                        if view == 0 || view == 2 {
+                            div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 0;",
+                                crate::frame_surface::FrameSurface { name: "31-row-drives".to_string() }
+                            }
+                        }
+                        if view == 0 || view == 4 {
+                            div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 0;",
+                                crate::frame_surface::FrameSurface { name: "32-row-amp-cab".to_string() }
+                            }
+                        }
+                        if view == 3 || view == 5 {
+                            div { class: "flex items-center justify-center min-h-0 w-full", style: "flex: 1 1 0%; color: #8a8a90; font-size: 13px;",
+                                "Not designed in frame yet."
+                            }
+                        }
+                    }
+                    if show_input {
                     // Height from the column, not from an aspect ratio.
                     //
                     // This row asked for `aspect-ratio: 25 / 9` to get its
@@ -2731,6 +2784,8 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             }
                         }
                     }
+                    }
+                    if show_time {
                     // Time section: stereo delay + stereo reverb + modulation —
                     // or, on PRE, the Pre FX module's motion, delay and reverb.
                     div { class: "flex gap-0 min-h-0 w-full", style: "flex: 2 1 0%; min-height: 150px;",
@@ -2838,6 +2893,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             }
                         }
                         }
+                    }
                     }
                 }
 

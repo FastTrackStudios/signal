@@ -82,6 +82,12 @@ vello.workspace = true
 # than at build time.
 wgpu.workspace = true
 bytemuck = { version = "1", features = ["derive"] }
+# Pages designed in frame, rendered by frame on this window's device and
+# hot-reloaded from their files (see frame_surface.rs). `wgpu_context` is
+# the type Blitz boxes its device in.
+frame-live.workspace = true
+wgpu_context = "0.7"
+tracing.workspace = true
 
 # `rig_shot` — the UI rendered to a PNG with no window and no audio device.
 # The backend is a dev-dep because the UI crate does not depend on it (the

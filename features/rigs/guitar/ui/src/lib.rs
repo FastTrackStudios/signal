@@ -18,6 +18,8 @@ pub use modulation_ui::viz as mod_viz;
 /// The plugin's own vello EQ editor — native only (a painted scene needs a
 /// Blitz host natively, a canvas in a browser).
 mod eq_vello;
+/// Pages designed in frame, running live (hot-reloaded from their files).
+mod frame_surface;
 mod grid;
 /// The shared audio-gui knob (moved to signal-widgets).
 pub use signal_widgets::knob;
