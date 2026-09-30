@@ -757,7 +757,13 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     ("release", "200"),
                 ],
             ))
-            .with_block(off(BlockType::Pitch, "Pitch"))
+            // Its voices stored, so a preset or snapshot can set them: A an
+            // octave up, B an octave down.
+            .with_block(off_fx(
+                BlockType::Pitch,
+                "Pitch",
+                &[("semitones", "12"), ("cents", "0"), ("a_level", "0.7"), ("b_semitones", "-12"), ("b_level", "0.7"), ("dry", "1"), ("mix", "0.5")],
+            ))
             // Volume pedal (clean gain, unity default) — the Control view's
             // left pedal drives it.
             .with_block(on_fx(

@@ -779,11 +779,12 @@ pub fn InputRow(
     let picture = faces.filter_picture.clone();
     rsx! {
         Row {
-            // The pitch stage: its voices, each interval and level.
-            Panel { weight: 0.0,
+            // The pitch stage: its voices on their ladder, the doubler —
+            // the widest unit here, laid out for its room.
+            Panel { weight: 1.3,
                 match (pitch, pitch_face) {
-                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f } },
-                    (None, Some(f)) => rsx! { UnboundFace { face: f } },
+                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, fill: true } },
+                    (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true } },
                     _ => rsx! { div { style: "width: 280px; height: 100%; display: flex;", crate::control::PitchStrip {} } },
                 }
             }
@@ -795,8 +796,8 @@ pub fn InputRow(
                 }
             }
             // The envelope filter: one unit, its screen inside, filling the
-            // room (laid out for it).
-            Panel { weight: 1.0,
+            // room left it (laid out for it).
+            Panel { weight: 0.8,
                 match (filter.clone(), filter_face) {
                     (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, fill: true } },
                     (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true } },
