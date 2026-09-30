@@ -44,6 +44,8 @@ pub struct Faces {
     pub amps: Vec<FaceEntry>,
     pub gate: Option<FaceEntry>,
     pub eq: Option<FaceEntry>,
+    /// A cab beside its amp (wide screens).
+    pub cab: Option<FaceEntry>,
     /// Pedals for the pre effects, by block preset name.
     pub pre: Vec<FaceEntry>,
     /// Pictures of what a block is doing, by its kind (`reverb`).
@@ -91,7 +93,7 @@ impl Faces {
                 return Self::default();
             };
             let list = |k: &str| doc.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default();
-            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry) }
+            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry) }
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -317,7 +319,7 @@ pub fn DrivesRow(blocks: Vec<LiveBlock>) -> Element {
 /// The Amp row: every loaded amp, its face or a card; with one amp, the
 /// Amp EQ's graph beside it; the gate's picture on the right.
 #[component]
-pub fn AmpRow(blocks: Vec<LiveBlock>) -> Element {
+pub fn AmpRow(blocks: Vec<LiveBlock>, #[props(default)] cabs: bool) -> Element {
     let faces = use_faces();
     // Every amp the preset loaded: the first always, any other when it
     // plays something (a stereo module's Amp R).
@@ -334,7 +336,19 @@ pub fn AmpRow(blocks: Vec<LiveBlock>) -> Element {
     rsx! {
         Row {
             for b in amps {
-                BlockPanel { key: "{b.id}", face: faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).cloned(), block: b.clone(), card: AMP }
+                if let Some((cab, face)) = cabs.then(|| cab_of(&blocks, &b).zip(faces.cab.clone())).flatten() {
+                    // The amp and its cab, halves of one panel.
+                    Panel { key: "{b.id}", weight: 1.0,
+                        if let Some(f) = faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).cloned() {
+                            BlockFace { block: b.clone(), face: f }
+                        } else {
+                            NameCard { block: b.clone(), aspect: AMP }
+                        }
+                        BlockFace { block: cab, face }
+                    }
+                } else {
+                    BlockPanel { key: "{b.id}", face: faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).cloned(), block: b.clone(), card: AMP }
+                }
             }
             if one {
                 if let (Some(e), Some(f)) = (eq, faces.eq.clone()) {
@@ -485,4 +499,14 @@ pub fn InputRow(blocks: Vec<LiveBlock>) -> Element {
             }
         }
     }
+}
+
+/// An amp's cab, when one is loaded: `Amp L`'s is `Cab L`, and a cab is
+/// loaded when it names an impulse (its preset is the IR's name).
+fn cab_of(blocks: &[LiveBlock], amp: &LiveBlock) -> Option<LiveBlock> {
+    let side = amp.name.rsplit(' ').next().unwrap_or("L");
+    blocks
+        .iter()
+        .find(|b| b.block_type == BlockType::Cabinet && b.name.eq_ignore_ascii_case(&format!("Cab {side}")) && !b.preset.is_empty())
+        .cloned()
 }

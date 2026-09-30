@@ -2539,6 +2539,12 @@ impl Group {
     }
 }
 
+/// The window is wide (an ultrawide, 5120 × 1440): every group shows, in
+/// signal order, each on one row with its two halves side by side — the
+/// whole rig at once. Provided by the host, which measures its body.
+#[derive(Clone, Copy)]
+pub struct WideLayout(pub Signal<bool>);
+
 /// Which groups the Control view shows, most recently picked last: with
 /// the switches up, the last one; with them hidden, the last two, stacked
 /// in signal order. Provided by the host (the top bar picks).
@@ -2704,7 +2710,15 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     // The groups the top bar picked (AMP alone by default; AMP over POST
     // with the switches hidden).
     let groups = try_use_context::<ShownGroups>().unwrap_or_default();
-    let shown = groups.shown();
+    let wide = try_use_context::<WideLayout>().is_some_and(|w| (w.0)());
+    // Wide: the whole rig, every group, each on one row.
+    let shown = if wide { Group::ALL.to_vec() } else { groups.shown() };
+    // A group's two rows: stacked, or side by side on one row when wide.
+    let group_style = if wide {
+        "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;"
+    } else {
+        "flex: 2 1 0%; min-height: 0; display: flex; flex-direction: column;"
+    };
     let show_input = !FRAME_ROWS;
     let show_pre = FRAME_ROWS && shown.contains(&Group::Pre);
     let show_amp = FRAME_ROWS && shown.contains(&Group::Amp);
@@ -2890,7 +2904,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // PRE: the input stage (gain, pitch, compressor, EQ), then
                     // the pre effects in front of the amp.
                     if show_pre {
-                        div { class: "flex flex-col gap-0 min-h-0 w-full", style: "flex: 2 1 0%; min-height: 0; display: flex; flex-direction: column;",
+                        div { class: "gap-0 min-h-0 w-full", style: group_style,
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
                                 crate::rig_faces::InputRow { blocks: blocks.clone() }
                             }
@@ -2902,15 +2916,19 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // AMP: the drives, then the amps — the blocks the preset
                     // loaded, each drawn by its frame face (or a card).
                     if show_amp {
-                        div { class: "flex flex-col gap-0 min-h-0 w-full", style: "flex: 2 1 0%; min-height: 0; display: flex; flex-direction: column;",
-                            div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                        div { class: "gap-0 min-h-0 w-full", style: group_style,
+                            div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;",
                                 crate::rig_faces::DrivesRow { blocks: blocks.clone() }
                             }
-                            div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
-                                crate::rig_faces::AmpRow { blocks: blocks.clone() }
+                            // Wide: the amps get more of the row, and a
+                            // loaded cab stands beside its amp.
+                            div { style: if wide { "flex: 1.5 1 0%; min-width: 0; min-height: 0; display: flex;" } else { "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;" },
+                                crate::rig_faces::AmpRow { blocks: blocks.clone(), cabs: wide }
                             }
                         }
                     }
+                    // POST: its two rows, stacked or (wide) side by side.
+                    div { class: "gap-0 min-h-0 w-full", style: if show_post || !FRAME_ROWS { group_style } else { "display: none;" },
                     // POST, top: the EQ, the post compressor and the patch's
                     // volume (level and boost); the modules follow below.
                     if show_post {
@@ -3056,6 +3074,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             }
                         }
                         }
+                    }
                     }
                     }
                 }

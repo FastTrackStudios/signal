@@ -96,6 +96,10 @@ pub fn GuitarRigRemote() -> Element {
     // The Control view's groups (PRE / AMP / POST): picked in the bar; two
     // fit when the switches and macros are hidden.
     let groups = use_context_provider(crate::control::ShownGroups::new);
+    // Wide (an ultrawide window): the whole rig at once, and the macros
+    // beside the switches. Measured on the body.
+    let mut wide = use_signal(|| false);
+    use_context_provider(|| crate::control::WideLayout(wide));
     if *groups.two.peek() != (switches() == Switches::Hidden) {
         let mut two = groups.two;
         two.set(switches() == Switches::Hidden);
@@ -673,6 +677,16 @@ pub fn GuitarRigRemote() -> Element {
             // appeared and the window looked frozen.
             div {
                 class: "flex-1 min-h-0 flex flex-row overflow-hidden",
+                onresize: move |e| {
+                    if let Ok(size) = e.get_content_box_size()
+                        && size.height > 1.0
+                    {
+                        let is_wide = size.width / size.height >= 2.6;
+                        if *wide.peek() != is_wide {
+                            wide.set(is_wide);
+                        }
+                    }
+                },
                 style: if library_open().is_some() || palette_open() || audio_open() { "display: none;" } else { "" },
                 // The left sidebar follows the mode: the pool for Preset,
                 // the profile tree for Profile, the set and its songs for
@@ -782,23 +796,27 @@ pub fn GuitarRigRemote() -> Element {
                             // directly above the switches, in Profile and
                             // Setlist modes. Its panels drop over the grid,
                             // or rise over the page when the grid is short.
-                            if perf_now.perform_mode != 0 && switches() != Switches::Hidden {
+                            if !wide() && perf_now.perform_mode != 0 && switches() != Switches::Hidden {
                                 crate::macro_bar::MacroBar {
                                     macros: state.macros,
                                     drop_up: switches() != Switches::Full,
                                 }
                             }
                             if switches() != Switches::Hidden {
+                            // Wide: the switches, the macros beside them.
+                            div {
+                                style: match (wide(), switches() == Switches::Compact) {
+                                    (true, true) => "display: flex; flex-direction: row; align-items: stretch; flex: 0 0 116px; min-height: 0;",
+                                    (true, false) => "display: flex; flex-direction: row; align-items: stretch; flex: 1 1 0%; min-height: 0;",
+                                    (false, true) => "display: flex; flex-direction: column; flex: 0 0 116px; min-height: 0;",
+                                    (false, false) => "display: flex; flex-direction: column; flex: 1.2 1 0%; min-height: 0;",
+                                },
                             div {
                                 // A whisker of padding so tile rings render
                                 // inside the clipping ancestor instead of
                                 // being shaved off at the dock edges.
                                 class: "min-h-0 p-1",
-                                style: if switches() == Switches::Compact {
-                                    "flex: 0 0 116px;"
-                                } else {
-                                    "flex: 1.2 1 0%;"
-                                },
+                                style: if wide() { "flex: 1.4 1 0%; min-width: 0;" } else { "flex: 1 1 0%;" },
                                 PerformGrid {
                                     compact: switches() == Switches::Compact,
                                     model: perf(),
@@ -811,6 +829,15 @@ pub fn GuitarRigRemote() -> Element {
                                     on_next_song,
                                     on_select_song,
                                 }
+                            }
+                            if wide() && perf_now.perform_mode != 0 {
+                                div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; justify-content: center;",
+                                    crate::macro_bar::MacroBar {
+                                        macros: state.macros,
+                                        drop_up: true,
+                                    }
+                                }
+                            }
                             }
                             }
                         }
