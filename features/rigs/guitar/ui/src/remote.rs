@@ -198,13 +198,6 @@ pub fn GuitarRigRemote() -> Element {
     let perf = state.perf;
     let blocks = state.blocks;
     let _connected = rig.is_some();
-    // Presets and Tones only exist in Preset mode: leaving Preset mode while
-    // on one lands on Control rather than a tab that is no longer there.
-    use_effect(move || {
-        if perf().perform_mode != 0 && matches!(mode(), Mode::Presets | Mode::Tones) {
-            mode.set(Mode::Control);
-        }
-    });
     let perf_now = perf();
 
     // The five rig controls, shared by the standalone Perform view and the
@@ -405,12 +398,12 @@ pub fn GuitarRigRemote() -> Element {
                 // Where you are, and the way back (Signal ▾ ▸ Rigs ▸ Guitar ▾).
                 fts_chrome::Crumbs { current_only: true }
 
-                // Play group: Preset / Profile / Setlist — jumps to the
-                // perform grid in that mode (synced to every remote).
+                // Play group: Profile / Setlist — jumps to the perform grid
+                // in that mode (synced to every remote). There is no Preset
+                // mode: presets are the Core, picked under a patch.
                 div { class: "flex items-center rounded-md border border-border bg-background/40 p-0.5 gap-0.5 ml-1",
                     for (pm, label, icon) in [
-                        (0u32, "Preset", fts_chrome::Icon::Preset),
-                        (1, "Profile", fts_chrome::Icon::Profile),
+                        (1u32, "Profile", fts_chrome::Icon::Profile),
                         (2, "Setlist", fts_chrome::Icon::Setlist),
                     ] {
                         button {
@@ -476,7 +469,6 @@ pub fn GuitarRigRemote() -> Element {
                         (Mode::Tones, "Tones", fts_chrome::Icon::Tones),
                     ]
                     .into_iter()
-                    .filter(|(m, _, _)| perf_now.perform_mode == 0 || !matches!(m, Mode::Presets | Mode::Tones))
                     {
                         button {
                             key: "{label}",

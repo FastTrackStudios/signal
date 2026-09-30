@@ -2073,7 +2073,8 @@ impl GuitarRigBackend {
         let Some(st) = RigLibrary::load_last_state() else {
             return;
         };
-        *self.perform_mode.lock_ok() = st.perform_mode.min(2);
+        // A state saved in the old Preset mode opens in Profile.
+        *self.perform_mode.lock_ok() = if st.perform_mode == 0 { 1 } else { st.perform_mode.min(2) };
         {
             let mut hp = self.headphone.lock_ok();
             let fader = |v: f32, d: f32| if v.is_finite() { v.clamp(0.0, 1.0) } else { d };
@@ -6383,11 +6384,14 @@ impl Rig for GuitarRigBackend {
     }
 
     fn set_perform_mode(&self, mode: u32) {
-        *self.perform_mode.lock_ok() = mode.min(2);
+        // No Preset mode any more (presets are the Core, picked under a
+        // patch): an old remote asking for it plays Profile.
+        let mode = if mode == 0 { 1 } else { mode.min(2) };
+        *self.perform_mode.lock_ok() = mode;
         self.mark_state_dirty();
         tracing::info!(
             "perform mode → {}",
-            ["preset", "profile", "setlist"][mode.min(2) as usize]
+            ["preset", "profile", "setlist"][mode as usize]
         );
         // Songs are live only in Setlist mode: entering it tunes the
         // switches for the song that is up, leaving it gives the profile its
