@@ -39,14 +39,21 @@ pub(crate) fn design_dir() -> std::path::PathBuf {
 /// by the face's addresses; `on_edit` hears every edit the face makes,
 /// the same way.
 #[component]
-pub fn FrameSurface(name: String, #[props(default)] values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>) -> Element {
+pub fn FrameSurface(
+    name: String,
+    #[props(default)] values: Vec<(String, f64)>,
+    on_edit: Option<EventHandler<(String, f64)>>,
+    /// Fill the box exactly (a picture) instead of fitting the face whole.
+    #[props(default)]
+    stretch: bool,
+) -> Element {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        native::mount(name, values, on_edit)
+        native::mount(name, values, on_edit, stretch)
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let _ = (name, values, on_edit);
+        let _ = (name, values, on_edit, stretch);
         rsx! { div { style: "width: 100%; height: 100%;" } }
     }
 }
@@ -72,14 +79,17 @@ mod native {
     /// Edits the widget heard, for the component to hand on.
     type Edits = Rc<RefCell<Vec<(String, f64)>>>;
 
-    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>) -> Element {
+    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool) -> Element {
         crate::fx_viz::use_repaint_clock();
         let live: Shared = use_hook(|| {
             let path = super::design_dir().join(&name);
             let dir = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
             let stem = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
             let (markup, catalog) = frame_live::face_paths(&dir, &stem);
-            let opened = LiveSurface::open(&markup, catalog).map_err(|e| {
+            let opened = LiveSurface::open(&markup, catalog).map(|mut l| {
+                l.set_stretch(stretch);
+                l
+            }).map_err(|e| {
                 tracing::warn!(target: "frame", surface = %markup.display(), error = %e, "frame surface did not open");
                 e
             });

@@ -448,14 +448,18 @@ pub fn InputRow(blocks: Vec<LiveBlock>) -> Element {
     let unit = |kind: &str, bt: BlockType| -> (Option<LiveBlock>, Option<FaceEntry>) {
         (blocks.iter().find(|b| b.block_type == bt).cloned(), pick(&faces.input, kind).cloned())
     };
+    let (pitch, pitch_face) = unit("pitch", BlockType::Pitch);
     let (wah, wah_face) = unit("wah", BlockType::Wah);
     let (filter, filter_face) = unit("filter", BlockType::Filter);
     let picture = faces.filter_picture.clone();
     rsx! {
         Row {
+            // The pitch stage: its voices, each interval and level.
             Panel { weight: 0.0,
-                div { style: "width: 64px; height: 100%; display: flex;",
-                    crate::control::PitchStrip {}
+                match (pitch, pitch_face) {
+                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f } },
+                    (None, Some(f)) => rsx! { UnboundFace { face: f } },
+                    _ => rsx! { div { style: "width: 280px; height: 100%; display: flex;", crate::control::PitchStrip {} } },
                 }
             }
             Panel { weight: 0.0,
@@ -473,12 +477,8 @@ pub fn InputRow(blocks: Vec<LiveBlock>) -> Element {
                 }
                 if let Some(p) = picture {
                     div { style: "flex: 1 1 0%; min-width: 0; height: 100%; display: flex; border-left: 1px solid #1d1f24;",
-                        if let Some(b) = filter {
-                            BlockFace { block: b, face: p }
-                        } else {
-                            div { style: "width: 100%; height: 100%;",
-                                FrameSurface { name: p.face.clone() }
-                            }
+                        div { style: "width: 100%; height: 100%;",
+                            FrameSurface { name: p.face.clone(), stretch: true, values: filter.as_ref().map(|b| values_of(b, &p.ns)).unwrap_or_default() }
                         }
                     }
                 }
