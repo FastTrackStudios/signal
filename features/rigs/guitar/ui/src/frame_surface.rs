@@ -46,14 +46,20 @@ pub fn FrameSurface(
     /// Fill the box exactly (a picture) instead of fitting the face whole.
     #[props(default)]
     stretch: bool,
+    /// The same face laid out for other proportions — (name, width ÷
+    /// height) — for a box that isn't the face's shape: the widget draws
+    /// whichever fits its box best, so the face reflows as the box resizes
+    /// rather than shrinking into it.
+    #[props(default)]
+    variants: Vec<(String, f64)>,
 ) -> Element {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        native::mount(name, values, on_edit, stretch)
+        native::mount(name, values, on_edit, stretch, variants)
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let _ = (name, values, on_edit, stretch);
+        let _ = (name, values, on_edit, stretch, variants);
         rsx! { div { style: "width: 100%; height: 100%;" } }
     }
 }
@@ -75,7 +81,62 @@ mod native {
     /// Pixels per wheel notch when the wheel reports pixels.
     const PX_PER_NOTCH: f64 = 40.0;
 
-    type Shared = Rc<RefCell<Result<LiveSurface, String>>>;
+    type Shared = Rc<RefCell<Result<Surfaces, String>>>;
+
+    /// A face's surfaces: the one design, or its variants by proportion
+    /// (width ÷ height), and which is drawn.
+    struct Surfaces {
+        all: Vec<(f64, LiveSurface)>,
+        active: usize,
+    }
+
+    impl Surfaces {
+        fn active(&self) -> &LiveSurface {
+            &self.all[self.active].1
+        }
+
+        fn active_mut(&mut self) -> &mut LiveSurface {
+            &mut self.all[self.active].1
+        }
+
+        fn each_mut(&mut self) -> impl Iterator<Item = &mut LiveSurface> {
+            self.all.iter_mut().map(|(_, l)| l)
+        }
+
+        /// Draw the variant closest to a `w` × `h` box; whether that changed.
+        fn pick(&mut self, w: u32, h: u32) -> bool {
+            if self.all.len() < 2 || h == 0 {
+                return false;
+            }
+            let want = f64::from(w) / f64::from(h);
+            let best = self
+                .all
+                .iter()
+                .enumerate()
+                .min_by(|(_, (a, _)), (_, (b, _))| (a.ln() - want.ln()).abs().total_cmp(&(b.ln() - want.ln()).abs()))
+                .map_or(0, |(i, _)| i);
+            let changed = best != self.active;
+            self.active = best;
+            changed
+        }
+    }
+
+    fn open_face(name: &str, stretch: bool) -> Result<LiveSurface, String> {
+        let path = super::design_dir().join(name);
+        let dir = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+        let stem = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let (markup, catalog) = frame_live::face_paths(&dir, &stem);
+        LiveSurface::open(&markup, catalog)
+            .map(|mut l| {
+                l.set_stretch(stretch);
+                l.set_max_fps(max_fps());
+                l
+            })
+            .map_err(|e| {
+                tracing::warn!(target: "frame", surface = %markup.display(), error = %e, "frame surface did not open");
+                e
+            })
+    }
     /// Edits the widget heard, for the component to hand on.
     type Edits = Rc<RefCell<Vec<(String, f64)>>>;
 
@@ -88,20 +149,17 @@ mod native {
     /// How often the design's files are checked for a new version.
     const RELOAD_POLL: std::time::Duration = std::time::Duration::from_millis(250);
 
-    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool) -> Element {
+    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>) -> Element {
         let live: Shared = use_hook(|| {
-            let path = super::design_dir().join(&name);
-            let dir = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
-            let stem = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-            let (markup, catalog) = frame_live::face_paths(&dir, &stem);
-            let opened = LiveSurface::open(&markup, catalog).map(|mut l| {
-                l.set_stretch(stretch);
-                l.set_max_fps(max_fps());
-                l
-            }).map_err(|e| {
-                tracing::warn!(target: "frame", surface = %markup.display(), error = %e, "frame surface did not open");
-                e
-            });
+            let opened = if variants.is_empty() {
+                open_face(&name, stretch).map(|l| Surfaces { all: vec![(1.0, l)], active: 0 })
+            } else {
+                variants
+                    .iter()
+                    .map(|(n, aspect)| open_face(n, stretch).map(|l| (*aspect, l)))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(|all| Surfaces { all, active: 0 })
+            };
             Rc::new(RefCell::new(opened))
         });
         let edits: Edits = use_hook(|| Rc::new(RefCell::new(Vec::new())));
@@ -117,10 +175,12 @@ mod native {
                 async move {
                     loop {
                         architect::platform::sleep(RELOAD_POLL).await;
-                        if let Ok(l) = live.borrow_mut().as_mut()
-                            && l.poll_reload()
-                        {
-                            tracing::info!(target: "frame", "frame surface reloaded");
+                        if let Ok(s) = live.borrow_mut().as_mut() {
+                            for l in s.each_mut() {
+                                if l.poll_reload() {
+                                    tracing::info!(target: "frame", "frame surface reloaded");
+                                }
+                            }
                         }
                     }
                 }
@@ -130,15 +190,19 @@ mod native {
         // given (a param being dragged keeps the hand's).
         let mut applied: Signal<Vec<(String, f64)>> = use_signal(Vec::new);
         if *applied.peek() != values {
-            if let Ok(l) = live.borrow_mut().as_mut() {
-                l.apply_real(values.clone());
+            if let Ok(s) = live.borrow_mut().as_mut() {
+                for l in s.each_mut() {
+                    l.apply_real(values.clone());
+                }
             }
             applied.set(values);
         }
         // Held still while nothing runs (see `fts_audio_ui::animate`).
         let animate = fts_audio_ui::animate::animating();
-        if let Ok(l) = live.borrow_mut().as_mut() {
-            l.set_animate(animate);
+        if let Ok(s) = live.borrow_mut().as_mut() {
+            for l in s.each_mut() {
+                l.set_animate(animate);
+            }
         }
         let attr = use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(FrameWidget { live: Rc::clone(&live), edits: Rc::clone(&edits), update: update.clone(), target: None }));
         // The edits go out from a task, not from inside a render.
@@ -167,8 +231,8 @@ mod native {
         edits: Edits,
         /// Re-renders the component, which hands the edits on.
         update: std::sync::Arc<dyn Fn() + Send + Sync>,
-        /// The texture Blitz holds for us, and its size.
-        target: Option<(ResourceId, (u32, u32))>,
+        /// The texture Blitz holds for us, its size, and which variant's.
+        target: Option<(ResourceId, (u32, u32), usize)>,
     }
 
     /// The window's device and queue, from whatever the renderer boxed.
@@ -203,24 +267,29 @@ mod native {
                 tracing::warn!(target: "frame", "renderer has no wgpu device: frame surface stays blank");
                 return;
             };
-            if let Ok(live) = self.live.borrow_mut().as_mut()
-                && let Err(e) = live.attach_gpu(device, queue)
-            {
-                tracing::warn!(target: "frame", error = %e, "frame renderer did not start");
+            if let Ok(s) = self.live.borrow_mut().as_mut() {
+                for live in s.each_mut() {
+                    if let Err(e) = live.attach_gpu(device.clone(), queue.clone()) {
+                        tracing::warn!(target: "frame", error = %e, "frame renderer did not start");
+                    }
+                }
             }
             self.target = None;
         }
 
         fn destroy_surfaces(&mut self) {
-            if let Ok(live) = self.live.borrow_mut().as_mut() {
-                live.detach_gpu();
+            if let Ok(s) = self.live.borrow_mut().as_mut() {
+                for live in s.each_mut() {
+                    live.detach_gpu();
+                }
             }
             self.target = None;
         }
 
         fn handle_event(&mut self, event: &UiEvent) {
             let mut guard = self.live.borrow_mut();
-            let Ok(live) = guard.as_mut() else { return };
+            let Ok(surfaces) = guard.as_mut() else { return };
+            let live = surfaces.active_mut();
             match event {
                 UiEvent::PointerDown(e) => live.pointer_down(f64::from(e.element.x), f64::from(e.element.y), mods(e.mods)),
                 UiEvent::PointerMove(e) => live.pointer_move(f64::from(e.element.x), f64::from(e.element.y), mods(e.mods)),
@@ -241,13 +310,13 @@ mod native {
         /// The texture the face is: Blitz can draw it over the page as a
         /// layer, so a frame where only faces move repaints only them.
         fn composite_texture(&self) -> Option<ResourceId> {
-            self.target.map(|(id, _)| id)
+            self.target.map(|(id, _, _)| id)
         }
 
         /// Something new to draw or still moving: Blitz draws a frame for
         /// it, and keeps drawing (paced) while it moves.
         fn needs_redraw(&self) -> bool {
-            self.live.try_borrow().is_ok_and(|l| l.as_ref().is_ok_and(LiveSurface::is_moving))
+            self.live.try_borrow().is_ok_and(|s| s.as_ref().is_ok_and(|s| s.active().is_moving()))
         }
 
         fn paint(&mut self, render_ctx: &mut dyn RenderContext, _styles: &ComputedStyles, width: u32, height: u32, scale: f64) -> Scene {
@@ -256,7 +325,11 @@ mod native {
                 return scene;
             }
             let mut guard = self.live.borrow_mut();
-            let Ok(live) = guard.as_mut() else { return scene };
+            let Ok(surfaces) = guard.as_mut() else { return scene };
+            // The variant that fits this box (a face laid out for it).
+            surfaces.pick(width, height);
+            let active = surfaces.active;
+            let live = surfaces.active_mut();
             let before = live.error().map(str::to_string);
             if live.poll_reload() {
                 tracing::info!(target: "frame", "frame surface reloaded");
@@ -266,19 +339,19 @@ mod native {
             {
                 tracing::warn!(target: "frame", error = %e, "frame reload failed; keeping the last good design");
             }
-            let stale = self.target.is_none_or(|(_, size)| size != (width, height));
+            let stale = self.target.is_none_or(|(_, size, index)| size != (width, height) || index != active);
             if stale {
                 tracing::debug!(target: "frame", width, height, scale, "frame surface size");
             }
             if live.has_gpu() && (stale || live.needs_redraw()) {
                 match live.render(width, height, scale) {
                     Ok((texture, fresh)) => {
-                        if fresh || self.target.is_none() {
-                            if let Some((old, _)) = self.target.take() {
+                        if fresh || stale {
+                            if let Some((old, _, _)) = self.target.take() {
                                 render_ctx.unregister_resource(old);
                             }
                             match render_ctx.try_register_custom_resource(Box::new(texture)) {
-                                Ok(id) => self.target = Some((id, (width, height))),
+                                Ok(id) => self.target = Some((id, (width, height), active)),
                                 Err(e) => tracing::warn!(target: "frame", error = ?e, "Blitz would not take the frame texture"),
                             }
                         }
@@ -287,7 +360,7 @@ mod native {
                 }
                 hand_on(&self.edits, live, &*self.update);
             }
-            if let Some((id, _)) = self.target {
+            if let Some((id, _, _)) = self.target {
                 scene.fill(
                     Fill::NonZero,
                     Affine::IDENTITY,

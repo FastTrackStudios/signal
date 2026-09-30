@@ -35,6 +35,9 @@ pub struct FaceEntry {
     /// Other blocks the face also draws: (namespace, block name) — the
     /// Gravity Tank's `trem/` controls are the Pre Motion's.
     pub also: Vec<(String, String)>,
+    /// The face laid out for other proportions: (face, width ÷ height). A
+    /// face with variants fills its panel, drawing whichever fits.
+    pub variants: Vec<(String, f64)>,
 }
 
 /// `faces.json`, read.
@@ -76,7 +79,21 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
         .and_then(|a| a.as_object())
         .map(|o| o.iter().filter_map(|(k, b)| Some((k.clone(), b.as_str()?.to_string()))).collect())
         .unwrap_or_default();
-    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also })
+    let variants = v
+        .get("variants")
+        .and_then(|a| a.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| {
+                    let face = x.get("face")?.as_str()?;
+                    let size = x.get("size")?.as_array()?;
+                    let (w, h) = (size.first()?.as_f64()?, size.get(1)?.as_f64()?);
+                    (h > 0.0).then(|| (format!("{SET}/{face}"), w / h))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants })
 }
 
 impl Faces {
@@ -199,11 +216,19 @@ pub fn BlockFace(block: LiveBlock, face: FaceEntry, #[props(default)] extra: Vec
     let (w, h) = face.size;
     let mut targets: Vec<(String, LiveBlock)> = vec![(face.ns.clone(), block.clone())];
     targets.extend(extra);
+    // A face with variants fills its panel (it reflows to the box); one
+    // without keeps its own proportion.
+    let boxed = if face.variants.is_empty() {
+        format!("height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0;")
+    } else {
+        "height: 100%; flex: 1 1 0%; min-width: 0; min-height: 0;".to_string()
+    };
     rsx! {
-        div { style: "height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0;",
+        div { style: "{boxed}",
             FrameSurface {
                 key: "{block.id}-{face.face}",
                 name: face.face.clone(),
+                variants: face.variants.clone(),
                 values,
                 on_edit: move |(addr, value): (String, f64)| {
                     if let Some((ns, b)) = targets.iter().find(|(ns, _)| addr.starts_with(&format!("{ns}/"))) {
@@ -289,9 +314,16 @@ fn Row(children: Element) -> Element {
 
 /// A block in its panel: its face, or its card.
 #[component]
-fn BlockPanel(block: LiveBlock, face: Option<FaceEntry>, card: (f64, f64)) -> Element {
+fn BlockPanel(
+    block: LiveBlock,
+    face: Option<FaceEntry>,
+    card: (f64, f64),
+    /// How much of the row's spare width it takes (0: exactly its face).
+    #[props(default = 1.0)]
+    weight: f64,
+) -> Element {
     rsx! {
-        Panel { weight: 1.0,
+        Panel { weight,
             if let Some(f) = face {
                 BlockFace { block, face: f }
             } else {
@@ -358,11 +390,11 @@ pub fn AmpRow(
             }
             if one {
                 if let (Some(e), Some(f)) = (eq, faces.eq.clone()) {
-                    BlockPanel { block: e, face: Some(f), card: AMP }
+                    BlockPanel { block: e, face: Some(f), card: AMP, weight: 0.0 }
                 }
             }
             if let (Some(g), Some(f)) = (gate, faces.gate.clone()) {
-                BlockPanel { block: g, face: Some(f), card: (250.0, 392.0) }
+                BlockPanel { block: g, face: Some(f), card: (250.0, 392.0), weight: 0.0 }
             }
             {trailing}
         }
