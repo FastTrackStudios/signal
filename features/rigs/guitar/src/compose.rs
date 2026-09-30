@@ -1628,3 +1628,63 @@ pub fn recompose(
     }
     unmapped
 }
+
+/// The shipped rig, built patch by patch and written down: every block of
+/// every chain the Blues profile plays from the default compositions (its
+/// name, capture, IR, bypass and params). A change to how patches compose
+/// must leave it as recorded — `UPDATE_GOLDEN=1` rewrites the record when
+/// a change of sound is meant.
+#[cfg(test)]
+mod golden {
+    use super::*;
+    use crate::library::DrivePresetLib;
+    use crate::profiles::{ProfileDef, build_profile};
+
+    const RECORD: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/blues-chains.txt");
+
+    fn parse<T: for<'a> facet::Facet<'a>>(what: &str, text: &str) -> T {
+        facet_styx::from_str(text).unwrap_or_else(|e| panic!("{what} parses: {e}"))
+    }
+
+    /// The default config: the Blues profile, the compositions, the drives.
+    fn shipped() -> (ProfileDef, Compositions, Vec<crate::profiles::DrivePresetDef>) {
+        let profile: ProfileDef = parse("profiles/blues.styx", include_str!("../default-config/profiles/blues.styx"));
+        let comp = Compositions {
+            modules: parse::<ModuleLib>("modules.styx", include_str!("../default-config/modules.styx")).presets,
+            presets: parse::<PresetLib>("presets.styx", include_str!("../default-config/presets.styx")).presets,
+            blocks: parse::<BlockLib>("blocks.styx", include_str!("../default-config/blocks.styx")).presets,
+        };
+        let drives = parse::<DrivePresetLib>("drive-presets.styx", include_str!("../default-config/drive-presets.styx")).presets;
+        (profile, comp, drives)
+    }
+
+    /// Every patch's chain, one block a line.
+    pub(crate) fn chains(def: &ProfileDef, comp: &Compositions, drives: &[crate::profiles::DrivePresetDef]) -> String {
+        let built = build_profile(&flatten(def, comp), drives);
+        let mut out = String::new();
+        for p in &built.patches {
+            out.push_str(&format!("# {}\n", p.name));
+            for b in &p.chain {
+                let mut params: Vec<String> = b.params.iter().map(|x| format!("{}={}", x.name, x.value)).collect();
+                params.sort();
+                out.push_str(&format!("{} | nam={} | ir={} | bypassed={} | {}\n", b.name, b.nam, b.ir, b.bypassed, params.join(" ")));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_shipped_rig_builds_as_recorded() {
+        let (def, comp, drives) = shipped();
+        let now = chains(&def, &comp, &drives);
+        if std::env::var_os("UPDATE_GOLDEN").is_some() {
+            std::fs::write(RECORD, &now).expect("write the record");
+            return;
+        }
+        let recorded = std::fs::read_to_string(RECORD).expect("the record (UPDATE_GOLDEN=1 writes it)");
+        for (i, (a, b)) in recorded.lines().zip(now.lines()).enumerate() {
+            assert_eq!(a, b, "line {} of the record differs", i + 1);
+        }
+        assert_eq!(recorded.lines().count(), now.lines().count(), "the record's length differs");
+    }
+}
