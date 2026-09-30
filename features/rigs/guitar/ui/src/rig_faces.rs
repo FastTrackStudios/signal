@@ -38,6 +38,48 @@ pub struct FaceEntry {
     /// The face laid out for other proportions: (face, width ÷ height). A
     /// face with variants fills its panel, drawing whichever fits.
     pub variants: Vec<(String, f64)>,
+    /// Face params that aren't the block's own, and the block param each
+    /// drives.
+    pub maps: Vec<ParamMap>,
+}
+
+/// A face param (`<ns>/<face>`) standing for block param `param`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParamMap {
+    pub face: String,
+    pub param: String,
+    pub kind: MapKind,
+}
+
+/// How a face param's value becomes its block param's.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MapKind {
+    /// block = face × a + b.
+    Linear(f64, f64),
+    /// block = table[face], the face's value an option index.
+    Table(Vec<f64>),
+}
+
+impl ParamMap {
+    fn to_block(&self, face: f64) -> f64 {
+        match &self.kind {
+            MapKind::Linear(a, b) => face * a + b,
+            MapKind::Table(t) => t.get(face.round().max(0.0) as usize).or(t.last()).copied().unwrap_or(face),
+        }
+    }
+
+    fn to_face(&self, block: f64) -> f64 {
+        match &self.kind {
+            MapKind::Linear(a, b) if a.abs() > 1e-12 => (block - b) / a,
+            MapKind::Linear(..) => 0.0,
+            // The first option nearest the block's value.
+            MapKind::Table(t) => t
+                .iter()
+                .enumerate()
+                .min_by(|(_, x), (_, y)| (*x - block).abs().total_cmp(&(*y - block).abs()))
+                .map_or(0.0, |(i, _)| i as f64),
+        }
+    }
 }
 
 /// `faces.json`, read.
@@ -57,6 +99,8 @@ pub struct Faces {
     pub input: Vec<FaceEntry>,
     /// The filter's picture.
     pub filter_picture: Option<FaceEntry>,
+    /// The post compressor's unit.
+    pub post_comp: Option<FaceEntry>,
 }
 
 const SET: &str = "rig-faces";
@@ -93,7 +137,25 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
                 .collect()
         })
         .unwrap_or_default();
-    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants })
+    let maps = v
+        .get("maps")
+        .and_then(|a| a.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|m| {
+                    let face = m.get("face")?.as_str()?.to_string();
+                    let param = m.get("param")?.as_str()?.to_string();
+                    let kind = if let Some(l) = m.get("linear").and_then(|l| l.as_array()) {
+                        MapKind::Linear(l.first()?.as_f64()?, l.get(1)?.as_f64()?)
+                    } else {
+                        MapKind::Table(m.get("table")?.as_array()?.iter().filter_map(serde_json::Value::as_f64).collect())
+                    };
+                    Some(ParamMap { face, param, kind })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps })
 }
 
 impl Faces {
@@ -110,7 +172,7 @@ impl Faces {
                 return Self::default();
             };
             let list = |k: &str| doc.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default();
-            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry) }
+            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry), post_comp: doc.get("post_comp").and_then(entry) }
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -207,9 +269,23 @@ fn send(rig: Option<RigClient>, block: &LiveBlock, ns: &str, addr: &str, value: 
 ///
 /// `extra` are the other blocks it draws (its `also`), by namespace.
 #[component]
-pub fn BlockFace(block: LiveBlock, face: FaceEntry, #[props(default)] extra: Vec<(String, LiveBlock)>) -> Element {
+pub fn BlockFace(
+    block: LiveBlock,
+    face: FaceEntry,
+    #[props(default)] extra: Vec<(String, LiveBlock)>,
+    /// Take the box's width (its height from the face's proportion)
+    /// instead of its height.
+    #[props(default)]
+    across: bool,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut values = values_of(&block, &face.ns);
+    for m in &face.maps {
+        if let Some(p) = block.params.iter().find(|p| p.name == m.param) {
+            values.push((format!("{}/{}", face.ns, m.face), m.to_face(f64::from(p.value))));
+        }
+    }
+    let maps = face.maps.clone();
     for (ns, b) in &extra {
         values.extend(values_of(b, ns));
     }
@@ -218,7 +294,9 @@ pub fn BlockFace(block: LiveBlock, face: FaceEntry, #[props(default)] extra: Vec
     targets.extend(extra);
     // A face with variants fills its panel (it reflows to the box); one
     // without keeps its own proportion.
-    let boxed = if face.variants.is_empty() {
+    let boxed = if across {
+        format!("width: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-width: 0;")
+    } else if face.variants.is_empty() {
         format!("height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0;")
     } else {
         "height: 100%; flex: 1 1 0%; min-width: 0; min-height: 0;".to_string()
@@ -231,6 +309,15 @@ pub fn BlockFace(block: LiveBlock, face: FaceEntry, #[props(default)] extra: Vec
                 variants: face.variants.clone(),
                 values,
                 on_edit: move |(addr, value): (String, f64)| {
+                    // A mapped face param drives its block param.
+                    if let Some((ns, b)) = targets.first()
+                        && let Some(m) = maps.iter().find(|m| addr == format!("{ns}/{}", m.face))
+                    {
+                        if let Some(r) = rig.clone() {
+                            let _ = r.write_param(b.id.clone(), m.param.clone(), m.to_block(value) as f32);
+                        }
+                        return;
+                    }
                     if let Some((ns, b)) = targets.iter().find(|(ns, _)| addr.starts_with(&format!("{ns}/"))) {
                         send(rig.clone(), b, ns, &addr, value);
                     }
