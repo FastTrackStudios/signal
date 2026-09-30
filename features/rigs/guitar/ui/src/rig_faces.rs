@@ -32,6 +32,9 @@ pub struct FaceEntry {
     pub words: Vec<String>,
     /// Its size, for its box's proportion.
     pub size: (f64, f64),
+    /// Other blocks the face also draws: (namespace, block name) — the
+    /// Gravity Tank's `trem/` controls are the Pre Motion's.
+    pub also: Vec<(String, String)>,
 }
 
 /// `faces.json`, read.
@@ -60,7 +63,12 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
         .and_then(|s| s.as_array())
         .and_then(|s| Some((s.first()?.as_f64()?, s.get(1)?.as_f64()?)))
         .unwrap_or((1.0, 1.0));
-    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size })
+    let also = v
+        .get("also")
+        .and_then(|a| a.as_object())
+        .map(|o| o.iter().filter_map(|(k, b)| Some((k.clone(), b.as_str()?.to_string()))).collect())
+        .unwrap_or_default();
+    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also })
 }
 
 impl Faces {
@@ -142,6 +150,11 @@ fn send(rig: Option<RigClient>, block: &LiveBlock, ns: &str, addr: &str, value: 
                 let _ = rig.set_block_bypass(id, value < 0.5).await;
             });
         }
+        // A param of the block's own first: a delay's `level` is its
+        // wet's level, not the block's output.
+        param if block.params.iter().any(|p| p.name == param) => {
+            let _ = rig.write_param(id, param.to_string(), value as f32);
+        }
         "level" => {
             spawn(async move {
                 let _ = rig.set_block_level(id, value as f32, true).await;
@@ -154,30 +167,35 @@ fn send(rig: Option<RigClient>, block: &LiveBlock, ns: &str, addr: &str, value: 
             });
         }
         // The drive block's own EQ is still to come.
-        "tone" => {}
-        param if block.params.iter().any(|p| p.name == param) => {
-            let _ = rig.write_param(id, param.to_string(), value as f32);
-        }
         _ => {}
     }
 }
 
 /// A block drawn by its face: the box takes the face's proportion from
 /// the row's height.
+///
+/// `extra` are the other blocks it draws (its `also`), by namespace.
 #[component]
-pub fn BlockFace(block: LiveBlock, face: FaceEntry) -> Element {
+pub fn BlockFace(block: LiveBlock, face: FaceEntry, #[props(default)] extra: Vec<(String, LiveBlock)>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let values = values_of(&block, &face.ns);
+    let mut values = values_of(&block, &face.ns);
+    for (ns, b) in &extra {
+        values.extend(values_of(b, ns));
+    }
     let (w, h) = face.size;
-    let ns = face.ns.clone();
-    let b = block.clone();
+    let mut targets: Vec<(String, LiveBlock)> = vec![(face.ns.clone(), block.clone())];
+    targets.extend(extra);
     rsx! {
         div { style: "height: 100%; aspect-ratio: {w} / {h}; flex: 0 1 auto; min-width: 0; min-height: 0;",
             FrameSurface {
                 key: "{block.id}-{face.face}",
                 name: face.face.clone(),
                 values,
-                on_edit: move |(addr, value): (String, f64)| send(rig.clone(), &b, &ns, &addr, value),
+                on_edit: move |(addr, value): (String, f64)| {
+                    if let Some((ns, b)) = targets.iter().find(|(ns, _)| addr.starts_with(&format!("{ns}/"))) {
+                        send(rig.clone(), b, ns, &addr, value);
+                    }
+                },
             }
         }
     }
@@ -299,11 +317,35 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>) -> Element {
         .filter(|b| b.name.starts_with("Pre ") && !b.name.eq_ignore_ascii_case("Pre Comp"))
         .cloned()
         .collect();
+    // Each block's face, and the blocks a face draws as well (a Gravity
+    // Tank on the Pre Verb draws the Pre Motion too): those get no card.
+    let picked: Vec<(LiveBlock, Option<FaceEntry>)> = pre.iter().map(|b| (b.clone(), faces.pre(&b.preset).cloned())).collect();
+    let absorbed: Vec<String> = picked
+        .iter()
+        .filter_map(|(_, f)| f.as_ref())
+        .flat_map(|f| f.also.iter().map(|(_, name)| name.to_lowercase()))
+        .collect();
+    let items: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = picked
+        .into_iter()
+        .filter(|(b, _)| !absorbed.contains(&b.name.to_lowercase()))
+        .map(|(b, f)| {
+            let extra = f
+                .as_ref()
+                .map(|f| {
+                    f.also
+                        .iter()
+                        .filter_map(|(ns, name)| pre.iter().find(|x| x.name.eq_ignore_ascii_case(name)).map(|x| (ns.clone(), x.clone())))
+                        .collect()
+                })
+                .unwrap_or_default();
+            (b, f, extra)
+        })
+        .collect();
     rsx! {
         div { style: "display: flex; flex-direction: row; justify-content: space-evenly; align-items: stretch; gap: 12px; width: 100%; height: 100%; min-height: 0; padding: 8px; box-sizing: border-box;",
-            for b in pre {
-                if let Some(f) = faces.pre(&b.preset).cloned() {
-                    BlockFace { key: "{b.id}", block: b.clone(), face: f }
+            for (b, f, extra) in items {
+                if let Some(f) = f {
+                    BlockFace { key: "{b.id}", block: b.clone(), face: f, extra }
                 } else {
                     NameCard { key: "{b.id}", block: b.clone(), aspect: PEDAL }
                 }
