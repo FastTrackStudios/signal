@@ -1855,7 +1855,7 @@ fn ModuleControls(
 /// The Pitch strip: the note being played (large), a vertical cents meter
 /// with the in-tune zone, and a short trace of the detected pitch.
 #[component]
-fn PitchStrip() -> Element {
+pub(crate) fn PitchStrip() -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut reading = use_signal(signal_guitar_proto::TunerReading::default);
     let mut trace = use_signal(|| std::collections::VecDeque::<f32>::with_capacity(48));
@@ -2891,27 +2891,8 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // the pre effects in front of the amp.
                     if show_pre {
                         div { class: "flex flex-col gap-0 min-h-0 w-full", style: "flex: 2 1 0%; min-height: 0; display: flex; flex-direction: column;",
-                            div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 0;",
-                                div { class: "min-h-0 h-full flex flex-col", style: "flex: 1 1 0%;",
-                                    ZoomPanel { title: "Input Gain".to_string(), {empty_slot("Input Gain")} }
-                                }
-                                div { class: "min-h-0 h-full flex flex-col flex-shrink-0", style: "width: 64px;",
-                                    ZoomPanel { title: "Pitch".to_string(), PitchStrip {} }
-                                }
-                                div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
-                                    ZoomPanel {
-                                        title: "Input Comp".to_string(),
-                                        left_power_on: comp.as_ref().map(|b| !b.bypassed),
-                                        if let Some(c) = comp.clone() {
-                                            LiveComp { block: c, state }
-                                        } else {
-                                            {empty_slot("Input Comp")}
-                                        }
-                                    }
-                                }
-                                div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
-                                    ZoomPanel { title: "Input EQ".to_string(), {empty_slot("Input EQ")} }
-                                }
+                            div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                                crate::rig_faces::InputRow { blocks: blocks.clone() }
                             }
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
                                 crate::rig_faces::PreFxRow { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }

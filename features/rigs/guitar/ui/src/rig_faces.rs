@@ -48,6 +48,10 @@ pub struct Faces {
     pub pre: Vec<FaceEntry>,
     /// Pictures of what a block is doing, by its kind (`reverb`).
     pub pictures: Vec<FaceEntry>,
+    /// The input stage's units (wah, filter), by block type.
+    pub input: Vec<FaceEntry>,
+    /// The filter's picture.
+    pub filter_picture: Option<FaceEntry>,
 }
 
 const SET: &str = "rig-faces";
@@ -87,7 +91,7 @@ impl Faces {
                 return Self::default();
             };
             let list = |k: &str| doc.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default();
-            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), pre: list("pre"), pictures: list("pictures") }
+            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry) }
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -409,9 +413,10 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
     }
 }
 
-/// Whether a pre effect's panel carries a picture beside its pedal.
+/// Whether a pre effect's panel carries a picture beside its pedal (a
+/// spring reverb's face shows its own springs).
 fn shows_viz(b: &LiveBlock) -> bool {
-    matches!(b.block_type, BlockType::Delay | BlockType::Reverb)
+    b.block_type == BlockType::Delay
 }
 
 /// What a pre effect is doing, drawn by the effect's own visualiser.
@@ -420,5 +425,64 @@ fn viz_of(b: &LiveBlock, tempo_bpm: u32) -> Element {
         BlockType::Delay => rsx! { crate::control::DelayBlockViz { block: b.clone(), tempo_bpm } },
         BlockType::Reverb => rsx! { crate::control::ReverbBlockViz { block: b.clone(), tempo_bpm } },
         _ => rsx! { crate::control::ModBlockViz { block: b.clone() } },
+    }
+}
+
+/// A unit's face without a block in the chain yet: drawn, not bound.
+#[component]
+fn UnboundFace(face: FaceEntry) -> Element {
+    let (w, h) = face.size;
+    rsx! {
+        div { style: "height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0; opacity: 0.9;",
+            FrameSurface { name: face.face.clone() }
+        }
+    }
+}
+
+/// The input stage's top row: pitch, the wah, and the envelope filter with
+/// a picture of what it is doing. A unit whose block is not in the chain
+/// yet is drawn but not bound.
+#[component]
+pub fn InputRow(blocks: Vec<LiveBlock>) -> Element {
+    let faces = use_faces();
+    let unit = |kind: &str, bt: BlockType| -> (Option<LiveBlock>, Option<FaceEntry>) {
+        (blocks.iter().find(|b| b.block_type == bt).cloned(), pick(&faces.input, kind).cloned())
+    };
+    let (wah, wah_face) = unit("wah", BlockType::Wah);
+    let (filter, filter_face) = unit("filter", BlockType::Filter);
+    let picture = faces.filter_picture.clone();
+    rsx! {
+        Row {
+            Panel { weight: 0.0,
+                div { style: "width: 64px; height: 100%; display: flex;",
+                    crate::control::PitchStrip {}
+                }
+            }
+            Panel { weight: 0.0,
+                match (wah, wah_face) {
+                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f } },
+                    (None, Some(f)) => rsx! { UnboundFace { face: f } },
+                    _ => rsx! {},
+                }
+            }
+            Panel { weight: 1.0,
+                match (filter.clone(), filter_face) {
+                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f } },
+                    (None, Some(f)) => rsx! { UnboundFace { face: f } },
+                    _ => rsx! {},
+                }
+                if let Some(p) = picture {
+                    div { style: "flex: 1 1 0%; min-width: 0; height: 100%; display: flex; border-left: 1px solid #1d1f24;",
+                        if let Some(b) = filter {
+                            BlockFace { block: b, face: p }
+                        } else {
+                            div { style: "width: 100%; height: 100%;",
+                                FrameSurface { name: p.face.clone() }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
