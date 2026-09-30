@@ -654,6 +654,12 @@ fn GateFace(block: LiveBlock, face: FaceEntry, level: Signal<f32>) -> Element {
     rsx! { BlockFace { block, face, live } }
 }
 
+/// A pre effect whose face carries its own picture (the Aqua-Puss unit's
+/// repeats screen): it fills its panel, with no visualiser beside it.
+fn self_viewing(f: &FaceEntry) -> bool {
+    f.face.ends_with("17-pedal-aqua-puss")
+}
+
 /// The pre effects row: the blocks in front of the amp, each its pedal's
 /// face (by the block preset loaded) beside a picture of what it is doing
 /// — the delay's repeats, the spring's tail — or a card. The delay first
@@ -696,9 +702,9 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                     // The pedal, then what its block is doing — a delay's
                     // repeats, a reverb's tail. A tremolo shows its pulse on
                     // its own lamp.
-                    Panel { key: "{b.id}", weight: if shows_viz(&b) { 1.0 } else { 0.0 },
-                        BlockFace { block: b.clone(), face: f.clone(), extra: extra.clone() }
-                        if shows_viz(&b) {
+                    Panel { key: "{b.id}", weight: if shows_viz(&b) || self_viewing(&f) { 1.0 } else { 0.0 },
+                        BlockFace { block: b.clone(), face: f.clone(), extra: extra.clone(), fill: self_viewing(&f) }
+                        if shows_viz(&b) && !self_viewing(&f) {
                             div { style: "flex: 1 1 0%; min-width: 0; height: 100%; position: relative; display: flex; justify-content: center; border-left: 1px solid #1d1f24;",
                                 // A reverb's own picture from frame (its
                                 // springs, the algorithm it runs), else the
@@ -737,12 +743,18 @@ fn viz_of(b: &LiveBlock, tempo_bpm: u32) -> Element {
 /// A unit's face without a block in the chain yet: drawn, not bound, and
 /// off — so nothing on it moves.
 #[component]
-fn UnboundFace(face: FaceEntry) -> Element {
+fn UnboundFace(
+    face: FaceEntry,
+    /// Fill the box, laid out for it (frame's responsive mode).
+    #[props(default)]
+    fill: bool,
+) -> Element {
     let (w, h) = face.size;
     let off = vec![(format!("{}/on", face.ns), 0.0)];
+    let boxed = if fill { "width: 100%; height: 100%; min-width: 0; min-height: 0;".to_string() } else { format!("height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0;") };
     rsx! {
-        div { style: "height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0; opacity: 0.9;",
-            FrameSurface { name: face.face.clone(), values: off }
+        div { style: "{boxed} opacity: 0.9;",
+            FrameSurface { name: face.face.clone(), values: off, responsive: fill }
         }
     }
 }
@@ -782,10 +794,12 @@ pub fn InputRow(
                     _ => rsx! {},
                 }
             }
+            // The envelope filter: one unit, its screen inside, filling the
+            // room (laid out for it).
             Panel { weight: 1.0,
                 match (filter.clone(), filter_face) {
-                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f } },
-                    (None, Some(f)) => rsx! { UnboundFace { face: f } },
+                    (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, fill: true } },
+                    (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true } },
                     _ => rsx! {},
                 }
                 if let Some(p) = picture {

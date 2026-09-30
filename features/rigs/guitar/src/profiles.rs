@@ -772,15 +772,8 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             // Pre FX: what sits in front of the amp — a motion block, and a
             // reverb (a spring, like the tank in a Fender) and delay the amp
             // then colours. All off until a preset engages them.
-            .with_block(in_module(off(BlockType::Trem, "Pre Motion"), PRE_FX))
-            .with_block(in_module(
-                off_fx(
-                    BlockType::Reverb,
-                    "Pre Verb",
-                    &[("algorithm", "3"), ("mix", "1"), ("level", "-16.5"), ("decay", "0.35")],
-                ),
-                PRE_FX,
-            ))
+            // Pre FX in the John Mayer X order: the slap first, into the
+            // tank's tremolo and spring.
             .with_block(in_module(
                 off_fx(
                     BlockType::Delay,
@@ -794,6 +787,15 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                         ("level", "-16.5"),
                         ("feedback", "0.15"),
                     ],
+                ),
+                PRE_FX,
+            ))
+            .with_block(in_module(off(BlockType::Trem, "Pre Motion"), PRE_FX))
+            .with_block(in_module(
+                off_fx(
+                    BlockType::Reverb,
+                    "Pre Verb",
+                    &[("algorithm", "3"), ("mix", "1"), ("level", "-16.5"), ("decay", "0.35")],
                 ),
                 PRE_FX,
             ))
