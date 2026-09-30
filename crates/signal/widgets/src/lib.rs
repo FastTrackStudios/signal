@@ -20,11 +20,13 @@ pub mod preset_tree;
 pub mod sound_browser;
 pub mod switches;
 pub mod theme;
+pub mod touch;
 
 pub use drag_bus::{DragBus, DragEvent};
 pub use knob::{FmtFn, Knob, KnobSize};
 pub use picker::{Picker, PickerSize};
 pub use popup::{PopupHost, PopupLayer};
+pub use touch::{LongPress, Touch, TouchMenuButton, is_touch, reveal, use_long_press, use_touch};
 
 pub use preset_tree::PresetTree;
 pub use sound_browser::{BrowseChip, BrowseEntry, BrowseScope, SoundBrowser};

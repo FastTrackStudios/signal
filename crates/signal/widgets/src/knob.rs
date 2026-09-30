@@ -115,6 +115,7 @@ pub fn Knob(
     // for the local shield, when no app-root drag bus is above.
     let mut drag = use_signal(|| None::<(f64, f64)>);
     let bus = crate::drag_bus::DragBus::try_use();
+    let long = crate::touch::use_long_press();
 
     let range = (max - min).max(1e-6);
     let log = log && min > 0.0 && max > min;
@@ -175,7 +176,15 @@ pub fn Knob(
             div {
                 style: "position: relative; width: {d}px; height: {d}px; \
                         display: flex; align-items: center; justify-content: center;",
+                // Touch: hold still to reset — a finger has no double-click.
                 onpointerdown: move |e: PointerEvent| {
+                    long.down(&e, move |_| {
+                        if let Some(bus) = bus {
+                            bus.end();
+                        }
+                        drag.set(None);
+                        apply(0.5);
+                    });
                     let y0 = e.client_coordinates().y;
                     match bus {
                         // The root follows the drag across the whole window.
@@ -186,6 +195,15 @@ pub fn Knob(
                         }),
                         None => drag.set(Some((y0, val))),
                     }
+                },
+                onpointermove: move |e: PointerEvent| {
+                    long.moved(&e);
+                    e.prevent_default();
+                },
+                onpointerup: move |_| long.cancel(),
+                onpointercancel: move |_| {
+                    long.cancel();
+                    drag.set(None);
                 },
                 onwheel: move |e: WheelEvent| {
                     let step = if e.delta().strip_units().y < 0.0 { 0.02 } else { -0.02 };
@@ -257,12 +275,14 @@ pub fn Knob(
                     class: "fixed inset-0",
                     style: "z-index: 1000; cursor: ns-resize;",
                     onpointermove: move |e: PointerEvent| {
+                        e.prevent_default();
                         if let Some((y0, v0)) = drag() {
                             let dy = y0 - e.client_coordinates().y;
                             apply(v0 + dy / SENSITIVITY);
                         }
                     },
                     onpointerup: move |_| drag.set(None),
+                    onpointercancel: move |_| drag.set(None),
                 }
             }
 

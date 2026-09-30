@@ -472,7 +472,11 @@ fn MacroCell(
             }
         });
     }
-    let open = forced || hovered() || dragging() || tuning() || mine.is_some();
+    // Touch has no hover: a tap on the label pins the panel open (and a
+    // second tap lets it go).
+    let mut pinned = use_signal(|| false);
+    let long = signal_widgets::use_long_press();
+    let open = forced || hovered() || pinned() || dragging() || tuning() || mine.is_some();
     let color = if knob.color.is_empty() {
         MUTED.to_string()
     } else {
@@ -496,6 +500,32 @@ fn MacroCell(
         ]
     };
 
+    // The tune menu, at a client point: a right-click's, or a long-press's.
+    let open_tune_menu = {
+        let wire = wire.clone();
+        let id = id.clone();
+        let items = menu_items.clone();
+        move |x: f64, y: f64| {
+            let (wire, id) = (wire.clone(), id.clone());
+            crate::kit::context_menu_at(
+                host,
+                x,
+                y,
+                items.clone(),
+                EventHandler::new(move |p: crate::kit::Picked| match p.id {
+                    "tune" => tuning.set(true),
+                    "positions_patch" => {
+                        wire.run(&id, |r| async move { r.save_macro_positions("patch".into()).await });
+                    }
+                    "positions_snapshot" => {
+                        wire.run(&id, |r| async move { r.save_macro_positions("snapshot".into()).await });
+                    }
+                    _ => {}
+                }),
+            );
+        }
+    };
+
     rsx! {
         div {
             style: "position: relative; flex: 1 1 0%; min-width: 0;",
@@ -514,33 +544,33 @@ fn MacroCell(
                 onmouseleave: move |_| over_cell.set(false),
                 // Right-click: tune it, or keep the bar's positions.
                 oncontextmenu: {
-                    let wire = wire.clone();
-                    let id = id.clone();
-                    let items = menu_items.clone();
+                    let open_tune_menu = open_tune_menu.clone();
                     move |e: MouseEvent| {
                         e.prevent_default();
                         e.stop_propagation();
-                        let (wire, id) = (wire.clone(), id.clone());
-                        crate::kit::context_menu(
-                            host,
-                            &e,
-                            items.clone(),
-                            EventHandler::new(move |p: crate::kit::Picked| match p.id {
-                                "tune" => tuning.set(true),
-                                "positions_patch" => {
-                                    wire.run(&id, |r| async move { r.save_macro_positions("patch".into()).await });
-                                }
-                                "positions_snapshot" => {
-                                    wire.run(&id, |r| async move { r.save_macro_positions("snapshot".into()).await });
-                                }
-                                _ => {}
-                            }),
-                        );
+                        let p = e.client_coordinates();
+                        open_tune_menu(p.x, p.y);
                     }
                 },
+                // Touch: a long-press is the right-click.
+                onpointerdown: {
+                    let open_tune_menu = open_tune_menu.clone();
+                    move |e: PointerEvent| {
+                        let open_tune_menu = open_tune_menu.clone();
+                        long.down(&e, move |(x, y)| open_tune_menu(x, y));
+                    }
+                },
+                onpointermove: move |e: PointerEvent| long.moved(&e),
+                onpointerup: move |_| long.cancel(),
+                onpointercancel: move |_| long.cancel(),
 
-                // Label (above knob)
+                // Label (above knob). By touch, a tap pins the panel.
                 div { style: "display: flex; align-items: center; justify-content: center; gap: 2px; width: 100%;",
+                    onclick: move |_| {
+                        if !long.fired() && has_panel && signal_widgets::is_touch() {
+                            pinned.toggle();
+                        }
+                    },
                     span {
                         style: "font-size: 10px; font-weight: 500; max-width: 56px; overflow: hidden; \
                                 white-space: nowrap; color: {color};",
@@ -1779,6 +1809,7 @@ fn MiniKnob(
     #[props(default)]
     disabled: bool,
 ) -> Element {
+    let long = signal_widgets::use_long_press();
     let bus = DragBus::try_use();
     let mut shield = use_signal(|| None::<(f64, f64)>);
     let display = value.clamp(0.0, 1.0);
@@ -1856,6 +1887,19 @@ fn MiniKnob(
                 if disabled {
                     return;
                 }
+                // The knob's press is its own: the cell's long-press (its
+                // menu) must not fire under a knob being held.
+                e.stop_propagation();
+                // Touch: holding still resets, as a double-click does.
+                long.down(&e, move |_| {
+                    if let Some(bus) = bus {
+                        bus.end();
+                    }
+                    match on_reset {
+                        Some(r) => r.call(()),
+                        None => apply(f64::from(rest)),
+                    }
+                });
                 let y0 = e.client_coordinates().y;
                 let mut dragging = dragging;
                 dragging.set(true);
@@ -1879,6 +1923,9 @@ fn MiniKnob(
                     None => shield.set(Some((y0, v))),
                 }
             },
+            onpointermove: move |e: PointerEvent| long.moved(&e),
+            onpointerup: move |_| long.cancel(),
+            onpointercancel: move |_| long.cancel(),
             onwheel: move |e: WheelEvent| {
                 if disabled {
                     return;

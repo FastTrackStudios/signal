@@ -56,6 +56,9 @@ pub fn GuitarRigRemote() -> Element {
     // Menus drawn at the root, over everything: a panel that clips its
     // overflow cannot cut them off (Blitz has no `fixed`, no portals).
     signal_widgets::PopupHost::provide();
+    // Whether a finger or a mouse is playing the rig: every surface below
+    // gives right-click, hover and double-click actions a touch path.
+    let touch = signal_widgets::Touch::provide();
     // Callbacks made once per site, not once per render (see `stable`).
     let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -267,6 +270,9 @@ pub fn GuitarRigRemote() -> Element {
             // follows it anywhere in the window, and a release ends it.
             onpointermove: move |e: PointerEvent| drag_bus.root_move(&e),
             onpointerup: move |_| drag_bus.root_up(),
+            onpointercancel: move |_| drag_bus.root_up(),
+            // Every press says what kind of pointer made it.
+            onpointerdown: move |e: PointerEvent| touch.observe(&e),
             // Cmd/Ctrl+P: the command palette. Everything else: the
             // keymap (keymap.styx) — "ctrl+1" strings → rig actions.
             onkeydown: {

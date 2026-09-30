@@ -43,10 +43,15 @@ pub fn OpenButton(
     #[props(default = 13)] size: u32,
     on_open: EventHandler<()>,
 ) -> Element {
+    // By touch it is the way in (a finger has no double-click): a
+    // fingertip-sized target, drawn plainly.
+    let touch = signal_widgets::use_touch();
+    let pad = if touch { (signal_widgets::touch::HIT_PX.saturating_sub(size)) / 2 } else { 2 };
+    let ink = if touch { "#a1a1aa" } else { "#3f3f46" };
     rsx! {
         button {
-            style: "appearance: none; border: none; background: transparent; color: #3f3f46; \
-                    padding: 2px; line-height: 0; cursor: pointer;",
+            style: "appearance: none; border: none; background: transparent; color: {ink}; \
+                    padding: {pad}px; line-height: 0; cursor: pointer;",
             title: "{title}",
             onclick: move |e| {
                 e.stop_propagation();

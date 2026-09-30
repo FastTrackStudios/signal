@@ -404,12 +404,16 @@ fn PhonesLive(state: crate::state::RigViewState) -> Element {
 }
 
 /// A horizontal level slider: drag or click anywhere on it; double-click
-/// for unity.
+/// (hold still, by touch) for unity.
 #[component]
 fn LevelRow(label: String, value: f32, readout: String, on_change: Callback<f32>) -> Element {
     let mut el = use_signal(|| None::<std::rc::Rc<MountedData>>);
     let pct = (value * 100.0).clamp(0.0, 100.0);
     let unity = signal_guitar_proto::PHONES_UNITY * 100.0;
+    // Looked up here: a context lookup inside the press handler would be a
+    // hook called outside render.
+    let bus = signal_widgets::DragBus::try_use();
+    let long = signal_widgets::use_long_press();
     rsx! {
         div { style: "display: flex; align-items: center; gap: 10px;",
             span { style: "font-size: 12px; color: #a1a1aa; width: 80px; flex-shrink: 0;", "{label}" }
@@ -417,10 +421,18 @@ fn LevelRow(label: String, value: f32, readout: String, on_change: Callback<f32>
                 style: "position: relative; flex: 1 1 0%; height: 18px; cursor: ew-resize;",
                 onmounted: move |e| el.set(Some(e.data())),
                 ondoubleclick: move |_| on_change.call(signal_guitar_proto::PHONES_UNITY),
+                onpointermove: move |e: PointerEvent| long.moved(&e),
+                onpointerup: move |_| long.cancel(),
+                onpointercancel: move |_| long.cancel(),
                 onpointerdown: move |e: PointerEvent| {
+                    long.down(&e, move |_| {
+                        if let Some(bus) = bus {
+                            bus.end();
+                        }
+                        on_change.call(signal_guitar_proto::PHONES_UNITY);
+                    });
                     let x = e.client_coordinates().x;
                     let el = el();
-                    let bus = signal_widgets::DragBus::try_use();
                     spawn(async move {
                         let Some(el) = el else { return };
                         let Ok(rect) = el.get_client_rect().await else { return };

@@ -29,7 +29,7 @@ use signal_widgets::PopupHost;
 // with the keys rig; the rig's own names for them stay.
 pub use signal_widgets::kit::{
     ActionMenu, Button, Chips, DeleteButton, Dot, MenuItem, NamePrompt, Picked, SectionHeader,
-    context_menu, origin_of,
+    context_menu, context_menu_at, origin_of,
 };
 
 use crate::theme::{
@@ -187,7 +187,7 @@ pub fn ListRow(
             {children}
             if let (true, Some(h)) = (has_menu, on_menu) {
                 div {
-                    class: if selected || live { "" } else { "opacity-40 group-hover:opacity-100" },
+                    class: if selected || live { "" } else { signal_widgets::reveal("opacity-40 group-hover:opacity-100") },
                     style: "display: flex; flex-shrink: 0;",
                     ActionMenu { items: menu.clone(), on_pick: h, size: 20, bare: true, title: "Actions" }
                 }

@@ -123,6 +123,19 @@ pub fn HoldButton(
                     on_tap.call(());
                 }
             },
+            // The system took the touch back (a gesture, an alert): nothing
+            // fires, and a held momentary lets go.
+            onpointercancel: move |_| {
+                if held() {
+                    held.set(false);
+                    if let Some(up) = on_up {
+                        up.call(());
+                    }
+                }
+                if let Some(task) = hold_task.take() {
+                    task.cancel();
+                }
+            },
             onpointerleave: move |_| {
                 // A held momentary lets go when the pointer leaves.
                 if held() {
@@ -246,7 +259,13 @@ pub const MENU_PANEL: &str = "min-width: 220px; padding: 4px; display: flex; fle
 /// would have nowhere to go.
 pub fn open_menu(host: PopupHost, e: &MouseEvent, render: impl Fn() -> Element + 'static) {
     let p = e.client_coordinates();
-    host.open_up(p.x - 110.0, p.y - 6.0, 230.0, render, || {});
+    open_menu_at(host, p.x, p.y, render);
+}
+
+/// [`open_menu`] at client point `(x, y)` — for a long-press, which has a
+/// point but no mouse event.
+pub fn open_menu_at(host: PopupHost, x: f64, y: f64, render: impl Fn() -> Element + 'static) {
+    host.open_up(x - 110.0, y - 6.0, 230.0, render, || {});
 }
 
 /// Close the open switch menu. After the click that picked from it is done
@@ -366,7 +385,8 @@ pub fn SwitchTile(
     #[props(default)] learning: bool,
     on_tap: Callback<()>,
     #[props(default)] on_hold: Option<Callback<()>>,
-    /// Right-click: open the tile's menu (see [`open_menu`]).
+    /// Right-click — or its ⋯ by touch: open the tile's menu (see
+    /// [`open_menu`]).
     on_menu: EventHandler<MouseEvent>,
 ) -> Element {
     let (bg, fg) = colors;
@@ -414,6 +434,8 @@ pub fn SwitchTile(
                     span { style: "font-size: 9px; opacity: 0.65; font-variant-numeric: tabular-nums;", "{footer}" }
                 }
             }
+            // A long-press is the tile's hold, so a finger opens the menu here.
+            crate::touch::TouchMenuButton { onclick: move |e: MouseEvent| on_menu.call(e), title: "Switch menu" }
         }
     }
 }

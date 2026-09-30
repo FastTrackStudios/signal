@@ -415,6 +415,23 @@ pub fn origin_of(e: &MouseEvent) -> (f64, f64) {
     (c.x - el.x, c.y - el.y)
 }
 
+/// Open `items` as a menu at client point `(x, y)` — a long-press on a row,
+/// which has a point but no mouse event.
+pub fn context_menu_at(
+    host: Option<PopupHost>,
+    x: f64,
+    y: f64,
+    items: Vec<MenuItem>,
+    on_pick: EventHandler<Picked>,
+) {
+    if items.is_empty() {
+        return;
+    }
+    if let Some(h) = host {
+        open_action_menu(h, x, y, items, on_pick, || {});
+    }
+}
+
 /// Open `items` as a context menu at the pointer (a right-click on a row).
 /// `host` is captured at render — looking it up here would be a hook
 /// called from an event.
@@ -462,6 +479,8 @@ pub fn ActionMenu(
 ) -> Element {
     // Every hook first: `use_context` inside the click handler would be a
     // hook called outside render.
+    // A fingertip-sized target by touch.
+    let size = crate::touch::hit(crate::touch::use_touch(), size);
     let host = PopupHost::try_use();
     let mut open = use_signal(|| false);
     let border = if bare { "transparent" } else { LINE };

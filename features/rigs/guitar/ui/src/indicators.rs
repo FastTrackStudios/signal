@@ -53,7 +53,7 @@ pub fn Indicator(
                 }
             },
             div {
-                title: "{title} — right-click or double-click for options",
+                title: "{title} — right-click or double-click (tap, by touch) for options",
                 style: "display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; \
                         border-radius: 6px; cursor: default; user-select: none; \
                         font-size: 11px; font-weight: 600; color: #a1a1aa;",
@@ -63,6 +63,12 @@ pub fn Indicator(
                     open.set(true);
                 },
                 ondoubleclick: move |_| open.set(true),
+                // Touch has neither: a tap opens it.
+                onclick: move |_| {
+                    if signal_widgets::is_touch() {
+                        open.toggle();
+                    }
+                },
                 span {
                     style: "width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; \
                             background: {dot}; box-shadow: 0 0 6px {dot};",

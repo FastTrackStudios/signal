@@ -66,6 +66,8 @@ pub fn KeysRigRemote() -> Element {
     let (state, _rig) = use_keys_state();
     // Menus drawn over the whole rig (the switches' right-click menus open
     // upward from the bottom of the window) — see `PopupLayer` below.
+    // Whether a finger or a mouse is playing the rig (see `signal_widgets::touch`).
+    let touch = signal_widgets::Touch::provide();
     signal_widgets::PopupHost::provide();
     // Control-view depth: mixer → engine → layer. Shared through context so
     // the cards can open themselves.
@@ -126,6 +128,8 @@ pub fn KeysRigRemote() -> Element {
         div {
             style: "position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; \
                     color: #e4e4e7; font-family: sans-serif; background: #08080a;",
+            // Every press says what kind of pointer made it.
+            onpointerdown: move |e: PointerEvent| touch.observe(&e),
             div { style: "display: flex; flex: 1; min-height: 0;",
                 // The browser — one sidebar, pointed at the selection.
                 Browser { state }

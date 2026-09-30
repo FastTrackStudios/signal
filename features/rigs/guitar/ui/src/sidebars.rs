@@ -356,7 +356,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                 }
                                 PresetCell { preset: main_preset.clone(), variation: main_variation.clone() }
                                 div {
-                                    class: "opacity-0 group-hover:opacity-100",
+                                    class: signal_widgets::reveal("opacity-0 group-hover:opacity-100"),
                                     style: "display: flex; flex-shrink: 0;",
                                     crate::kit::ActionMenu {
                                         items: stack_items(&stack_label, &stack_names),
@@ -488,7 +488,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                             // up down the list; icons sit to its left.
                                             PresetCell { preset: preset.clone(), variation: variation.clone() }
                                             div {
-                                                class: "opacity-0 group-hover:opacity-100",
+                                                class: signal_widgets::reveal("opacity-0 group-hover:opacity-100"),
                                                 style: "display: flex; flex-shrink: 0;",
                                                 crate::kit::ActionMenu {
                                                     items: patch_items(&name, &patch_names),

@@ -791,38 +791,39 @@ fn StackTile(
     } else {
         "relative flex flex-col items-center justify-center gap-1 rounded-xl"
     };
+    let open_switch_menu = EventHandler::new({
+        let (stack, part, parts, changes, learn, target) =
+            (stack.clone(), part.clone(), parts.clone(), changes.clone(), learn.clone(), learn_target.clone());
+        move |e: MouseEvent| {
+            e.prevent_default();
+            let Some(h) = host else {
+                menu.set(true);
+                return;
+            };
+            let (stack, part, parts, changes, learn, target) =
+                (stack.clone(), part.clone(), parts.clone(), changes.clone(), learn.clone(), target.clone());
+            open_menu(h, &e, move || rsx! {
+                SwitchMenu {
+                    switch_no,
+                    footswitch,
+                    stack: Some((index, stack.clone())),
+                    job: "stack".to_string(),
+                    part: part.clone(),
+                    in_song,
+                    parts: parts.clone(),
+                    changes: changes.clone(),
+                    learn: learn.clone(),
+                    learn_target: Some(target.clone()),
+                    on_close: move |()| close_menu(Some(h)),
+                }
+            });
+        }
+    });
     rsx! {
         div {
             style: "position: relative; height: 100%; display: flex; flex-direction: column;",
             // Right-click: how this switch behaves, for the song that is up.
-            oncontextmenu: {
-                let (stack, part, parts, changes, learn, target) =
-                    (stack.clone(), part.clone(), parts.clone(), changes.clone(), learn.clone(), learn_target.clone());
-                move |e: MouseEvent| {
-                    e.prevent_default();
-                    let Some(h) = host else {
-                        menu.set(true);
-                        return;
-                    };
-                    let (stack, part, parts, changes, learn, target) =
-                        (stack.clone(), part.clone(), parts.clone(), changes.clone(), learn.clone(), target.clone());
-                    open_menu(h, &e, move || rsx! {
-                        SwitchMenu {
-                            switch_no,
-                            footswitch,
-                            stack: Some((index, stack.clone())),
-                            job: "stack".to_string(),
-                            part: part.clone(),
-                            in_song,
-                            parts: parts.clone(),
-                            changes: changes.clone(),
-                            learn: learn.clone(),
-                            learn_target: Some(target.clone()),
-                            on_close: move |()| close_menu(Some(h)),
-                        }
-                    });
-                }
-            },
+            oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
             onmouseleave: move |_| menu.set(false),
             LearnBadge {
                 binding: learn.binding(&learn_target).map(str::to_string),
@@ -931,6 +932,7 @@ fn StackTile(
                 }
                 }
             }
+            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
         }
     }
 }
@@ -958,31 +960,32 @@ fn ActionTile(
     let mut menu = use_signal(|| false);
     let host = signal_widgets::PopupHost::try_use();
     let sw = footswitch as u32;
+    let open_switch_menu = EventHandler::new({
+        let (job, stack, part) = (job.clone(), stack.clone(), part.clone());
+        move |e: MouseEvent| {
+            e.prevent_default();
+            let Some(h) = host else {
+                menu.set(true);
+                return;
+            };
+            let (job, stack, part) = (job.clone(), stack.clone(), part.clone());
+            open_menu(h, &e, move || rsx! {
+                SwitchMenu {
+                    switch_no: footswitch + 1,
+                    footswitch: Some(footswitch),
+                    stack: stack.clone().map(|st| (footswitch, st)),
+                    job: job.clone(),
+                    part: part.clone(),
+                    in_song,
+                    on_close: move |()| close_menu(Some(h)),
+                }
+            });
+        }
+    });
     rsx! {
         div {
             style: "position: relative; height: 100%; display: flex; flex-direction: column;",
-            oncontextmenu: {
-                let (job, stack, part) = (job.clone(), stack.clone(), part.clone());
-                move |e: MouseEvent| {
-                    e.prevent_default();
-                    let Some(h) = host else {
-                        menu.set(true);
-                        return;
-                    };
-                    let (job, stack, part) = (job.clone(), stack.clone(), part.clone());
-                    open_menu(h, &e, move || rsx! {
-                        SwitchMenu {
-                            switch_no: footswitch + 1,
-                            footswitch: Some(footswitch),
-                            stack: stack.clone().map(|st| (footswitch, st)),
-                            job: job.clone(),
-                            part: part.clone(),
-                            in_song,
-                            on_close: move |()| close_menu(Some(h)),
-                        }
-                    });
-                }
-            },
+            oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
             onmouseleave: move |_| menu.set(false),
             HoldButton {
                 class: if compact {
@@ -1041,6 +1044,7 @@ fn ActionTile(
                     }
                 }
             }
+            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
         }
     }
 }
@@ -1345,25 +1349,26 @@ fn LearnRows(target: String, learn: SwitchLearn, on_close: Callback<()>) -> Elem
 fn Learnable(target: String, title: String, learn: SwitchLearn, children: Element) -> Element {
     let mut menu = use_signal(|| false);
     let host = signal_widgets::PopupHost::try_use();
+    let open_switch_menu = EventHandler::new({
+        let (target, title, learn) = (target.clone(), title.clone(), learn.clone());
+        move |e: MouseEvent| {
+            e.prevent_default();
+            let Some(h) = host else {
+                menu.set(true);
+                return;
+            };
+            let (target, title, learn) = (target.clone(), title.clone(), learn.clone());
+            open_menu(h, &e, move || rsx! {
+                SwitchMenuFrame { title: title.clone(),
+                    LearnRows { target: target.clone(), learn: learn.clone(), on_close: move |()| close_menu(Some(h)) }
+                }
+            });
+        }
+    });
     rsx! {
         div {
             style: "position: relative; height: 100%; min-height: 0; display: flex; flex-direction: column;",
-            oncontextmenu: {
-                let (target, title, learn) = (target.clone(), title.clone(), learn.clone());
-                move |e: MouseEvent| {
-                    e.prevent_default();
-                    let Some(h) = host else {
-                        menu.set(true);
-                        return;
-                    };
-                    let (target, title, learn) = (target.clone(), title.clone(), learn.clone());
-                    open_menu(h, &e, move || rsx! {
-                        SwitchMenuFrame { title: title.clone(),
-                            LearnRows { target: target.clone(), learn: learn.clone(), on_close: move |()| close_menu(Some(h)) }
-                        }
-                    });
-                }
-            },
+            oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
             onmouseleave: move |_| menu.set(false),
             LearnBadge {
                 binding: learn.binding(&target).map(str::to_string),
@@ -1377,6 +1382,7 @@ fn Learnable(target: String, title: String, learn: SwitchLearn, children: Elemen
                     }
                 }
             }
+            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
         }
     }
 }
@@ -1501,35 +1507,36 @@ fn TapTempoTile(
     } else {
         "box-shadow: 0 0 0 3px transparent;"
     };
+    let open_switch_menu = EventHandler::new({
+        let (part, learn) = (part.clone(), learn.clone());
+        move |e: MouseEvent| {
+            e.prevent_default();
+            let Some(h) = host else {
+                menu.set(true);
+                return;
+            };
+            let (part, learn) = (part.clone(), learn.clone());
+            open_menu(h, &e, move || rsx! {
+                SwitchMenu {
+                    switch_no: 5usize,
+                    footswitch: Some(4usize),
+                    stack: None,
+                    job: "tap_tempo".to_string(),
+                    part: part.clone(),
+                    in_song,
+                    learn: learn.clone(),
+                    learn_target: Some("tap".to_string()),
+                    on_close: move |()| close_menu(Some(h)),
+                }
+            });
+        }
+    });
     rsx! {
         div {
             style: "position: relative; height: 100%; display: flex; flex-direction: column;",
             // Right-click: MIDI-learn a pedal onto it, and (in a song) give
             // switch 5 another job.
-            oncontextmenu: {
-                let (part, learn) = (part.clone(), learn.clone());
-                move |e: MouseEvent| {
-                    e.prevent_default();
-                    let Some(h) = host else {
-                        menu.set(true);
-                        return;
-                    };
-                    let (part, learn) = (part.clone(), learn.clone());
-                    open_menu(h, &e, move || rsx! {
-                        SwitchMenu {
-                            switch_no: 5usize,
-                            footswitch: Some(4usize),
-                            stack: None,
-                            job: "tap_tempo".to_string(),
-                            part: part.clone(),
-                            in_song,
-                            learn: learn.clone(),
-                            learn_target: Some("tap".to_string()),
-                            on_close: move |()| close_menu(Some(h)),
-                        }
-                    });
-                }
-            },
+            oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
             onmouseleave: move |_| menu.set(false),
             LearnBadge {
                 binding: learn.binding("tap").map(str::to_string),
@@ -1564,6 +1571,7 @@ fn TapTempoTile(
                     }
                 }
             }
+            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
         }
     }
 }

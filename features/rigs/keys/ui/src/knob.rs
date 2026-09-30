@@ -162,6 +162,8 @@ pub fn Knob(
                 div {
                     style: "position: fixed; inset: 0; z-index: 999; cursor: ns-resize;",
                     onpointermove: move |e: PointerEvent| {
+                        // The drag owns the finger: no panel scroll under it (Blitz).
+                        e.prevent_default();
                         if let Some((y0, n0)) = drag() {
                             let dy = y0 - e.client_coordinates().y;
                             let next = (n0 as f64 + dy / SENSITIVITY).clamp(0.0, 1.0) as f32;
@@ -181,6 +183,11 @@ pub fn Knob(
                         local.set(None);
                     },
                     onpointerleave: move |_| {
+                        send.flush();
+                        drag.set(None);
+                        local.set(None);
+                    },
+                    onpointercancel: move |_| {
                         send.flush();
                         drag.set(None);
                         local.set(None);

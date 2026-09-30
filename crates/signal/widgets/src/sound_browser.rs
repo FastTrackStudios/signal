@@ -13,10 +13,15 @@
 //! |---|---|
 //! | click a row | loads it |
 //! | ↑ ↓ in the search field | **auditions**: the highlighted sound plays, live |
-//! | Enter | keeps what is auditioning (or loads the highlighted row) |
-//! | Esc | puts back what played before the audition began |
+//! | Enter · **Keep** | keeps what is auditioning (or loads the highlighted row) |
+//! | Esc · **Undo** | puts back what played before the audition began |
 //! | ⋯ / right-click on a row | its actions (rename, duplicate, delete…) |
 //! | ⋯ in the header | the level's actions (save as a preset…) |
+//!
+//! By touch (see [`crate::touch`]) a tap **auditions** instead of loading
+//! outright — the sound plays, and the bar's Keep / Undo decide; tapping the
+//! same row again keeps it, and leaving keeps it too. A long-press on a row
+//! opens its menu, and every button is a fingertip wide.
 //!
 //! Entries are data (see [`BrowseEntry`]); every action comes back through a
 //! handful of handlers, so the rig decides what "load", "audition" and
@@ -177,6 +182,25 @@ impl Ui {
         }
         self.end(h, true);
         self.cursor.set(Some(id));
+    }
+
+    /// A tap on a row. With a mouse (or no audition) it loads. By touch it
+    /// auditions — the tap is the finger's arrow key — and a second tap on
+    /// the same row keeps it.
+    fn tap(mut self, h: Handlers, audition: bool, touch: bool, id: String) {
+        if !(touch && audition) {
+            self.load(h, id);
+            return;
+        }
+        if self.previewed.peek().as_deref() == Some(id.as_str()) {
+            self.end(h, true);
+            return;
+        }
+        self.tick += 1;
+        self.cursor.set(Some(id.clone()));
+        self.auditioning.set(true);
+        self.previewed.set(Some(id.clone()));
+        h.on_preview.call(id);
     }
 
     /// Move the highlight and, when the rig auditions, play it shortly.
@@ -453,9 +477,7 @@ fn Body(
                 }
             }
             if ui.auditioning.read().clone() {
-                span { style: "font-size: {T_META}; color: {m.accent};",
-                    "Auditioning — Enter keeps it, Esc goes back"
-                }
+                AuditionBar { accent: m.accent.clone(), h, ui }
             }
         }
     };
@@ -533,6 +555,7 @@ fn List(model: Signal<Model>, h: Handlers, ui: Ui) -> Element {
                             indent: false,
                             lit: cursor.as_deref() == Some(entry.id.as_str()),
                             accent: m.accent.clone(),
+                            audition: m.audition,
                             h,
                             ui,
                         }
@@ -543,6 +566,7 @@ fn List(model: Signal<Model>, h: Handlers, ui: Ui) -> Element {
                                 entry: child,
                                 indent: true,
                                 accent: m.accent.clone(),
+                                audition: m.audition,
                                 h,
                                 ui,
                             }
@@ -567,10 +591,13 @@ fn Row(
     indent: bool,
     lit: bool,
     accent: String,
+    audition: bool,
     h: Handlers,
     ui: Ui,
 ) -> Element {
     let host = PopupHost::try_use();
+    let touch = crate::touch::use_touch();
+    let long = crate::touch::use_long_press();
     let (bg, fg) = if lit {
         (FOCUS_BG, TEXT)
     } else if entry.live {
@@ -578,7 +605,12 @@ fn Row(
     } else {
         ("transparent", "#d4d4d8")
     };
-    let pad = if indent { "5px 8px 5px 22px" } else { "6px 8px" };
+    let pad = match (indent, touch) {
+        (true, false) => "5px 8px 5px 22px",
+        (false, false) => "6px 8px",
+        (true, true) => "10px 8px 10px 22px",
+        (false, true) => "11px 8px",
+    };
     let edge = if lit { accent.clone() } else { "transparent".to_string() };
     let size = if indent { T_SMALL } else { T_BODY };
     let id = entry.id.clone();
@@ -593,9 +625,25 @@ fn Row(
             style: "display: flex; align-items: center; gap: 8px; padding: {pad}; border-radius: {R_SM}; \
                     background: {bg}; color: {fg}; cursor: pointer; min-width: 0; \
                     border-left: 2px solid {edge};",
+            // Touch: a long-press opens the row's menu (its right-click).
+            onpointerdown: {
+                let menu = menu.clone();
+                move |e: PointerEvent| {
+                    let menu = menu.clone();
+                    long.down(&e, move |(x, y)| crate::kit::context_menu_at(host, x, y, menu, on_pick));
+                }
+            },
+            onpointermove: move |e: PointerEvent| long.moved(&e),
+            onpointerup: move |_| long.cancel(),
+            onpointercancel: move |_| long.cancel(),
+            onpointerleave: move |_| long.cancel(),
             onclick: {
                 let id = id.clone();
-                move |_| ui.load(h, id.clone())
+                move |_| {
+                    if !long.fired() {
+                        ui.tap(h, audition, touch, id.clone());
+                    }
+                }
             },
             oncontextmenu: {
                 let menu = menu.clone();
@@ -699,8 +747,52 @@ fn Detail(model: Signal<Model>, h: Handlers, ui: Ui) -> Element {
     }
 }
 
+/// While an audition runs: what is playing on trial, and the two ways out —
+/// the buttons a finger has for Enter and Esc.
+#[component]
+fn AuditionBar(accent: String, h: Handlers, ui: Ui) -> Element {
+    let touch = crate::touch::use_touch();
+    let pad = if touch { "11px 16px" } else { "4px 10px" };
+    let btn = |primary: bool| {
+        let (bg, fg, border) = if primary {
+            ("#2563eb", "#ffffff", "#2563eb")
+        } else {
+            ("transparent", TEXT, LINE_STRONG)
+        };
+        format!(
+            "appearance: none; cursor: pointer; border-radius: {R_SM}; padding: {pad}; font-size: {T_SMALL}; \
+             font-weight: 700; background: {bg}; color: {fg}; border: 1px solid {border};"
+        )
+    };
+    rsx! {
+        div { style: "display: flex; align-items: center; gap: 6px;",
+            span { style: "flex: 1 1 0; min-width: 0; font-size: {T_META}; color: {accent}; white-space: nowrap; overflow: hidden;",
+                "Auditioning"
+            }
+            button {
+                style: "{btn(false)}",
+                title: "Put back what played before (Esc)",
+                onclick: move |_| {
+                    let mut u = ui;
+                    u.tick += 1;
+                    ui.end(h, false);
+                    u.cursor.set(None);
+                },
+                "Undo"
+            }
+            button {
+                style: "{btn(true)}",
+                title: "Keep it (Enter)",
+                onclick: move |_| ui.end(h, true),
+                "Keep"
+            }
+        }
+    }
+}
+
 #[component]
 fn Chip(chip: BrowseChip, on_chip: EventHandler<String>) -> Element {
+    let pad = if crate::touch::use_touch() { "9px 14px" } else { "2px 9px" };
     let (border, bg, fg) = if chip.on {
         ("#1f2b3a", FOCUS_BG, FOCUS_FG)
     } else {
@@ -708,7 +800,7 @@ fn Chip(chip: BrowseChip, on_chip: EventHandler<String>) -> Element {
     };
     rsx! {
         button {
-            style: "appearance: none; border: 1px solid {border}; border-radius: 999px; padding: 2px 9px; \
+            style: "appearance: none; border: 1px solid {border}; border-radius: 999px; padding: {pad}; \
                     cursor: pointer; font-size: 10px; font-weight: 700; background: {bg}; color: {fg};",
             onclick: move |_| on_chip.call(chip.id.clone()),
             "{chip.label}"
@@ -718,9 +810,10 @@ fn Chip(chip: BrowseChip, on_chip: EventHandler<String>) -> Element {
 
 #[component]
 fn GlyphButton(title: String, onclick: EventHandler<()>, children: Element) -> Element {
+    let side = crate::touch::hit(crate::touch::use_touch(), 22);
     rsx! {
         button {
-            style: "display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; \
+            style: "display: flex; align-items: center; justify-content: center; width: {side}px; height: {side}px; \
                     padding: 0; flex-shrink: 0; border-radius: {R_SM}; border: 1px solid {LINE}; \
                     background: transparent; color: {MUTED}; cursor: pointer;",
             title: "{title}",
