@@ -9,40 +9,44 @@
 //! the new one in within a quarter second, values kept — so a surface is
 //! designed against the running app instead of by relaunching it.
 //!
-//! Where designs come from: `SIGNAL_FRAME_DIR`, else the blues rig in the
-//! frame checkout beside this one (`../../frame/examples/plugins/rig-blues`,
-//! as the processor and daw checkouts are found). Machine-specific while
-//! the rig pages are being designed; they ship as data later.
+//! Where designs come from: `SIGNAL_FRAME_DIR`, else frame's generated
+//! faces in the frame checkout beside this one
+//! (`../../frame/examples/plugins`, as the processor and daw checkouts are
+//! found); a surface is named by its path under that, `rig-faces/<file>`.
+//! Machine-specific while the faces are being designed; they ship as data
+//! later.
 //!
-//! The controls are not yet bound to rig blocks: an edit moves the control
-//! and is logged, and nothing reaches the engine.
+//! Values cross in the params' own units: `values` in (a block's `drive`,
+//! its level in dB…), `on_edit` out — the face's catalog ranges convert.
 
 use dioxus::prelude::*;
 
-/// The rig-blues pages in the frame checkout, unless `SIGNAL_FRAME_DIR` says
-/// otherwise.
+/// frame's generated faces in the frame checkout, unless
+/// `SIGNAL_FRAME_DIR` says otherwise.
 #[cfg(not(target_arch = "wasm32"))]
-fn design_dir() -> std::path::PathBuf {
+pub(crate) fn design_dir() -> std::path::PathBuf {
     if let Some(dir) = std::env::var_os("SIGNAL_FRAME_DIR") {
         return dir.into();
     }
     let here = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     // features/rigs/guitar/ui → the repo root → its parent → frame.
-    here.join("../../../../../../frame/examples/plugins/rig-blues")
+    here.join("../../../../../../frame/examples/plugins")
 }
 
-/// One page of a frame design, `name` (its `.fm` file's stem), filling
-/// its box — fitted whole and centred. `on_edit` hears every param edit
-/// the page makes, as (address, normalized value).
+/// One frame face, `name` (its path under the faces directory without
+/// `.fm`, e.g. `rig-faces/22-amp-vibroverb`), filling its box — fitted
+/// whole and centred. `values` are the params' values in their own units,
+/// by the face's addresses; `on_edit` hears every edit the face makes,
+/// the same way.
 #[component]
-pub fn FrameSurface(name: String, on_edit: Option<EventHandler<(String, f64)>>) -> Element {
+pub fn FrameSurface(name: String, #[props(default)] values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>) -> Element {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        native::mount(name, on_edit)
+        native::mount(name, values, on_edit)
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let _ = (name, on_edit);
+        let _ = (name, values, on_edit);
         rsx! { div { style: "width: 100%; height: 100%;" } }
     }
 }
@@ -57,7 +61,7 @@ mod native {
     use blitz_dom::node::ComputedStyles;
     use blitz_traits::events::{BlitzWheelDelta, UiEvent};
     use dioxus::prelude::*;
-    use frame_live::{Call, LiveSurface};
+    use frame_live::LiveSurface;
     use kurbo::{Affine, Rect};
     use vello::peniko::{Fill, ImageBrush, ImageSampler};
 
@@ -68,10 +72,13 @@ mod native {
     /// Edits the widget heard, for the component to hand on.
     type Edits = Rc<RefCell<Vec<(String, f64)>>>;
 
-    pub(super) fn mount(name: String, on_edit: Option<EventHandler<(String, f64)>>) -> Element {
+    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>) -> Element {
         crate::fx_viz::use_repaint_clock();
         let live: Shared = use_hook(|| {
-            let (markup, catalog) = frame_live::face_paths(&super::design_dir(), &name);
+            let path = super::design_dir().join(&name);
+            let dir = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+            let stem = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let (markup, catalog) = frame_live::face_paths(&dir, &stem);
             let opened = LiveSurface::open(&markup, catalog).map_err(|e| {
                 tracing::warn!(target: "frame", surface = %markup.display(), error = %e, "frame surface did not open");
                 e
@@ -79,6 +86,15 @@ mod native {
             Rc::new(RefCell::new(opened))
         });
         let edits: Edits = use_hook(|| Rc::new(RefCell::new(Vec::new())));
+        // The block's values, whenever they differ from what was last
+        // given (a param being dragged keeps the hand's).
+        let mut applied: Signal<Vec<(String, f64)>> = use_signal(Vec::new);
+        if *applied.peek() != values {
+            if let Ok(l) = live.borrow_mut().as_mut() {
+                l.apply_real(values.clone());
+            }
+            applied.set(values);
+        }
         let attr = use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(FrameWidget { live: Rc::clone(&live), edits: Rc::clone(&edits), target: None }));
         // The repaint clock runs this body ~40 times a second; the edits
         // go out from a task, not from inside a render.
@@ -123,12 +139,10 @@ mod native {
         frame_live::Modifiers { fine: m.shift(), alt: m.ctrl() || m.meta(), option: m.alt() }
     }
 
-    fn hand_on(edits: &Edits, calls: Vec<Call>) {
-        for call in calls {
-            if let Call::SetParam { addr, value, .. } = &call {
-                tracing::debug!(target: "frame", %addr, value, "frame edit");
-                edits.borrow_mut().push((addr.to_string(), *value));
-            }
+    fn hand_on(edits: &Edits, live: &mut LiveSurface) {
+        for (addr, value) in live.take_edits() {
+            tracing::debug!(target: "frame", %addr, value, "frame edit");
+            edits.borrow_mut().push((addr, value));
         }
     }
 
@@ -170,7 +184,7 @@ mod native {
                 }
                 _ => {}
             }
-            hand_on(&self.edits, live.take_calls());
+            hand_on(&self.edits, live);
         }
 
         fn paint(&mut self, render_ctx: &mut dyn RenderContext, _styles: &ComputedStyles, width: u32, height: u32, scale: f64) -> Scene {
@@ -180,10 +194,13 @@ mod native {
             }
             let mut guard = self.live.borrow_mut();
             let Ok(live) = guard.as_mut() else { return scene };
+            let before = live.error().map(str::to_string);
             if live.poll_reload() {
                 tracing::info!(target: "frame", "frame surface reloaded");
             }
-            if let Some(e) = live.error() {
+            if let Some(e) = live.error()
+                && before.as_deref() != Some(e)
+            {
                 tracing::warn!(target: "frame", error = %e, "frame reload failed; keeping the last good design");
             }
             let stale = self.target.is_none_or(|(_, size)| size != (width, height));
@@ -205,7 +222,7 @@ mod native {
                     }
                     Err(e) => tracing::warn!(target: "frame", error = %e, "frame render failed"),
                 }
-                hand_on(&self.edits, live.take_calls());
+                hand_on(&self.edits, live);
             }
             if let Some((id, _)) = self.target {
                 scene.fill(

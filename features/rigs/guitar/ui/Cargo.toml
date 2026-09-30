@@ -61,6 +61,8 @@ signal-proto.workspace = true
 signal-grid.workspace = true
 signal-grid-ui.workspace = true
 uuid = { version = "1", features = ["v4"] }
+# frame's faces.json (which face draws which block).
+serde_json.workspace = true
 # use_stream (atom+vox) + the portable sleep (platform: tokio native / gloo wasm).
 architect = { workspace = true, features = ["atom", "vox", "platform"] }
 

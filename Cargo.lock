@@ -14319,6 +14319,7 @@ dependencies = [
  "reverb-dsp",
  "reverb-ui",
  "rustc-hash 2.1.3",
+ "serde_json",
  "session-ui",
  "signal-grid",
  "signal-grid-ui",

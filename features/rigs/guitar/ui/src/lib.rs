@@ -20,6 +20,8 @@ pub use modulation_ui::viz as mod_viz;
 mod eq_vello;
 /// Pages designed in frame, running live (hot-reloaded from their files).
 mod frame_surface;
+/// The rig's blocks drawn with frame faces, chosen by what is loaded.
+mod rig_faces;
 mod grid;
 /// The shared audio-gui knob (moved to signal-widgets).
 pub use signal_widgets::knob;

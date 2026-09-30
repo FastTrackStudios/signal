@@ -93,6 +93,13 @@ pub fn GuitarRigRemote() -> Element {
     // stage view; Setlist manages the set (toggle away if unused).
     let mut mode = use_signal(|| Mode::Control);
     let mut switches = use_signal(|| Switches::Full);
+    // The Control view's groups (PRE / AMP / POST): picked in the bar; two
+    // fit when the switches and macros are hidden.
+    let groups = use_context_provider(crate::control::ShownGroups::new);
+    if *groups.two.peek() != (switches() == Switches::Hidden) {
+        let mut two = groups.two;
+        two.set(switches() == Switches::Hidden);
+    }
     let mut audio_open = crate::settings::AUDIO_SETTINGS_OPEN.signal();
     // One bar: this header replaces the app's (crumbs and window controls
     // included) instead of stacking under it. No-op outside the app.
@@ -443,7 +450,6 @@ pub fn GuitarRigRemote() -> Element {
                         move |_| library_open.set(if library_open().is_some() { None } else { Some(at) })
                     },
                     fts_chrome::Glyph { icon: fts_chrome::Icon::Browser, size: 13 }
-                    "Library"
                 }
                 // The bar's slack moves the window (and double-click maximises).
                 fts_chrome::DragSpace {}
@@ -479,8 +485,29 @@ pub fn GuitarRigRemote() -> Element {
                 }
 
 
-                // The footswitch grid: full, a compact strip, or hidden —
-                // click to cycle. Hidden gives the page all the height.
+                // The Control view's groups: which show (one with the
+                // switches up, two without), stacked in signal order.
+                if mode() == Mode::Control {
+                    div { class: "flex items-center rounded-md border border-border bg-background/40 p-0.5 gap-0.5 ml-1",
+                        for g in crate::control::Group::ALL {
+                            button {
+                                key: "{g.label()}",
+                                title: "Show {g.label()}",
+                                class: if groups.shown().contains(&g) {
+                                    "rounded px-2 py-1 text-xs font-semibold bg-accent text-accent-foreground"
+                                } else {
+                                    "rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                                },
+                                onclick: move |_| groups.pick(g),
+                                "{g.label()}"
+                            }
+                        }
+                    }
+                }
+
+                // The footswitch grid and the macros: full, a compact strip,
+                // or hidden — click to cycle. Hidden gives the page all the
+                // height.
                 button {
                     class: if switches() == Switches::Hidden {
                         "flex items-center h-7 px-2 rounded-md border border-border text-muted-foreground hover:text-foreground text-xs"
@@ -752,7 +779,7 @@ pub fn GuitarRigRemote() -> Element {
                             // directly above the switches, in Profile and
                             // Setlist modes. Its panels drop over the grid,
                             // or rise over the page when the grid is short.
-                            if perf_now.perform_mode != 0 {
+                            if perf_now.perform_mode != 0 && switches() != Switches::Hidden {
                                 crate::macro_bar::MacroBar {
                                     macros: state.macros,
                                     drop_up: switches() != Switches::Full,

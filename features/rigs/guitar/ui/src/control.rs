@@ -2444,11 +2444,76 @@ fn eq_panel(block: LiveBlock, spectrum: Vec<f32>) -> Element {
 
 /// The guitar instrument panel — see the module docs for the layout.
 
-/// The Control view's two main rows are pages designed in frame (Drives,
-/// then Amp/Cab) instead of the hand-laid compressor/EQ/gate and time rows.
+/// The Control view is laid out in groups of two rows — PRE, AMP (the
+/// drives and the amps, drawn with frame faces) and POST — instead of the
+/// hand-laid rows alone.
 const FRAME_ROWS: bool = true;
-/// The section bar's choices: the module, then the seven sections.
-const VIEWS: usize = 8;
+
+/// A group of two rows on the Control view, in signal order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Group {
+    /// Before the amp: compression, pitch, EQ, and the pre effects.
+    Pre,
+    /// The drives, then the amps (with the Amp EQ and the gate).
+    Amp,
+    /// After the amp: modulation, motion and the Time module.
+    Post,
+}
+
+impl Group {
+    pub const ALL: [Self; 3] = [Self::Pre, Self::Amp, Self::Post];
+
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Pre => "PRE",
+            Self::Amp => "AMP",
+            Self::Post => "POST",
+        }
+    }
+}
+
+/// Which groups the Control view shows, most recently picked last: with
+/// the switches up, the last one; with them hidden, the last two, stacked
+/// in signal order. Provided by the host (the top bar picks).
+#[derive(Clone, Copy)]
+pub struct ShownGroups {
+    pub picked: Signal<Vec<Group>>,
+    /// The switches (and macros) are hidden: two groups fit.
+    pub two: Signal<bool>,
+}
+
+impl ShownGroups {
+    /// AMP with the switches up; AMP over POST without them.
+    #[must_use]
+    pub fn new() -> Self {
+        Self { picked: Signal::new(vec![Group::Post, Group::Amp]), two: Signal::new(false) }
+    }
+
+    /// The groups showing, in signal order.
+    #[must_use]
+    pub fn shown(&self) -> Vec<Group> {
+        let picked = (self.picked)();
+        let n = if (self.two)() { 2 } else { 1 };
+        let last: Vec<Group> = picked.iter().rev().take(n).copied().collect();
+        Group::ALL.into_iter().filter(|g| last.contains(g)).collect()
+    }
+
+    /// Pick `g`: it becomes the most recent.
+    pub fn pick(&self, g: Group) {
+        let mut picked = self.picked;
+        let mut v = picked();
+        v.retain(|x| *x != g);
+        v.push(g);
+        picked.set(v);
+    }
+}
+
+impl Default for ShownGroups {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[component]
 pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
@@ -2570,13 +2635,13 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
 
     let hp = model.headphone.clone();
-    // Which section the bar shows (0 = the Drive → Amp module). Sections
-    // not yet designed in frame show their hand-laid panels: Input the
-    // dynamics/EQ row, Post-FX and Time the time row.
-    let mut section = use_signal(|| 0usize);
-    let view = section();
-    let show_input = !FRAME_ROWS || view == 1;
-    let show_time = !FRAME_ROWS || view == 6 || view == 7;
+    // The groups the top bar picked (AMP alone by default; AMP over POST
+    // with the switches hidden).
+    let groups = try_use_context::<ShownGroups>().unwrap_or_default();
+    let shown = groups.shown();
+    let show_input = !FRAME_ROWS || shown.contains(&Group::Pre);
+    let show_amp = FRAME_ROWS && shown.contains(&Group::Amp);
+    let show_time = !FRAME_ROWS || shown.contains(&Group::Post);
 
     rsx! {
         div { class: "flex gap-0 h-full min-h-0 overflow-hidden",
@@ -2657,40 +2722,6 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         CabChunk { cab: cab_r.clone(), amp_loaded: amp_r_preset.is_some() }
                     }
                     }
-                    // The rig as designed in frame (docs: frame's rig-sections):
-                    // the Drives section on top, the Amp/Cab section under
-                    // it — live pages, hot-reloaded as their files change.
-                    // The hand-laid rows they replace follow, off while
-                    // FRAME_ROWS is on.
-                    if FRAME_ROWS {
-                        // The section bar: the Drive → Amp module, then
-                        // each section; a click switches what shows below.
-                        div { class: "flex-shrink-0 w-full", style: "height: 52px;",
-                            crate::frame_surface::FrameSurface {
-                                name: "00-section-bar".to_string(),
-                                on_edit: move |(addr, value): (String, f64)| {
-                                    if addr == "rig/section" {
-                                        section.set((value * (VIEWS - 1) as f64).round() as usize);
-                                    }
-                                },
-                            }
-                        }
-                        if view == 0 || view == 2 {
-                            div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 0;",
-                                crate::frame_surface::FrameSurface { name: "31-row-drives".to_string() }
-                            }
-                        }
-                        if view == 0 || view == 4 {
-                            div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 0;",
-                                crate::frame_surface::FrameSurface { name: "32-row-amp-cab".to_string() }
-                            }
-                        }
-                        if view == 3 || view == 5 {
-                            div { class: "flex items-center justify-center min-h-0 w-full", style: "flex: 1 1 0%; color: #8a8a90; font-size: 13px;",
-                                "Not designed in frame yet."
-                            }
-                        }
-                    }
                     if show_input {
                     // Height from the column, not from an aspect ratio.
                     //
@@ -2702,7 +2733,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // flex weight against the time row below gives the same
                     // proportion without the ambiguity, and the compressor's
                     // `aspect-square` still takes its width from the height.
-                    div { class: "flex gap-0 min-h-0 w-full", style: "flex: 3 1 0%; min-height: 0;",
+                    div { class: "flex gap-0 min-h-0 w-full", style: if FRAME_ROWS { "flex: 1 1 0%; min-height: 0;" } else { "flex: 3 1 0%; min-height: 0;" },
                         // Height-driven square: width follows the row height.
                         div { class: "min-h-0 h-full aspect-square flex flex-col flex-shrink-0",
                             ZoomPanel {
@@ -2785,10 +2816,22 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                     }
                     }
+                    // AMP: the drives, then the amps — the blocks the preset
+                    // loaded, each drawn by its frame face (or a card).
+                    if show_amp {
+                        div { class: "flex flex-col gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column;",
+                            div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                                crate::rig_faces::DrivesRow { blocks: blocks.clone() }
+                            }
+                            div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                                crate::rig_faces::AmpRow { blocks: blocks.clone() }
+                            }
+                        }
+                    }
                     if show_time {
                     // Time section: stereo delay + stereo reverb + modulation —
                     // or, on PRE, the Pre FX module's motion, delay and reverb.
-                    div { class: "flex gap-0 min-h-0 w-full", style: "flex: 2 1 0%; min-height: 150px;",
+                    div { class: "flex gap-0 min-h-0 w-full", style: if FRAME_ROWS { "flex: 1 1 0%; min-height: 150px;" } else { "flex: 2 1 0%; min-height: 150px;" },
                         div { class: "min-h-0 h-full flex flex-col gap-0", style: "flex: 1 1 0%;",
                             if !bpre {
                                 ZoomPanel { title: "Modulation".to_string(),
