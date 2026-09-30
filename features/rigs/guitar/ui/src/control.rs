@@ -1118,6 +1118,10 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
 
     let cur = delays[sel().min(delays.len() - 1)].clone();
     let cur_id = cur.id.clone();
+    // Each delay drawn by its machine's face (frame), where there is one.
+    let faces = crate::rig_faces::use_faces();
+    let face_of = |b: &LiveBlock| faces.time(false, DELAY_ALGOS.get(param_v(b, "style", 1.0) as usize).copied().unwrap_or("")).cloned();
+    let all_faces = delays.iter().all(|b| face_of(b).is_some());
 
     rsx! {
         div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
@@ -1146,6 +1150,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                     };
                     let mut taps = stems(t_l, true);
                     taps.extend(stems(t_r, false));
+                    let lane_face = face_of(b);
                     rsx! {
                         div {
                             key: "lane{di}",
@@ -1165,8 +1170,15 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                                     }
                                 }
                             },
-                            {delay_lane(taps.clone(), win_ms, !dim, color, W, quarter, div_label(b),
-                                param_v(b, "style", 1.0) as u32)}
+                            if let Some(f) = lane_face.clone() {
+                                div { class: "absolute inset-0 flex justify-center", style: "background: #0b0c0f;",
+                                    crate::rig_faces::BlockFace { block: b.clone(), face: f }
+                                }
+                            } else {
+                                {delay_lane(taps.clone(), win_ms, !dim, color, W, quarter, div_label(b),
+                                    param_v(b, "style", 1.0) as u32)}
+                            }
+                            if lane_face.is_none() {
                             div { class: "absolute top-0.5 left-1.5 flex items-center gap-1.5",
                                 button {
                                     style: if dim { "font-size:10px; line-height:1; color:#52525b;" } else { "font-size:10px; line-height:1; color:#4ade80;" },
@@ -1189,11 +1201,13 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                                     BypassedBadge { small: true }
                                 }
                             }
+                            }
                             // Per-lane machine + timing, embedded at the
-                            // lane's right edge.
+                            // lane's right edge (a face keeps its top-right
+                            // corner clear for them).
                             div {
-                                class: "absolute right-0 inset-y-0 flex items-center gap-1 pr-1 pl-3",
-                                style: "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);",
+                                class: if lane_face.is_some() { "absolute right-1 top-1 flex items-center gap-1 px-1" } else { "absolute right-0 inset-y-0 flex items-center gap-1 pr-1 pl-3" },
+                                style: if lane_face.is_some() { "background: rgba(8,8,8,0.7); border-radius: 4px;" } else { "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);" },
                                 onclick: move |e: MouseEvent| e.stop_propagation(),
                                 // One timing division per delay (drives
                                 // both sides).
@@ -1228,7 +1242,8 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
 
 
             // ── Knobs for the selected delay (machine + timing live on
-            // the lanes) ──
+            // the lanes); faces carry their own ──
+            if !all_faces {
             div { class: "flex items-end justify-around gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0",
                 style: if cur.bypassed { "order: 1; opacity: 0.4;" } else { "order: 1;" },
                 // The repeats' band: low cut on the wet, high cut in the
@@ -1266,6 +1281,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                     }
                 }
             }
+            }
 
         }
     }
@@ -1290,6 +1306,10 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
     }
     let cur = verbs[sel().min(verbs.len() - 1)].clone();
     let cur_id = cur.id.clone();
+    // Each reverb drawn by its algorithm's face (frame), where there is one.
+    let faces = crate::rig_faces::use_faces();
+    let face_of = |b: &LiveBlock| faces.time(true, VERB_ALGOS.get(param_v(b, "algorithm", 1.0) as usize).copied().unwrap_or("")).cloned();
+    let all_faces = verbs.iter().all(|b| face_of(b).is_some());
 
     rsx! {
         div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
@@ -1338,6 +1358,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                     .iter()
                     .map(|(t, l)| (x_of_t(*t), *l))
                     .collect();
+                    let lane_face = face_of(b);
                     rsx! {
                         div {
                             key: "lane{vi}",
@@ -1357,6 +1378,11 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                                     }
                                 }
                             },
+                            if let Some(f) = lane_face.clone() {
+                                div { class: "absolute inset-0 flex justify-center", style: "background: #0b0c0f;",
+                                    crate::rig_faces::BlockFace { block: b.clone(), face: f }
+                                }
+                            } else {
                             {reverb_lane(
                                 t60 as f32,
                                 size,
@@ -1373,6 +1399,8 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                                 &bot,
                                 x_of_t(t60),
                             )}
+                            }
+                            if lane_face.is_none() {
                             div { class: "absolute top-0.5 left-1.5 flex items-center gap-1.5",
                                 button {
                                     style: if dim { "font-size:10px; line-height:1; color:#52525b;" } else { "font-size:10px; line-height:1; color:#4ade80;" },
@@ -1395,11 +1423,12 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                                     BypassedBadge { small: true }
                                 }
                             }
+                            }
                             // Per-lane algorithm + decay-time readout at the
                             // lane's right edge (the knob lives in the strip).
                             div {
-                                class: "absolute right-0 inset-y-0 flex items-center gap-1.5 pr-1 pl-3",
-                                style: "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);",
+                                class: if lane_face.is_some() { "absolute right-1 top-1 flex items-center gap-1.5 px-1" } else { "absolute right-0 inset-y-0 flex items-center gap-1.5 pr-1 pl-3" },
+                                style: if lane_face.is_some() { "background: rgba(8,8,8,0.7); border-radius: 4px;" } else { "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);" },
                                 onclick: move |e: MouseEvent| e.stop_propagation(),
                                 div { class: "flex flex-col items-end",
                                     span { style: "font-size:7px; text-transform:uppercase; color:#8a8a92;", "Time" }
@@ -1423,7 +1452,9 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
             }
 
 
-            // ── Knobs for the selected reverb (algorithm lives on the lanes) ──
+            // ── Knobs for the selected reverb (algorithm lives on the lanes);
+            // faces carry their own ──
+            if !all_faces {
             div { class: "flex items-end justify-around gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0",
                 style: if cur.bypassed { "order: 1; opacity: 0.4;" } else { "order: 1;" },
                 if let Some(p) = param(&cur, "level") {
@@ -1474,6 +1505,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                 if let Some(p) = param(&cur, "pan_a") {
                     PKnob { block_id: cur_id, name: "pan_a", label: "Pan", p }
                 }
+            }
             }
 
         }
