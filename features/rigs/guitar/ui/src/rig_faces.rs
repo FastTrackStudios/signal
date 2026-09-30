@@ -695,8 +695,22 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
         })
         .collect();
     items.sort_by_key(|(b, _, _)| b.block_type != BlockType::Delay);
+    // The delay and the reverb as lanes, stacked — delay on top — in the
+    // Time module's form; the rest (the tremolo) beside them.
+    let laned = |(b, f, _): &(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)| f.is_some() && matches!(b.block_type, BlockType::Delay | BlockType::Reverb);
+    let lanes: Vec<(LiveBlock, FaceEntry, Vec<(String, LiveBlock)>)> = items.iter().filter(|i| laned(i)).filter_map(|(b, f, e)| f.clone().map(|f| (b.clone(), f, e.clone()))).collect();
+    let items: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = items.into_iter().filter(|i| !laned(i)).collect();
     rsx! {
         Row {
+            if !lanes.is_empty() {
+                div { style: "flex: 0.8 1 0%; min-width: 0; height: 100%; display: flex; flex-direction: column; border-right: 1px solid #1d1f24;",
+                    for (b, f, extra) in lanes {
+                        div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                            BlockFace { block: b.clone(), face: f, extra, fill: true }
+                        }
+                    }
+                }
+            }
             for (b, f, extra) in items {
                 if let Some(f) = f {
                     // The pedal, then what its block is doing — a delay's
