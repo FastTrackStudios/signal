@@ -3796,7 +3796,20 @@ impl GuitarRigBackend {
                                 // which cab rather than "Cab L".
                                 (Self::asset_stem(&block.ir), Vec::new(), 0)
                             } else {
-                                <(String, Vec<String>, u32)>::default()
+                                // Any other block: the block preset the patch
+                                // picks for it (module snapshot, preset
+                                // snapshot, then the patch's own), so a
+                                // surface can name and draw what is loaded.
+                                def.patches
+                                    .iter()
+                                    .find(|p| p.name.eq_ignore_ascii_case(&patch.name))
+                                    .and_then(|own| {
+                                        crate::compose::block_picks(&comp, own)
+                                            .into_iter()
+                                            .find(|c| c.block.eq_ignore_ascii_case(&name))
+                                    })
+                                    .map(|c| (c.preset, Vec::new(), 0))
+                                    .unwrap_or_default()
                             }
                         };
                         // An amp's capture file: its Amp module

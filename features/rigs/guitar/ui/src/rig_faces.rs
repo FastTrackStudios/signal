@@ -41,6 +41,8 @@ pub struct Faces {
     pub amps: Vec<FaceEntry>,
     pub gate: Option<FaceEntry>,
     pub eq: Option<FaceEntry>,
+    /// Pedals for the pre effects, by block preset name.
+    pub pre: Vec<FaceEntry>,
 }
 
 const SET: &str = "rig-faces";
@@ -75,7 +77,7 @@ impl Faces {
                 return Self::default();
             };
             let list = |k: &str| doc.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default();
-            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry) }
+            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), pre: list("pre") }
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -87,6 +89,12 @@ impl Faces {
     #[must_use]
     pub fn drive(&self, preset: &str) -> Option<&FaceEntry> {
         pick(&self.drives, preset)
+    }
+
+    /// The face for a pre effect's block preset.
+    #[must_use]
+    pub fn pre(&self, preset: &str) -> Option<&FaceEntry> {
+        pick(&self.pre, preset)
     }
 
     /// The face for an amp's capture file.
@@ -275,6 +283,30 @@ pub fn AmpRow(blocks: Vec<LiveBlock>) -> Element {
             div { style: "flex: 1 1 0%;" }
             if let (Some(g), Some(f)) = (gate, faces.gate.clone()) {
                 BlockFace { block: g, face: f }
+            }
+        }
+    }
+}
+
+/// The pre effects row: the blocks in front of the amp (Pre Delay, Pre
+/// Verb, Pre Motion), each its pedal face (by the block preset loaded) or
+/// a card.
+#[component]
+pub fn PreFxRow(blocks: Vec<LiveBlock>) -> Element {
+    let faces = use_faces();
+    let pre: Vec<LiveBlock> = blocks
+        .iter()
+        .filter(|b| b.name.starts_with("Pre ") && !b.name.eq_ignore_ascii_case("Pre Comp"))
+        .cloned()
+        .collect();
+    rsx! {
+        div { style: "display: flex; flex-direction: row; justify-content: space-evenly; align-items: stretch; gap: 12px; width: 100%; height: 100%; min-height: 0; padding: 8px; box-sizing: border-box;",
+            for b in pre {
+                if let Some(f) = faces.pre(&b.preset).cloned() {
+                    BlockFace { key: "{b.id}", block: b.clone(), face: f }
+                } else {
+                    NameCard { key: "{b.id}", block: b.clone(), aspect: PEDAL }
+                }
             }
         }
     }

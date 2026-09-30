@@ -2639,9 +2639,12 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     // with the switches hidden).
     let groups = try_use_context::<ShownGroups>().unwrap_or_default();
     let shown = groups.shown();
-    let show_input = !FRAME_ROWS || shown.contains(&Group::Pre);
+    let show_input = !FRAME_ROWS;
+    let show_pre = FRAME_ROWS && shown.contains(&Group::Pre);
     let show_amp = FRAME_ROWS && shown.contains(&Group::Amp);
-    let show_time = !FRAME_ROWS || shown.contains(&Group::Post);
+    let show_post = FRAME_ROWS && shown.contains(&Group::Post);
+    let show_time = !FRAME_ROWS || show_post;
+    let trim = find_block(&blocks, BlockType::Volume, "Patch Trim");
 
     rsx! {
         div { class: "flex gap-0 h-full min-h-0 overflow-hidden",
@@ -2652,7 +2655,9 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
             // ── Center surface ──
             div { class: "flex flex-col gap-1 flex-1 min-w-0 min-h-0",
                 style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow-y: scroll;",
-                if chain_engine != signal_guitar_proto::BlockEngine::LIVE {
+                // With the groups laid out, audio off is the top bar's
+                // blinking Audio dot, not a banner pushing the page down.
+                if !FRAME_ROWS && chain_engine != signal_guitar_proto::BlockEngine::LIVE {
                     AudioOffBanner { state, loading: chain_engine == signal_guitar_proto::BlockEngine::LOADING }
                 }
                 // Main modules, in signal order: Compressor → Gate → Amp EQ,
@@ -2749,7 +2754,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                         });
                                     })
                                 }),
-                                if let Some(comp) = comp {
+                                if let Some(comp) = comp.clone() {
                                     LiveComp { block: comp.clone(), state }
                                 } else {
                                     {empty_slot(comp_title)}
@@ -2777,7 +2782,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                         });
                                     })
                                 }),
-                                if let Some(eq) = eq {
+                                if let Some(eq) = eq.clone() {
                                     // The plugin's own editor where there is a
                                     // renderer that can paint it; the portable
                                     // SVG re-host on wasm. Same band model
@@ -2816,15 +2821,83 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                     }
                     }
+                    // PRE: the input stage (gain, pitch, compressor, EQ), then
+                    // the pre effects in front of the amp.
+                    if show_pre {
+                        div { class: "flex flex-col gap-0 min-h-0 w-full", style: "flex: 2 1 0%; min-height: 0; display: flex; flex-direction: column;",
+                            div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 0;",
+                                div { class: "min-h-0 h-full flex flex-col", style: "flex: 1 1 0%;",
+                                    ZoomPanel { title: "Input Gain".to_string(), {empty_slot("Input Gain")} }
+                                }
+                                div { class: "min-h-0 h-full flex flex-col flex-shrink-0", style: "width: 64px;",
+                                    ZoomPanel { title: "Pitch".to_string(), PitchStrip {} }
+                                }
+                                div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
+                                    ZoomPanel {
+                                        title: "Input Comp".to_string(),
+                                        left_power_on: comp.as_ref().map(|b| !b.bypassed),
+                                        if let Some(c) = comp.clone() {
+                                            LiveComp { block: c, state }
+                                        } else {
+                                            {empty_slot("Input Comp")}
+                                        }
+                                    }
+                                }
+                                div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
+                                    ZoomPanel { title: "Input EQ".to_string(), {empty_slot("Input EQ")} }
+                                }
+                            }
+                            div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                                crate::rig_faces::PreFxRow { blocks: blocks.clone() }
+                            }
+                        }
+                    }
                     // AMP: the drives, then the amps — the blocks the preset
                     // loaded, each drawn by its frame face (or a card).
                     if show_amp {
-                        div { class: "flex flex-col gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column;",
+                        div { class: "flex flex-col gap-0 min-h-0 w-full", style: "flex: 2 1 0%; min-height: 0; display: flex; flex-direction: column;",
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
                                 crate::rig_faces::DrivesRow { blocks: blocks.clone() }
                             }
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
                                 crate::rig_faces::AmpRow { blocks: blocks.clone() }
+                            }
+                        }
+                    }
+                    // POST, top: the EQ, the post compressor and the patch's
+                    // volume (level and boost); the modules follow below.
+                    if show_post {
+                        div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 0;",
+                            div { class: "min-h-0 h-full flex flex-col", style: "flex: 3 1 0%;",
+                                ZoomPanel {
+                                    title: "EQ".to_string(),
+                                    left_power_on: eq.as_ref().map(|b| !b.bypassed),
+                                    if let Some(e) = eq.clone() {
+                                        LiveEq { block: e, state }
+                                    } else {
+                                        {empty_slot("EQ")}
+                                    }
+                                }
+                            }
+                            div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
+                                ZoomPanel {
+                                    title: "Post Comp".to_string(),
+                                    left_power_on: post_comp.as_ref().map(|b| !b.bypassed),
+                                    if let Some(c) = post_comp.clone() {
+                                        LiveComp { block: c, state }
+                                    } else {
+                                        {empty_slot("Post Comp")}
+                                    }
+                                }
+                            }
+                            div { class: "min-h-0 h-full flex flex-col flex-shrink-0", style: "width: 92px;",
+                                ZoomPanel { title: "Volume".to_string(),
+                                    if let Some(t) = trim.clone() {
+                                        PatchTrimPanel { block: t }
+                                    } else {
+                                        {empty_slot("Volume")}
+                                    }
+                                }
                             }
                         }
                     }
@@ -2858,7 +2931,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                         // The patch's own level and pan — Patch Trim, the last
                         // block before the Time module, in signal order.
-                        if !bpre {
+                        if !bpre && !FRAME_ROWS {
                             if let Some(trim) = find_block(&blocks, BlockType::Volume, "Patch Trim") {
                                 div { class: "min-h-0 h-full flex flex-col flex-shrink-0", style: "width: 92px;",
                                     ZoomPanel { title: "Patch".to_string(),

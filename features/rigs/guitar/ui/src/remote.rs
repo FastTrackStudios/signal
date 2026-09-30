@@ -618,6 +618,9 @@ pub fn GuitarRigRemote() -> Element {
                             label: "Audio".to_string(),
                             dot: if is_running { "#22c55e".to_string() } else { "#ef4444".to_string() },
                             title: if is_running { "Audio running".to_string() } else { "Audio stopped".to_string() },
+                            // Off: the dot blinks rather than a banner
+                            // pushing the page down.
+                            flash: !is_running,
                             // What the rig spends of its realtime budget,
                             // measured on the chain actually playing.
                             extra: rsx! {

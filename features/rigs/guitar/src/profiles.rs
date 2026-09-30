@@ -659,8 +659,8 @@ pub fn slot_pedal(slot: &str, drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -
     }
 }
 
-/// Build the boost slot: the captured pedal assigned to it; unassigned, the
-/// library's boost capture (a drive preset option named for boosting, e.g.
+/// Build the boost slot: the captured pedal assigned to it (one with no
+/// capture plays the native boost); unassigned, the library's boost capture (a drive preset option named for boosting, e.g.
 /// King of Tone "Red = Boost"); with none in the library, the native clean
 /// boost. Off by default, like every board slot.
 fn boost_block(drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -> RigBlock {
@@ -681,11 +681,14 @@ fn boost_block(drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -> RigBlock {
     // A captured boost is a pedal like the drives (a NAM Drive block, as
     // the library's pedal nodes resolve); only the native fallback is a
     // Boost block.
+    // A pedal preset whose option has no capture names the native boost
+    // (a rig's "Keeley Katana" as the built-in clean boost): it plays the
+    // Boost block, under the pedal's name.
     let mut b = match assigned {
-        Some(opt) => RigBlock::of_type(BlockType::Drive)
+        Some(opt) if !opt.nam.is_empty() => RigBlock::of_type(BlockType::Drive)
             .with_nam(opt.nam)
             .with_param("drive", "0.5"),
-        None => RigBlock::of_type(BlockType::Boost).with_param("drive", "0.5"),
+        _ => RigBlock::of_type(BlockType::Boost).with_param("drive", "0.5"),
     };
     b = b.named(BOOST_SLOT);
     b.bypassed = true;
