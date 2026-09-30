@@ -271,6 +271,12 @@ impl PluginInstance for KeysInstrument {
     fn is_prepared(&self) -> bool {
         self.prepared
     }
+    /// A lane shares nothing per block with any other: its counters are its
+    /// own or atomic, its scratch is per thread, and the sample cache is
+    /// built for many readers. So lanes render on several cores at once.
+    fn parallel_safe(&self) -> bool {
+        true
+    }
     fn process_block(
         &mut self,
         in_l: &[f32],
@@ -885,6 +891,10 @@ impl PluginInstance for ScopeStage {
     }
     fn is_prepared(&self) -> bool {
         self.prepared
+    }
+    /// Its own filters and limiter; the scope's settings are atomics.
+    fn parallel_safe(&self) -> bool {
+        true
     }
     fn process_block(
         &mut self,

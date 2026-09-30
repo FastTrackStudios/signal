@@ -65,6 +65,8 @@ fn main() {
     }
     let deadline = std::time::Duration::from_secs_f64(f64::from(block) / f64::from(sr));
     let busy = std::env::var_os("LANE_STRESS_BUSY").is_some();
+    let pace = std::env::var_os("LANE_STRESS_PACE").is_some();
+    let paced_from = std::time::Instant::now();
     // LANE_STRESS_SMASH=N: N keys across the keyboard struck inside ~50 ms,
     // sustain pedal down the whole time — a forearm on the keys.
     let smash: usize = std::env::var("LANE_STRESS_SMASH").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
@@ -131,6 +133,15 @@ fn main() {
             let r = rig.lock().unwrap();
             for &k in &chord {
                 r.note_off(k);
+            }
+        }
+        // LANE_STRESS_PACE=1: one block per deadline, as a device clocks
+        // them — unpaced, a fast render outruns the sample streamer (a
+        // harness artefact: its reads land before any device would ask).
+        if pace {
+            let due = paced_from + deadline * b as u32;
+            while std::time::Instant::now() < due {
+                std::thread::sleep(std::time::Duration::from_micros(100));
             }
         }
         let t = std::time::Instant::now();

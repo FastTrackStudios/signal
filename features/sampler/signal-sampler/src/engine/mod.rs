@@ -2438,10 +2438,18 @@ pub(crate) fn steady_loop_region_cached(
     let key = (Arc::as_ptr(data) as usize, lo, hi, min_len);
     // `try_lock`, never `lock`: this runs on the audio thread, and losing the
     // race to the worker costs one fallback note, not a dropout. The worker
-    // holds it only long enough to insert.
-    let Ok(mut guard) = LOOP_REGIONS.try_lock() else {
-        return None;
-    };
+    // holds it only long enough to insert. Lanes render on several threads,
+    // so a sibling lane may hold it for its own lookup — a few retries ride
+    // that out rather than give its note the fallback.
+    let mut guard = None;
+    for _ in 0..64 {
+        if let Ok(g) = LOOP_REGIONS.try_lock() {
+            guard = Some(g);
+            break;
+        }
+        std::hint::spin_loop();
+    }
+    let mut guard = guard?;
     let map = guard.get_or_insert_with(HashMap::new);
     match map.get(&key) {
         Some(LoopScan::Done(found)) => *found,
