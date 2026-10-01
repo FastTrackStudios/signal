@@ -18,7 +18,7 @@ ROOT="$(cd "$(dirname "$0")/../../../../.." && pwd)"
 OUT="${1:-$ROOT/target/phone-shots}"
 SCALE="${2:-1}"
 shift $(( $# > 2 ? 2 : $# ))
-ALL=(transpose-dive pitch-doubler wah-envelope pre-mod-trem pre-delay-verb compressor drives amps eq gate-post-comp mod-motion delays reverbs)
+ALL=(input pedals special pre-mod-trem pre-delay-verb compressor drives amps eq gate-post-comp mod-motion delays reverbs)
 if [ $# -gt 0 ]; then PAGES=("$@"); else PAGES=("${ALL[@]}"); fi
 W=$((874 * SCALE)) H=$((402 * SCALE)) VH=$((381 * SCALE))
 BASE="${PHONE_SHOTS_DISPLAY:-120}"

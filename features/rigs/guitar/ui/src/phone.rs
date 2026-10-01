@@ -30,9 +30,10 @@ use crate::state::RigViewState;
 /// A page of the chain.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
-    TransposeDive,
-    PitchDoubler,
-    WahFilter,
+    Input,
+    Pedals,
+    Pitch,
+    Filter,
     PreModTrem,
     PreDelayVerb,
     PreComp,
@@ -56,10 +57,11 @@ enum Home {
 }
 
 impl Page {
-    pub const ALL: [Self; 13] = [
-        Self::TransposeDive,
-        Self::PitchDoubler,
-        Self::WahFilter,
+    pub const ALL: [Self; 14] = [
+        Self::Input,
+        Self::Pedals,
+        Self::Pitch,
+        Self::Filter,
         Self::PreModTrem,
         Self::PreDelayVerb,
         Self::PreComp,
@@ -74,9 +76,10 @@ impl Page {
 
     fn title(self) -> &'static str {
         match self {
-            Self::TransposeDive => "Transpose · Dive",
-            Self::PitchDoubler => "Pitch · Doubler",
-            Self::WahFilter => "Wah · Envelope",
+            Self::Input => "Input · Transpose · Doubler",
+            Self::Pedals => "Pedals · Wah · Dive · Volume",
+            Self::Pitch => "Pitch · Octaver · Harmonizer",
+            Self::Filter => "Filter",
             Self::PreModTrem => "Pre Mod · Pre Trem",
             Self::PreDelayVerb => "Pre Delay · Pre Verb",
             Self::PreComp => "Compressor",
@@ -93,9 +96,10 @@ impl Page {
     /// Its name in a file or a setting (`drives`, `gate-post-comp`).
     pub fn slug(self) -> &'static str {
         match self {
-            Self::TransposeDive => "transpose-dive",
-            Self::PitchDoubler => "pitch-doubler",
-            Self::WahFilter => "wah-envelope",
+            Self::Input => "input",
+            Self::Pedals => "pedals",
+            Self::Pitch => "pitch",
+            Self::Filter => "filter",
             Self::PreModTrem => "pre-mod-trem",
             Self::PreDelayVerb => "pre-delay-verb",
             Self::PreComp => "compressor",
@@ -112,9 +116,10 @@ impl Page {
     /// Its segment's label on the chain rail.
     fn short(self) -> &'static str {
         match self {
-            Self::TransposeDive => "Trans",
-            Self::PitchDoubler => "Pitch",
-            Self::WahFilter => "Wah",
+            Self::Input => "Input",
+            Self::Pedals => "Pedals",
+            Self::Pitch => "Pitch",
+            Self::Filter => "Filter",
             Self::PreModTrem => "P.Mod",
             Self::PreDelayVerb => "P.Dly",
             Self::PreComp => "Comp",
@@ -130,7 +135,7 @@ impl Page {
 
     fn home(self) -> Home {
         match self {
-            Self::TransposeDive | Self::PitchDoubler | Self::WahFilter | Self::PreModTrem | Self::PreDelayVerb => Home::Front,
+            Self::Input | Self::Pedals | Self::Pitch | Self::Filter | Self::PreModTrem | Self::PreDelayVerb => Home::Front,
             Self::PreComp | Self::Drives | Self::Amps | Self::Eq | Self::GatePostComp => Home::Core,
             Self::ModMotion => Home::Post,
             Self::Delays | Self::Reverbs => Home::Time,
@@ -440,9 +445,10 @@ fn PatchStepper(revision: u64) -> Element {
 fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32) -> Element {
     let only = |kinds: &[&str]| kinds.iter().map(|k| (*k).to_string()).collect::<Vec<_>>();
     match page {
-        Page::TransposeDive => rsx! { crate::rig_faces::InputRow { blocks, only: only(&["transpose", "dive"]) } },
-        Page::PitchDoubler => rsx! { crate::rig_faces::InputRow { blocks, only: only(&["pitch", "doubler"]) } },
-        Page::WahFilter => rsx! { crate::rig_faces::InputRow { blocks, only: only(&["wah", "filter"]) } },
+        Page::Input => rsx! { crate::rig_faces::InputRow { blocks, only: only(&["transpose", "doubler"]) } },
+        Page::Pedals => rsx! { crate::rig_faces::InputRow { blocks, only: only(&["wah", "dive", "volume"]) } },
+        Page::Pitch => rsx! { crate::rig_faces::InputRow { blocks, only: only(&["pitch", "harmony"]) } },
+        Page::Filter => rsx! { crate::rig_faces::InputRow { blocks, only: only(&["filter"]) } },
         Page::PreModTrem => rsx! { crate::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Units } },
         Page::PreDelayVerb => rsx! { crate::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Lanes } },
         Page::PreComp => {

@@ -1220,6 +1220,66 @@ pub fn InputRow(
     // The doubler: no block of its own yet — its unit, drawn.
     let doubler_face = pick(&faces.input, "doubler").cloned();
     let picture = faces.filter_picture.clone();
+    // On a phone a page's units are lanes, stacked, in the page's order:
+    // each its face's phone tier, its preset on its nameplate.
+    let tier = crate::control::use_tier();
+    if tier <= crate::control::Tier::Phone && !only.is_empty() {
+        let lanes: Vec<(String, Option<LiveBlock>, Option<FaceEntry>)> = only
+            .iter()
+            .map(|k| {
+                let (b, f) = match k.as_str() {
+                    "transpose" => (transpose.clone(), transpose_face.clone()),
+                    "dive" => (dive.clone(), dive_face.clone()),
+                    "pitch" => (pitch.clone(), pitch_face.clone()),
+                    "doubler" => (None, doubler_face.clone()),
+                    "wah" => (wah.clone(), wah_face.clone()),
+                    "filter" => (filter.clone(), filter_face.clone()),
+                    "harmony" => named("harmony", "Harmonizer"),
+                    "volume" => named("volume", "Volume Pedal"),
+                    _ => (None, None),
+                };
+                (k.clone(), b, f.map(|f| f.at(tier)))
+            })
+            .collect();
+        // The pedal pages are a board: the pedals side by side at their
+        // own proportions, all one scale, the largest that fits — as the
+        // drives. The rest are lanes, stacked.
+        let board = only.iter().any(|k| matches!(k.as_str(), "wah" | "dive" | "volume" | "pitch" | "harmony"));
+        if board {
+            let (ww, wh) = try_use_context::<crate::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
+            // The page: the window less the rail, the housing, the bars.
+            let (room_w, room_h) = (ww - 60.0 - 54.0 - 24.0, wh - 44.0 - 30.0 - 30.0);
+            let sizes: Vec<(f64, f64)> = lanes.iter().map(|(_, _, f)| f.as_ref().map_or((1.0, 1.0), |f| (f.size.0, f.size.1))).collect();
+            let gaps = 14.0 * (sizes.len().saturating_sub(1)) as f64;
+            let k = ((room_w - gaps) / sizes.iter().map(|s| s.0).sum::<f64>().max(1.0)).min(room_h / sizes.iter().map(|s| s.1).fold(1.0, f64::max));
+            return rsx! {
+                div { style: "display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 14px; width: 100%; height: 100%; min-height: 0; background: linear-gradient(180deg, #121316, #0b0c0e); border-top: 3px solid #1c1d21; border-bottom: 3px solid #1c1d21;",
+                    for ((k_, b, f), (fw, fh)) in lanes.into_iter().zip(sizes) {
+                        div { key: "{k_}", style: "flex: 0 0 auto; width: {fw * k}px; height: {fh * k}px; display: flex; filter: drop-shadow(0 6px 8px rgba(0,0,0,0.6));",
+                            match (b, f) {
+                                (Some(b), Some(f)) => rsx! { BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some(b.block_type.as_str().to_string()) } },
+                                (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true } },
+                                _ => rsx! {},
+                            }
+                        }
+                    }
+                }
+            };
+        }
+        return rsx! {
+            div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
+                for (k, b, f) in lanes {
+                    div { key: "{k}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                        match (b, f) {
+                            (Some(b), Some(f)) => rsx! { BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some(b.block_type.as_str().to_string()) } },
+                            (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true } },
+                            _ => rsx! {},
+                        }
+                    }
+                }
+            }
+        };
+    }
     rsx! {
         Row {
             // The transposer, first in the chain, then the dive bomb.

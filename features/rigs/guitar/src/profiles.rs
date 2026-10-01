@@ -780,6 +780,14 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 "Pitch",
                 &[("semitones", "12"), ("cents", "0"), ("a_level", "0.7"), ("b_semitones", "-12"), ("b_level", "0.7"), ("dry", "1"), ("mix", "0.5")],
             ))
+            // The harmonizer: a pitch block of its own beside the octaver
+            // (Pitch), so each keeps its intervals — a major third and a
+            // fifth over the note.
+            .with_block(off_fx(
+                BlockType::Pitch,
+                "Harmonizer",
+                &[("semitones", "4"), ("cents", "0"), ("a_level", "0.6"), ("b_semitones", "7"), ("b_level", "0.5"), ("dry", "1"), ("mix", "0.5")],
+            ))
             // Volume pedal (clean gain, unity default) — the Control view's
             // left pedal drives it.
             .with_block(on_fx(
