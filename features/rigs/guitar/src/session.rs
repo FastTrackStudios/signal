@@ -2196,6 +2196,28 @@ impl GuitarRigBackend {
             }
         }
         tracing::info!("tap tempo: {bpm:.1} BPM → delay time {quarter_ms:.0} ms");
+        self.retime_synced_reverbs(None);
+    }
+
+    /// Give every reverb locked to the tempo (`sync_div`) the decay that
+    /// rings for its beats now — or only `only`'s. The engine has no tempo
+    /// of its own for a reverb, so the rig does it on a tempo change, a
+    /// patch load and an algorithm change.
+    fn retime_synced_reverbs(&self, only: Option<&str>) {
+        let Some(bpm) = *self.tempo.lock_ok() else { return };
+        let writes: Vec<(String, f32)> = self
+            .blocks
+            .lock_ok()
+            .iter()
+            .filter(|b| b.block_type == BlockType::Reverb && only.is_none_or(|id| b.id == id))
+            .filter_map(|b| {
+                let v = |n: &str| b.params.iter().find(|p| p.name == n).map_or(0.0, |p| p.value);
+                crate::time_sync::reverb_synced_decay(v("algorithm"), v("variant"), v("sync_div"), bpm as f32).map(|d| (b.id.clone(), d))
+            })
+            .collect();
+        for (id, decay) in writes {
+            self.write_live_param(&id, "decay", decay);
+        }
     }
 
     /// The boost currently applied (0.0 while disengaged).
@@ -4326,6 +4348,8 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("damping", 0.0, 1.0, 0.3),
             ("tone", -1.0, 1.0, 0.0),
             ("pan_a", -1.0, 1.0, 0.0),
+            // Locked to the tempo: the tail's beats (`time_sync`; 0 free).
+            ("sync_div", 0.0, 7.0, 0.0),
             // The dry guitar through the block; the reverb is added in
             // parallel at `level`.
             ("dry", 0.0, 1.0, 1.0),
@@ -7943,6 +7967,11 @@ impl Rig for GuitarRigBackend {
         if matches!(param.as_str(), "style" | "algorithm" | "engine" | "pan" | "pan_a" | "width") {
             let blocks = self.blocks.lock_ok().clone();
             self.macros.lock_ok().refresh(&blocks);
+        }
+        // A reverb locked to the tempo keeps its beats through a new
+        // algorithm (another decay law) or a new length.
+        if matches!(param.as_str(), "algorithm" | "variant" | "sync_div") {
+            self.retime_synced_reverbs(Some(&id));
         }
         // Chain state only — param drags shouldn't re-publish the perf model.
         self.events.publish(RigEvent::Chain(Rig::chain(self)));

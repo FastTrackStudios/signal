@@ -1067,6 +1067,41 @@ pub struct MacroResult {
 
 pub mod watch;
 
+/// Time effects locked to the tempo — the beat lengths a Time knob's Beat
+/// side steps through, shared by the rig (which follows the tempo) and
+/// every remote (which shows and sets them).
+pub mod time {
+    /// A reverb's tail in beats, by its `sync_div` (0: free — the decay is
+    /// its own).
+    pub const REVERB_BEATS: [(&str, f64); 8] = [
+        ("Free", 0.0),
+        ("1/8", 0.5),
+        ("1/4", 1.0),
+        ("1/2", 2.0),
+        ("1 bar", 4.0),
+        ("2 bars", 8.0),
+        ("4 bars", 16.0),
+        ("8 bars", 32.0),
+    ];
+
+    /// A delay's divisions shortest to longest — (label, its `tap_div`
+    /// index, its length in quarter notes). `FREE_DIV` runs on the time
+    /// knob.
+    pub const DELAY_BEATS: [(&str, usize, f64); 8] = [
+        ("1/16", 4, 0.25),
+        ("1/8T", 3, 1.0 / 3.0),
+        ("1/8", 2, 0.5),
+        ("1/8.", 1, 0.75),
+        ("1/4T", 10, 2.0 / 3.0 * 1.0),
+        ("1/4", 0, 1.0),
+        ("1/4.", 8, 1.5),
+        ("1/2", 9, 2.0),
+    ];
+
+    /// The `tap_div` that runs free.
+    pub const FREE_DIV: usize = 7;
+}
+
 pub mod rig {
     //! Live rig control. `Rig` → `RigClient` / `RigService` / `rig_serve`,
     //! plus the `#[subscribe]` stream sibling: `RigStreamClient` /

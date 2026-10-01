@@ -50,6 +50,9 @@ pub struct FaceEntry {
     /// It carries the nameplate: prints its algorithm and preset itself,
     /// the host filling `<ns>/preset` and answering its presses.
     pub nameplate: bool,
+    /// It carries the Time knob (`<ns>/time`, `/sync`, `/time_text`), the
+    /// host mapping it onto the block (`time_face`).
+    pub time_knob: bool,
 }
 
 impl FaceEntry {
@@ -221,7 +224,8 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
         })
         .unwrap_or_default();
     let nameplate = v.get("nameplate").and_then(serde_json::Value::as_bool).unwrap_or(false);
-    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark, tiers, nameplate })
+    let time_knob = v.get("time_knob").and_then(serde_json::Value::as_bool).unwrap_or(false);
+    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark, tiers, nameplate, time_knob })
 }
 
 impl Faces {
@@ -380,12 +384,18 @@ pub fn BlockFace(
     preset_type: Option<String>,
     #[props(default)]
     algos: Option<(&'static str, Vec<&'static str>)>,
+    /// The tempo, for a face with the Time knob (its Beat side).
+    #[props(default)]
+    tempo_bpm: Option<u32>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     // The nameplate: the preset playing, printed by the face.
     let comp = try_use_context::<crate::face_chrome::FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
     let playing = comp.active_blocks.iter().find(|b| b.block.eq_ignore_ascii_case(&block.name)).map(|b| b.preset.clone()).unwrap_or_default();
-    let texts = if face.nameplate { vec![(format!("{}/preset", face.ns), if playing.is_empty() { "—".to_string() } else { playing.clone() })] } else { Vec::new() };
+    let mut texts = if face.nameplate { vec![(format!("{}/preset", face.ns), if playing.is_empty() { "—".to_string() } else { playing.clone() })] } else { Vec::new() };
+    // The Time knob: its position, switch and readout, from the block.
+    let bpm = tempo_bpm.unwrap_or(120) as f32;
+    let timed = face.time_knob.then(|| crate::time_face::view(&block, bpm)).flatten();
     // Where the last press on the face landed (window coordinates): the
     // algorithm menu opens there.
     let mut pressed_at = use_signal(|| (0.0, 0.0));
@@ -397,6 +407,12 @@ pub fn BlockFace(
             values.push((format!("{}/{}", face.ns, m.face), m.to_face(f64::from(p.value))));
         }
     }
+    if let Some(t) = &timed {
+        values.push((format!("{}/time", face.ns), t.time));
+        values.push((format!("{}/sync", face.ns), t.sync));
+        texts.push((format!("{}/time_text", face.ns), t.text.clone()));
+    }
+    let time_block = timed.is_some().then(|| block.clone());
     let maps = face.maps.clone();
     for (ns, b) in &extra {
         values.extend(values_of(b, ns));
@@ -433,6 +449,16 @@ pub fn BlockFace(
                 values,
                 texts,
                 on_edit: move |(addr, value): (String, f64)| {
+                    // The Time knob and its switch, onto the block.
+                    if let Some(b) = time_block.as_ref()
+                        && let Some((_, what)) = addr.rsplit_once('/').filter(|(_, w)| *w == "time" || *w == "sync")
+                    {
+                        let writes = if what == "time" { crate::time_face::turn(b, bpm, value) } else { crate::time_face::flip(b, bpm, value >= 0.5) };
+                        for (param, v) in writes {
+                            crate::control::send_param(&rig, &b.id, param, v);
+                        }
+                        return;
+                    }
                     // The nameplate's presses.
                     if let Some((b, kind, algos, comp, playing)) = nameplate.as_ref()
                         && let Some(press) = ["algo_menu", "preset_prev", "preset_next", "preset_browse"].into_iter().find(|p| addr.ends_with(&format!("/{p}")))

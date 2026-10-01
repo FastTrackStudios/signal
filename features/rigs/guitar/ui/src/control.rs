@@ -1397,7 +1397,7 @@ pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(defaul
                             },
                             if let Some(f) = lane_face.clone() {
                                 div { class: "absolute inset-0 flex justify-center", style: "background: #0b0c0f;",
-                                    crate::rig_faces::BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some("reverb".to_string()), algos: Some(("algorithm", VERB_ALGOS.to_vec())) }
+                                    crate::rig_faces::BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some("reverb".to_string()), algos: Some(("algorithm", VERB_ALGOS.to_vec())), tempo_bpm: Some(tempo_bpm) }
                                 }
                             } else {
                             {reverb_lane(

@@ -35,6 +35,8 @@ signal-macromod.workspace = true
 # The wire contract this crate's headless backend implements (Rig +
 # AudioSettings services); front-ends consume the same crate's clients.
 signal-guitar-proto.workspace = true
+# A reverb locked to the tempo: its decay ↔ seconds law (`time_sync`).
+reverb-dsp.workspace = true
 # Layer/Services composition + dispatchers for mounting the services.
 architect = { workspace = true, features = ["vox", "rig"] }
 # BlockType — primary-param mapping per block type.

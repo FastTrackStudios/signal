@@ -33,6 +33,7 @@ pub mod node_store;
 pub mod nodes;
 pub mod profiles;
 pub mod session;
+pub mod time_sync;
 pub mod web_bundle;
 
 pub use session::GuitarRigBackend;

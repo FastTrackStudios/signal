@@ -44,6 +44,7 @@ mod setlist_bar;
 mod settings;
 mod sidebars;
 mod stable;
+mod time_face;
 mod state;
 mod theme;
 mod wire_param;
