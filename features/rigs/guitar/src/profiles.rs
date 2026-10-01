@@ -742,6 +742,22 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             b
         };
         let head = RigPatch::new(name)
+            // The transposer, before everything: the whole rig hears the
+            // guitar in the key it is set to (down a step, up a capo…) —
+            // the clean engine, the shifted signal alone.
+            .with_block(off_fx(
+                BlockType::Pitch,
+                TRANSPOSE,
+                &[("semitones", "0"), ("cents", "0"), ("engine", "0"), ("mix", "1"), ("a_level", "1"), ("b_level", "0"), ("dry", "0")],
+            ))
+            // The dive bomb: a whammy — one voice, the shifted signal alone,
+            // its interval swept by the treadle; short frames, so it
+            // follows the foot.
+            .with_block(off_fx(
+                BlockType::Pitch,
+                DIVE_BOMB,
+                &[("semitones", "0"), ("cents", "0"), ("engine", "0"), ("live", "1"), ("mix", "1"), ("a_level", "1"), ("b_level", "0"), ("dry", "0")],
+            ))
             // Pedal-style squeeze before everything (off until a preset
             // engages it): slow-ish attack lets the pick through.
             // (No explicit module for these two single blocks: a module named
@@ -780,6 +796,12 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             // then colours. All off until a preset engages them.
             // Pre FX in the John Mayer X order: the slap first, into the
             // tank's tremolo and spring.
+            // Modulation into the amp first (a chorus or vibe on the
+            // board, before the slap).
+            .with_block(in_module(
+                off_fx(BlockType::Chorus, PRE_MOD, &[("engine", "5"), ("rate", "0.6"), ("depth", "0.4"), ("mix", "0.5")]),
+                PRE_FX,
+            ))
             .with_block(in_module(
                 off_fx(
                     BlockType::Delay,
@@ -1031,6 +1053,13 @@ pub const PRE_FX: &str = "Pre FX";
 /// its drive board (the Drive module), its amps (the Amp module), the gate,
 /// the amp EQ and the post compressor. A patch's preset *is* its Core.
 pub const CORE: &str = "Core";
+
+/// The transposer: the first block of the chain.
+pub const TRANSPOSE: &str = "Transpose";
+/// The dive bomb (whammy), after the transposer.
+pub const DIVE_BOMB: &str = "Dive Bomb";
+/// Modulation in front of the amp: the first of the Pre FX.
+pub const PRE_MOD: &str = "Pre Mod";
 
 /// The chain blocks the Core owns besides its drives and amps.
 pub const CORE_BLOCKS: [&str; 4] = [PRE_COMP, "Gate", "Amp EQ", POST_COMP];

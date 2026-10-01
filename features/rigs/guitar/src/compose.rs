@@ -219,6 +219,25 @@ pub struct PresetSnapshotDef {
     /// its sound. A patch's own positions win knob by knob.
     #[facet(default)]
     pub macros: Vec<crate::profiles::MacroValueDef>,
+    /// The Core frozen into NAM captures ([`crate::freeze`]): the left one,
+    /// or the only one.
+    #[facet(default)]
+    pub frozen_nam: String,
+    /// The right side's capture, for a Core whose sides differ.
+    #[facet(default)]
+    pub frozen_nam2: String,
+    /// The captures' output trim, dB: what lands them at the live Core's
+    /// level.
+    #[facet(default)]
+    pub frozen_trim_db: f32,
+    /// How far the frozen Core is from the live one (error-to-signal ratio
+    /// on a guitar it never trained on, the worse side).
+    #[facet(default)]
+    pub frozen_esr: f32,
+    /// Play the frozen Core rather than the live one. The settings stay
+    /// either way: flip as often as wanted.
+    #[facet(default)]
+    pub frozen: bool,
 }
 
 /// A preset: a composition of module presets, with snapshots.
@@ -552,6 +571,9 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
             // an overwrite here threw away, so a patch-level fix could never
             // take.
             patch.level_db += snap.level_db;
+            if snap.frozen && !snap.frozen_nam.is_empty() {
+                crate::freeze::play_frozen(patch, snap, &mut overrides, &mut synthesised);
+            }
         }
         for pick in in_signal_order(&own) {
             apply_pick(comp, pick, patch, &mut overrides, &mut synthesised);
@@ -620,13 +642,15 @@ pub fn put_core(patch: &mut PatchDef, preset: &str, snapshot: &str) {
 fn block_type_of(block: &str) -> Option<&'static str> {
     let b = block.to_ascii_lowercase();
     Some(match b.as_str() {
-        "chorus" => "chorus",
+        "chorus" | "pre mod" => "chorus",
         "flanger" => "flanger",
         "phaser" => "phaser",
         "tremolo" | "pre motion" => "trem",
         "vibrato" => "vibrato",
         "rotary" => "rotary",
         "pitch" => "pitch",
+        "transpose" => "transpose",
+        "dive bomb" => "dive",
         "pre delay" => "delay",
         "pre verb" => "reverb",
         _ => return None,
@@ -886,6 +910,7 @@ mod tests {
                         level_db: 0.0,
                         gain_bias_db: 0.0,
                         macros: Vec::new(),
+                        ..Default::default()
                     },
                     PresetSnapshotDef {
                         blocks: Vec::new(),
@@ -895,6 +920,7 @@ mod tests {
                         level_db: 0.0,
                         gain_bias_db: 2.0,
                         macros: Vec::new(),
+                        ..Default::default()
                     },
                 ],
             }],
@@ -1274,6 +1300,7 @@ pub fn propose(def: &ProfileDef) -> Migration {
             level_db: 0.0,
             gain_bias_db: 0.0,
             macros: Vec::new(),
+            ..Default::default()
         });
         patch.rig_preset = preset_name;
         patch.snapshot = patch.name.clone();
@@ -1877,6 +1904,7 @@ pub fn recompose(
                 level_db: 0.0,
                 gain_bias_db: 0.0,
                 macros: Vec::new(),
+                ..Default::default()
             };
             match preset
                 .snapshots
@@ -1910,7 +1938,7 @@ pub fn recompose(
 /// must leave it as recorded — `UPDATE_GOLDEN=1` rewrites the record when
 /// a change of sound is meant.
 #[cfg(test)]
-mod golden {
+pub(crate) mod golden {
     use super::*;
     use crate::library::DrivePresetLib;
     use crate::profiles::{ProfileDef, build_profile};
@@ -1922,7 +1950,7 @@ mod golden {
     }
 
     /// The default config: the Blues profile, the compositions, the drives.
-    fn shipped() -> (ProfileDef, Compositions, Vec<crate::profiles::DrivePresetDef>) {
+    pub(crate) fn shipped() -> (ProfileDef, Compositions, Vec<crate::profiles::DrivePresetDef>) {
         let profile: ProfileDef = parse("profiles/blues.styx", include_str!("../default-config/profiles/blues.styx"));
         let comp = Compositions {
             modules: parse::<ModuleLib>("modules.styx", include_str!("../default-config/modules.styx")).presets,

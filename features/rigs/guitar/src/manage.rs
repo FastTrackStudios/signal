@@ -802,6 +802,7 @@ mod tests {
                     level_db: 0.0,
                     gain_bias_db: 0.0,
                     macros: Vec::new(),
+                    ..Default::default()
                 }],
             }],
             blocks: vec![BlockPresetDef {
