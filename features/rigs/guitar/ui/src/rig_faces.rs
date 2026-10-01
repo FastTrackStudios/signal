@@ -46,13 +46,27 @@ pub struct FaceEntry {
     pub dark: Option<String>,
     /// The same design laid out for other rooms (`tiers` in the manifest):
     /// (tier, face, dark face, size). [`at`](Self::at) picks one.
-    pub tiers: Vec<(crate::control::Tier, String, Option<String>, (f64, f64))>,
+    pub tiers: Vec<(crate::control::Tier, FaceTier)>,
     /// It carries the nameplate: prints its algorithm and preset itself,
     /// the host filling `<ns>/preset` and answering its presses.
     pub nameplate: bool,
-    /// It carries the Time knob (`<ns>/time`, `/sync`, `/time_text`), the
-    /// host mapping it onto the block (`time_face`).
+    /// It carries the Time knob (`<ns>/time_knob`, `/sync`, `/time_text`),
+    /// the host mapping it onto the block (`time_face`).
     pub time_knob: bool,
+    /// Its back — the advanced controls — and the back's dark finish: the
+    /// face's flip arrow (`<ns>/flip`) turns it over.
+    pub back: Option<String>,
+    pub back_dark: Option<String>,
+}
+
+/// A face's version for one tier: (face, dark face, size, back, dark back).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FaceTier {
+    pub face: String,
+    pub dark: Option<String>,
+    pub size: (f64, f64),
+    pub back: Option<String>,
+    pub back_dark: Option<String>,
 }
 
 impl FaceEntry {
@@ -61,13 +75,15 @@ impl FaceEntry {
     /// itself.
     #[must_use]
     pub fn at(&self, tier: crate::control::Tier) -> Self {
-        let best = self.tiers.iter().filter(|(t, ..)| *t >= tier && *t < crate::control::Tier::Desktop).min_by_key(|(t, ..)| *t);
-        let best = best.or_else(|| self.tiers.iter().filter(|(t, ..)| *t <= tier).max_by_key(|(t, ..)| *t));
+        let best = self.tiers.iter().filter(|(t, _)| *t >= tier && *t < crate::control::Tier::Desktop).min_by_key(|(t, _)| *t);
+        let best = best.or_else(|| self.tiers.iter().filter(|(t, _)| *t <= tier).max_by_key(|(t, _)| *t));
         let mut f = self.clone();
-        if let Some((_, face, dark, size)) = best {
-            f.face.clone_from(face);
-            f.dark.clone_from(dark);
-            f.size = *size;
+        if let Some((_, t)) = best {
+            f.face.clone_from(&t.face);
+            f.dark.clone_from(&t.dark);
+            f.size = t.size;
+            f.back.clone_from(&t.back);
+            f.back_dark.clone_from(&t.back_dark);
         }
         f
     }
@@ -78,6 +94,9 @@ impl FaceEntry {
         let mut f = self.clone();
         if let Some(d) = &self.dark {
             f.face.clone_from(d);
+        }
+        if self.back_dark.is_some() {
+            f.back.clone_from(&self.back_dark);
         }
         f
     }
@@ -216,16 +235,18 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
                 .filter_map(|(name, t)| {
                     let tier = crate::control::Tier::from_name(name)?;
                     let face = format!("{SET}/{}", t.get("face")?.as_str()?);
-                    let dark = t.get("dark").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
+                    let named = |k: &str| t.get(k).and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
                     let s = t.get("size")?.as_array()?;
-                    Some((tier, face, dark, (s.first()?.as_f64()?, s.get(1)?.as_f64()?)))
+                    Some((tier, FaceTier { face, dark: named("dark"), size: (s.first()?.as_f64()?, s.get(1)?.as_f64()?), back: named("back"), back_dark: named("back_dark") }))
                 })
                 .collect()
         })
         .unwrap_or_default();
     let nameplate = v.get("nameplate").and_then(serde_json::Value::as_bool).unwrap_or(false);
     let time_knob = v.get("time_knob").and_then(serde_json::Value::as_bool).unwrap_or(false);
-    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark, tiers, nameplate, time_knob })
+    let back = v.get("back").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
+    let back_dark = v.get("back_dark").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
+    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark, tiers, nameplate, time_knob, back, back_dark })
 }
 
 impl Faces {
@@ -396,6 +417,20 @@ pub fn BlockFace(
     // The Time knob: its position, switch and readout, from the block.
     let bpm = tempo_bpm.unwrap_or(120) as f32;
     let timed = face.time_knob.then(|| crate::time_face::view(&block, bpm)).flatten();
+    // Turned over to its back (the advanced controls) by its flip arrow.
+    // `FTS_FACE_BACK=1` starts every face turned over (to look at backs).
+    let mut flipped = use_signal(|| {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            std::env::var("FTS_FACE_BACK").is_ok_and(|v| v == "1")
+        }
+        #[cfg(target_arch = "wasm32")]
+        false
+    });
+    let shown = match (&face.back, flipped()) {
+        (Some(back), true) => back.clone(),
+        _ => face.face.clone(),
+    };
     // Where the last press on the face landed (window coordinates): the
     // algorithm menu opens there.
     let mut pressed_at = use_signal(|| (0.0, 0.0));
@@ -447,13 +482,20 @@ pub fn BlockFace(
                 PresetCorner { block: step_name, block_type: step_type }
             }
             FrameSurface {
-                key: "{block.id}-{face.face}",
-                name: face.face.clone(),
+                key: "{block.id}-{shown}",
+                name: shown.clone(),
                 responsive: fill,
                 variants: face.variants.clone(),
                 values,
                 texts,
                 on_edit: move |(addr, value): (String, f64)| {
+                    // The flip arrow: the other side.
+                    if addr.ends_with("/flip") {
+                        if value >= 0.5 {
+                            flipped.toggle();
+                        }
+                        return;
+                    }
                     // The Time knob and its switch, onto the block.
                     if let Some(b) = time_block.as_ref()
                         && let Some((_, what)) = addr.rsplit_once('/').filter(|(_, w)| *w == "time_knob" || *w == "sync")
