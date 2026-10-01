@@ -132,7 +132,7 @@ const CLOUD_TONE_HZ: &[(f64, f64)] = &[
 ];
 
 /// Our wet level against BigSky's at MIX 127, dB.
-const CLOUD_WET_GAIN_DB: f64 = 2.4;
+const CLOUD_WET_GAIN_DB: f64 = 4.0;
 
 /// Cloud: BigSky `Decay` 1000–50000, `PreDelay`/`Tone`/`MOD` 0–127,
 /// `LowEnd`/`Diffusion` −10…+10.
