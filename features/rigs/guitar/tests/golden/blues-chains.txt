@@ -9,7 +9,7 @@ Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | byp
 Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
 Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=0 tap_div_r=0 time=110
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
 Amp L | nam=/home/cody/.config/signal/nam/tone3000/65989/Fender_ Vibroverb_ 1964  - Dumble_ Steel String Singer_ _002 -  Two-Rock_ John Mayer Signature Prototype __Signature _83__.nam | ir= | bypassed=false | 
@@ -44,7 +44,7 @@ Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | byp
 Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
 Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=0 tap_div_r=0 time=110
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
 Amp L | nam=/home/cody/.config/signal/nam/tone3000/65976/Fender_ Vibroverb_ 1964.nam | ir= | bypassed=false | 
@@ -79,7 +79,7 @@ Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | byp
 Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=false | drive=0.5
 Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=0 tap_div_r=0 time=110
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
 Amp L | nam=/home/cody/.config/signal/nam/tone3000/65976/Fender_ Vibroverb_ 1964.nam | ir= | bypassed=false | 
@@ -114,7 +114,7 @@ Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | byp
 Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
 Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=0 tap_div_r=0 time=110
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
 Amp L | nam=/home/cody/.config/signal/nam/tone3000/65976/Fender_ Vibroverb_ 1964.nam | ir= | bypassed=false | 
@@ -149,7 +149,7 @@ Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | byp
 Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
 Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=0 tap_div_r=0 time=110
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
 Amp L | nam=/home/cody/.config/signal/nam/tone3000/29285/Dumble Steel SS Clean.nam | ir= | bypassed=false | 
@@ -184,7 +184,7 @@ Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | byp
 Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
 Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=0 tap_div_r=0 time=110
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
 Amp L | nam=/home/cody/.config/signal/nam/tone3000/29285/Dumble Steel SS Drive 1.nam | ir= | bypassed=false | 
@@ -219,7 +219,7 @@ Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | byp
 Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
 Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=0 tap_div_r=0 time=110
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
 Amp L | nam=/home/cody/.config/signal/nam/tone3000/65968/Two-Rock_ John Mayer Signature Prototype.nam | ir= | bypassed=false | 
@@ -254,7 +254,7 @@ Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | byp
 Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
 Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=false | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=0 tap_div_r=0 time=110
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
 Amp L | nam=/home/cody/.config/signal/nam/tone3000/65968/Two-Rock_ John Mayer Signature Prototype.nam | ir= | bypassed=false | 
