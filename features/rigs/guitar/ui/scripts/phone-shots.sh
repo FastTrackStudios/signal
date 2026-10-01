@@ -37,7 +37,7 @@ sleep 1
 for i in "${!PAGES[@]}"; do
     env -u WAYLAND_DISPLAY DISPLAY=":$((BASE + i))" \
         SIGNAL_RIG_DESIGN=1 FTS_FORM_FACTOR=phone FTS_PHONE_PAGE="${PAGES[$i]}" \
-        FTS_WINDOW_SIZE="${W}x${VH}" WINIT_X11_SCALE_FACTOR="$SCALE" \
+        FTS_WINDOW_SIZE="874x381" WINIT_X11_SCALE_FACTOR="$SCALE" \
         ./target/debug/signal-desktop >"$OUT/${PAGES[$i]}.log" 2>&1 &
     PIDS+=($!)
 done

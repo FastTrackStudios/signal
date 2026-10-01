@@ -44,9 +44,28 @@ pub struct FaceEntry {
     /// The same face in its dark finish, where it has one: a Time lane
     /// underneath another draws this, so the pair reads light over dark.
     pub dark: Option<String>,
+    /// The same design laid out for other rooms (`tiers` in the manifest):
+    /// (tier, face, dark face, size). [`at`](Self::at) picks one.
+    pub tiers: Vec<(crate::control::Tier, String, Option<String>, (f64, f64))>,
 }
 
 impl FaceEntry {
+    /// This face laid out for `tier`: its version for that room, or the
+    /// nearest smaller one it has (a phone's in a strip's room), else
+    /// itself.
+    #[must_use]
+    pub fn at(&self, tier: crate::control::Tier) -> Self {
+        let best = self.tiers.iter().filter(|(t, ..)| *t >= tier && *t < crate::control::Tier::Desktop).min_by_key(|(t, ..)| *t);
+        let best = best.or_else(|| self.tiers.iter().filter(|(t, ..)| *t <= tier).max_by_key(|(t, ..)| *t));
+        let mut f = self.clone();
+        if let Some((_, face, dark, size)) = best {
+            f.face.clone_from(face);
+            f.dark.clone_from(dark);
+            f.size = *size;
+        }
+        f
+    }
+
     /// This face in its dark finish (itself when it has none).
     #[must_use]
     pub fn darkened(&self) -> Self {
@@ -183,7 +202,22 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
         })
         .unwrap_or_default();
     let dark = v.get("dark").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
-    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark })
+    let tiers = v
+        .get("tiers")
+        .and_then(|t| t.as_object())
+        .map(|o| {
+            o.iter()
+                .filter_map(|(name, t)| {
+                    let tier = crate::control::Tier::from_name(name)?;
+                    let face = format!("{SET}/{}", t.get("face")?.as_str()?);
+                    let dark = t.get("dark").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
+                    let s = t.get("size")?.as_array()?;
+                    Some((tier, face, dark, (s.first()?.as_f64()?, s.get(1)?.as_f64()?)))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark, tiers })
 }
 
 impl Faces {

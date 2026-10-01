@@ -1317,8 +1317,13 @@ pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(defaul
     let cur_id = cur.id.clone();
     // Each reverb drawn by its algorithm's face (frame), where there is one.
     let faces = crate::rig_faces::use_faces();
-    let face_of = |b: &LiveBlock| faces.time(true, VERB_ALGOS.get(param_v(b, "algorithm", 1.0) as usize).copied().unwrap_or("")).cloned();
+    // Drawn at the window's tier (a phone draws each face's phone layout).
+    let tier = use_tier();
+    let face_of = |b: &LiveBlock| faces.time(true, VERB_ALGOS.get(param_v(b, "algorithm", 1.0) as usize).copied().unwrap_or("")).map(|f| f.at(tier));
     let all_faces = verbs.iter().all(|b| face_of(b).is_some());
+    // On a phone the lane's bar is its preset and algorithm: the face shows
+    // the time itself.
+    let small_room = tier <= Tier::Phone;
 
     rsx! {
         div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
@@ -1444,6 +1449,7 @@ pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(defaul
                                 onclick: move |e: MouseEvent| e.stop_propagation(),
                                 // Its preset (the name opens the browser).
                                 crate::face_chrome::PresetStepper { block: b.name.clone(), block_type: "reverb".to_string(), accent: color.to_string() }
+                                if !small_room {
                                 div { class: "flex flex-col items-end",
                                     span { style: "font-size:7px; text-transform:uppercase; color:#8a8a92;", "Time" }
                                     span { style: "font-family:ui-monospace,monospace; font-size:10px; color:{color};",
@@ -1451,6 +1457,7 @@ pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(defaul
                                         // decay here ("0.80") read as a 0.8 s tail.
                                         {verb_seconds_label(param_v(b, "algorithm", 1.0), param_v(b, "variant", 0.0), param_v(b, "decay", 0.4))}
                                     }
+                                }
                                 }
                                 AlgoPicker {
                                     block_id: b.id.clone(),
@@ -2652,6 +2659,43 @@ pub struct WindowAspect(pub Signal<f64>);
 /// lays out for. Provided by the host.
 #[derive(Clone, Copy)]
 pub struct WindowSize(pub Signal<(f64, f64)>);
+
+/// The room a face is drawn in, smallest first — which version of a face
+/// (`FaceEntry::at`) the rig draws. Not the device: a desktop window made
+/// phone-sized draws the phone's.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum Tier {
+    Strip,
+    Phone,
+    Ipad,
+    Desktop,
+    Fullscreen,
+}
+
+impl Tier {
+    /// From its name in the manifest.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "strip" => Self::Strip,
+            "phone" => Self::Phone,
+            "ipad" => Self::Ipad,
+            "desktop" => Self::Desktop,
+            "fullscreen" => Self::Fullscreen,
+            _ => return None,
+        })
+    }
+}
+
+/// The tier the window is drawn at (Desktop when the host says nothing).
+#[must_use]
+pub fn use_tier() -> Tier {
+    let size = try_use_context::<WindowSize>().map_or((0.0, 0.0), |s| (s.0)());
+    match FormFactor::of(size) {
+        FormFactor::Phone => Tier::Phone,
+        FormFactor::Desktop => Tier::Desktop,
+    }
+}
 
 /// The form factors the rig lays out for.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
