@@ -500,7 +500,14 @@ pub fn BlockFace(
                     if let Some(b) = time_block.as_ref()
                         && let Some((_, what)) = addr.rsplit_once('/').filter(|(_, w)| *w == "time_knob" || *w == "sync")
                     {
-                        let writes = if what == "time_knob" { crate::time_face::turn(b, bpm, value) } else { crate::time_face::flip(b, bpm, value >= 0.5) };
+                        let writes = if what == "time_knob" {
+                            crate::time_face::turn(b, bpm, value)
+                        } else {
+                            // A press on the side already lit changes nothing.
+                            let beat = value >= 0.5;
+                            let now = crate::time_face::view(b, bpm).is_some_and(|t| t.sync >= 0.5);
+                            if beat == now { Vec::new() } else { crate::time_face::flip(b, bpm, beat) }
+                        };
                         for (param, v) in writes {
                             crate::control::send_param(&rig, &b.id, param, v);
                         }
