@@ -310,19 +310,21 @@ pub fn delete_module_snapshot(
     Ok(())
 }
 
-/// The module a block type belongs to, for deciding which of a patch's edits
-/// a module's "save from live" takes. Time owns no blocks of its own: its
-/// snapshots are a Delay pick and a Reverb pick, whose modules own those.
-fn owned_by_type(module: &str, bt: BlockType) -> bool {
-    match module.to_ascii_lowercase().as_str() {
-        "amp" => bt.category() == BlockCategory::Amp,
-        "drive" => bt.category() == BlockCategory::Drive,
-        "dynamics" => bt.category() == BlockCategory::Dynamics,
-        "modulation" => matches!(bt.category(), BlockCategory::Modulation | BlockCategory::Motion),
-        "delay" => bt == BlockType::Delay,
-        "reverb" => bt == BlockType::Reverb,
-        _ => false,
+/// Whether `module` owns the chain block `name` of type `bt`, for deciding
+/// which of a patch's edits a module's "save from live" takes
+/// ([`crate::profiles::module_of_block`]): the Core owns its own blocks and
+/// its Drive's and Amp's; Time owns no blocks of its own (its snapshots are
+/// a Delay pick and a Reverb pick, whose modules own those). The pre
+/// effects belong to no module.
+fn owned_by(module: &str, name: &str, bt: BlockType) -> bool {
+    let of = crate::profiles::module_of_block(name, bt);
+    if module.eq_ignore_ascii_case(crate::profiles::CORE) {
+        return of.is_some_and(|m| matches!(m, "Core" | "Drive" | "Amp"));
     }
+    if module.eq_ignore_ascii_case("dynamics") {
+        return bt.category() == BlockCategory::Dynamics && of != Some(crate::profiles::CORE);
+    }
+    of.is_some_and(|m| m.eq_ignore_ascii_case(module))
 }
 
 /// The chain blocks `pick` owns on a chain of `(name, type)`: the blocks of
@@ -337,7 +339,7 @@ pub fn owned_blocks(comp: &Compositions, pick: &ModuleChoiceDef, chain: &[(Strin
         }
     };
     for (name, bt) in chain {
-        if owned_by_type(&pick.module, *bt) {
+        if owned_by(&pick.module, name, *bt) {
             add(name);
         }
     }
@@ -800,6 +802,7 @@ mod tests {
                     level_db: 0.0,
                     gain_bias_db: 0.0,
                     macros: Vec::new(),
+                    ..Default::default()
                 }],
             }],
             blocks: vec![BlockPresetDef {

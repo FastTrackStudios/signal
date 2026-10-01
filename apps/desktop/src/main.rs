@@ -146,6 +146,15 @@ fn main() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
     }
+    // NVIDIA: sleep, don't spin, while a frame waits on the GPU. Its driver
+    // busy-waits in present by default, which on a large window was a
+    // third of the UI thread; this measured ~60% → ~38% of a core at
+    // 5120x1440. Other drivers ignore it; a value already set wins.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("__GL_YIELD").is_none() {
+        // SAFETY: single-threaded, before the renderer or any thread starts.
+        unsafe { std::env::set_var("__GL_YIELD", "USLEEP") };
+    }
 
     // `--keys` / `--workspace X --rig Y`: open straight to a place instead of
     // wherever the app was last left. Before the engine branch so `--engine`
@@ -309,7 +318,7 @@ fn default_window_size() -> (f64, f64) {
     let (w, h): (f64, f64) = (2560.0, 1440.0);
     match main_screen_size() {
         // Room for the menu bar and a margin; never below the min size.
-        Some((sw, sh)) => (w.min(sw - 40.0).max(720.0), h.min(sh - 80.0).max(480.0)),
+        Some((sw, sh)) => (w.min(sw - 40.0).max(320.0), h.min(sh - 80.0).max(300.0)),
         None => (w, h),
     }
 }
@@ -365,7 +374,7 @@ fn launch_app() {
         .with_title("FastTrackStudio")
         .with_decorations(false)
         .with_surface_size(LogicalSize::new(w, h))
-        .with_min_surface_size(LogicalSize::new(720.0, 480.0))
+        .with_min_surface_size(LogicalSize::new(320.0, 300.0))
         .with_maximized(maximized && !fullscreen);
     // Position first: borderless fullscreen picks the monitor the window is
     // on, so placing it inside the target screen is what selects that screen.
@@ -406,7 +415,7 @@ fn launch_app() {
             let (w, h) = size.unwrap_or_else(default_window_size);
             LogicalSize::new(w, h)
         })
-        .with_min_inner_size(LogicalSize::new(720.0, 480.0))
+        .with_min_inner_size(LogicalSize::new(320.0, 300.0))
         .with_maximized(maximized && !fullscreen);
     if let Some((x, y)) = pos {
         window = window.with_position(LogicalPosition::new(x, y));

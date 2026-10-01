@@ -13,9 +13,7 @@ use std::time::Duration;
 
 use dioxus::dioxus_core::Task;
 use dioxus::prelude::*;
-use signal_widgets::{Picker, PickerSize};
 
-use signal_guitar_proto::LiveBlock;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{PerfStack, PerformanceModel, TunerReading};
 
@@ -197,62 +195,6 @@ pub fn PerformGrid(
     let stacks = model.stacks;
     let rig = use_hook(try_consume_context::<RigClient>);
     let mode = model.perform_mode;
-    // Preset mode browses the pool — fetch it whenever the model moves.
-    let presets = use_resource({
-        let rig = rig.clone();
-        let rev = model.revision;
-        move || {
-            let _ = rev;
-            let rig = rig.clone();
-            async move {
-                match rig {
-                    Some(r) => r.presets().await.unwrap_or_default(),
-                    None => Vec::new(),
-                }
-            }
-        }
-    });
-    let preset_list = presets.read().clone().unwrap_or_default();
-    // Pedal view: the active chain's toggleable FX as stomp switches.
-    let chain = use_resource({
-        let rig = rig.clone();
-        let rev = model.revision;
-        move || {
-            let _ = rev;
-            let rig = rig.clone();
-            async move {
-                match rig {
-                    Some(r) => r.chain().await.unwrap_or_default(),
-                    None => Vec::new(),
-                }
-            }
-        }
-    });
-    let chain_blocks = chain.read().clone().unwrap_or_default();
-    // The pedalboard: comp + drives + boost on the top row, time + mod on
-    // the bottom — matching the two-row switch layout.
-    let pedal_types = |b: &LiveBlock| {
-        use signal_proto::block::BlockType as B;
-        matches!(
-            b.block_type,
-            B::Compressor
-                | B::Drive
-                | B::Boost
-                | B::Delay
-                | B::Reverb
-                | B::Chorus
-                | B::Flanger
-                | B::Phaser
-                | B::Trem
-                | B::Vibrato
-                | B::Rotary
-        )
-    };
-    let pedals: Vec<LiveBlock> = chain_blocks
-        .iter()
-        .filter(|b| pedal_types(b))
-        .cloned()
-        .collect();
     let _set_mode = {
         let rig = rig.clone();
         move |m: u32| {
@@ -418,292 +360,211 @@ pub fn PerformGrid(
             }
         }
 
-        if mode == 0 {
-            // ── Pedal view: the active chain's FX as stomp switches; pick
-            // the base preset from the bar. Tap = bypass toggle (auto-saved
-            // into the patch like any live edit) ──
-            div { class: "flex items-center gap-2 flex-shrink-0",
-                span { class: "text-[10px] uppercase tracking-wider text-muted-foreground", "Preset" }
-                Picker {
-                    options: preset_list.iter().map(|p| p.name.clone()).collect::<Vec<String>>(),
-                    selected: preset_list.iter().position(|p| p.active).unwrap_or(usize::MAX) as u32,
-                    placeholder: "preset…".to_string(),
-                    on_select: {
-                        let rig = rig.clone();
-                        move |i: u32| {
-                            if let Some(r) = rig.clone() {
-                                spawn(async move { let _ = r.play_preset(i).await; });
-                            }
-                        }
-                    },
+        // (The pedal view was Preset mode's; there is no Preset mode now.)
+    // Hold layer ABOVE the main switches (a footswitch's hold function
+    // lives "up" from your toe) — a slim strip, ~1/8 the main row.
+    // The switches, with the chords (two switches held together)
+    // drawn across the gaps between the pair.
+    div { style: "position: relative; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;",
+        div {
+            class: "grid grid-cols-5 gap-3 flex-1 min-h-0",
+            style: if compact {
+                "grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);"
+            } else {
+                "grid-template-rows: minmax(44px, 1fr) minmax(0, 7fr);"
+            },
+
+            // ── Row A: the hold layer (switches 6–10), compact. The same in
+            // every mode: song parts overlay the profile rather than taking
+            // switches of their own, so Setlist mode plays the rig with the
+            // same feet as Profile mode — parts are chosen from the sidebar,
+            // the palette or the keymap. ──
+            if let Some(stack) = stacks.get(4).cloned() {
+                StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true, part: part_name.clone(), in_song, parts: song_parts.clone(), changes: song_changes.clone() }
+            } else {
+                div { class: "relative rounded-lg border border-dashed border-border/30",
+                    SwitchNo { no: 6 }
                 }
             }
-            div { class: "grid grid-cols-5 auto-rows-fr gap-3 flex-1 min-h-0",
-                for b in pedals.iter() {
-                    {
-                        let on = !b.bypassed;
-                        let id = b.id.clone();
-                        let color = b.block_type.color().border.to_string();
-                        rsx! {
-                            button {
-                                key: "{b.id}",
-                                class: "rounded-2xl border flex flex-col items-center justify-center gap-2 p-3",
-                                style: if on {
-                                    format!("border-color: {color}; background: color-mix(in srgb, {color} 22%, #0a0a0a); box-shadow: inset 0 0 40px color-mix(in srgb, {color} 12%, transparent);")
-                                } else {
-                                    "border-color: #27272a; background: #0f0f10; opacity: 0.75;".to_string()
-                                },
-                                onclick: {
-                                    let rig = rig.clone();
-                                    move |_| {
-                                        let id = id.clone();
-                                        if let Some(r) = rig.clone() {
-                                            spawn(async move { let _ = r.toggle_block_bypass(id).await; });
-                                        }
-                                    }
-                                },
-                                // Pedal LED.
-                                span {
-                                    class: "w-3 h-3 rounded-full",
-                                    style: if on {
-                                        format!("background-color: {color}; box-shadow: 0 0 8px {color};")
-                                    } else {
-                                        "background-color: #3f3f46;".to_string()
-                                    },
-                                }
-                                span { class: "text-base font-bold text-center leading-tight", "{b.name}" }
-                                if !b.preset.is_empty() {
-                                    span { class: "text-[10px] opacity-60 truncate max-w-full", "{b.preset}" }
-                                }
-                                // Editing surface: block presets with NAM
-                                // options get a picker right on the pedal.
-                                if !b.options.is_empty() {
-                                    Picker {
-                                        options: b.options.clone(),
-                                        selected: b.option,
-                                        size: PickerSize::Tiny,
-                                        on_select: {
-                                            let rig = rig.clone();
-                                            let id = b.id.clone();
-                                            move |i: u32| {
-                                                if let Some(r) = rig.clone() {
-                                                    let id = id.clone();
-                                                    spawn(async move { let _ = r.set_block_option(id, i).await; });
-                                                }
-                                            }
+            // Switch 7 (hold 2): FX Toggle — lit while the Time FX are ON.
+            FnTile {
+                title: "FX Toggle".to_string(),
+                subtitle: fx_sub.to_string(),
+                bg: "#ec4899".to_string(),
+                text: "#ffffff".to_string(),
+                active: !model.fx_bypass,
+                switch_no: 7,
+                compact: true,
+                onclick: on_toggle_fx,
+            }
+            // Switch 8 (hold 3): the Song layer — setlist prev/next + fast
+            // scroll. Tap toggles the layer; the tile names where you are.
+            FnTile {
+                title: "Song".to_string(),
+                subtitle: format!("{song_pos} · {current_song}"),
+                bg: "#a78bfa".to_string(),
+                text: "#1e1b4b".to_string(),
+                active: song_layer() || model.perform_mode == 2,
+                switch_no: 8,
+                compact: true,
+                // As the footswitch: from Profile mode, into Setlist mode on
+                // the song that is up; in Setlist mode, the song layer.
+                onclick: cbs.cb({
+                    let rig = rig.clone();
+                    let in_setlist = model.perform_mode == 2;
+                    move |(): ()| {
+                        if in_setlist {
+                            song_layer.toggle();
+                        } else if let Some(r) = rig.clone() {
+                            spawn(async move {
+                                let _ = r.set_perform_mode(2).await;
+                            });
+                        }
+                    }
+                }),
+            }
+            // Switch 9 (hold 4): Boost — tap on/off, hold rotates the level.
+            BoostTile {
+                subtitle: boost_sub,
+                active: model.boost_db != 0.0,
+                switch_no: 9,
+                on_toggle: on_toggle_boost,
+                on_cycle: on_cycle_boost,
+            }
+            // Switch 10 (hold 5): the live tuner, right in the tile.
+            LiveTunerTile {
+                switch_no: 10,
+                onclick: cbs.cb({
+                    let rig = rig.clone();
+                    move |(): ()| {
+                        if let Some(r) = rig.clone() {
+                            spawn(async move { let _ = r.toggle_tuner().await; });
+                        }
+                    }
+                }),
+            }
+
+            // ── Row B: the Song layer (while active) or switches 1–5 ──
+            if song_layer() {
+                // Switch 1: previous song.
+                HoldButton {
+                    class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full bg-card border border-border hover:bg-accent/40".to_string(),
+                    style: String::new(),
+                    on_tap: on_prev_song,
+                    SwitchNo { no: 1 }
+                    span { class: "text-3xl font-bold", "‹" }
+                    span { class: "text-xs text-muted-foreground", "Previous" }
+                }
+                // Switch 2: next song.
+                HoldButton {
+                    class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full bg-card border border-border hover:bg-accent/40".to_string(),
+                    style: String::new(),
+                    on_tap: on_next_song,
+                    SwitchNo { no: 2 }
+                    span { class: "text-3xl font-bold", "›" }
+                    span { class: "text-xs text-muted-foreground", "Next" }
+                }
+                // The setlist, spanning the middle — current song highlighted,
+                // any entry jumps straight there.
+                div {
+                    class: "relative col-span-2 rounded-xl border border-border bg-card overflow-y-auto",
+                    div { class: "flex flex-col p-2 gap-1",
+                        for (i, song) in model.songs.iter().enumerate() {
+                            {
+                                let is_current = i == model.song_index as usize;
+                                let name = song.name.clone();
+                                let meta = format!("{} · {}", song.key, song.bpm);
+                                rsx! {
+                                    button {
+                                        key: "{i}",
+                                        class: if is_current {
+                                            "flex items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm font-bold bg-accent text-accent-foreground"
+                                        } else {
+                                            "flex items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent/40"
                                         },
+                                        onclick: move |_| on_select_song.call(i),
+                                        span { class: "font-mono text-[10px] opacity-60 w-4", "{i + 1}" }
+                                        span { class: "truncate", "{name}" }
+                                        span { class: "ml-auto font-mono text-[10px] opacity-60 flex-shrink-0", "{meta}" }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
-        } else {
-        // Hold layer ABOVE the main switches (a footswitch's hold function
-        // lives "up" from your toe) — a slim strip, ~1/8 the main row.
-        // The switches, with the chords (two switches held together)
-        // drawn across the gaps between the pair.
-        div { style: "position: relative; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;",
-            div {
-                class: "grid grid-cols-5 gap-3 flex-1 min-h-0",
-                style: if compact {
-                    "grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);"
-                } else {
-                    "grid-template-rows: minmax(44px, 1fr) minmax(0, 7fr);"
-                },
-
-                // ── Row A: the hold layer (switches 6–10), compact. The same in
-                // every mode: song parts overlay the profile rather than taking
-                // switches of their own, so Setlist mode plays the rig with the
-                // same feet as Profile mode — parts are chosen from the sidebar,
-                // the palette or the keymap. ──
-                if let Some(stack) = stacks.get(4).cloned() {
-                    StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true, part: part_name.clone(), in_song, parts: song_parts.clone(), changes: song_changes.clone() }
-                } else {
-                    div { class: "relative rounded-lg border border-dashed border-border/30",
-                        SwitchNo { no: 6 }
-                    }
+                // Switch 5: back to the rig.
+                HoldButton {
+                    class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full bg-card border border-border hover:bg-accent/40".to_string(),
+                    style: String::new(),
+                    on_tap: cbs.cb(move |(): ()| song_layer.set(false)),
+                    SwitchNo { no: 5 }
+                    span { class: "text-xl font-bold", "Back" }
+                    span { class: "text-xs text-muted-foreground", "to the rig" }
                 }
-                // Switch 7 (hold 2): FX Toggle — lit while the Time FX are ON.
-                FnTile {
-                    title: "FX Toggle".to_string(),
-                    subtitle: fx_sub.to_string(),
-                    bg: "#ec4899".to_string(),
-                    text: "#ffffff".to_string(),
-                    active: !model.fx_bypass,
-                    switch_no: 7,
-                    compact: true,
-                    onclick: on_toggle_fx,
-                }
-                // Switch 8 (hold 3): the Song layer — setlist prev/next + fast
-                // scroll. Tap toggles the layer; the tile names where you are.
-                FnTile {
-                    title: "Song".to_string(),
-                    subtitle: format!("{song_pos} · {current_song}"),
-                    bg: "#a78bfa".to_string(),
-                    text: "#1e1b4b".to_string(),
-                    active: song_layer() || model.perform_mode == 2,
-                    switch_no: 8,
-                    compact: true,
-                    // As the footswitch: from Profile mode, into Setlist mode on
-                    // the song that is up; in Setlist mode, the song layer.
-                    onclick: cbs.cb({
-                        let rig = rig.clone();
-                        let in_setlist = model.perform_mode == 2;
-                        move |(): ()| {
-                            if in_setlist {
-                                song_layer.toggle();
-                            } else if let Some(r) = rig.clone() {
-                                spawn(async move {
-                                    let _ = r.set_perform_mode(2).await;
-                                });
-                            }
-                        }
-                    }),
-                }
-                // Switch 9 (hold 4): Boost — tap on/off, hold rotates the level.
-                BoostTile {
-                    subtitle: boost_sub,
-                    active: model.boost_db != 0.0,
-                    switch_no: 9,
-                    on_toggle: on_toggle_boost,
-                    on_cycle: on_cycle_boost,
-                }
-                // Switch 10 (hold 5): the live tuner, right in the tile.
-                LiveTunerTile {
-                    switch_no: 10,
-                    onclick: cbs.cb({
-                        let rig = rig.clone();
-                        move |(): ()| {
-                            if let Some(r) = rig.clone() {
-                                spawn(async move { let _ = r.toggle_tuner().await; });
-                            }
-                        }
-                    }),
-                }
-
-                // ── Row B: the Song layer (while active) or switches 1–5 ──
-                if song_layer() {
-                    // Switch 1: previous song.
-                    HoldButton {
-                        class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full bg-card border border-border hover:bg-accent/40".to_string(),
-                        style: String::new(),
-                        on_tap: on_prev_song,
-                        SwitchNo { no: 1 }
-                        span { class: "text-3xl font-bold", "‹" }
-                        span { class: "text-xs text-muted-foreground", "Previous" }
-                    }
-                    // Switch 2: next song.
-                    HoldButton {
-                        class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full bg-card border border-border hover:bg-accent/40".to_string(),
-                        style: String::new(),
-                        on_tap: on_next_song,
-                        SwitchNo { no: 2 }
-                        span { class: "text-3xl font-bold", "›" }
-                        span { class: "text-xs text-muted-foreground", "Next" }
-                    }
-                    // The setlist, spanning the middle — current song highlighted,
-                    // any entry jumps straight there.
-                    div {
-                        class: "relative col-span-2 rounded-xl border border-border bg-card overflow-y-auto",
-                        div { class: "flex flex-col p-2 gap-1",
-                            for (i, song) in model.songs.iter().enumerate() {
-                                {
-                                    let is_current = i == model.song_index as usize;
-                                    let name = song.name.clone();
-                                    let meta = format!("{} · {}", song.key, song.bpm);
-                                    rsx! {
-                                        button {
-                                            key: "{i}",
-                                            class: if is_current {
-                                                "flex items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm font-bold bg-accent text-accent-foreground"
-                                            } else {
-                                                "flex items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent/40"
-                                            },
-                                            onclick: move |_| on_select_song.call(i),
-                                            span { class: "font-mono text-[10px] opacity-60 w-4", "{i + 1}" }
-                                            span { class: "truncate", "{name}" }
-                                            span { class: "ml-auto font-mono text-[10px] opacity-60 flex-shrink-0", "{meta}" }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // Switch 5: back to the rig.
-                    HoldButton {
-                        class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full bg-card border border-border hover:bg-accent/40".to_string(),
-                        style: String::new(),
-                        on_tap: cbs.cb(move |(): ()| song_layer.set(false)),
-                        SwitchNo { no: 5 }
-                        span { class: "text-xl font-bold", "Back" }
-                        span { class: "text-xs text-muted-foreground", "to the rig" }
-                    }
-                } else {
-                for i in 0..4usize {
-                    if jobs[i] != "stack" {
-                        ActionTile {
-                            key: "a{i}",
-                            footswitch: i,
-                            job: jobs[i].clone(),
-                            next: step_hint(&jobs[i]).0,
-                            back: step_hint(&jobs[i]).1,
-                            stack: stacks.get(i).cloned(),
-                            part: part_name.clone(),
-                            in_song,
-                            compact,
-                        }
-                    } else if let Some(stack) = stacks.get(i).cloned() {
-                        StackTile {
-                            key: "s{i}-{stack.is_active}",
-                            index: i,
-                            switch_no: i + 1,
-                            stack,
-                            on_press,
-                            on_hold: hold_actions[i],
-                            compact,
-                            footswitch: Some(i),
-                            part: part_name.clone(),
-                            in_song,
-                            parts: song_parts.clone(),
-                            changes: song_changes.clone(),
-                        }
-                    } else {
-                        div { key: "s{i}", class: "relative rounded-xl border-2 border-dashed border-border/30",
-                            SwitchNo { no: i + 1 }
-                        }
-                    }
-                }
-                // Switch 5: its job — Tap Tempo (hold: tuner) unless the song
-                // gives it another (stepping through the parts, by default).
-                if jobs[4] != "tap_tempo" {
+            } else {
+            for i in 0..4usize {
+                if jobs[i] != "stack" {
                     ActionTile {
-                        footswitch: 4usize,
-                        job: jobs[4].clone(),
-                        next: step_hint(&jobs[4]).0,
-                        back: step_hint(&jobs[4]).1,
+                        key: "a{i}",
+                        footswitch: i,
+                        job: jobs[i].clone(),
+                        next: step_hint(&jobs[i]).0,
+                        back: step_hint(&jobs[i]).1,
+                        stack: stacks.get(i).cloned(),
                         part: part_name.clone(),
                         in_song,
                         compact,
                     }
+                } else if let Some(stack) = stacks.get(i).cloned() {
+                    StackTile {
+                        key: "s{i}-{stack.is_active}",
+                        index: i,
+                        switch_no: i + 1,
+                        stack,
+                        on_press,
+                        on_hold: hold_actions[i],
+                        compact,
+                        footswitch: Some(i),
+                        part: part_name.clone(),
+                        in_song,
+                        parts: song_parts.clone(),
+                        changes: song_changes.clone(),
+                    }
                 } else {
-                TapTempoTile {
-                    compact,
-                    in_song,
+                    div { key: "s{i}", class: "relative rounded-xl border-2 border-dashed border-border/30",
+                        SwitchNo { no: i + 1 }
+                    }
+                }
+            }
+            // Switch 5: its job — Tap Tempo (hold: tuner) unless the song
+            // gives it another (stepping through the parts, by default).
+            if jobs[4] != "tap_tempo" {
+                ActionTile {
+                    footswitch: 4usize,
+                    job: jobs[4].clone(),
+                    next: step_hint(&jobs[4]).0,
+                    back: step_hint(&jobs[4]).1,
                     part: part_name.clone(),
-                    tempo_bpm: model.tempo_bpm,
-                    // Hold is free — the tuner is switches 3 + 4 together.
-                    on_tap: on_tap_tempo,
+                    in_song,
+                    compact,
                 }
-                }
-                }
+            } else {
+            TapTempoTile {
+                compact,
+                in_song,
+                part: part_name.clone(),
+                tempo_bpm: model.tempo_bpm,
+                // Hold is free — the tuner is switches 3 + 4 together.
+                on_tap: on_tap_tempo,
             }
-            if !song_layer() {
-                ChordMarks { chords: chord_marks.clone(), compact }
+            }
             }
         }
+        if !song_layer() {
+            ChordMarks { chords: chord_marks.clone(), compact }
         }
+    }
+
         }
     }
 }
@@ -1395,7 +1256,7 @@ fn TapTempoTile(
             },
             onmouseleave: move |_| menu.set(false),
         HoldButton {
-            class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full transition-shadow duration-100 opacity-90 hover:opacity-100".to_string(),
+            class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full opacity-90 hover:opacity-100".to_string(),
             style: format!("background-color: #27272a; color: #d4d4d8; {ring}"),
             on_tap,
             SwitchNo { no: 5 }
@@ -1449,7 +1310,7 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
     let needle = 50.0 + r.cents.clamp(-50.0, 50.0);
     rsx! {
         button {
-            class: "relative flex items-center gap-2 rounded-lg px-2 text-left transition-all duration-100 min-h-0 overflow-hidden",
+            class: "relative flex items-center gap-2 rounded-lg px-2 text-left min-h-0 overflow-hidden",
             style: if in_tune {
                 "background-color: #14532d; border: 1px solid #22c55e;"
             } else {
@@ -1468,7 +1329,7 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
                 div { class: "absolute left-1/2 top-0 bottom-0 w-px bg-white/40" }
                 if r.active {
                     div {
-                        class: "absolute top-0 bottom-0 w-0.5 rounded transition-all duration-75",
+                        class: "absolute top-0 bottom-0 w-0.5 rounded",
                         style: if in_tune { "left: {needle}%; background-color: #22c55e;" } else { "left: {needle}%; background-color: #eab308;" },
                     }
                 }
@@ -1550,7 +1411,7 @@ pub fn TunerOverlay(on_close: EventHandler<()>) -> Element {
                 // Needle.
                 if r.active {
                     div {
-                        class: "absolute top-0 bottom-0 w-1 rounded transition-all duration-75",
+                        class: "absolute top-0 bottom-0 w-1 rounded",
                         style: "left: {needle_pct}%; background-color: {needle_color};",
                     }
                 }

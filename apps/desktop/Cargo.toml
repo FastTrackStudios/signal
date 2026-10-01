@@ -266,6 +266,10 @@ dioxus = { workspace = true, default-features = true, features = ["desktop", "la
 # `webview` feature for the old path.
 dioxus-native = { workspace = true }
 dioxus-native-dom = { workspace = true }
+# Blitz's shell with custom widgets on: dioxus-native enables them in
+# blitz-dom only, which compiled out freeing a dropped widget's textures
+# and drawing frame faces as composited layers.
+blitz-shell = { workspace = true, features = ["custom-widget"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tracing-subscriber.workspace = true

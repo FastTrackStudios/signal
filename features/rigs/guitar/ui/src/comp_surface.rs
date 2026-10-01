@@ -348,6 +348,10 @@ pub fn CompSurface(
     let fmt_db = crate::knob::FmtFn(|v| format!("{v:.0}dB"));
     let fmt_pct = crate::knob::FmtFn(|v| format!("{:.0}%", v * 100.0));
     let _fmt_db: fn(f32) -> String = |v| format!("{v:.1}dB");
+    // On a phone the controls leave the picture for a strip of their own
+    // under it, at a finger's size.
+    let phone = crate::control::use_tier() <= crate::control::Tier::Phone;
+    let picture_box = if phone { format!("position:absolute; left:0; right:0; top:0; bottom:{STRIP_H}px;") } else { "position:absolute; inset:0;".to_string() };
 
     rsx! {
         div { class: "relative flex flex-col h-full min-h-0 overflow-hidden",
@@ -357,7 +361,7 @@ pub fn CompSurface(
             // the plugin mounts, so the rig and the plugin cannot disagree
             // about what this block looks like. It paints and does not
             // listen; the svg above it owns every gesture.
-            div { style: "position:absolute; inset:0;",
+            div { style: "{picture_box}",
                 {comp_picture(CompPicture {
                     threshold,
                     ratio,
@@ -474,8 +478,26 @@ pub fn CompSurface(
                 }
             }
 
+            if phone {
+                div { style: "flex: 0 0 {STRIP_H}px; display: flex; align-items: center; gap: 14px; padding: 0 12px; background: #0e0e10; border-top: 1px solid #1f1f23;",
+                    div { style: "display: flex; flex-direction: column; gap: 2px; min-width: 104px;",
+                        span { style: "font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #8a8a92;", "THR · RATIO" }
+                        span { style: "font-family: ui-monospace, monospace; font-size: 16px; color: #e8e8ec;", "{thr:.1} dB" }
+                        span { style: "font-family: ui-monospace, monospace; font-size: 16px; color: #ff9c9c;", "{ratio:.1}:1" }
+                    }
+                    div { style: "display: flex; align-items: flex-end; gap: 10px;",
+                        {knob("attack", "Atk", KnobSize::Medium, Some(fmt_ms))}
+                        {knob("release", "Rel", KnobSize::Medium, Some(fmt_ms))}
+                        {knob("knee", "Knee", KnobSize::Medium, Some(fmt_db))}
+                        {knob("range", "Range", KnobSize::Medium, Some(fmt_db))}
+                        {knob("fold", "Fold", KnobSize::Medium, Some(fmt_pct))}
+                    }
+                    {style_keys(&block, rig.clone())}
+                }
+            }
             // ── Readouts + the two time knobs (threshold/ratio live on
             // the display itself) ──
+            if !phone {
             div {
                 class: "absolute bottom-0 left-0 right-0 flex items-end px-2 py-1",
                 style: "background: linear-gradient(to top, rgba(8,8,8,0.9), transparent);",
@@ -496,6 +518,47 @@ pub fn CompSurface(
                     {knob("range", "Range", KnobSize::Small, Some(fmt_db))}
                     {knob("fold", "Fold", KnobSize::Small, Some(fmt_pct))}
                     {style_picker(&block, rig.clone())}
+                }
+            }
+            }
+        }
+    }
+}
+
+/// The phone's control strip under the picture, in CSS px.
+const STRIP_H: f64 = 96.0;
+
+/// The circuit selector at a finger's size: the styles as keys, the one
+/// it is lit.
+fn style_keys(block: &LiveBlock, rig: Option<RigClient>) -> Element {
+    let current = param_v(block, "style", 0.0).round().clamp(0.0, 3.0) as usize;
+    let id = block.id.clone();
+    rsx! {
+        div { style: "margin-left: auto; display: flex; flex-direction: column; align-items: center; gap: 4px;",
+            span { style: "font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #8a8a92;", "STYLE" }
+            div { style: "display: flex; gap: 4px;",
+                for (i, name) in COMP_STYLES.iter().enumerate() {
+                    button {
+                        key: "{name}",
+                        style: if i == current {
+                            "width: 54px; height: 44px; border-radius: 8px; border: 1px solid #e4e4e7; background: #e4e4e7; color: #111; font-size: 12px; font-weight: 700;"
+                        } else {
+                            "width: 54px; height: 44px; border-radius: 8px; border: 1px solid #2a2a30; background: #18181b; color: #a1a1aa; font-size: 12px; font-weight: 700;"
+                        },
+                        onclick: {
+                            let rig = rig.clone();
+                            let id = id.clone();
+                            move |_| {
+                                if let Some(r) = rig.clone() {
+                                    let id = id.clone();
+                                    spawn(async move {
+                                        let _ = r.write_param(id, "style".into(), i as f32).await;
+                                    });
+                                }
+                            }
+                        },
+                        "{name}"
+                    }
                 }
             }
         }

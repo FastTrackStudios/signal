@@ -103,6 +103,7 @@ impl Kind {
     #[must_use]
     pub fn for_module(module: &str) -> Option<Self> {
         [
+            Self::Compositions,
             Self::AmpModules,
             Self::DriveModules,
             Self::TimeModules,
@@ -117,6 +118,8 @@ impl Kind {
     #[must_use]
     pub const fn module(self) -> Option<&'static str> {
         match self {
+            // Presets are the Core module: the core tone a patch is built on.
+            Self::Compositions => Some("Core"),
             Self::AmpModules => Some("Amp"),
             Self::DriveModules => Some("Drive"),
             Self::TimeModules => Some("Time"),
@@ -135,7 +138,7 @@ impl Kind {
             Self::Patches => "Patches",
             Self::Presets => "Captures",
             Self::Drives => "Drives",
-            Self::Compositions => "Presets",
+            Self::Compositions => "Core",
             Self::AmpModules => "Amp",
             Self::DriveModules => "Drive",
             Self::TimeModules => "Time",
@@ -155,7 +158,7 @@ impl Kind {
             Self::Patches => "patch",
             Self::Presets => "capture",
             Self::Drives => "drive",
-            Self::Compositions => "preset",
+            Self::Compositions => "core preset",
             Self::AmpModules => "amp preset",
             Self::DriveModules => "drive preset",
             Self::TimeModules => "time preset",
@@ -190,12 +193,12 @@ impl Kind {
         matches!(self, Self::Patches | Self::Presets | Self::Drives)
     }
 
-    /// Where the picker opens for a perform mode (0 Preset / 1 Profile /
-    /// 2 Setlist): the thing that mode plays from.
+    /// Where the picker opens for a perform mode (1 Profile / 2 Setlist;
+    /// the old Preset mode, 0, plays as Profile — presets are the Core now,
+    /// picked under a patch): the thing that mode plays from.
     #[must_use]
     pub const fn for_perform_mode(mode: u32) -> Self {
         match mode {
-            0 => Self::Compositions,
             2 => Self::Setlists,
             _ => Self::Profiles,
         }
@@ -2499,7 +2502,8 @@ mod tests {
 
     #[test]
     fn each_perform_mode_opens_on_what_it_plays_from() {
-        assert_eq!(Kind::for_perform_mode(0), Kind::Compositions);
+        // The old Preset mode plays as Profile.
+        assert_eq!(Kind::for_perform_mode(0), Kind::Profiles);
         assert_eq!(Kind::for_perform_mode(1), Kind::Profiles);
         assert_eq!(Kind::for_perform_mode(2), Kind::Setlists);
     }

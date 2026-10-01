@@ -465,6 +465,7 @@ impl RigLibrary {
         seed_models();
         let store = store();
         let mut profiles = load_profiles(&store);
+        Self::split_core_once(&store, &mut profiles);
         let mut drive_presets =
             read_or_seed::<DrivePresetLib>(&store, "drive-presets.styx", DEFAULT_DRIVE_PRESETS, || {
                 DrivePresetLib {
@@ -602,6 +603,43 @@ impl RigLibrary {
             presets,
             blocks,
         }
+    }
+
+    /// Presets become the Core module, once: a library whose presets still
+    /// hold time effects, pre effects or chorus and tremolo settings has
+    /// them moved out ([`crate::compose::split_core`] — every patch keeps
+    /// its sound), the old files kept beside the new as `*.styx.migrated`.
+    /// A run that may not write leaves the library as it is (it still
+    /// plays: the split changes where settings live, not what plays).
+    fn split_core_once(store: &StyxDir, profiles: &mut Vec<ProfileDef>) {
+        if writable_store().is_none() {
+            return;
+        }
+        let comp = Self::load_compositions();
+        let (split, split_profiles) = crate::compose::split_core(&comp, profiles);
+        let changed = format!("{:?}", split.presets) != format!("{:?}", comp.presets);
+        if !changed {
+            return;
+        }
+        let keep = |path: std::path::PathBuf| {
+            if path.exists() {
+                if let Err(e) = std::fs::copy(&path, path.with_extension("styx.migrated")) {
+                    tracing::warn!("rig library: cannot keep {} before the Core split: {e}", path.display());
+                }
+            }
+        };
+        for f in [crate::compose::PRESETS_FILE, crate::compose::MODULES_FILE, crate::compose::BLOCKS_FILE] {
+            keep(store.dir().join(f));
+        }
+        for p in split_profiles.iter() {
+            keep(profiles_store().dir().join(profile_file(&p.name)));
+        }
+        Self::save_compositions(&split);
+        for p in &split_profiles {
+            save_profile_file(store, p.clone());
+        }
+        tracing::info!("rig library: presets are the Core module now — time effects, pre effects, chorus and tremolo moved out (old files kept as *.styx.migrated)");
+        *profiles = split_profiles;
     }
 
     /// Write both composition libraries back.

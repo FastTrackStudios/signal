@@ -659,8 +659,8 @@ pub fn slot_pedal(slot: &str, drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -
     }
 }
 
-/// Build the boost slot: the captured pedal assigned to it; unassigned, the
-/// library's boost capture (a drive preset option named for boosting, e.g.
+/// Build the boost slot: the captured pedal assigned to it (one with no
+/// capture plays the native boost); unassigned, the library's boost capture (a drive preset option named for boosting, e.g.
 /// King of Tone "Red = Boost"); with none in the library, the native clean
 /// boost. Off by default, like every board slot.
 fn boost_block(drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -> RigBlock {
@@ -681,11 +681,14 @@ fn boost_block(drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -> RigBlock {
     // A captured boost is a pedal like the drives (a NAM Drive block, as
     // the library's pedal nodes resolve); only the native fallback is a
     // Boost block.
+    // A pedal preset whose option has no capture names the native boost
+    // (a rig's "Keeley Katana" as the built-in clean boost): it plays the
+    // Boost block, under the pedal's name.
     let mut b = match assigned {
-        Some(opt) => RigBlock::of_type(BlockType::Drive)
+        Some(opt) if !opt.nam.is_empty() => RigBlock::of_type(BlockType::Drive)
             .with_nam(opt.nam)
             .with_param("drive", "0.5"),
-        None => RigBlock::of_type(BlockType::Boost).with_param("drive", "0.5"),
+        _ => RigBlock::of_type(BlockType::Boost).with_param("drive", "0.5"),
     };
     b = b.named(BOOST_SLOT);
     b.bypassed = true;
@@ -739,6 +742,22 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             b
         };
         let head = RigPatch::new(name)
+            // The transposer, before everything: the whole rig hears the
+            // guitar in the key it is set to (down a step, up a capo…) —
+            // the clean engine, the shifted signal alone.
+            .with_block(off_fx(
+                BlockType::Pitch,
+                TRANSPOSE,
+                &[("semitones", "0"), ("cents", "0"), ("engine", "0"), ("mix", "1"), ("a_level", "1"), ("b_level", "0"), ("dry", "0")],
+            ))
+            // The dive bomb: a whammy — one voice, the shifted signal alone,
+            // its interval swept by the treadle; short frames, so it
+            // follows the foot.
+            .with_block(off_fx(
+                BlockType::Pitch,
+                DIVE_BOMB,
+                &[("semitones", "0"), ("cents", "0"), ("engine", "0"), ("live", "1"), ("mix", "1"), ("a_level", "1"), ("b_level", "0"), ("dry", "0")],
+            ))
             // Pedal-style squeeze before everything (off until a preset
             // engages it): slow-ish attack lets the pick through.
             // (No explicit module for these two single blocks: a module named
@@ -754,7 +773,21 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     ("release", "200"),
                 ],
             ))
-            .with_block(off(BlockType::Pitch, "Pitch"))
+            // Its voices stored, so a preset or snapshot can set them: A an
+            // octave up, B an octave down.
+            .with_block(off_fx(
+                BlockType::Pitch,
+                "Pitch",
+                &[("semitones", "12"), ("cents", "0"), ("a_level", "0.7"), ("b_semitones", "-12"), ("b_level", "0.7"), ("dry", "1"), ("mix", "0.5")],
+            ))
+            // The harmonizer: a pitch block of its own beside the octaver
+            // (Pitch), so each keeps its intervals — a major third and a
+            // fifth over the note.
+            .with_block(off_fx(
+                BlockType::Pitch,
+                "Harmonizer",
+                &[("semitones", "4"), ("cents", "0"), ("a_level", "0.6"), ("b_semitones", "7"), ("b_level", "0.5"), ("dry", "1"), ("mix", "0.5")],
+            ))
             // Volume pedal (clean gain, unity default) — the Control view's
             // left pedal drives it.
             .with_block(on_fx(
@@ -769,13 +802,12 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             // Pre FX: what sits in front of the amp — a motion block, and a
             // reverb (a spring, like the tank in a Fender) and delay the amp
             // then colours. All off until a preset engages them.
-            .with_block(in_module(off(BlockType::Trem, "Pre Motion"), PRE_FX))
+            // Pre FX in the John Mayer X order: the slap first, into the
+            // tank's tremolo and spring.
+            // Modulation into the amp first (a chorus or vibe on the
+            // board, before the slap).
             .with_block(in_module(
-                off_fx(
-                    BlockType::Reverb,
-                    "Pre Verb",
-                    &[("algorithm", "3"), ("mix", "1"), ("level", "-16.5"), ("decay", "0.35")],
-                ),
+                off_fx(BlockType::Chorus, PRE_MOD, &[("engine", "5"), ("rate", "0.6"), ("depth", "0.4"), ("mix", "0.5")]),
                 PRE_FX,
             ))
             .with_block(in_module(
@@ -794,6 +826,15 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 ),
                 PRE_FX,
             ))
+            .with_block(in_module(off(BlockType::Trem, "Pre Motion"), PRE_FX))
+            .with_block(in_module(
+                off_fx(
+                    BlockType::Reverb,
+                    "Pre Verb",
+                    &[("algorithm", "3"), ("mix", "1"), ("level", "-16.5"), ("decay", "0.35")],
+                ),
+                PRE_FX,
+            ))
             // The Amp module: the amp stage, then what shapes it — gate,
             // studio-style glue compression, and the amp EQ.
             .with_block(in_module(amp_l, "Amp"))
@@ -801,7 +842,8 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             .with_block(in_module(amp_r, "Amp"))
             .with_block(in_module(cab_r, "Amp"))
             .with_block(in_module(
-                on_fx(BlockType::Gate, "Gate", &[("threshold", "-50")]),
+                // Attack and release stored too, so a preset can set them.
+                on_fx(BlockType::Gate, "Gate", &[("threshold", "-50"), ("attack", "1"), ("release", "120")]),
                 "Amp",
             ))
             .with_block(in_module(
@@ -884,6 +926,10 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     &[
                         ("mix", "1"),
                         ("level", "-20"),
+                        // Stored (Digital, the engine's default) so a preset
+                        // or snapshot can switch its machine: an override
+                        // only sets a param the block has.
+                        ("style", "1"),
                         ("time", "600"),
                         ("feedback", "0.62"),
                         ("tap_div_l", "1"),
@@ -904,7 +950,10 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 off_fx(
                     BlockType::Reverb,
                     "VERB 2",
-                    &[("mix", "1"), ("level", "-20"), ("decay", "0.85"), ("size", "0.92")],
+                    // Its algorithm stored (Hall, the engine's default) so
+                    // a preset or snapshot can switch it: an override only
+                    // sets a param the block has.
+                    &[("mix", "1"), ("level", "-20"), ("algorithm", "1"), ("decay", "0.85"), ("size", "0.92")],
                 ),
                 "Time",
             ))
@@ -1007,6 +1056,55 @@ pub const POST_COMP: &str = "Post Comp";
 pub const LIMITER: &str = "Limiter";
 /// The module holding what sits in front of the amp.
 pub const PRE_FX: &str = "Pre FX";
+
+/// The Core module: the core tone a patch is built on — its compressor,
+/// its drive board (the Drive module), its amps (the Amp module), the gate,
+/// the amp EQ and the post compressor. A patch's preset *is* its Core.
+pub const CORE: &str = "Core";
+
+/// The transposer: the first block of the chain.
+pub const TRANSPOSE: &str = "Transpose";
+/// The dive bomb (whammy), after the transposer.
+pub const DIVE_BOMB: &str = "Dive Bomb";
+/// Modulation in front of the amp: the first of the Pre FX.
+pub const PRE_MOD: &str = "Pre Mod";
+
+/// The chain blocks the Core owns besides its drives and amps.
+pub const CORE_BLOCKS: [&str; 4] = [PRE_COMP, "Gate", "Amp EQ", POST_COMP];
+
+/// The Core's blocks that stay live when the Core is frozen into one NAM
+/// capture: the gate. A capture can't gate (its noise floor is the
+/// capture's), so the gate runs after it as itself — the rest of the Core
+/// (compressor, drives, amps, EQ, post compressor) is what the capture
+/// learns, and a frozen Core must play exactly as the live one did. Room
+/// is not in the Core at all.
+pub const UNFROZEN_CORE_BLOCKS: [&str; 1] = ["Gate"];
+
+/// The module a chain block belongs to: `Core` (compressor, gate, amp EQ,
+/// post compressor), `Drive` / `Amp` (the Core's drive board and amps),
+/// `Delay` / `Reverb` (the Time module's lanes) — or none. Most blocks
+/// belong to no module (the pre effects, pitch, wah, filter, chorus,
+/// tremolo…): a patch picks their block presets directly.
+#[must_use]
+pub fn module_of_block(name: &str, bt: BlockType) -> Option<&'static str> {
+    use signal_proto::BlockCategory;
+    let is = |b: &str| b.eq_ignore_ascii_case(name);
+    if CORE_BLOCKS.iter().any(|b| is(b)) {
+        return Some(CORE);
+    }
+    // The pre effects are blocks of their own, whatever their type.
+    if name.len() > 4 && name[..4].eq_ignore_ascii_case("pre ") {
+        return None;
+    }
+    match bt.category() {
+        BlockCategory::Drive => Some("Drive"),
+        BlockCategory::Amp => Some("Amp"),
+        _ if bt == BlockType::Cabinet => Some("Amp"),
+        _ if bt == BlockType::Delay => Some("Delay"),
+        _ if bt == BlockType::Reverb => Some("Reverb"),
+        _ => None,
+    }
+}
 
 /// Put a patch's level on its trim block, INSIDE the chain and upstream of
 /// the time effects.
@@ -2517,5 +2615,28 @@ mod slot_tests {
         assert!(empty.empty && empty.pedal.is_empty());
         // A slot assigned a pedal the library no longer has is empty too.
         assert!(slot_pedal("Drive 2", &[slot("Drive 2", "Gone", 0)], &dps).empty);
+    }
+}
+
+#[cfg(test)]
+mod module_of_block_tests {
+    use super::*;
+
+    #[test]
+    fn the_core_owns_its_tone_and_the_rest_are_blocks_of_their_own() {
+        assert_eq!(module_of_block(PRE_COMP, BlockType::Compressor), Some(CORE));
+        assert_eq!(module_of_block("Gate", BlockType::Gate), Some(CORE));
+        assert_eq!(module_of_block("Amp EQ", BlockType::Eq), Some(CORE));
+        assert_eq!(module_of_block(POST_COMP, BlockType::Compressor), Some(CORE));
+        assert_eq!(module_of_block("Drive 1", BlockType::Drive), Some("Drive"));
+        assert_eq!(module_of_block("Amp L", BlockType::Amp), Some("Amp"));
+        assert_eq!(module_of_block("DLY 1", BlockType::Delay), Some("Delay"));
+        assert_eq!(module_of_block("VERB 2", BlockType::Reverb), Some("Reverb"));
+        // The pre effects, pitch, chorus, tremolo: no module's.
+        assert_eq!(module_of_block("Pre Delay", BlockType::Delay), None);
+        assert_eq!(module_of_block("Pre Verb", BlockType::Reverb), None);
+        assert_eq!(module_of_block("Chorus", BlockType::Chorus), None);
+        assert_eq!(module_of_block("Tremolo", BlockType::Trem), None);
+        assert_eq!(module_of_block("Pitch", BlockType::Pitch), None);
     }
 }

@@ -40,9 +40,33 @@ pub fn Indicator(
     #[props(default)]
     pinned: bool,
     #[props(default)] on_close: Option<Callback<()>>,
+    /// Blink the dot (and the label in its colour): something here needs
+    /// attention — audio off — without a banner pushing the page down.
+    #[props(default)]
+    flash: bool,
 ) -> Element {
     let mut open = use_signal(|| false);
     let showing = open() || pinned;
+    // The blink's phase, local so only the indicator redraws.
+    // It only ticks while flashing: a steady indicator re-renders nothing.
+    let mut lit = use_signal(|| true);
+    let mut flashing = use_signal(|| flash);
+    if *flashing.peek() != flash {
+        flashing.set(flash);
+    }
+    use_future(move || async move {
+        loop {
+            architect::platform::sleep(std::time::Duration::from_millis(550)).await;
+            if *flashing.peek() {
+                lit.toggle();
+            } else if !*lit.peek() {
+                lit.set(true);
+            }
+        }
+    });
+    let on = !flash || lit();
+    let dot_now = if on { dot.clone() } else { "#3f3f46".to_string() };
+    let label_color = if flash && on { dot.clone() } else { "#a1a1aa".to_string() };
     rsx! {
         div {
             style: "position: relative; display: flex; align-items: center; height: 28px;",
@@ -56,7 +80,7 @@ pub fn Indicator(
                 title: "{title} — right-click or double-click for options",
                 style: "display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; \
                         border-radius: 6px; cursor: default; user-select: none; \
-                        font-size: 11px; font-weight: 600; color: #a1a1aa;",
+                        font-size: 11px; font-weight: 600; color: {label_color};",
                 class: "hover:bg-accent/30",
                 oncontextmenu: move |e: MouseEvent| {
                     e.prevent_default();
@@ -65,7 +89,7 @@ pub fn Indicator(
                 ondoubleclick: move |_| open.set(true),
                 span {
                     style: "width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; \
-                            background: {dot}; box-shadow: 0 0 6px {dot};",
+                            background: {dot_now}; box-shadow: 0 0 6px {dot_now};",
                 }
                 "{label}"
             }

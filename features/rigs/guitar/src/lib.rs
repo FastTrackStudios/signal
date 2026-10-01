@@ -23,6 +23,7 @@ pub mod compose;
 pub mod config_watch;
 pub mod design;
 pub mod drop_log;
+pub mod freeze;
 pub mod levelling;
 pub mod measure;
 pub mod library;
@@ -32,6 +33,7 @@ pub mod node_store;
 pub mod nodes;
 pub mod profiles;
 pub mod session;
+pub mod time_sync;
 pub mod web_bundle;
 
 pub use session::GuitarRigBackend;

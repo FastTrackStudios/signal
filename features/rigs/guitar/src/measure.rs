@@ -137,3 +137,33 @@ fn render(
     );
     Some(lufs)
 }
+
+/// Load `patch` alone on an offline rig, switch it in as the live rig does,
+/// and play `input` through it once (after a warm-up pass): what comes out,
+/// left and right, as long as the input.
+#[must_use]
+pub fn render_through(patch: &RigPatch, sample_rate: u32, input: &[f32]) -> Option<(Vec<f32>, Vec<f32>)> {
+    let rig = GuitarRig::open_offline(sample_rate)
+        .map_err(|e| tracing::warn!(error = %e, "render: no offline rig"))
+        .ok()?;
+    let mut prig = ProfileRig::new(rig);
+    prig.set_level_match(false);
+    let mut profile = RigProfile::new("render");
+    profile.patches.push(patch.clone());
+    if let Err(e) = prig.load_profile(profile, None) {
+        tracing::warn!(patch = %patch.name, error = %e, "render: chain did not build");
+        return None;
+    }
+    if !prig.activate(0) {
+        return None;
+    }
+    apply_chain_bypass(&prig);
+    let samples: Arc<Vec<f32>> = Arc::new(input.to_vec());
+    let frames = samples.len();
+    let rig = prig.rig();
+    rig.start_test_signal(samples.clone());
+    rig.render_offline((WARM_UP_SECS * f64::from(sample_rate)) as usize);
+    rig.start_test_signal(samples);
+    let (l, r) = rig.measure_output(frames, std::time::Duration::ZERO);
+    (l.len() >= frames).then_some((l, r))
+}
