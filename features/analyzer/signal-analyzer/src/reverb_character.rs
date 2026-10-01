@@ -237,16 +237,31 @@ fn correlation(l: &[f64], r: &[f64]) -> f64 {
     if ll * rr <= 0.0 { 0.0 } else { lr / (ll * rr).sqrt() }
 }
 
-/// Sideband energy (dB re the core) and RMS spread (Hz) around `f0`, in a
-/// 32k-sample window of `x` from `start` (0.68 s at 48 kHz, 4× zero-padded).
-fn tone_spread(planner: &mut RealFftPlanner<f64>, x: &[f64], start: usize, f0: f64, sr: f64) -> Option<(f64, f64)> {
+/// Sideband energy (dB re the core) and RMS spread (Hz) around `f0`,
+/// from 32k-sample windows (0.68 s at 48 kHz, 4× zero-padded) every 8k
+/// samples across `[start, end)`, their power spectra averaged. A
+/// modulated reverb's spectrum around a tone is random from window to
+/// window; averaging is what makes the number repeatable.
+fn tone_spread(planner: &mut RealFftPlanner<f64>, x: &[f64], start: usize, end: usize, f0: f64, sr: f64) -> Option<(f64, f64)> {
     const N: usize = 32_768;
+    const HOP: usize = 8_192;
     const PAD: usize = 131_072;
-    let seg = x.get(start..start + N)?;
-    let spec = power_spectrum(planner, seg, PAD);
+    let mut acc = vec![0.0; PAD / 2 + 1];
+    let mut a = start;
+    let mut windows = 0usize;
+    while a + N <= end.min(x.len()) {
+        for (s, v) in acc.iter_mut().zip(power_spectrum(planner, x.get(a..a + N)?, PAD)) {
+            *s += v;
+        }
+        windows += 1;
+        a += HOP;
+    }
+    if windows == 0 {
+        return None;
+    }
     let df = sr / PAD as f64;
     let (mut total, mut core, mut moment) = (0.0, 0.0, 0.0);
-    for (k, p) in spec.iter().enumerate() {
+    for (k, p) in acc.iter().enumerate() {
         let d = k as f64 * df - f0;
         if d.abs() <= 60.0 {
             total += p;
@@ -334,9 +349,11 @@ pub fn measure(left: &[f32], right: &[f32], sample_rate: f64, excitation_end_s: 
     let correlation = [corr(0.0, 50.0), corr(50.0, 200.0), corr(200.0, 1000.0), corr(1000.0, 1e7)];
 
     let modulation = tone_hz.and_then(|f0| {
-        let (sustain_side_db, sustain_spread_hz) = tone_spread(&mut planner, &l, at(600.0), f0, sr)?;
-        let (tail_side_db, tail_spread_hz) = tone_spread(&mut planner, &l, at(excitation_end_s * 1000.0 + 50.0), f0, sr)?;
-        let held = energy.get(at(600.0)..at(1250.0))?;
+        let end_ms = excitation_end_s * 1000.0;
+        let (sustain_side_db, sustain_spread_hz) = tone_spread(&mut planner, &l, at(600.0), at(end_ms - 50.0), f0, sr)?;
+        let (tail_side_db, tail_spread_hz) =
+            tone_spread(&mut planner, &l, at(end_ms + 50.0), at(end_ms + 2050.0), f0, sr)?;
+        let held = energy.get(at(600.0)..at(end_ms - 50.0))?;
         let rms = (held.iter().sum::<f64>() / held.len().max(1) as f64).sqrt();
         Some(Modulation {
             f0,
@@ -382,18 +399,39 @@ pub struct Distance {
     pub envelope_db: f64,
     /// Mean |Δ| echo density over the first 200 ms.
     pub echo_density: f64,
-    /// RMS third-octave difference, early and late, dB.
+    /// RMS third-octave difference, early and late, dB — over the bands
+    /// within 30 dB of the reference's loudest.
     pub spectrum_early_db: f64,
     pub spectrum_late_db: f64,
     /// Mean |Δ| L/R correlation over the four windows.
     pub correlation: f64,
     /// |Δ| sideband level while held and in the tail, dB.
     pub modulation_db: Option<f64>,
+    /// Mean |log2(candidate / reference)| of the spread, held and tail.
+    pub modulation_spread_log2: Option<f64>,
 }
 
 fn rms_diff(a: &[f64], b: &[f64]) -> f64 {
     let n = a.len().min(b.len()).max(1) as f64;
     (a.iter().zip(b).map(|(x, y)| (x - y).powi(2)).sum::<f64>() / n).sqrt()
+}
+
+/// How far below the reference's loudest band a band still counts in the
+/// spectral distance. A held sine leaves most third-octaves at the noise
+/// floor, and differencing two floors measures nothing about the reverb.
+const SPECTRUM_RANGE_DB: f64 = 30.0;
+
+/// RMS band difference over the bands the reference actually has energy in.
+fn spectrum_diff(reference: &[f64], candidate: &[f64]) -> f64 {
+    let top = reference.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let pairs: Vec<(f64, f64)> = reference
+        .iter()
+        .zip(candidate)
+        .filter(|(r, _)| **r >= top - SPECTRUM_RANGE_DB)
+        .map(|(r, c)| (*r, *c))
+        .collect();
+    let n = pairs.len().max(1) as f64;
+    (pairs.iter().map(|(r, c)| (r - c).powi(2)).sum::<f64>() / n).sqrt()
 }
 
 #[must_use]
@@ -406,6 +444,7 @@ pub fn distance(reference: &Character, candidate: &Character) -> Distance {
         .collect();
     let horizon = reference.envelope_db.iter().rposition(|v| *v > -60.0).unwrap_or(0) + 1;
     let clamp = |v: &[f64]| v.iter().take(horizon).map(|x| x.max(-60.0)).collect::<Vec<_>>();
+    let tonal = reference.modulation.is_some();
     let ned = 200.0 / NED_HOP_MS;
     let ned_n = ned as usize;
     Distance {
@@ -420,13 +459,22 @@ pub fn distance(reference: &Character, candidate: &Character) -> Distance {
             .map(|(a, b)| (a - b).abs())
             .sum::<f64>()
             / ned,
-        spectrum_early_db: rms_diff(&reference.spectrum_early, &candidate.spectrum_early),
-        spectrum_late_db: rms_diff(&reference.spectrum_late, &candidate.spectrum_late),
+        // A held tone has one band worth comparing; its spectrum says
+        // nothing about the reverb's colour.
+        spectrum_early_db: if tonal { f64::NAN } else { spectrum_diff(&reference.spectrum_early, &candidate.spectrum_early) },
+        spectrum_late_db: if tonal { f64::NAN } else { spectrum_diff(&reference.spectrum_late, &candidate.spectrum_late) },
         correlation: reference.correlation.iter().zip(&candidate.correlation).map(|(a, b)| (a - b).abs()).sum::<f64>() / 4.0,
         modulation_db: match (reference.modulation, candidate.modulation) {
             (Some(r), Some(c)) => {
                 Some(0.5 * ((c.sustain_side_db - r.sustain_side_db).abs() + (c.tail_side_db - r.tail_side_db).abs()))
             }
+            _ => None,
+        },
+        modulation_spread_log2: match (reference.modulation, candidate.modulation) {
+            (Some(r), Some(c)) => Some(
+                0.5 * ((c.sustain_spread_hz / r.sustain_spread_hz).log2().abs()
+                    + (c.tail_spread_hz / r.tail_spread_hz).log2().abs()),
+            ),
             _ => None,
         },
     }
@@ -504,15 +552,15 @@ pub fn report(title: &str, reference: &Character, candidate: &Character, ref_nam
 
     let _ = writeln!(
         s,
-        "\n**distance** — level {:+.1} dB · decay {} · envelope {:.1} dB · echo density {:.2} · spectrum early {:.1} / late {:.1} dB · correlation {:.2} · modulation {}\n",
+        "\n**distance** — level {:+.1} dB · decay {} · envelope {:.1} dB · echo density {:.2} · spectrum early {} / late {} dB · correlation {:.2} · modulation {}\n",
         d.level_db,
         d.decay_log2.map_or_else(|| "—".into(), |v| format!("{:.0}%", (2f64.powf(v) - 1.0) * 100.0)),
         d.envelope_db,
         d.echo_density,
-        d.spectrum_early_db,
-        d.spectrum_late_db,
+        if d.spectrum_early_db.is_finite() { format!("{:.1}", d.spectrum_early_db) } else { "—".into() },
+        if d.spectrum_late_db.is_finite() { format!("{:.1}", d.spectrum_late_db) } else { "—".into() },
         d.correlation,
-        opt(d.modulation_db, 1.0, " dB"),
+        d.modulation_spread_log2.map_or_else(|| "—".into(), |v| format!("spread {:.0}% off", (2f64.powf(v) - 1.0) * 100.0)),
     );
     s
 }

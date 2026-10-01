@@ -18,6 +18,7 @@
 //! $EX run --input guitar.wav                 # any WAV as the stimulus
 //! $EX sweep PreDelay 0,32,64,127             # how a knob moves both reverbs
 //! $EX sweep Tone 0,32,64,96,127 --ref-only   # reverse-engineer one knob's law
+//! $EX sweep Tone 0,64,127 --ref-only --bands  # + absolute level per octave (static filters)
 //! ```
 //!
 //! Output goes to `--out` (default `target/bigsky-match/<algo>/`): the
@@ -58,23 +59,104 @@ fn knob(k: &Knobs, name: &str) -> f64 {
         .unwrap_or(0.0)
 }
 
-/// Cloud: BigSky `Decay` 1000–50000 ms, `PreDelay`/`Tone`/`MOD` 0–127,
+/// Piecewise-linear lookup in `(x, y)` points (sorted by x), clamped at
+/// the ends; `log` interpolates in log-log (for time laws).
+fn lookup(points: &[(f64, f64)], x: f64, log: bool) -> f64 {
+    let (Some(first), Some(last)) = (points.first(), points.last()) else { return 0.0 };
+    if x <= first.0 {
+        return first.1;
+    }
+    if x >= last.0 {
+        return last.1;
+    }
+    for w in points.windows(2) {
+        let ((x0, y0), (x1, y1)) = (w[0], w[1]);
+        if x <= x1 {
+            if log && x0 > 0.0 && y0 > 0.0 {
+                let f = (x / x0).ln() / (x1 / x0).ln();
+                return y0 * (y1 / y0).powf(f);
+            }
+            return y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+        }
+    }
+    last.1
+}
+
+/// BigSky Cloud `Decay` (ms, as displayed) → measured T20 (s), impulse,
+/// other knobs at defaults. Not a time: everything up to ~3000 rings for
+/// ~4.5 s, and above that T20 ≈ 11.4·(D/8000)^1.5. 50000 is infinite.
+const CLOUD_DECAY_T20: &[(f64, f64)] = &[
+    (1000.0, 4.50),
+    (2000.0, 4.53),
+    (3000.0, 4.77),
+    (4000.0, 5.60),
+    (5000.0, 6.78),
+    (6000.0, 8.15),
+    (8000.0, 11.39),
+    (12000.0, 19.83),
+    (16000.0, 30.60),
+    (24000.0, 57.16),
+    (32000.0, 75.19),
+];
+
+/// BigSky `PreDelay` (0–127) → measured onset (ms). ≈0.023·v² up to 64,
+/// then accelerating to 1.5 s.
+const CLOUD_PREDELAY_MS: &[(f64, f64)] = &[
+    (0.0, 0.0),
+    (8.0, 2.6),
+    (16.0, 7.1),
+    (24.0, 14.5),
+    (32.0, 24.3),
+    (48.0, 52.5),
+    (64.0, 93.5),
+    (80.0, 162.2),
+    (96.0, 323.7),
+    (112.0, 729.2),
+    (120.0, 1086.4),
+    (127.0, 1499.8),
+];
+
+/// BigSky `Tone` (0–127) → cutoff of a static 2-pole (Q≈0.5) low-pass on
+/// the wet, fitted to the octave levels of a noise burst (≤0.7 dB RMS).
+/// Per-band decay does not move with Tone: it is not in-loop damping.
+const CLOUD_TONE_HZ: &[(f64, f64)] = &[
+    (0.0, 926.0),
+    (16.0, 1649.0),
+    (32.0, 2455.0),
+    (48.0, 3276.0),
+    (64.0, 4037.0),
+    (80.0, 4877.0),
+    (96.0, 5776.0),
+    (112.0, 6841.0),
+    (127.0, 8022.0),
+];
+
+/// Our wet level against BigSky's at MIX 127, dB.
+const CLOUD_WET_GAIN_DB: f64 = 2.4;
+
+/// Cloud: BigSky `Decay` 1000–50000, `PreDelay`/`Tone`/`MOD` 0–127,
 /// `LowEnd`/`Diffusion` −10…+10.
 ///
-/// First-guess translation — every line here is a hypothesis for
-/// `sweep` to confirm or correct.
+/// Decay, PreDelay and Tone are measured laws (the tables above); LowEnd
+/// maps straight across (our Cloud implements BigSky's law for it). MOD
+/// is still a first guess.
 fn map_cloud(k: &Knobs) -> Vec<(String, f64)> {
     let p = |n: &str, v: f64| (n.to_string(), v);
     vec![
         p("algorithm", 4.0),
         p("mix", 1.0),
         p("dry", 0.0),
-        p("decay_time", knob(k, "Decay") / 1000.0),
-        p("predelay", knob(k, "PreDelay")),
+        p("decay_time", lookup(CLOUD_DECAY_T20, knob(k, "Decay"), true)),
+        // Our pre-delay line holds 500 ms; BigSky reaches 1.5 s past ~110.
+        p("predelay", lookup(CLOUD_PREDELAY_MS, knob(k, "PreDelay"), false).min(500.0)),
+        p("high_cut", lookup(CLOUD_TONE_HZ, knob(k, "Tone"), true)),
+        p("damping", 0.0),
         p("modulation", knob(k, "MOD") / 127.0),
-        p("damping", 1.0 - knob(k, "Tone") / 127.0),
         p("low_end", (knob(k, "LowEnd") + 10.0) / 20.0),
         p("diffusion", (knob(k, "Diffusion") + 10.0) / 20.0),
+        // BigSky's MIX is a wet level (+10 dB from 64 to 127; this tool
+        // renders at 127). Matched on the impulse's energy.
+        p("wet_gain", CLOUD_WET_GAIN_DB),
     ]
 }
 
@@ -109,7 +191,7 @@ impl Args {
             .iter()
             .filter(|a| {
                 let keep = !skip && !a.starts_with("--");
-                skip = a.starts_with("--") && !matches!(a.as_str(), "--ref-only");
+                skip = a.starts_with("--") && !matches!(a.as_str(), "--ref-only" | "--bands");
                 keep
             })
             .nth(i)
@@ -273,7 +355,7 @@ fn run(args: &Args, algo: &Algo, knobs: &Knobs, overrides: &[(String, String)], 
     let _ = writeln!(doc, "# BigSky {} vs FTS-Reverb\n", algo.bigsky_type);
     let _ = writeln!(doc, "BigSky: {}\n", knobs.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(", "));
     let _ = writeln!(doc, "Ours: {}\n", ours.iter().map(|(k, v)| format!("{k}={v:.3}")).collect::<Vec<_>>().join(", "));
-    let mut summary = String::from("| stimulus | level Δ dB | decay Δ | envelope dB | echo dens. | spec early dB | spec late dB | corr | mod dB |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|\n");
+    let mut summary = String::from("| stimulus | level Δ dB | decay Δ | envelope dB | echo dens. | spec early dB | spec late dB | corr | mod spread Δ |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|\n");
     let mut sections = String::new();
     for case in &cases {
         eprintln!("{}: rendering BigSky…", case.name);
@@ -288,16 +370,16 @@ fn run(args: &Args, algo: &Algo, knobs: &Knobs, overrides: &[(String, String)], 
         let d = reverb_character::distance(&a, &b);
         let _ = writeln!(
             summary,
-            "| {} | {:+.1} | {} | {:.1} | {:.2} | {:.1} | {:.1} | {:.2} | {} |",
+            "| {} | {:+.1} | {} | {:.1} | {:.2} | {} | {} | {:.2} | {} |",
             case.name,
             d.level_db,
-            d.decay_log2.map_or_else(|| "—".into(), |v| format!("{:.0}%", (2f64.powf(v) - 1.0) * 100.0)),
+            pct(d.decay_log2),
             d.envelope_db,
             d.echo_density,
-            d.spectrum_early_db,
-            d.spectrum_late_db,
+            finite(d.spectrum_early_db),
+            finite(d.spectrum_late_db),
             d.correlation,
-            d.modulation_db.map_or_else(|| "—".into(), |v| format!("{v:.1}")),
+            pct(d.modulation_spread_log2),
         );
         sections.push_str(&reverb_character::report(&case.name, &a, &b, "BigSky", "ours"));
     }
@@ -310,6 +392,16 @@ fn run(args: &Args, algo: &Algo, knobs: &Knobs, overrides: &[(String, String)], 
     eprintln!("wrote {} (and WAVs beside it)", path.display());
 }
 
+/// A mean |log2 ratio| as "how far off", in percent.
+fn pct(v: Option<f64>) -> String {
+    v.map_or_else(|| "—".into(), |v| format!("{:.0}%", (2f64.powf(v) - 1.0) * 100.0))
+}
+
+/// One decimal, or "—" for a measurement that does not apply (NaN).
+fn finite(v: f64) -> String {
+    if v.is_finite() { format!("{v:.1}") } else { "—".into() }
+}
+
 /// One row of a sweep: the headline numbers for a single render.
 fn sweep_row(c: &Character) -> String {
     let t = |v: Option<f64>| v.map_or_else(|| "—".into(), |x| format!("{x:.2}"));
@@ -319,7 +411,7 @@ fn sweep_row(c: &Character) -> String {
         v.iter().sum::<f64>() / v.len().max(1) as f64
     };
     let tilt = c.spectrum_late.get(18).zip(c.spectrum_late.get(9)).map(|(hi, lo)| hi - lo);
-    let m = c.modulation.map_or_else(|| "—".into(), |m| format!("{:.1}/{:.1}", m.sustain_side_db, m.tail_side_db));
+    let m = c.modulation.map_or_else(|| "—".into(), |m| format!("{:.1}/{:.1}Hz", m.sustain_spread_hz, m.tail_spread_hz));
     format!(
         "{:>7.1} {:>7.1} {:>6.0} {:>6} {:>6} {:>6} {:>6} {:>6} {:>7} {:>7.0} {:>7} {:>6.2} {:>11}",
         c.energy_db,
@@ -338,6 +430,16 @@ fn sweep_row(c: &Character) -> String {
     )
 }
 
+/// Absolute energy per octave (dB): what a static filter does shows up
+/// here as a fixed shape, independent of the decay.
+fn bands_row(c: &Character) -> String {
+    c.bands
+        .iter()
+        .map(|b| format!("{:.0}:{:+.1}", b.centre_hz, c.energy_db + b.level_db))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn sweep(args: &Args, algo: &Algo, knobs: &Knobs, overrides: &[(String, String)]) {
     let (Some(name), Some(values)) = (args.positional(1), args.positional(2)) else {
         fail("usage: sweep <Knob> <v1,v2,...> [--stimulus impulse] [--ref-only]")
@@ -346,7 +448,7 @@ fn sweep(args: &Args, algo: &Algo, knobs: &Knobs, overrides: &[(String, String)]
     let case = Case::of(Stimulus::from_name(stim).unwrap_or_else(|| fail(format!("unknown stimulus {stim:?}"))));
     let key = knobs.keys().find(|n| n.eq_ignore_ascii_case(name)).cloned().unwrap_or_else(|| name.to_string());
     println!(
-        "{algo} {key} sweep on {stim}  (tilt = late 4k − 500 Hz ⅓-oct, NED@50ms, corr 0.2–1 s, mod = held/tail sidebands dB)",
+        "{algo} {key} sweep on {stim}  (tilt = late 4k − 500 Hz ⅓-oct, NED@50ms, corr 0.2–1 s, mod = held/tail spread around the tone)",
         algo = algo.name
     );
     println!(
@@ -360,10 +462,16 @@ fn sweep(args: &Args, algo: &Algo, knobs: &Knobs, overrides: &[(String, String)]
         let (bl, br) = render_bigsky(algo, &k, &case.input, tail);
         let a = reverb_character::measure(&bl, &br, SR, case.end_s, case.tone);
         println!("{:>8} {:>7}  {}", v.trim(), "BigSky", sweep_row(&a));
+        if args.flag("--bands") {
+            println!("{:>8} {:>7}  {}", "", "octaves", bands_row(&a));
+        }
         if !args.flag("--ref-only") {
             let (ol, or) = render_ours(&our_settings(algo, &k, overrides), &case.input, tail);
             let b = reverb_character::measure(&ol, &or, SR, case.end_s, case.tone);
             println!("{:>8} {:>7}  {}", "", "ours", sweep_row(&b));
+            if args.flag("--bands") {
+                println!("{:>8} {:>7}  {}", "", "octaves", bands_row(&b));
+            }
         }
     }
 }

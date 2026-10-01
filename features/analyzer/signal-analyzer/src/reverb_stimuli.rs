@@ -73,7 +73,7 @@ impl Stimulus {
             Self::Impulse => 0.0,
             Self::Burst => 0.05,
             Self::Snare => 0.25,
-            Self::Sine220 | Self::Sine1k => 1.5,
+            Self::Sine220 | Self::Sine1k => 4.0,
             Self::Pluck => 2.5,
             Self::Pad => 2.0,
         }
@@ -121,7 +121,10 @@ impl Stimulus {
             }
             Self::Sine220 | Self::Sine1k => {
                 let f = self.tone_hz().unwrap_or(1000.0);
-                let n = frames(1.5);
+                // Long enough to average the modulation over a dozen
+                // windows: one window of a randomly modulated tail is a
+                // single noisy draw.
+                let n = frames(4.0);
                 (0..n)
                     .map(|i| (TAU * f * i as f64 / sr).sin() * SINE_AMPLITUDE * fade(i, n, 5.0, sr))
                     .collect()
