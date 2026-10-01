@@ -2794,7 +2794,12 @@ impl GuitarRigBackend {
     }
 
     fn design_blocks(&self) -> Vec<LiveBlock> {
-        let wanted = self.design_patch.lock_ok().clone();
+        // A design run can name the patch to show (`SIGNAL_RIG_DESIGN_PATCH`):
+        // the shot tools look at a page on any patch that way.
+        let wanted = std::env::var("SIGNAL_RIG_DESIGN_PATCH")
+            .ok()
+            .filter(|p| !p.is_empty() && crate::library::rig_is_design())
+            .unwrap_or_else(|| self.design_patch.lock_ok().clone());
         let def = self.profile_def.lock_ok();
         let dps = self.drive_presets.lock_ok();
         let profile = profile_from_library(&self.effective_def(&def), &dps);
@@ -2892,7 +2897,12 @@ impl GuitarRigBackend {
                     output_level_db: None,
                     overridden: false,
                     detail: String::new(),
-                    asset: String::new(),
+                    // The file it plays, as the live chain names it (the
+                    // amp row shows a second amp only when it plays one).
+                    asset: std::path::Path::new(block.asset_path())
+                        .file_name()
+                        .map(|f| f.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
                     empty: false,
                 }
             })

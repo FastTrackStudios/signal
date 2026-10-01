@@ -59,7 +59,8 @@ pub struct FaceEntry {
     pub back_dark: Option<String>,
 }
 
-/// A face's version for one tier: (face, dark face, size, back, dark back).
+/// A face's version for one tier — and its proportions there (`variants`:
+/// a phone's amp, one, two or three to a row): (face, dark face, size, back, dark back).
 #[derive(Debug, Clone, PartialEq)]
 pub struct FaceTier {
     pub face: String,
@@ -67,6 +68,7 @@ pub struct FaceTier {
     pub size: (f64, f64),
     pub back: Option<String>,
     pub back_dark: Option<String>,
+    pub variants: Vec<(String, f64)>,
 }
 
 impl FaceEntry {
@@ -84,6 +86,7 @@ impl FaceEntry {
             f.size = t.size;
             f.back.clone_from(&t.back);
             f.back_dark.clone_from(&t.back_dark);
+            f.variants.clone_from(&t.variants);
         }
         f
     }
@@ -237,7 +240,21 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
                     let face = format!("{SET}/{}", t.get("face")?.as_str()?);
                     let named = |k: &str| t.get(k).and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
                     let s = t.get("size")?.as_array()?;
-                    Some((tier, FaceTier { face, dark: named("dark"), size: (s.first()?.as_f64()?, s.get(1)?.as_f64()?), back: named("back"), back_dark: named("back_dark") }))
+                    let variants = t
+                        .get("variants")
+                        .and_then(|a| a.as_array())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|x| {
+                                    let face = x.get("face")?.as_str()?;
+                                    let size = x.get("size")?.as_array()?;
+                                    let (w, h) = (size.first()?.as_f64()?, size.get(1)?.as_f64()?);
+                                    (h > 0.0).then(|| (format!("{SET}/{face}"), w / h))
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    Some((tier, FaceTier { face, dark: named("dark"), size: (s.first()?.as_f64()?, s.get(1)?.as_f64()?), back: named("back"), back_dark: named("back_dark"), variants }))
                 })
                 .collect()
         })
@@ -842,6 +859,8 @@ pub fn AmpRow(
     amps_only: bool,
 ) -> Element {
     let faces = use_faces();
+    // Each amp at the window's tier (upright on a phone).
+    let tier = crate::control::use_tier();
     // Every amp the preset loaded: the first always, any other when it
     // plays something (a stereo module's Amp R).
     let amps: Vec<LiveBlock> = blocks
@@ -860,7 +879,7 @@ pub fn AmpRow(
                 if let Some((cab, face)) = cabs.then(|| cab_of(&blocks, &b).zip(faces.cab.clone())).flatten() {
                     // The amp and its cab, halves of one panel.
                     Panel { key: "{b.id}", weight: 1.0,
-                        if let Some(f) = faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).cloned() {
+                        if let Some(f) = faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).map(|f| f.at(tier)) {
                             BlockFace { block: b.clone(), face: f }
                         } else {
                             NameCard { block: b.clone(), aspect: AMP }
@@ -868,7 +887,7 @@ pub fn AmpRow(
                         BlockFace { block: cab, face }
                     }
                 } else {
-                    BlockPanel { key: "{b.id}", face: faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).cloned(), block: b.clone(), card: AMP }
+                    BlockPanel { key: "{b.id}", face: faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).map(|f| f.at(tier)), block: b.clone(), card: AMP }
                 }
             }
             if one {
