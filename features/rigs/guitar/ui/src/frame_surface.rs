@@ -56,6 +56,9 @@ pub fn FrameSurface(
     /// mode): its picture widens or narrows, its controls keep their shape.
     #[props(default)]
     responsive: bool,
+    /// Text the face shows (a nameplate's preset): (address, text).
+    #[props(default)]
+    texts: Vec<(String, String)>,
 ) -> Element {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -65,21 +68,21 @@ pub fn FrameSurface(
         let key = format!("{name}|{}", variants.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(","));
         rsx! {
             for k in [key] {
-                NativeFace { key: "{k}", name: name.clone(), values: values.clone(), on_edit, stretch, variants: variants.clone(), responsive }
+                NativeFace { key: "{k}", name: name.clone(), values: values.clone(), on_edit, stretch, variants: variants.clone(), responsive, texts: texts.clone() }
             }
         }
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let _ = (name, values, on_edit, stretch, variants, responsive);
+        let _ = (name, values, on_edit, stretch, variants, responsive, texts);
         rsx! { div { style: "width: 100%; height: 100%;" } }
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[component]
-fn NativeFace(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool) -> Element {
-    native::mount(name, values, on_edit, stretch, variants, responsive)
+fn NativeFace(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool, texts: Vec<(String, String)>) -> Element {
+    native::mount(name, values, on_edit, stretch, variants, responsive, texts)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -168,7 +171,7 @@ mod native {
     /// How often the design's files are checked for a new version.
     const RELOAD_POLL: std::time::Duration = std::time::Duration::from_millis(250);
 
-    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool) -> Element {
+    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool, texts: Vec<(String, String)>) -> Element {
         let live: Shared = use_hook(|| {
             let opened = if variants.is_empty() {
                 open_face(&name, stretch, responsive).map(|l| Surfaces { all: vec![(1.0, l)], active: 0 })
@@ -215,6 +218,16 @@ mod native {
                 }
             }
             applied.set(values);
+        }
+        // Its text, likewise.
+        let mut applied_texts: Signal<Vec<(String, String)>> = use_signal(Vec::new);
+        if *applied_texts.peek() != texts {
+            if let Ok(s) = live.borrow_mut().as_mut() {
+                for l in s.each_mut() {
+                    l.apply_texts(texts.clone());
+                }
+            }
+            applied_texts.set(texts);
         }
         // A face always moves: its lamps, tape and wavefronts are the unit
         // at work, not a picture of the audio, and each face holds its own

@@ -206,7 +206,7 @@ pub(crate) fn board_label(b: &LiveBlock) -> String {
 }
 
 /// Fire a param write without blocking the UI.
-fn send_param(rig: &Option<RigClient>, id: &str, name: &str, value: f32) {
+pub(crate) fn send_param(rig: &Option<RigClient>, id: &str, name: &str, value: f32) {
     if let Some(r) = rig.clone() {
         let (id, name) = (id.to_string(), name.to_string());
         spawn(async move {
@@ -958,7 +958,7 @@ fn AlgoPicker(
 }
 
 /// The algorithm grid, as the popup host draws it.
-fn algo_grid(
+pub(crate) fn algo_grid(
     options: &[&'static str],
     current: usize,
     accent: &str,
@@ -1397,7 +1397,7 @@ pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(defaul
                             },
                             if let Some(f) = lane_face.clone() {
                                 div { class: "absolute inset-0 flex justify-center", style: "background: #0b0c0f;",
-                                    crate::rig_faces::BlockFace { block: b.clone(), face: f, fill: true }
+                                    crate::rig_faces::BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some("reverb".to_string()), algos: Some(("algorithm", VERB_ALGOS.to_vec())) }
                                 }
                             } else {
                             {reverb_lane(
@@ -1442,7 +1442,9 @@ pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(defaul
                             }
                             }
                             // Per-lane algorithm + decay-time readout at the
-                            // lane's right edge (the knob lives in the strip).
+                            // lane's right edge (the knob lives in the strip)
+                            // — unless its face prints its own nameplate.
+                            if !lane_face.as_ref().is_some_and(|f| f.nameplate) {
                             div {
                                 class: if lane_face.is_some() { "absolute right-1 top-1 flex items-center gap-1.5 px-1" } else { "absolute right-0 inset-y-0 flex items-center gap-1.5 pr-1 pl-3" },
                                 style: if lane_face.is_some() { "background: rgba(8,8,8,0.7); border-radius: 4px;" } else { "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);" },
@@ -1466,6 +1468,7 @@ pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(defaul
                                     options: VERB_ALGOS.to_vec(),
                                     accent: color.to_string(),
                                 }
+                            }
                             }
                         }
                     }

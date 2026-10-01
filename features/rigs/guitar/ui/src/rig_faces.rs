@@ -47,6 +47,9 @@ pub struct FaceEntry {
     /// The same design laid out for other rooms (`tiers` in the manifest):
     /// (tier, face, dark face, size). [`at`](Self::at) picks one.
     pub tiers: Vec<(crate::control::Tier, String, Option<String>, (f64, f64))>,
+    /// It carries the nameplate: prints its algorithm and preset itself,
+    /// the host filling `<ns>/preset` and answering its presses.
+    pub nameplate: bool,
 }
 
 impl FaceEntry {
@@ -217,7 +220,8 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
                 .collect()
         })
         .unwrap_or_default();
-    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark, tiers })
+    let nameplate = v.get("nameplate").and_then(serde_json::Value::as_bool).unwrap_or(false);
+    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark, tiers, nameplate })
 }
 
 impl Faces {
@@ -369,8 +373,23 @@ pub fn BlockFace(
     /// the name opening its presets in the browser).
     #[props(default)]
     stepper: bool,
+    /// For a face with the nameplate: the block's preset type as the
+    /// libraries file it (`reverb`), and the param its algorithm menu sets
+    /// with the options (`algorithm`, the reverb algorithms).
+    #[props(default)]
+    preset_type: Option<String>,
+    #[props(default)]
+    algos: Option<(&'static str, Vec<&'static str>)>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    // The nameplate: the preset playing, printed by the face.
+    let comp = try_use_context::<crate::face_chrome::FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
+    let playing = comp.active_blocks.iter().find(|b| b.block.eq_ignore_ascii_case(&block.name)).map(|b| b.preset.clone()).unwrap_or_default();
+    let texts = if face.nameplate { vec![(format!("{}/preset", face.ns), if playing.is_empty() { "—".to_string() } else { playing.clone() })] } else { Vec::new() };
+    // Where the last press on the face landed (window coordinates): the
+    // algorithm menu opens there.
+    let mut pressed_at = use_signal(|| (0.0, 0.0));
+    let nameplate = face.nameplate.then(|| (block.clone(), preset_type.clone().unwrap_or_default(), algos.clone(), comp.clone(), playing.clone()));
     let mut values = values_of(&block, &face.ns);
     values.extend(live);
     for m in &face.maps {
@@ -399,7 +418,11 @@ pub fn BlockFace(
     let (step_name, step_type) = (block.name.clone(), block.block_type.as_str().to_string());
     rsx! {
         div { style: "position: relative; {boxed}",
-            if stepper {
+            onpointerdown: move |e: PointerEvent| {
+                let c = e.client_coordinates();
+                pressed_at.set((c.x, c.y));
+            },
+            if stepper && !face.nameplate {
                 PresetCorner { block: step_name, block_type: step_type }
             }
             FrameSurface {
@@ -408,7 +431,17 @@ pub fn BlockFace(
                 responsive: fill,
                 variants: face.variants.clone(),
                 values,
+                texts,
                 on_edit: move |(addr, value): (String, f64)| {
+                    // The nameplate's presses.
+                    if let Some((b, kind, algos, comp, playing)) = nameplate.as_ref()
+                        && let Some(press) = ["algo_menu", "preset_prev", "preset_next", "preset_browse"].into_iter().find(|p| addr.ends_with(&format!("/{p}")))
+                    {
+                        if value >= 0.5 {
+                            nameplate_press(rig.clone(), press, b, kind, algos.as_ref(), comp, playing, pressed_at());
+                        }
+                        return;
+                    }
                     // A mapped face param drives its block param.
                     if let Some((ns, b)) = targets.first()
                         && let Some(m) = maps.iter().find(|m| addr == format!("{ns}/{}", m.face))
@@ -424,6 +457,65 @@ pub fn BlockFace(
                 },
             }
         }
+    }
+}
+
+/// A press on a face's nameplate: step the block's preset (‹ ›), open its
+/// presets (the name), or open its algorithm menu at `at` (the title).
+#[allow(clippy::too_many_arguments)]
+fn nameplate_press(
+    rig: Option<RigClient>,
+    press: &str,
+    block: &LiveBlock,
+    kind: &str,
+    algos: Option<&(&'static str, Vec<&'static str>)>,
+    comp: &signal_guitar_proto::CompositionModel,
+    playing: &str,
+    at: (f64, f64),
+) {
+    match press {
+        "preset_prev" | "preset_next" => {
+            let names: Vec<String> = comp.block_presets.iter().filter(|p| p.block_type.eq_ignore_ascii_case(kind)).map(|p| p.name.clone()).collect();
+            if names.is_empty() {
+                return;
+            }
+            let n = names.len() as i64;
+            let dir = if press == "preset_next" { 1 } else { -1 };
+            let next = names.iter().position(|x| x.eq_ignore_ascii_case(playing)).map_or(0, |i| (i as i64 + dir).rem_euclid(n) as usize);
+            let (block, name) = (block.name.clone(), names[next].clone());
+            spawn(async move {
+                if let Some(r) = rig {
+                    let _ = r.choose_block(block, name).await;
+                }
+            });
+        }
+        "preset_browse" => {
+            if let Some(s) = try_consume_context::<crate::module_sidebar::SelectedModule>() {
+                s.set(crate::module_sidebar::Selection::Block { name: block.name.clone(), block_type: kind.to_string() });
+            }
+        }
+        "algo_menu" => {
+            let (Some((param, options)), Some(host)) = (algos, signal_widgets::PopupHost::try_use()) else { return };
+            let (param, options) = (*param, options.clone());
+            let current = block.params.iter().find(|p| p.name == param).map_or(0, |p| p.value.round().max(0.0) as usize);
+            let id = block.id.clone();
+            host.open(
+                at.0,
+                at.1 + 12.0,
+                260.0,
+                move || {
+                    crate::control::algo_grid(&options, current, "#c4b5fd", {
+                        let (rig, id) = (rig.clone(), id.clone());
+                        move |i| {
+                            crate::control::send_param(&rig, &id, param, i as f32);
+                            spawn(async move { host.close() });
+                        }
+                    })
+                },
+                || {},
+            );
+        }
+        _ => {}
     }
 }
 
