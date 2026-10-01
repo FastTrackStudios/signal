@@ -122,7 +122,7 @@ const CLOUD_PREDELAY_MS: &[(f64, f64)] = &[
 ];
 
 /// Our wet level against BigSky's at MIX 127, dB.
-const CLOUD_WET_GAIN_DB: f64 = -2.7;
+const CLOUD_WET_GAIN_DB: f64 = -7.4;
 
 /// Cloud: BigSky `Decay` 1000–50000, `PreDelay`/`Tone`/`MOD` 0–127,
 /// `LowEnd`/`Diffusion` −10…+10.
