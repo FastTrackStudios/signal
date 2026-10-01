@@ -117,7 +117,8 @@ impl RigAudioPrefs {
     /// 1-2, the mix in on 3-4. Meaningful with `phones_routing` on.
     #[must_use]
     pub fn resolved_routing(&self) -> ((usize, usize), (usize, usize), (usize, usize)) {
-        let pair = |l: usize, r: usize, d: (usize, usize)| if l == 0 && r == 0 { d } else { (l, r) };
+        let pair =
+            |l: usize, r: usize, d: (usize, usize)| if l == 0 && r == 0 { d } else { (l, r) };
         (
             pair(self.main_out_l, self.main_out_r, (2, 3)),
             pair(self.phones_out_l, self.phones_out_r, (0, 1)),

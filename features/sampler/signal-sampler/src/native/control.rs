@@ -26,6 +26,8 @@ pub enum LfoWave {
     Square,
     /// Sample & hold: a new random value each cycle.
     SampleHold,
+    /// A falling ramp.
+    SawDown,
 }
 
 /// A control LFO. Bipolar output −1..+1. Free-rate or tempo-synced, with
@@ -42,6 +44,13 @@ pub struct ControlLfo {
     phase: f32,
     held: f32,
     rng: u32,
+    /// Fade-in after each note-on (seconds; 0 = none) and where it is.
+    pub fade_s: f32,
+    fade: f32,
+    /// Output amplitude (an LFO's own depth, e.g. Omnisphere's swing).
+    pub amp: f32,
+    /// Output 0..amp instead of −amp..+amp.
+    pub unipolar: bool,
 }
 
 impl ControlLfo {
@@ -56,6 +65,10 @@ impl ControlLfo {
             phase: 0.0,
             held: 0.0,
             rng: 0x02F6_E2B1,
+            fade_s: 0.0,
+            fade: 1.0,
+            amp: 1.0,
+            unipolar: false,
         }
     }
 
@@ -97,6 +110,12 @@ impl ControlLfo {
                 }
             }
             LfoWave::SampleHold => self.held,
+            LfoWave::SawDown => 1.0 - 2.0 * self.phase,
+        };
+        let v = if self.unipolar {
+            (v + 1.0) * 0.5 * self.amp
+        } else {
+            v * self.amp
         };
         let hz = match self.sync_beats {
             Some(beats) => (tempo_bpm.max(1.0) / 60.0) / beats.max(1e-3),
@@ -117,6 +136,19 @@ impl ControlLfo {
 pub struct ControlEnv {
     env: Adsr,
     held: u32,
+    /// Delay before the attack and hold at the top (seconds), and the
+    /// frames each has left.
+    delay_s: f32,
+    hold_s: f32,
+    delay_left: u32,
+    hold_left: u32,
+    sample_rate: f32,
+    /// Velocity sensitivity 0..1: the output scales by
+    /// `1 − s + s·vel/127` of the note that started it (1 = linear).
+    vel_sens: f32,
+    vel_scale: f32,
+    /// Output amplitude (a depth another route can modulate).
+    amp: f32,
 }
 
 impl ControlEnv {
@@ -125,7 +157,41 @@ impl ControlEnv {
         Self {
             env: Adsr::new(sample_rate, params),
             held: 0,
+            delay_s: 0.0,
+            hold_s: 0.0,
+            delay_left: 0,
+            hold_left: 0,
+            sample_rate: sample_rate.max(1.0),
+            vel_sens: 0.0,
+            vel_scale: 1.0,
+            amp: 1.0,
         }
+    }
+
+    /// Output amplitude (see `amp`).
+    #[must_use]
+    pub fn with_amp(mut self, amp: f32) -> Self {
+        self.amp = amp;
+        self
+    }
+
+    /// Scale the envelope by note velocity (see `vel_sens`).
+    #[must_use]
+    pub fn with_velocity_sensitivity(mut self, sens: f32) -> Self {
+        self.vel_sens = sens.clamp(0.0, 1.0);
+        self
+    }
+
+    /// Delay before the attack and hold at full level after it (seconds).
+    #[must_use]
+    pub fn with_delay_hold(mut self, delay_s: f32, hold_s: f32) -> Self {
+        self.delay_s = delay_s.max(0.0);
+        self.hold_s = hold_s.max(0.0);
+        self
+    }
+
+    fn frames(&self, secs: f32) -> u32 {
+        (secs * self.sample_rate) as u32
     }
 
     fn advance(&mut self, events: &PluginEvents<'_>, frames: usize) -> f32 {
@@ -134,11 +200,19 @@ impl ControlEnv {
             match &ev.message {
                 MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0 => {
                     self.held += 1;
-                    self.env.note_on();
+                    self.vel_scale =
+                        1.0 - self.vel_sens + self.vel_sens * f32::from(velocity.get()) / 127.0;
+                    self.hold_left = self.frames(self.hold_s);
+                    self.delay_left = self.frames(self.delay_s);
+                    if self.delay_left == 0 {
+                        self.env.note_on();
+                    }
                 }
                 MidiEvent::NoteOn { .. } | MidiEvent::NoteOff { .. } => {
                     self.held = self.held.saturating_sub(1);
                     if self.held == 0 {
+                        self.delay_left = 0;
+                        self.hold_left = 0;
                         self.env.note_off();
                     }
                 }
@@ -148,9 +222,128 @@ impl ControlEnv {
         // Advance through the block; block-rate consumers take the end value.
         let mut v = 0.0;
         for _ in 0..frames {
-            v = self.env.tick();
+            if self.delay_left > 0 {
+                // Waiting out the delay: the envelope has not started.
+                self.delay_left -= 1;
+                if self.delay_left == 0 {
+                    self.env.note_on();
+                }
+                v = self.env.tick();
+            } else if self.hold_left > 0 && !self.env.in_attack() && self.held > 0 {
+                // At the top: hold at full level before the decay.
+                self.hold_left -= 1;
+                v = 1.0;
+            } else {
+                v = self.env.tick();
+            }
         }
-        v
+        v * self.vel_scale * self.amp
+    }
+}
+
+pub use super::breakpoints::SegPoint;
+use super::breakpoints::{Breakpoints, EnvPlayer};
+
+/// A breakpoint envelope as a control source: Omnisphere's Mod Envs (free
+/// running — restart on every note-on, loop when asked, tempo-synced when
+/// their times are beats) and, with a sustain point, its filter envelopes
+/// (hold while a key is down, release from where they are). Unipolar 0..1.
+#[derive(Clone, Debug)]
+pub struct ControlMultiseg {
+    bp: Breakpoints,
+    player: EnvPlayer,
+    /// Times are in beats (one beat = `60 / bpm` seconds).
+    synced: bool,
+    held: u32,
+    /// Velocity sensitivity, as [`ControlEnv`]'s.
+    vel_sens: f32,
+    vel_scale: f32,
+    /// Output amplitude (a depth another route can modulate).
+    amp: f32,
+    sample_rate: f32,
+}
+
+impl ControlMultiseg {
+    /// Build from breakpoints (sorted by time); free-running.
+    #[must_use]
+    pub fn new(points: Vec<SegPoint>, looping: bool, synced: bool) -> Self {
+        Self {
+            bp: Breakpoints::new(points, None, looping),
+            player: EnvPlayer::default(),
+            synced,
+            held: 0,
+            vel_sens: 0.0,
+            vel_scale: 1.0,
+            amp: 1.0,
+            sample_rate: 48_000.0,
+        }
+    }
+
+    /// Output amplitude (see `amp`).
+    #[must_use]
+    pub fn with_amp(mut self, amp: f32) -> Self {
+        self.amp = amp;
+        self
+    }
+
+    /// Hold at point `index` while a key is down, releasing along the last
+    /// segment (an amp/filter envelope: the penultimate point).
+    #[must_use]
+    pub fn with_sustain(mut self, index: usize) -> Self {
+        self.bp = Breakpoints::new(std::mem::take(&mut self.bp.points), Some(index), false);
+        self
+    }
+
+    #[must_use]
+    pub fn with_velocity_sensitivity(mut self, sens: f32) -> Self {
+        self.vel_sens = sens.clamp(0.0, 1.0);
+        self
+    }
+
+    /// The envelope's level at position `t` (unreleased).
+    #[must_use]
+    pub fn level_at(&self, t: f32) -> f32 {
+        self.bp.level_at(t)
+    }
+}
+
+impl ControlSource for ControlMultiseg {
+    fn set_sample_rate(&mut self, sample_rate: f32) {
+        self.sample_rate = sample_rate;
+    }
+
+    fn tick(&mut self, events: &PluginEvents<'_>, frames: usize, tempo_bpm: f32) -> f32 {
+        for ev in events.midi {
+            match &ev.message {
+                midicore::MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0 => {
+                    self.held += 1;
+                    self.player.note_on();
+                    self.vel_scale =
+                        1.0 - self.vel_sens + self.vel_sens * f32::from(velocity.get()) / 127.0;
+                }
+                midicore::MidiEvent::NoteOn { .. } | midicore::MidiEvent::NoteOff { .. } => {
+                    self.held = self.held.saturating_sub(1);
+                    if self.held == 0 {
+                        self.player.note_off(&self.bp);
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Block rate: the value is the block start's.
+        let secs = frames as f32 / self.sample_rate.max(1.0);
+        let dt = if self.synced {
+            secs * tempo_bpm.max(1.0) / 60.0
+        } else {
+            secs
+        };
+        self.player.tick(&self.bp, dt) * self.vel_scale * self.amp
+    }
+
+    fn take_amp(&mut self) -> Option<f32> {
+        let a = self.amp;
+        self.amp = 1.0;
+        Some(a)
     }
 }
 
@@ -165,6 +358,9 @@ pub enum MidiMod {
     Bender,
     /// Velocity of the most recent note-on, 0..1.
     Velocity,
+    /// The same, squared — Omnisphere's `Velo` source (measured: a route's
+    /// swing grows as `(vel/127)²`).
+    VelocitySquared,
     /// Note number of the most recent note-on, 0..1 (raw, uncentered).
     Key,
     /// Bipolar key-tracking centered at middle C (note 60): −1..+1 across
@@ -200,33 +396,81 @@ pub trait ControlSource: Send {
 
     /// Rate change (voices/coefficients survive).
     fn set_sample_rate(&mut self, _sample_rate: f32) {}
+    /// Live-update an LFO's rate (and wave, when given); `false` for a
+    /// source that is not an LFO.
+    fn set_lfo(&mut self, _rate_hz: f32, _wave: Option<LfoWave>, _fade_s: Option<f32>) -> bool {
+        false
+    }
+    /// Live-update an envelope's delay and hold (seconds); `false` for a
+    /// source that is not an envelope.
+    fn set_env_timing(&mut self, _delay_s: f32, _hold_s: f32) -> bool {
+        false
+    }
+    /// Hand over this source's own amplitude (an LFO's depth) so a route
+    /// can modulate it: returns it and leaves the source at full scale.
+    /// `None` for a source without one.
+    fn take_amp(&mut self) -> Option<f32> {
+        None
+    }
     /// Advance through one block; returns the source's current value.
     /// Bipolar sources return −1..+1, unipolar 0..1.
     fn tick(&mut self, events: &PluginEvents<'_>, frames: usize, tempo_bpm: f32) -> f32;
 }
 
 impl ControlSource for ControlLfo {
+    fn take_amp(&mut self) -> Option<f32> {
+        let a = self.amp;
+        self.amp = 1.0;
+        Some(a)
+    }
+
+    fn set_lfo(&mut self, rate_hz: f32, wave: Option<LfoWave>, fade_s: Option<f32>) -> bool {
+        self.rate_hz = rate_hz.max(0.0);
+        if let Some(w) = wave {
+            self.wave = w;
+        }
+        if let Some(f) = fade_s {
+            self.fade_s = f.max(0.0);
+        }
+        true
+    }
+
     fn set_sample_rate(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
     }
 
     fn tick(&mut self, events: &PluginEvents<'_>, frames: usize, tempo_bpm: f32) -> f32 {
-        if self.retrigger
-            && events.midi.iter().any(|ev| {
-                matches!(
-                    &ev.message,
-                    midicore::MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0
-                )
-            })
-        {
-            self.reset();
+        let note_on = events.midi.iter().any(|ev| {
+            matches!(
+                &ev.message,
+                midicore::MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0
+            )
+        });
+        if note_on {
+            if self.retrigger {
+                self.reset();
+            }
+            // The fade starts over with each note.
+            self.fade = 0.0;
         }
         let sr = self.sample_rate;
-        self.advance(frames, sr, tempo_bpm)
+        let v = self.advance(frames, sr, tempo_bpm);
+        if self.fade_s > 0.0 {
+            self.fade = (self.fade + frames as f32 / (self.fade_s * sr.max(1.0))).min(1.0);
+            v * self.fade
+        } else {
+            v
+        }
     }
 }
 
 impl ControlSource for ControlEnv {
+    fn take_amp(&mut self) -> Option<f32> {
+        let a = self.amp;
+        self.amp = 1.0;
+        Some(a)
+    }
+
     fn set_env_params(&mut self, sample_rate: f32, params: crate::native::AdsrParams) -> bool {
         self.env.set_params(sample_rate, params);
         true
@@ -234,6 +478,13 @@ impl ControlSource for ControlEnv {
 
     fn set_sample_rate(&mut self, sample_rate: f32) {
         self.env.set_sample_rate(sample_rate);
+        self.sample_rate = sample_rate.max(1.0);
+    }
+
+    fn set_env_timing(&mut self, delay_s: f32, hold_s: f32) -> bool {
+        self.delay_s = delay_s.max(0.0);
+        self.hold_s = hold_s.max(0.0);
+        true
     }
 
     fn tick(&mut self, events: &PluginEvents<'_>, frames: usize, _tempo_bpm: f32) -> f32 {
@@ -291,6 +542,11 @@ impl ControlSource for MidiSource {
                 (MidiMod::Velocity, MidiEvent::NoteOn { velocity, .. }) if velocity.get() > 0 => {
                     v = velocity.get() as f32 / 127.0;
                 }
+                (MidiMod::VelocitySquared, MidiEvent::NoteOn { velocity, .. })
+                    if velocity.get() > 0 =>
+                {
+                    v = (velocity.get() as f32 / 127.0).powi(2);
+                }
                 (MidiMod::Key, MidiEvent::NoteOn { key, velocity, .. }) if velocity.get() > 0 => {
                     v = key.get() as f32 / 127.0;
                 }
@@ -340,6 +596,21 @@ impl ModSource {
         self.0.set_env_params(sample_rate, params)
     }
 
+    /// Live-update this source's rate and wave when it is an LFO.
+    pub fn set_lfo(&mut self, rate_hz: f32, wave: Option<LfoWave>, fade_s: Option<f32>) -> bool {
+        self.0.set_lfo(rate_hz, wave, fade_s)
+    }
+
+    /// See [`ControlSource::take_amp`].
+    pub fn take_amp(&mut self) -> Option<f32> {
+        self.0.take_amp()
+    }
+
+    /// Live-update this source's delay and hold when it is an envelope.
+    pub fn set_env_timing(&mut self, delay_s: f32, hold_s: f32) -> bool {
+        self.0.set_env_timing(delay_s, hold_s)
+    }
+
     #[must_use]
     pub fn lfo(mut lfo: ControlLfo, sample_rate: f32) -> Self {
         lfo.sample_rate = sample_rate;
@@ -349,6 +620,12 @@ impl ModSource {
     #[must_use]
     pub fn env(mut env: ControlEnv, sample_rate: f32) -> Self {
         env.env.set_sample_rate(sample_rate);
+        Self(Box::new(env))
+    }
+
+    #[must_use]
+    pub fn multiseg(mut env: ControlMultiseg, sample_rate: f32) -> Self {
+        env.sample_rate = sample_rate;
         Self(Box::new(env))
     }
 
@@ -371,6 +648,7 @@ impl ModSource {
             "after" | "aftertouch" | "pressure" => MidiMod::Aftertouch,
             "bender" | "bend" | "pitchbend" => MidiMod::Bender,
             "velo" | "velocity" => MidiMod::Velocity,
+            "velocity squared" | "velocity²" | "velo2" => MidiMod::VelocitySquared,
             "key" => MidiMod::Key,
             "keytrack" | "key track" | "keytracking" => MidiMod::KeyTrack,
             "random" | "random2" | "random unipolar" => MidiMod::Random,
@@ -402,6 +680,41 @@ impl ModSource {
     /// [`tick`](Self::tick) with an explicit tempo (for synced LFOs).
     pub fn tick_at(&mut self, events: &PluginEvents<'_>, frames: usize, tempo_bpm: f32) -> f32 {
         self.0.tick(events, frames, tempo_bpm)
+    }
+}
+
+#[cfg(test)]
+mod multiseg_tests {
+    use super::*;
+
+    fn pt(time: f32, level: f32, curve: f32, step: bool) -> SegPoint {
+        SegPoint {
+            time,
+            level,
+            curve,
+            step,
+        }
+    }
+
+    #[test]
+    fn segments_follow_their_curves_and_steps() {
+        let env = ControlMultiseg::new(
+            vec![
+                pt(0.0, 0.0, 0.0, false),
+                pt(1.0, 1.0, 10.5, false),
+                pt(2.0, 0.5, 0.0, true),
+                pt(3.0, 0.0, 0.0, false),
+            ],
+            false,
+            false,
+        );
+        assert!((env.level_at(0.5) - 0.5).abs() < 1e-6, "linear");
+        // Fast-then-slow (Omnisphere c = 0.25): most of the way by 30%.
+        let f = (1.0 - env.level_at(1.3)) / 0.5;
+        assert!(f > 0.9, "{f}");
+        // A step holds until its time.
+        assert!((env.level_at(2.99) - 0.5).abs() < 1e-6);
+        assert!(env.level_at(3.5).abs() < 1e-6);
     }
 }
 
@@ -452,6 +765,47 @@ mod tests {
             hi = hi.max(v);
         }
         assert!(hi > 0.9 && lo < -0.9, "full bipolar swing, got {lo}..{hi}");
+    }
+
+    #[test]
+    fn env_delay_and_hold_and_lfo_fade() {
+        let on = [PluginMidiEvent {
+            offset: 0,
+            message: ev_note_on(60, 100),
+        }];
+        let ev_on = PluginEvents {
+            params: &[],
+            midi: &on,
+            note_expressions: &[],
+        };
+        // 100 ms delay, 3 ms attack, 200 ms hold, then a 50 ms decay to 0.2.
+        let params = crate::native::AdsrParams {
+            attack_s: 0.003,
+            decay_s: 0.05,
+            sustain: 0.2,
+            release_s: 0.1,
+        };
+        let mut env = ModSource::env(
+            ControlEnv::new(48_000.0, params).with_delay_hold(0.1, 0.2),
+            48_000.0,
+        );
+        assert!(env.tick(&ev_on, 2_400) < 1e-6, "silent through the delay");
+        let _ = env.tick(&no_events(), 2_880); // past the delay + attack
+        assert!(env.tick(&no_events(), 4_800) > 0.999, "held at the top");
+        let _ = env.tick(&no_events(), 9_600); // hold over, decaying
+        assert!(
+            env.tick(&no_events(), 9_600) < 0.25,
+            "decays after the hold"
+        );
+
+        // An LFO with a 1 s fade starts near silent after a note.
+        let mut lfo = ControlLfo::new(LfoWave::Square, 2.0);
+        lfo.fade_s = 1.0;
+        let mut lfo = ModSource::lfo(lfo, 48_000.0);
+        let early = lfo.tick(&ev_on, 480).abs();
+        let _ = lfo.tick(&no_events(), 48_000);
+        let late = lfo.tick(&no_events(), 480).abs();
+        assert!(early < 0.05 && late > 0.95, "fade: {early} -> {late}");
     }
 
     #[test]

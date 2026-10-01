@@ -387,7 +387,11 @@ pub(crate) fn attach_song_patches(profile: &mut ProfileDef, songs: &[SongDef]) {
             continue;
         }
         for p in &song.patches {
-            if profile.patches.iter().any(|x| x.name.eq_ignore_ascii_case(&p.name)) {
+            if profile
+                .patches
+                .iter()
+                .any(|x| x.name.eq_ignore_ascii_case(&p.name))
+            {
                 tracing::warn!(song = %song.name, patch = %p.name, "rig library: a song patch shares a name with a profile patch — skipped");
                 continue;
             }
@@ -454,7 +458,10 @@ fn save_profile_file(store: &StyxDir, mut profile: ProfileDef) {
     for preset in &mut profile.presets {
         store.relativize(&mut preset.nam);
     }
-    config_watch::write_guarded(&profiles_store().dir().join(profile_file(&profile.name)), &profile);
+    config_watch::write_guarded(
+        &profiles_store().dir().join(profile_file(&profile.name)),
+        &profile,
+    );
 }
 
 impl RigLibrary {
@@ -484,10 +491,11 @@ impl RigLibrary {
             .setlists;
         let midi_map =
             read_or_seed::<MidiMapDef>(&store, "midi.styx", DEFAULT_MIDI, default_midi_map);
-        let keymap = read_or_seed::<KeymapLib>(&store, "keymap.styx", DEFAULT_KEYMAP, || KeymapLib {
-            bindings: default_keymap(),
-        })
-        .bindings;
+        let keymap =
+            read_or_seed::<KeymapLib>(&store, "keymap.styx", DEFAULT_KEYMAP, || KeymapLib {
+                bindings: default_keymap(),
+            })
+            .bindings;
         for profile in &mut profiles {
             for preset in &mut profile.presets {
                 store.resolve(&mut preset.nam);
@@ -529,8 +537,9 @@ impl RigLibrary {
         // follow-up must not parse three styx files to find nothing changed.
         // A save (here or by hand) moves a stamp and the next call re-reads.
         type Stamp = Vec<Option<(std::time::SystemTime, u64)>>;
-        static CACHE: std::sync::Mutex<Option<(std::path::PathBuf, Stamp, crate::compose::Compositions)>> =
-            std::sync::Mutex::new(None);
+        static CACHE: std::sync::Mutex<
+            Option<(std::path::PathBuf, Stamp, crate::compose::Compositions)>,
+        > = std::sync::Mutex::new(None);
         let dir = rig_dir();
         let stamp: Stamp = [
             crate::compose::MODULES_FILE,
@@ -551,10 +560,11 @@ impl RigLibrary {
                 }
             }
         }
-        let last_good = CACHE
-            .lock()
-            .ok()
-            .and_then(|c| c.as_ref().filter(|(d, _, _)| *d == dir).map(|(_, _, comp)| comp.clone()));
+        let last_good = CACHE.lock().ok().and_then(|c| {
+            c.as_ref()
+                .filter(|(d, _, _)| *d == dir)
+                .map(|(_, _, comp)| comp.clone())
+        });
         let comp = Self::read_compositions(last_good.as_ref());
         if let Ok(mut cache) = CACHE.lock() {
             *cache = Some((dir, stamp, comp.clone()));
@@ -580,10 +590,11 @@ impl RigLibrary {
             }
         }
         let store = store();
-        let modules = one::<crate::compose::ModuleLib>(crate::compose::MODULES_FILE).map(|l| l.presets);
+        let modules =
+            one::<crate::compose::ModuleLib>(crate::compose::MODULES_FILE).map(|l| l.presets);
         let fresh_modules = modules.is_ok();
-        let mut modules = modules
-            .unwrap_or_else(|()| last_good.map(|c| c.modules.clone()).unwrap_or_default());
+        let mut modules =
+            modules.unwrap_or_else(|()| last_good.map(|c| c.modules.clone()).unwrap_or_default());
         if fresh_modules {
             for m in &mut modules {
                 for snap in &mut m.snapshots {
@@ -708,8 +719,10 @@ impl RigLibrary {
             return;
         };
         let mut profile = profile.clone();
-        let (song_patches, own): (Vec<crate::profiles::PatchDef>, Vec<crate::profiles::PatchDef>) =
-            profile.patches.drain(..).partition(|p| !p.song.is_empty());
+        let (song_patches, own): (
+            Vec<crate::profiles::PatchDef>,
+            Vec<crate::profiles::PatchDef>,
+        ) = profile.patches.drain(..).partition(|p| !p.song.is_empty());
         profile.patches = own;
         if !song_patches.is_empty() {
             let songs_path = store.dir().join("songs.styx");
@@ -720,7 +733,9 @@ impl RigLibrary {
                 Read::Ok(l) => l.songs,
                 Read::Missing => Vec::new(),
                 Read::Bad(_) => {
-                    tracing::warn!("songs.styx does not parse — the song patches were not saved into it");
+                    tracing::warn!(
+                        "songs.styx does not parse — the song patches were not saved into it"
+                    );
                     return save_profile_file(&store, profile);
                 }
             };
@@ -762,7 +777,10 @@ impl RigLibrary {
                 store.relativize(&mut option.nam);
             }
         }
-        config_watch::write_guarded(&store.dir().join("drive-presets.styx"), &DrivePresetLib { presets });
+        config_watch::write_guarded(
+            &store.dir().join("drive-presets.styx"),
+            &DrivePresetLib { presets },
+        );
     }
 
     /// Write the songs. A song's patches are kept as the file has them —
@@ -787,7 +805,10 @@ impl RigLibrary {
             .iter()
             .map(|s| {
                 let mut s = s.clone();
-                if let Some(d) = on_disk.iter().find(|d| d.name.eq_ignore_ascii_case(&s.name)) {
+                if let Some(d) = on_disk
+                    .iter()
+                    .find(|d| d.name.eq_ignore_ascii_case(&s.name))
+                {
                     s.patches.clone_from(&d.patches);
                 }
                 s
@@ -897,15 +918,25 @@ mod tests {
         assert_eq!(back.part_index, 1);
         assert_eq!(back.active_patch, "Lead Big");
         assert_eq!(back.tempo_bpm, 74.0);
-        assert_eq!(back.master_trim_db, -4.5, "the main fader survives a restart");
+        assert_eq!(
+            back.master_trim_db, -4.5,
+            "the main fader survives a restart"
+        );
         // A last-state from before the fader was kept opens at −6 dB.
-        let old: super::LastState = facet_styx::from_str("setlist_index 1\nperform_mode 2\n").expect("old state parses");
+        let old: super::LastState =
+            facet_styx::from_str("setlist_index 1\nperform_mode 2\n").expect("old state parses");
         assert_eq!(old.master_trim_db, -6.0);
         assert_eq!(back.profile, "Blues");
         // The phones come back as they were; an old file opens at unity.
-        assert_eq!((back.phones_volume, back.phones_guitar, back.phones_mix), (0.6, 0.8, 0.7));
+        assert_eq!(
+            (back.phones_volume, back.phones_guitar, back.phones_mix),
+            (0.6, 0.8, 0.7)
+        );
         assert!(back.main_mute);
-        assert_eq!((old.phones_volume, old.phones_guitar, old.phones_mix), (0.75, 0.75, 0.75));
+        assert_eq!(
+            (old.phones_volume, old.phones_guitar, old.phones_mix),
+            (0.75, 0.75, 0.75)
+        );
         assert!(!old.main_mute);
     }
 
@@ -947,7 +978,13 @@ mod song_patch_tests {
         attach_song_patches(&mut profile, &[washed, other]);
         assert_eq!(profile.patches.len(), own + 1);
         let added = profile.patches.last().unwrap();
-        assert_eq!((added.name.as_str(), added.song.as_str()), ("Dry Chorus Clean", "WASHED"));
-        assert!(profile.patches[..own].iter().all(|p| p.song.is_empty()), "the profile's own stay its own");
+        assert_eq!(
+            (added.name.as_str(), added.song.as_str()),
+            ("Dry Chorus Clean", "WASHED")
+        );
+        assert!(
+            profile.patches[..own].iter().all(|p| p.song.is_empty()),
+            "the profile's own stay its own"
+        );
     }
 }

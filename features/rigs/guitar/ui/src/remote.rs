@@ -42,34 +42,9 @@ enum Mode {
     Presets,
 }
 
-/// How much of the page the footswitch grid takes.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Switches {
-    /// The full grid: a third of the page, big tiles.
-    Full,
-    /// A short strip — both rows compact.
-    Compact,
-    /// No grid: the page gets all the height.
-    Hidden,
-}
-
-impl Switches {
-    fn next(self) -> Self {
-        match self {
-            Self::Full => Self::Compact,
-            Self::Compact => Self::Hidden,
-            Self::Hidden => Self::Full,
-        }
-    }
-
-    fn label(self) -> &'static str {
-        match self {
-            Self::Full => "Full",
-            Self::Compact => "Compact",
-            Self::Hidden => "Hidden",
-        }
-    }
-}
+/// How much of the page the footswitch grid takes — the switches toggle
+/// every rig shares.
+use signal_widgets::switches::{SwitchesMode as Switches, SwitchesToggle};
 
 /// The remote rig UI. Prop-less: everything arrives via context
 /// (`RigClient`, `RigStreamClient`, `AudioSettingsClient`).
@@ -81,6 +56,9 @@ pub fn GuitarRigRemote() -> Element {
     // Menus drawn at the root, over everything: a panel that clips its
     // overflow cannot cut them off (Blitz has no `fixed`, no portals).
     signal_widgets::PopupHost::provide();
+    // Whether a finger or a mouse is playing the rig: every surface below
+    // gives right-click, hover and double-click actions a touch path.
+    let touch = signal_widgets::Touch::provide();
     // Callbacks made once per site, not once per render (see `stable`).
     let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -323,6 +301,9 @@ pub fn GuitarRigRemote() -> Element {
             // follows it anywhere in the window, and a release ends it.
             onpointermove: move |e: PointerEvent| drag_bus.root_move(&e),
             onpointerup: move |_| drag_bus.root_up(),
+            onpointercancel: move |_| drag_bus.root_up(),
+            // Every press says what kind of pointer made it.
+            onpointerdown: move |e: PointerEvent| touch.observe(&e),
             // Cmd/Ctrl+P: the command palette. Everything else: the
             // keymap (keymap.styx) — "ctrl+1" strings → rig actions.
             onkeydown: {
@@ -531,17 +512,8 @@ pub fn GuitarRigRemote() -> Element {
                 // The footswitch grid and the macros: full, a compact strip,
                 // or hidden — click to cycle. Hidden gives the page all the
                 // height.
-                button {
-                    class: if switches() == Switches::Hidden {
-                        "flex items-center h-7 px-2 rounded-md border border-border text-muted-foreground hover:text-foreground text-xs"
-                    } else {
-                        "flex items-center h-7 px-2 rounded-md bg-accent text-accent-foreground text-xs"
-                    },
-                    style: "display: flex; align-items: center; gap: 5px;",
-                    title: "Switches: {switches().label()} — click for {switches().next().label()}",
-                    onclick: move |_| switches.set(switches().next()),
+                SwitchesToggle { mode: switches,
                     fts_chrome::Glyph { icon: fts_chrome::Icon::Perform, size: 13 }
-                    "Switches"
                 }
 
                 // Global switch states — visible in every mode.

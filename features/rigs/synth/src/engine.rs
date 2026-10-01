@@ -113,6 +113,127 @@ pub struct ModuleSettings {
     /// Unison voices + detune, for sampler sources that support them.
     pub unison: u32,
     pub detune: f32,
+    /// Pan −1..1 and stereo width 0..1 (0.5 as recorded), on the Amp.
+    pub pan: f32,
+    pub width: f32,
+    /// Transpose (semitones) and fine tune (cents).
+    pub transpose: f32,
+    pub fine: f32,
+    /// Filter key tracking 0..1, drive 0..1 and wet mix 0..1.
+    pub keytrack: f32,
+    pub filter_drive: f32,
+    pub filter_mix: f32,
+    /// Vibrato: rate (Hz), depth 0..1, delay (ms).
+    pub vib_rate: f32,
+    pub vib_depth: f32,
+    pub vib_delay_ms: f32,
+    /// Tone on the Amp, 0..1: warmth and body 0.5 = flat, drive 0 = clean.
+    pub warmth: f32,
+    pub body: f32,
+    pub drive: f32,
+    /// Chorus amount 0..1 (0 = no chorus).
+    pub chorus: f32,
+    pub ambience: AmbienceSettings,
+    pub delay: DelaySettings,
+    /// The part's LFOs 1–4 as `(rate_hz, depth, wave)` — depth scales the
+    /// routes an imported patch gives each; wave indexes sine / triangle /
+    /// saw / square / S&H.
+    pub lfos: [(f32, f32, f32); 4],
+    /// The Mod Env's `(attack_ms, decay_ms, sustain, release_ms)`.
+    pub mod_env: (f32, f32, f32, f32),
+    /// Each LFO's fade-in (ms) and destination (see [`ModDest`]).
+    pub lfo_fade_ms: [f32; 4],
+    pub lfo_dest: [ModDest; 4],
+    /// Both Mod Envs' delay and hold (ms), depth −1..1 and destination; the
+    /// second's ADSR.
+    pub mod_env_dh: [(f32, f32); 2],
+    pub mod_env_depth: [f32; 2],
+    pub mod_env_dest: [ModDest; 2],
+    pub mod_env2: (f32, f32, f32, f32),
+    /// The settings as seeded from an imported patch (the knobs untouched).
+    /// Applying onto an imported tree then writes only what moved away from
+    /// it, so an untouched lane plays exactly what the importer built — the
+    /// knob model is coarser than the patch (ADSR over breakpoints, one
+    /// cutoff over a measured taper) and must not overwrite it.
+    pub baseline: Option<Box<ModuleSettings>>,
+}
+
+/// Where a keys module's LFO or Mod Env goes (the destination picker).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ModDest {
+    #[default]
+    Off,
+    Pitch,
+    Cutoff,
+    Resonance,
+    Level,
+    Pan,
+    Width,
+}
+
+impl ModDest {
+    /// From the picker's 0..6 value.
+    #[must_use]
+    pub fn from_value(v: f32) -> Self {
+        match v.round() as i32 {
+            1 => Self::Pitch,
+            2 => Self::Cutoff,
+            3 => Self::Resonance,
+            4 => Self::Level,
+            5 => Self::Pan,
+            6 => Self::Width,
+            _ => Self::Off,
+        }
+    }
+}
+
+/// One modulation route of a keys module: source, target leaf, target
+/// param, depth (normalized, as the mod matrix takes it).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModuleRoute {
+    pub source: String,
+    pub leaf: &'static str,
+    pub param: &'static str,
+    pub depth: f32,
+}
+
+/// The module's reverb (its "Ambience").
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AmbienceSettings {
+    pub on: bool,
+    /// Algorithm index (the reverb's table).
+    pub algo: f32,
+    pub size: f32,
+    pub mix: f32,
+    pub predelay_ms: f32,
+    pub decay: f32,
+}
+
+/// The module's delay.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DelaySettings {
+    pub on: bool,
+    /// Machine / style index (the delay's table).
+    pub style: f32,
+    pub time_ms: f32,
+    pub feedback: f32,
+    pub mix: f32,
+}
+
+impl AmbienceSettings {
+    /// Whether the reverb is in the chain (on and audible).
+    #[must_use]
+    pub fn active(&self) -> bool {
+        self.on && self.mix > 0.0
+    }
+}
+
+impl DelaySettings {
+    /// Whether the delay is in the chain (on and audible).
+    #[must_use]
+    pub fn active(&self) -> bool {
+        self.on && self.mix > 0.0
+    }
 }
 
 impl Default for ModuleSettings {
@@ -127,11 +248,232 @@ impl Default for ModuleSettings {
             filter_env: (0.0, 0.0, 1.0, 120.0),
             unison: 1,
             detune: 0.1,
+            pan: 0.0,
+            width: 0.5,
+            transpose: 0.0,
+            fine: 0.0,
+            keytrack: 0.0,
+            filter_drive: 0.0,
+            filter_mix: 1.0,
+            vib_rate: 5.0,
+            vib_depth: 0.0,
+            vib_delay_ms: 300.0,
+            warmth: 0.5,
+            body: 0.5,
+            drive: 0.0,
+            chorus: 0.0,
+            // Effects start out: a patch sounds as it was made until a knob
+            // asks for more.
+            ambience: AmbienceSettings {
+                on: false,
+                algo: 1.0,
+                size: 0.5,
+                mix: 0.15,
+                predelay_ms: 20.0,
+                decay: 0.45,
+            },
+            delay: DelaySettings {
+                on: false,
+                style: 0.0,
+                time_ms: 375.0,
+                feedback: 0.35,
+                mix: 0.0,
+            },
+            lfos: [
+                (2.0, 0.0, 0.0),
+                (0.5, 0.0, 1.0),
+                (4.0, 0.0, 2.0),
+                (8.0, 0.0, 3.0),
+            ],
+            // The mod engine's own envelope default: an untouched Mod Env
+            // re-applies as exactly what the tree compiles.
+            mod_env: (3.0, 250.0, 0.8, 150.0),
+            lfo_fade_ms: [0.0; 4],
+            lfo_dest: [ModDest::Off; 4],
+            mod_env_dh: [(0.0, 0.0); 2],
+            mod_env_depth: [0.0; 2],
+            mod_env_dest: [ModDest::Off; 2],
+            mod_env2: (3.0, 250.0, 0.8, 150.0),
+            baseline: None,
         }
     }
 }
 
 impl ModuleSettings {
+    /// Whether sampler voices carry their own filter (envelope amount or key
+    /// tracking set). Then it is the module's filter — the shared chain
+    /// filter opens — and the resonance knob is the voices'.
+    #[must_use]
+    pub fn voice_filter_on(&self) -> bool {
+        self.filter_env_depth != 0.0 || self.keytrack > 0.0
+    }
+
+    /// The module's Amp: unity gain, plus pan, width and tone.
+    #[must_use]
+    pub fn amp_block(&self) -> RigBlock {
+        RigBlock::of_type(BlockType::Amp)
+            .named("Amp")
+            .with_param("gain", "0.5")
+            .with_param(
+                "pan",
+                format!("{:.4}", (self.pan.clamp(-1.0, 1.0) + 1.0) * 0.5),
+            )
+            .with_param("width", format!("{:.4}", self.width.clamp(0.0, 1.0)))
+            .with_param("warmth", format!("{:.4}", self.warmth.clamp(0.0, 1.0)))
+            .with_param("body", format!("{:.4}", self.body.clamp(0.0, 1.0)))
+            .with_param("drive", format!("{:.4}", self.drive.clamp(0.0, 1.0)))
+    }
+
+    /// The module's effects in chain order — Chorus, Delay, Ambience — each
+    /// only when it is on, so an idle module costs nothing. The blocks carry
+    /// their values in the effects' own units.
+    #[must_use]
+    pub fn fx_blocks(&self) -> Vec<RigBlock> {
+        let mut out = Vec::new();
+        if self.chorus > 0.0 {
+            out.push(
+                RigBlock::of_type(BlockType::Chorus)
+                    .named("Chorus")
+                    .with_param("mix", format!("{:.4}", self.chorus.clamp(0.0, 1.0))),
+            );
+        }
+        let d = &self.delay;
+        if d.active() {
+            out.push(
+                RigBlock::of_type(BlockType::Delay)
+                    .named("Delay")
+                    .with_param("style", format!("{:.0}", d.style.clamp(0.0, 13.0)))
+                    .with_param("time", format!("{:.2}", d.time_ms.clamp(2.0, 2500.0)))
+                    .with_param("feedback", format!("{:.4}", d.feedback.clamp(0.0, 0.95)))
+                    .with_param("mix", format!("{:.4}", d.mix.clamp(0.0, 1.0))),
+            );
+        }
+        let a = &self.ambience;
+        if a.active() {
+            out.push(
+                RigBlock::of_type(BlockType::Reverb)
+                    .named("Ambience")
+                    .with_param("algorithm", format!("{:.0}", a.algo.clamp(0.0, 14.0)))
+                    .with_param("size", format!("{:.4}", a.size.clamp(0.0, 1.0)))
+                    .with_param("decay", format!("{:.4}", a.decay.clamp(0.0, 1.0)))
+                    .with_param(
+                        "predelay",
+                        format!("{:.2}", a.predelay_ms.clamp(0.0, 200.0)),
+                    )
+                    .with_param("mix", format!("{:.4}", a.mix.clamp(0.0, 1.0))),
+            );
+        }
+        out
+    }
+
+    /// The sampler source's per-voice params (seconds / Hz / cents / 0..1),
+    /// beyond the amp ADSR: its own filter, vibrato and tuning.
+    fn sampler_voice_params(&self, mut block: RigBlock) -> RigBlock {
+        let secs = |ms: f32| format!("{:.4}", ms.max(0.0) / 1000.0);
+        if self.voice_filter_on() {
+            block = block
+                .with_param("filter_attack", secs(self.filter_env.0))
+                .with_param("filter_decay", secs(self.filter_env.1))
+                .with_param(
+                    "filter_sustain",
+                    format!("{:.4}", self.filter_env.2.clamp(0.0, 1.0)),
+                )
+                .with_param("filter_release", secs(self.filter_env.3))
+                .with_param(
+                    "filter_env_amt",
+                    format!("{:.4}", self.filter_env_depth.clamp(-1.0, 1.0)),
+                )
+                .with_param("filter_cutoff_hz", format!("{:.1}", self.cutoff_hz))
+                .with_param(
+                    "filter_resonance",
+                    format!("{:.4}", self.resonance.clamp(0.0, 1.0)),
+                )
+                .with_param(
+                    "filter_keytrack",
+                    format!("{:.4}", self.keytrack.clamp(0.0, 1.0)),
+                );
+        }
+        if self.vib_depth > 0.0 {
+            block = block
+                .with_param("vib_rate", format!("{:.3}", self.vib_rate))
+                .with_param(
+                    "vib_depth",
+                    format!("{:.4}", self.vib_depth.clamp(0.0, 1.0)),
+                )
+                .with_param("vib_delay_ms", format!("{:.1}", self.vib_delay_ms.max(0.0)));
+        }
+        if self.transpose != 0.0 || self.fine != 0.0 {
+            block = block
+                .with_param("transpose", format!("{:.3}", self.transpose))
+                .with_param("fine", format!("{:.3}", self.fine));
+        }
+        block
+    }
+
+    /// The module's modulation routes for its picked destinations: LFOs
+    /// (bipolar) at up to ±2 semitones / ±2 octaves / half a parameter's
+    /// range, Mod Envs (unipolar, depth −1..1) at up to 12 semitones / 4
+    /// octaves. A route exists whenever a destination is picked — depth 0
+    /// included — so its depth can move live.
+    #[must_use]
+    pub fn mod_routes(&self) -> Vec<ModuleRoute> {
+        let sampler = matches!(self.source, Source::Sample(_));
+        let synth = matches!(self.source, Source::Synth);
+        let target = |dest: ModDest, env: bool| -> Option<(&'static str, &'static str, f32)> {
+            Some(match dest {
+                ModDest::Off => return None,
+                ModDest::Pitch if sampler => (
+                    "Soundsource",
+                    "pitch_mod",
+                    if env { 12.0 / 24.0 } else { 2.0 / 24.0 },
+                ),
+                ModDest::Pitch => (
+                    "Soundsource",
+                    "tune",
+                    if env { 12.0 / 48.0 } else { 2.0 / 48.0 },
+                ),
+                ModDest::Cutoff if sampler && self.voice_filter_on() => {
+                    ("Soundsource", "cutoff_mod", if env { 0.5 } else { 0.25 })
+                }
+                ModDest::Cutoff if synth => ("Soundsource", "cutoff", if env { 0.4 } else { 0.2 }),
+                ModDest::Cutoff => ("Filter 1", "cutoff", if env { 0.4 } else { 0.2 }),
+                ModDest::Resonance if synth => ("Soundsource", "resonance", 0.5),
+                ModDest::Resonance => ("Filter 1", "resonance", 0.5),
+                ModDest::Level => ("Amp", "gain", 0.5),
+                ModDest::Pan => ("Amp", "pan", 0.5),
+                ModDest::Width => ("Amp", "width", 0.5),
+            })
+        };
+        let mut out = Vec::new();
+        for (i, dest) in self.lfo_dest.iter().enumerate() {
+            if let Some((leaf, param, scale)) = target(*dest, false) {
+                out.push(ModuleRoute {
+                    source: format!("LFO {}", i + 1),
+                    leaf,
+                    param,
+                    depth: self.lfos[i].1.clamp(0.0, 1.0) * scale,
+                });
+            }
+        }
+        for (i, name) in ["Mod Env", "Mod Env 2"].into_iter().enumerate() {
+            if let Some((leaf, param, scale)) = target(self.mod_env_dest[i], true) {
+                out.push(ModuleRoute {
+                    source: name.to_string(),
+                    leaf,
+                    param,
+                    depth: self.mod_env_depth[i].clamp(-1.0, 1.0) * scale,
+                });
+            }
+        }
+        out
+    }
+
+    /// The Wavetable's tune param (0.5 centre, ±24 semitones).
+    #[must_use]
+    pub fn wavetable_tune(&self) -> f32 {
+        (0.5 + (self.transpose + self.fine / 100.0) / 48.0).clamp(0.0, 1.0)
+    }
+
     /// Settings for a bare source, everything else at its default.
     #[must_use]
     pub fn from_source(source: Source) -> Self {
@@ -170,17 +512,26 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
         // The sampler: a Keyscape piano, an Omnisphere soundsource, a kit.
         Source::Sample(spec) => {
             let mut block = RigBlock::sample_lib(spec.clone()).named("Soundsource");
-            // The sampler's own per-voice amplitude envelope: the attack and
-            // release a note actually gets.
+            // The sampler's own per-voice amplitude envelope: the ADSR a
+            // note actually gets (times in seconds, sustain 0..=1).
             block = block
                 .with_param(
                     "amp_attack",
                     format!("{:.4}", set.amp_env.0.max(0.0) / 1000.0),
                 )
                 .with_param(
+                    "amp_decay",
+                    format!("{:.4}", set.amp_env.1.max(0.0) / 1000.0),
+                )
+                .with_param(
+                    "amp_sustain",
+                    format!("{:.4}", set.amp_env.2.clamp(0.0, 1.0)),
+                )
+                .with_param(
                     "amp_release",
                     format!("{:.4}", set.amp_env.3.max(0.0) / 1000.0),
                 );
+            block = set.sampler_voice_params(block);
             if set.unison > 1 {
                 block = block
                     .with_param("unison", set.unison.to_string())
@@ -227,12 +578,16 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
     // scale); Hz is what a player reads. A SYNTH module filters per voice
     // (inside the oscillator), so its chain filter sits wide open; a sampler
     // module keeps the chain filter as its tone control.
-    let chain_cutoff = if matches!(set.source, Source::Synth) {
+    // A sampler whose voices carry their own filter opens it too: the
+    // voices are the filter then.
+    let open = matches!(set.source, Source::Synth)
+        || (matches!(set.source, Source::Sample(_)) && set.voice_filter_on());
+    let chain_cutoff = if open {
         1.0
     } else {
         signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz)
     };
-    let chain_res = if matches!(set.source, Source::Synth) {
+    let chain_res = if open {
         0.0
     } else {
         set.resonance.clamp(0.0, 1.0)
@@ -242,7 +597,9 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
             RigBlock::of_type(BlockType::Filter)
                 .named("Filter 1")
                 .with_param("cutoff", format!("{chain_cutoff:.4}"))
-                .with_param("resonance", format!("{chain_res:.4}")),
+                .with_param("resonance", format!("{chain_res:.4}"))
+                .with_param("drive", format!("{:.4}", set.filter_drive.clamp(0.0, 1.0)))
+                .with_param("mix", format!("{:.4}", set.filter_mix.clamp(0.0, 1.0))),
         )
         .block(BlockType::Filter, "Filter 2");
 
@@ -255,22 +612,58 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
         // starts at zero and is opened by its envelope; a sampler's Amp is
         // just a gain stage at unity, because its voices carry their own
         // envelopes.
-        .add(
-            Container::module("Amp").add(
-                // Unity for every source: the voice's own amp envelope shapes
-                // the level (the old synth-only closed-Amp + env route is gone).
-                RigBlock::of_type(BlockType::Amp)
-                    .named("Amp")
-                    .with_param("gain", "0.5"),
-            ),
-        )
-        .add(fx_rack("FX"))
+        // Unity for every source: the voice's own amp envelope shapes the
+        // level; the Amp carries pan, width and tone.
+        // "Amp Stage", not "Amp": a route naming "Amp" must find the block,
+        // and a container of the same name took the match.
+        .add(Container::module("Amp Stage").add(set.amp_block()))
+        .add(module_fx(set))
         // Each module routes to the Part's aux rack independently (rigs
         // without an Aux Rack container simply drop the send).
         .send(AUX_RACK, "To Aux")
         .modulator_block(envelope("Amp Env", set.amp_env))
         .modulator_block(envelope("Filter Env", set.filter_env))
-        .modulator(BlockType::MultisegEnvelope, "Mod Env")
+        .modulator_block(mod_env("Mod Env", set.mod_env, set.mod_env_dh[0]))
+        .modulator_block(mod_env("Mod Env 2", set.mod_env2, set.mod_env_dh[1]))
+        .with_lfos(set)
+}
+
+/// A Mod Env: an envelope with delay and hold (ms).
+fn mod_env(name: &str, adsr: (f32, f32, f32, f32), (delay, hold): (f32, f32)) -> RigBlock {
+    envelope(name, adsr)
+        .with_param("delay", format!("{:.4}", delay.max(0.0) / 1000.0))
+        .with_param("hold", format!("{:.4}", hold.max(0.0) / 1000.0))
+}
+
+/// A keys module's LFOs (those with a destination) and every picked
+/// destination's route.
+trait WithLfos {
+    fn with_lfos(self, set: &ModuleSettings) -> Self;
+}
+
+impl WithLfos for Container {
+    fn with_lfos(self, set: &ModuleSettings) -> Self {
+        let mut module = self;
+        for (i, &(rate, _, wave)) in set.lfos.iter().enumerate() {
+            if set.lfo_dest[i] == ModDest::Off {
+                continue;
+            }
+            module = module.modulator_block(
+                RigBlock::of_type(BlockType::Lfo)
+                    .named(format!("LFO {}", i + 1))
+                    .with_param("rate", format!("{:.4}", rate.clamp(0.01, 40.0)))
+                    .with_param("wave", format!("{}", wave.round().clamp(0.0, 4.0) as u32))
+                    .with_param(
+                        "fade",
+                        format!("{:.4}", set.lfo_fade_ms[i].max(0.0) / 1000.0),
+                    ),
+            );
+        }
+        for r in set.mod_routes() {
+            module = module.route(r.source, format!("{}.{}", r.leaf, r.param), r.depth);
+        }
+        module
+    }
 }
 
 /// Attach the module's envelope routes — but only where a module-level
@@ -291,6 +684,325 @@ const fn with_module_envelopes(module: Container, _set: &ModuleSettings) -> Cont
     // a shared Amp Env onto the module Amp's gain, a shared Filter Env onto
     // the module filter's cutoff — double-enveloped the sum, so they're gone.
     module
+}
+
+/// Write a keys module's settings onto layer `layer_idx` ("Layer A".."D")
+/// of an imported Omnisphere tree, so a rebuilt lane keeps what the knobs
+/// say: the source's amp ADSR, Filter 1's cutoff and resonance, the Filter
+/// Env's ADSR and — where the patch routes it — its depth onto the cutoff.
+/// A sample-mode layer with no such route takes the depth as its voices' own
+/// filter envelope instead, as a keys module does. Returns `false` when the
+/// tree has no such layer.
+///
+/// With a [`ModuleSettings::baseline`] (the knobs as the patch seeded them)
+/// only what moved is written, and relative to the patch: an untouched lane
+/// is the imported tree exactly, and a cutoff turned up an octave moves the
+/// patch's own measured knob up an octave.
+pub fn apply_settings_to_omni_layer(
+    tree: &mut Container,
+    layer_idx: usize,
+    set: &ModuleSettings,
+) -> bool {
+    use signal_sampler::rig_node::RigNode;
+    fn find_mut<'a>(c: &'a mut Container, name: &str) -> Option<&'a mut Container> {
+        if c.name == name {
+            return Some(c);
+        }
+        c.children.iter_mut().find_map(|child| match child {
+            RigNode::Container { container } => find_mut(container, name),
+            RigNode::Block { .. } => None,
+        })
+    }
+    fn for_blocks(c: &mut Container, f: &mut impl FnMut(&mut RigBlock)) {
+        for child in &mut c.children {
+            match child {
+                RigNode::Block { block } => f(block),
+                RigNode::Container { container } => for_blocks(container, f),
+            }
+        }
+    }
+    fn put(block: &mut RigBlock, name: &str, value: String) {
+        match block.params.iter_mut().find(|p| p.name == name) {
+            Some(p) => p.value = value,
+            None => {
+                block.params.push(signal_sampler::rig_node::Param {
+                    name: name.to_string(),
+                    value,
+                });
+            }
+        }
+    }
+    fn get(block: &RigBlock, name: &str) -> Option<f32> {
+        block
+            .params
+            .iter()
+            .find(|p| p.name == name)
+            .and_then(|p| p.value.parse().ok())
+    }
+    /// The knob setting whose corner is `hz`, off a `s:hz;…` taper table.
+    fn taper_setting(taper: &str, hz: f32) -> Option<f32> {
+        let pts: Vec<(f32, f32)> = taper
+            .split(';')
+            .filter_map(|kv| {
+                let (k, v) = kv.split_once(':')?;
+                Some((k.parse().ok()?, v.parse().ok()?))
+            })
+            .collect();
+        let first = pts.first()?;
+        if hz <= first.1 {
+            return Some(first.0);
+        }
+        for w in pts.windows(2) {
+            let ((s0, h0), (s1, h1)) = (w[0], w[1]);
+            if hz <= h1 {
+                let x = (hz / h0).ln() / (h1 / h0).ln().max(1e-6);
+                return Some(s0 + (s1 - s0) * x);
+            }
+        }
+        pts.last().map(|p| p.0)
+    }
+    let Some(name) = crate::omni_import::LAYER_NAMES.get(layer_idx) else {
+        return false;
+    };
+    let Some(layer) = find_mut(tree, name) else {
+        return false;
+    };
+    let base = set.baseline.as_deref();
+    // Whether a knob moved off the patch (always, with no baseline).
+    let moved = |f: &dyn Fn(&ModuleSettings) -> f32| {
+        base.is_none_or(|b| (f(b) - f(set)).abs() > 1e-6)
+    };
+    let secs = |ms: f32| format!("{:.4}", ms.max(0.0) / 1000.0);
+    let depth = set.filter_env_depth.clamp(-1.0, 1.0);
+    // The filter section's own envelope route is the first Filter Env →
+    // Filter 1 route the importer writes; later ones are mod-matrix rows with
+    // depths of their own, left as the patch set them.
+    let env_route = layer.mod_routes.iter_mut().find(|r| {
+        r.source.key() == "filter env"
+            && r.target.key() == "filter 1"
+            // A knob-units route only relative to a baseline: an absolute
+            // macro depth is in the old normalized-cutoff units.
+            && (r.parameter == "cutoff" || (base.is_some() && r.parameter == "knob"))
+    });
+    let routed = env_route.is_some();
+    if let Some(r) = env_route {
+        if moved(&|s| s.filter_env_depth) {
+            r.depth = match base {
+                // Relative: the patch's own depth, scaled by the knob.
+                Some(b) if b.filter_env_depth.abs() > 1e-4 => {
+                    r.depth * (set.filter_env_depth / b.filter_env_depth)
+                }
+                _ => depth,
+            };
+        }
+    }
+    let mut is_sampler = false;
+    for_blocks(layer, &mut |b| {
+        if b.display_name() == "Soundsource" && b.block_type == BlockType::Sampler {
+            is_sampler = true;
+        }
+    });
+    // A sample-mode layer the patch gives no filter-envelope route takes the
+    // knobs' as its voices' own filter (as a keys module does), and its
+    // shared filter opens for it.
+    let voice_filter = is_sampler && !routed && set.voice_filter_on() && moved(&|s| s.filter_env_depth);
+    let voice_params = set.sampler_voice_params(RigBlock::of_type(BlockType::Sampler));
+    let base_voice = base.map(|b| b.sampler_voice_params(RigBlock::of_type(BlockType::Sampler)));
+    let amp = set.amp_block();
+    let base_amp = base.map(ModuleSettings::amp_block);
+    // Only the params that differ from the baseline's.
+    let changed = |p: &signal_sampler::rig_node::Param, from: &Option<RigBlock>| {
+        from.as_ref()
+            .is_none_or(|b| b.params.iter().find(|q| q.name == p.name) != Some(p))
+    };
+    let amp_moved = moved(&|s| s.amp_env.0)
+        || moved(&|s| s.amp_env.1)
+        || moved(&|s| s.amp_env.2)
+        || moved(&|s| s.amp_env.3);
+    for_blocks(layer, &mut |b| match b.display_name().as_str() {
+        "Soundsource" => {
+            if amp_moved {
+                put(b, "amp_attack", secs(set.amp_env.0));
+                put(b, "amp_decay", secs(set.amp_env.1));
+                put(
+                    b,
+                    "amp_sustain",
+                    format!("{:.4}", set.amp_env.2.clamp(0.0, 1.0)),
+                );
+                put(b, "amp_release", secs(set.amp_env.3));
+                // The knobs are an ADSR: they replace the patch's breakpoints.
+                b.params.retain(|p| p.name != "amp_points");
+            }
+            if b.block_type == BlockType::Sampler {
+                for p in &voice_params.params {
+                    if (voice_filter || !p.name.starts_with("filter_")) && changed(p, &base_voice) {
+                        put(b, &p.name, p.value.clone());
+                    }
+                }
+            } else if b.block_type == BlockType::Wavetable {
+                if moved(&|s| s.vib_rate) {
+                    put(
+                        b,
+                        "vib_rate",
+                        format!("{:.4}", (set.vib_rate / 12.0).clamp(0.0, 1.0)),
+                    );
+                }
+                if moved(&|s| s.vib_depth) {
+                    put(
+                        b,
+                        "vib_depth",
+                        format!("{:.4}", set.vib_depth.clamp(0.0, 1.0)),
+                    );
+                }
+                if moved(&|s| s.wavetable_tune()) {
+                    match base {
+                        // Relative to the patch's own tuning.
+                        Some(bs) => {
+                            let t = get(b, "tune").unwrap_or(0.5)
+                                + (set.wavetable_tune() - bs.wavetable_tune());
+                            put(b, "tune", format!("{t:.4}"));
+                        }
+                        None => put(b, "tune", format!("{:.4}", set.wavetable_tune())),
+                    }
+                }
+            }
+        }
+        "Filter 1" => {
+            if voice_filter {
+                put(b, "cutoff", "1.0000".to_string());
+                put(b, "resonance", "0.0000".to_string());
+            } else {
+                if moved(&|s| s.cutoff_hz) {
+                    let knob = b
+                        .params
+                        .iter()
+                        .find(|p| p.name == "taper")
+                        .map(|p| p.value.clone());
+                    match (base, knob, get(b, "knob_setting")) {
+                        // A measured knob: move it by the knob's ratio.
+                        (Some(bs), Some(taper), Some(_)) if bs.cutoff_hz > 0.0 => {
+                            let hz = signal_sampler::native::NativeFilter::cutoff_from_norm(
+                                get(b, "cutoff").unwrap_or(1.0),
+                            ) * (set.cutoff_hz / bs.cutoff_hz);
+                            if let Some(setting) = taper_setting(&taper, hz) {
+                                put(b, "knob_setting", format!("{setting:.4}"));
+                            }
+                            put(
+                                b,
+                                "cutoff",
+                                format!(
+                                    "{:.4}",
+                                    signal_sampler::native::NativeFilter::norm_from_cutoff(hz)
+                                ),
+                            );
+                        }
+                        _ => put(
+                            b,
+                            "cutoff",
+                            format!(
+                                "{:.4}",
+                                signal_sampler::native::NativeFilter::norm_from_cutoff(
+                                    set.cutoff_hz
+                                )
+                            ),
+                        ),
+                    }
+                }
+                if moved(&|s| s.resonance) {
+                    put(
+                        b,
+                        "resonance",
+                        format!("{:.4}", set.resonance.clamp(0.0, 1.0)),
+                    );
+                }
+            }
+            if moved(&|s| s.filter_drive) {
+                put(
+                    b,
+                    "drive",
+                    format!("{:.4}", set.filter_drive.clamp(0.0, 1.0)),
+                );
+            }
+            if moved(&|s| s.filter_mix) {
+                put(b, "mix", format!("{:.4}", set.filter_mix.clamp(0.0, 1.0)));
+            }
+        }
+        "Amp" => {
+            // Pan, width and tone; the layer keeps its own gain.
+            for p in amp.params.iter().filter(|p| p.name != "gain") {
+                if changed(p, &base_amp) {
+                    put(b, &p.name, p.value.clone());
+                }
+            }
+        }
+        _ => {}
+    });
+    // The module's effects follow the patch's own, in its FX rack — only
+    // those the knobs added.
+    let base_fx = base.map(ModuleSettings::fx_blocks).unwrap_or_default();
+    let fx: Vec<RigBlock> = set
+        .fx_blocks()
+        .into_iter()
+        .filter(|b| {
+            !base_fx
+                .iter()
+                .any(|f| f.block_type == b.block_type && f.params == b.params)
+        })
+        .collect();
+    if !fx.is_empty() {
+        if let Some(rack) = find_mut(layer, "Layer FX") {
+            for block in fx {
+                rack.children.push(RigNode::Block { block });
+            }
+        }
+    }
+    let mod_moved = moved(&|s| s.mod_env.0)
+        || moved(&|s| s.mod_env.1)
+        || moved(&|s| s.mod_env.2)
+        || moved(&|s| s.mod_env.3)
+        || moved(&|s| s.mod_env_dh[0].0)
+        || moved(&|s| s.mod_env_dh[0].1);
+    if mod_moved {
+        if let Some(me) = layer
+            .modulators
+            .iter_mut()
+            .find(|m| m.display_name() == "Mod Env")
+        {
+            put(me, "attack", secs(set.mod_env.0));
+            put(me, "decay", secs(set.mod_env.1));
+            put(
+                me,
+                "sustain",
+                format!("{:.4}", set.mod_env.2.clamp(0.0, 1.0)),
+            );
+            put(me, "release", secs(set.mod_env.3));
+            put(me, "delay", secs(set.mod_env_dh[0].0));
+            put(me, "hold", secs(set.mod_env_dh[0].1));
+        }
+    }
+    let fenv_moved = moved(&|s| s.filter_env.0)
+        || moved(&|s| s.filter_env.1)
+        || moved(&|s| s.filter_env.2)
+        || moved(&|s| s.filter_env.3);
+    if fenv_moved {
+        if let Some(fe) = layer
+            .modulators
+            .iter_mut()
+            .find(|m| m.display_name() == "Filter Env")
+        {
+            put(fe, "attack", secs(set.filter_env.0));
+            put(fe, "decay", secs(set.filter_env.1));
+            put(
+                fe,
+                "sustain",
+                format!("{:.4}", set.filter_env.2.clamp(0.0, 1.0)),
+            );
+            put(fe, "release", secs(set.filter_env.3));
+            // The knobs are an ADSR: they replace the patch's breakpoints.
+            fe.params.retain(|p| p.name != "points");
+        }
+    }
+    true
 }
 
 /// Build one **layer**: four modules in parallel (they sum — a layer is a
@@ -331,6 +1043,20 @@ pub fn signal_layer_single(name: &str, source: Source) -> Container {
 /// A 4-slot FX rack — every rack in the engine (Layer / Common / Aux /
 /// Master) is exactly four slots.
 #[must_use]
+/// A module's FX rack: its active effects, then empty slots up to four.
+fn module_fx(set: &ModuleSettings) -> Container {
+    let blocks = set.fx_blocks();
+    let used = blocks.len();
+    let mut rack = Container::module("FX");
+    for b in blocks {
+        rack = rack.add(b);
+    }
+    for slot in used + 1..=4 {
+        rack = rack.block(BlockType::Custom, format!("FX Slot {slot}"));
+    }
+    rack
+}
+
 pub fn fx_rack(name: &str) -> Container {
     let mut rack = Container::module(name);
     for slot in 1..=4 {
@@ -383,16 +1109,13 @@ pub struct ImportedPatch {
     pub modules: Vec<ImportedModule>,
     /// The patch's LFOs as `(rate_hz, depth, shape)` — Omnisphere's LFOs are
     /// per-part, so every module of the patch shares them. `shape` indexes
-    /// sine / triangle / square / saw / random, matching the LFO panel.
+    /// sine / triangle / saw / square / S&H, as the patch tree's LFOs do.
     pub lfos: Vec<(f32, f32, f32)>,
 }
 
 /// Omnisphere's normalized LFO rate → Hz. Approximate (an exponential over
 /// the free-run range) until it's swept against the real engine like the
 /// filter knee was.
-fn omni_lfo_hz(v: f32) -> f32 {
-    0.05 * (9.6 * v.clamp(0.0, 1.0)).exp2()
-}
 
 /// Read an Omnisphere `.prt_omn` patch and flatten its layers onto module
 /// settings.
@@ -406,37 +1129,200 @@ fn omni_lfo_hz(v: f32) -> f32 {
 pub fn import_omni_patch(path: &std::path::Path) -> Result<ImportedPatch, String> {
     let xml = std::fs::read_to_string(path).map_err(|e| format!("read {path:?}: {e}"))?;
     let patch = crate::omni_import::parse_patch(&xml)?;
-    // Omnisphere times are seconds; the macro surface is milliseconds.
-    let secs = |t: (f32, f32, f32, f32)| (t.0 * 1000.0, t.1 * 1000.0, t.2, t.3 * 1000.0);
     // A patch declares up to four layers but only uses the ones with a
     // soundsource — an empty slot is not a module, it is nothing.
     let modules = patch
         .layers
         .iter()
         .filter(|l| !l.soundsource.trim().is_empty())
-        .map(|l| ImportedModule {
-            source: l.soundsource.clone(),
-            // `level` is normalized; unity sits at 1.0.
-            level_db: if l.level > 0.0 {
-                20.0 * l.level.log10()
-            } else {
-                -60.0
-            },
-            cutoff_hz: crate::omni_import::omni_cutoff_hz(l.filter_freq),
-            resonance: l.filter_res,
-            filter_env_depth: l.filter_env_depth,
-            amp_env: l.amp_env.map(secs),
-            filter_env: l.filter_env.map(secs),
-            unison: l.unison_count.max(1),
-            detune: l.unison_detune,
-            fx: l
-                .fx
-                .iter()
-                .filter(|f| !f.is_empty() && f.as_str() != "No Effect")
-                .cloned()
-                .collect(),
-        })
+        .map(imported_module)
         .collect();
+    Ok(ImportedPatch {
+        modules,
+        ..import_rest(&patch)
+    })
+}
+
+/// Every layer of an Omnisphere patch file, synthesis layers included, in
+/// layer order ("Layer A" first) — the values a lane hosting the whole patch
+/// seeds its module knobs from, one module per layer.
+///
+/// # Errors
+///
+/// When the file cannot be read or parsed.
+pub fn import_omni_layers(path: &std::path::Path) -> Result<Vec<ImportedModule>, String> {
+    let xml = std::fs::read_to_string(path).map_err(|e| format!("read {path:?}: {e}"))?;
+    let patch = crate::omni_import::parse_patch(&xml)?;
+    Ok(patch.layers.iter().take(4).map(imported_module).collect())
+}
+
+/// An imported Omnisphere patch's LFOs 1–4 onto its tree: each "LFO n"
+/// modulator's rate and wave, and its routes scaled so the deepest reaches
+/// the LFO's depth (keeping the patch's proportions and signs). The LFOs
+/// are part-level — every layer shares them.
+///
+/// With `base` (the LFOs as the patch seeded them), an LFO left where it was
+/// is not touched: the tree keeps the patch's own rate law and wave.
+pub fn apply_lfos_to_omni(
+    tree: &mut Container,
+    lfos: &[(f32, f32, f32); 4],
+    base: Option<&[(f32, f32, f32); 4]>,
+) {
+    use signal_sampler::rig_node::RigNode;
+    fn walk(c: &mut Container, f: &mut impl FnMut(&mut Container)) {
+        f(c);
+        for child in &mut c.children {
+            if let RigNode::Container { container } = child {
+                walk(container, f);
+            }
+        }
+    }
+    let deepest = lfo_depths(tree);
+    for (i, &(rate, depth, wave)) in lfos.iter().enumerate() {
+        if base.is_some_and(|b| b[i] == lfos[i]) {
+            continue;
+        }
+        let name = format!("LFO {}", i + 1);
+        let key = name.to_lowercase();
+        let scale = if deepest[i] > 0.0 {
+            Some(depth / deepest[i])
+        } else {
+            None
+        };
+        walk(tree, &mut |c| {
+            for m in &mut c.modulators {
+                if m.display_name() == name {
+                    for (k, v) in [
+                        ("rate", format!("{:.4}", rate.clamp(0.01, 40.0))),
+                        ("wave", format!("{}", wave.round().clamp(0.0, 4.0) as u32)),
+                    ] {
+                        match m.params.iter_mut().find(|p| p.name == k) {
+                            Some(p) => p.value = v,
+                            None => m.params.push(signal_sampler::rig_node::Param {
+                                name: k.to_string(),
+                                value: v,
+                            }),
+                        }
+                    }
+                }
+            }
+            if let Some(scale) = scale {
+                for r in &mut c.mod_routes {
+                    if r.source.key() == key {
+                        r.depth *= scale;
+                    }
+                }
+            }
+        });
+    }
+}
+
+/// The part LFOs' fade-in times (ms) onto an imported patch's tree.
+pub fn apply_lfo_fades_to_omni(tree: &mut Container, fades_ms: &[f32; 4], base: Option<&[f32; 4]>) {
+    for (i, fade) in fades_ms.iter().enumerate() {
+        if base.is_some_and(|b| b[i] == *fade) {
+            continue;
+        }
+        let name = format!("LFO {}", i + 1);
+        for m in &mut tree.modulators {
+            if m.display_name() == name {
+                let v = format!("{:.4}", fade.max(0.0) / 1000.0);
+                match m.params.iter_mut().find(|p| p.name == "fade") {
+                    Some(p) => p.value = v,
+                    None => m.params.push(signal_sampler::rig_node::Param {
+                        name: "fade".to_string(),
+                        value: v,
+                    }),
+                }
+            }
+        }
+    }
+}
+
+/// An Omnisphere patch file's LFOs 1–4 as `(rate_hz, depth, wave)` — the
+/// values a lane hosting the patch seeds its LFO knobs from.
+///
+/// # Errors
+///
+/// When the file cannot be read or parsed.
+pub fn import_omni_lfos(path: &std::path::Path) -> Result<Vec<(f32, f32, f32)>, String> {
+    let xml = std::fs::read_to_string(path).map_err(|e| format!("read {path:?}: {e}"))?;
+    let patch = crate::omni_import::parse_patch(&xml)?;
+    // Depth as the TREE carries it (routes scaled to their targets, the
+    // unsupported ones dropped) — what `apply_lfos_to_omni` scales against,
+    // so the seeded knobs re-apply as the identity.
+    let tree = crate::omni_import::patch_to_container(
+        &patch,
+        &crate::omni_import::SoundsourceIndex::default(),
+    );
+    let depths = lfo_depths(&tree);
+    Ok(import_rest(&patch)
+        .lfos
+        .into_iter()
+        .zip(depths)
+        .map(|((rate, _, wave), depth)| (rate, depth, wave))
+        .collect())
+}
+
+/// The deepest route (absolute) from each of "LFO 1".."LFO 4" in `tree`.
+fn lfo_depths(tree: &Container) -> [f32; 4] {
+    use signal_sampler::rig_node::RigNode;
+    fn walk(c: &Container, out: &mut [f32; 4]) {
+        for r in &c.mod_routes {
+            let key = r.source.key();
+            for (i, d) in out.iter_mut().enumerate() {
+                if key == format!("lfo {}", i + 1) {
+                    *d = d.max(r.depth.abs());
+                }
+            }
+        }
+        for child in &c.children {
+            if let RigNode::Container { container } = child {
+                walk(container, out);
+            }
+        }
+    }
+    let mut out = [0.0; 4];
+    walk(tree, &mut out);
+    out
+}
+
+/// One Omnisphere layer as a module's settings.
+fn imported_module(l: &crate::omni_import::OmniLayer) -> ImportedModule {
+    // Omnisphere times are seconds; the macro surface is milliseconds.
+    let secs = |t: (f32, f32, f32, f32)| (t.0 * 1000.0, t.1 * 1000.0, t.2, t.3 * 1000.0);
+    ImportedModule {
+        source: l.soundsource.clone(),
+        // `level` is normalized; unity sits at 1.0.
+        level_db: if l.level > 0.0 {
+            20.0 * l.level.log10()
+        } else {
+            -60.0
+        },
+        cutoff_hz: l
+            .filter_type1
+            .and_then(crate::omni_import::filter_model)
+            .map_or_else(
+                || crate::omni_import::omni_cutoff_hz(l.filter_freq),
+                |m| m.corner_hz(l.filter_freq),
+            ),
+        resonance: l.filter_res,
+        filter_env_depth: l.filter_env_depth,
+        amp_env: l.amp_env.map(secs),
+        filter_env: l.filter_env.map(secs),
+        unison: l.unison_count.max(1),
+        detune: l.unison_detune,
+        fx: l
+            .fx
+            .iter()
+            .filter(|f| !f.is_empty() && f.as_str() != "No Effect")
+            .cloned()
+            .collect(),
+    }
+}
+
+/// A patch's name and LFOs (its modules are the caller's choice).
+fn import_rest(patch: &crate::omni_import::OmniPatch) -> ImportedPatch {
     // The mod matrix carries the LFO depths: an LFO with no route is idle,
     // however its rate reads.
     let lfos = patch
@@ -444,7 +1330,7 @@ pub fn import_omni_patch(path: &std::path::Path) -> Result<ImportedPatch, String
         .iter()
         .enumerate()
         .take(4)
-        .map(|(i, (rate, kind, _synced, _retrig))| {
+        .map(|(i, l)| {
             let tag = format!("LFO{}", i + 1);
             let depth = patch
                 .mod_routes
@@ -452,23 +1338,96 @@ pub fn import_omni_patch(path: &std::path::Path) -> Result<ImportedPatch, String
                 .filter(|r| r.source.starts_with(&tag))
                 .map(|r| r.depth.abs())
                 .fold(0.0f32, f32::max);
-            (
-                omni_lfo_hz(*rate),
-                depth.clamp(0.0, 1.0),
-                (kind * 4.0).clamp(0.0, 4.0),
-            )
+            (l.rate_hz(), depth.clamp(0.0, 1.0), l.wave() as f32)
         })
         .collect();
-    Ok(ImportedPatch {
-        name: patch.name,
-        modules,
+    ImportedPatch {
+        name: patch.name.clone(),
+        modules: Vec::new(),
         lfos,
-    })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_picked_destination_builds_its_lfo_and_route_off_builds_none() {
+        use signal_sampler::node_render::RenderNode;
+        let compile = |set: &ModuleSettings| {
+            let m = signal_module_with("Keys A", set);
+            let mut rn = RenderNode::compile(&Container::preset("p").add(m), 48_000);
+            rn.prepare(48_000.0, 128);
+            rn
+        };
+        let mut set = ModuleSettings::from_source(Source::Synth);
+        let mut rn = compile(&set);
+        assert!(rn.routes_from("Keys A", "LFO 1").is_empty());
+
+        set.lfo_dest[0] = ModDest::Level;
+        set.lfos[0].1 = 0.5;
+        set.mod_env_dest[1] = ModDest::Pan;
+        set.mod_env_depth[1] = -0.5;
+        let mut rn = compile(&set);
+        assert_eq!(
+            rn.routes_from("Keys A", "LFO 1"),
+            vec![("amp".into(), "gain".into())]
+        );
+        assert_eq!(
+            rn.routes_from("Keys A", "Mod Env 2"),
+            vec![("amp".into(), "pan".into())]
+        );
+        // Its rate, wave and fade go live.
+        assert!(rn.set_lfo(
+            "Keys A",
+            "LFO 1",
+            3.0,
+            Some(signal_sampler::native::LfoWave::Saw),
+            Some(0.2)
+        ));
+        assert!(rn.set_route_depth("Keys A", "LFO 1", "Amp", "gain", 0.1));
+    }
+
+    #[test]
+    fn effects_are_in_the_chain_only_when_on_and_take_live_writes() {
+        use signal_sampler::node_render::RenderNode;
+        // Defaults: no effect blocks at all (an idle module costs nothing).
+        let quiet = signal_module_with("Keys A", &ModuleSettings::from_source(Source::Synth));
+        let mut rn = RenderNode::compile(&Container::preset("p").add(quiet), 48_000);
+        rn.prepare(48_000.0, 128);
+        for fx in ["Chorus", "Delay", "Ambience"] {
+            assert!(!rn.has_leaf("Keys A", fx), "{fx} built while off");
+        }
+
+        let mut set = ModuleSettings::from_source(Source::Synth);
+        set.chorus = 0.4;
+        set.delay.on = true;
+        set.delay.mix = 0.3;
+        set.ambience.on = true;
+        set.ambience.mix = 0.2;
+        let busy = signal_module_with("Keys A", &set);
+        let mut rn = RenderNode::compile(&Container::preset("p").add(busy), 48_000);
+        rn.prepare(48_000.0, 128);
+        for fx in ["Chorus", "Delay", "Ambience"] {
+            assert!(rn.has_leaf("Keys A", fx), "{fx} missing while on");
+        }
+        // Plain units: a 700 ms delay, a 60 ms predelay.
+        assert!(rn.set_leaf_plain("Keys A", "Delay", "time", 700.0));
+        assert!(rn.set_leaf_plain("Keys A", "Ambience", "predelay", 60.0));
+        assert!(!rn.set_leaf_plain("Keys A", "Delay", "no_such_param", 1.0));
+        // And the chain renders.
+        let (mut l, mut r) = (vec![0.0f32; 128], vec![0.0f32; 128]);
+        let silence = vec![0.0f32; 128];
+        rn.process(
+            &silence,
+            &silence,
+            &mut l,
+            &mut r,
+            &signal_plugin_host::PluginEvents::default(),
+        );
+        assert!(l.iter().chain(&r).all(|x| x.is_finite()));
+    }
 
     /// End-to-end through the full compiled module chain (per-voice synth →
     /// open chain filter → unity Amp): notes sound, the pitch wheel bends
@@ -559,7 +1518,7 @@ mod tests {
             let sources = m.find("Source").expect("source module");
             assert_eq!(sources.blocks().len(), 1, "exactly one Source Block");
             assert_eq!(m.find("Filters").expect("filters").blocks().len(), 2);
-            assert!(m.find("Amp").is_some());
+            assert!(m.find("Amp Stage").is_some());
             assert_eq!(m.find("FX").expect("rack").blocks().len(), 4);
         }
     }

@@ -1,0 +1,12 @@
+# The sibling checkouts signal's [patch] sections build from (`../<dir>`),
+# and the commit each one must be at. CI checks these out beside the repo
+# (scripts/ci-siblings.sh) so a clean runner builds exactly what a dev tree
+# does, against the one Cargo.lock. Bump a line when signal moves to a new
+# sibling commit; the commit must be pushed.
+#
+# dir                    repo                                    commit
+daw                      FastTrackStudios/daw                    a6ad6d8c
+processor                FastTrackStudios/processor              2955edd
+blitz                    FastTrackStudios/blitz                  bd6f59b5
+neural-amp-modeler-rs    FastTrackStudios/neural-amp-modeler-rs  2803578
+session                  FastTrackStudios/session                3e47298f

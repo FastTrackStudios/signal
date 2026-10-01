@@ -178,14 +178,15 @@ impl PluginInstance for TimeStage {
                 }
                 // Wet only: the stage's dry is the tap's. Sent as a param
                 // write alongside whatever else this block carries.
-                let wet_only = self.dry_id.filter(|_| self.force_wet || !events.params.is_empty());
+                let wet_only = self
+                    .dry_id
+                    .filter(|_| self.force_wet || !events.params.is_empty());
                 let ev_store;
                 let ev = match wet_only {
                     Some(id) => {
                         self.events_buf.clear();
-                        self.events_buf.extend(
-                            events.params.iter().copied().filter(|(p, _)| *p != id),
-                        );
+                        self.events_buf
+                            .extend(events.params.iter().copied().filter(|(p, _)| *p != id));
                         self.events_buf.push((id, 0.0));
                         self.force_wet = false;
                         ev_store = PluginEvents {
@@ -265,7 +266,12 @@ pub fn wrap(boxes: &mut [Option<Box<dyn PluginInstance>>], names: &[&str], max_b
         let shared = Shared::new(max_block);
         for (i, role) in [(t, Role::Tap), (a, Role::Add)] {
             if let Some(inner) = boxes.get_mut(i).and_then(Option::take) {
-                boxes[i] = Some(Box::new(TimeStage::new(inner, role, shared.clone(), max_block)));
+                boxes[i] = Some(Box::new(TimeStage::new(
+                    inner,
+                    role,
+                    shared.clone(),
+                    max_block,
+                )));
             }
         }
     }
@@ -293,7 +299,13 @@ mod tests {
             }
         }
         fn params(&mut self) -> Vec<PluginParamInfo> {
-            vec![PluginParamInfo { id: 0, name: "dry".into(), min: 0.0, max: 1.0, default: 1.0 }]
+            vec![PluginParamInfo {
+                id: 0,
+                name: "dry".into(),
+                min: 0.0,
+                max: 1.0,
+                default: 1.0,
+            }]
         }
         fn param_value(&mut self, _: u32) -> Option<f64> {
             None
@@ -342,7 +354,9 @@ mod tests {
         for block in chain.iter_mut() {
             let (inl, inr) = (buf, buf);
             let (mut ol, mut or) = ([0.0; 4], [0.0; 4]);
-            block.process_block(&inl, &inr, &mut ol, &mut or, &events).unwrap();
+            block
+                .process_block(&inl, &inr, &mut ol, &mut or, &events)
+                .unwrap();
             buf = ol;
         }
         buf[0]
@@ -363,13 +377,19 @@ mod tests {
     fn the_two_delays_run_in_parallel_with_the_dry() {
         let mut c = chain(&["DLY 1", "DLY 2"], &[0.5, 0.25]);
         assert!((run(&mut c, 1.0) - 1.75).abs() < 1e-6);
-        assert!((run(&mut c, 1.0) - 1.75).abs() < 1e-6, "no state leaks between blocks");
+        assert!(
+            (run(&mut c, 1.0) - 1.75).abs() < 1e-6,
+            "no state leaks between blocks"
+        );
     }
 
     /// The reverbs split what the delay stage made: (1.75)·(1 + 0.5 + 0.25).
     #[test]
     fn the_reverb_stage_hears_the_delay_stage() {
-        let mut c = chain(&["DLY 1", "DLY 2", "VERB 1", "VERB 2"], &[0.5, 0.25, 0.5, 0.25]);
+        let mut c = chain(
+            &["DLY 1", "DLY 2", "VERB 1", "VERB 2"],
+            &[0.5, 0.25, 0.5, 0.25],
+        );
         assert!((run(&mut c, 1.0) - 1.75 * 1.75).abs() < 1e-5);
     }
 

@@ -122,6 +122,9 @@ mod mac_menu;
 #[cfg(target_os = "macos")]
 mod mac_activity;
 
+/// The log filter when `RUST_LOG` is unset — the console and the OTel export alike.
+const LOG_FILTER: &str = "info,vox_core=warn,schema_deser=off";
+
 fn main() {
     // Before anything starts audio: a backgrounded rig must not be throttled
     // (it xran whenever another app had focus).
@@ -195,12 +198,12 @@ fn main() {
         let registry = tracing_subscriber::registry()
             .with(
                 tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| "info,vox_core=warn,schema_deser=off".into()),
+                    .unwrap_or_else(|_| LOG_FILTER.into()),
             )
             .with(tracing_subscriber::fmt::layer())
             .with(log_ring::RingLayer::new())
             .with(architect_telemetry::tracing_layer());
-        match architect_telemetry::otel::init("signal") {
+        match architect_telemetry::otel::init("signal", LOG_FILTER) {
             Some((otel_guard, layers)) => {
                 registry.with(layers).init();
                 std::mem::forget(otel_guard);
@@ -292,8 +295,7 @@ fn window_placement() -> WindowPlacement {
         Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
     }
     let truthy = |v: String| v != "0" && !v.eq_ignore_ascii_case("false");
-    let fullscreen = setting("FTS_WINDOW_FULLSCREEN", "window-fullscreen")
-        .is_some_and(truthy);
+    let fullscreen = setting("FTS_WINDOW_FULLSCREEN", "window-fullscreen").is_some_and(truthy);
     let size = pair("FTS_WINDOW_SIZE", "window-size", 'x');
     let maximized = setting("FTS_WINDOW_MAXIMIZED", "window-maximized")
         .map(truthy)
@@ -1010,8 +1012,8 @@ fn SettingsPanel() -> Element {
 #[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
 #[component]
 fn AccountSettings() -> Element {
-    use signal_account_proto::account::AccountAuthClient;
     use signal_account_proto::AccountStatus;
+    use signal_account_proto::account::AccountAuthClient;
 
     let client = use_resource(connect_account);
     let mut status = use_signal(AccountStatus::default);
@@ -1025,7 +1027,9 @@ fn AccountSettings() -> Element {
             if *refreshed.peek() {
                 return;
             }
-            let Some(Some(c)) = client.read().clone() else { return };
+            let Some(Some(c)) = client.read().clone() else {
+                return;
+            };
             refreshed.set(true);
             spawn(async move {
                 if let Ok(s) = c.status().await {

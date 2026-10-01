@@ -4,7 +4,9 @@
 use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::{RigClient, RigEvent, RigStreamClient};
-use signal_guitar_proto::{LevelProgress, LiveBlock, LiveNode, MacroKnobView, PerformanceModel, RigPerf};
+use signal_guitar_proto::{
+    LevelProgress, LiveBlock, LiveNode, MacroKnobView, PerformanceModel, RigPerf,
+};
 
 use crate::meters::meter_level;
 

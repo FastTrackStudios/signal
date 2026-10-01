@@ -15,12 +15,14 @@
 mod adsr;
 mod amp;
 mod arp;
+pub mod breakpoints;
 mod control;
 mod filter;
 mod freq_shifter;
 mod modal;
 mod ranges;
 mod registry;
+mod wavebank;
 mod waveshaper;
 mod wavetable;
 mod wg;
@@ -29,13 +31,19 @@ mod wurli;
 pub use adsr::{Adsr, AdsrParams};
 pub use amp::NativeAmp;
 pub use arp::{ArpEngine, ArpStep};
-pub use control::{ControlEnv, ControlLfo, ControlSource, LfoWave, MidiMod, MidiSource, ModSource};
-pub use filter::{FilterCharacter, FilterMode, Ladder, NativeFilter, Svf};
+pub use control::{
+    ControlEnv, ControlLfo, ControlMultiseg, ControlSource, LfoWave, MidiMod, MidiSource,
+    ModSource, SegPoint,
+};
+pub use filter::{FilterCharacter, FilterMode, Ladder, NativeFilter, OnePole, ResonanceMap, Svf};
 pub use freq_shifter::NativeDfs;
 pub use modal::NativeModal;
 pub use ranges::{default_of, range_of, ranges_of};
 pub(crate) use registry::build_native_source;
+pub use registry::parse_points;
+pub use breakpoints::{set_tempo_bpm, tempo_bpm};
 pub use registry::{build_native, native_dsp_available};
+pub use wavebank::WaveBank;
 pub use waveshaper::NativeWaveshaper;
 pub use wavetable::{HarmVoice, NativeWavetable, SynthConfig};
 pub use wg::NativeWaveguide;

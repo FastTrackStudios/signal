@@ -11,14 +11,15 @@
 
 use std::time::Duration;
 
-use dioxus::dioxus_core::Task;
 use dioxus::prelude::*;
+use signal_widgets::switches::{
+    HoldButton, InlineMenu, LIT_RING, LearnBadge, MENU_PANEL, MidiLearnRows, SwitchMenuFrame,
+    SwitchNo, close_menu, dim, open_menu,
+};
 
 use signal_guitar_proto::rig::RigClient;
-use signal_guitar_proto::{PerfStack, PerformanceModel, TunerReading};
+use signal_guitar_proto::{PerfStack, PerformanceModel, SwitchLearn, TunerReading};
 
-/// How long a press must last to count as a hold (footswitch convention).
-const HOLD_MS: u64 = 500;
 
 /// The jobs a footswitch can be given (the rig's `SWITCH_ACTIONS`):
 /// `(key, label)`. Stepping jobs go forward on a tap, back on a hold.
@@ -63,115 +64,9 @@ pub fn folder_color(name: &str) -> (&'static str, &'static str) {
     }
 }
 
-/// A lit switch's ring.
-const LIT_RING: &str = "box-shadow: 0 0 0 2px rgba(255,255,255,0.8), 0 10px 24px rgba(0,0,0,0.5);";
 
-/// `hex` (`#rrggbb`) darkened toward the grid's background — `amount` of
-/// the colour left — for a switch that is not lit. A plain colour, so the
-/// dark state never depends on the renderer re-applying an opacity.
-fn dim(hex: &str, amount: f32) -> String {
-    let h = hex.trim_start_matches('#');
-    let ch = |i: usize| f32::from(u8::from_str_radix(h.get(i..i + 2).unwrap_or("00"), 16).unwrap_or(0));
-    let base = [10.0, 10.0, 12.0];
-    let mix = |c: f32, b: f32| (b + (c - b) * amount).round().clamp(0.0, 255.0) as u8;
-    format!("#{:02x}{:02x}{:02x}", mix(ch(0), base[0]), mix(ch(2), base[1]), mix(ch(4), base[2]))
-}
 
-/// The physical switch number, pinned to a tile corner.
-#[component]
-fn SwitchNo(no: usize) -> Element {
-    rsx! {
-        span { class: "absolute top-1.5 left-2.5 text-[10px] font-mono opacity-40", "{no}" }
-    }
-}
 
-/// A footswitch-shaped button with the tap/hold split every switch shares:
-/// press-and-release fires `on_tap`; holding for [`HOLD_MS`] fires `on_hold`
-/// instead (release then does nothing). Pointer events, so it behaves the
-/// same with a mouse or a finger on a stage tablet. No `on_hold` → every
-/// press is a tap, however long.
-#[component]
-fn HoldButton(
-    class: String,
-    style: String,
-    on_tap: Callback<()>,
-    #[props(default)] on_hold: Option<Callback<()>>,
-    /// Momentary: `on_down` on the press and `on_up` on the release (or on
-    /// dragging off), in place of tap and hold.
-    #[props(default)] on_down: Option<Callback<()>>,
-    #[props(default)] on_up: Option<Callback<()>>,
-    children: Element,
-) -> Element {
-    let mut hold_fired = use_signal(|| false);
-    let mut hold_task = use_signal(|| None::<Task>);
-    let mut held = use_signal(|| false);
-    // A right-click opens the tile's menu; it is not a press.
-    let secondary = |e: &PointerEvent| {
-        matches!(
-            e.trigger_button(),
-            Some(dioxus::html::input_data::MouseButton::Secondary)
-        )
-    };
-    rsx! {
-        button {
-            class: "{class}",
-            style: "{style}",
-            onpointerdown: move |e: PointerEvent| {
-                if secondary(&e) {
-                    return;
-                }
-                if let Some(down) = on_down {
-                    held.set(true);
-                    down.call(());
-                    return;
-                }
-                hold_fired.set(false);
-                if let Some(hold) = on_hold {
-                    let task = spawn(async move {
-                        architect::platform::sleep(Duration::from_millis(HOLD_MS)).await;
-                        hold_fired.set(true);
-                        hold.call(());
-                    });
-                    hold_task.set(Some(task));
-                }
-            },
-            onpointerup: move |e: PointerEvent| {
-                if secondary(&e) {
-                    return;
-                }
-                if on_down.is_some() {
-                    if held() {
-                        held.set(false);
-                        if let Some(up) = on_up {
-                            up.call(());
-                        }
-                    }
-                    return;
-                }
-                if let Some(task) = hold_task.take() {
-                    task.cancel();
-                }
-                if !hold_fired() {
-                    on_tap.call(());
-                }
-            },
-            onpointerleave: move |_| {
-                // A held momentary lets go when the pointer leaves.
-                if held() {
-                    held.set(false);
-                    if let Some(up) = on_up {
-                        up.call(());
-                    }
-                }
-                // Dragging off the switch cancels the press entirely.
-                if let Some(task) = hold_task.take() {
-                    task.cancel();
-                }
-            },
-            {children}
-        }
-    }
-}
 
 /// Perform-mode footswitch grid — see the module docs for the layout.
 #[component]
@@ -232,22 +127,35 @@ pub fn PerformGrid(
     // What each footswitch does right now (the song's and part's jobs).
     let jobs: Vec<String> = (0..5)
         .map(|i| {
-            model
-                .switch_actions
-                .get(i)
-                .cloned()
-                .unwrap_or_else(|| if i < 4 { "stack".into() } else { "tap_tempo".into() })
+            model.switch_actions.get(i).cloned().unwrap_or_else(|| {
+                if i < 4 {
+                    "stack".into()
+                } else {
+                    "tap_tempo".into()
+                }
+            })
         })
         .collect();
     let in_song = mode == 2;
-    let song_changes: Vec<(String, u32)> = model.song_changes.iter().map(|c| (c.patch.clone(), c.count)).collect();
+    let song_changes: Vec<(String, u32)> = model
+        .song_changes
+        .iter()
+        .map(|c| (c.patch.clone(), c.count))
+        .collect();
     let song_parts: Vec<(String, String)> = if in_song {
-        model.parts.iter().map(|p| (p.name.clone(), p.patch.clone())).collect()
+        model
+            .parts
+            .iter()
+            .map(|p| (p.name.clone(), p.patch.clone()))
+            .collect()
     } else {
         Vec::new()
     };
     let part_name = if in_song {
-        model.parts.get(model.part_index as usize).map(|p| p.name.clone())
+        model
+            .parts
+            .get(model.part_index as usize)
+            .map(|p| p.name.clone())
     } else {
         None
     };
@@ -264,11 +172,22 @@ pub fn PerformGrid(
         let at = model.part_index as usize;
         match job {
             "parts" => (
-                model.parts.get(at + 1).map_or_else(next_song, |p| p.name.clone()),
-                at.checked_sub(1).and_then(|i| model.parts.get(i)).map_or(String::new(), |p| p.name.clone()),
+                model
+                    .parts
+                    .get(at + 1)
+                    .map_or_else(next_song, |p| p.name.clone()),
+                at.checked_sub(1)
+                    .and_then(|i| model.parts.get(i))
+                    .map_or(String::new(), |p| p.name.clone()),
             ),
             "sections" => {
-                let sec = |i: usize| model.parts.get(i).map(|p| p.section.clone()).unwrap_or_default();
+                let sec = |i: usize| {
+                    model
+                        .parts
+                        .get(i)
+                        .map(|p| p.section.clone())
+                        .unwrap_or_default()
+                };
                 let cur = sec(at);
                 let next = model
                     .parts
@@ -278,7 +197,11 @@ pub fn PerformGrid(
                     .map_or_else(next_song, |p| p.section.clone());
                 // Back: to this section's start from a later part of it, else
                 // the section before.
-                let first = (0..=at).rev().take_while(|&i| sec(i).eq_ignore_ascii_case(&cur)).last().unwrap_or(at);
+                let first = (0..=at)
+                    .rev()
+                    .take_while(|&i| sec(i).eq_ignore_ascii_case(&cur))
+                    .last()
+                    .unwrap_or(at);
                 let back = if first < at {
                     cur.clone()
                 } else {
@@ -289,8 +212,13 @@ pub fn PerformGrid(
             "songs" => {
                 let i = model.song_index as usize;
                 (
-                    model.songs.get(i + 1).map_or("end of the set".into(), |s| s.name.clone()),
-                    i.checked_sub(1).and_then(|i| model.songs.get(i)).map_or(String::new(), |s| s.name.clone()),
+                    model
+                        .songs
+                        .get(i + 1)
+                        .map_or("end of the set".into(), |s| s.name.clone()),
+                    i.checked_sub(1)
+                        .and_then(|i| model.songs.get(i))
+                        .map_or(String::new(), |s| s.name.clone()),
                 )
             }
             _ => (String::new(), String::new()),
@@ -317,16 +245,42 @@ pub fn PerformGrid(
         let i = model.song_index as usize;
         let (back, on) = if in_song {
             (
-                i.checked_sub(1).and_then(|p| model.songs.get(p)).map_or("start of set".to_string(), |s| s.name.clone()),
-                model.songs.get(i + 1).map_or("end of set".to_string(), |s| s.name.clone()),
+                i.checked_sub(1)
+                    .and_then(|p| model.songs.get(p))
+                    .map_or("start of set".to_string(), |s| s.name.clone()),
+                model
+                    .songs
+                    .get(i + 1)
+                    .map_or("end of set".to_string(), |s| s.name.clone()),
             )
         } else {
             ("Profile".to_string(), "Profile".to_string())
         };
         vec![
-            ChordMark { gap: 0, label: back, icon: "‹", trailing: false, tint: "#a78bfa", onclick: (in_song).then(|| call("prev")) },
-            ChordMark { gap: 2, label: "Tuner".to_string(), icon: "♪", trailing: false, tint: "#22c55e", onclick: Some(call("tuner")) },
-            ChordMark { gap: 3, label: on, icon: "›", trailing: true, tint: "#a78bfa", onclick: (in_song).then(|| call("next")) },
+            ChordMark {
+                gap: 0,
+                label: back,
+                icon: "‹",
+                trailing: false,
+                tint: "#a78bfa",
+                onclick: (in_song).then(|| call("prev")),
+            },
+            ChordMark {
+                gap: 2,
+                label: "Tuner".to_string(),
+                icon: "♪",
+                trailing: false,
+                tint: "#22c55e",
+                onclick: Some(call("tuner")),
+            },
+            ChordMark {
+                gap: 3,
+                label: on,
+                icon: "›",
+                trailing: true,
+                tint: "#a78bfa",
+                onclick: (in_song).then(|| call("next")),
+            },
         ]
     };
     let current_song = model
@@ -380,22 +334,24 @@ pub fn PerformGrid(
             // same feet as Profile mode — parts are chosen from the sidebar,
             // the palette or the keymap. ──
             if let Some(stack) = stacks.get(4).cloned() {
-                StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true, part: part_name.clone(), in_song, parts: song_parts.clone(), changes: song_changes.clone() }
+                StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true, part: part_name.clone(), in_song, parts: song_parts.clone(), changes: song_changes.clone(), learn: model.learn.clone() }
             } else {
                 div { class: "relative rounded-lg border border-dashed border-border/30",
                     SwitchNo { no: 6 }
                 }
             }
             // Switch 7 (hold 2): FX Toggle — lit while the Time FX are ON.
-            FnTile {
-                title: "FX Toggle".to_string(),
-                subtitle: fx_sub.to_string(),
-                bg: "#ec4899".to_string(),
-                text: "#ffffff".to_string(),
-                active: !model.fx_bypass,
-                switch_no: 7,
-                compact: true,
-                onclick: on_toggle_fx,
+            Learnable { target: "fx", title: "Switch 7 · FX Toggle", learn: model.learn.clone(),
+                FnTile {
+                    title: "FX Toggle".to_string(),
+                    subtitle: fx_sub.to_string(),
+                    bg: "#ec4899".to_string(),
+                    text: "#ffffff".to_string(),
+                    active: !model.fx_bypass,
+                    switch_no: 7,
+                    compact: true,
+                    onclick: on_toggle_fx,
+                }
             }
             // Switch 8 (hold 3): the Song layer — setlist prev/next + fast
             // scroll. Tap toggles the layer; the tile names where you are.
@@ -424,14 +380,17 @@ pub fn PerformGrid(
                 }),
             }
             // Switch 9 (hold 4): Boost — tap on/off, hold rotates the level.
-            BoostTile {
-                subtitle: boost_sub,
-                active: model.boost_db != 0.0,
-                switch_no: 9,
-                on_toggle: on_toggle_boost,
-                on_cycle: on_cycle_boost,
+            Learnable { target: "boost", title: "Switch 9 · Boost", learn: model.learn.clone(),
+                BoostTile {
+                    subtitle: boost_sub,
+                    active: model.boost_db != 0.0,
+                    switch_no: 9,
+                    on_toggle: on_toggle_boost,
+                    on_cycle: on_cycle_boost,
+                }
             }
             // Switch 10 (hold 5): the live tuner, right in the tile.
+            Learnable { target: "tuner", title: "Switch 10 · Tuner", learn: model.learn.clone(),
             LiveTunerTile {
                 switch_no: 10,
                 onclick: cbs.cb({
@@ -442,6 +401,7 @@ pub fn PerformGrid(
                         }
                     }
                 }),
+            }
             }
 
             // ── Row B: the Song layer (while active) or switches 1–5 ──
@@ -529,6 +489,7 @@ pub fn PerformGrid(
                         in_song,
                         parts: song_parts.clone(),
                         changes: song_changes.clone(),
+                        learn: model.learn.clone(),
                     }
                 } else {
                     div { key: "s{i}", class: "relative rounded-xl border-2 border-dashed border-border/30",
@@ -556,6 +517,7 @@ pub fn PerformGrid(
                 tempo_bpm: model.tempo_bpm,
                 // Hold is free — the tuner is switches 3 + 4 together.
                 on_tap: on_tap_tempo,
+                learn: model.learn.clone(),
             }
             }
             }
@@ -563,8 +525,7 @@ pub fn PerformGrid(
         if !song_layer() {
             ChordMarks { chords: chord_marks.clone(), compact }
         }
-    }
-
+        }
         }
     }
 }
@@ -649,18 +610,29 @@ fn StackTile(
     #[props(default)] compact: bool,
     /// The footswitch (0-based) this tile is, when it is one of 1–5 — its
     /// job can then be changed from the menu.
-    #[props(default)] footswitch: Option<usize>,
+    #[props(default)]
+    footswitch: Option<usize>,
     /// The part that is up (Setlist mode).
-    #[props(default)] part: Option<String>,
+    #[props(default)]
+    part: Option<String>,
     #[props(default)] in_song: bool,
     /// The song's parts `(name, patch)` (Setlist mode), for the part menu.
-    #[props(default)] parts: Vec<(String, String)>,
+    #[props(default)]
+    parts: Vec<(String, String)>,
     /// The song's changes to profile patches `(patch, count)`.
-    #[props(default)] changes: Vec<(String, u32)>,
+    #[props(default)]
+    changes: Vec<(String, u32)>,
+    /// The switches' MIDI learn.
+    #[props(default)]
+    learn: SwitchLearn,
 ) -> Element {
     // Callbacks made once per site, not once per render (see `stable`).
     let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<signal_guitar_proto::rig::RigClient>);
+    let learn_target = format!("stack:{index}");
+    // Menus open upward in the app's popup layer (the grid is the bottom of
+    // the window); in place where the app has none.
+    let host = signal_widgets::PopupHost::try_use();
     let mut menu = use_signal(|| false);
     let (momentary, no_rotate) = (stack.momentary, stack.no_rotate);
     let (bg, text) = folder_color(&stack.name);
@@ -679,15 +651,44 @@ fn StackTile(
     } else {
         "relative flex flex-col items-center justify-center gap-1 rounded-xl"
     };
+    let open_switch_menu = EventHandler::new({
+        let (stack, part, parts, changes, learn, target) =
+            (stack.clone(), part.clone(), parts.clone(), changes.clone(), learn.clone(), learn_target.clone());
+        move |e: MouseEvent| {
+            e.prevent_default();
+            let Some(h) = host else {
+                menu.set(true);
+                return;
+            };
+            let (stack, part, parts, changes, learn, target) =
+                (stack.clone(), part.clone(), parts.clone(), changes.clone(), learn.clone(), target.clone());
+            open_menu(h, &e, move || rsx! {
+                SwitchMenu {
+                    switch_no,
+                    footswitch,
+                    stack: Some((index, stack.clone())),
+                    job: "stack".to_string(),
+                    part: part.clone(),
+                    in_song,
+                    parts: parts.clone(),
+                    changes: changes.clone(),
+                    learn: learn.clone(),
+                    learn_target: Some(target.clone()),
+                    on_close: move |()| close_menu(Some(h)),
+                }
+            });
+        }
+    });
     rsx! {
         div {
             style: "position: relative; height: 100%; display: flex; flex-direction: column;",
             // Right-click: how this switch behaves, for the song that is up.
-            oncontextmenu: move |e: MouseEvent| {
-                e.prevent_default();
-                menu.set(true);
-            },
+            oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
             onmouseleave: move |_| menu.set(false),
+            LearnBadge {
+                binding: learn.binding(&learn_target).map(str::to_string),
+                learning: learn.is_learning(&learn_target),
+            }
         HoldButton {
             class: format!("{layout_cls} h-full {state_cls}"),
             style: format!("background-color: {bg}; color: {text}; {state_style}"),
@@ -775,18 +776,23 @@ fn StackTile(
             }
         }
             if menu() {
+                InlineMenu {
                 SwitchMenu {
                     switch_no,
                     footswitch,
                     stack: Some((index, stack.clone())),
                     job: "stack".to_string(),
-                    part,
+                    part: part.clone(),
                     in_song,
                     parts: parts.clone(),
                     changes: changes.clone(),
+                    learn: learn.clone(),
+                    learn_target: Some(learn_target.clone()),
                     on_close: move |()| menu.set(false),
                 }
+                }
             }
+            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
         }
     }
 }
@@ -799,10 +805,12 @@ fn ActionTile(
     footswitch: usize,
     job: String,
     /// Where a stepping job goes on a tap, and on a hold.
-    #[props(default)] next: String,
+    #[props(default)]
+    next: String,
     #[props(default)] back: String,
     /// The stack it would play, for turning it back into one from the menu.
-    #[props(default)] stack: Option<PerfStack>,
+    #[props(default)]
+    stack: Option<PerfStack>,
     #[props(default)] part: Option<String>,
     #[props(default)] in_song: bool,
     #[props(default)] compact: bool,
@@ -810,14 +818,34 @@ fn ActionTile(
     let cbs = crate::stable::use_stable();
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut menu = use_signal(|| false);
+    let host = signal_widgets::PopupHost::try_use();
     let sw = footswitch as u32;
+    let open_switch_menu = EventHandler::new({
+        let (job, stack, part) = (job.clone(), stack.clone(), part.clone());
+        move |e: MouseEvent| {
+            e.prevent_default();
+            let Some(h) = host else {
+                menu.set(true);
+                return;
+            };
+            let (job, stack, part) = (job.clone(), stack.clone(), part.clone());
+            open_menu(h, &e, move || rsx! {
+                SwitchMenu {
+                    switch_no: footswitch + 1,
+                    footswitch: Some(footswitch),
+                    stack: stack.clone().map(|st| (footswitch, st)),
+                    job: job.clone(),
+                    part: part.clone(),
+                    in_song,
+                    on_close: move |()| close_menu(Some(h)),
+                }
+            });
+        }
+    });
     rsx! {
         div {
             style: "position: relative; height: 100%; display: flex; flex-direction: column;",
-            oncontextmenu: move |e: MouseEvent| {
-                e.prevent_default();
-                menu.set(true);
-            },
+            oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
             onmouseleave: move |_| menu.set(false),
             HoldButton {
                 class: if compact {
@@ -864,16 +892,19 @@ fn ActionTile(
                 }
             }
             if menu() {
-                SwitchMenu {
-                    switch_no: footswitch + 1,
-                    footswitch: Some(footswitch),
-                    stack: stack.map(|st| (footswitch, st)),
-                    job,
-                    part,
-                    in_song,
-                    on_close: move |()| menu.set(false),
+                InlineMenu {
+                    SwitchMenu {
+                        switch_no: footswitch + 1,
+                        footswitch: Some(footswitch),
+                        stack: stack.clone().map(|st| (footswitch, st)),
+                        job: job.clone(),
+                        part: part.clone(),
+                        in_song,
+                        on_close: move |()| menu.set(false),
+                    }
                 }
             }
+            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
         }
     }
 }
@@ -898,6 +929,12 @@ fn SwitchMenu(
     /// The song's changes to profile patches `(patch, count)`.
     #[props(default)]
     changes: Vec<(String, u32)>,
+    /// The switches' MIDI learn, and this switch's name in it — the menu
+    /// ends with its MIDI learn rows.
+    #[props(default)]
+    learn: SwitchLearn,
+    #[props(default)]
+    learn_target: Option<String>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let host = signal_widgets::PopupHost::try_use();
@@ -936,7 +973,9 @@ fn SwitchMenu(
                     no_rotate,
                     part: scope_part,
                 };
-                spawn(async move { let _ = r.tune_switch(t).await; });
+                spawn(async move {
+                    let _ = r.tune_switch(t).await;
+                });
             }
         }
     };
@@ -944,7 +983,9 @@ fn SwitchMenu(
         let rig = rig.clone();
         move |action: String| {
             if let (Some(r), Some(sw)) = (rig.clone(), footswitch) {
-                spawn(async move { let _ = r.set_switch_action(sw as u32, action, scope_part).await; });
+                spawn(async move {
+                    let _ = r.set_switch_action(sw as u32, action, scope_part).await;
+                });
             }
         }
     };
@@ -959,7 +1000,9 @@ fn SwitchMenu(
                         let _ = r.reset_switch(i as u32, scope_part).await;
                     }
                     if let Some(sw) = footswitch {
-                        let _ = r.set_switch_action(sw as u32, String::new(), scope_part).await;
+                        let _ = r
+                            .set_switch_action(sw as u32, String::new(), scope_part)
+                            .await;
                     }
                 });
             }
@@ -968,10 +1011,7 @@ fn SwitchMenu(
     let patch_list = patches.read().clone().unwrap_or_default();
     rsx! {
         div {
-            style: "position: absolute; top: 8px; right: 8px; z-index: 300; max-height: 70vh; overflow-y: auto; \
-                    min-width: 220px; padding: 4px; display: flex; flex-direction: column; gap: 1px; \
-                    border: 1px solid #2b2b31; border-radius: 10px; \
-                    background: #0d0d10; box-shadow: 0 12px 32px #000c;",
+            style: "{MENU_PANEL}",
             div { style: "{head}", "Switch {switch_no} · {scope}" }
             // The patch this switch is on, as a part of the song: make one
             // of it, or go to / rename / remove the one it is.
@@ -1128,6 +1168,81 @@ fn SwitchMenu(
                     if scope_part { "Reset for this part" } else { "Reset for this song" }
                 }
             }
+            if let Some(target) = learn_target {
+                LearnRows { target, learn, on_close }
+            }
+        }
+    }
+}
+
+/// A switch menu's MIDI learn rows, on the rig's client.
+#[component]
+fn LearnRows(target: String, learn: SwitchLearn, on_close: Callback<()>) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let call = move |f: fn(RigClient, String) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()>>>| {
+        let rig = rig.clone();
+        move |t: String| {
+            if let Some(r) = rig.clone() {
+                spawn(f(r, t));
+            }
+        }
+    };
+    let learn_it = call(|r, t| Box::pin(async move { let _ = r.midi_learn(t).await; }));
+    let cancel = call(|r, _| Box::pin(async move { let _ = r.midi_learn_cancel().await; }));
+    let unlearn = call(|r, t| Box::pin(async move { let _ = r.midi_unlearn(t).await; }));
+    rsx! {
+        MidiLearnRows {
+            target: target.clone(),
+            binding: learn.binding(&target).map(str::to_string),
+            learning: learn.is_learning(&target),
+            on_learn: move |t: String| learn_it(t),
+            on_cancel: move |()| cancel(String::new()),
+            on_unlearn: move |t: String| unlearn(t),
+            on_close: move |()| on_close.call(()),
+        }
+    }
+}
+
+/// A switch with no menu of its own (FX, Boost, the tuner), made
+/// learnable: right-click for its MIDI learn rows; its badge in the corner.
+#[component]
+fn Learnable(target: String, title: String, learn: SwitchLearn, children: Element) -> Element {
+    let mut menu = use_signal(|| false);
+    let host = signal_widgets::PopupHost::try_use();
+    let open_switch_menu = EventHandler::new({
+        let (target, title, learn) = (target.clone(), title.clone(), learn.clone());
+        move |e: MouseEvent| {
+            e.prevent_default();
+            let Some(h) = host else {
+                menu.set(true);
+                return;
+            };
+            let (target, title, learn) = (target.clone(), title.clone(), learn.clone());
+            open_menu(h, &e, move || rsx! {
+                SwitchMenuFrame { title: title.clone(),
+                    LearnRows { target: target.clone(), learn: learn.clone(), on_close: move |()| close_menu(Some(h)) }
+                }
+            });
+        }
+    });
+    rsx! {
+        div {
+            style: "position: relative; height: 100%; min-height: 0; display: flex; flex-direction: column;",
+            oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
+            onmouseleave: move |_| menu.set(false),
+            LearnBadge {
+                binding: learn.binding(&target).map(str::to_string),
+                learning: learn.is_learning(&target),
+            }
+            {children}
+            if menu() {
+                InlineMenu {
+                    SwitchMenuFrame { title: title.clone(),
+                        LearnRows { target: target.clone(), learn: learn.clone(), on_close: move |()| menu.set(false) }
+                    }
+                }
+            }
+            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
         }
     }
 }
@@ -1191,7 +1306,11 @@ fn BoostTile(
     let style = if active {
         format!("background-color: #fafafa; color: #0a0a0a; {LIT_RING}")
     } else {
-        format!("background-color: {}; color: {};", dim("#fafafa", 0.3), dim("#0a0a0a", 0.45))
+        format!(
+            "background-color: {}; color: {};",
+            dim("#fafafa", 0.3),
+            dim("#0a0a0a", 0.45)
+        )
     };
     rsx! {
         HoldButton {
@@ -1217,9 +1336,13 @@ fn TapTempoTile(
     #[props(default)] compact: bool,
     #[props(default)] in_song: bool,
     #[props(default)] part: Option<String>,
+    /// The switches' MIDI learn.
+    #[props(default)]
+    learn: SwitchLearn,
 ) -> Element {
     let mut lit = use_signal(|| false);
     let mut menu = use_signal(|| false);
+    let host = signal_widgets::PopupHost::try_use();
 
     // Props aren't reactive — mirror the tempo into a signal so the blink
     // loop restarts the moment a tap changes it.
@@ -1244,17 +1367,41 @@ fn TapTempoTile(
     } else {
         "box-shadow: 0 0 0 3px transparent;"
     };
+    let open_switch_menu = EventHandler::new({
+        let (part, learn) = (part.clone(), learn.clone());
+        move |e: MouseEvent| {
+            e.prevent_default();
+            let Some(h) = host else {
+                menu.set(true);
+                return;
+            };
+            let (part, learn) = (part.clone(), learn.clone());
+            open_menu(h, &e, move || rsx! {
+                SwitchMenu {
+                    switch_no: 5usize,
+                    footswitch: Some(4usize),
+                    stack: None,
+                    job: "tap_tempo".to_string(),
+                    part: part.clone(),
+                    in_song,
+                    learn: learn.clone(),
+                    learn_target: Some("tap".to_string()),
+                    on_close: move |()| close_menu(Some(h)),
+                }
+            });
+        }
+    });
     rsx! {
         div {
             style: "position: relative; height: 100%; display: flex; flex-direction: column;",
-            // Right-click (in a song): give switch 5 another job.
-            oncontextmenu: move |e: MouseEvent| {
-                e.prevent_default();
-                if in_song {
-                    menu.set(true);
-                }
-            },
+            // Right-click: MIDI-learn a pedal onto it, and (in a song) give
+            // switch 5 another job.
+            oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
             onmouseleave: move |_| menu.set(false),
+            LearnBadge {
+                binding: learn.binding("tap").map(str::to_string),
+                learning: learn.is_learning("tap"),
+            }
         HoldButton {
             class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full opacity-90 hover:opacity-100".to_string(),
             style: format!("background-color: #27272a; color: #d4d4d8; {ring}"),
@@ -1270,16 +1417,21 @@ fn TapTempoTile(
             }
         }
             if menu() {
-                SwitchMenu {
-                    switch_no: 5usize,
-                    footswitch: Some(4usize),
-                    stack: None,
-                    job: "tap_tempo".to_string(),
-                    part,
-                    in_song,
-                    on_close: move |()| menu.set(false),
+                InlineMenu {
+                    SwitchMenu {
+                        switch_no: 5usize,
+                        footswitch: Some(4usize),
+                        stack: None,
+                        job: "tap_tempo".to_string(),
+                        part: part.clone(),
+                        in_song,
+                        learn: learn.clone(),
+                        learn_target: Some("tap".to_string()),
+                        on_close: move |()| menu.set(false),
+                    }
                 }
             }
+            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
         }
     }
 }

@@ -75,6 +75,8 @@ pub mod filters;
 pub mod generators;
 pub mod loudness;
 pub mod null;
+pub mod reverb_character;
+pub mod reverb_stimuli;
 
 pub use compare::{Comparison, Criterion, CriterionResult, Thresholds, compare};
 pub use decay::{

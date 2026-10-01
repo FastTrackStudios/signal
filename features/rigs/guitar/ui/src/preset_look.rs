@@ -29,7 +29,14 @@ fn has(params: &[PresetParam], name: &str) -> bool {
 }
 
 /// The groups a delay list is hunted by, in list order.
-pub const DELAY_GROUPS: [&str; 6] = ["Slap", "Rhythmic", "Lead", "Ambient", "Modulated", "Special"];
+pub const DELAY_GROUPS: [&str; 6] = [
+    "Slap",
+    "Rhythmic",
+    "Lead",
+    "Ambient",
+    "Modulated",
+    "Special",
+];
 /// A reverb's algorithm families, in list order.
 pub const VERB_GROUPS: [&str; 5] = ["Rooms", "Halls", "Plates", "Springs", "Ambient"];
 /// The group of an "off" preset — pinned at the top, quiet.
@@ -91,7 +98,9 @@ fn delay_group(name: &str, params: &[PresetParam]) -> &'static str {
     let time = param(params, "time", 350.0);
     if lower.contains("lead") {
         "Lead"
-    } else if ["ambient", "swell", "wash", "pad"].iter().any(|w| lower.contains(w))
+    } else if ["ambient", "swell", "wash", "pad"]
+        .iter()
+        .any(|w| lower.contains(w))
         || fb >= 0.55
         || param(params, "swell", 0.0) >= 0.5
     {
@@ -179,7 +188,11 @@ fn look_of(p: &BlockPresetEntry) -> Look {
                 group: verb_group(alg).to_string(),
                 engine: VERB_ALGOS.get(alg).copied().unwrap_or("").to_string(),
                 engine_default: false,
-                value: if exact { seconds(secs) } else { format!("≈{}", seconds(secs)) },
+                value: if exact {
+                    seconds(secs)
+                } else {
+                    format!("≈{}", seconds(secs))
+                },
                 shape: Shape::Tail {
                     seconds: secs as f32,
                     predelay_ms: param(params, "predelay", 0.0),
@@ -190,7 +203,13 @@ fn look_of(p: &BlockPresetEntry) -> Look {
             // Anything else: by its engine or style, else one A–Z list.
             let (engine, default) = if other == "compressor" && has(params, "style") {
                 let i = param(params, "style", 0.0).round().max(0.0) as usize;
-                (crate::comp_surface::COMP_STYLES.get(i).copied().unwrap_or(""), i == 0)
+                (
+                    crate::comp_surface::COMP_STYLES
+                        .get(i)
+                        .copied()
+                        .unwrap_or(""),
+                    i == 0,
+                )
             } else if has(params, "engine") {
                 let i = param(params, "engine", 0.0).round().max(0.0) as usize;
                 (MOD_ENGINES.get(i).copied().unwrap_or(""), i == 0)
@@ -218,15 +237,22 @@ pub fn group_rank(block_type: &str, group: &str) -> usize {
         "reverb" => &VERB_GROUPS,
         _ => &[],
     };
-    order.iter().position(|g| *g == group).map_or(100, |i| i + 1)
+    order
+        .iter()
+        .position(|g| *g == group)
+        .map_or(100, |i| i + 1)
 }
 
 /// A block preset's list: its presets with their looks, grouped in list
 /// order (Off first), library order within a group.
 #[must_use]
 pub fn grouped(presets: &[BlockPresetEntry]) -> Vec<(String, Vec<(BlockPresetEntry, Look)>)> {
-    let mut rows: Vec<(BlockPresetEntry, Look)> = presets.iter().map(|p| (p.clone(), look(p))).collect();
-    let ty = presets.first().map(|p| p.block_type.clone()).unwrap_or_default();
+    let mut rows: Vec<(BlockPresetEntry, Look)> =
+        presets.iter().map(|p| (p.clone(), look(p))).collect();
+    let ty = presets
+        .first()
+        .map(|p| p.block_type.clone())
+        .unwrap_or_default();
     // Stable: library order is kept inside a group.
     rows.sort_by(|a, b| {
         group_rank(&ty, &a.1.group)
@@ -252,7 +278,12 @@ pub fn grouped(presets: &[BlockPresetEntry]) -> Vec<(String, Vec<(BlockPresetEnt
 /// The picture, `w` × `h` px. `lit` draws it in the accent (the preset that
 /// plays); otherwise grey — a picture is a shape to compare, not a signal.
 #[component]
-pub fn ShapeView(shape: Shape, #[props(default = 44)] w: u32, #[props(default = 12)] h: u32, #[props(default)] lit: bool) -> Element {
+pub fn ShapeView(
+    shape: Shape,
+    #[props(default = 44)] w: u32,
+    #[props(default = 12)] h: u32,
+    #[props(default)] lit: bool,
+) -> Element {
     let ink = if lit { LIVE } else { MUTED };
     let (wf, hf) = (f64::from(w), f64::from(h));
     match shape {
@@ -288,7 +319,10 @@ pub fn ShapeView(shape: Shape, #[props(default = 44)] w: u32, #[props(default = 
                 }
             }
         }
-        Shape::Tail { seconds, predelay_ms } => {
+        Shape::Tail {
+            seconds,
+            predelay_ms,
+        } => {
             // A wedge: the gap is the pre-delay, the length the tail on a
             // log scale (0.3 s … 20 s across the width).
             let pre = (f64::from(predelay_ms) / 200.0 * wf * 0.25).clamp(0.0, wf * 0.25);
@@ -356,8 +390,12 @@ pub fn engine_swatch(block_type: &str, engine: &str) -> &'static str {
     let family: &[&str] = match block_type {
         "delay" => &["#3b82f6", "#1d4ed8", "#60a5fa", "#2563eb", "#93c5fd"],
         "reverb" => &["#8b5cf6", "#6d28d9", "#a78bfa", "#7c3aed", "#c4b5fd"],
-        "chorus" | "flanger" | "phaser" | "modulation" => &["#7dd3fc", "#38bdf8", "#bae6fd", "#0ea5e9", "#e0f2fe"],
-        "trem" | "vibrato" | "rotary" | "panner" => &["#ec4899", "#f472b6", "#db2777", "#f9a8d4", "#be185d"],
+        "chorus" | "flanger" | "phaser" | "modulation" => {
+            &["#7dd3fc", "#38bdf8", "#bae6fd", "#0ea5e9", "#e0f2fe"]
+        }
+        "trem" | "vibrato" | "rotary" | "panner" => {
+            &["#ec4899", "#f472b6", "#db2777", "#f9a8d4", "#be185d"]
+        }
         "drive" | "boost" | "saturator" => &["#f97316", "#ef4444", "#fb923c", "#dc2626", "#ea580c"],
         "compressor" | "limiter" => &["#e5e7eb", "#d1d5db", "#f3f4f6", "#9ca3af", "#cbd5e1"],
         "amp" | "cabinet" => &["#d6b36a", "#b8954a", "#e6cb8f", "#a8844a", "#f0dcae"],
@@ -367,7 +405,9 @@ pub fn engine_swatch(block_type: &str, engine: &str) -> &'static str {
     if engine.is_empty() {
         return DIM;
     }
-    let h = engine.bytes().fold(7u32, |h, b| h.wrapping_mul(31).wrapping_add(u32::from(b)));
+    let h = engine
+        .bytes()
+        .fold(7u32, |h, b| h.wrapping_mul(31).wrapping_add(u32::from(b)));
     family[(h as usize) % family.len()]
 }
 
@@ -381,152 +421,6 @@ fn usage(used_by: &[String]) -> (String, String) {
     }
 }
 
-/// One preset in a list: swatch and name hard left, the engine and usage on
-/// the subline beneath; value and picture hard right; ⋯ faint until the row
-/// is hovered. The one that plays has the green edge; edited, the amber dot.
-#[component]
-pub fn PresetRow(
-    name: String,
-    look: Look,
-    #[props(default)] used_by: Vec<String>,
-    #[props(default)] live: bool,
-    #[props(default)] modified: bool,
-    /// Indent, px — a snapshot under its preset.
-    #[props(default)]
-    indent: u32,
-    /// A line of its own under the name, instead of the engine (an amp's
-    /// captures).
-    #[props(default)]
-    subline: String,
-    /// Extra pieces at the right, before the value (a Time snapshot's picks).
-    #[props(default)]
-    children: Element,
-    /// The children *are* the row's values (a Time snapshot's Delay and
-    /// Reverb picks): no value or picture of its own, a compact row.
-    #[props(default)]
-    picks: bool,
-    /// The macro knobs it tunes (`delay`, `space`) — a quiet glyph by the
-    /// name, the knobs in its tooltip.
-    #[props(default)]
-    macros: Vec<String>,
-    onclick: EventHandler<()>,
-    #[props(default)] menu: Vec<crate::kit::MenuItem>,
-    #[props(default)] on_menu: Option<EventHandler<crate::kit::Picked>>,
-) -> Element {
-    let host = signal_widgets::PopupHost::try_use();
-    let off = look.group == OFF;
-    let (count, who) = usage(&used_by);
-    let edge = if live { LIVE } else { "transparent" };
-    let bg = if live { crate::theme::LIVE_BG } else { "transparent" };
-    let ink = if off && !live { MUTED } else { TEXT };
-    let pad = if off || picks { "4px" } else { "6px" };
-    // The engine chip, unless the group already says it (a Room among Rooms).
-    let engine = if look.group.starts_with(look.engine.as_str()) { String::new() } else { look.engine.clone() };
-    rsx! {
-        div {
-            class: if live { "group" } else { "group hover:bg-accent/30" },
-            style: "display: flex; align-items: center; gap: 8px; min-width: 0; margin-left: {indent}px; \
-                    padding: {pad} 6px {pad} 8px; border-left: 2px solid {edge}; border-radius: 0 6px 6px 0; \
-                    background: {bg}; cursor: pointer;",
-            title: "{who}",
-            onclick: move |_| onclick.call(()),
-            oncontextmenu: {
-                let menu = menu.clone();
-                move |e: MouseEvent| {
-                    if let Some(h) = on_menu {
-                        e.prevent_default();
-                        e.stop_propagation();
-                        crate::kit::context_menu(host, &e, menu.clone(), h);
-                    }
-                }
-            },
-            if !off && !look.engine.is_empty() {
-                span { style: "width: 3px; height: 22px; border-radius: 2px; flex-shrink: 0; background: {engine_swatch(&look.block_type, &look.engine)};" }
-            }
-            div { style: "flex: 1 1 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; gap: 2px;",
-                div { style: "display: flex; align-items: center; gap: 5px; min-width: 0;",
-                    if modified {
-                        crate::kit::Dot { modified: true, size: 6 }
-                    }
-                    span { style: "flex: 1 1 auto; font-size: 12px; font-weight: 600; color: {ink}; white-space: nowrap; overflow: hidden; \
-                                   text-overflow: ellipsis; min-width: 0;",
-                        title: "{name}",
-                        "{name}"
-                    }
-                    if !macros.is_empty() {
-                        MacroGlyph { knobs: macros.clone() }
-                    }
-                }
-                if !off && (!subline.is_empty() || !engine.is_empty() || !count.is_empty()) {
-                    div { style: "display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden;",
-                        if subline.is_empty() {
-                            EngineChip { engine: engine.clone(), default: look.engine_default }
-                        } else {
-                            span { style: "font-size: 10px; color: {FAINT}; white-space: nowrap; overflow: hidden;", "{subline}" }
-                        }
-                        if !count.is_empty() {
-                            span { style: "font-size: 10px; font-family: monospace; color: {FAINT};", "{count}" }
-                        }
-                    }
-                }
-            }
-            {children}
-            if !off && !picks {
-                ValueChip { value: look.value.clone(), lit: live }
-                ShapeView { shape: look.shape.clone(), w: 52, h: 14, lit: live }
-            }
-            if let Some(h) = on_menu.filter(|_| !menu.is_empty()) {
-                div { class: "opacity-25 group-hover:opacity-100", style: "display: flex; flex-shrink: 0;",
-                    crate::kit::ActionMenu { items: menu.clone(), on_pick: h, size: 20, bare: true, title: "Actions" }
-                }
-            }
-        }
-    }
-}
-
-/// A quiet group header: small caps and a count, hard left.
-#[component]
-pub fn GroupHeader(label: String, count: usize) -> Element {
-    rsx! {
-        div { style: "display: flex; align-items: baseline; gap: 6px; padding: 12px 8px 4px 10px;",
-            span { style: "{crate::theme::EYEBROW}", "{label}" }
-            span { style: "font-size: 10px; font-family: monospace; color: {DIM};", "{count}" }
-        }
-    }
-}
-
-/// The filter chips under a search: All, then each group with its count. A
-/// chip is where the filter changes.
-#[component]
-pub fn GroupChips(groups: Vec<(String, usize)>, selected: String, on_pick: EventHandler<String>) -> Element {
-    let total: usize = groups.iter().map(|(_, n)| n).sum();
-    let all = std::iter::once(("All".to_string(), total)).chain(groups);
-    rsx! {
-        div { style: "display: flex; flex-wrap: wrap; gap: 4px;",
-            for (g, n) in all {
-                {
-                    let on = (g == "All" && selected.is_empty()) || g == selected;
-                    let pick = if g == "All" { String::new() } else { g.clone() };
-                    rsx! {
-                        button {
-                            key: "{g}",
-                            style: format!(
-                                "display: flex; align-items: baseline; gap: 4px; padding: 2px 8px; border-radius: 999px; \
-                                 font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid {}; background: {}; color: {};",
-                                if on { crate::theme::FOCUS_FG } else { crate::theme::LINE },
-                                if on { crate::theme::FOCUS_BG } else { "transparent" },
-                                if on { crate::theme::FOCUS_FG } else { MUTED },
-                            ),
-                            onclick: move |_| on_pick.call(pick.clone()),
-                            "{g}"
-                            span { style: "font-size: 9px; font-family: monospace; opacity: 0.6;", "{n}" }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -540,7 +434,10 @@ mod tests {
             used_by: Vec::new(),
             params: params
                 .iter()
-                .map(|(n, v)| PresetParam { name: (*n).into(), value: *v })
+                .map(|(n, v)| PresetParam {
+                    name: (*n).into(),
+                    value: *v,
+                })
                 .collect(),
             macros: Vec::new(),
         }
@@ -548,14 +445,56 @@ mod tests {
 
     #[test]
     fn delays_group_by_what_they_do() {
-        let slap = preset("delay", "Sun Slap", &[("tap_div_l", 7.0), ("time", 120.0), ("feedback", 0.05)]);
-        let dotted = preset("delay", "Dotted Eighth", &[("tap_div_l", 1.0), ("feedback", 0.35)]);
-        let lead = preset("delay", "Lead Quarter", &[("tap_div_l", 0.0), ("feedback", 0.45)]);
-        let wash = preset("delay", "Flute Wash", &[("tap_div_l", 8.0), ("feedback", 0.7)]);
-        let warm = preset("delay", "Warm Analog", &[("style", 2.0), ("tap_div_l", 0.0), ("feedback", 0.45), ("mod_depth", 0.3)]);
-        let rev = preset("delay", "Reverse", &[("style", 5.0), ("tap_div_l", 9.0), ("feedback", 0.15)]);
-        let groups: Vec<String> = [&slap, &dotted, &lead, &wash, &warm, &rev].iter().map(|p| look(p).group).collect();
-        assert_eq!(groups, ["Slap", "Rhythmic", "Lead", "Ambient", "Modulated", "Special"]);
+        let slap = preset(
+            "delay",
+            "Sun Slap",
+            &[("tap_div_l", 7.0), ("time", 120.0), ("feedback", 0.05)],
+        );
+        let dotted = preset(
+            "delay",
+            "Dotted Eighth",
+            &[("tap_div_l", 1.0), ("feedback", 0.35)],
+        );
+        let lead = preset(
+            "delay",
+            "Lead Quarter",
+            &[("tap_div_l", 0.0), ("feedback", 0.45)],
+        );
+        let wash = preset(
+            "delay",
+            "Flute Wash",
+            &[("tap_div_l", 8.0), ("feedback", 0.7)],
+        );
+        let warm = preset(
+            "delay",
+            "Warm Analog",
+            &[
+                ("style", 2.0),
+                ("tap_div_l", 0.0),
+                ("feedback", 0.45),
+                ("mod_depth", 0.3),
+            ],
+        );
+        let rev = preset(
+            "delay",
+            "Reverse",
+            &[("style", 5.0), ("tap_div_l", 9.0), ("feedback", 0.15)],
+        );
+        let groups: Vec<String> = [&slap, &dotted, &lead, &wash, &warm, &rev]
+            .iter()
+            .map(|p| look(p).group)
+            .collect();
+        assert_eq!(
+            groups,
+            [
+                "Slap",
+                "Rhythmic",
+                "Lead",
+                "Ambient",
+                "Modulated",
+                "Special"
+            ]
+        );
         assert_eq!(look(&slap).value, "120 ms");
         assert_eq!(look(&dotted).value, "1/8.");
     }
@@ -564,8 +503,16 @@ mod tests {
     fn off_is_pinned_first_and_reverbs_group_by_family() {
         let mut off = preset("reverb", "Reverb Off", &[]);
         off.bypass = true;
-        let hall = preset("reverb", "Worship Hall", &[("algorithm", 1.0), ("decay", 0.42)]);
-        let room = preset("reverb", "Glue Room", &[("algorithm", 0.0), ("decay", 0.41)]);
+        let hall = preset(
+            "reverb",
+            "Worship Hall",
+            &[("algorithm", 1.0), ("decay", 0.42)],
+        );
+        let room = preset(
+            "reverb",
+            "Glue Room",
+            &[("algorithm", 0.0), ("decay", 0.41)],
+        );
         let bloom = preset("reverb", "Bloom Pad", &[("algorithm", 5.0), ("decay", 0.6)]);
         let g = grouped(&[hall, bloom, off, room]);
         let names: Vec<&str> = g.iter().map(|(n, _)| n.as_str()).collect();
@@ -581,10 +528,15 @@ pub fn MacroGlyph(knobs: Vec<String>) -> Element {
         .iter()
         .map(|k| {
             let mut c = k.chars();
-            c.next().map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
+            c.next()
+                .map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
         })
         .collect();
-    let tip = format!("Tunes the {} macro{}", names.join(", "), if names.len() == 1 { "" } else { "s" });
+    let tip = format!(
+        "Tunes the {} macro{}",
+        names.join(", "),
+        if names.len() == 1 { "" } else { "s" }
+    );
     rsx! {
         span { title: "{tip}", style: "display: flex; flex-shrink: 0; width: 10px; height: 10px;",
             svg {

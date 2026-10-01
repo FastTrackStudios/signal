@@ -31,11 +31,11 @@ use std::{collections::HashMap, sync::Arc};
 use facet::Facet;
 
 use crate::SamplerError;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::block_params::{BlockDelta, BlockWrite};
 use crate::rig::RigBlock;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::rig::{GuitarRig, ModelId};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::block_params::{BlockDelta, BlockWrite};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::rig::{PreparedChain, prepare_chain};
 
@@ -581,7 +581,11 @@ impl LiveLog {
         self.seq += 1;
         let entries = self.chains.entry(chain).or_default();
         entries.retain(|e| !(e.block == block && same_target(&e.write, &write)));
-        entries.push(LogEntry { block: block.to_string(), write, seq: self.seq });
+        entries.push(LogEntry {
+            block: block.to_string(),
+            write,
+            seq: self.seq,
+        });
     }
 }
 
@@ -589,8 +593,14 @@ impl LiveLog {
 #[cfg(not(target_arch = "wasm32"))]
 fn live_as_block_write(param: &str, value: f32) -> BlockWrite {
     match param {
-        "input_trim" => BlockWrite::Nam { input_db: Some(value), output_db: None },
-        "output_trim" => BlockWrite::Nam { input_db: None, output_db: Some(value) },
+        "input_trim" => BlockWrite::Nam {
+            input_db: Some(value),
+            output_db: None,
+        },
+        "output_trim" => BlockWrite::Nam {
+            input_db: None,
+            output_db: Some(value),
+        },
         _ => BlockWrite::Params(vec![(param.to_string(), f64::from(value))]),
     }
 }
@@ -611,11 +621,17 @@ fn due_state(spec: &ChainSpec, entries: &[LogEntry]) -> Vec<crate::block_params:
     let mut order: Vec<&LogEntry> = entries.iter().collect();
     order.sort_by_key(|e| e.seq);
     for e in order {
-        let LiveWrite::Param(name, v) = &e.write else { continue };
-        let Some(slot) = spec.block_ids.iter().position(|b| *b == e.block) else { continue };
+        let LiveWrite::Param(name, v) = &e.write else {
+            continue;
+        };
+        let Some(slot) = spec.block_ids.iter().position(|b| *b == e.block) else {
+            continue;
+        };
         let block = &spec.blocks[slot];
         if reconciled(block) {
-            if let Some(w) = ResolvedWrite::resolve(block.block_type, &live_as_block_write(name, *v)) {
+            if let Some(w) =
+                ResolvedWrite::resolve(block.block_type, &live_as_block_write(name, *v))
+            {
                 due[slot].note(&w);
             }
         }
@@ -667,7 +683,13 @@ impl ReloadTicket {
         let mut claimed = vec![false; self.installed.len()];
         let mut fate: Vec<Fate> = specs
             .iter()
-            .map(|s| if s.is_some() { Fate::Build } else { Fate::Nothing })
+            .map(|s| {
+                if s.is_some() {
+                    Fate::Build
+                } else {
+                    Fate::Nothing
+                }
+            })
             .collect();
         // Unchanged: its own chain first, so a patch keeps the chain it had
         // (and any tail it is ringing), then any identical free one.
@@ -678,7 +700,9 @@ impl ReloadTicket {
                     continue;
                 }
                 let hit = self.installed.iter().enumerate().position(|(j, c)| {
-                    !claimed[j] && c.key == *key && (!own || c.patch.eq_ignore_ascii_case(&patch.name))
+                    !claimed[j]
+                        && c.key == *key
+                        && (!own || c.patch.eq_ignore_ascii_case(&patch.name))
                 });
                 if let Some(j) = hit {
                     claimed[j] = true;
@@ -688,13 +712,18 @@ impl ReloadTicket {
         }
         // Changed only in settings: its own chain, retuned.
         for (i, patch) in profile.patches.iter().enumerate() {
-            let (Some(spec), Some((_, stamps))) = (&specs[i], &keys[i]) else { continue };
+            let (Some(spec), Some((_, stamps))) = (&specs[i], &keys[i]) else {
+                continue;
+            };
             if !matches!(fate[i], Fate::Build) {
                 continue;
             }
-            let Some(j) = self.installed.iter().enumerate().position(|(j, c)| {
-                !claimed[j] && c.patch.eq_ignore_ascii_case(&patch.name)
-            }) else {
+            let Some(j) = self
+                .installed
+                .iter()
+                .enumerate()
+                .position(|(j, c)| !claimed[j] && c.patch.eq_ignore_ascii_case(&patch.name))
+            else {
                 continue;
             };
             let old = &self.installed[j];
@@ -749,19 +778,28 @@ impl ReloadPlan {
     /// Chains this plan builds.
     #[must_use]
     pub fn builds(&self) -> usize {
-        self.fate.iter().filter(|f| matches!(f, Fate::Build)).count()
+        self.fate
+            .iter()
+            .filter(|f| matches!(f, Fate::Build))
+            .count()
     }
 
     /// Chains this plan keeps as they are.
     #[must_use]
     pub fn reuses(&self) -> usize {
-        self.fate.iter().filter(|f| matches!(f, Fate::Keep(_))).count()
+        self.fate
+            .iter()
+            .filter(|f| matches!(f, Fate::Keep(_)))
+            .count()
     }
 
     /// Chains this plan keeps and writes new settings to.
     #[must_use]
     pub fn retunes(&self) -> usize {
-        self.fate.iter().filter(|f| matches!(f, Fate::Retune(..))).count()
+        self.fate
+            .iter()
+            .filter(|f| matches!(f, Fate::Retune(..)))
+            .count()
     }
 
     /// Build the chains the plan lists — concurrently, and touching no rig,
@@ -922,7 +960,11 @@ fn block_ids_for(blocks: &[&RigBlock]) -> Vec<String> {
                 b.name.trim().to_string()
             };
             let n = seen.entry(base.clone()).or_insert(0);
-            let id = if *n == 0 { base.clone() } else { format!("{base} {}", *n + 1) };
+            let id = if *n == 0 {
+                base.clone()
+            } else {
+                format!("{base} {}", *n + 1)
+            };
             *n += 1;
             id
         })
@@ -1082,9 +1124,15 @@ fn carry_live_state(
             }
             LiveWrite::Param(p, v) => {
                 let w = if block.is_nam() && p == "input_trim" {
-                    BlockWrite::Nam { input_db: Some(*v), output_db: None }
+                    BlockWrite::Nam {
+                        input_db: Some(*v),
+                        output_db: None,
+                    }
                 } else if block.is_nam() && p == "output_trim" {
-                    BlockWrite::Nam { input_db: None, output_db: Some(*v) }
+                    BlockWrite::Nam {
+                        input_db: None,
+                        output_db: Some(*v),
+                    }
                 } else if crate::block_params::is_known(block.block_type, p) && block.is_native() {
                     BlockWrite::Params(vec![(p.clone(), f64::from(*v))])
                 } else {
@@ -1219,11 +1267,7 @@ impl ProfileRig {
     /// change to the playing patch's chain crossfades in with its tail
     /// ringing on. All three phases under `&mut self`; see
     /// [`begin_reload`](Self::begin_reload) to build without holding a lock.
-    pub fn reload_profile(
-        &mut self,
-        profile: RigProfile,
-        base_dir: Option<&Path>,
-    ) -> ReloadCommit {
+    pub fn reload_profile(&mut self, profile: RigProfile, base_dir: Option<&Path>) -> ReloadCommit {
         let prepared = self
             .begin_reload(ReloadMode::Keep)
             .plan(profile, base_dir)
@@ -1442,8 +1486,13 @@ impl ProfileRig {
                             .get(&name)
                             .copied()
                             .filter(|_| mode == ReloadMode::Keep);
-                        let old_spec = before.and_then(|b| self.chain_keys.get(&b)).map(|k| k.spec.clone());
-                        let entries = before.and_then(|b| old_log.get(&b)).cloned().unwrap_or_default();
+                        let old_spec = before
+                            .and_then(|b| self.chain_keys.get(&b))
+                            .map(|k| k.spec.clone());
+                        let entries = before
+                            .and_then(|b| old_log.get(&b))
+                            .cloned()
+                            .unwrap_or_default();
                         let (writes, kept, bypass) = carry_live_state(
                             old_spec.as_deref(),
                             &spec,
@@ -1495,7 +1544,10 @@ impl ProfileRig {
         let mut no_rotate = vec![false; n];
         let mut profile = profile;
         for (si, st) in profile.stacks.iter_mut().enumerate() {
-            let Some(old) = carried.iter().find(|c| c.name.eq_ignore_ascii_case(&st.name)) else {
+            let Some(old) = carried
+                .iter()
+                .find(|c| c.name.eq_ignore_ascii_case(&st.name))
+            else {
                 continue;
             };
             if old.song {
@@ -1507,7 +1559,11 @@ impl ProfileRig {
                 .cursor_patch
                 .as_ref()
                 .and_then(|name| st.patches.iter().position(|p| p.eq_ignore_ascii_case(name)))
-                .unwrap_or(if old.pos < st.patches.len() { old.pos } else { 0 });
+                .unwrap_or(if old.pos < st.patches.len() {
+                    old.pos
+                } else {
+                    0
+                });
             no_rotate[si] = old.no_rotate;
         }
 
@@ -1568,7 +1624,10 @@ impl ProfileRig {
                     garbage.retired.push(r);
                     report.retired += 1;
                 }
-                None => tracing::warn!(chain = id, "ProfileRig: a retired chain is still playing — kept"),
+                None => tracing::warn!(
+                    chain = id,
+                    "ProfileRig: a retired chain is still playing — kept"
+                ),
             }
         }
 
@@ -2074,7 +2133,9 @@ impl ProfileRig {
     /// these on top; a view of it must show the same.
     #[must_use]
     pub fn live_state(&self) -> Vec<(String, LiveWrite)> {
-        let Some(chain) = self.rig.active() else { return Vec::new() };
+        let Some(chain) = self.rig.active() else {
+            return Vec::new();
+        };
         let mut entries = self.log().chains.get(&chain).cloned().unwrap_or_default();
         entries.sort_by_key(|e| e.seq);
         entries.into_iter().map(|e| (e.block, e.write)).collect()
@@ -2089,9 +2150,15 @@ impl ProfileRig {
     /// what it corrected (`block: n params` / `block: trims`), each one a bug
     /// to find. Safe at any time, as often as wanted.
     pub fn reconcile(&self) -> Vec<String> {
-        let Some(id) = self.rig.active() else { return Vec::new() };
-        let Some(key) = self.chain_keys.get(&id) else { return Vec::new() };
-        let Some(applied) = self.rig.chain_applied(id) else { return Vec::new() };
+        let Some(id) = self.rig.active() else {
+            return Vec::new();
+        };
+        let Some(key) = self.chain_keys.get(&id) else {
+            return Vec::new();
+        };
+        let Some(applied) = self.rig.chain_applied(id) else {
+            return Vec::new();
+        };
         let entries = self.log().chains.get(&id).cloned().unwrap_or_default();
         let due = due_state(&key.spec, &entries);
         let mut report = Vec::new();
@@ -2103,7 +2170,9 @@ impl ProfileRig {
             for w in have.diff_to(want) {
                 let block = key.spec.block_ids.get(slot).cloned().unwrap_or_default();
                 report.push(match &w {
-                    crate::block_params::ResolvedWrite::Events(ev) => format!("{block}: {} params", ev.len()),
+                    crate::block_params::ResolvedWrite::Events(ev) => {
+                        format!("{block}: {} params", ev.len())
+                    }
                     crate::block_params::ResolvedWrite::Nam { .. } => format!("{block}: trims"),
                 });
                 writes.push((slot, w));

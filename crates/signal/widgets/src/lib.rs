@@ -12,14 +12,25 @@
 
 pub mod arc;
 pub mod drag_bus;
-pub mod popup;
+pub mod kit;
 pub mod knob;
 pub mod picker;
+pub mod popup;
 pub mod preset_tree;
+pub mod sound_browser;
+pub mod switches;
+pub mod theme;
+pub mod touch;
 
 pub use drag_bus::{DragBus, DragEvent};
-pub use popup::{PopupHost, PopupLayer};
 pub use knob::{FmtFn, Knob, KnobSize};
 pub use picker::{Picker, PickerSize};
+pub use popup::{PopupHost, PopupLayer};
+pub use touch::{LongPress, Touch, TouchMenuButton, is_touch, reveal, use_long_press, use_touch};
 
 pub use preset_tree::PresetTree;
+pub use sound_browser::{BrowseChip, BrowseEntry, BrowseScope, SoundBrowser};
+pub use switches::{
+    HoldButton, InlineMenu, LearnBadge, MenuRow, MidiLearnRows, SwitchMenuFrame, SwitchNo,
+    SwitchTile, SwitchesMode, SwitchesToggle, close_menu, open_menu,
+};

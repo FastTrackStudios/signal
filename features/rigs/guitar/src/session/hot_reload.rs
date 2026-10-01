@@ -105,13 +105,17 @@ fn kind(path: &Path) -> Kind {
     if in_profiles {
         return Kind::Profile;
     }
-    match path.file_name().and_then(|f| f.to_str()).unwrap_or_default() {
+    match path
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or_default()
+    {
         "songs.styx" => Kind::Songs,
         "setlists.styx" => Kind::Setlists,
         "drive-presets.styx" => Kind::DrivePresets,
-        crate::compose::MODULES_FILE | crate::compose::PRESETS_FILE | crate::compose::BLOCKS_FILE => {
-            Kind::Composition
-        }
+        crate::compose::MODULES_FILE
+        | crate::compose::PRESETS_FILE
+        | crate::compose::BLOCKS_FILE => Kind::Composition,
         "midi.styx" => Kind::Midi,
         "keymap.styx" => Kind::Keymap,
         "last-state.styx" => Kind::LastState,
@@ -148,7 +152,11 @@ impl GuitarRigBackend {
         };
         let changes = {
             let mut w = self.hot.watcher.lock_ok();
-            if request.is_some() { w.force(&dir) } else { w.poll(&dir) }
+            if request.is_some() {
+                w.force(&dir)
+            } else {
+                w.poll(&dir)
+            }
         };
         if changes.is_empty() && request.is_none() {
             return;
@@ -266,13 +274,18 @@ impl GuitarRigBackend {
     }
 
     fn apply_profile(&self, path: &Path, deleted: bool) -> String {
-        let file = path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+        let file = path
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let playing = profile_file(&self.profile_def.lock_ok().name) == file;
         if deleted {
             if playing {
                 return "the playing profile's file was deleted — still playing it; its next save writes it back".to_string();
             }
-            self.other_profiles.lock_ok().retain(|p| profile_file(&p.name) != file);
+            self.other_profiles
+                .lock_ok()
+                .retain(|p| profile_file(&p.name) != file);
             self.publish_state();
             return "deleted — removed from the profile list".to_string();
         }
@@ -291,7 +304,11 @@ impl GuitarRigBackend {
             format!(
                 "profile {name}: {}{}",
                 ReloadCounts::describe(counts),
-                if dropped { " (an unsaved live edit gave way to the file)" } else { "" }
+                if dropped {
+                    " (an unsaved live edit gave way to the file)"
+                } else {
+                    ""
+                }
             )
         } else {
             {
@@ -361,9 +378,7 @@ impl GuitarRigBackend {
         // Checked here so a bad file changes nothing; the rebuild then reads
         // it through `load_compositions`, whose cache has seen it move.
         let ok = match kind_file(path) {
-            crate::compose::MODULES_FILE => {
-                parse_check::<crate::compose::ModuleLib>(path)
-            }
+            crate::compose::MODULES_FILE => parse_check::<crate::compose::ModuleLib>(path),
             crate::compose::PRESETS_FILE => parse_check::<crate::compose::PresetLib>(path),
             _ => parse_check::<crate::compose::BlockLib>(path),
         };
@@ -401,7 +416,11 @@ impl GuitarRigBackend {
                 .find(|d| d.name.eq_ignore_ascii_case(s))
                 .and_then(|d| d.parts.get(*self.part_index.lock_ok()).cloned())
         });
-        Position { setlist, song, part }
+        Position {
+            setlist,
+            song,
+            part,
+        }
     }
 
     /// Put the player back on `at` by name in the reloaded library — the
@@ -424,17 +443,19 @@ impl GuitarRigBackend {
         let resolved = self.resolved_setlist();
         {
             let mut i = self.song_index.lock_ok();
-            if let Some(n) = at
-                .song
-                .as_ref()
-                .and_then(|name| resolved.iter().position(|(s, ..)| s.eq_ignore_ascii_case(name)))
-            {
+            if let Some(n) = at.song.as_ref().and_then(|name| {
+                resolved
+                    .iter()
+                    .position(|(s, ..)| s.eq_ignore_ascii_case(name))
+            }) {
                 *i = n;
             } else {
                 *i = (*i).min(resolved.len().saturating_sub(1));
             }
         }
-        let song = resolved.get(*self.song_index.lock_ok()).map(|(n, ..)| n.clone());
+        let song = resolved
+            .get(*self.song_index.lock_ok())
+            .map(|(n, ..)| n.clone());
         let parts: Vec<String> = song
             .as_ref()
             .and_then(|s| {
@@ -467,7 +488,9 @@ impl GuitarRigBackend {
 }
 
 fn kind_file(path: &Path) -> &str {
-    path.file_name().and_then(|f| f.to_str()).unwrap_or_default()
+    path.file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or_default()
 }
 
 /// Whether `path` parses as `T` (remembering it either way).

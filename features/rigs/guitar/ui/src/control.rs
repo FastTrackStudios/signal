@@ -122,7 +122,11 @@ fn decay_t60_secs(decay: f32) -> f64 {
 /// the engine rings for 12.
 pub(crate) fn verb_seconds(algorithm: f32, variant: f32, decay: f32) -> (f64, bool) {
     let alg = reverb_dsp::algorithm::AlgorithmType::from_index(algorithm.round().max(0.0) as usize);
-    match reverb_dsp::algorithm::decay_seconds(alg, variant.round().max(0.0) as usize, f64::from(decay)) {
+    match reverb_dsp::algorithm::decay_seconds(
+        alg,
+        variant.round().max(0.0) as usize,
+        f64::from(decay),
+    ) {
         Some(t) => (t, true),
         None => (decay_t60_secs(decay), false),
     }
@@ -151,7 +155,11 @@ pub(crate) fn cut_fmt(hz: f32) -> String {
 /// A delay's or reverb's level: it runs fully wet in parallel with the dry,
 /// so how loud the effect sits is its `level`, in dB.
 pub(crate) fn level_fmt(db: f32) -> String {
-    if db <= -59.5 { "Off".into() } else { format!("{db:+.1} dB") }
+    if db <= -59.5 {
+        "Off".into()
+    } else {
+        format!("{db:+.1} dB")
+    }
 }
 
 /// The wet's gain (linear) — what the lanes draw the repeats and tail at.
@@ -431,11 +439,19 @@ fn StereoMeter(
     let (lp, lc) = bar(l_db);
     let (rp, rc) = bar(r_db);
     let max_db = l_db.max(r_db);
-    let text = if max_db <= -89.0 { "−∞".to_string() } else { format!("{max_db:.0}") };
+    let text = if max_db <= -89.0 {
+        "−∞".to_string()
+    } else {
+        format!("{max_db:.0}")
+    };
     let tick = use_hook(|| std::rc::Rc::new(std::cell::Cell::new((0u32, String::new()))));
     let shown_db = {
         let (n, last) = tick.take();
-        let show = if n % 8 == 0 || last.is_empty() { text } else { last };
+        let show = if n % 8 == 0 || last.is_empty() {
+            text
+        } else {
+            last
+        };
         tick.set((n.wrapping_add(1), show.clone()));
         show
     };
@@ -500,16 +516,37 @@ fn div_label(b: &LiveBlock) -> String {
 /// Division → multiple of a quarter note, for the tap visualization
 /// (Free returns 0 → the caller falls back to the block's `time`).
 pub(crate) fn div_factor(idx: f32) -> f32 {
-    [1.0, 0.75, 0.5, 1.0 / 3.0, 0.25, 0.618, 0.414, 0.0, 1.5, 2.0, 2.0 / 3.0]
-        .get(idx.max(0.0) as usize)
-        .copied()
-        .unwrap_or(0.0)
+    [
+        1.0,
+        0.75,
+        0.5,
+        1.0 / 3.0,
+        0.25,
+        0.618,
+        0.414,
+        0.0,
+        1.5,
+        2.0,
+        2.0 / 3.0,
+    ]
+    .get(idx.max(0.0) as usize)
+    .copied()
+    .unwrap_or(0.0)
 }
 
 /// `delay::DelayStyle` order — the `TimeLine` MX machines.
 /// `chorus::EngineType` order — the modulation algorithms.
 pub(crate) const MOD_ENGINES: [&str; 11] = [
-    "Cubic", "BBD", "Tape", "Orbit", "Juno", "CE-2", "Dimension", "Clone", "Tri-Chorus", "SCF",
+    "Cubic",
+    "BBD",
+    "Tape",
+    "Orbit",
+    "Juno",
+    "CE-2",
+    "Dimension",
+    "Clone",
+    "Tri-Chorus",
+    "SCF",
     "Julia",
 ];
 /// `TremMode` order.
@@ -1052,13 +1089,18 @@ fn PKnob(
 #[component]
 fn PatchTrimPanel(block: LiveBlock) -> Element {
     let param = |name: &str, lo: f32, hi: f32| {
-        block.params.iter().find(|p| p.name == name).cloned().unwrap_or(BlockParam {
-            name: name.to_string(),
-            value: 0.0,
-            min: lo,
-            max: hi,
-            overridden: false,
-        })
+        block
+            .params
+            .iter()
+            .find(|p| p.name == name)
+            .cloned()
+            .unwrap_or(BlockParam {
+                name: name.to_string(),
+                value: 0.0,
+                min: lo,
+                max: hi,
+                overridden: false,
+            })
     };
     let pan = param("pan", -1.0, 1.0);
     let gain = param("gain_db", -24.0, 24.0);
@@ -2834,7 +2876,11 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     // The chain's engine state, for every panel's badge: the blocks say it;
     // with none on screen and no audio, there is no audio.
     let chain_engine = blocks.first().map_or(
-        if (state.running)() { signal_guitar_proto::BlockEngine::LIVE } else { signal_guitar_proto::BlockEngine::NO_AUDIO },
+        if (state.running)() {
+            signal_guitar_proto::BlockEngine::LIVE
+        } else {
+            signal_guitar_proto::BlockEngine::NO_AUDIO
+        },
         |b| b.engine,
     );
     let engine_sig = use_context_provider(|| ChainEngine(Signal::new(chain_engine))).0;
@@ -3563,12 +3609,20 @@ fn AudioOffBanner(state: RigViewState, loading: bool) -> Element {
     // Stopped on purpose (the Audio menu): nothing is wrong to explain.
     let stopped = why == "Audio stopped";
     let (dot, head, body) = if loading {
-        ("#eab308", "Starting audio…", "Opening the interface and building the patch.".to_string())
+        (
+            "#eab308",
+            "Starting audio…",
+            "Opening the interface and building the patch.".to_string(),
+        )
     } else {
         (
             "#ef4444",
             "No audio",
-            if why.is_empty() { "The audio device is closed.".to_string() } else { why },
+            if why.is_empty() {
+                "The audio device is closed.".to_string()
+            } else {
+                why
+            },
         )
     };
     rsx! {
@@ -3624,11 +3678,10 @@ fn LiveStereoMeter(label: &'static str, state: RigViewState, output: bool, muted
 #[component]
 pub(crate) fn LiveComp(block: LiveBlock, state: RigViewState) -> Element {
     let in_db = state.in_peak_db.cloned();
-    let (wave, gr_db) = state
-        .comp_wave
-        .read()
-        .get(&block.name)
-        .map_or_else(|| ((Vec::new(), Vec::new()), 0.0), |(i, g, gr)| ((i.clone(), g.clone()), *gr));
+    let (wave, gr_db) = state.comp_wave.read().get(&block.name).map_or_else(
+        || ((Vec::new(), Vec::new()), 0.0),
+        |(i, g, gr)| ((i.clone(), g.clone()), *gr),
+    );
     rsx! {
         crate::comp_surface::CompSurface { block, wave, in_db, gr_db }
     }
@@ -3659,23 +3712,38 @@ fn PhonesStrip(hp: signal_guitar_proto::HeadphoneState, state: RigViewState) -> 
     let (mix_l, mix_r) = state.mix_db.cloned();
     let db = |pos: f32| {
         let d = phones_fader_db(pos);
-        if d.is_finite() { format!("{d:+.0}") } else { "off".to_string() }
+        if d.is_finite() {
+            format!("{d:+.0}")
+        } else {
+            "off".to_string()
+        }
     };
     let mixer = hp.mixer.clone();
     let (dot, tip) = match (mixer.enabled, mixer.state) {
-        (false, _) => ("#52525b", "Headphone mixer off — set it up in Audio Settings".to_string()),
+        (false, _) => (
+            "#52525b",
+            "Headphone mixer off — set it up in Audio Settings".to_string(),
+        ),
         (true, PhonesMixerState::PLAYING) => (
             "#22c55e",
-            format!("Headphone mixer playing the mix · {} Hz · {} frames · pid {}", mixer.rate, mixer.block, mixer.pid),
+            format!(
+                "Headphone mixer playing the mix · {} Hz · {} frames · pid {}",
+                mixer.rate, mixer.block, mixer.pid
+            ),
         ),
-        (true, PhonesMixerState::NO_DEVICE) => ("#ef4444", "Headphone mixer: the interface is not there — retrying".to_string()),
+        (true, PhonesMixerState::NO_DEVICE) => (
+            "#ef4444",
+            "Headphone mixer: the interface is not there — retrying".to_string(),
+        ),
         (true, _) => ("#eab308", "Headphone mixer starting…".to_string()),
     };
     let set_mix = {
         let rig = rig.clone();
         move |v: f32| {
             if let Some(r) = rig.clone() {
-                spawn(async move { let _ = r.set_phones_mix(v).await; });
+                spawn(async move {
+                    let _ = r.set_phones_mix(v).await;
+                });
             }
         }
     };
@@ -3684,7 +3752,9 @@ fn PhonesStrip(hp: signal_guitar_proto::HeadphoneState, state: RigViewState) -> 
         let vol = hp.volume;
         move |v: f32| {
             if let Some(r) = rig.clone() {
-                spawn(async move { let _ = r.set_headphone(vol, v).await; });
+                spawn(async move {
+                    let _ = r.set_headphone(vol, v).await;
+                });
             }
         }
     };
@@ -3693,7 +3763,9 @@ fn PhonesStrip(hp: signal_guitar_proto::HeadphoneState, state: RigViewState) -> 
         let gtr = hp.self_mix;
         move |v: f32| {
             if let Some(r) = rig.clone() {
-                spawn(async move { let _ = r.set_headphone(v, gtr).await; });
+                spawn(async move {
+                    let _ = r.set_headphone(v, gtr).await;
+                });
             }
         }
     };

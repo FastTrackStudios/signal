@@ -155,6 +155,9 @@ mod modmatrix;
 pub use modmatrix::ModEngine;
 use modmatrix::{ModCompiler, build_arp};
 
+/// A container gain at or below this (dB) is off: exactly zero.
+pub const OFF_DB: f32 = -120.0;
+
 /// A compiled, renderable node mirroring the container tree.
 pub enum RenderNode {
     /// A leaf (`inst = None` for a placeholder pass-through): a **source**
@@ -438,6 +441,7 @@ impl RenderNode {
                 sources: mc.sources,
                 source_paths: mc.source_paths,
                 routes: mc.routes,
+                scales: mc.scales,
                 leaf_paths: mc.leaf_paths,
                 leaf_names,
                 leaf_params,
@@ -446,6 +450,8 @@ impl RenderNode {
                 bus_l: vec![Vec::new(); bus_count],
                 bus_r: vec![Vec::new(); bus_count],
                 tempo_bpm: 120.0,
+                tempo_followers: mc.tempo_followers,
+                followed_bpm: 0.0,
                 sample_rate: sample_rate as f32,
                 arp: build_arp(resolved),
             }),
@@ -537,10 +543,17 @@ impl RenderNode {
                 cells.peaks.insert(id, cell.clone());
                 cell
             });
+            // A gain at or below the floor is OFF — exactly zero, so the
+            // branch sleeps (see the `Gain` arm of `process_inner`). An
+            // imported Omnisphere patch's unused layers are built at −200 dB:
+            // 1e-10, not zero, so they took every note and rendered every
+            // voice (their oscillators, envelopes and filters) to be
+            // multiplied by nothing — ~10% of the keys rig's render.
+            let db_gain = |db: f32| if db <= OFF_DB { 0.0 } else { 10f32.powf(db / 20.0) };
             node = Self::Gain {
                 asleep: false,
-                input: 10f32.powf(container.input_db / 20.0),
-                output: 10f32.powf(container.output_db / 20.0),
+                input: db_gain(container.input_db),
+                output: db_gain(container.output_db),
                 cell,
                 meter,
                 inner: Box::new(node),
@@ -580,6 +593,23 @@ impl RenderNode {
             .map(LeafBackend::params_snapshot)
             .unwrap_or_default();
         let id = mc.leaves.len();
+        // Tempo-synced parameters, resolved to the processor's param ids now
+        // so a tempo change is a plain write on the audio thread.
+        for p in &block.params {
+            let (hz, target) = match (p.name.strip_prefix("sync_ms_"), p.name.strip_prefix("sync_hz_")) {
+                (Some(t), _) => (false, t),
+                (_, Some(t)) => (true, t),
+                _ => continue,
+            };
+            let Ok(beats) = p.value.parse::<f32>() else { continue };
+            if let Some(param_id) = params
+                .iter()
+                .find(|i| i.name.eq_ignore_ascii_case(target))
+                .map(|i| i.id)
+            {
+                mc.tempo_followers.push(modmatrix::TempoFollower { leaf: id, param_id, beats, hz });
+            }
+        }
         mc.leaves.push((
             leaf.id.as_str().to_string(),
             leaf.name.to_lowercase(),
@@ -624,11 +654,74 @@ impl RenderNode {
             .is_some_and(|e| e.set_leaf_param(module, leaf, param, value))
     }
 
+    /// A leaf parameter's current base (normalized 0..1): the live overlay
+    /// if one is set, else the value the block was built with — what
+    /// [`set_leaf_param`](Self::set_leaf_param) would be moving it from.
+    /// `None` when the leaf or parameter is not in this tree.
+    pub fn leaf_param_value(&mut self, module: &str, leaf: &str, param: &str) -> Option<f64> {
+        let (id, pid, overlaid) = {
+            let e = self.root_engine()?;
+            let id = e.find_leaf(module, leaf)?;
+            let pkey = param.to_lowercase();
+            let pid = e.leaf_params[id]
+                .iter()
+                .find(|p| p.name.to_lowercase() == pkey)?
+                .id;
+            let overlaid = e
+                .overlay
+                .get(id)
+                .and_then(|o| o.iter().find(|(p, _)| *p == pid))
+                .map(|(_, v)| *v);
+            (id, pid, overlaid)
+        };
+        if overlaid.is_some() {
+            return overlaid;
+        }
+        match self.leaf_backend_mut(id)? {
+            LeafBackend::Plugin(p) => p.param_value(pid),
+            LeafBackend::Source(_) => None,
+        }
+    }
+
     /// Live-update a modulator envelope's ADSR ("amp env" / "filter env"),
     /// addressed by its owning `module` container.
     pub fn set_env(&mut self, module: &str, name: &str, params: crate::native::AdsrParams) -> bool {
         self.root_engine()
             .is_some_and(|e| e.set_env(module, name, params))
+    }
+
+    /// Live-update an LFO source's rate and wave (see `ModEngine::set_lfo`).
+    pub fn set_lfo(
+        &mut self,
+        module: &str,
+        name: &str,
+        rate_hz: f32,
+        wave: Option<crate::native::LfoWave>,
+        fade_s: Option<f32>,
+    ) -> bool {
+        self.root_engine()
+            .is_some_and(|e| e.set_lfo(module, name, rate_hz, wave, fade_s))
+    }
+
+    /// The routes from source `name` in `module`, as lower-cased
+    /// `(leaf, param)` (see `ModEngine::routes_from`).
+    pub fn routes_from(&mut self, module: &str, name: &str) -> Vec<(String, String)> {
+        self.root_engine()
+            .map(|e| e.routes_from(module, name))
+            .unwrap_or_default()
+    }
+
+    /// Live-update an envelope source's delay and hold (seconds).
+    pub fn set_env_timing(&mut self, module: &str, name: &str, delay_s: f32, hold_s: f32) -> bool {
+        self.root_engine()
+            .is_some_and(|e| e.set_env_timing(module, name, delay_s, hold_s))
+    }
+
+    /// Scale a source's authored routes to `depth` at the deepest (see
+    /// `ModEngine::set_source_depth`).
+    pub fn set_source_depth(&mut self, module: &str, name: &str, depth: f32) -> bool {
+        self.root_engine()
+            .is_some_and(|e| e.set_source_depth(module, name, depth))
     }
 
     /// Live-update a modulation route's depth (e.g. Filter Env → cutoff
@@ -670,6 +763,43 @@ impl RenderNode {
             }
             None => false,
         }
+    }
+
+    /// Whether leaf `leaf` of `module` is in this tree.
+
+    pub fn has_leaf(&mut self, module: &str, leaf: &str) -> bool {
+        self.root_engine()
+            .and_then(|e| e.find_leaf(module, leaf))
+            .is_some()
+    }
+
+    /// Write `param` of leaf `leaf` (in `module`) in the processor's OWN
+    /// units — a delay time in ms, a reverb's predelay — straight to it. The
+    /// parameter overlay ([`set_leaf_param`](Self::set_leaf_param)) is the
+    /// 0..1 path, right for the native blocks whose parameters are
+    /// normalized and wrong for the effects whose are not. The value holds
+    /// until the next write (it is the processor's own state now).
+    pub fn set_leaf_plain(&mut self, module: &str, leaf: &str, param: &str, value: f64) -> bool {
+        let Some(id) = self.root_engine().and_then(|e| e.find_leaf(module, leaf)) else {
+            return false;
+        };
+        let Some(LeafBackend::Plugin(p)) = self.leaf_backend_mut(id) else {
+            return false;
+        };
+        let Some(pid) = p
+            .params()
+            .iter()
+            .find(|i| i.name.eq_ignore_ascii_case(param))
+            .map(|i| i.id)
+        else {
+            return false;
+        };
+        let writes = [(pid, value)];
+        let ev = PluginEvents {
+            params: &writes,
+            ..PluginEvents::default()
+        };
+        p.process_block(&[], &[], &mut [], &mut [], &ev).is_ok()
     }
 
     /// The leaf backend behind leaf `id`, if present in this subtree.
@@ -1033,6 +1163,28 @@ impl RenderNode {
     /// their own voice vecs and are not counted). A cheap read for
     /// load/diagnostic panels; `&mut` only because the leaf downcast goes
     /// through `as_any_mut`.
+    /// Shed voices in every source under this node (the rig's CPU guard):
+    /// see [`crate::soundsource::Soundsource::shed_voices`].
+    pub fn shed_voices(&mut self, level: u8) {
+        match self {
+            Self::Leaf {
+                inst: Some(LeafBackend::Source(src)),
+                ..
+            } => src.shed_voices(level),
+            Self::Leaf { .. } => {}
+            Self::Serial(v) | Self::Parallel(v) => {
+                for n in v {
+                    n.shed_voices(level);
+                }
+            }
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.shed_voices(level),
+        }
+    }
+
     pub fn active_voices(&mut self) -> usize {
         match self {
             Self::Leaf {
@@ -1110,6 +1262,24 @@ impl RenderNode {
         // buffers down the tree.
         if let Self::Modulated { engine, inner } = self {
             let frames = out_l.len().min(out_r.len());
+            // The band's tempo, when there is one, drives everything synced.
+            if let Some(bpm) = signal_rig_host::tempo::get() {
+                engine.tempo_bpm = bpm;
+            }
+            if (engine.tempo_bpm - engine.followed_bpm).abs() > 1e-3 {
+                engine.followed_bpm = engine.tempo_bpm;
+                crate::native::set_tempo_bpm(engine.tempo_bpm);
+                for f in &engine.tempo_followers {
+                    if let Some(LeafBackend::Plugin(p)) = inner.leaf_backend_mut(f.leaf) {
+                        let writes = [(f.param_id, f.value(engine.tempo_bpm))];
+                        let ev = PluginEvents {
+                            params: &writes,
+                            ..PluginEvents::default()
+                        };
+                        let _ = p.process_block(&[], &[], &mut [], &mut [], &ev);
+                    }
+                }
+            }
             // The arpeggiator rewrites the MIDI stream before anything else
             // (steps replace held notes; CC/bend pass through).
             let arp_midi;

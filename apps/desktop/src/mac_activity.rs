@@ -36,6 +36,8 @@ pub fn hold_realtime_activity() {
     match activity {
         // The token must outlive the process's audio: never ended.
         Some(token) => std::mem::forget(token),
-        None => tracing::warn!("macOS activity not granted: the rig may be throttled in the background"),
+        None => {
+            tracing::warn!("macOS activity not granted: the rig may be throttled in the background")
+        }
     }
 }

@@ -7,7 +7,7 @@
 //! `RigBlock.params` configure the instance; runtime parameter writes (the
 //! mod matrix, a UI, a host) arrive later through `PluginEvents.params`.
 
-use signal_plugin_host::PluginInstance;
+use signal_plugin_host::{PluginEvents, PluginInstance};
 use signal_proto::block::BlockType;
 
 use crate::rig::RigBlock;
@@ -179,9 +179,7 @@ pub fn build_native_source(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn
         BlockType::Oscillator => Some(Box::new(
             NativeOscillator::new(sample_rate).with_block_params(block),
         )),
-        BlockType::Wavetable => Some(Box::new(
-            NativeWavetable::new(sample_rate).with_config(wavetable_config(block)),
-        )),
+        BlockType::Wavetable => Some(Box::new(wavetable_osc(block, sample_rate))),
         // City Wurli physically-modeled Wurlitzer 200A (PhysicalModel kind).
         BlockType::Formant => Some(Box::new(NativeWurli::new(sample_rate))),
         _ => None,
@@ -280,11 +278,95 @@ fn wavetable_config(block: &RigBlock) -> SynthConfig {
     cfg
 }
 
+/// The Wavetable oscillator for `block`: its config, and — when the block
+/// names real waves (`wave0` / `wave1`, an imported patch's) and they load —
+/// those waves in place of the generated shapes.
+/// Breakpoints from a block param: "time:level:curve:step;…" (see
+/// `breakpoints::SegPoint`).
+pub fn parse_points(spec: &str) -> Vec<super::breakpoints::SegPoint> {
+    spec.split(';')
+        .filter_map(|p| {
+            let mut it = p.split(':').map(|v| v.trim().parse::<f32>().ok());
+            Some(super::breakpoints::SegPoint {
+                time: it.next()??,
+                level: it.next()??,
+                curve: it.next().flatten().unwrap_or(0.0),
+                step: it.next().flatten().unwrap_or(0.0) > 0.0,
+            })
+        })
+        .collect()
+}
+
+fn wavetable_osc(block: &RigBlock, sample_rate: u32) -> NativeWavetable {
+    let mut osc = NativeWavetable::new(sample_rate)
+        .with_config(wavetable_config(block))
+        .with_transpose(block.param_f32("transpose").unwrap_or(0.0))
+        .with_glide(block.param_f32("glide_s").unwrap_or(0.0))
+        .with_amp_points(
+            block
+                .param_str("amp_points")
+                .map(|p| parse_points(&p))
+                .unwrap_or_default(),
+        )
+        .with_amp_sync(block.param_f32("amp_sync").unwrap_or(0.0) > 0.5)
+        .with_noise((block.param_f32("noise").unwrap_or(0.0) > 0.5).then(|| {
+            super::wavetable::NoiseCfg::from_shape(
+                block.param_f32("noise_shape").unwrap_or(0.0),
+                block.param_f32("noise_symmetry").unwrap_or(0.0),
+            )
+        }));
+    // Real wavetables (an imported patch's `wave0` / `wave1`), when named and
+    // readable; otherwise the generated shapes.
+    if let Some(a) = block.param_str("wave0").filter(|p| !p.is_empty()) {
+        let b = block
+            .param_str("wave1")
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| a.clone());
+        let stride = block
+            .param_f32("wt_stride")
+            .map_or(1, |s| s.max(1.0) as usize);
+        // Omnisphere's tables are 64 frames of 4096-sample cycles.
+        let cycle = block
+            .param_f32("wt_cycle")
+            .map_or(4096, |c| (c as usize).next_power_of_two().max(64));
+        let load =
+            |p: &str| super::wavebank::WaveBank::load(std::path::Path::new(p), cycle, stride);
+        match (load(&a), load(&b)) {
+            (Ok(wa), Ok(wb)) => {
+                osc = osc.with_waves(
+                    wa,
+                    wb,
+                    block.param_f32("wt_position").unwrap_or(0.0),
+                    block.param_f32("wt_mix").unwrap_or(0.0),
+                );
+            }
+            (Err(e), _) | (_, Err(e)) => tracing::warn!("wavetable not loaded: {e}"),
+        }
+    }
+    // A patch's polyphony in notes (1 = mono).
+    if let Some(n) = block.param_f32("max_notes") {
+        osc.set_max_notes(n.round().max(1.0) as usize);
+    }
+    if let Some(s) = block.param_f32("vel_sens") {
+        osc = osc.with_velocity_sensitivity(s);
+    }
+    if let Some(r) = block.param_f32("sync_ratio") {
+        osc = osc.with_sync_ratio(r);
+    }
+    if let Some(k) = block.param_f32("sync_knob") {
+        osc = osc.with_sync_knob(k);
+    }
+    osc
+}
+
 fn build_wavetable(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     // A first-class Soundsource, hosted through the generic leaf adapter.
-    Box::new(SoundsourceLeaf::new(
-        NativeWavetable::new(sample_rate).with_config(wavetable_config(block)),
-    ))
+    let osc = wavetable_osc(block, sample_rate);
+    let mut w: Box<dyn PluginInstance> = Box::new(SoundsourceLeaf::new(osc));
+    // Normalized live params the rig's knobs also write (the amp envelope
+    // arrives through `wavetable_config`, in seconds).
+    apply_named(w.as_mut(), block, &["vib_rate", "vib_depth", "tune"]);
+    w
 }
 
 fn build_filter(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
@@ -292,8 +374,37 @@ fn build_filter(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     if let Some(v) = block.param_f32("cutoff") {
         f = f.with_cutoff(NativeFilter::cutoff_from_norm(v));
     }
+    // A filter model's resonance curve (see `ResonanceMap`), passband gain
+    // and ladder compensation.
+    if let (Some(lo), Some(hi)) = (block.param_f32("res_lo"), block.param_f32("res_hi")) {
+        let curve = block.param_f32("res_curve").unwrap_or(1.0);
+        f = f.with_resonance_map(super::ResonanceMap { lo, hi, curve });
+    }
     if let Some(v) = block.param_f32("resonance") {
-        f = f.with_q(NativeFilter::q_from_norm(v));
+        f = f.with_resonance(v);
+    }
+    if let Some(db) = block.param_f32("gain_db") {
+        f = f.with_gain_db(db);
+    }
+    if let Some(v) = block.param_f32("res_shift") {
+        f = f.with_res_shift(v, block.param_f32("res_shift_curve").unwrap_or(1.0));
+    }
+    if let Some(c) = block.param_f32("ladder_comp") {
+        f = f.with_ladder_comp(c);
+    }
+    // An emulated cutoff knob: `taper` = "setting:hz;…", set to `knob_setting`.
+    if let Some(t) = block.param_str("taper") {
+        let points: Vec<(f32, f32)> = t
+            .split(';')
+            .filter_map(|p| {
+                let (s, hz) = p.split_once(':')?;
+                Some((s.trim().parse().ok()?, hz.trim().parse().ok()?))
+            })
+            .collect();
+        if points.len() >= 2 {
+            let setting = block.param_f32("knob_setting").unwrap_or(0.5);
+            f = f.with_taper(points, setting);
+        }
     }
     if let Some(m) = block
         .params
@@ -313,7 +424,9 @@ fn build_filter(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     {
         f = f.with_character(FilterCharacter::Ladder);
     }
-    Box::new(f)
+    let mut f: Box<dyn PluginInstance> = Box::new(f);
+    apply_named(f.as_mut(), block, &["drive", "mix"]);
+    f
 }
 
 fn build_amp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
@@ -321,7 +434,35 @@ fn build_amp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     if let Some(v) = block.param_f32("gain") {
         a = a.with_gain_norm(v);
     }
-    Box::new(a)
+    let mut a: Box<dyn PluginInstance> = Box::new(a);
+    apply_named(
+        a.as_mut(),
+        block,
+        &["pan", "width", "warmth", "body", "drive", "tremolo"],
+    );
+    a
+}
+
+/// Hand `names` from the block's stored params to `inst` in its own units
+/// (its parameter table's), the way a live write would.
+fn apply_named(inst: &mut dyn PluginInstance, block: &RigBlock, names: &[&str]) {
+    let infos = inst.params();
+    let writes: Vec<(u32, f64)> = names
+        .iter()
+        .filter_map(|n| {
+            let v = block.param_f32(n)?;
+            let id = infos.iter().find(|p| p.name == *n)?.id;
+            Some((id, f64::from(v)))
+        })
+        .collect();
+    if writes.is_empty() {
+        return;
+    }
+    let ev = PluginEvents {
+        params: &writes,
+        ..PluginEvents::default()
+    };
+    let _ = inst.process_block(&[], &[], &mut [], &mut [], &ev);
 }
 
 fn build_waveshaper(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {

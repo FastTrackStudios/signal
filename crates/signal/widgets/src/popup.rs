@@ -27,6 +27,11 @@ struct Popup {
     min_width: f64,
     render: Render,
     on_close: Option<Rc<dyn Fn()>>,
+    /// Grows upward from `y` (its bottom edge there) instead of down.
+    above: bool,
+    /// A sheet: nearly the whole root, over a dimmed backdrop (an expanded
+    /// browser), rather than a menu at a point.
+    sheet: bool,
 }
 
 /// The app root's popup layer. `Copy`: a signal handle.
@@ -54,20 +59,73 @@ impl PopupHost {
     /// `min_width` wide. Replaces any open popup (closing it first).
     /// `on_close` runs however it closes — a pick, a click away, Escape.
     pub fn open(
-        mut self,
+        self,
         x: f64,
         y: f64,
         min_width: f64,
         render: impl Fn() -> Element + 'static,
         on_close: impl Fn() + 'static,
     ) {
+        self.show(x, y, min_width, Rc::new(render), on_close, false);
+    }
+
+    /// As [`open`](Self::open), but growing **upward**: the popup's bottom
+    /// edge at client `y`, and no taller than the room above it (scrolling
+    /// past that). For controls at the bottom of the window — the rigs'
+    /// footswitches — where a menu that drops down has nowhere to go.
+    pub fn open_up(
+        self,
+        x: f64,
+        y: f64,
+        min_width: f64,
+        render: impl Fn() -> Element + 'static,
+        on_close: impl Fn() + 'static,
+    ) {
+        self.show(x, y, min_width, Rc::new(render), on_close, true);
+    }
+
+    /// Show `render` as a **sheet**: nearly the whole root, over a dimmed
+    /// backdrop — the way a docked panel opens out full size (the sound
+    /// browser's expand). Closes like any popup: a click on the backdrop,
+    /// Escape, or [`close`](Self::close).
+    pub fn open_sheet(self, render: impl Fn() -> Element + 'static, on_close: impl Fn() + 'static) {
+        let mut this = self;
+        this.close();
+        this.open.set(Some(Popup {
+            x: 0.0,
+            y: 0.0,
+            min_width: 0.0,
+            render: Rc::new(render),
+            on_close: Some(Rc::new(on_close)),
+            above: false,
+            sheet: true,
+        }));
+    }
+
+    /// Whether a sheet is showing.
+    #[must_use]
+    pub fn sheet_open(self) -> bool {
+        self.open.read().as_ref().is_some_and(|p| p.sheet)
+    }
+
+    fn show(
+        mut self,
+        x: f64,
+        y: f64,
+        min_width: f64,
+        render: Render,
+        on_close: impl Fn() + 'static,
+        above: bool,
+    ) {
         self.close();
         self.open.set(Some(Popup {
             x,
             y,
             min_width,
-            render: Rc::new(render),
+            render,
             on_close: Some(Rc::new(on_close)),
+            above,
+            sheet: false,
         }));
     }
 
@@ -108,8 +166,11 @@ pub fn PopupLayer() -> Element {
     // layer's root between an idle box and a backdrop, while the panels
     // around it re-render, is the kind of replacement the renderer's tree
     // updates have tripped on.
-    let (ox, oy, ow, _oh) = origin();
-    let (left, top, min_w) = match &popup {
+    let (ox, oy, ow, oh) = origin();
+    let place = match &popup {
+        Some(p) if p.sheet => {
+            "left: 3%; top: 3%; right: 3%; bottom: 3%; display: flex;".to_string()
+        }
         Some(p) => {
             // Keep the menu on screen — only against a width actually
             // measured (clamping to an unmeasured zero pinned it left).
@@ -117,11 +178,27 @@ pub fn PopupLayer() -> Element {
             if ow > p.min_width {
                 left = left.min(ow - p.min_width);
             }
-            (left, (p.y - oy).max(0.0), p.min_width)
+            let at = (p.y - oy).max(0.0);
+            if p.above && oh > 0.0 {
+                // Bottom-anchored: it grows up from `at` without knowing its
+                // own height, and scrolls rather than leave the window.
+                format!(
+                    "left: {left}px; bottom: {}px; min-width: {}px; max-height: {}px; overflow-y: auto;",
+                    (oh - at).max(0.0),
+                    p.min_width,
+                    (at - 8.0).max(80.0)
+                )
+            } else {
+                format!("left: {left}px; top: {at}px; min-width: {}px;", p.min_width)
+            }
         }
-        None => (0.0, 0.0, 0.0),
+        None => String::new(),
     };
-    let layer_style = if showing {
+    let dim = popup.as_ref().is_some_and(|p| p.sheet);
+    let layer_style = if dim {
+        // A sheet dims what it covers.
+        "position: absolute; inset: 0; z-index: 900; background: rgba(0,0,0,0.55);"
+    } else if showing {
         // Backdrop: the whole app, so a click anywhere else closes the menu.
         "position: absolute; inset: 0; z-index: 900;"
     } else {
@@ -150,7 +227,7 @@ pub fn PopupLayer() -> Element {
             },
             if let Some(p) = popup {
                 div {
-                    style: "position: absolute; left: {left}px; top: {top}px; min-width: {min_w}px;",
+                    style: "position: absolute; {place}",
                     // Presses inside the menu are the menu's.
                     onpointerdown: move |e: PointerEvent| e.stop_propagation(),
                     onclick: move |e: MouseEvent| e.stop_propagation(),

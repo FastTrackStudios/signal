@@ -56,7 +56,8 @@ const SIGNAL_TAILWIND: &str =
 static WIRED: std::sync::OnceLock<Wired> = std::sync::OnceLock::new();
 
 /// What a save made in `RIG_SHOT_TUNE_SAVE` answered, for the panel header.
-static SHOT_STATUS: std::sync::OnceLock<(String, signal_guitar_proto::MacroResult)> = std::sync::OnceLock::new();
+static SHOT_STATUS: std::sync::OnceLock<(String, signal_guitar_proto::MacroResult)> =
+    std::sync::OnceLock::new();
 
 struct Wired {
     rig: RigClient,
@@ -105,7 +106,10 @@ fn main() {
     });
     // `RIG_SHOT_MODE=0|1|2`: the perform mode (Preset / Profile / Setlist),
     // which picks the left sidebar. Design mode forgets it afterwards.
-    if let Some(mode) = std::env::var("RIG_SHOT_MODE").ok().and_then(|m| m.parse::<u32>().ok()) {
+    if let Some(mode) = std::env::var("RIG_SHOT_MODE")
+        .ok()
+        .and_then(|m| m.parse::<u32>().ok())
+    {
         let rig = wired.rig.clone();
         runtime.block_on(async move {
             let _ = rig.set_perform_mode(mode).await;
@@ -115,10 +119,16 @@ fn main() {
     // `RIG_SHOT_PART=2` (its part, 0-based): the song and part that are up.
     if let Ok(song) = std::env::var("RIG_SHOT_SONG") {
         let rig = wired.rig.clone();
-        let part = std::env::var("RIG_SHOT_PART").ok().and_then(|p| p.parse::<u32>().ok());
+        let part = std::env::var("RIG_SHOT_PART")
+            .ok()
+            .and_then(|p| p.parse::<u32>().ok());
         runtime.block_on(async move {
             if let Ok(perf) = rig.perf().await {
-                if let Some(i) = perf.songs.iter().position(|s| s.name.eq_ignore_ascii_case(&song)) {
+                if let Some(i) = perf
+                    .songs
+                    .iter()
+                    .position(|s| s.name.eq_ignore_ascii_case(&song))
+                {
                     let _ = rig.select_song(i as u32).await;
                     if let Some(p) = part {
                         let _ = rig.select_part(p).await;
@@ -147,12 +157,18 @@ fn main() {
         let rig = wired.rig.clone();
         runtime.block_on(async move {
             let Ok(bar) = rig.macros().await else { return };
-            let Some(k) = bar.into_iter().find(|k| k.id == knob) else { return };
+            let Some(k) = bar.into_iter().find(|k| k.id == knob) else {
+                return;
+            };
             if let Ok(ops) = std::env::var("RIG_SHOT_TUNE_OPS") {
                 for op in ops.split(';') {
                     let parts: Vec<&str> = op.split(':').collect();
-                    let [i, op, v] = parts.as_slice() else { continue };
-                    let (Ok(i), Ok(v)) = (i.parse::<usize>(), v.parse::<f32>()) else { continue };
+                    let [i, op, v] = parts.as_slice() else {
+                        continue;
+                    };
+                    let (Ok(i), Ok(v)) = (i.parse::<usize>(), v.parse::<f32>()) else {
+                        continue;
+                    };
                     let Some(t) = k.tune.get(i) else { continue };
                     let _ = rig
                         .tune_macro(signal_guitar_proto::MacroTune {
@@ -232,12 +248,16 @@ fn Shot() -> Element {
         // (a block and its type): the right sidebar, open on it.
         let _ = provide_context(signal_guitar_ui::InitialSelection(shot_selection()));
         // `RIG_SHOT_MACRO=drive`: that macro's hover panel, held open.
-        let _ = provide_context(signal_guitar_ui::MacroPanelOpen(std::env::var("RIG_SHOT_MACRO").ok()));
+        let _ = provide_context(signal_guitar_ui::MacroPanelOpen(
+            std::env::var("RIG_SHOT_MACRO").ok(),
+        ));
         // `RIG_SHOT_TUNE=1`: that panel in tune mode.
         let _ = provide_context(signal_guitar_ui::MacroTuneMode(
             std::env::var("RIG_SHOT_TUNE").map_or(0, |v| v.parse::<u8>().unwrap_or(1)),
         ));
-        let _ = provide_context(signal_guitar_ui::MacroShotStatus(SHOT_STATUS.get().cloned()));
+        let _ = provide_context(signal_guitar_ui::MacroShotStatus(
+            SHOT_STATUS.get().cloned(),
+        ));
     });
     rsx! {
         // The same two stylesheets the window mounts. Without them the shot is

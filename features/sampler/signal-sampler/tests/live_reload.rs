@@ -42,7 +42,10 @@ fn db(x: f32) -> f32 {
 }
 
 fn max_diff(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max)
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, f32::max)
 }
 
 fn sine(hz: f32, amp: f32) -> Arc<Vec<f32>> {
@@ -92,7 +95,9 @@ fn set(mut block: RigBlock, param: &str, value: &str) -> RigBlock {
 }
 
 fn patch(name: &str, blocks: Vec<RigBlock>) -> RigPatch {
-    blocks.into_iter().fold(RigPatch::new(name), RigPatch::with_block)
+    blocks
+        .into_iter()
+        .fold(RigPatch::new(name), RigPatch::with_block)
 }
 
 fn profile(lead: Vec<RigBlock>, clean: Vec<RigBlock>) -> RigProfile {
@@ -164,9 +169,15 @@ fn a_structural_param_rebuilds_just_that_chain() {
             .with_param("meter", meter)
     };
     let mut prig = rig(profile(vec![comp("0"), verb(0.5)], vec![delay(300.0, 0.4)]));
-    let report = prig.reload_profile(profile(vec![comp("2"), verb(0.5)], vec![delay(300.0, 0.4)]), None);
+    let report = prig.reload_profile(
+        profile(vec![comp("2"), verb(0.5)], vec![delay(300.0, 0.4)]),
+        None,
+    );
     assert_eq!((report.built, report.retuned, report.reused), (1, 0, 1));
-    assert!(report.switched, "the playing chain rebuilt, switched in gaplessly");
+    assert!(
+        report.switched,
+        "the playing chain rebuilt, switched in gaplessly"
+    );
     // A threshold alone is a setting.
     let report = prig.reload_profile(
         profile(
@@ -222,7 +233,10 @@ fn a_knob_turned_while_the_chains_build_is_kept() {
             "knob during a {} reload: largest difference from a chain built with it {d:e}",
             if rebuild { "rebuilding" } else { "retuning" }
         );
-        assert!(d < 1e-6, "the knob's level is on the committed chain: {d:e}");
+        assert!(
+            d < 1e-6,
+            "the knob's level is on the committed chain: {d:e}"
+        );
     }
 }
 
@@ -253,7 +267,9 @@ fn macro_positions_are_on_a_rebuilt_chain_from_its_first_sample() {
     let (lo, hi) = around
         .chunks(win)
         .map(rms)
-        .fold((f32::INFINITY, 0.0f32), |(lo, hi), r| (lo.min(r), hi.max(r)));
+        .fold((f32::INFINITY, 0.0f32), |(lo, hi), r| {
+            (lo.min(r), hi.max(r))
+        });
     let after = rms(&heard(prig.rig(), 0.1));
     println!(
         "macro'd trim through a rebuild: {:+.2} dB before, windows {:+.2}..{:+.2} dB through \
@@ -263,22 +279,36 @@ fn macro_positions_are_on_a_rebuilt_chain_from_its_first_sample() {
         db(hi),
         db(after)
     );
-    assert!((db(after) - db(before)).abs() < 0.05, "the new chain plays the macro'd level");
+    assert!(
+        (db(after) - db(before)).abs() < 0.05,
+        "the new chain plays the macro'd level"
+    );
     // Through the switch the old and new chains play the same note at the
     // same level, crossfaded equal-power: coherent, they sum to at most
     // +3 dB for the 8 ms of the fade (a footswitch between two identical
     // patches does the same). The baseline would be +6 dB, and stay.
-    assert!(db(hi) - db(before) < 3.1, "never up to the baseline, even for a window");
+    assert!(
+        db(hi) - db(before) < 3.1,
+        "never up to the baseline, even for a window"
+    );
     assert!(db(before) - db(lo) < 0.5, "no dip");
 
     // The session's overlay: a macro over a param the edit changed — Trim's
     // baseline goes to +3 dB, the macro puts it at -2 dB over that.
     let mut edited = profile(lead(0.0), vec![delay(300.0, 0.4)]);
-    edited.patches[0].chain = vec![gain("Trim", 3.0), gain("Out", 0.0), gain("Pad", 0.0), gain("Pad2", 0.0)];
+    edited.patches[0].chain = vec![
+        gain("Trim", 3.0),
+        gain("Out", 0.0),
+        gain("Pad", 0.0),
+        gain("Pad2", 0.0),
+    ];
     let ticket = prig.begin_reload(ReloadMode::Keep);
     let mut prepared = ticket.plan(edited, None).prepare();
     assert!(prepared.changes("Lead"));
-    prepared.set_overlay("Lead", vec![("Trim".into(), LiveWrite::Param("gain_db".into(), -2.0))]);
+    prepared.set_overlay(
+        "Lead",
+        vec![("Trim".into(), LiveWrite::Param("gain_db".into(), -2.0))],
+    );
     let report = prig.commit_reload(prepared, None);
     assert_eq!(report.built, 1);
     heard(prig.rig(), 0.1);
@@ -317,7 +347,11 @@ fn boost_and_tempo_are_carried_onto_a_rebuilt_chain() {
     heard(prig.rig(), 0.1);
     let report = prig.reload_profile(profile(lead(true), vec![delay(300.0, 0.4)]), None);
     assert_eq!(report.built, 1);
-    assert!(report.carried >= 2, "boost and tempo carried: {}", report.carried);
+    assert!(
+        report.carried >= 2,
+        "boost and tempo carried: {}",
+        report.carried
+    );
 
     // What a chain built with that boost and that tempo plays.
     let mut want = profile(lead(true), vec![delay(300.0, 0.4)]);
@@ -335,6 +369,8 @@ fn boost_and_tempo_are_carried_onto_a_rebuilt_chain() {
     let got = play_after(prig.rig(), 0.0, &sig, 1.0);
     let want = play_after(reference.rig(), 0.0, &sig, 1.0);
     let d = max_diff(&got, &want);
-    println!("boost + tempo after a rebuild: largest difference from a chain built with them {d:e}");
+    println!(
+        "boost + tempo after a rebuild: largest difference from a chain built with them {d:e}"
+    );
     assert!(d < 1e-6, "boost and tempo carried: {d:e}");
 }

@@ -347,6 +347,11 @@ pub struct PerformanceModel {
     /// assignments resolved.
     #[facet(default)]
     pub switch_actions: Vec<String>,
+    /// The switches' MIDI learn: which is waiting for a pedal, and what the
+    /// bound ones answer to (targets `"stack:N"`, `"tap"`, `"fx"`,
+    /// `"boost"`, `"tuner"`).
+    #[facet(default)]
+    pub learn: signal_rigs_proto::SwitchLearn,
 }
 
 /// One patch in the loaded profile — the preset browser's row.
@@ -1123,9 +1128,9 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode, MacroKnobView, MacroResult,
-        MacroSave, MacroTune,
-        PartOverride, PatchInfo, PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
+        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode,
+        MacroKnobView, MacroResult, MacroSave, MacroTune, PartOverride, PatchInfo,
+        PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
     };
 
     /// One live rig change. Every variant carries **full state** (idempotent
@@ -1440,6 +1445,14 @@ pub mod rig {
         fn play_preset(&self, index: u32);
         /// Tap tempo.
         fn tap_tempo(&self);
+        /// Learn the next pedal or pad pressed onto switch `target`
+        /// (`"stack:N"`, `"tap"`, `"fx"`, `"boost"`, `"tuner"`); the model's
+        /// `learn` shows it waiting. Learned pedals come before `midi.styx`.
+        fn midi_learn(&self, target: String);
+        /// Stop waiting for a pedal.
+        fn midi_learn_cancel(&self);
+        /// Unbind switch `target`.
+        fn midi_unlearn(&self, target: String);
         /// Toggle a block's bypass (by id).
         fn toggle_block_bypass(&self, id: String);
         /// Set a block's bypass explicitly (the rotate controls need set,
@@ -1470,6 +1483,15 @@ pub mod rig {
         /// captures) or live (its settings). Both are kept; saved and
         /// rebuilt.
         fn set_core_frozen(&self, preset: String, snapshot: String, frozen: bool);
+        /// Start auditioning from the sound browser: remember the profile's
+        /// picks (and the song's), so arrowing through presets can be undone
+        /// by [`browse_audition_end`](Self::browse_audition_end). A second
+        /// begin keeps the first snapshot. The same process as the keys rig's
+        /// `audition_begin`.
+        fn browse_audition_begin(&self);
+        /// Stop auditioning: keep what is playing, or put back the picks
+        /// from before it began.
+        fn browse_audition_end(&self, keep: bool);
         /// Step the active patch's `module` pick through its preset's
         /// snapshots (`delta` −1 / +1, wrapping). With no pick yet, takes
         /// the module's first preset.
@@ -1531,7 +1553,13 @@ pub mod rig {
         /// Delete a module preset — refused while anything refers to it.
         fn delete_module_preset(&self, module: String, name: String);
         /// Rename one snapshot of a module preset; references follow.
-        fn rename_module_snapshot(&self, module: String, preset: String, old: String, new_name: String);
+        fn rename_module_snapshot(
+            &self,
+            module: String,
+            preset: String,
+            old: String,
+            new_name: String,
+        );
         /// Delete one snapshot — refused for the last one, or while a
         /// preset or patch names it.
         fn delete_module_snapshot(&self, module: String, preset: String, snapshot: String);
@@ -1662,3 +1690,6 @@ mod tests {
         assert_eq!(perf.buffer_latency_ms(), 0.0);
     }
 }
+
+/// The switches' MIDI learn state (shared by every rig).
+pub use signal_rigs_proto::SwitchLearn;

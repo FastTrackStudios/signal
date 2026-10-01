@@ -210,7 +210,11 @@ pub fn roles(names: &[&str], r_loaded: bool) -> Vec<Option<Role>> {
 
 /// Wrap the stage's blocks of a built chain in [`BlendStage`]s, in place;
 /// every other block is left exactly where it is.
-pub fn wrap(boxes: &mut [Option<Box<dyn PluginInstance>>], roles: &[Option<Role>], max_block: usize) {
+pub fn wrap(
+    boxes: &mut [Option<Box<dyn PluginInstance>>],
+    roles: &[Option<Role>],
+    max_block: usize,
+) {
     if roles.iter().all(Option::is_none) {
         return;
     }

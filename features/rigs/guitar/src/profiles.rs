@@ -338,7 +338,14 @@ impl OverrideDef {
 /// dry at the block's `dry`, the effect added on top — so each runs fully
 /// wet (`mix` pinned at 1 in the chain) and how loud the effect sits is its
 /// `level`, in dB.
-pub const PARALLEL_FX: [&str; 6] = ["Pre Verb", "Pre Delay", "DLY 1", "DLY 2", "VERB 1", "VERB 2"];
+pub const PARALLEL_FX: [&str; 6] = [
+    "Pre Verb",
+    "Pre Delay",
+    "DLY 1",
+    "DLY 2",
+    "VERB 1",
+    "VERB 2",
+];
 
 #[must_use]
 pub fn is_parallel_fx(block: &str) -> bool {
@@ -349,7 +356,11 @@ pub fn is_parallel_fx(block: &str) -> bool {
 /// the level's −60 dB (off).
 #[must_use]
 pub fn mix_to_level_db(mix: f32) -> f32 {
-    if mix <= 0.001 { -60.0 } else { (20.0 * mix.log10()).max(-60.0) }
+    if mix <= 0.001 {
+        -60.0
+    } else {
+        (20.0 * mix.log10()).max(-60.0)
+    }
 }
 
 impl OverrideDef {
@@ -357,7 +368,8 @@ impl OverrideDef {
     /// same: before the effects ran fully wet, their amount was `mix`, and
     /// stored presets, patches and sections still say so.
     pub fn pin_parallel_mix(&mut self) {
-        if self.op == "set" && self.param.eq_ignore_ascii_case("mix") && is_parallel_fx(&self.block) {
+        if self.op == "set" && self.param.eq_ignore_ascii_case("mix") && is_parallel_fx(&self.block)
+        {
             self.param = "level".into();
             self.value = mix_to_level_db(self.value);
         }
@@ -643,11 +655,20 @@ pub fn slot_pedal(slot: &str, drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -
         .iter()
         .find(|d| d.block.eq_ignore_ascii_case(slot))
         .map(|d| (d.preset.clone(), d.option))
-        .or_else(|| slot.eq_ignore_ascii_case(BOOST_SLOT).then(|| default_boost(dps)).flatten());
+        .or_else(|| {
+            slot.eq_ignore_ascii_case(BOOST_SLOT)
+                .then(|| default_boost(dps))
+                .flatten()
+        });
     let found = assignment.and_then(|(preset, i)| {
         let p = dps.iter().find(|p| p.name.eq_ignore_ascii_case(&preset))?;
         let o = p.options.get(i).or_else(|| p.options.first())?;
-        Some(SlotPedal { pedal: p.name.clone(), option: o.name.clone(), nam: o.nam.clone(), empty: false })
+        Some(SlotPedal {
+            pedal: p.name.clone(),
+            option: o.name.clone(),
+            nam: o.nam.clone(),
+            empty: false,
+        })
     });
     match found {
         Some(s) => s,
@@ -655,7 +676,10 @@ pub fn slot_pedal(slot: &str, drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -
             pedal: "Clean Boost (built-in)".to_string(),
             ..SlotPedal::default()
         },
-        None => SlotPedal { empty: true, ..SlotPedal::default() },
+        None => SlotPedal {
+            empty: true,
+            ..SlotPedal::default()
+        },
     }
 }
 
@@ -942,7 +966,12 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 on_fx(
                     BlockType::Reverb,
                     "VERB 1",
-                    &[("mix", "1"), ("level", "-22"), ("decay", "0.42"), ("size", "0.45")],
+                    &[
+                        ("mix", "1"),
+                        ("level", "-22"),
+                        ("decay", "0.42"),
+                        ("size", "0.45"),
+                    ],
                 ),
                 "Time",
             ))
@@ -1273,10 +1302,17 @@ impl SongDef {
     /// Record `ov` on `patch` for this song (replacing the same block /
     /// param / op).
     pub fn set_patch_override(&mut self, patch: &str, ov: OverrideDef) {
-        let entry = match self.patch_overrides.iter().position(|e| e.patch.eq_ignore_ascii_case(patch)) {
+        let entry = match self
+            .patch_overrides
+            .iter()
+            .position(|e| e.patch.eq_ignore_ascii_case(patch))
+        {
             Some(i) => &mut self.patch_overrides[i],
             None => {
-                self.patch_overrides.push(SongPatchOverridesDef { patch: patch.to_string(), overrides: Vec::new() });
+                self.patch_overrides.push(SongPatchOverridesDef {
+                    patch: patch.to_string(),
+                    overrides: Vec::new(),
+                });
                 self.patch_overrides.last_mut().expect("just pushed")
             }
         };
@@ -1303,7 +1339,9 @@ impl SongDef {
     pub fn version_of(&self, profile: &str, patch: &str) -> Option<&PatchDef> {
         self.patch_versions
             .iter()
-            .find(|v| v.profile.eq_ignore_ascii_case(profile) && v.patch.name.eq_ignore_ascii_case(patch))
+            .find(|v| {
+                v.profile.eq_ignore_ascii_case(profile) && v.patch.name.eq_ignore_ascii_case(patch)
+            })
             .map(|v| &v.patch)
     }
 
@@ -1357,7 +1395,11 @@ impl SongDef {
 
     /// Take the song's changes to `patch` out of it.
     pub fn take_patch_overrides(&mut self, patch: &str) -> Vec<OverrideDef> {
-        match self.patch_overrides.iter().position(|e| e.patch.eq_ignore_ascii_case(patch)) {
+        match self
+            .patch_overrides
+            .iter()
+            .position(|e| e.patch.eq_ignore_ascii_case(patch))
+        {
             Some(i) => self.patch_overrides.remove(i).overrides,
             None => Vec::new(),
         }
@@ -1391,7 +1433,11 @@ impl SongDef {
             let next = self
                 .own_recall(&cur)
                 .map(|r| r.repeat_of.trim().to_string())
-                .filter(|n| !n.is_empty() && !n.eq_ignore_ascii_case(&cur) && self.parts.iter().any(|p| p.eq_ignore_ascii_case(n)));
+                .filter(|n| {
+                    !n.is_empty()
+                        && !n.eq_ignore_ascii_case(&cur)
+                        && self.parts.iter().any(|p| p.eq_ignore_ascii_case(n))
+                });
             match next {
                 Some(n) => cur = n,
                 None => break,
@@ -1500,9 +1546,18 @@ impl SongDef {
     pub fn remove_part(&mut self, name: &str) -> bool {
         // Its repeats keep its sound: each takes a copy of what it recalled.
         if let Some(src) = self.own_recall(name).cloned() {
-            for r in self.part_recalls.iter_mut().filter(|r| r.repeat_of.eq_ignore_ascii_case(name)) {
+            for r in self
+                .part_recalls
+                .iter_mut()
+                .filter(|r| r.repeat_of.eq_ignore_ascii_case(name))
+            {
                 let (part, section) = (r.part.clone(), r.section.clone());
-                *r = PartRecallDef { part, section, repeat_of: src.repeat_of.clone(), ..src.clone() };
+                *r = PartRecallDef {
+                    part,
+                    section,
+                    repeat_of: src.repeat_of.clone(),
+                    ..src.clone()
+                };
             }
         }
         let before = self.parts.len();
@@ -2084,13 +2139,26 @@ mod song_tests {
     #[test]
     fn a_repeat_is_linked_to_its_part() {
         let mut s = song();
-        s.parts = ["Verse 2", "Chorus 2", "Bridge", "Dance! (V2)"].map(String::from).to_vec();
+        s.parts = ["Verse 2", "Chorus 2", "Bridge", "Dance! (V2)"]
+            .map(String::from)
+            .to_vec();
         s.part_recalls = vec![
-            PartRecallDef { part: "Verse 2".into(), patch: "Dry Chorus Clean L".into(), ..Default::default() },
-            PartRecallDef { part: "Dance! (V2)".into(), repeat_of: "Verse 2".into(), ..Default::default() },
+            PartRecallDef {
+                part: "Verse 2".into(),
+                patch: "Dry Chorus Clean L".into(),
+                ..Default::default()
+            },
+            PartRecallDef {
+                part: "Dance! (V2)".into(),
+                repeat_of: "Verse 2".into(),
+                ..Default::default()
+            },
         ];
         assert_eq!(s.source_part("Dance! (V2)"), "Verse 2");
-        assert_eq!(s.part_recall("Dance! (V2)").unwrap().patch, "Dry Chorus Clean L");
+        assert_eq!(
+            s.part_recall("Dance! (V2)").unwrap().patch,
+            "Dry Chorus Clean L"
+        );
         assert!(s.rename_part("Verse 2", "V2"));
         assert_eq!(s.source_part("Dance! (V2)"), "V2");
         assert!(s.remove_part("V2"));
@@ -2104,19 +2172,38 @@ mod song_tests {
     #[test]
     fn a_song_plays_its_version_of_a_patch() {
         let prof = worship_def();
-        let base = prof.patches.iter().find(|p| p.name == "Lead").cloned().expect("Lead");
+        let base = prof
+            .patches
+            .iter()
+            .find(|p| p.name == "Lead")
+            .cloned()
+            .expect("Lead");
         let mut s = song();
-        s.version_mut(&prof.name, &base).modules.push(ModuleChoiceDef {
-            module: "Delay".into(),
-            preset: "U2 Edge".into(),
-            snapshot: "Streets".into(),
-        });
+        s.version_mut(&prof.name, &base)
+            .modules
+            .push(ModuleChoiceDef {
+                module: "Delay".into(),
+                preset: "U2 Edge".into(),
+                snapshot: "Streets".into(),
+            });
         let played = s.apply_to(&prof);
         let lead = played.patches.iter().find(|p| p.name == "Lead").unwrap();
         assert!(lead.modules.iter().any(|m| m.snapshot == "Streets"));
-        let other = ProfileDef { name: "Blues".into(), ..prof.clone() };
+        let other = ProfileDef {
+            name: "Blues".into(),
+            ..prof.clone()
+        };
         let blues = s.apply_to(&other);
-        assert!(!blues.patches.iter().find(|p| p.name == "Lead").unwrap().modules.iter().any(|m| m.snapshot == "Streets"));
+        assert!(
+            !blues
+                .patches
+                .iter()
+                .find(|p| p.name == "Lead")
+                .unwrap()
+                .modules
+                .iter()
+                .any(|m| m.snapshot == "Streets")
+        );
         assert!(s.take_version(&prof.name, "Lead").is_some());
         assert!(s.version_of(&prof.name, "Lead").is_none());
     }
@@ -2234,13 +2321,24 @@ mod trim_tests {
             .iter()
             .position(|b| b.name.eq_ignore_ascii_case(TRIM_BLOCK))
             .expect("trim block");
-        for m in ["Chorus", "Flanger", "Phaser", "Tremolo", "Vibrato", "Rotary", "Boost", "Amp L", "Amp EQ"] {
-            if let Some(i) = patch.chain.iter().position(|b| b.name.eq_ignore_ascii_case(m)) {
+        for m in [
+            "Chorus", "Flanger", "Phaser", "Tremolo", "Vibrato", "Rotary", "Boost", "Amp L",
+            "Amp EQ",
+        ] {
+            if let Some(i) = patch
+                .chain
+                .iter()
+                .position(|b| b.name.eq_ignore_ascii_case(m))
+            {
                 assert!(i < trim, "{m} must come before the trim");
             }
         }
         let next = patch.chain.get(trim + 1).expect("the time module follows");
-        assert!(next.is_time_module(), "the first block after the trim is the Time module's, got {}", next.name);
+        assert!(
+            next.is_time_module(),
+            "the first block after the trim is the Time module's, got {}",
+            next.name
+        );
     }
 
     /// Calibration and the player's own level ADD. Normalisation puts every
@@ -2584,13 +2682,22 @@ mod slot_tests {
             name: name.into(),
             options: options
                 .iter()
-                .map(|(n, f)| DriveOptionDef { name: (*n).into(), nam: (*f).into(), hash: String::new(), level_db: 0.0 })
+                .map(|(n, f)| DriveOptionDef {
+                    name: (*n).into(),
+                    nam: (*f).into(),
+                    hash: String::new(),
+                    level_db: 0.0,
+                })
                 .collect(),
         }
     }
 
     fn slot(block: &str, preset: &str, option: usize) -> DriveSlotDef {
-        DriveSlotDef { block: block.into(), preset: preset.into(), option }
+        DriveSlotDef {
+            block: block.into(),
+            preset: preset.into(),
+            option,
+        }
     }
 
     /// A slot names the pedal assigned to it and which capture; the boost
@@ -2599,15 +2706,24 @@ mod slot_tests {
     #[test]
     fn a_slot_names_the_pedal_it_plays() {
         let dps = vec![
-            pedal("King of Tone", &[("Red", "/m/kot red.nam"), ("Both Sides", "/m/kot both.nam")]),
+            pedal(
+                "King of Tone",
+                &[("Red", "/m/kot red.nam"), ("Both Sides", "/m/kot both.nam")],
+            ),
             pedal("Clean Boost", &[("King of Tone Red", "/m/kot red.nam")]),
         ];
         let drives = vec![slot("Drive 1", "King of Tone", 1)];
         let d1 = slot_pedal("Drive 1", &drives, &dps);
-        assert_eq!((d1.pedal.as_str(), d1.option.as_str(), d1.empty), ("King of Tone", "Both Sides", false));
+        assert_eq!(
+            (d1.pedal.as_str(), d1.option.as_str(), d1.empty),
+            ("King of Tone", "Both Sides", false)
+        );
         assert_eq!(d1.nam, "/m/kot both.nam");
         let boost = slot_pedal("Boost", &drives, &dps);
-        assert_eq!((boost.pedal.as_str(), boost.option.as_str()), ("Clean Boost", "King of Tone Red"));
+        assert_eq!(
+            (boost.pedal.as_str(), boost.option.as_str()),
+            ("Clean Boost", "King of Tone Red")
+        );
         let native = slot_pedal("Boost", &drives, &dps[..1]);
         assert_eq!(native.pedal, "Clean Boost (built-in)");
         assert!(!native.empty);

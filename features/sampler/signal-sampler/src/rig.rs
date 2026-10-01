@@ -979,15 +979,16 @@ impl OutputTap {
             if let Ok(mut cap) = self.shared.capture.try_lock() {
                 cap.0.extend_from_slice(&l[..take]);
                 cap.1.extend_from_slice(&r[..take]);
-                self.shared.remaining.store(remaining - take, Ordering::Relaxed);
+                self.shared
+                    .remaining
+                    .store(remaining - take, Ordering::Relaxed);
             }
         }
     }
 }
 
 /// Unity below −0.4 dBFS; above it, a smooth knee into full scale.
-#[cfg(not(target_arch = "wasm32"))]
-fn soft_ceiling(x: f32) -> f32 {
+pub(crate) fn soft_ceiling(x: f32) -> f32 {
     const KNEE: f32 = 0.955;
     let a = x.abs();
     if a <= KNEE {
@@ -1254,7 +1255,11 @@ pub fn prepare_chain_with(
             if let Some(inner) = boxes[i].take() {
                 // The time stage's second block adds only its wet; the stage
                 // carries the dry.
-                let pass = if stage_roles[i] == Some(crate::time_stage::Role::Add) { 0.0 } else { 1.0 };
+                let pass = if stage_roles[i] == Some(crate::time_stage::Role::Add) {
+                    0.0
+                } else {
+                    1.0
+                };
                 boxes[i] = Some(Box::new(crate::block_gate::BlockGate::new(
                     inner,
                     gates[i].clone(),
@@ -1293,7 +1298,10 @@ pub fn prepare_chain_with(
         }
     }
 
-    let applied = blocks.iter().map(crate::block_params::BlockState::built).collect();
+    let applied = blocks
+        .iter()
+        .map(crate::block_params::BlockState::built)
+        .collect();
     Ok(PreparedChain {
         boxes,
         names,
@@ -1439,6 +1447,18 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
     }
 }
 
+/// Sample-block preloads still running in this process (each block opens
+/// its zones on a background thread; a note whose zone isn't open yet is
+/// dropped). A host that must not lose the first notes — a render, a rig
+/// coming up — waits for [`preloads_pending`] to reach 0.
+static PRELOADS_PENDING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// How many sample-block preloads are still running (see [`PRELOADS_PENDING`]).
+#[must_use]
+pub fn preloads_pending() -> usize {
+    PRELOADS_PENDING.load(std::sync::atomic::Ordering::Acquire)
+}
+
 /// Build a sample block's **Sample Soundsource** — the `SampleEngine`
 /// wrapped as a [`SamplerInstrument`](crate::SamplerInstrument), same as the
 /// sampler TUI's loading path (`PlayerPatch::load/from_pack` +
@@ -1527,8 +1547,115 @@ pub(crate) fn build_sample_source(
     if let Some(v) = block.param_f32("amp_attack") {
         engine.set_attack_frames((v.max(0.0) * sample_rate as f32) as usize);
     }
+    if let Some(v) = block.param_f32("amp_decay") {
+        engine.set_decay_frames((v.max(0.0) * sample_rate as f32) as usize);
+    }
+    if let Some(v) = block.param_f32("amp_sustain") {
+        engine.set_sustain_level(v);
+    }
     if let Some(v) = block.param_f32("amp_release") {
         engine.set_release_frames((v.max(0.0) * sample_rate as f32) as usize);
+    }
+    // An imported layer's breakpoint amp envelope and velocity law.
+    if let Some(spec) = block.param_str("amp_points") {
+        let points = crate::native::parse_points(&spec);
+        if points.len() >= 2 {
+            engine.set_amp_points(Some(
+                crate::native::breakpoints::Breakpoints::with_penultimate_sustain(points)
+                    .with_synced(block.param_f32("amp_sync").unwrap_or(0.0) > 0.5),
+            ));
+        }
+    }
+    // An NI piano layer played with a gig's snapshot of its controls.
+    if let Some(s) = block
+        .param_str("piano_snapshot")
+        .and_then(|s| crate::piano_release::Snapshot::from_name(&s))
+    {
+        engine.set_piano_snapshot(s);
+    }
+    // A patch's polyphony in notes: a new note past it steals the stalest.
+    if let Some(n) = block.param_f32("max_notes") {
+        engine.set_max_notes(Some(n.round().max(1.0) as usize));
+    }
+    // One mic of a multi-mic source, when the source has it — else every
+    // mic plays (a missing name must never silence the source).
+    if let Some(m) = block.param_str("prefer_mic").filter(|m| engine.has_mic(m)) {
+        engine.set_solo_mic(Some(m));
+    }
+    // One mic of a multi-mic source (the others silent).
+    if let Some(m) = block.param_str("solo_mic").filter(|m| !m.is_empty()) {
+        engine.set_solo_mic(Some(m));
+    }
+    // An Omnisphere layer's soundsource Release Volume: dB, or "off".
+    match block.param_str("release_db").as_deref() {
+        Some("off") => engine.set_release_level_db(None),
+        Some(v) => {
+            if let Ok(db) = v.parse::<f32>() {
+                engine.set_release_level_db(Some(db));
+            }
+        }
+        None => {}
+    }
+    if let Some(s) = block.param_f32("vel_sens") {
+        engine.set_velocity_sens(Some(s));
+    }
+    // One soundsource of a multi-soundsource pack (its zones' articulation).
+    if let Some(a) = block.param_str("articulation").filter(|a| !a.is_empty()) {
+        engine.set_articulation(a);
+    }
+    if let Some(v) = block.param_f32("zone_velocity") {
+        engine.set_zone_velocity(Some(v.round() as u8));
+    }
+    if block.param_str("transpose_mode").is_some_and(|m| m == "resample") {
+        engine.set_resample_transpose(true);
+    }
+    // Harmonia voices (an Omnisphere sample layer's).
+    let harmonia: Vec<(f32, f32, f32)> = (1..=4)
+        .filter_map(|n| {
+            let level = block.param_f32(&format!("harm{n}_level"))?;
+            (level > 0.0).then(|| {
+                (
+                    block.param_f32(&format!("harm{n}_interval")).unwrap_or(0.0),
+                    level,
+                    block.param_f32(&format!("harm{n}_pan")).unwrap_or(0.0),
+                )
+            })
+        })
+        .collect();
+    if !harmonia.is_empty() {
+        engine.set_harmonia(harmonia);
+    }
+    if let Some(k) = block.param_f32("timbre_semis") {
+        engine.set_timbre_shift(k.round() as i32);
+    }
+    if let Some(hz) = block.param_f32("filter_cutoff_hz") {
+        let s = |k: &str, d: f32| block.param_f32(k).unwrap_or(d);
+        engine.set_voice_filter(
+            crate::native::AdsrParams {
+                attack_s: s("filter_attack", 0.0).max(0.0),
+                decay_s: s("filter_decay", 0.0).max(0.0),
+                sustain: s("filter_sustain", 1.0).clamp(0.0, 1.0),
+                release_s: s("filter_release", 0.0).max(0.0),
+            },
+            s("filter_env_amt", 0.0),
+            hz,
+            s("filter_resonance", 0.0),
+            s("filter_keytrack", 0.0),
+        );
+    }
+    if let Some(depth) = block.param_f32("vib_depth") {
+        engine.set_vibrato(
+            block.param_f32("vib_rate").unwrap_or(5.0),
+            depth,
+            block.param_f32("vib_delay_ms").unwrap_or(0.0),
+        );
+    }
+    let (st, cents) = (
+        block.param_f32("transpose").unwrap_or(0.0),
+        block.param_f32("fine").unwrap_or(0.0),
+    );
+    if st != 0.0 || cents != 0.0 {
+        engine.set_tune(st, cents);
     }
     // Decode in the background, middle-out from middle C, so the block is
     // playable almost immediately and never blocks the caller (same
@@ -1559,10 +1686,13 @@ pub(crate) fn build_sample_source(
     }
     let label = name.clone();
     #[cfg(not(target_arch = "wasm32"))]
+    PRELOADS_PENDING.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+    #[cfg(not(target_arch = "wasm32"))]
     if let Err(err) = std::thread::Builder::new()
         .name(format!("signal-preload:{label}"))
         .spawn(move || {
             let stats = cache.preload(paths.iter().map(std::path::PathBuf::as_path));
+            PRELOADS_PENDING.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
             tracing::info!(
                 library = %label,
                 loaded = stats.loaded,
@@ -1575,6 +1705,7 @@ pub(crate) fn build_sample_source(
             );
         })
     {
+        PRELOADS_PENDING.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
         tracing::warn!(err = %err, "failed to spawn sample block preload thread");
     }
     // wasm32: no streamer thread, so this runs synchronously on the caller —
@@ -1693,7 +1824,8 @@ pub struct GuitarRig {
     /// The offline rig's renderer and playhead — the same `ProjectRenderer`
     /// the realtime callback drives, pulled here by `render_offline` instead
     /// of by an audio device. `None` for a live rig.
-    offline: Option<std::sync::Mutex<(daw::standalone::audio_engine::render::ProjectRenderer, u64)>>,
+    offline:
+        Option<std::sync::Mutex<(daw::standalone::audio_engine::render::ProjectRenderer, u64)>>,
     /// Live realtime metrics (render time / block size) from the duplex engine,
     /// driving the rig's DSP-load meter. `None` under the cpal fallback.
     engine_stats: Option<Arc<EngineStats>>,
@@ -1942,7 +2074,9 @@ impl GuitarRig {
     fn assemble(
         daw: Standalone,
         host: Option<DuplexRigHost>,
-        offline: Option<std::sync::Mutex<(daw::standalone::audio_engine::render::ProjectRenderer, u64)>>,
+        offline: Option<
+            std::sync::Mutex<(daw::standalone::audio_engine::render::ProjectRenderer, u64)>,
+        >,
         engine_stats: Option<Arc<EngineStats>>,
         meters: Arc<Meters>,
         track_guid: String,
@@ -1992,7 +2126,9 @@ impl GuitarRig {
         /// the size a realtime callback would plausibly use.
         const BLOCK: usize = 512;
         let Some(offline) = &self.offline else { return };
-        let Ok(mut guard) = offline.lock() else { return };
+        let Ok(mut guard) = offline.lock() else {
+            return;
+        };
         let (renderer, playhead) = &mut *guard;
         let mut left = frames;
         while left > 0 {
@@ -2006,7 +2142,11 @@ impl GuitarRig {
     /// The next `frames` of the chain's real output, `(left, right)` — the
     /// one measurement both engines share. Offline, rendered on the spot;
     /// live, captured as the device plays (blocks until it is, or `timeout`).
-    pub fn measure_output(&self, frames: usize, timeout: std::time::Duration) -> (Vec<f32>, Vec<f32>) {
+    pub fn measure_output(
+        &self,
+        frames: usize,
+        timeout: std::time::Duration,
+    ) -> (Vec<f32>, Vec<f32>) {
         self.arm_output_capture(frames);
         if self.is_offline() {
             self.render_offline(frames);
@@ -3138,7 +3278,10 @@ impl GuitarRig {
                 input_db: (param_name == "input_trim").then_some(value),
                 output_db: (param_name == "output_trim").then_some(value),
             };
-            let mut swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut swap = self
+                .swap
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if let Some(st) = swap
                 .active
                 .and_then(|a| swap.chains.get_mut(&a))
@@ -3249,7 +3392,9 @@ mod tests {
             .with_param("decay", "0.8");
         let a = rig.install_chain(&[verb]).unwrap();
         let b = rig
-            .install_chain(&[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "0")])
+            .install_chain(
+                &[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "0")],
+            )
             .unwrap();
         // A 50 ms burst, then silence (the test signal loops: make it long).
         let mut sig = vec![0.0f32; 48_000 * 20];
@@ -3261,11 +3406,17 @@ mod tests {
         rig.set_active(Some(a));
         rig.start_test_signal(Arc::new(sig));
         let before = heard(&rig, 0.3);
-        assert!(rms(&before[4_800..]) > 1e-3, "A's reverb rings before the switch");
+        assert!(
+            rms(&before[4_800..]) > 1e-3,
+            "A's reverb rings before the switch"
+        );
         rig.set_active(Some(b));
         let after = heard(&rig, 1.0);
         let late = rms(&after[24_000..]);
-        assert!(late > 1e-4, "A's tail still rings 0.5 s after switching to B: {late}");
+        assert!(
+            late > 1e-4,
+            "A's tail still rings 0.5 s after switching to B: {late}"
+        );
         assert_eq!(rig.tail_voices(), 1);
     }
 
@@ -3274,10 +3425,14 @@ mod tests {
     fn switching_back_after_the_tail_has_ended_plays_the_patch() {
         let mut rig = GuitarRig::open_offline(48_000).unwrap();
         let loud = rig
-            .install_chain(&[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "6")])
+            .install_chain(
+                &[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "6")],
+            )
             .unwrap();
         let quiet = rig
-            .install_chain(&[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "-6")])
+            .install_chain(&[
+                RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "-6")
+            ])
             .unwrap();
         rig.start_test_signal(Arc::new(vec![0.25f32; 48_000]));
         rig.set_active(Some(loud));
@@ -3287,7 +3442,10 @@ mod tests {
         rig.set_active(Some(loud));
         let out = heard(&rig, 0.1);
         let last = out[out.len() - 1];
-        assert!((last - 0.25 * 1.995).abs() < 0.01, "A at +6 dB again, not dry: {last}");
+        assert!(
+            (last - 0.25 * 1.995).abs() < 0.01,
+            "A at +6 dB again, not dry: {last}"
+        );
     }
 
     /// Two levels, one switch: no step between them.
@@ -3295,10 +3453,14 @@ mod tests {
     fn a_switch_crossfades_the_two_patches() {
         let mut rig = GuitarRig::open_offline(48_000).unwrap();
         let loud = rig
-            .install_chain(&[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "6")])
+            .install_chain(
+                &[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "6")],
+            )
             .unwrap();
         let quiet = rig
-            .install_chain(&[RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "-6")])
+            .install_chain(&[
+                RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "-6")
+            ])
             .unwrap();
         // A slow sine: its own sample-to-sample change is tiny, so any step
         // is the switch's.
@@ -3311,8 +3473,14 @@ mod tests {
         rig.set_active(Some(quiet));
         out.extend(heard(&rig, 0.2));
         let steady = 0.25 * 2.0 * std::f32::consts::TAU * 50.0 / 48_000.0;
-        let max_jump = out.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0, f32::max);
-        assert!(max_jump < steady * 1.5, "largest step {max_jump} vs a sine's own {steady}");
+        let max_jump = out
+            .windows(2)
+            .map(|w| (w[1] - w[0]).abs())
+            .fold(0.0, f32::max);
+        assert!(
+            max_jump < steady * 1.5,
+            "largest step {max_jump} vs a sine's own {steady}"
+        );
     }
 
     /// A 16-bit mono WAV of `samples` — an IR as the browser would fetch it.

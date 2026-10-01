@@ -40,7 +40,9 @@ fn rms(x: &[f32]) -> f32 {
 }
 
 fn max_step(x: &[f32]) -> f32 {
-    x.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0, f32::max)
+    x.windows(2)
+        .map(|w| (w[1] - w[0]).abs())
+        .fold(0.0, f32::max)
 }
 
 /// `a` against `b`, as the error's level below `b`'s (dB; lower is closer).
@@ -121,7 +123,10 @@ fn a_tail_rings_on_as_if_nothing_had_switched() {
     let skip = SR as usize / 50;
     assert!(rms(&want[skip..]) > 1e-3, "the reference rings");
     let e = error_db(&got[skip..], &want[skip..]);
-    assert!(e < -60.0, "the tail is the unswitched tail: error {e:.1} dB");
+    assert!(
+        e < -60.0,
+        "the tail is the unswitched tail: error {e:.1} dB"
+    );
 }
 
 /// A switch between two patches with time effects and different levels
@@ -220,7 +225,10 @@ fn a_bypassed_delay_rings_out() {
     assert!(rms(&got[SR as usize / 4..]) > 1e-3, "repeats still sound");
     let skip = SR as usize / 50;
     let e = error_db(&got[skip..], &want[skip..]);
-    assert!(e < -60.0, "the repeats are the unbypassed ones: error {e:.1} dB");
+    assert!(
+        e < -60.0,
+        "the repeats are the unbypassed ones: error {e:.1} dB"
+    );
 }
 
 /// A tail keeps the level its patch played at, not the new patch's.
@@ -293,10 +301,7 @@ fn a_switch_storm_never_drops_to_the_raw_input() {
     let out = rig.take_output_capture().0;
     // 0.05 · 4 (+12 dB) as RMS; the raw input would read a quarter of it.
     let expected = 0.05 * 3.98 * std::f32::consts::FRAC_1_SQRT_2;
-    let worst = out
-        .chunks(BLOCK)
-        .map(rms)
-        .fold(f32::INFINITY, f32::min);
+    let worst = out.chunks(BLOCK).map(rms).fold(f32::INFINITY, f32::min);
     assert!(
         worst > expected * 0.6,
         "every block through the chain: quietest {worst} vs {expected}"

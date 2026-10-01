@@ -321,6 +321,8 @@ fn MacroBand(#[props(default)] seed: Vec<KeysMacro>) -> Element {
 
     let scope = MacroScope::of(&selection.read());
     let accent = scope.accent();
+    // The band's tempo (0 = none yet) the synced delays follow.
+    let tempo_bpm = state.as_ref().map_or(0, |s| s.perform.read().tempo_bpm);
 
     // Re-pull whenever the selection moves or the rig publishes a mixer —
     // every macro move republishes, so the band reflects what it just did.
@@ -401,6 +403,8 @@ fn MacroBand(#[props(default)] seed: Vec<KeysMacro>) -> Element {
                         align-items: flex-start;",
                 crate::time_fx::DelayView {
                     lanes: fx_lanes.clone(),
+                    tempo_bpm: if tempo_bpm > 0 { tempo_bpm as f32 } else { 120.0 },
+                    synced: tempo_bpm > 0,
                     macros: dly_macros,
                     accent: "#38bdf8".to_string(),
                     on_change: {

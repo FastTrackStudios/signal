@@ -166,7 +166,16 @@ impl SampleEngine {
             let end = release_lifetime_frames.min(voice.data_num_frames());
             voice.with_sample_window(0, Some(end))
         } else {
-            voice
+            // A patch layer's breakpoint amp envelope and velocity law (an
+            // Omnisphere patch naming a Keyscape source).
+            let voice = voice.with_amp_points(self.amp_points.clone(), self.sample_rate);
+            match self.velocity_sens {
+                Some(s) => {
+                    let v = f32::from(self.last_velocity) / 127.0;
+                    voice.scaled_gain(1.0 - s + s * v * v)
+                }
+                None => voice,
+            }
         };
 
         // Structured trace + live tracing of the actual spawn — the ground
@@ -494,7 +503,8 @@ impl SampleEngine {
             .iter()
             .filter(|a| a.kind == ArticulationKind::Legato)
             .filter(|a| {
-                a.instrument_filter.is_empty() || a.instrument_filter.contains(&self.section)
+                a.instrument_filter.is_empty()
+                    || a.instrument_filter.iter().any(|f| **f == *self.section)
             })
             .filter(|a| a.is_sordino() == want_sord)
             .filter(|a| a.resolve_legato_role() == want_role)

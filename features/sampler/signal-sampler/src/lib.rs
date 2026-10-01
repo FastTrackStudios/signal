@@ -81,18 +81,16 @@
 // filesystem scans, the pack CLI). The wasm32 build keeps the pure engine +
 // tree renderer + the keys lane machinery — see `keys_rig::KeysRig::
 // open_headless` and the browser worklet entry (signal-keys-worklet).
-/// What each block of a chain costs (per-block DSP time and latency).
-pub mod block_profile;
 pub mod amp_blend;
-pub mod time_stage;
-pub mod block_gate;
-pub mod block_params;
-pub mod tail_stage;
 pub mod api;
 pub mod assets;
 pub mod audio_soundsource;
 pub mod bank;
 pub mod block;
+pub mod block_gate;
+pub mod block_params;
+/// What each block of a chain costs (per-block DSP time and latency).
+pub mod block_profile;
 /// Lane instruments compiled off the audio thread (wasm + threads), handed
 /// over by pointer through the shared heap — see the module docs.
 #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
@@ -116,6 +114,7 @@ pub mod from_node;
 pub mod gapless;
 pub mod instrument;
 pub mod keys_rig;
+pub mod lane_health;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod kit_tracks;
 pub mod loudness;
@@ -140,6 +139,8 @@ pub mod patch_level;
 /// velocity-domain transforms.
 ///
 /// See `features/rigs/keys/spec/piano-voice.md`.
+pub mod piano_note_law;
+pub mod piano_release;
 pub mod piano_voice;
 pub mod preset_registry;
 pub mod preset_spec;
@@ -164,6 +165,8 @@ pub mod soundsource;
 pub mod spec;
 pub mod stats;
 pub mod styx_edit;
+pub mod tail_stage;
+pub mod time_stage;
 pub mod to_node;
 
 pub use audio_soundsource::AudioSoundsource;
@@ -615,6 +618,7 @@ impl PlayerPatch {
                     trigger_cc: 0,
                     trigger_value_min: 0,
                     trigger_value_max: 0,
+                    pedal_state: String::new(),
                     mic: String::new(),
                     articulation: String::new(),
                     dynamic: String::new(),
@@ -903,4 +907,4 @@ impl PlayerPatch {
 }
 
 /// The drop log's event types and time base (see [`rig::GuitarRig::collect_drops`]).
-pub use daw_audio_io::duplex::{clock_ns, DropEvent, DropKind};
+pub use daw_audio_io::duplex::{DropEvent, DropKind, clock_ns};

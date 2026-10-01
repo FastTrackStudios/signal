@@ -509,6 +509,57 @@ struct ParallelLaneRt {
     instances: Vec<Box<dyn PluginInstance>>,
     gain_l: f32,
     gain_r: f32,
+    /// Delays the lane by what it is short of the slowest lane, so the lanes
+    /// sum sample-aligned (a lane with an oversampled or linear-phase block in
+    /// it would otherwise comb-filter against a dry one).
+    align: AlignDelay,
+}
+
+impl ParallelLaneRt {
+    /// The lane's latency: its series' latencies summed.
+    fn latency(&mut self) -> u32 {
+        self.instances.iter_mut().map(|i| i.latency()).sum()
+    }
+}
+
+/// Most a lane is ever delayed to line up with a slower one (~340 ms at
+/// 48 kHz — past any block's latency); a longer gap is capped here.
+const MAX_ALIGN: usize = 16_384;
+
+/// A stereo delay line of a variable length up to [`MAX_ALIGN`], sized in
+/// `prepare` so the audio thread never allocates.
+#[derive(Default)]
+struct AlignDelay {
+    l: Vec<f32>,
+    r: Vec<f32>,
+    write: usize,
+}
+
+impl AlignDelay {
+    fn reserve(&mut self) {
+        if self.l.len() != MAX_ALIGN {
+            self.l = vec![0.0; MAX_ALIGN];
+            self.r = vec![0.0; MAX_ALIGN];
+            self.write = 0;
+        }
+    }
+
+    /// Delay `l` / `r` in place by `delay` frames.
+    fn process(&mut self, l: &mut [f32], r: &mut [f32], delay: usize) {
+        let cap = self.l.len();
+        if delay == 0 || cap == 0 {
+            return;
+        }
+        let delay = delay.min(cap - 1);
+        for i in 0..l.len().min(r.len()) {
+            self.l[self.write] = l[i];
+            self.r[self.write] = r[i];
+            let read = (self.write + cap - delay) % cap;
+            l[i] = self.l[read];
+            r[i] = self.r[read];
+            self.write = (self.write + 1) % cap;
+        }
+    }
 }
 
 impl ParallelSum {
@@ -538,6 +589,7 @@ impl ParallelSum {
                 instances,
                 gain_l,
                 gain_r,
+                align: AlignDelay::default(),
             });
         }
         Ok(Self {
@@ -583,14 +635,21 @@ impl PluginInstance for ParallelSum {
     fn text_to_value(&mut self, _id: u32, _t: &str) -> Option<f64> {
         None
     }
+    /// The slowest lane's: the others are delayed to meet it.
     fn latency(&mut self) -> u32 {
-        0
+        self.lanes
+            .iter_mut()
+            .map(ParallelLaneRt::latency)
+            .max()
+            .unwrap_or(0)
+            .min(MAX_ALIGN as u32 - 1)
     }
     fn prepare(&mut self, sr: f64, bs: u32) -> Result<(), PluginError> {
         for lane in &mut self.lanes {
             for inst in &mut lane.instances {
                 inst.prepare(sr, bs)?;
             }
+            lane.align.reserve();
         }
         self.ensure_scratch(bs as usize);
         Ok(())
@@ -619,7 +678,10 @@ impl PluginInstance for ParallelSum {
         for v in &mut out_r[..frames] {
             *v = 0.0;
         }
+        // Re-read each block: a block's latency can follow its parameters.
+        let slowest = self.latency();
         for lane in &mut self.lanes {
+            let behind = slowest.saturating_sub(lane.latency()) as usize;
             // Feed each lane a fresh copy of the input.
             self.src_l[..frames].copy_from_slice(&in_l[..frames]);
             self.src_r[..frames].copy_from_slice(&in_r[..frames]);
@@ -641,6 +703,8 @@ impl PluginInstance for ParallelSum {
                 self.src_l[..frames].copy_from_slice(&self.lane_l[..frames]);
                 self.src_r[..frames].copy_from_slice(&self.lane_r[..frames]);
             }
+            lane.align
+                .process(&mut self.src_l[..frames], &mut self.src_r[..frames], behind);
             // Sum the lane (post-series in `src`) into the output with gains.
             for i in 0..frames {
                 out_l[i] += self.src_l[i] * lane.gain_l * self.level_lin;
@@ -1847,6 +1911,110 @@ impl Controller for SnapshotSwitcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A pure delay that reports it — stands in for an oversampled or
+    /// linear-phase block.
+    struct Late {
+        n: usize,
+        line: std::collections::VecDeque<(f32, f32)>,
+    }
+    impl PluginInstance for Late {
+        fn descriptor(&self) -> PluginDescriptor {
+            PluginDescriptor {
+                id: "late".into(),
+                name: "Late".into(),
+                vendor: String::new(),
+                version: String::new(),
+                format: PluginFormat::Synthetic,
+            }
+        }
+        fn params(&mut self) -> Vec<PluginParamInfo> {
+            Vec::new()
+        }
+        fn param_value(&mut self, _: u32) -> Option<f64> {
+            None
+        }
+        fn value_to_text(&mut self, _: u32, _: f64) -> Option<String> {
+            None
+        }
+        fn text_to_value(&mut self, _: u32, _: &str) -> Option<f64> {
+            None
+        }
+        fn latency(&mut self) -> u32 {
+            self.n as u32
+        }
+        fn prepare(&mut self, _: f64, _: u32) -> Result<(), PluginError> {
+            self.line = std::iter::repeat_n((0.0, 0.0), self.n).collect();
+            Ok(())
+        }
+        fn is_prepared(&self) -> bool {
+            true
+        }
+        fn process_block(
+            &mut self,
+            in_l: &[f32],
+            in_r: &[f32],
+            out_l: &mut [f32],
+            out_r: &mut [f32],
+            _: &PluginEvents<'_>,
+        ) -> Result<(), PluginError> {
+            for i in 0..out_l.len() {
+                self.line.push_back((in_l[i], in_r[i]));
+                let (l, r) = self.line.pop_front().unwrap_or_default();
+                out_l[i] = l;
+                out_r[i] = r;
+            }
+            Ok(())
+        }
+        fn deactivate(&mut self) {}
+    }
+
+    #[test]
+    fn parallel_lanes_sum_aligned_and_report_the_slowest_lane() {
+        let lane = |instances: Vec<Box<dyn PluginInstance>>| ParallelLaneRt {
+            instances,
+            gain_l: 1.0,
+            gain_r: 1.0,
+            align: AlignDelay::default(),
+        };
+        let mut sum = ParallelSum {
+            core: BlockCore::new(BlockId::new("p"), BlockRole::Utility),
+            lanes: vec![
+                lane(vec![Box::new(Late {
+                    n: 37,
+                    line: Default::default(),
+                })]),
+                lane(Vec::new()),
+            ],
+            level_lin: 1.0,
+            lane_l: Vec::new(),
+            lane_r: Vec::new(),
+            src_l: Vec::new(),
+            src_r: Vec::new(),
+        };
+        sum.prepare(48_000.0, 64).unwrap();
+        assert_eq!(sum.latency(), 37);
+        // An impulse down both lanes comes out as ONE impulse, at the
+        // reported latency — not two, 37 samples apart.
+        let mut heard = Vec::new();
+        for b in 0..2 {
+            let mut x = vec![0.0f32; 64];
+            if b == 0 {
+                x[0] = 1.0;
+            }
+            let (mut l, mut r) = (vec![0.0; 64], vec![0.0; 64]);
+            sum.process_block(&x, &x, &mut l, &mut r, &PluginEvents::default())
+                .unwrap();
+            heard.extend(l);
+        }
+        let hits: Vec<(usize, f32)> = heard
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(_, v)| v.abs() > 1e-6)
+            .collect();
+        assert_eq!(hits, vec![(37, 2.0)]);
+    }
 
     /// A headless fake [`Rig`] so the [`Controller`] built-ins can be tested
     /// without an audio device.

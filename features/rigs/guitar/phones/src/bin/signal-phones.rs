@@ -61,7 +61,10 @@ fn main() {
         }
     }
     let Some(_instance) = instance else {
-        tracing::info!("phones mixer: another one is running on {}", state.display());
+        tracing::info!(
+            "phones mixer: another one is running on {}",
+            state.display()
+        );
         return;
     };
 
@@ -84,9 +87,9 @@ fn main() {
             break;
         }
         let seq = link.config_seq();
-        let dead = stream.as_ref().is_some_and(|(b, s)| {
-            *s != seq || b.stats().stream_state.load(Ordering::Relaxed) < 0
-        });
+        let dead = stream
+            .as_ref()
+            .is_some_and(|(b, s)| *s != seq || b.stats().stream_state.load(Ordering::Relaxed) < 0);
         // Audio that stopped moving (the device's clock went away without
         // saying so) is a stream to reopen too.
         let beat = link.shared_heartbeat();
@@ -138,6 +141,8 @@ fn open(link: &Arc<PhonesLink>, block: u32) -> Result<Backend, String> {
         // The rig owns the device's rate; ask only for a small block.
         latency: None,
         buffer: Some(block),
+        // Its own process: its block is its own.
+        buffer_lower_only: false,
         input_device: device.clone(),
         output_device: device,
         allow_builtin_mic: false,

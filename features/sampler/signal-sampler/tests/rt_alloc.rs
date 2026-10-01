@@ -191,8 +191,12 @@ fn a_time_stage_allocates_nothing() {
     for _ in 0..200 {
         let ((), n) = audio(|| {
             let ev = PluginEvents::default();
-            boxes[0].process_block(&x, &x, &mut a_l, &mut a_r, &ev).unwrap();
-            boxes[1].process_block(&a_l, &a_r, &mut b_l, &mut b_r, &ev).unwrap();
+            boxes[0]
+                .process_block(&x, &x, &mut a_l, &mut a_r, &ev)
+                .unwrap();
+            boxes[1]
+                .process_block(&a_l, &a_r, &mut b_l, &mut b_r, &ev)
+                .unwrap();
         });
         total += n;
     }
@@ -234,8 +238,16 @@ fn rendering_through_reload_commits_allocates_nothing() {
     let gain = || RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "3");
     let profile = |decay: f32, ms: f32| {
         RigProfile::new("Rt")
-            .with_patch(RigPatch::new("Lead").with_block(gain()).with_block(verb(decay)))
-            .with_patch(RigPatch::new("Clean").with_block(gain()).with_block(delay(ms)))
+            .with_patch(
+                RigPatch::new("Lead")
+                    .with_block(gain())
+                    .with_block(verb(decay)),
+            )
+            .with_patch(
+                RigPatch::new("Clean")
+                    .with_block(gain())
+                    .with_block(delay(ms)),
+            )
     };
     let mut prig = ProfileRig::new(GuitarRig::open_offline(SR).expect("offline rig"));
     prig.set_level_match(false);
@@ -261,7 +273,10 @@ fn rendering_through_reload_commits_allocates_nothing() {
     let mut baseline = Vec::new();
     render(&prig, 400, &mut baseline);
     let floor = baseline[0];
-    assert!(baseline.iter().all(|&a| a == floor), "a steady floor: {baseline:?}");
+    assert!(
+        baseline.iter().all(|&a| a == floor),
+        "a steady floor: {baseline:?}"
+    );
     let mut through = Vec::new();
     // The playing patch rebuilt (a switch, a tail), another patch rebuilt
     // (no switch), and the playing patch rebuilt again while the first
@@ -270,9 +285,15 @@ fn rendering_through_reload_commits_allocates_nothing() {
     // time, a trim: written to the running chains, the playing one
     // included), with knob writes between.
     let mut retuned = 0;
-    for (k, (decay, ms)) in [(0.5, 300.0), (0.5, 450.0), (0.3, 450.0), (0.9, 200.0), (0.9, 250.0)]
-        .into_iter()
-        .enumerate()
+    for (k, (decay, ms)) in [
+        (0.5, 300.0),
+        (0.5, 450.0),
+        (0.3, 450.0),
+        (0.9, 200.0),
+        (0.9, 250.0),
+    ]
+    .into_iter()
+    .enumerate()
     {
         let report = prig.reload_profile(profile(decay, ms), None);
         assert!(report.is_committed());
@@ -284,7 +305,8 @@ fn rendering_through_reload_commits_allocates_nothing() {
     assert!(retuned >= 2, "retunes were exercised: {retuned}");
     // A retune of the playing patch itself: its trim.
     let mut retrim = profile(0.9, 250.0);
-    retrim.patches[0].chain[0] = RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "-4");
+    retrim.patches[0].chain[0] =
+        RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", "-4");
     let report = prig.reload_profile(retrim, None);
     assert_eq!((report.built, report.retuned), (0, 1));
     render(&prig, 200, &mut through);

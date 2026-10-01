@@ -4,9 +4,12 @@
 //! interpolation between frames. A pitch shift of N semitones multiplies
 //! the playback rate by `2^(N/12)`.
 //!
-//! The amplitude envelope is a simple two-stage model:
-//! - Playing: flat at `gain`
-//! - Releasing: linear fade to zero over `release_frames`
+//! The amplitude envelope:
+//! - Attack: a ramp from silence to `gain` (`with_attack`)
+//! - Decay / sustain: after the attack, a ramp from full level to the
+//!   sustain level over the decay time (`with_decay`; off by default)
+//! - Releasing: linear fade to zero over `release_frames`, from wherever the
+//!   decay had got to
 //!
 //! CSS sustain samples have their own natural releases baked in; we do not
 //! apply an envelope to them. Release samples are played to completion at
@@ -15,6 +18,125 @@
 use std::sync::Arc;
 
 use super::cache::SampleData;
+use crate::native::{Adsr, AdsrParams};
+
+/// A voice's filter envelope: its own ADSR driving its own lowpass, so every
+/// note opens and closes on its own (a module-wide envelope would close the
+/// filter on every ringing note at one note's release).
+///
+/// The lowpass only ever sits at or below the layer's cutoff knob, so it
+/// never fights the layer's tone filter: `amount` > 0 closes it by up to
+/// [`FILTER_ENV_OCTAVES`] × `amount` below the cutoff and lets the envelope
+/// open it back up; `amount` < 0 closes it as the envelope rises.
+#[derive(Debug, Clone)]
+pub struct VoiceFilter {
+    env: Adsr,
+    amount: f32,
+    base_hz: f32,
+    /// Key-tracking offset in octaves (see `with_keytrack`).
+    key_octaves: f32,
+    sample_rate: f32,
+    /// Two-pole state-variable lowpass, one per channel: (ic1, ic2).
+    state: [(f32, f32); 2],
+    g: f32,
+    k: f32,
+    /// Coefficients are recomputed every [`FILTER_COEF_EVERY`] frames.
+    countdown: u16,
+}
+
+/// The state-variable filter's damping for a 0..1 resonance knob.
+fn resonance_k(resonance: f32) -> f32 {
+    std::f32::consts::SQRT_2 - (std::f32::consts::SQRT_2 - 0.1) * resonance.clamp(0.0, 1.0)
+}
+
+/// A voice's vibrato settings (see [`Voice::with_vibrato`]).
+#[derive(Debug, Clone, Copy)]
+pub struct Vibrato {
+    pub rate_hz: f32,
+    pub cents: f32,
+    pub delay_frames: u32,
+    pub sample_rate: f32,
+}
+
+/// Octaves the filter envelope sweeps at full amount.
+pub const FILTER_ENV_OCTAVES: f32 = 7.0;
+const FILTER_COEF_EVERY: u16 = 16;
+
+impl VoiceFilter {
+    #[must_use]
+    pub fn new(sample_rate: f32, params: AdsrParams, amount: f32, base_hz: f32) -> Self {
+        let mut env = Adsr::new(sample_rate, params);
+        env.note_on();
+        Self {
+            env,
+            amount: amount.clamp(-1.0, 1.0),
+            base_hz,
+            key_octaves: 0.0,
+            sample_rate,
+            state: [(0.0, 0.0); 2],
+            g: 0.0,
+            k: std::f32::consts::SQRT_2,
+            countdown: 0,
+        }
+    }
+
+    /// Resonance 0..1 (0 = Butterworth, 1 ≈ Q 10). While a voice filter is
+    /// on it is the layer's filter, so it carries the resonance knob.
+    #[must_use]
+    pub fn with_resonance(mut self, resonance: f32) -> Self {
+        self.k = resonance_k(resonance);
+        self
+    }
+
+    /// Key tracking: the cutoff moves `keytrack` octaves per octave played,
+    /// around middle C (60).
+    #[must_use]
+    pub fn with_keytrack(mut self, keytrack: f32, note: u8) -> Self {
+        self.key_octaves = keytrack.clamp(0.0, 1.0) * (f32::from(note) - 60.0) / 12.0;
+        self
+    }
+
+    /// Follow the layer's cutoff, amount and resonance while the note is held.
+    pub fn set_base(&mut self, base_hz: f32, amount: f32, resonance: f32) {
+        self.base_hz = base_hz;
+        self.amount = amount.clamp(-1.0, 1.0);
+        self.k = resonance_k(resonance);
+    }
+
+    fn note_off(&mut self) {
+        self.env.note_off();
+    }
+
+    fn tick(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let e = self.env.tick();
+        if self.countdown == 0 {
+            self.countdown = FILTER_COEF_EVERY;
+            let octaves = if self.amount >= 0.0 {
+                self.amount * (e - 1.0)
+            } else {
+                self.amount * e
+            } * FILTER_ENV_OCTAVES
+                + self.key_octaves;
+            let hz = (self.base_hz * octaves.exp2()).clamp(20.0, self.sample_rate * 0.45);
+            self.g = (std::f32::consts::PI * hz / self.sample_rate).tan();
+        }
+        self.countdown -= 1;
+        let (g, k) = (self.g, self.k);
+        let a1 = 1.0 / (1.0 + g * (g + k));
+        let a2 = g * a1;
+        let a3 = g * a2;
+        let mut out = [l, r];
+        for (x, (ic1, ic2)) in out.iter_mut().zip(self.state.iter_mut()) {
+            let v3 = *x - *ic2;
+            let v1 = a1 * *ic1 + a2 * v3;
+            let v2 = *ic2 + a2 * *ic1 + a3 * v3;
+            *ic1 = 2.0 * v1 - *ic1;
+            *ic2 = 2.0 * v2 - *ic2;
+            *x = v2;
+        }
+        (out[0], out[1])
+    }
+}
 
 // ── Voice state ───────────────────────────────────────────────────────────────
 
@@ -201,6 +323,10 @@ pub struct Voice {
     /// Engine `frames_rendered` at spawn — the base for stamping emissions
     /// with absolute output frames.
     spawn_frame: u64,
+    /// The strike (note-on, or the note-off that triggered release samples)
+    /// that spawned this voice — shared by every mic and layer sample of it;
+    /// what a polyphony limit counts. Set by [`VoicePool::spawn`].
+    strike: u32,
     /// Output frames this voice has produced (holds included — they occupy
     /// real output time).
     frames_out: u64,
@@ -215,6 +341,31 @@ pub struct Voice {
     /// `gain`/`target_gain` machinery, so CC1/CC2 re-levelling
     /// (`update_sustain_gains`) never cancels it. `bloom_frames == 0` = off.
     bloom_frames: usize,
+    /// Decay / sustain stage (`with_decay`): a multiplier that holds at 1.0
+    /// through the attack, then moves to `sustain` over `decay_left` frames.
+    /// 1.0 / 0 frames = off, so a voice without it is unchanged.
+    ds_level: f32,
+    sustain: f32,
+    decay_left: usize,
+    /// A breakpoint amplitude envelope (`with_amp_points` — an Omnisphere
+    /// layer's AENV), in place of the linear release fade: it holds at its
+    /// sustain point while the key is down and runs its own release after.
+    amp_bp: Option<(Arc<crate::native::breakpoints::Breakpoints>, crate::native::breakpoints::EnvPlayer, f32)>,
+    /// The breakpoint envelope at control rate: evaluated every
+    /// [`ENV_CONTROL_FRAMES`] frames and interpolated between (`a` → `b`,
+    /// `i` frames into the period). Per-sample evaluation made the envelope
+    /// the render thread's top cost when a forearm lands on the keys.
+    bp_ctrl: (f32, f32, u32, bool),
+    /// Per-voice filter envelope (`with_filter_env`); `None` = no filter.
+    filter: Option<VoiceFilter>,
+    /// Vibrato (`with_vibrato`): phase and step (cycles/frame), depth in
+    /// cents, frames left before it starts, and its fade-in.
+    vib_phase: f32,
+    vib_inc: f32,
+    vib_cents: f32,
+    vib_wait: u32,
+    vib_fade: f32,
+    vib_fade_step: f32,
     bloom_total: usize,
     bloom_target: f32,
 
@@ -274,6 +425,9 @@ pub struct Voice {
     /// sit a fixed dB UNDER the note body that actually sounded — a soft note
     /// is a genuinely quiet recording, so a fixed-level release would drown it.
     env_peak: f32,
+    /// The loudest `env_peak` this voice has reached — its onset level, for
+    /// how far the body has decayed since ([`VoicePool::note_body_ratio`]).
+    max_peak: f32,
     /// Render-trace correlation id (set at spawn when tracing) — pairs this
     /// voice's lifetime with its `TraceKind::VoiceSpawn`/`VoiceEnd` events.
     pub trace_id: Option<u64>,
@@ -302,11 +456,20 @@ pub struct Voice {
 pub struct FlexEnv {
     /// `(len_frames, from_level, to_level, tension)` per segment.
     segs: Vec<(f64, f32, f32, f32)>,
+    /// Per segment, the shape's constants: curvature `a` (0 = linear),
+    /// `1 / (e^a − 1)`, and `e^(a / len)` — one frame's step along it.
+    curve: Vec<(f64, f64, f64)>,
     /// Frames elapsed along the envelope timeline.
     pos: f64,
     /// While `Some`, `pos` is clamped to this value until the voice releases —
     /// the sustain-hold freeze (see struct docs).
     hold_end: Option<f64>,
+    /// Where `pos` is, walked frame by frame: the segment, the frames into
+    /// it, and `e^(a·t/len)` there — so a frame costs a multiply, not two
+    /// `exp`s and a walk of the segment list (it runs per voice per frame).
+    seg: usize,
+    t: f64,
+    eat: f64,
 }
 
 impl FlexEnv {
@@ -339,10 +502,25 @@ impl FlexEnv {
             cum += len;
             from = level;
         }
+        let curve = segs
+            .iter()
+            .map(|&(len, _, _, tension)| {
+                let a = Self::curvature(tension);
+                if a == 0.0 {
+                    (0.0, 0.0, 1.0)
+                } else {
+                    (a, 1.0 / (a.exp() - 1.0), (a / len).exp())
+                }
+            })
+            .collect();
         Some(Self {
             segs,
+            curve,
             pos: 0.0,
             hold_end,
+            seg: 0,
+            t: 0.0,
+            eat: 1.0,
         })
     }
 
@@ -365,6 +543,54 @@ impl FlexEnv {
         }
     }
 
+    /// The shape law's `a` for `tension` — 0 for a (near-)linear segment.
+    fn curvature(tension: f32) -> f64 {
+        let a = (f64::from(tension) - 0.5) * 12.0;
+        if a.abs() < 1.0e-3 { 0.0 } else { a }
+    }
+
+    /// The level where the walk is (see [`level_at`](Self::level_at), the
+    /// same law evaluated from scratch).
+    #[inline]
+    fn level_here(&self) -> f32 {
+        let Some(&(len, from, to, _)) = self.segs.get(self.seg) else {
+            return self.segs.last().map_or(0.0, |s| s.2);
+        };
+        let (a, inv, _) = self.curve[self.seg];
+        let frac = if a == 0.0 {
+            (self.t / len).clamp(0.0, 1.0)
+        } else {
+            ((self.eat - 1.0) * inv).clamp(0.0, 1.0)
+        };
+        from + (to - from) * frac as f32
+    }
+
+    /// One frame along the timeline.
+    #[inline]
+    fn step(&mut self) {
+        self.pos += 1.0;
+        let Some(&(len, ..)) = self.segs.get(self.seg) else {
+            return;
+        };
+        self.t += 1.0;
+        if self.t < len {
+            self.eat *= self.curve[self.seg].2;
+            return;
+        }
+        // Into the next segment(s): re-anchor the exponential there.
+        let mut len = len;
+        while self.t >= len {
+            self.t -= len;
+            self.seg += 1;
+            match self.segs.get(self.seg) {
+                Some(s) => len = s.0,
+                None => return,
+            }
+        }
+        let a = self.curve[self.seg].0;
+        self.eat = if a == 0.0 { 1.0 } else { (a * self.t / len).exp() };
+    }
+
     /// Current envelope level for the present `pos`, without advancing.
     #[inline]
     fn level_at(&self, pos: f64) -> f32 {
@@ -384,10 +610,10 @@ impl FlexEnv {
     /// level. `released` = the voice has received note-off (freeze lifts).
     #[inline]
     fn next(&mut self, released: bool) -> f32 {
-        let lvl = self.level_at(self.pos);
+        let lvl = self.level_here();
         let frozen = !released && self.hold_end.is_some_and(|h| self.pos >= h);
         if !frozen {
-            self.pos += 1.0;
+            self.step();
         }
         lvl
     }
@@ -451,10 +677,23 @@ impl Voice {
             start_hold: 0,
             marker_arrival_file: None,
             spawn_frame: 0,
+            strike: 0,
             frames_out: 0,
             arrival_emitted: None,
             arrival_drained: false,
             bloom_frames: 0,
+            ds_level: 1.0,
+            sustain: 1.0,
+            decay_left: 0,
+            amp_bp: None,
+            bp_ctrl: (0.0, 0.0, 0, false),
+            filter: None,
+            vib_phase: 0.0,
+            vib_inc: 0.0,
+            vib_cents: 0.0,
+            vib_wait: 0,
+            vib_fade: 0.0,
+            vib_fade_step: 1.0,
             bloom_total: 0,
             bloom_target: 1.0,
             kind,
@@ -469,6 +708,7 @@ impl Voice {
             has_sounded: false,
             quiet_frames: 0,
             env_peak: 0.0,
+            max_peak: 0.0,
             trace_id: None,
             pitch: None,
         }
@@ -520,10 +760,23 @@ impl Voice {
             start_hold: 0,
             marker_arrival_file: None,
             spawn_frame: 0,
+            strike: 0,
             frames_out: 0,
             arrival_emitted: None,
             arrival_drained: false,
             bloom_frames: 0,
+            ds_level: 1.0,
+            sustain: 1.0,
+            decay_left: 0,
+            amp_bp: None,
+            bp_ctrl: (0.0, 0.0, 0, false),
+            filter: None,
+            vib_phase: 0.0,
+            vib_inc: 0.0,
+            vib_cents: 0.0,
+            vib_wait: 0,
+            vib_fade: 0.0,
+            vib_fade_step: 1.0,
             bloom_total: 0,
             bloom_target: 1.0,
             kind,
@@ -538,6 +791,7 @@ impl Voice {
             has_sounded: false,
             quiet_frames: 0,
             env_peak: 0.0,
+            max_peak: 0.0,
             trace_id: None,
             pitch: None,
         }
@@ -713,12 +967,94 @@ impl Voice {
         self
     }
 
+    /// The decay and sustain of an ADSR: once the attack is done, fall from
+    /// full level to `sustain` (0..=1) over `decay_frames`, and hold there
+    /// until note-off. `decay_frames == 0` jumps straight to `sustain`;
+    /// `sustain == 1.0` leaves the voice as it was.
+    #[must_use]
+    pub fn with_decay(mut self, decay_frames: usize, sustain: f32) -> Self {
+        let sustain = sustain.clamp(0.0, 1.0);
+        self.sustain = sustain;
+        if decay_frames == 0 {
+            self.ds_level = sustain;
+        } else {
+            self.decay_left = decay_frames;
+        }
+        self
+    }
+
+    /// Scale the voice's level (its gain and target gain) by `k`.
+    #[must_use]
+    pub fn scaled_gain(mut self, k: f32) -> Self {
+        self.gain *= k;
+        self.target_gain *= k;
+        self
+    }
+
+    /// Shape the voice with a breakpoint amplitude envelope (`None`: off).
+    /// `sample_rate` is the output rate the envelope advances at.
+    #[must_use]
+    pub fn with_amp_points(
+        mut self,
+        bp: Option<Arc<crate::native::breakpoints::Breakpoints>>,
+        sample_rate: u32,
+    ) -> Self {
+        self.amp_bp = bp.map(|bp| {
+            let mut player = crate::native::breakpoints::EnvPlayer::default();
+            player.note_on();
+            (bp, player, 1.0 / sample_rate.max(1) as f32)
+        });
+        self
+    }
+
+    /// Give the voice its own filter envelope (see [`VoiceFilter`]).
+    #[must_use]
+    pub fn with_filter_env(mut self, filter: Option<VoiceFilter>) -> Self {
+        self.filter = filter;
+        self
+    }
+
+    /// Follow the layer's cutoff knobs on a held note.
+    pub fn set_filter_base(&mut self, base_hz: f32, amount: f32, resonance: f32) {
+        if let Some(f) = &mut self.filter {
+            f.set_base(base_hz, amount, resonance);
+        }
+    }
+
+    /// Vibrato: `rate_hz`, `cents` deep, starting `delay_frames` after the
+    /// note and fading in over as long again (at least 50 ms).
+    #[must_use]
+    pub fn with_vibrato(mut self, vib: Vibrato) -> Self {
+        self.set_vibrato(vib);
+        self.vib_wait = vib.delay_frames;
+        let fade = vib.delay_frames.max((vib.sample_rate * 0.05) as u32).max(1);
+        self.vib_fade = 0.0;
+        self.vib_fade_step = 1.0 / fade as f32;
+        self
+    }
+
+    /// Change the vibrato's rate and depth on a held note.
+    pub fn set_vibrato(&mut self, vib: Vibrato) {
+        self.vib_inc = vib.rate_hz / vib.sample_rate.max(1.0);
+        self.vib_cents = vib.cents;
+    }
+
     /// CSS legato handoff: spawn this (looping sustain) voice muted, wait
     /// `delay_frames`, then fade it in to its spawn gain over `fade_frames`.
     /// Mirrors the `CSS_W` helper (`wait($haa1x); fade_in($id, $0fznn)`) that
     /// brings the destination sustain up underneath the one-shot bow-change
     /// transition (spec §2.1 step 7). `delay_frames == 0 && fade_frames == 0`
     /// leaves the natural attack unchanged.
+    /// Fade a just-spawned voice in from silence over `frames` (Kontakt's
+    /// `fade_in` on a new event) — the in-place form of
+    /// [`with_fade_in_under`](Self::with_fade_in_under) with no delay.
+    pub fn start_fade_in(&mut self, frames: usize) {
+        if frames > 0 {
+            self.gain = 0.0;
+            self.gain_ramp_frames = frames;
+        }
+    }
+
     #[must_use]
     pub fn with_fade_in_under(mut self, delay_frames: usize, fade_frames: usize) -> Self {
         if delay_frames > 0 || fade_frames > 0 {
@@ -913,11 +1249,29 @@ impl Voice {
 
     pub fn note_off_with_release_frames(&mut self, release_frames: usize) {
         match self.kind {
-            VoiceKind::Short | VoiceKind::Release => {
+            // A one-shot plays to its end — unless a breakpoint amp envelope
+            // shapes it, which releases with the key like any other voice.
+            VoiceKind::Short if self.amp_bp.is_none() => {}
+            VoiceKind::Release => {
                 // Play to end — do not release early.
             }
             _ => {
                 if self.state == VoiceState::Playing {
+                    if let Some(f) = &mut self.filter {
+                        f.note_off();
+                    }
+                    // A breakpoint envelope releases over its own last
+                    // segment (plus a frame so it reaches its end).
+                    let release_frames = match &mut self.amp_bp {
+                        Some((bp, player, dt)) => {
+                            player.note_off(bp);
+                            let tail = bp.sustain.map_or(0.0, |s| {
+                                bp.points.last().map_or(0.0, |l| l.time) - bp.points[s].time
+                            }) * bp.unit_s();
+                            (tail / *dt) as usize + 2
+                        }
+                        None => release_frames,
+                    };
                     let frames = release_frames.max(1);
                     // Update the divisor too — `next_frame` computes
                     // `env = frames_remaining / self.release_frames`, so if
@@ -1046,6 +1400,16 @@ impl Voice {
             self.bloom_frames -= 1;
         }
 
+        // Decay toward the sustain level, once the attack has finished.
+        if self.decay_left > 0
+            && self.attack_delay == 0
+            && self.gain_ramp_frames == 0
+            && self.state == VoiceState::Playing
+        {
+            self.ds_level += (self.sustain - self.ds_level) / self.decay_left as f32;
+            self.decay_left -= 1;
+        }
+
         // Envelope
         let env = match &mut self.state {
             VoiceState::Playing => 1.0f32,
@@ -1112,6 +1476,10 @@ impl Voice {
             r = shift[1].tick(r);
         }
 
+        if let Some(f) = &mut self.filter {
+            (l, r) = f.tick(l, r);
+        }
+
         // Decoded ENV_FLEX amplitude envelope. Freezes at the sustain-hold
         // point while Playing (held note stays steady); advances through the
         // decay once Releasing. Multiplied on top of the note-off release fade.
@@ -1126,12 +1494,52 @@ impl Voice {
         } else {
             1.0
         };
-        let amp = self.gain * env * flex * bloom;
+        // A breakpoint envelope replaces the linear release fade.
+        let (env, bp) = match &mut self.amp_bp {
+            Some((bp, player, dt)) => {
+                // Control rate: the envelope one period ahead, interpolated.
+                let (a, b, i, primed) = &mut self.bp_ctrl;
+                let k = ENV_CONTROL_FRAMES as f32;
+                if !*primed {
+                    *a = player.tick(bp, *dt * k);
+                    *b = player.tick(bp, *dt * k);
+                    *i = 0;
+                    *primed = true;
+                } else if *i >= ENV_CONTROL_FRAMES {
+                    *a = *b;
+                    *b = player.tick(bp, *dt * k);
+                    *i = 0;
+                }
+                let v = *a + (*b - *a) * (*i as f32 / k);
+                *i += 1;
+                (1.0, v)
+            }
+            None => (env, 1.0),
+        };
+        let amp = self.gain * env * flex * bloom * self.ds_level * bp;
 
         // Advance position. During a portamento glide the read rate is nudged
         // by `glide_cents` (ramping to 0) so the pitch scoops into true tuning;
         // the tiny position drift over the ~60 ms glide is inaudible.
+        // Vibrato: a triangle-smoothed sine (parabolic), a few cents either
+        // way, so a linear cents→ratio is exact to well under a cent.
+        let vib = if self.vib_cents > 0.0 {
+            if self.vib_wait > 0 {
+                self.vib_wait -= 1;
+                1.0
+            } else {
+                self.vib_fade = (self.vib_fade + self.vib_fade_step).min(1.0);
+                self.vib_phase = (self.vib_phase + self.vib_inc).fract();
+                let x = self.vib_phase * 2.0 - 1.0; // -1..1
+                let s = 4.0 * x * (1.0 - x.abs()); // parabolic sine
+                1.0 + f64::from(s * self.vib_cents * self.vib_fade)
+                    * (std::f64::consts::LN_2 / 1200.0)
+            }
+        } else {
+            1.0
+        };
         let step = self.bend
+            * vib
             * if self.glide_frames > 0 {
                 let s = self.rate * 2f64.powf(self.glide_cents as f64 / 1200.0);
                 self.glide_cents += self.glide_step;
@@ -1185,18 +1593,190 @@ impl Voice {
         let num_frames = output.len() / 2;
         let mut rendered = 0;
         let mut block_peak = 0.0f32;
-        for i in 0..num_frames {
+        let mut i = 0;
+        while i < num_frames {
+            // The common case — a plain sample playing or fading, nothing
+            // else moving — runs in `render_fast`, many frames at a time;
+            // anything else (and the frame that ends a run) goes through
+            // `next_frame`.
+            if FAST_STATS.load(std::sync::atomic::Ordering::Relaxed) {
+                fast_stats(self);
+            }
+            if FAST_PATH.load(std::sync::atomic::Ordering::Relaxed) && self.fast_ok() {
+                let n = self.render_fast(&mut output[i * 2..num_frames * 2], &mut block_peak);
+                i += n;
+                rendered += n;
+                if i >= num_frames {
+                    break;
+                }
+            }
             let (l, r) = self.next_frame();
             output[i * 2] += l;
             output[i * 2 + 1] += r;
             block_peak = block_peak.max(l.abs()).max(r.abs());
             rendered += 1;
+            i += 1;
             if self.is_done() {
                 break;
             }
         }
         self.update_decay_retire(block_peak, rendered);
         rendered
+    }
+
+    /// Nothing but the sample, its gain (and its ramp) and its envelopes (the
+    /// fade, the flex envelope, the breakpoint envelope) is moving: no hold,
+    /// attack delay, bloom, decay, pitch shift, filter, vibrato, glide,
+    /// reverse or ping-pong loop, no marker to emit. Then
+    /// [`render_fast`](Self::render_fast) plays it.
+    #[inline]
+    fn fast_ok(&self) -> bool {
+        (matches!(self.state, VoiceState::Playing)
+            || matches!(self.state, VoiceState::Releasing { frames_remaining } if frames_remaining > 0))
+            && self.start_hold == 0
+            && self.release_hold == 0
+            && self.attack_delay == 0
+            && self.bloom_frames == 0
+            && self.decay_left == 0
+            && self.pitch.is_none()
+            && self.filter.is_none()
+            && self.vib_cents <= 0.0
+            && self.glide_frames == 0
+            && !self.reverse
+            && !(self.alternating_loop && self.loop_range.is_some())
+            && (self.marker_arrival_file.is_none() || self.arrival_emitted.is_some())
+    }
+
+    /// Play frames while [`fast_ok`](Self::fast_ok) holds, reading straight
+    /// from the run of samples that holds them — `next_frame`'s arithmetic,
+    /// in its order, without its per-frame branches and per-frame sample
+    /// lookups. Adds into `out` (interleaved), folds the output peak into
+    /// `peak`, returns the frames played; it stops before any frame
+    /// `next_frame` has to decide (the end of the sample, the end of the run,
+    /// the loop seam, the end of the fade).
+    fn render_fast(&mut self, out: &mut [f32], peak: &mut f32) -> usize {
+        let frames = out.len() / 2;
+        let idx0 = self.position as usize;
+        if idx0 >= self.end_frame || idx0 < self.start_frame {
+            return 0;
+        }
+        let ch = self.data.channels.max(1) as usize;
+        let last = self.end_frame.saturating_sub(1);
+        // `next_frame`'s constants for this run.
+        let bloom = if self.bloom_total > 0 {
+            let t = 1.0 - self.bloom_frames as f32 / self.bloom_total as f32;
+            1.0 + (self.bloom_target - 1.0) * t
+        } else {
+            1.0
+        };
+        let step = self.bend * 1.0f64 * self.rate;
+        let seam = match (self.loop_range, self.loop_xfade > 0) {
+            (Some((_, loop_end)), true) => loop_end as f64 - self.loop_xfade as f64,
+            _ => f64::INFINITY,
+        };
+        let Some((span, base)) = self.data.span_cursored(idx0, &mut self.stream_cursor) else {
+            return 0;
+        };
+        let span_end = base + span.len() / ch;
+        let (mut position, mut state) = (self.position, self.state.clone());
+        let mut n = 0;
+        let mut furthest = 0usize;
+        while n < frames {
+            let idx = position as usize;
+            // Frames `next_frame` decides: past the sample, at its last
+            // frame, out of this run, at the loop seam, the fade's end.
+            if idx >= self.end_frame || idx < self.start_frame || idx + 1 > last {
+                break;
+            }
+            if idx < base || idx + 1 >= span_end || position >= seam {
+                break;
+            }
+            // The gain ramp (attack), as `next_frame` steps it.
+            if self.gain_ramp_frames > 0 {
+                self.gain += (self.target_gain - self.gain) / self.gain_ramp_frames as f32;
+                self.gain_ramp_frames -= 1;
+                if self.stage1_run > 0 {
+                    self.stage1_run -= 1;
+                    if self.stage1_run == 0 && self.stage2_frames > 0 {
+                        self.gain_ramp_frames = self.stage2_frames;
+                        self.stage2_frames = 0;
+                    }
+                }
+            } else {
+                self.gain = self.target_gain;
+            }
+            let env = match &mut state {
+                VoiceState::Playing => 1.0f32,
+                VoiceState::Releasing { frames_remaining } => {
+                    if *frames_remaining == 0 {
+                        break;
+                    }
+                    let t = *frames_remaining as f32 / self.release_frames.max(1) as f32;
+                    *frames_remaining -= 1;
+                    t
+                }
+                VoiceState::Done => break,
+            };
+            let frac = (position - idx as f64) as f32;
+            let (a, b) = ((idx - base) * ch, (idx + 1 - base) * ch);
+            let ((l0, r0), (l1, r1)) = if ch >= 2 {
+                ((span.get(a), span.get(a + 1)), (span.get(b), span.get(b + 1)))
+            } else {
+                let (x, y) = (span.get(a), span.get(b));
+                ((x, x), (y, y))
+            };
+            furthest = b;
+            let (l, r) = (l0 + (l1 - l0) * frac, r0 + (r1 - r0) * frac);
+            // The envelopes, as `next_frame` steps them.
+            let flex = match &mut self.flex {
+                Some(f) => f.next(!matches!(state, VoiceState::Playing)),
+                None => 1.0,
+            };
+            let (env, bp) = match &mut self.amp_bp {
+                Some((bpts, player, dt)) => {
+                    let (a, b, i, primed) = &mut self.bp_ctrl;
+                    let k = ENV_CONTROL_FRAMES as f32;
+                    if !*primed {
+                        *a = player.tick(bpts, *dt * k);
+                        *b = player.tick(bpts, *dt * k);
+                        *i = 0;
+                        *primed = true;
+                    } else if *i >= ENV_CONTROL_FRAMES {
+                        *a = *b;
+                        *b = player.tick(bpts, *dt * k);
+                        *i = 0;
+                    }
+                    let v = *a + (*b - *a) * (*i as f32 / k);
+                    *i += 1;
+                    (1.0, v)
+                }
+                None => (env, 1.0),
+            };
+            let amp = self.gain * env * flex * bloom * self.ds_level * bp;
+            position += step;
+            if let Some((loop_start, loop_end)) = self.loop_range {
+                if position >= loop_end as f64 {
+                    let len = (loop_end - loop_start) as f64;
+                    position = loop_start as f64 + (position - loop_end as f64) % len;
+                }
+            }
+            let (ol, or) = (
+                flush_denormal(l * amp * self.pan_l),
+                flush_denormal(r * amp * self.pan_r),
+            );
+            out[n * 2] += ol;
+            out[n * 2 + 1] += or;
+            *peak = peak.max(ol.abs()).max(or.abs());
+            n += 1;
+        }
+        self.position = position;
+        self.state = state;
+        self.frames_out += n as u64;
+        // The read-ahead the per-frame reads would have issued.
+        if n > 0 {
+            self.stream_cursor.touch(base * ch + furthest);
+        }
+        n
     }
 
     /// Free a voice that has decayed to silence. Once a voice has actually
@@ -1216,6 +1796,7 @@ impl Voice {
         } else {
             self.env_peak *= ENV_PEAK_DECAY;
         }
+        self.max_peak = self.max_peak.max(self.env_peak);
         if self.state == VoiceState::Done {
             return;
         }
@@ -1257,6 +1838,40 @@ thread_local! {
 /// Flush denormals to zero. On `no_std`/embedded and WASM targets the host may
 /// not set hardware FTZ/DAZ, so a denormal on a quiet release tail can spike
 /// CPU. The branch is predictable (almost always false) and cheap.
+/// Count why voices miss the fast path ([`FAST_MISS`]) — diagnostics.
+pub static FAST_STATS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Voice-blocks missing the fast path, per reason: not sounding, start hold,
+/// release hold, attack delay, gain ramp, bloom, decay, pitch shift,
+/// filter, flex envelope, breakpoint envelope, vibrato, glide, reverse,
+/// ping-pong loop, marker.
+pub static FAST_MISS: [std::sync::atomic::AtomicU64; 16] = [const { std::sync::atomic::AtomicU64::new(0) }; 16];
+
+fn fast_stats(v: &Voice) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let reasons = [
+        !(matches!(v.state, VoiceState::Playing) || matches!(v.state, VoiceState::Releasing { frames_remaining } if frames_remaining > 0)),
+        v.start_hold != 0, v.release_hold != 0, v.attack_delay != 0, false,
+        v.bloom_frames != 0, v.decay_left != 0, v.pitch.is_some(), v.filter.is_some(),
+        false, false, v.vib_cents > 0.0, v.glide_frames != 0, v.reverse,
+        v.alternating_loop && v.loop_range.is_some(),
+        !(v.marker_arrival_file.is_none() || v.arrival_emitted.is_some()),
+    ];
+    for (i, r) in reasons.iter().enumerate() {
+        if *r { FAST_MISS[i].fetch_add(1, Relaxed); }
+    }
+}
+
+/// The voices' fast path on (the default) or off — off only to check it
+/// against the per-frame path (`set_fast_path`).
+static FAST_PATH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Play voices through their per-frame path only (`false`), for comparing it
+/// with the fast path; `true` restores the fast path.
+pub fn set_fast_path(on: bool) {
+    FAST_PATH.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 #[inline(always)]
 fn flush_denormal(x: f32) -> f32 {
     if x.abs() < 1.0e-30 { 0.0 } else { x }
@@ -1269,6 +1884,14 @@ fn flush_denormal(x: f32) -> f32 {
 /// auto-retire (see [`Voice::update_decay_retire`]) keeps the *active* count
 /// far below it in practice by freeing faded notes.
 const MAX_VOICES: usize = 160;
+
+/// Held notes the CPU guard never cuts below, per voice pool — a two-handed
+/// chord with the pedal down stays whole.
+const SHED_NOTE_FLOOR: usize = 16;
+
+/// Frames per control-rate step of a voice's breakpoint envelope (a third of
+/// a millisecond at 48 kHz — well under anything an envelope does audibly).
+const ENV_CONTROL_FRAMES: u32 = 16;
 const STEAL_FADE_FRAMES: usize = 128;
 /// Output magnitude below which a voice is considered inaudible (~ -84 dBFS).
 /// Deliberately deep so a still-audible (even very faint) held note is never
@@ -1322,6 +1945,9 @@ pub struct VoicePool {
     /// timing — is bit-identical to the full mix. Offline analysis only.
     solo_notes: Option<std::collections::BTreeSet<u8>>,
     solo_scratch: Vec<f32>,
+    /// The current strike, stamped on every voice spawned (see
+    /// [`begin_strike`](Self::begin_strike)).
+    strike: u32,
 }
 
 impl Default for VoicePool {
@@ -1341,6 +1967,7 @@ impl VoicePool {
             bend: 1.0,
             solo_notes: None,
             solo_scratch: Vec::new(),
+            strike: 0,
         }
     }
 
@@ -1355,6 +1982,7 @@ impl VoicePool {
             bend: 1.0,
             solo_notes: None,
             solo_scratch: Vec::new(),
+            strike: 0,
         }
     }
 
@@ -1387,10 +2015,18 @@ impl VoicePool {
         }
     }
 
+    /// A new strike begins: the voices spawned from here on (every mic and
+    /// layer sample of one note-on, or the release samples of one note-off)
+    /// count as one note to a polyphony limit.
+    pub fn begin_strike(&mut self) {
+        self.strike = self.strike.wrapping_add(1);
+    }
+
     pub fn spawn(&mut self, voice: Voice) {
         let mut voice = voice;
         // New voices sound at the current wheel position.
         voice.bend = self.bend;
+        voice.strike = self.strike;
         // Remove done voices first
         self.voices.retain(|v| !v.is_done());
 
@@ -1436,6 +2072,17 @@ impl VoicePool {
     /// Loudest current peak-follower level among the note's still-sounding
     /// body voices (non-release, not Done). Used to scale a note's release tail
     /// so it sits under the actual body that played. `0.0` if nothing sounds.
+    /// How far `note`'s body has decayed from its onset: its current peak
+    /// over the loudest it reached (0‥1; 1 when nothing has sounded yet).
+    pub fn note_body_ratio(&self, note: u8) -> f32 {
+        let (now, max) = self
+            .voices
+            .iter()
+            .filter(|v| v.note == note && v.kind != VoiceKind::Release && v.state != VoiceState::Done)
+            .fold((0.0f32, 0.0f32), |(n, m), v| (n + v.env_peak, m + v.max_peak));
+        if max <= 1e-9 { 1.0 } else { (now / max).clamp(0.0, 1.0) }
+    }
+
     pub fn note_body_peak(&self, note: u8) -> f32 {
         self.voices
             .iter()
@@ -1782,6 +2429,147 @@ impl VoicePool {
         self.stolen
     }
 
+    /// Make room for a new strike of `incoming`.
+    ///
+    /// **Other keys**, under a limit of `max_notes` sounding keys (a patch's
+    /// voice count counts notes — every mic, layer sample and release of a
+    /// key is one of them): while that many other keys are sounding, fade out
+    /// every voice of the stalest — a key already released first, else the
+    /// oldest held. Returns keys stolen.
+    ///
+    /// **The same key**, re-struck: its strike before this one rings on (the
+    /// overlap a player hears), anything older fades over
+    /// [`REPEAT_FADE`] — the new strike takes the string over, as on the
+    /// instrument. Without it, repeats of one note under the sustain pedal
+    /// piled up with no limit (a Dolceola lane reached 232 voices in a plain
+    /// worship passage). Counting each strike against the note limit instead
+    /// held the voices down but stole the chord under a pedalled melody.
+    pub fn make_room_for_note(&mut self, incoming: u8, max_notes: usize) -> usize {
+        const STEAL_NOTE_FADE: usize = 240; // 5 ms: fast, not a click
+        // A voice with no more than a repeat fade left — a steal, a repeat,
+        // a release nearly over — no longer counts.
+        let fading = |v: &Voice| {
+            matches!(v.state, VoiceState::Releasing { frames_remaining } if frames_remaining <= REPEAT_FADE)
+        };
+        // The same key: keep the latest strike, fade the older ones.
+        let mut strikes: Vec<u32> = Vec::new();
+        for v in &self.voices {
+            if v.note == incoming && v.state != VoiceState::Done && !fading(v) && !strikes.contains(&v.strike) {
+                strikes.push(v.strike);
+            }
+        }
+        if strikes.len() >= MAX_REPEAT_STRIKES {
+            let keep = &strikes[strikes.len() + 1 - MAX_REPEAT_STRIKES..];
+            for v in self.voices.iter_mut().filter(|v| {
+                v.note == incoming && v.state != VoiceState::Done && !keep.contains(&v.strike)
+            }) {
+                if !fading(v) {
+                    v.ramp_gain(0.0, REPEAT_FADE);
+                    v.state = VoiceState::Releasing { frames_remaining: REPEAT_FADE };
+                }
+            }
+        }
+        // Other keys, under the note limit.
+        let mut stolen = 0;
+        loop {
+            // Sounding keys, in first-voice order, with whether all their
+            // voices are already releasing.
+            let mut notes: Vec<(u8, bool)> = Vec::new();
+            for v in &self.voices {
+                if v.state == VoiceState::Done || v.note == incoming || fading(v) {
+                    continue;
+                }
+                let released = matches!(v.state, VoiceState::Releasing { .. }) || v.kind == VoiceKind::Release;
+                match notes.iter_mut().find(|(n, _)| *n == v.note) {
+                    Some(e) => e.1 &= released,
+                    None => notes.push((v.note, released)),
+                }
+            }
+            if notes.len() < max_notes.max(1) {
+                return stolen;
+            }
+            let victim = notes
+                .iter()
+                .find(|(_, released)| *released)
+                .or_else(|| notes.first())
+                .map(|(n, _)| *n);
+            let Some(victim) = victim else {
+                return stolen;
+            };
+            for v in self.voices.iter_mut().filter(|v| v.note == victim && v.state != VoiceState::Done) {
+                v.ramp_gain(0.0, STEAL_NOTE_FADE);
+                v.state = VoiceState::Releasing { frames_remaining: STEAL_NOTE_FADE };
+            }
+            self.stolen = self.stolen.saturating_add(1);
+            NOTE_STEALS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            crate::lane_health::stolen();
+            stolen += 1;
+        }
+    }
+
+    /// Shed load under CPU pressure (the keys rig's overload guard).
+    ///
+    /// `level` 1: fade the OLD release tails — voices past the middle of
+    /// their release, most of their level already gone. A note just let go
+    /// of keeps ringing: that is the one a player hears end early (a
+    /// Dolceola note rings for a second after key-up). `level` 2, a real
+    /// overload: every releasing voice and release sample, and the oldest
+    /// held note of a pile-up. Fades are quick but not clicks. Every voice
+    /// faded is counted to the lane (`lane_health`).
+    pub fn shed(&mut self, level: u8) {
+        const SHED_FADE: usize = 1440; // 30 ms at 48 kHz
+        let mut held: Vec<usize> = Vec::new();
+        let mut faded = 0usize;
+        for (i, v) in self.voices.iter_mut().enumerate() {
+            match v.state {
+                VoiceState::Done => {}
+                VoiceState::Releasing { frames_remaining } => {
+                    let old = frames_remaining < v.release_frames / 2;
+                    if frames_remaining > SHED_FADE && (level >= 2 || old) {
+                        v.ramp_gain(0.0, SHED_FADE);
+                        v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                        faded += 1;
+                    }
+                }
+                _ if v.kind == VoiceKind::Release => {
+                    if level >= 2 {
+                        v.ramp_gain(0.0, SHED_FADE);
+                        v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                        faded += 1;
+                    }
+                }
+                _ => held.push(i),
+            }
+        }
+        crate::lane_health::faded(faded);
+        if level >= 2 {
+            // One note — the oldest held — and only while the lane holds more
+            // than a big chord's worth: the guard trims a runaway pile-up, it
+            // never thins a chord. Spawn order is pool order.
+            let mut notes: Vec<u8> = Vec::new();
+            for &i in &held {
+                let n = self.voices[i].note;
+                if !notes.contains(&n) {
+                    notes.push(n);
+                }
+            }
+            if notes.len() > SHED_NOTE_FLOOR {
+                let victim = notes[0];
+                let mut cut = 0usize;
+                for &i in &held {
+                    let v = &mut self.voices[i];
+                    if v.note == victim {
+                        v.ramp_gain(0.0, SHED_FADE);
+                        v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                        cut += 1;
+                    }
+                }
+                crate::lane_health::faded(cut);
+            }
+        }
+        self.stolen = self.stolen.saturating_add(1);
+    }
+
     /// Mutable iterator over all active voices (used by engine for CC1 updates).
     pub fn voices_mut(&mut self) -> &mut Vec<Voice> {
         &mut self.voices
@@ -1874,6 +2662,102 @@ mod tests {
         Voice::new(sample(), 60, VoiceKind::SustainLo, 0, gain, 128)
     }
 
+    /// A strike of `note` with `mics` voices.
+    fn strike(pool: &mut VoicePool, note: u8, mics: usize) {
+        pool.begin_strike();
+        for _ in 0..mics {
+            pool.spawn(Voice::new(sample(), note, VoiceKind::SustainLo, 0, 1.0, 128));
+        }
+    }
+
+    fn sounding(pool: &VoicePool) -> usize {
+        pool.voices
+            .iter()
+            .filter(|v| !matches!(v.state, VoiceState::Done | VoiceState::Releasing { .. }))
+            .count()
+    }
+
+    /// The frame-by-frame walk plays the same envelope as the law
+    /// evaluated from scratch — every curve shape, across segment edges,
+    /// through a sustain hold and after release.
+    #[test]
+    fn flex_env_walk_matches_the_law() {
+        let segs = [
+            (3.0, 1.0, 0.8),
+            (12.5, 0.6, 0.5),
+            (40.0, 0.9, 0.15),
+            (7.3, 0.2, 0.62),
+            (900.0, 0.0, 0.3),
+        ];
+        let mut walk = FlexEnv::from_segments(&segs, 0.0, 48_000, true).expect("env");
+        let law = walk.clone();
+        let mut pos = 0.0f64;
+        let mut worst = 0.0f32;
+        for frame in 0..60_000 {
+            let released = frame > 4_000;
+            let expect = law.level_at(pos);
+            let got = walk.next(released);
+            worst = worst.max((got - expect).abs());
+            let frozen = !released && law.hold_end.is_some_and(|h| pos >= h);
+            if !frozen {
+                pos += 1.0;
+            }
+        }
+        assert!(worst < 1e-4, "walk drifted from the law by {worst}");
+    }
+
+    /// Under the pedal, repeats of one key must not pile up (a Dolceola
+    /// lane held 232 voices): the latest strike and the one before ring, the
+    /// older ones fade — and nothing is stolen.
+    #[test]
+    fn a_re_struck_key_rings_its_last_two_strikes() {
+        let mut pool = VoicePool::new();
+        for _ in 0..20 {
+            pool.make_room_for_note(72, 4);
+            strike(&mut pool, 72, 3);
+        }
+        assert_eq!(sounding(&pool), 2 * 3, "two strikes of three mics each");
+        assert_eq!(pool.stolen_count(), 0);
+    }
+
+    /// A melody re-struck over a held chord takes nothing from the chord.
+    #[test]
+    fn a_pedalled_melody_does_not_steal_the_chord() {
+        let mut pool = VoicePool::new();
+        for n in [48, 55, 60] {
+            pool.make_room_for_note(n, 4);
+            strike(&mut pool, n, 3);
+        }
+        for _ in 0..10 {
+            pool.make_room_for_note(72, 4);
+            strike(&mut pool, 72, 3);
+        }
+        for n in [48, 55, 60] {
+            assert!(
+                pool.voices.iter().filter(|v| v.note == n).all(|v| v.state == VoiceState::Playing),
+                "chord note {n} kept"
+            );
+        }
+        assert_eq!(pool.stolen_count(), 0);
+    }
+
+    /// Every mic of a key is one note: four three-mic keys fit a limit of
+    /// four; a fifth steals the oldest key, all its mics together.
+    #[test]
+    fn a_keys_mics_are_one_note() {
+        let mut pool = VoicePool::new();
+        for n in [60, 64, 67, 72] {
+            pool.make_room_for_note(n, 4);
+            strike(&mut pool, n, 3);
+        }
+        assert_eq!(sounding(&pool), 12);
+        assert_eq!(pool.stolen_count(), 0);
+        pool.make_room_for_note(76, 4);
+        strike(&mut pool, 76, 3);
+        assert_eq!(sounding(&pool), 12);
+        assert!(pool.voices.iter().filter(|v| v.note == 60).all(|v| v.state != VoiceState::Playing));
+    }
+
     /// A mono sine `freq_hz` recorded at `sr`, `secs` long.
     fn sine_sample(freq_hz: f64, sr: u32, secs: f64) -> Arc<SampleData> {
         let n = (sr as f64 * secs) as usize;
@@ -1925,6 +2809,77 @@ mod tests {
             (tuned - 441.0).abs() < 5.0,
             "compensated sample should sound ~441 Hz, got {tuned:.1}"
         );
+    }
+
+    #[test]
+    fn decay_falls_to_sustain_after_the_attack_and_release_starts_from_there() {
+        // A constant 1.0 sample, so the output is the envelope itself.
+        let n = 48_000;
+        let dc = Arc::new(SampleData::from_f32(vec![1.0; n], 1, 48_000, n));
+        let mut v = Voice::new(dc.clone(), 60, VoiceKind::SustainLo, 0, 1.0, 1_000)
+            .with_attack(100)
+            .with_decay(1_000, 0.5);
+        let mut buf = vec![0.0f32; 4_000 * 2];
+        v.render_block(&mut buf);
+        let at = |i: usize| buf[i * 2];
+        let peak = at(100);
+        assert!(peak > 0.0);
+        assert!(
+            (at(1_200) / peak - 0.5).abs() < 0.01,
+            "sustain {}",
+            at(1_200) / peak
+        );
+        assert!((at(3_999) / peak - 0.5).abs() < 0.01, "holds");
+        v.note_off();
+        let mut rel = vec![0.0f32; 1_200 * 2];
+        v.render_block(&mut rel);
+        assert!(
+            rel[0] / peak <= 0.5 + 1e-3,
+            "release starts at the sustain level"
+        );
+        assert!(rel[1_100 * 2].abs() < 1e-6, "and ends silent");
+
+        // Without `with_decay` the voice holds full level, as before.
+        let mut flat = Voice::new(dc, 60, VoiceKind::SustainLo, 0, 1.0, 1_000).with_attack(100);
+        let mut buf2 = vec![0.0f32; 4_000 * 2];
+        flat.render_block(&mut buf2);
+        assert!((buf2[3_999 * 2] - buf2[100 * 2]).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_filter_envelope_opens_each_note_from_closed_to_the_cutoff() {
+        // A bright 4 kHz tone through a voice whose filter envelope sweeps
+        // from 7 octaves under a 10 kHz cutoff up to it over 200 ms.
+        let data = sine_sample(4_000.0, 48_000, 1.0);
+        let params = AdsrParams {
+            attack_s: 0.2,
+            decay_s: 0.0,
+            sustain: 1.0,
+            release_s: 0.1,
+        };
+        let filter = VoiceFilter::new(48_000.0, params, 1.0, 10_000.0);
+        let mut v = Voice::with_rate(data.clone(), 60, VoiceKind::SustainLo, 1.0, 1.0, 128)
+            .with_filter_env(Some(filter));
+        let mut buf = vec![0.0f32; 24_000 * 2];
+        v.render_block(&mut buf);
+        let rms = |a: usize, b: usize| {
+            (buf[a * 2..b * 2]
+                .iter()
+                .step_by(2)
+                .map(|x| x * x)
+                .sum::<f32>()
+                / (b - a) as f32)
+                .sqrt()
+        };
+        let (early, late) = (rms(500, 1_500), rms(14_000, 24_000));
+        assert!(early < late * 0.2, "closed at the start: {early} vs {late}");
+        assert!(late > 0.5, "open once the attack is done: {late}");
+
+        // Amount 0 is off: the engine gives no filter, the tone is untouched.
+        let mut plain = Voice::with_rate(data, 60, VoiceKind::SustainLo, 1.0, 1.0, 128);
+        let mut b2 = vec![0.0f32; 2_000 * 2];
+        plain.render_block(&mut b2);
+        assert!(b2[500 * 2..1_500 * 2].iter().any(|x| x.abs() > 0.5));
     }
 
     #[test]
@@ -2357,4 +3312,21 @@ mod tests {
             worst_run * 512 * 1000 / sr as usize,
         );
     }
+}
+
+/// Strikes of one key that ring at once: the new one and the one before.
+pub const MAX_REPEAT_STRIKES: usize = 2;
+/// How long an older strike of a re-struck key takes to fade (100 ms at
+/// 48 kHz) — the new strike taking the string over, not a cut.
+pub const REPEAT_FADE: usize = 4800;
+
+/// Notes stolen at a polyphony limit, process-wide (every sampler pool and
+/// wavetable oscillator) — for a rig's health log: a note cut short by a
+/// voice limit sounds like a note cut short by anything else.
+pub static NOTE_STEALS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many notes polyphony limits have stolen so far (process-wide).
+#[must_use]
+pub fn note_steals() -> u64 {
+    NOTE_STEALS.load(std::sync::atomic::Ordering::Relaxed)
 }

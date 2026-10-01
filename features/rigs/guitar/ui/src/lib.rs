@@ -31,11 +31,11 @@ mod indicators;
 mod kit;
 mod library;
 mod macro_bar;
-mod module_sidebar;
 mod meters;
+mod module_sidebar;
 mod palette;
-mod part_menu;
 pub mod param_writer;
+mod part_menu;
 mod perform;
 mod phone;
 mod preset_look;
@@ -56,12 +56,14 @@ pub use grid::RigGraph;
 pub use icons::module_icon;
 pub use library::{Kind as LibraryKind, LibraryPicker};
 pub use macro_bar::{MacroBar, MacroPanelOpen, MacroShotStatus, MacroTuneMode};
-pub use module_sidebar::{InitialSelection, Selection as ModuleSelection};
 pub use meters::{CpuMeter, DspReadout, MeterBar, MeterPair, meter_level};
+pub use module_sidebar::{InitialSelection, Selection as ModuleSelection};
 pub use perform::PerformGrid;
 pub use remote::GuitarRigRemote;
 pub use setlist_bar::SetlistSidebar;
-pub use settings::{AUDIO_SETTINGS_OPEN, AudioSettingsBridge, AudioSettingsModal, open_audio_settings};
+pub use settings::{
+    AUDIO_SETTINGS_OPEN, AudioSettingsBridge, AudioSettingsModal, open_audio_settings,
+};
 pub use sidebars::{LeftSidebar, LevellingChip};
 /// The node/preset tree (moved to signal-widgets — both rigs draw it).
 pub use signal_widgets::PresetTree;

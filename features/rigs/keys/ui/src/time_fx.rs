@@ -146,6 +146,9 @@ fn BypassLamp(
 pub fn DelayView(
     lanes: Vec<FxLane>,
     #[props(default = 120.0)] tempo_bpm: f32,
+    /// Whether `tempo_bpm` is the band's (tapped) tempo or a stand-in.
+    #[props(default)]
+    synced: bool,
     /// The selected scope's Delay macros — the knobs that move what the view
     /// draws. Same controls the guitar rig puts under its delay lanes.
     #[props(default)]
@@ -184,7 +187,7 @@ pub fn DelayView(
                     on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
                 }
                 span { style: "font-size: 8px; color: #3f3f46;",
-                    "{tempo_bpm:.0} bpm · 8 beats"
+                    if synced { "{tempo_bpm:.0} bpm · 8 beats" } else { "no tempo — tap one · 8 beats at 120" }
                 }
                 div { style: "flex: 1;" }
                 if audible.is_empty() {

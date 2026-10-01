@@ -19,7 +19,7 @@ use std::cell::OnceCell;
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject, ProtocolObject};
-use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
+use objc2::{MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSImage, NSMenu, NSMenuDelegate, NSMenuItem,
     NSStatusBar, NSStatusItem, NSVariableStatusItemLength,
@@ -63,7 +63,11 @@ fn scan() -> Vec<SignalProcess> {
     if pids.is_empty() {
         return Vec::new();
     }
-    let list = pids.iter().map(ToString::to_string).collect::<Vec<_>>().join(",");
+    let list = pids
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
     classify(&ps(&["-o", "pid=,args=", "-p", &list]))
 }
 
@@ -275,7 +279,13 @@ fn fill(menu: &NSMenu, target: &Target) {
         add(item(mtm, "Engine: not running", None, target, 0));
     }
     for e in &engines {
-        add(item(mtm, &format!("Engine running · pid {}", e.pid), None, target, 0));
+        add(item(
+            mtm,
+            &format!("Engine running · pid {}", e.pid),
+            None,
+            target,
+            0,
+        ));
         add(item(
             mtm,
             "    Stop engine",
@@ -285,7 +295,13 @@ fn fill(menu: &NSMenu, target: &Target) {
         ));
     }
     for a in &apps {
-        add(item(mtm, &format!("Signal app open · pid {}", a.pid), None, target, 0));
+        add(item(
+            mtm,
+            &format!("Signal app open · pid {}", a.pid),
+            None,
+            target,
+            0,
+        ));
         add(item(
             mtm,
             "    Quit Signal app",
@@ -295,15 +311,39 @@ fn fill(menu: &NSMenu, target: &Target) {
         ));
     }
     sep();
-    add(item(mtm, "Open Signal Rig", Some(sel!(openApp:)), target, 0));
+    add(item(
+        mtm,
+        "Open Signal Rig",
+        Some(sel!(openApp:)),
+        target,
+        0,
+    ));
     if engines.is_empty() {
-        add(item(mtm, "Start engine", Some(sel!(startEngine:)), target, 0));
+        add(item(
+            mtm,
+            "Start engine",
+            Some(sel!(startEngine:)),
+            target,
+            0,
+        ));
     }
     if !engines.is_empty() || !apps.is_empty() {
-        add(item(mtm, "Stop everything", Some(sel!(stopAll:)), target, 0));
+        add(item(
+            mtm,
+            "Stop everything",
+            Some(sel!(stopAll:)),
+            target,
+            0,
+        ));
     }
     sep();
-    add(item(mtm, "Quit Signal menu bar", Some(sel!(quitMenuBar:)), target, 0));
+    add(item(
+        mtm,
+        "Quit Signal menu bar",
+        Some(sel!(quitMenuBar:)),
+        target,
+        0,
+    ));
 }
 
 thread_local! {
@@ -395,9 +435,18 @@ mod tests {
         assert_eq!(
             classify(args),
             vec![
-                SignalProcess { pid: 101, kind: Kind::Engine },
-                SignalProcess { pid: 102, kind: Kind::App },
-                SignalProcess { pid: 103, kind: Kind::MenuBar },
+                SignalProcess {
+                    pid: 101,
+                    kind: Kind::Engine
+                },
+                SignalProcess {
+                    pid: 102,
+                    kind: Kind::App
+                },
+                SignalProcess {
+                    pid: 103,
+                    kind: Kind::MenuBar
+                },
             ]
         );
     }

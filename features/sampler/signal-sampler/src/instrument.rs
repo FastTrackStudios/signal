@@ -21,7 +21,7 @@
 //! not `Sync`), and there is no `Rc` anywhere in the engine — so
 //! `SamplerInstrument` is `Send`.
 
-use signal_plugin_host::{PluginDescriptor, PluginEvents, PluginFormat};
+use signal_plugin_host::{PluginDescriptor, PluginEvents, PluginFormat, PluginParamInfo};
 
 use crate::engine::SampleEngine;
 use crate::soundsource::{Soundsource, SoundsourceKind};
@@ -175,6 +175,10 @@ impl Soundsource for SamplerInstrument {
         SoundsourceKind::Sample
     }
 
+    fn shed_voices(&mut self, level: u8) {
+        self.engine_mut().shed_voices(level);
+    }
+
     fn as_any_mut(&mut self) -> Option<&mut dyn core::any::Any> {
         Some(self)
     }
@@ -193,6 +197,29 @@ impl Soundsource for SamplerInstrument {
         // `SampleEngine`'s rate is fixed at construction; only size the
         // interleaved (stereo) scratch so `render` never allocates.
         self.scratch.resize(block_size * 2, 0.0);
+    }
+
+    /// Modulation inputs a route can drive (0.5 = none): `pitch_mod`
+    /// ±12 semitones on every voice, `cutoff_mod` ±4 octaves on the voices'
+    /// own filter.
+    fn params(&self) -> Vec<PluginParamInfo> {
+        let mk = |id, name: &str| PluginParamInfo {
+            id,
+            name: name.into(),
+            min: 0.0,
+            max: 1.0,
+            default: 0.5,
+        };
+        vec![mk(0, "pitch_mod"), mk(1, "cutoff_mod")]
+    }
+
+    fn set_param(&mut self, id: u32, value: f64) {
+        let v = (value as f32).clamp(0.0, 1.0) - 0.5;
+        match id {
+            0 => self.engine.set_pitch_mod(v * 24.0),
+            1 => self.engine.set_cutoff_mod(v * 8.0),
+            _ => {}
+        }
     }
 
     fn note_on(&mut self, note: u8, velocity: u8) {
@@ -218,6 +245,10 @@ impl Soundsource for SamplerInstrument {
         // de-interleaved into the planar output.
         let frames = out_l.len().min(out_r.len());
 
+        // Modulation writes (routes onto `pitch_mod` / `cutoff_mod`).
+        for &(id, value) in events.params {
+            self.set_param(id, value);
+        }
         // Apply this block's MIDI in offset order (the host already sorts).
         for ev in events.midi {
             self.apply_midi(&ev.message);

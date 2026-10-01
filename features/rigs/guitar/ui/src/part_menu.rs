@@ -53,7 +53,11 @@ pub fn change_items(changes: &[(String, u32)], patch: &str) -> Vec<MenuItem> {
 /// The song's changes, `(patch, count)`.
 #[must_use]
 pub fn changes_of(model: &PerformanceModel) -> Vec<(String, u32)> {
-    model.song_changes.iter().map(|c| (c.patch.clone(), c.count)).collect()
+    model
+        .song_changes
+        .iter()
+        .map(|c| (c.patch.clone(), c.count))
+        .collect()
 }
 
 /// The items for a switch on `patch`: its part, then the song's changes to
@@ -65,7 +69,11 @@ pub fn items(parts: &[(String, String)], patch: &str) -> Vec<MenuItem> {
 
 /// [`items`] with the song's changes to the patch.
 #[must_use]
-pub fn items_with_changes(parts: &[(String, String)], changes: &[(String, u32)], patch: &str) -> Vec<MenuItem> {
+pub fn items_with_changes(
+    parts: &[(String, String)],
+    changes: &[(String, u32)],
+    patch: &str,
+) -> Vec<MenuItem> {
     let mut out = part_items(parts, patch);
     let ch = change_items(changes, patch);
     if !ch.is_empty() {
@@ -84,11 +92,21 @@ fn part_items(parts: &[(String, String)], patch: &str) -> Vec<MenuItem> {
     let taken: Vec<String> = parts.iter().map(|(n, _)| n.clone()).collect();
     match part_for(parts, patch) {
         Some((_, name)) => {
-            let others: Vec<String> = taken.iter().filter(|n| !n.eq_ignore_ascii_case(name)).cloned().collect();
+            let others: Vec<String> = taken
+                .iter()
+                .filter(|n| !n.eq_ignore_ascii_case(name))
+                .cloned()
+                .collect();
             vec![
                 MenuItem::head(format!("Part · {name}")),
                 MenuItem::run("part-go", format!("Go to {name}")),
-                MenuItem::name("part-rename", "Rename part…", "Rename", name.to_string(), others),
+                MenuItem::name(
+                    "part-rename",
+                    "Rename part…",
+                    "Rename",
+                    name.to_string(),
+                    others,
+                ),
                 MenuItem::delete("part-remove", format!("Remove part {name}"), None),
             ]
         }

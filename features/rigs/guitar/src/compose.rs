@@ -32,8 +32,15 @@ pub const MODULES_FILE: &str = "modules.styx";
 pub const PRESETS_FILE: &str = "presets.styx";
 
 /// The modules a preset composes, in signal order.
-pub const MODULES: [&str; 7] =
-    ["Dynamics", "Drive", "Amp", "Modulation", "Time", "Delay", "Reverb"];
+pub const MODULES: [&str; 7] = [
+    "Dynamics",
+    "Drive",
+    "Amp",
+    "Modulation",
+    "Time",
+    "Delay",
+    "Reverb",
+];
 
 /// One parameter a block preset sets.
 #[derive(Clone, Debug, Default, Facet)]
@@ -395,7 +402,12 @@ pub fn block_picks(comp: &Compositions, patch: &PatchDef) -> Vec<BlockChoiceDef>
 /// overrides, and those of the modules it references (a Time snapshot's
 /// Delay and Reverb) — by block name.
 #[must_use]
-pub fn blocks_set_by(comp: &Compositions, module: &str, preset: &str, snapshot_name: &str) -> Vec<String> {
+pub fn blocks_set_by(
+    comp: &Compositions,
+    module: &str,
+    preset: &str,
+    snapshot_name: &str,
+) -> Vec<String> {
     fn walk(comp: &Compositions, m: &str, p: &str, s: &str, depth: u8, out: &mut Vec<String>) {
         if depth > 4 {
             return;
@@ -414,7 +426,14 @@ pub fn blocks_set_by(comp: &Compositions, module: &str, preset: &str, snapshot_n
         snap.blocks.iter().for_each(|c| add(&c.block));
         snap.overrides.iter().for_each(|o| add(&o.block));
         for sub in &snap.modules {
-            walk(comp, &sub.module, &sub.preset, &sub.snapshot, depth + 1, out);
+            walk(
+                comp,
+                &sub.module,
+                &sub.preset,
+                &sub.snapshot,
+                depth + 1,
+                out,
+            );
         }
     }
     let mut out = Vec::new();
@@ -436,7 +455,10 @@ pub fn expand_picks(comp: &Compositions, layer: Vec<ModuleChoiceDef>) -> Vec<Mod
             continue;
         };
         for sub in &snap.modules {
-            if !out.iter().any(|o| o.module.eq_ignore_ascii_case(&sub.module)) {
+            if !out
+                .iter()
+                .any(|o| o.module.eq_ignore_ascii_case(&sub.module))
+            {
                 out.push(sub.clone());
             }
         }
@@ -548,7 +570,10 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
     let mut out = def.clone();
     let mut synthesised: Vec<PresetDef> = Vec::new();
     for patch in &mut out.patches {
-        patch.overrides.iter_mut().for_each(OverrideDef::pin_parallel_mix);
+        patch
+            .overrides
+            .iter_mut()
+            .for_each(OverrideDef::pin_parallel_mix);
         if patch.rig_preset.is_empty() && patch.modules.is_empty() && patch.blocks.is_empty() {
             continue;
         }
@@ -951,7 +976,10 @@ mod tests {
                 name: "Rhythmic".into(),
                 snapshots: vec![snap(
                     "Dotted",
-                    vec![choice("Delay", "Rhythmic", "Dotted Eighth"), choice("Reverb", "Hall", "Hall")],
+                    vec![
+                        choice("Delay", "Rhythmic", "Dotted Eighth"),
+                        choice("Reverb", "Hall", "Hall"),
+                    ],
                 )],
             }],
             ..Compositions::default()
@@ -961,13 +989,27 @@ mod tests {
             ..snapshot_patch(&worship_def(), "", "", "p").expect("a patch")
         };
         let picks = module_picks(&c, &patch);
-        let of = |m: &str| picks.iter().find(|p| p.module == m).map(|p| p.snapshot.clone());
+        let of = |m: &str| {
+            picks
+                .iter()
+                .find(|p| p.module == m)
+                .map(|p| p.snapshot.clone())
+        };
         assert_eq!(of("Delay").as_deref(), Some("Dotted Eighth"));
         assert_eq!(of("Reverb").as_deref(), Some("Hall"));
         patch.modules.push(choice("Delay", "Slapback", "Slap"));
         let picks = module_picks(&c, &patch);
-        let of = |m: &str| picks.iter().find(|p| p.module == m).map(|p| p.snapshot.clone());
-        assert_eq!(of("Delay").as_deref(), Some("Slap"), "the patch's own Delay wins");
+        let of = |m: &str| {
+            picks
+                .iter()
+                .find(|p| p.module == m)
+                .map(|p| p.snapshot.clone())
+        };
+        assert_eq!(
+            of("Delay").as_deref(),
+            Some("Slap"),
+            "the patch's own Delay wins"
+        );
         assert_eq!(of("Reverb").as_deref(), Some("Hall"));
     }
 
@@ -1437,7 +1479,12 @@ pub fn level_presets(
     let measure_at = |(p, s): (usize, usize), level_db: f32| -> Option<f32> {
         let preset = &comp.presets[p];
         let mut def = base.clone();
-        def.patches = vec![snapshot_patch(base, &preset.name, &preset.snapshots[s].name, "level")?];
+        def.patches = vec![snapshot_patch(
+            base,
+            &preset.name,
+            &preset.snapshots[s].name,
+            "level",
+        )?];
         let mut calm = comp.clone();
         calm.presets[p].snapshots[s].level_db = level_db;
         let flat = flatten(&def, &calm);
@@ -1521,7 +1568,10 @@ pub fn regroup_by_gear(comp: &mut Compositions, profiles: &mut [ProfileDef]) -> 
     }
     // What a snapshot *is*, for spotting an identical one.
     fn content(snapshot: &PresetSnapshotDef) -> String {
-        format!("{:?}|{:?}|{:?}", snapshot.modules, snapshot.blocks, snapshot.overrides)
+        format!(
+            "{:?}|{:?}|{:?}",
+            snapshot.modules, snapshot.blocks, snapshot.overrides
+        )
     }
     let is_gear = |p: &RigPresetDef| {
         !p.snapshots.is_empty()
@@ -1531,7 +1581,12 @@ pub fn regroup_by_gear(comp: &mut Compositions, profiles: &mut [ProfileDef]) -> 
     };
 
     let mut moved = Vec::new();
-    let composites: Vec<RigPresetDef> = comp.presets.iter().filter(|p| !is_gear(p)).cloned().collect();
+    let composites: Vec<RigPresetDef> = comp
+        .presets
+        .iter()
+        .filter(|p| !is_gear(p))
+        .cloned()
+        .collect();
     for composite in composites {
         let mut kept = Vec::new();
         for snap in composite.snapshots {
@@ -1539,7 +1594,11 @@ pub fn regroup_by_gear(comp: &mut Compositions, profiles: &mut [ProfileDef]) -> 
                 kept.push(snap);
                 continue;
             };
-            let gear = match comp.presets.iter().position(|p| p.name.eq_ignore_ascii_case(&amp)) {
+            let gear = match comp
+                .presets
+                .iter()
+                .position(|p| p.name.eq_ignore_ascii_case(&amp))
+            {
                 Some(i) => i,
                 None => {
                     comp.presets.push(RigPresetDef {
@@ -1551,40 +1610,44 @@ pub fn regroup_by_gear(comp: &mut Compositions, profiles: &mut [ProfileDef]) -> 
             };
             let key = content(&snap);
             let target = &mut comp.presets[gear];
-            let (to_snapshot, reused) = if let Some(same) = target.snapshots.iter().find(|s| content(s) == key) {
-                (same.name.clone(), true)
-            } else {
-                // Its own name if free; else named by what sets it apart —
-                // the drive pedal it adds, or failing that its delay — and
-                // only then numbered.
-                let taken = |target: &RigPresetDef, name: &str| {
-                    target.snapshots.iter().any(|s| s.name.eq_ignore_ascii_case(name))
-                };
-                let pick = |module: &str| {
-                    snap.modules
-                        .iter()
-                        .find(|m| m.module.eq_ignore_ascii_case(module))
-                        .filter(|m| !m.preset.eq_ignore_ascii_case("Off"))
-                };
-                let mut name = snap.name.clone();
-                if taken(target, &name) {
-                    if let Some(drive) = pick("Drive") {
-                        name = format!("{} + {}", snap.name, drive.preset);
-                    } else if let Some(time) = pick("Delay").or_else(|| pick("Time")) {
-                        name = format!("{} · {}", snap.name, time.snapshot);
+            let (to_snapshot, reused) =
+                if let Some(same) = target.snapshots.iter().find(|s| content(s) == key) {
+                    (same.name.clone(), true)
+                } else {
+                    // Its own name if free; else named by what sets it apart —
+                    // the drive pedal it adds, or failing that its delay — and
+                    // only then numbered.
+                    let taken = |target: &RigPresetDef, name: &str| {
+                        target
+                            .snapshots
+                            .iter()
+                            .any(|s| s.name.eq_ignore_ascii_case(name))
+                    };
+                    let pick = |module: &str| {
+                        snap.modules
+                            .iter()
+                            .find(|m| m.module.eq_ignore_ascii_case(module))
+                            .filter(|m| !m.preset.eq_ignore_ascii_case("Off"))
+                    };
+                    let mut name = snap.name.clone();
+                    if taken(target, &name) {
+                        if let Some(drive) = pick("Drive") {
+                            name = format!("{} + {}", snap.name, drive.preset);
+                        } else if let Some(time) = pick("Delay").or_else(|| pick("Time")) {
+                            name = format!("{} · {}", snap.name, time.snapshot);
+                        }
                     }
-                }
-                let base = name.clone();
-                let mut n = 2;
-                while taken(target, &name) {
-                    name = format!("{base} {n}");
-                    n += 1;
-                }
-                let mut joined = snap.clone();
-                joined.name.clone_from(&name);
-                target.snapshots.push(joined);
-                (name, false)
-            };
+                    let base = name.clone();
+                    let mut n = 2;
+                    while taken(target, &name) {
+                        name = format!("{base} {n}");
+                        n += 1;
+                    }
+                    let mut joined = snap.clone();
+                    joined.name.clone_from(&name);
+                    target.snapshots.push(joined);
+                    (name, false)
+                };
             moved.push(Regrouped {
                 from_preset: composite.name.clone(),
                 from_snapshot: snap.name.clone(),
@@ -1663,15 +1726,19 @@ pub fn dial_post_comp(
         .filter(|(_, preset)| only.is_none_or(|n| preset.name.eq_ignore_ascii_case(n)))
         .flat_map(|(p, preset)| {
             let comp = &*comp;
-            preset.snapshots.iter().enumerate().filter_map(move |(s, snap)| {
-                let choice = snap
-                    .blocks
-                    .iter()
-                    .rev()
-                    .find(|b| b.block.eq_ignore_ascii_case(POST_COMP))?;
-                let target = comp.block_preset(&choice.preset)?.target_gr_db;
-                (target > 0.0).then(|| (p, s, choice.preset.clone(), target))
-            })
+            preset
+                .snapshots
+                .iter()
+                .enumerate()
+                .filter_map(move |(s, snap)| {
+                    let choice = snap
+                        .blocks
+                        .iter()
+                        .rev()
+                        .find(|b| b.block.eq_ignore_ascii_case(POST_COMP))?;
+                    let target = comp.block_preset(&choice.preset)?.target_gr_db;
+                    (target > 0.0).then(|| (p, s, choice.preset.clone(), target))
+                })
         })
         .collect();
 
@@ -1680,14 +1747,21 @@ pub fn dial_post_comp(
     let render = |p: usize, s: usize, threshold: f32, engaged: bool| -> Option<f32> {
         let preset = &comp.presets[p];
         let mut def = base.clone();
-        def.patches = vec![snapshot_patch(base, &preset.name, &preset.snapshots[s].name, "dial")?];
+        def.patches = vec![snapshot_patch(
+            base,
+            &preset.name,
+            &preset.snapshots[s].name,
+            "dial",
+        )?];
         let mut trial = comp.clone();
         let snap = &mut trial.presets[p].snapshots[s];
         snap.overrides.retain(|o| {
             !(o.block.eq_ignore_ascii_case(POST_COMP) && o.param.eq_ignore_ascii_case("threshold"))
         });
-        snap.overrides.push(OverrideDef::set("", POST_COMP, "threshold", threshold));
-        snap.overrides.push(OverrideDef::set("", POST_COMP, "makeup", 0.0));
+        snap.overrides
+            .push(OverrideDef::set("", POST_COMP, "threshold", threshold));
+        snap.overrides
+            .push(OverrideDef::set("", POST_COMP, "makeup", 0.0));
         let flat = flatten(&def, &trial);
         let mut patch = crate::nodes::to_nodes_with_store(&flat, drives)
             .to_profile(&flat, drives)
@@ -1732,7 +1806,8 @@ pub fn dial_post_comp(
                     !(o.block.eq_ignore_ascii_case(POST_COMP)
                         && o.param.eq_ignore_ascii_case("threshold"))
                 });
-                snap.overrides.push(OverrideDef::set("", POST_COMP, "threshold", threshold));
+                snap.overrides
+                    .push(OverrideDef::set("", POST_COMP, "threshold", threshold));
             }
             PostCompDial {
                 preset: comp.presets[p].name.clone(),
@@ -1768,7 +1843,12 @@ pub fn loudness_target(comp: &Compositions, preset: &str, snapshot: &str) -> f32
 /// tab plays when it auditions a snapshot, so an audition lands exactly at
 /// the level the snapshot was levelled to.
 #[must_use]
-pub fn snapshot_patch(base: &ProfileDef, preset: &str, snapshot: &str, name: &str) -> Option<crate::profiles::PatchDef> {
+pub fn snapshot_patch(
+    base: &ProfileDef,
+    preset: &str,
+    snapshot: &str,
+    name: &str,
+) -> Option<crate::profiles::PatchDef> {
     let mut patch = base.patches.first()?.clone();
     patch.name = name.into();
     patch.rig_preset = preset.into();

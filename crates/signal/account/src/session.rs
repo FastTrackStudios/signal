@@ -285,9 +285,16 @@ impl Account {
 
     /// Keep the refresh token and expiry from a token response, if it has one.
     fn save_refresh(&self, token_response: &str) {
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(token_response) else { return };
-        let Some(refresh) = v.get("refresh_token").and_then(|r| r.as_str()) else { return };
-        let expires_in = v.get("expires_in").and_then(serde_json::Value::as_i64).unwrap_or(3600);
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(token_response) else {
+            return;
+        };
+        let Some(refresh) = v.get("refresh_token").and_then(|r| r.as_str()) else {
+            return;
+        };
+        let expires_in = v
+            .get("expires_in")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(3600);
         let record = serde_json::json!({
             "refresh_token": refresh,
             "expires_at": now_unix() + expires_in,
@@ -313,7 +320,9 @@ impl Account {
         let v: serde_json::Value = serde_json::from_str(&text).ok()?;
         Some((
             v.get("refresh_token")?.as_str()?.to_string(),
-            v.get("expires_at").and_then(serde_json::Value::as_i64).unwrap_or(0),
+            v.get("expires_at")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0),
         ))
     }
 
@@ -342,7 +351,10 @@ impl Account {
         let response = self
             .http
             .post(format!("{}/oauth2/token", self.issuer()))
-            .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                "application/x-www-form-urlencoded",
+            )
             .body(body)
             .send()
             .await
@@ -356,7 +368,12 @@ impl Account {
             AccountError::Issuer(e.to_string())
         })?;
         self.save_refresh(&text);
-        let mut session = self.store.load().ok().flatten().unwrap_or_else(|| StoredSession::new(token.clone()));
+        let mut session = self
+            .store
+            .load()
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| StoredSession::new(token.clone()));
         session.token.clone_from(&token);
         self.store
             .save(&session)
@@ -415,7 +432,9 @@ fn now_unix() -> i64 {
 fn urlencode(s: &str) -> String {
     s.bytes()
         .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
             _ => format!("%{b:02X}"),
         })
         .collect()
