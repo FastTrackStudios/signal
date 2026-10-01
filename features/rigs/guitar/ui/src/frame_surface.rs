@@ -271,12 +271,22 @@ mod native {
     }
 
     /// The window's device and queue, from whatever the renderer boxed.
+    /// The host's device, when Vello can render on it: its compute stages
+    /// need indirect execution, which the iOS simulator's Metal lacks (wgpu
+    /// aborts the app at the first face). Without it the face paints its
+    /// vectors into the page instead (`paint_vectors`).
     fn device_and_queue(ctx: Box<dyn std::any::Any>) -> Option<(wgpu::Device, wgpu::Queue)> {
+        let vello_can = |adapter: &wgpu::Adapter| {
+            adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::INDIRECT_EXECUTION)
+        };
         let ctx = match ctx.downcast::<wgpu_context::DeviceHandle>() {
-            Ok(h) => return Some((h.device.clone(), h.queue.clone())),
+            Ok(h) => return vello_can(&h.adapter).then(|| (h.device.clone(), h.queue.clone())),
             Err(ctx) => ctx,
         };
-        ctx.downcast::<vello::util::DeviceHandle>().ok().map(|h| (h.device.clone(), h.queue.clone()))
+        ctx.downcast::<vello::util::DeviceHandle>()
+            .ok()
+            .filter(|h| vello_can(h.adapter()))
+            .map(|h| (h.device.clone(), h.queue.clone()))
     }
 
     /// Shift = fine, Ctrl/Cmd = alternate (reset-on-click), as frame's player.
@@ -298,16 +308,10 @@ mod native {
 
     impl Widget for FrameWidget {
         fn can_create_surfaces(&mut self, render_ctx: &mut dyn RenderContext) {
-            // frame renders with Vello, which needs indirect execution even
-            // in its CPU mode; the iOS simulator's Metal has none (wgpu
-            // aborts the app at the first face). The simulator shows the
-            // pages without their faces; a phone draws them.
-            if cfg!(all(target_os = "ios", target_abi = "sim")) {
-                tracing::warn!(target: "frame", "iOS simulator: no indirect execution, frame surface stays blank");
-                return;
-            }
+            // No device Vello can render on: the face paints its vectors
+            // into the page (see `paint`).
             let Some((device, queue)) = render_ctx.renderer_specific_context().and_then(device_and_queue) else {
-                tracing::warn!(target: "frame", "renderer has no wgpu device: frame surface stays blank");
+                tracing::info!(target: "frame", "no device for Vello: frame surface paints vectors");
                 return;
             };
             if let Ok(s) = self.live.borrow_mut().as_mut() {
@@ -402,6 +406,14 @@ mod native {
                     Err(e) => tracing::warn!(target: "frame", error = %e, "frame render failed"),
                 }
                 hand_on(&self.edits, live, &*self.update);
+            }
+            // No Vello GPU to render with (the iOS simulator: no indirect
+            // execution): the face's vectors go straight into this scene, for
+            // whatever renderer draws it — vello-hybrid there.
+            if !live.has_gpu() {
+                live.paint_vectors(&mut scene, width, height, scale);
+                hand_on(&self.edits, live, &*self.update);
+                return scene;
             }
             if let Some((id, _, _)) = self.target {
                 scene.fill(

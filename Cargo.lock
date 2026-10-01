@@ -5935,6 +5935,8 @@ dependencies = [
 name = "frame-live"
 version = "0.1.0"
 dependencies = [
+ "anyrender 0.11.1",
+ "anyrender_svg 0.12.0",
  "document-io",
  "document-proto",
  "kurbo 0.13.1",

@@ -153,8 +153,10 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         // stacks are built in `new()`, so the UI is populated either way.
         #[cfg(not(target_os = "ios"))]
         backend.start();
+        // Design mode (the simulator) opens no device: `start` only lays the
+        // profile out, which is what the pages draw from.
         #[cfg(target_os = "ios")]
-        if crate::ios_audio::has_external_input() {
+        if crate::ios_audio::has_external_input() || signal_guitar::library::rig_is_design() {
             backend.start();
         }
 

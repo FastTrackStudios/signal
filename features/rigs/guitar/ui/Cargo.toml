@@ -84,7 +84,7 @@ bytemuck = { version = "1", features = ["derive"] }
 # Pages designed in frame, rendered by frame on this window's device and
 # hot-reloaded from their files (see frame_surface.rs). `wgpu_context` is
 # the type Blitz boxes its device in.
-frame-live.workspace = true
+frame-live = { workspace = true, features = ["anyrender-0-11"] }
 wgpu_context = "0.7"
 tracing.workspace = true
 
