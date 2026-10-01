@@ -5106,13 +5106,14 @@ dependencies = [
  "architect-ui",
  "atomic_float",
  "blitz-dom",
+ "blitz-traits",
  "bytemuck",
  "dioxus",
+ "dioxus-native",
  "eq-dsp",
  "fts-audio-ui",
  "futures-timer",
  "kurbo 0.13.1",
- "nice-plug-dioxus",
  "parking_lot",
  "peniko 0.6.1",
  "spectrum-analyzer",
@@ -14320,7 +14321,6 @@ dependencies = [
  "reverb-ui",
  "rustc-hash 2.1.3",
  "serde_json",
- "session-ui",
  "signal-grid",
  "signal-grid-ui",
  "signal-guitar",
@@ -14503,6 +14503,23 @@ dependencies = [
  "fts-modulation",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "signal-mobile"
+version = "0.1.0"
+dependencies = [
+ "android-activity",
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
+ "blitz-shell",
+ "dioxus",
+ "dioxus-native",
+ "signal-guitar-proto",
+ "signal-guitar-ui",
+ "tracing",
+ "tracing-subscriber",
+ "vox-core",
+ "vox-websocket",
 ]
 
 [[package]]

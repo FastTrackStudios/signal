@@ -1,0 +1,30 @@
+[package]
+name = "signal-mobile"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+description = "Signal on a phone — the guitar rig's phone pages as a remote of a signal engine, on Blitz"
+
+# The phone app: the same `GuitarRigRemote` the desktop and the browser
+# mount, laid out a page at a time (the phone form factor), talking to a
+# `signal-desktop --engine` over vox WebSocket. Blitz (dioxus-native) draws
+# it — the phone faces are painted custom widgets, which a WebView cannot
+# host. Runs on the desktop too (`cargo run -p signal-mobile`), sized as a
+# phone held sideways, for a quick look without the emulator.
+
+[dependencies]
+dioxus = { workspace = true }
+dioxus-native = { workspace = true }
+blitz-shell = { workspace = true, features = ["custom-widget"] }
+signal-guitar-ui = { workspace = true }
+signal-guitar-proto = { workspace = true }
+vox-core = { workspace = true }
+vox-websocket = { workspace = true }
+architect = { workspace = true, features = ["vox", "platform"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+# The activity the app runs in: Android's NativeActivity, with
+# `android_main` (main.rs) as its entry.
+android-activity = { version = "0.6", features = ["native-activity"] }

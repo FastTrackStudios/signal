@@ -9,6 +9,9 @@ resolver = "3"
 
 members = [
     "apps/desktop",
+    # The phone app (dx build --platform android): the guitar rig's phone
+    # pages on Blitz, a remote of a signal engine.
+    "apps/mobile",
     # Vendored, patched dioxus-native-dom — see its UPSTREAM.md and the
     # `[patch]` for DioxusLabs/dioxus below.
     "libs/vendor/dioxus-native-dom",
