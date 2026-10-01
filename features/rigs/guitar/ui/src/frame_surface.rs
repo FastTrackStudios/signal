@@ -298,6 +298,14 @@ mod native {
 
     impl Widget for FrameWidget {
         fn can_create_surfaces(&mut self, render_ctx: &mut dyn RenderContext) {
+            // frame renders with Vello, which needs indirect execution even
+            // in its CPU mode; the iOS simulator's Metal has none (wgpu
+            // aborts the app at the first face). The simulator shows the
+            // pages without their faces; a phone draws them.
+            if cfg!(all(target_os = "ios", target_abi = "sim")) {
+                tracing::warn!(target: "frame", "iOS simulator: no indirect execution, frame surface stays blank");
+                return;
+            }
             let Some((device, queue)) = render_ctx.renderer_specific_context().and_then(device_and_queue) else {
                 tracing::warn!(target: "frame", "renderer has no wgpu device: frame surface stays blank");
                 return;

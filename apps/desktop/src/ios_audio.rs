@@ -20,7 +20,8 @@
 
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::{class, msg_send, msg_send_id};
+use objc2::runtime::NSObject;
+use objc2::{class, msg_send};
 
 /// Port types that count as a real guitar/line interface (allowlist — the
 /// built-in mic, wired-headset mic, and Bluetooth are deliberately absent).
@@ -102,40 +103,40 @@ pub fn log_available_inputs() {
 /// opens the input only for a real interface). Safe to call repeatedly.
 pub fn configure() {
     unsafe {
-        let session: Retained<AnyObject> = msg_send_id![class!(AVAudioSession), sharedInstance];
-        let mut err: *mut AnyObject = std::ptr::null_mut();
+        let session: Retained<AnyObject> = msg_send![class!(AVAudioSession), sharedInstance];
 
         let category = nsstring("AVAudioSessionCategoryPlayAndRecord");
         // DefaultToSpeaker | AllowBluetoothA2DP.
         let options: usize = 0x8 | 0x20;
-        let ok: bool = msg_send![
-            &*session, setCategory: category, withOptions: options, error: &mut err
-        ];
-        if !ok {
+        let set: Result<(), Retained<NSObject>> =
+            msg_send![&*session, setCategory: category, withOptions: options, error: _];
+        if set.is_err() {
             tracing::warn!("AVAudioSession setCategory(playAndRecord) failed");
         }
-        let _: bool = msg_send![&*session, setPreferredSampleRate: 48_000.0f64, error: &mut err];
-        let _: bool = msg_send![
-            &*session, setPreferredIOBufferDuration: (128.0f64 / 48_000.0), error: &mut err
+        let _: Result<(), Retained<NSObject>> =
+            msg_send![&*session, setPreferredSampleRate: 48_000.0f64, error: _];
+        let _: Result<(), Retained<NSObject>> = msg_send![
+            &*session, setPreferredIOBufferDuration: (128.0f64 / 48_000.0), error: _
         ];
 
         let ext = external_input_port();
         if !ext.is_null() {
-            let set_in: bool = msg_send![&*session, setPreferredInput: ext, error: &mut err];
-            if !set_in {
+            let set_in: Result<(), Retained<NSObject>> =
+                msg_send![&*session, setPreferredInput: ext, error: _];
+            if set_in.is_err() {
                 tracing::warn!("AVAudioSession setPreferredInput failed");
             }
             tracing::info!("AVAudioSession: external interface present — input pinned");
         } else {
             // Clear any preferred input; the rig won't read the built-in mic.
-            let _: bool = msg_send![
-                &*session, setPreferredInput: std::ptr::null_mut::<AnyObject>(), error: &mut err
+            let _: Result<(), Retained<NSObject>> = msg_send![
+                &*session, setPreferredInput: std::ptr::null_mut::<AnyObject>(), error: _
             ];
             tracing::info!("AVAudioSession: no interface — rig input stays closed (no mic)");
         }
 
-        let active: bool = msg_send![&*session, setActive: true, error: &mut err];
-        if !active {
+        let active: Result<(), Retained<NSObject>> = msg_send![&*session, setActive: true, error: _];
+        if active.is_err() {
             tracing::warn!("AVAudioSession activation failed");
         }
         // After activation, availableInputs is populated — log what's there.

@@ -15,6 +15,8 @@ members = [
     # Vendored, patched dioxus-native-dom — see its UPSTREAM.md and the
     # `[patch]` for DioxusLabs/dioxus below.
     "libs/vendor/dioxus-native-dom",
+    "libs/vendor/dioxus-native",
+    "libs/vendor/anyrender_vello_hybrid",
     "apps/web",
     "apps/cli",
     "apps/fts-convert",
@@ -513,7 +515,11 @@ dioxus = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d0
 # Both features can be on at once: the renderer is chosen by a `cfg_if`
 # chain that tests `vello` first, so this wins over the default without
 # having to turn defaults off and re-list them.
-dioxus-native = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", features = ["prelude", "system-fonts", "svg", "autofocus", "incremental", "data-uri", "vello"] }
+# Vendored (libs/vendor/dioxus-native, from the same rev): the iOS simulator
+# draws with vello-hybrid — its Metal has no indirect execution, which full
+# Vello needs (even in CPU mode, for its raster pass). Devices and desktops
+# keep Vello. See its UPSTREAM.md.
+dioxus-native = { path = "libs/vendor/dioxus-native", features = ["prelude", "system-fonts", "svg", "autofocus", "incremental", "data-uri", "vello", "vello-hybrid"] }
 blitz-dom = "=0.3.0-beta.1"
 blitz-paint = "=0.3.0-beta.1"
 blitz-traits = "=0.3.0-beta.1"
@@ -852,6 +858,10 @@ blitz-html = { path = "../blitz/packages/blitz-html" }
 # so a frame where only faces move skips Blitz's paint and vello).
 anyrender = { path = "../blitz/vendor/anyrender" }
 anyrender_vello = { path = "../blitz/vendor/anyrender_vello" }
+# Resizes its surface whenever it is the wrong size: a simulator or iPad
+# that rotates before the renderer is up otherwise keeps the portrait
+# surface. See libs/vendor/anyrender_vello_hybrid/UPSTREAM.md.
+anyrender_vello_hybrid = { path = "libs/vendor/anyrender_vello_hybrid" }
 # Vendored one-line fix: quote scalars containing `<`/`>` — upstream
 # (facet-rs/facet) styx-format emits them bare but styx-parse rejects
 # them, so serialized keybind configs (`keys "<C-s>"`) could not be
@@ -1190,6 +1200,7 @@ codegen-units = 256
 # with equivalent guarantees — see libs/vendor/dioxus-native-dom/UPSTREAM.md.
 [patch."https://github.com/DioxusLabs/dioxus"]
 dioxus-native-dom = { path = "libs/vendor/dioxus-native-dom" }
+dioxus-native = { path = "libs/vendor/dioxus-native" }
 
 # Local neural-amp-modeler-rs checkout (../neural-amp-modeler-rs): the pure
 # engine's wasm speed-up (5x, bit-identical) lives there until it is tagged.

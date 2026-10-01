@@ -182,6 +182,21 @@ const RAIL_W: u32 = 60;
 /// island: 37 points wide, 11 in from the edge).
 const HOUSING: u32 = 54;
 
+/// What the app around the rig gives it on a phone: the way back to the
+/// instrument menu (the iPhone app's front door). Absent where the rig is
+/// the whole app (the Android remote, the desktop shot tool).
+#[derive(Clone, Copy)]
+pub struct PhoneHost {
+    pub on_home: Callback<()>,
+}
+
+/// Which side the camera housing is on, for a phone on its side: `true`
+/// the left. The page keeps [`HOUSING`] clear on that side. Provided by the
+/// iOS shell (it reads the window scene's orientation); without it the
+/// housing is taken to be on the right.
+#[derive(Clone, Copy)]
+pub struct IslandLeft(pub Signal<bool>);
+
 /// The phone's rig surface: the patch along the top, the rail down the
 /// left (Control, Switch, Edit; Profile or Song), and the view — in
 /// Control, a page of the chain over the chain itself.
@@ -194,6 +209,11 @@ pub fn PhoneControl(
     switches: Element,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let host = try_use_context::<PhoneHost>();
+    let island_left = try_use_context::<IslandLeft>().is_some_and(|s| (s.0)());
+    // The housing's clearance: the rail moves out from under it on the
+    // left; on the right the view keeps clear of it itself.
+    let (lead, trail) = if island_left { (HOUSING, 0) } else { (0, HOUSING) };
     // `FTS_PHONE_PAGE=<slug>`: open on that page (the shot tool renders
     // every page at once, an app each).
     let mut page = use_signal(|| {
@@ -287,7 +307,7 @@ pub fn PhoneControl(
         // home indicator out) and the screen's full width: the view runs
         // under the camera housing on the right, and what sits beside it
         // keeps clear itself.
-        div { style: "width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; background: #0f1012; color: {TEXT};",
+        div { style: "width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; padding-left: {lead}px; background: #0f1012; color: {TEXT};",
             // ── The top line: the patch, where you are, its modules ──
             div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
                 PatchStepper { revision: model.revision }
@@ -307,18 +327,24 @@ pub fn PhoneControl(
             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;",
                 // ── The rail ──
                 div { style: "flex: 0 0 {RAIL_W}px; display: flex; flex-direction: column; justify-content: center; gap: 2px; background: {BAR_BG}; border-right: 1px solid {RULE};",
+                    if let Some(host) = host {
+                        RailButton { on: false, label: "Rigs", icon: "Rigs", onclick: move |()| host.on_home.call(()) }
+                        div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
+                    }
                     for (m, label) in [(Mode::Control, "Control"), (Mode::Switch, "Switch"), (Mode::Edit, "Edit")] {
                         RailButton { key: "{label}", on: mode() == m, label, icon: label, onclick: move |()| mode.set(m) }
                     }
                     div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
                     RailButton { on: !song, label: "Profile", icon: "Profile", onclick: move |()| set_play(1) }
                     RailButton { on: song, label: "Song", icon: "Song", onclick: move |()| play_song(2) }
+                    div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
+                    RailButton { on: false, label: "Audio", icon: "Audio", onclick: move |()| crate::settings::open_audio_settings() }
                 }
                 // ── The view ──
                 div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
                     match mode() {
                         Mode::Control => rsx! {
-                            div { style: "flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {HOUSING}px;",
+                            div { style: "flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
                                 PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm }
                             }
                             // The chain: a segment a page, coloured by
@@ -341,12 +367,12 @@ pub fn PhoneControl(
                             }
                         },
                         Mode::Switch => rsx! {
-                            div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; box-sizing: border-box; padding: 6px {HOUSING}px 6px 6px;",
+                            div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; box-sizing: border-box; padding: 6px {trail}px 6px 6px;",
                                 {switches}
                             }
                         },
                         Mode::Edit => rsx! {
-                            div { style: "flex: 1 1 0%; display: flex; align-items: center; justify-content: center; color: {DIM}; font-size: 12px; padding-right: {HOUSING}px;",
+                            div { style: "flex: 1 1 0%; display: flex; align-items: center; justify-content: center; color: {DIM}; font-size: 12px; padding-right: {trail}px;",
                                 "Edit — coming next"
                             }
                         },
@@ -384,6 +410,10 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
         "Edit" => &["M4 20l4-1 11-11-3-3L5 16z", "M14 7l3 3"],
         // A person.
         "Profile" => &["M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M4 21c1-4 4-6 8-6s7 2 8 6"],
+        // Back to the instrument menu.
+        "Rigs" => &["M14 6l-6 6 6 6"],
+        // A speaker.
+        "Audio" => &["M4 9h3l4-3.5v13L7 15H4z", "M15 9.5a4 4 0 0 1 0 5", "M17.5 7a7.5 7.5 0 0 1 0 10"],
         // A note.
         _ => &["M9 18V5l11-2v13", "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z", "M20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"],
     };

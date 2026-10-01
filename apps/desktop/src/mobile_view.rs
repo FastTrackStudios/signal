@@ -1,36 +1,34 @@
-//! The iPhone shell.
+//! The iPhone shell, on Blitz.
 //!
 //! The app ships as **Signal**, so its front door is the instrument menu
-//! (`crate::rigs::RigMenu`) — the same catalogue the desktop renders. There
-//! is no domain chooser above it: the old Home page offered Signal / Session
-//! / Charts when only Signal exists here, which cost a tap to say nothing.
+//! (`crate::rigs::RigMenu`) — the same catalogue the desktop renders. A
+//! remembered rig opens straight into itself on launch; the menu is one tap
+//! back (the rig's rail has a Rigs button).
 //!
-//! A remembered rig opens straight into itself on launch; the menu is one tap
-//! back, on the rig rail. The rig (`RigShell`) is a wide control panel that
-//! switches the phone to landscape on entry (and back to portrait on exit)
-//! via `ios_orientation`. Inside the rig, three pages sit behind a slim left
-//! rail:
+//! The guitar rig is `GuitarRigRemote`, the surface the desktop and the
+//! Android remote mount: on a phone held sideways it lays the chain out a
+//! page at a time in frame's phone faces (`signal_guitar_ui`'s `phone`), so
+//! the phone has no rig UI of its own. This shell only gives it what a phone
+//! window can tell it — its size in points (the form factor) and which side
+//! the camera housing is on — and the way back to the menu.
 //!
-//! - **Scenes**: the perform grid (footswitch stacks, tap tempo, hold layer)
-//! - **Control**: the guitar instrument panel (chain, params, meters)
-//! - **Audio**: input/output device + buffer/rate selection
-//!
-//! The rig clients come from `rig_engine.rs` (in-process LocalServer) and
+//! Blitz draws it (dioxus-native, the desktop's renderer): the faces are
+//! painted custom widgets, which the WebView this replaced could not host.
+//! The rig clients come from `rig_engine.rs` (in-process `LocalServer`) and
 //! are provided as context, so every shared component works unchanged.
 
 #[cfg(feature = "signal-keys-rig")]
 use crate::keys_view;
 use dioxus::prelude::*;
-use signal_guitar_ui::proto::AudioPrefs;
-use signal_guitar_ui::proto::audio::AudioSettingsClient;
-use signal_guitar_ui::proto::rig::RigClient;
-use signal_guitar_ui::{
-    AudioSettingsBridge, AudioSettingsModal, ControlView, PerformGrid, use_rig_state,
-};
+use signal_guitar_ui::{GuitarRigRemote, IslandLeft, PhoneHost, WindowAspect, WindowSize};
 
 use crate::rigs::{Rig, RigMenu};
 
 const SIGNAL_TAILWIND: &str = include_str!("../assets/tailwind-signal.css");
+
+/// Blitz gives `body` an 8px margin, and the root's background is also what
+/// fills under the status bar and the home indicator.
+const ROOT_CSS: &str = "html, body { margin: 0; padding: 0; background: #0f1012; }";
 
 /// Which top-level screen is showing.
 #[derive(Clone, Copy, PartialEq)]
@@ -58,35 +56,68 @@ impl MobileScreen {
     }
 }
 
-/// Which rig page is showing (within `RigShell`).
-#[derive(Clone, Copy, PartialEq)]
-enum MobilePage {
-    Scenes,
-    Control,
-    Audio,
-}
-
-/// The phone app root: bootstrap the engine into context, then route
-/// between the instrument menu and the rigs.
+/// The phone app root: hand winit's window to the app's scene, measure the
+/// window, bootstrap the engine into context, then route between the
+/// instrument menu and the rigs.
 #[component]
 pub fn MobileApp() -> Element {
+    // First, before anything else: winit's window joins the app's window
+    // scene (`ios_scene`) — without one iOS 27 never shows it.
+    let window = dioxus_native::use_window();
+    use_hook({
+        let window = window.clone();
+        move || {
+            use dioxus_native::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            if let Ok(handle) = window.window_handle()
+                && let RawWindowHandle::UiKit(uikit) = handle.as_raw()
+            {
+                crate::ios_scene::window_created(uikit.ui_view);
+            }
+        }
+    });
+
+    // The window's size in points, its aspect, and the housing's side: the
+    // rig's form factor and where its page keeps clear. Read on a timer
+    // (as the desktop's rig view does) — a rotation changes all three.
+    let mut size = use_context_provider(|| WindowSize(Signal::new((402.0, 874.0))));
+    let mut aspect = use_context_provider(|| WindowAspect(Signal::new(402.0 / 874.0)));
+    let mut island = use_context_provider(|| IslandLeft(Signal::new(false)));
+    use_future(move || {
+        let window = window.clone();
+        async move {
+            loop {
+                let px = window.surface_size();
+                if px.height > 0 {
+                    let scale = window.scale_factor().max(0.1);
+                    let pt = (f64::from(px.width) / scale, f64::from(px.height) / scale);
+                    let was = *size.0.peek();
+                    if (was.0 - pt.0).abs() > 1.0 || (was.1 - pt.1).abs() > 1.0 {
+                        size.0.set(pt);
+                        aspect.0.set(pt.0 / pt.1);
+                    }
+                }
+                let left = crate::ios_scene::island_on_left() == Some(true);
+                if *island.0.peek() != left {
+                    island.0.set(left);
+                }
+                architect::platform::sleep(std::time::Duration::from_millis(300)).await;
+            }
+        }
+    });
+
     let engine = crate::rig_engine::engine();
     rsx! {
-        // Without device-width + viewport-fit=cover, WKWebView lays out a
-        // 980px legacy viewport and the safe-area env() vars stay zero.
-        document::Meta {
-            name: "viewport",
-            content: "width=device-width, initial-scale=1, viewport-fit=cover",
-        }
+        document::Style { {ROOT_CSS} }
         document::Style { {SIGNAL_TAILWIND} }
+        // The viewport, sized explicitly: an absolute box stretched only by
+        // its insets gets no height in Blitz. Blitz keeps the safe area's
+        // top and bottom out of the viewport; the sides are the page's own
+        // (`BLITZ_SAFE_AREA_SIDES=0`, so the rig runs under the housing).
         div {
-            style: "display: flex; flex-direction: column; height: 100dvh; width: 100vw; \
-                    box-sizing: border-box; \
-                    background: #09090b; color: #e4e4e7; overflow: hidden; \
-                    padding-top: env(safe-area-inset-top); \
-                    padding-bottom: env(safe-area-inset-bottom); \
-                    padding-left: env(safe-area-inset-left); \
-                    padding-right: env(safe-area-inset-right);",
+            style: "position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; \
+                    box-sizing: border-box; display: flex; flex-direction: column; \
+                    background: #0f1012; color: #e4e4e7; overflow: hidden; \
+                    font-family: Inter, -apple-system, sans-serif;",
             match engine {
                 Some(engine) => {
                     let _ = provide_context(engine.rig.clone());
@@ -119,7 +150,7 @@ fn Router() -> Element {
             .map(MobileScreen::for_rig)
             .unwrap_or(MobileScreen::Menu)
     });
-    let to_menu = move |_| {
+    let to_menu = move |()| {
         crate::rigs::store_last(None);
         screen.set(MobileScreen::Menu);
     };
@@ -133,7 +164,7 @@ fn Router() -> Element {
             }
         },
         MobileScreen::Rig => rsx! {
-            RigShell { on_home: to_menu }
+            GuitarPage { on_home: to_menu }
         },
         #[cfg(feature = "signal-keys-rig")]
         MobileScreen::Keys => rsx! {
@@ -147,321 +178,24 @@ fn Router() -> Element {
 fn MenuPage(on_pick: EventHandler<Rig>) -> Element {
     use_hook(crate::ios_orientation::portrait);
     rsx! {
-        RigMenu { phone: true, on_pick }
+        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto;",
+            RigMenu { phone: true, on_pick }
+        }
     }
 }
 
-/// Landscape rig shell: a slim left rail (back + page tabs + engine status)
-/// beside the full-width page — the grid gets the whole screen, like the
-/// floor unit.
+/// The guitar rig, held sideways: the shared remote, which lays itself out
+/// for the phone (frame's phone faces, a page at a time). Its rail's Rigs
+/// button comes back here.
 #[component]
-fn RigShell(on_home: EventHandler<()>) -> Element {
+fn GuitarPage(on_home: EventHandler<()>) -> Element {
     use_hook(crate::ios_orientation::landscape);
-
-    let mut page = use_signal(|| MobilePage::Scenes);
-    let state = use_rig_state();
-    let perf = state.perf;
-    let running = state.running.cloned();
-
-    rsx! {
-        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: row; overflow: hidden;",
-            // Rack rail: anodized panel, active page marked by a glowing
-            // accent LED on the inner edge (echoes the stompbox LEDs).
-            div {
-                style: "width: 62px; flex-shrink: 0; display: flex; flex-direction: column; \
-                        align-items: stretch; background: #0a0a0c; \
-                        border-right: 1px solid #1b1b1f; padding: 4px 0 6px;",
-                // Back to the instrument menu.
-                button {
-                    style: "appearance: none; background: transparent; border: none; \
-                            padding: 9px 0 7px; display: flex; flex-direction: column; \
-                            align-items: center; gap: 3px; color: #52525b;",
-                    onclick: move |_| on_home.call(()),
-                    BackIcon {}
-                    RailLabel { text: "Rigs" }
-                }
-                div { style: "height: 1px; background: #1b1b1f; margin: 2px 12px 4px;" }
-                for (p, label) in [
-                    (MobilePage::Scenes, "Scenes"),
-                    (MobilePage::Control, "Control"),
-                    (MobilePage::Audio, "Audio"),
-                ] {
-                    {
-                        let active = page() == p;
-                        rsx! {
-                            button {
-                                style: format!(
-                                    "position: relative; appearance: none; border: none; \
-                                     background: {}; padding: 11px 0 9px; display: flex; \
-                                     flex-direction: column; align-items: center; gap: 4px; color: {};",
-                                    if active { "#101821" } else { "transparent" },
-                                    if active { "#38bdf8" } else { "#52525b" },
-                                ),
-                                onclick: move |_| page.set(p),
-                                // Accent LED on the inner (content-side) edge.
-                                if active {
-                                    span {
-                                        style: "position: absolute; right: 0; top: 8px; bottom: 8px; \
-                                                width: 3px; border-radius: 2px 0 0 2px; background: #38bdf8; \
-                                                box-shadow: 0 0 8px #38bdf8, 0 0 2px #38bdf8;",
-                                    }
-                                }
-                                match p {
-                                    MobilePage::Scenes => rsx! { ScenesIcon {} },
-                                    MobilePage::Control => rsx! { ControlIcon {} },
-                                    MobilePage::Audio => rsx! { AudioIcon {} },
-                                }
-                                RailLabel { text: label }
-                            }
-                        }
-                    }
-                }
-                div { style: "flex: 1;" }
-                // Engine status LED — live/idle. (Tempo lives on the perform
-                // grid's Tap Tempo, so no BPM readout here.)
-                div {
-                    style: "display: flex; flex-direction: column; align-items: center; gap: 4px; \
-                            padding-top: 8px; border-top: 1px solid #1b1b1f; margin: 0 12px;",
-                    span {
-                        style: format!(
-                            "width: 7px; height: 7px; border-radius: 999px; background: {}; box-shadow: 0 0 6px {};",
-                            if running { "#22c55e" } else { "#3f3f46" },
-                            if running { "#22c55e88" } else { "transparent" },
-                        )
-                    }
-                    span {
-                        style: "font-size: 7px; font-weight: 600; color: #3f3f46; letter-spacing: 0.14em;",
-                        if running { "LIVE" } else { "IDLE" }
-                    }
-                }
-            }
-            // Page content.
-            div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;",
-                match page() {
-                    MobilePage::Scenes => rsx! { ScenesPage { state: state.clone() } },
-                    MobilePage::Control => rsx! {
-                        div { style: "flex: 1; min-height: 0; overflow-y: auto;",
-                            ControlView { model: perf.cloned(), state: state.clone() }
-                        }
-                    },
-                    MobilePage::Audio => rsx! {
-                        AudioPage { on_close: move |_| page.set(MobilePage::Scenes) }
-                    },
-                }
-            }
-        }
-    }
-}
-
-/// Scenes: connection dot + patch line + the shared perform grid, sized
-/// for a phone in portrait.
-#[component]
-fn ScenesPage(state: signal_guitar_ui::RigViewState) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
-    let perf = state.perf.cloned();
-    let running = state.running.cloned();
-    let active = state.active_patch.cloned().unwrap_or_default();
-
-    macro_rules! rig_call {
-        ($method:ident $(, $arg:expr)*) => {{
-            let rig = rig.clone();
-            move |_| {
-                if let Some(rig) = rig.clone() {
-                    spawn(async move { let _ = rig.$method($($arg),*).await; });
-                }
-            }
-        }};
-    }
-
-    let on_press = {
-        let rig = rig.clone();
-        Callback::new(move |i: usize| {
-            if let Some(rig) = rig.clone() {
-                spawn(async move {
-                    let _ = rig.press_stack(i as u32).await;
-                });
-            }
-        })
-    };
-    let on_select_song = {
-        let rig = rig.clone();
-        Callback::new(move |i: usize| {
-            if let Some(rig) = rig.clone() {
-                spawn(async move {
-                    let _ = rig.select_song(i as u32).await;
-                });
-            }
-        })
-    };
-
-    tracing::info!(
-        stacks = perf.stacks.len(),
-        mode = perf.perform_mode,
-        songs = perf.songs.len(),
-        profile = %perf.profile_name,
-        rig_ctx = rig.is_some(),
-        "scenes render"
-    );
-    let _ = running;
-    rsx! {
-        // A whisper of a header: just the active patch, centered.
-        if !active.is_empty() {
-            div { style: "text-align: center; font-size: 11px; font-weight: 600; color: #a1a1aa; padding: 2px 0 0;",
-                "{active}"
-            }
-        }
-        div { style: "flex: 1; min-height: 0; padding: 4px;",
-            PerformGrid {
-                model: perf,
-                on_press,
-                on_toggle_fx: Callback::new(rig_call!(toggle_fx)),
-                on_toggle_boost: Callback::new(rig_call!(toggle_boost)),
-                on_cycle_boost: Callback::new(rig_call!(cycle_boost)),
-                on_tap_tempo: Callback::new(rig_call!(tap_tempo)),
-                on_prev_song: Callback::new(rig_call!(prev_song)),
-                on_next_song: Callback::new(rig_call!(next_song)),
-                on_select_song,
-            }
-        }
-    }
-}
-
-/// Audio: device pickers over the AudioSettings service. Saving persists
-/// prefs and restarts the rig so they take effect. `on_close` returns to
-/// the Scenes page (the shared modal is full-screen — without a working
-/// close it traps the UI).
-#[component]
-fn AudioPage(on_close: EventHandler<()>) -> Element {
-    let settings = use_hook(try_consume_context::<AudioSettingsClient>);
-    let rig = use_hook(try_consume_context::<RigClient>);
-
-    let bridge = use_resource(move || {
-        let settings = settings.clone();
-        async move {
-            let settings = settings?;
-            let devices = settings.devices().await.ok()?;
-            let prefs = settings.prefs().await.ok()?;
-            Some((devices, prefs))
-        }
+    use_context_provider(|| PhoneHost {
+        on_home: Callback::new(move |()| on_home.call(())),
     });
-
-    let on_save = {
-        let settings = use_hook(try_consume_context::<AudioSettingsClient>);
-        let rig = rig.clone();
-        Callback::new(move |prefs: AudioPrefs| {
-            let settings = settings.clone();
-            let rig = rig.clone();
-            spawn(async move {
-                if let Some(settings) = settings {
-                    let _ = settings.save_prefs(prefs).await;
-                }
-                if let Some(rig) = rig {
-                    // Reopen the device with the new prefs.
-                    let _ = rig.start().await;
-                }
-            });
-        })
-    };
-
     rsx! {
-        div { style: "flex: 1; min-height: 0; overflow-y: auto; padding: 8px;",
-            match bridge.read().as_ref() {
-                Some(Some((devices, prefs))) => rsx! {
-                    AudioSettingsModal {
-                        bridge: AudioSettingsBridge {
-                            inputs: devices.inputs.clone(),
-                            outputs: devices.outputs.clone(),
-                            prefs: prefs.clone(),
-                            on_save,
-                        },
-                        on_close: move |_| on_close.call(()),
-                    }
-                },
-                Some(None) => rsx! {
-                    span { style: "font-size: 13px; color: #71717a;", "Audio settings unavailable." }
-                },
-                None => rsx! {
-                    span { style: "font-size: 13px; color: #71717a;", "Loading devices…" }
-                },
-            }
-        }
-    }
-}
-
-// ── Rail glyphs ─────────────────────────────────────────────────────────────
-// Stroke-based line icons drawn from the rig's own world; they inherit the
-// button's `color` via `currentColor`, so active/inactive tint is free.
-
-/// Uppercase micro-caps rail label — a rack-panel legend.
-#[component]
-fn RailLabel(text: &'static str) -> Element {
-    rsx! {
-        span {
-            style: "font-size: 8px; font-weight: 600; letter-spacing: 0.1em; \
-                    text-transform: uppercase; color: currentColor;",
-            "{text}"
-        }
-    }
-}
-
-/// Back-to-the-menu chevron.
-#[component]
-fn BackIcon() -> Element {
-    rsx! {
-        svg {
-            width: "22", height: "22", view_box: "0 0 24 24", fill: "none",
-            stroke: "currentColor", stroke_width: "1.75",
-            stroke_linecap: "round", stroke_linejoin: "round",
-            path { d: "M14 6 L8 12 L14 18" }
-        }
-    }
-}
-
-/// Scenes: the footswitch grid itself (6 pads, floor-unit layout).
-#[component]
-fn ScenesIcon() -> Element {
-    rsx! {
-        svg {
-            width: "22", height: "22", view_box: "0 0 24 24", fill: "none",
-            stroke: "currentColor", stroke_width: "1.6",
-            rect { x: "3.5", y: "3.5", width: "7", height: "5", rx: "1.4" }
-            rect { x: "13.5", y: "3.5", width: "7", height: "5", rx: "1.4" }
-            rect { x: "3.5", y: "9.5", width: "7", height: "5", rx: "1.4" }
-            rect { x: "13.5", y: "9.5", width: "7", height: "5", rx: "1.4" }
-            rect { x: "3.5", y: "15.5", width: "7", height: "5", rx: "1.4" }
-            rect { x: "13.5", y: "15.5", width: "7", height: "5", rx: "1.4" }
-        }
-    }
-}
-
-/// Control: a fader stack (the instrument panel — chain, params, meters).
-#[component]
-fn ControlIcon() -> Element {
-    rsx! {
-        svg {
-            width: "22", height: "22", view_box: "0 0 24 24", fill: "none",
-            stroke: "currentColor", stroke_width: "1.6", stroke_linecap: "round",
-            line { x1: "3", y1: "6.5", x2: "21", y2: "6.5" }
-            circle { cx: "8", cy: "6.5", r: "2.4", fill: "currentColor", stroke: "none" }
-            line { x1: "3", y1: "12", x2: "21", y2: "12" }
-            circle { cx: "15.5", cy: "12", r: "2.4", fill: "currentColor", stroke: "none" }
-            line { x1: "3", y1: "17.5", x2: "21", y2: "17.5" }
-            circle { cx: "11", cy: "17.5", r: "2.4", fill: "currentColor", stroke: "none" }
-        }
-    }
-}
-
-/// Audio: speaker + sound waves (device I/O).
-#[component]
-fn AudioIcon() -> Element {
-    rsx! {
-        svg {
-            width: "22", height: "22", view_box: "0 0 24 24", fill: "none",
-            stroke: "currentColor", stroke_width: "1.6",
-            stroke_linecap: "round", stroke_linejoin: "round",
-            path { d: "M4 9 H7 L11 5.5 V18.5 L7 15 H4 Z" }
-            path { d: "M15 9.5 A4 4 0 0 1 15 14.5" }
-            path { d: "M17.5 7 A7.5 7.5 0 0 1 17.5 17" }
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+            GuitarRigRemote {}
         }
     }
 }

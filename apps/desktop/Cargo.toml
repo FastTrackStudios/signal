@@ -255,7 +255,9 @@ eyre = { workspace = true, optional = true }
 # further down).
 [target.'cfg(not(any(target_arch = "wasm32", target_os = "ios")))'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
-# The Blitz native renderer — the default desktop path.
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The Blitz native renderer — the desktop path and the iPhone's.
 #
 # `dioxus::desktop` puts WebKit/WRY behind the same components, and a WebView
 # cannot be handed a painted scene: `CustomWidgetAttr` is an `Any` attribute,
@@ -271,7 +273,6 @@ dioxus-native-dom = { workspace = true }
 # and drawing frame faces as composited layers.
 blitz-shell = { workspace = true, features = ["custom-widget"] }
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tracing-subscriber.workspace = true
 # Telemetry: fmt console logs + optional Sentry + OTLP export (traces,
 # logs, metrics). Doubly opt-in — the `otel` cargo feature carries the
@@ -365,8 +366,15 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 # ── iPhone (dx build --platform ios) — the in-process rig + phone shell ──
 [target.'cfg(target_os = "ios")'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["mobile", "launch"] }
-# AVAudioSession bootstrap (ios_audio.rs) — four dynamic objc calls.
-objc2 = "0.5"
+# The UIScene delegate iOS 27 requires (ios_scene.rs) — the objc2 winit
+# itself is built on — plus the AVAudioSession bootstrap (ios_audio.rs) and
+# the orientation / pasteboard / Bonjour calls (ios_orientation.rs).
+objc2 = "0.6"
+objc2-ui-kit = { version = "0.3", features = [
+    "UIApplication", "UIResponder", "UIScene", "UISceneOptions", "UISceneSession",
+    "UIWindowScene", "UIWindow", "UIView", "UIScreen", "UIOrientation", "block2",
+] }
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSSet", "NSString"] }
 
 # PipeWire (audio + MIDI) is the Linux DEFAULT via target-gated deps inside
 # daw-audio-io and the rig crates themselves — no per-app feature plumbing.

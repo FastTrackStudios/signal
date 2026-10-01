@@ -13,9 +13,17 @@ Remove this patch after upgrading to an upstream version with equivalent mapping
 lifetime guarantees. Regression coverage lives in Session's DOM stress harness
 and the native mutation writer unit tests.
 
-Additionally (signal): `set_focus` borrowed the document unconditionally. It is
-almost always called from a task spawned in `onmounted`, and a task runs inside
-`render_immediate` while the document is borrowed, so the app panicked with
-"RefCell already borrowed" before drawing its first frame. It now asks with
-`try_borrow_mut` and reports the document busy instead; `autofocus` is the
-reliable way to ask for focus.
+Additionally (from session, 2026-09): `set_focus` never borrows a document
+someone else holds. It is almost always called from a task spawned in
+`onmounted`, and a task runs inside `render_immediate` while the document is
+borrowed — an unconditional borrow panicked ("RefCell already borrowed")
+before the first frame. A focus change asked for while the document is busy
+is parked and applied the next time the document is free
+(`apply_pending_focus`, from `poll` and `handle_ui_event`).
+`get_scroll_offset` / `get_scroll_size` report a busy document or a dropped
+node as an error instead of panicking.
+
+Additionally (signal): `layout_stale` — a pointer event that arrives between
+a mutation batch and the next frame's resolve walked layout links into freed
+anonymous boxes and panicked; `handle_ui_event` resolves first when the tree
+changed since.

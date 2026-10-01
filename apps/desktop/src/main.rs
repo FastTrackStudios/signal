@@ -104,6 +104,9 @@ mod ios_orientation;
 mod keys_view;
 #[cfg(all(feature = "signal-guitar", target_os = "ios"))]
 mod mobile_view;
+// The UIScene lifecycle iOS 27 requires (winit does not adopt it yet).
+#[cfg(target_os = "ios")]
+mod ios_scene;
 /// The rig engine embedded IN-PROCESS. iOS has no choice (it cannot spawn a
 /// child); desktop uses it by default because a rig that needs a second
 /// process and a free port to make a sound is a worse default than one that
@@ -126,6 +129,14 @@ mod mac_activity;
 const LOG_FILTER: &str = "info,vox_core=warn,schema_deser=off";
 
 fn main() {
+    // iPhone: Blitz keeps the safe area's top and bottom out of the
+    // viewport but not its sides — the rig's phone pages run under the
+    // camera housing and keep clear of it themselves (`IslandLeft`).
+    #[cfg(target_os = "ios")]
+    // SAFETY: first thing in main, before any thread starts.
+    unsafe {
+        std::env::set_var("BLITZ_SAFE_AREA_SIDES", "0");
+    }
     // Before anything starts audio: a backgrounded rig must not be throttled
     // (it xran whenever another app had focus).
     #[cfg(target_os = "macos")]
@@ -225,6 +236,20 @@ fn main() {
         // folder, Documents/FastTrackStudio/ (file sharing is on), so the
         // seeded guitar config lands writably AND the user can drop
         // keys/drums sample packs in by hand.
+        // The simulator has no audio interface, and the rig opens only for
+        // one: run it in design mode, which lists the real profile — its
+        // patches, chain and faces — without audio, and writes nothing.
+        #[cfg(target_abi = "sim")]
+        // SAFETY: single-threaded, before the engine bootstrap spawns.
+        unsafe {
+            std::env::set_var("SIGNAL_RIG_DESIGN", "1");
+        }
+        // frame's faces ship in the bundle (ios/app-plist.sh copies them in),
+        // beside the executable.
+        if let Some(bundle) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|d| d.join("frame"))) {
+            // SAFETY: single-threaded, before the engine bootstrap spawns.
+            unsafe { std::env::set_var("SIGNAL_FRAME_DIR", bundle) };
+        }
         if let Some(home) = std::env::var_os("HOME") {
             let app_root = std::path::PathBuf::from(&home).join("Documents/FastTrackStudio");
             let _ = std::fs::create_dir_all(&app_root);
@@ -444,13 +469,24 @@ fn launch_app() {
     dioxus::launch(App);
 }
 
-/// iPhone: the phone-sized shell (mobile_view.rs) over the in-process rig.
+/// iPhone: the phone shell (mobile_view.rs) over the in-process rig, on
+/// Blitz like the desktop — the rig's frame faces are painted widgets, which
+/// a WebView cannot host. The window is the screen; the status bar hides
+/// (a phone held sideways has no room for it).
 #[cfg(target_os = "ios")]
 fn launch_app() {
+    use dioxus_native::winit::platform::ios::WindowAttributesIos;
+    use dioxus_native::{Config, WindowAttributes, launch_cfg};
+    // Before UIKit looks the delegate up by the name Info.plist gives it.
+    ios_scene::register();
+    let window = WindowAttributes::default().with_title("Signal").with_platform_attributes(Box::new(
+        WindowAttributesIos::default().with_prefers_status_bar_hidden(true),
+    ));
     #[cfg(feature = "signal-guitar")]
-    dioxus::launch(mobile_view::MobileApp);
+    let root = mobile_view::MobileApp;
     #[cfg(not(feature = "signal-guitar"))]
-    dioxus::launch(App);
+    let root = App;
+    launch_cfg(root, vec![], vec![Box::new(Config::new().with_window_attributes(window))]);
 }
 
 /// Top-level workspaces. Which ones exist depends on compiled features;
@@ -1009,7 +1045,7 @@ fn SettingsPanel() -> Element {
 /// else the account gathers, later) works on every machine signed in to it
 /// without a second, per-machine authorization. See `crates/signal/account`
 /// and `crates/signal/docs/tone3000.md`'s "Two ways to be authorized".
-#[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
+#[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 #[component]
 fn AccountSettings() -> Element {
     use signal_account_proto::AccountStatus;
@@ -1140,7 +1176,7 @@ fn AccountSettings() -> Element {
 /// child over vox — and hand back its account client. `None` while the
 /// engine is not yet up; the sign-in button says so rather than doing
 /// nothing.
-#[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
+#[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 async fn connect_account() -> Option<signal_account_proto::account::AccountAuthClient> {
     match rig_view::EngineMode::current() {
         rig_view::EngineMode::Embedded => {
@@ -1216,7 +1252,7 @@ fn EngineModeSetting() -> Element {
     rsx! {}
 }
 
-#[cfg(not(all(feature = "signal-guitar", not(target_arch = "wasm32"))))]
+#[cfg(not(all(feature = "signal", not(target_arch = "wasm32"))))]
 #[component]
 fn AccountSettings() -> Element {
     rsx! {}
