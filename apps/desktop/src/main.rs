@@ -318,7 +318,7 @@ fn default_window_size() -> (f64, f64) {
     let (w, h): (f64, f64) = (2560.0, 1440.0);
     match main_screen_size() {
         // Room for the menu bar and a margin; never below the min size.
-        Some((sw, sh)) => (w.min(sw - 40.0).max(720.0), h.min(sh - 80.0).max(480.0)),
+        Some((sw, sh)) => (w.min(sw - 40.0).max(320.0), h.min(sh - 80.0).max(300.0)),
         None => (w, h),
     }
 }
@@ -374,7 +374,7 @@ fn launch_app() {
         .with_title("FastTrackStudio")
         .with_decorations(false)
         .with_surface_size(LogicalSize::new(w, h))
-        .with_min_surface_size(LogicalSize::new(720.0, 480.0))
+        .with_min_surface_size(LogicalSize::new(320.0, 300.0))
         .with_maximized(maximized && !fullscreen);
     // Position first: borderless fullscreen picks the monitor the window is
     // on, so placing it inside the target screen is what selects that screen.
@@ -415,7 +415,7 @@ fn launch_app() {
             let (w, h) = size.unwrap_or_else(default_window_size);
             LogicalSize::new(w, h)
         })
-        .with_min_inner_size(LogicalSize::new(720.0, 480.0))
+        .with_min_inner_size(LogicalSize::new(320.0, 300.0))
         .with_maximized(maximized && !fullscreen);
     if let Some((x, y)) = pos {
         window = window.with_position(LogicalPosition::new(x, y));

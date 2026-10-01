@@ -498,6 +498,11 @@ pub fn DrivesRow(
     /// the first: the compressor's visualiser.
     #[props(default)]
     leading: Option<Element>,
+    /// Fit every pedal into this width (points) — the phone, where the
+    /// full height would leave room for two — rather than standing each
+    /// the row's full height.
+    #[props(default)]
+    fit_width: Option<f64>,
 ) -> Element {
     let faces = use_faces();
     let mut slots: Vec<(LiveBlock, Option<FaceEntry>)> = Vec::new();
@@ -508,6 +513,14 @@ pub fn DrivesRow(
             .map(|b| (b.clone(), (!b.empty).then(|| faces.drive(&b.preset).cloned()).flatten())),
     );
     let last = slots.len().saturating_sub(1);
+    // Fitted: the pedals' height that puts them all across `fit_width`,
+    // after the cables' least room.
+    let pedal_h = fit_width.map(|w| {
+        let aspects: f64 = slots.iter().map(|(_, f)| f.as_ref().map_or(PEDAL.0 / PEDAL.1, |f| f.size.0 / f.size.1)).sum();
+        let cables = 44.0 * last as f64 + 40.0;
+        ((w - cables) / aspects.max(0.1)).max(60.0)
+    });
+    let slot_size = pedal_h.map_or_else(|| "height: 100%;".to_string(), |h| format!("height: {h:.0}px; align-self: center;"));
     rsx! {
         div { style: "position: relative; display: flex; flex-direction: row; align-items: stretch; width: 100%; height: 100%; min-height: 0; box-sizing: border-box; padding: {BOARD_PAD_TOP}px 0 {BOARD_PAD_BOTTOM}px 0; background: {BOARD};",
             // The power: one lead along the top, a drop into each pedal.
@@ -521,7 +534,7 @@ pub fn DrivesRow(
                 Cable { end: CableEnd::Between }
             }
             for (i, (b, face)) in slots.into_iter().enumerate() {
-                div { key: "{b.id}", style: "position: relative; height: 100%; min-height: 0; flex: 0 0 auto; display: flex;",
+                div { key: "{b.id}", style: "position: relative; {slot_size} min-height: 0; flex: 0 0 auto; display: flex;",
                     div { style: "position: absolute; left: 50%; top: -{BOARD_PAD_TOP}px; width: 3px; height: {BOARD_PAD_TOP + 4}px; margin-left: -1px; background: {CORD}; pointer-events: none;" }
                     if let Some(f) = face {
                         BlockFace { block: b.clone(), face: f }
@@ -604,6 +617,10 @@ pub fn AmpRow(
     /// The input's live peak (dBFS), for the gate's meter.
     #[props(default)]
     in_db: Option<Signal<f32>>,
+    /// The amps alone: no EQ beside one, no gate (the phone has pages
+    /// for those).
+    #[props(default)]
+    amps_only: bool,
 ) -> Element {
     let faces = use_faces();
     // Every amp the preset loaded: the first always, any other when it
@@ -616,8 +633,8 @@ pub fn AmpRow(
         .map(|(_, b)| b.clone())
         .collect();
     let eq = blocks.iter().find(|b| b.block_type == BlockType::Eq && b.name.eq_ignore_ascii_case("Amp EQ")).cloned();
-    let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
-    let one = amps.len() == 1;
+    let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned().filter(|_| !amps_only);
+    let one = amps.len() == 1 && !amps_only;
     rsx! {
         Row {
             for b in amps {
@@ -654,6 +671,20 @@ pub fn AmpRow(
     }
 }
 
+/// The gate's unit on its own, its meter live: a page of the phone's chain.
+#[component]
+pub fn GateUnit(blocks: Vec<LiveBlock>, in_db: Signal<f32>) -> Element {
+    let faces = use_faces();
+    let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
+    rsx! {
+        if let (Some(g), Some(f)) = (gate, faces.gate.clone()) {
+            Panel { weight: 1.0,
+                GateFace { block: g, face: f, level: in_db }
+            }
+        }
+    }
+}
+
 /// The gate's face with the input's level in its meter: its own
 /// component, so only it redraws as the level moves.
 #[component]
@@ -683,7 +714,14 @@ pub fn PresetCorner(block: String, block_type: String) -> Element {
 /// — the delay's repeats, the spring's tail — or a card. The delay first
 /// (the John Mayer chain's slapback ahead of its tank).
 #[component]
-pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
+pub fn PreFxRow(
+    blocks: Vec<LiveBlock>,
+    tempo_bpm: u32,
+    /// What of the row: everything, the units (modulation, tremolo), or
+    /// the lanes (delay over reverb) — the phone shows them as two pages.
+    #[props(default)]
+    part: PrePart,
+) -> Element {
     let faces = use_faces();
     let pre: Vec<LiveBlock> = blocks
         .iter()
@@ -719,7 +757,11 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
     // tremolo) before them — for the look, not the chain's order.
     let laned = |(b, f, _): &(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)| f.is_some() && matches!(b.block_type, BlockType::Delay | BlockType::Reverb);
     let lanes: Vec<(LiveBlock, FaceEntry, Vec<(String, LiveBlock)>)> = items.iter().filter(|i| laned(i)).filter_map(|(b, f, e)| f.clone().map(|f| (b.clone(), f, e.clone()))).collect();
-    let items: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = items.into_iter().filter(|i| !laned(i)).collect();
+    let items: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = if part == PrePart::Lanes { Vec::new() } else { items.into_iter().filter(|i| !laned(i)).collect() };
+    let lanes = if part == PrePart::Units { Vec::new() } else { lanes };
+    // The lanes on their own page take the width; in the row, one Time
+    // lane's.
+    let lane_flex = if part == PrePart::Lanes { "1 1 0%" } else { "0 0 50.93%" };
     // Pre modulation takes what the tremolo and the lanes leave.
     let is_mod = |b: &LiveBlock| b.block_type == BlockType::Chorus;
     rsx! {
@@ -755,7 +797,7 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                 // half of that (32.5 % × 1.15 / 2 = 18.69 % of the group),
                 // and this row is 36.7 % of the group (control.rs):
                 // 18.69 / 36.7.
-                div { style: "flex: 0 0 50.93%; min-width: 0; height: 100%; display: flex; flex-direction: column; border-left: 1px solid #1d1f24;",
+                div { style: "flex: {lane_flex}; min-width: 0; height: 100%; display: flex; flex-direction: column; border-left: 1px solid #1d1f24;",
                     for (b, f, extra) in lanes {
                         div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
                             BlockFace { block: b.clone(), face: f, extra, fill: true, stepper: true }
@@ -765,6 +807,17 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
             }
         }
     }
+}
+
+/// What of the Pre FX row to draw.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum PrePart {
+    #[default]
+    All,
+    /// The units: modulation and the tremolo.
+    Units,
+    /// The lanes: the delay over the reverb.
+    Lanes,
 }
 
 /// Whether a pre effect's panel carries a picture beside its pedal (a
@@ -817,8 +870,13 @@ pub fn InputRow(
     /// Drawn right after the envelope filter: the input compressor.
     #[props(default = VNode::empty())]
     after_filter: Element,
+    /// Only these units (`transpose`, `dive`, `pitch`, `doubler`, `wah`,
+    /// `filter`) — a page of the phone's chain; empty for all.
+    #[props(default)]
+    only: Vec<String>,
 ) -> Element {
     let faces = use_faces();
+    let want = |k: &str| only.is_empty() || only.iter().any(|o| o == k);
     let unit = |kind: &str, bt: BlockType| -> (Option<LiveBlock>, Option<FaceEntry>) {
         (blocks.iter().find(|b| b.block_type == bt).cloned(), pick(&faces.input, kind).cloned())
     };
@@ -838,8 +896,8 @@ pub fn InputRow(
     rsx! {
         Row {
             // The transposer, first in the chain, then the dive bomb.
-            for (b, f, name, kind) in [(transpose, transpose_face, "Transpose", "transpose"), (dive, dive_face, "Dive Bomb", "dive")] {
-                Panel { weight: 0.0,
+            for (b, f, name, kind) in [(transpose, transpose_face, "Transpose", "transpose"), (dive, dive_face, "Dive Bomb", "dive")].into_iter().filter(|u| want(u.3)) {
+                Panel { weight: if only.is_empty() { 0.0 } else { 1.0 },
                     match (b, f) {
                         (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, stepper: true } },
                         (None, Some(f)) => rsx! { UnboundFace { face: f, stepper: Some((name.to_string(), kind.to_string())) } },
@@ -849,6 +907,7 @@ pub fn InputRow(
             }
             // The pitch stage: its voices on their ladder, the doubler —
             // the widest unit here, laid out for its room.
+            if want("pitch") {
             Panel { weight: 1.3,
                 match (pitch, pitch_face) {
                     (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, fill: true, stepper: true } },
@@ -856,21 +915,25 @@ pub fn InputRow(
                     _ => rsx! { div { style: "width: 280px; height: 100%; display: flex;", crate::control::PitchStrip {} } },
                 }
             }
+            }
             // The doubler, after the voices.
-            if let Some(f) = doubler_face {
+            if let Some(f) = doubler_face.filter(|_| want("doubler")) {
                 Panel { weight: 0.5,
                     UnboundFace { face: f, fill: true }
                 }
             }
-            Panel { weight: 0.0,
+            if want("wah") {
+            Panel { weight: if only.is_empty() { 0.0 } else { 1.0 },
                 match (wah, wah_face) {
                     (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, stepper: true } },
                     (None, Some(f)) => rsx! { UnboundFace { face: f, stepper: Some(("Wah".to_string(), "wah".to_string())) } },
                     _ => rsx! {},
                 }
             }
+            }
             // The envelope filter: one unit, its screen inside, filling the
             // room left it (laid out for it).
+            if want("filter") {
             Panel { weight: 0.9,
                 match (filter.clone(), filter_face) {
                     (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, fill: true, stepper: true } },
@@ -884,6 +947,7 @@ pub fn InputRow(
                         }
                     }
                 }
+            }
             }
             {after_filter}
         }

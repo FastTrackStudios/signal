@@ -37,6 +37,7 @@ mod palette;
 mod part_menu;
 pub mod param_writer;
 mod perform;
+mod phone;
 mod preset_look;
 mod remote;
 mod setlist_bar;
@@ -49,7 +50,7 @@ mod wire_param;
 
 pub use chain::ChainStrip;
 pub use comp_surface::CompSurface;
-pub use control::{ControlView, MidiIndicator, WindowAspect, ZoomPanel};
+pub use control::{ControlView, FormFactor, MidiIndicator, WindowAspect, WindowSize, ZoomPanel};
 pub use grid::RigGraph;
 pub use icons::module_icon;
 pub use library::{Kind as LibraryKind, LibraryPicker};

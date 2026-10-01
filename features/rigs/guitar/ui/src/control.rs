@@ -75,7 +75,7 @@ fn engine_badge(engine: u32) -> Option<(&'static str, &'static str)> {
 /// Every member of a grouped panel (Mod, Motion) is bypassed — the group is
 /// off. False for a group with no members: that is an empty slot, not a
 /// bypass.
-fn group_bypassed(blocks: &[LiveBlock], kinds: &[BlockType], pre: bool) -> bool {
+pub(crate) fn group_bypassed(blocks: &[LiveBlock], kinds: &[BlockType], pre: bool) -> bool {
     let mut members = blocks
         .iter()
         .filter(|b| kinds.contains(&b.block_type) && is_pre_fx(b) == pre)
@@ -84,7 +84,7 @@ fn group_bypassed(blocks: &[LiveBlock], kinds: &[BlockType], pre: bool) -> bool 
 }
 
 /// Find a chain block by (type, name).
-fn find_block(blocks: &[LiveBlock], bt: BlockType, name: &str) -> Option<LiveBlock> {
+pub(crate) fn find_block(blocks: &[LiveBlock], bt: BlockType, name: &str) -> Option<LiveBlock> {
     blocks
         .iter()
         .find(|b| b.block_type == bt && b.name.eq_ignore_ascii_case(name))
@@ -1104,7 +1104,7 @@ fn PatchTrimPanel(block: LiveBlock) -> Element {
 /// stacked (1 top, 2 bottom) — click a lane to select it — with the
 /// selected delay's controls in a strip beneath.
 #[component]
-fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
+pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let pick_block = try_use_context::<crate::module_sidebar::SelectedModule>();
     let mut sel = use_signal(|| 0usize);
@@ -1300,7 +1300,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
 /// stacked — click a lane to select — with the selected reverb's controls
 /// beneath.
 #[component]
-fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
+pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let pick_block = try_use_context::<crate::module_sidebar::SelectedModule>();
     let mut sel = use_signal(|| 0usize);
@@ -1531,7 +1531,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
 /// more than one at a time), an LFO visualization of the active effect,
 /// and two intelligently-mapped knobs — Mix and Speed.
 #[component]
-fn ModGroupPanel(
+pub(crate) fn ModGroupPanel(
     title: &'static str,
     /// Member block types, in rotation order.
     kinds: Vec<BlockType>,
@@ -1858,7 +1858,7 @@ fn SepSection(label: String, color: String, rule: String, children: Element) -> 
 }
 
 #[component]
-fn ModuleControls(
+pub(crate) fn ModuleControls(
     kind: crate::library::Kind,
     pick: Option<signal_guitar_proto::ModulePick>,
     /// Every module preset (this module's are picked out here).
@@ -2529,8 +2529,8 @@ pub(crate) fn ModBlockViz(block: LiveBlock) -> Element {
 /// Stated here as one list per slot so the pickers below and the visualiser
 /// cannot disagree about which machines belong where — `modulation-ui` owns
 /// the grouping and `modulation_slots` is checked against it.
-const MOD_KINDS: [BlockType; 3] = [BlockType::Chorus, BlockType::Phaser, BlockType::Flanger];
-const MOTION_KINDS: [BlockType; 3] = [BlockType::Trem, BlockType::Vibrato, BlockType::Rotary];
+pub(crate) const MOD_KINDS: [BlockType; 3] = [BlockType::Chorus, BlockType::Phaser, BlockType::Flanger];
+pub(crate) const MOTION_KINDS: [BlockType; 3] = [BlockType::Trem, BlockType::Vibrato, BlockType::Rotary];
 
 fn engine_of(block_type: BlockType) -> Option<crate::mod_viz::Engine> {
     use crate::mod_viz::Engine;
@@ -2647,6 +2647,35 @@ pub struct WideLayout(pub Signal<bool>);
 /// see its window) — the rig goes wide at 2.6 : 1 and over.
 #[derive(Clone, Copy)]
 pub struct WindowAspect(pub Signal<f64>);
+
+/// The window's size in points (logical pixels): which form factor the rig
+/// lays out for. Provided by the host.
+#[derive(Clone, Copy)]
+pub struct WindowSize(pub Signal<(f64, f64)>);
+
+/// The form factors the rig lays out for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FormFactor {
+    /// A phone held sideways (an iPhone 16 Pro: 874 × 402): the chain a
+    /// page at a time.
+    Phone,
+    /// Everything larger: the Control view.
+    Desktop,
+}
+
+impl FormFactor {
+    /// From the window's size in points — or `FTS_FORM_FACTOR=phone` to
+    /// try a layout on a desktop.
+    #[must_use]
+    pub fn of(size: (f64, f64)) -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
+        if std::env::var("FTS_FORM_FACTOR").is_ok_and(|v| v.eq_ignore_ascii_case("phone")) {
+            return Self::Phone;
+        }
+        let (w, h) = size;
+        if h > 0.0 && h <= 500.0 && w > h { Self::Phone } else { Self::Desktop }
+    }
+}
 
 /// Which groups the Control view shows, most recently picked last: with
 /// the switches up, the last one; with them hidden, the last two, stacked
@@ -3492,7 +3521,7 @@ fn LiveStereoMeter(label: &'static str, state: RigViewState, output: bool, muted
 
 /// A compressor surface with its block's live trace and gain reduction.
 #[component]
-fn LiveComp(block: LiveBlock, state: RigViewState) -> Element {
+pub(crate) fn LiveComp(block: LiveBlock, state: RigViewState) -> Element {
     let in_db = state.in_peak_db.cloned();
     let (wave, gr_db) = state
         .comp_wave
@@ -3506,7 +3535,7 @@ fn LiveComp(block: LiveBlock, state: RigViewState) -> Element {
 
 /// An EQ panel over the live input spectrum.
 #[component]
-fn LiveEq(block: LiveBlock, state: RigViewState) -> Element {
+pub(crate) fn LiveEq(block: LiveBlock, state: RigViewState) -> Element {
     let spectrum = state.spectrum.cloned();
     eq_panel(block, spectrum)
 }
