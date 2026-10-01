@@ -604,6 +604,14 @@ fn nameplate_press(
             }
         }
         "algo_menu" => {
+            // A face picked by its preset (a Pre FX pedal): its name opens
+            // the presets.
+            if algos.is_none() {
+                if let Some(s) = try_consume_context::<crate::module_sidebar::SelectedModule>() {
+                    s.set(crate::module_sidebar::Selection::Block { name: block.name.clone(), block_type: kind.to_string() });
+                }
+                return;
+            }
             let (Some((param, options)), Some(host)) = (algos, signal_widgets::PopupHost::try_use()) else { return };
             let (param, options) = (*param, options.clone());
             let current = block.params.iter().find(|p| p.name == param).map_or(0, |p| p.value.round().max(0.0) as usize);
@@ -1017,7 +1025,9 @@ pub fn PreFxRow(
         .cloned()
         .collect();
     // By its preset, else by the block itself (Pre Mod's unit for any).
-    let picked: Vec<(LiveBlock, Option<FaceEntry>)> = pre.iter().map(|b| (b.clone(), faces.pre(&b.preset).or_else(|| faces.pre(&b.name)).cloned())).collect();
+    // Each at the window's tier.
+    let tier = crate::control::use_tier();
+    let picked: Vec<(LiveBlock, Option<FaceEntry>)> = pre.iter().map(|b| (b.clone(), faces.pre(&b.preset).or_else(|| faces.pre(&b.name)).map(|f| f.at(tier)))).collect();
     let absorbed: Vec<String> = picked
         .iter()
         .filter_map(|(_, f)| f.as_ref())
@@ -1088,7 +1098,7 @@ pub fn PreFxRow(
                 div { style: "flex: {lane_flex}; min-width: 0; height: 100%; display: flex; flex-direction: column; border-left: 1px solid #1d1f24;",
                     for (b, f, extra) in lanes {
                         div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
-                            BlockFace { block: b.clone(), face: f, extra, fill: true, stepper: true }
+                            BlockFace { block: b.clone(), face: f, extra, fill: true, stepper: true, preset_type: Some(b.block_type.as_str().to_string()), tempo_bpm: Some(tempo_bpm) }
                         }
                     }
                 }
