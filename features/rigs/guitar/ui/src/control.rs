@@ -1651,7 +1651,29 @@ pub(crate) fn ModGroupPanel(
     };
     // The shown effect's face, where it has one: its picture and its
     // knobs, in place of the trace and the loose knobs.
-    let mod_face = crate::rig_faces::use_faces().modulation(cur.block_type.as_str()).cloned();
+    // At the window's tier (a phone's own layout).
+    let tier = use_tier();
+    let mod_face = crate::rig_faces::use_faces().modulation(cur.block_type.as_str()).map(|f| f.at(tier));
+    // The face's nameplate opens the member's engines (or modes).
+    let algos: Option<(&'static str, Vec<&'static str>)> = match cur.block_type {
+        BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => Some(("engine", MOD_ENGINES.to_vec())),
+        BlockType::Trem => Some(("mode", TREM_MODES.to_vec())),
+        _ => None,
+    };
+    let tab_h = if tier <= Tier::Phone { 30 } else { 22 };
+    let engage = {
+        let rig = rig.clone();
+        let members = members.clone();
+        move |next: usize| {
+            let (rig, members) = (rig.clone(), members.clone());
+            spawn(async move {
+                let Some(r) = rig else { return };
+                for (i, m) in members.iter().enumerate() {
+                    let _ = r.set_block_bypass(m.id.clone(), i != next).await;
+                }
+            });
+        }
+    };
 
     rsx! {
         div { class: "relative flex flex-col h-full min-h-0", style: "background: #080808;",
@@ -1660,8 +1682,34 @@ pub(crate) fn ModGroupPanel(
             // With a face, the header is a pill over the face's top-right
             // corner (which the face keeps clear): the rotation and the
             // pickers; the face has its own name and On key.
+            // With a face: the members as tabs over it (a press engages that
+            // one), Motion's speed beside them; the face's own nameplate has
+            // its preset, its engine and its On.
+            if mod_face.is_some() {
+                div { style: "flex: 0 0 {tab_h}px; display: flex; align-items: stretch; gap: 2px; padding: 3px 6px; background: #0b0c0f; border-bottom: 1px solid #1d1f24;",
+                    for (i, m) in members.iter().enumerate() {
+                        {
+                            let on = i == shown && engaged;
+                            let look = if on { format!("background: {group_color}; color: #0a0b0d;") } else { "background: #16181c; color: #a1a1aa;".to_string() };
+                            let engage = engage.clone();
+                            rsx! {
+                                div { key: "{m.id}",
+                                    style: "flex: 0 0 auto; padding: 0 12px; border-radius: 5px; display: flex; align-items: center; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; cursor: pointer; {look}",
+                                    onclick: move |_| engage(i),
+                                    "{m.name}"
+                                }
+                            }
+                        }
+                    }
+                    div { style: "flex: 1 1 0%;" }
+                    if tempo_divisions {
+                        div { style: "display: flex; align-items: center;", {speed_picker.clone()} }
+                    }
+                }
+            }
+            if mod_face.is_none() {
             div {
-                class: if mod_face.is_some() { "absolute flex items-center gap-1 px-1" } else { "flex items-center gap-1 pl-1.5 pt-1 flex-shrink-0" },
+                class: "flex items-center gap-1 pl-1.5 pt-1 flex-shrink-0",
                 style: if mod_face.is_some() { "right: 24px; top: 6px; z-index: 5; background: rgba(8,8,8,0.72); border-radius: 4px; padding-top: 2px; padding-bottom: 2px;" } else { "padding-right: 22px;" },
                 if mod_face.is_none() {
                 button {
@@ -1705,8 +1753,8 @@ pub(crate) fn ModGroupPanel(
                     style: if engaged { format!("background-color: {group_color}; color: #000;") } else { String::new() },
                     // Tap the name to engage/bypass the shown member.
                     onclick: {
-                        let rig = rig;
-                        let id = cur.id;
+                        let rig = rig.clone();
+                        let id = cur.id.clone();
                         move |_| {
                             if let Some(r) = rig.clone() {
                                 let id = id.clone();
@@ -1744,15 +1792,13 @@ pub(crate) fn ModGroupPanel(
                     },
                     _ => rsx! {},
                 }
-                if tempo_divisions && mod_face.is_some() {
-                    {speed_picker.clone()}
-                }
                 // Its preset (the name opens the browser).
                 crate::face_chrome::PresetStepper { block: cur.name.clone(), block_type: cur.block_type.as_str().to_string(), accent: group_color.to_string(), show_empty: true }
             }
+            }
             if let Some(f) = mod_face.clone() {
                 div { class: "relative flex-1 min-h-0 flex",
-                    crate::rig_faces::BlockFace { block: cur.clone(), face: f, fill: true }
+                    crate::rig_faces::BlockFace { block: cur.clone(), face: f, fill: true, preset_type: Some(cur.block_type.as_str().to_string()), algos: algos.clone(), tempo_bpm: Some(tempo_bpm) }
                 }
             } else {
             // LFO trace — flat while the group is bypassed (the panel's
