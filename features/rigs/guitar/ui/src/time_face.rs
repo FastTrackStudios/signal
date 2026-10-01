@@ -1,6 +1,6 @@
 //! A Time face's Time knob, on its block: the knob's position, its
 //! TIME | BEAT switch and the time it reads out (frame's `kit::time_knob`:
-//! `<ns>/time`, `<ns>/sync`, `<ns>/time_text`), from the block — and the
+//! `<ns>/time_knob`, `<ns>/sync`, `<ns>/time_text`), from the block — and the
 //! block params a turn or a flip of the switch sets.
 //!
 //! - A **reverb** in Time runs on its decay, read in seconds; in Beat its
@@ -24,6 +24,9 @@ pub struct TimeView {
     pub time: f64,
     pub sync: f64,
     pub text: String,
+    /// A delay's time as it plays, ms (its division's at the tempo when
+    /// locked): what the face's pictures animate from.
+    pub playing_ms: Option<f64>,
 }
 
 fn v(b: &LiveBlock, name: &str, dflt: f32) -> f32 {
@@ -61,8 +64,8 @@ pub fn view(b: &LiveBlock, bpm: f32) -> Option<TimeView> {
             let secs = verb_seconds(alg, var, decay).0;
             let div = v(b, "sync_div", 0.0).round().max(0.0) as usize;
             Some(match REVERB_BEATS.get(div).filter(|_| div > 0) {
-                Some((label, _)) => TimeView { time: (div as f64 - 1.0) / 6.0, sync: 1.0, text: format!("{label} · {}", seconds_text(secs)) },
-                None => TimeView { time: f64::from(decay), sync: 0.0, text: seconds_text(secs) },
+                Some((label, _)) => TimeView { time: (div as f64 - 1.0) / 6.0, sync: 1.0, text: format!("{label} · {}", seconds_text(secs)), playing_ms: None },
+                None => TimeView { time: f64::from(decay), sync: 0.0, text: seconds_text(secs), playing_ms: None },
             })
         }
         BlockType::Delay => {
@@ -70,12 +73,12 @@ pub fn view(b: &LiveBlock, bpm: f32) -> Option<TimeView> {
             Some(match DELAY_BEATS.iter().position(|d| d.1 == div) {
                 Some(k) => {
                     let (label, _, len) = DELAY_BEATS[k];
-                    TimeView { time: k as f64 / (DELAY_BEATS.len() - 1) as f64, sync: 1.0, text: format!("{label} · {:.0} ms", len * quarter * 1000.0) }
+                    TimeView { time: k as f64 / (DELAY_BEATS.len() - 1) as f64, sync: 1.0, text: format!("{label} · {:.0} ms", len * quarter * 1000.0), playing_ms: Some(len * quarter * 1000.0) }
                 }
                 None => {
                     let ms = f64::from(v(b, "time", 350.0));
                     let t = (ms / DELAY_MS.0).ln() / (DELAY_MS.1 / DELAY_MS.0).ln();
-                    TimeView { time: t.clamp(0.0, 1.0), sync: 0.0, text: format!("{ms:.0} ms") }
+                    TimeView { time: t.clamp(0.0, 1.0), sync: 0.0, text: format!("{ms:.0} ms"), playing_ms: Some(ms) }
                 }
             })
         }

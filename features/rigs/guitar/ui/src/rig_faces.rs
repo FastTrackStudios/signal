@@ -408,7 +408,12 @@ pub fn BlockFace(
         }
     }
     if let Some(t) = &timed {
-        values.push((format!("{}/time", face.ns), t.time));
+        // The pictures animate from the time as it plays.
+        if let Some(ms) = t.playing_ms {
+            values.retain(|(a, _)| *a != format!("{}/time", face.ns));
+            values.push((format!("{}/time", face.ns), ms));
+        }
+        values.push((format!("{}/time_knob", face.ns), t.time));
         values.push((format!("{}/sync", face.ns), t.sync));
         texts.push((format!("{}/time_text", face.ns), t.text.clone()));
     }
@@ -451,9 +456,9 @@ pub fn BlockFace(
                 on_edit: move |(addr, value): (String, f64)| {
                     // The Time knob and its switch, onto the block.
                     if let Some(b) = time_block.as_ref()
-                        && let Some((_, what)) = addr.rsplit_once('/').filter(|(_, w)| *w == "time" || *w == "sync")
+                        && let Some((_, what)) = addr.rsplit_once('/').filter(|(_, w)| *w == "time_knob" || *w == "sync")
                     {
-                        let writes = if what == "time" { crate::time_face::turn(b, bpm, value) } else { crate::time_face::flip(b, bpm, value >= 0.5) };
+                        let writes = if what == "time_knob" { crate::time_face::turn(b, bpm, value) } else { crate::time_face::flip(b, bpm, value >= 0.5) };
                         for (param, v) in writes {
                             crate::control::send_param(&rig, &b.id, param, v);
                         }

@@ -1124,7 +1124,9 @@ pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default
     let cur_id = cur.id.clone();
     // Each delay drawn by its machine's face (frame), where there is one.
     let faces = crate::rig_faces::use_faces();
-    let face_of = |b: &LiveBlock| faces.time(false, DELAY_ALGOS.get(param_v(b, "style", 1.0) as usize).copied().unwrap_or("")).cloned();
+    // Drawn at the window's tier (a phone draws each face's phone layout).
+    let tier = use_tier();
+    let face_of = |b: &LiveBlock| faces.time(false, DELAY_ALGOS.get(param_v(b, "style", 1.0) as usize).copied().unwrap_or("")).map(|f| f.at(tier));
     let all_faces = delays.iter().all(|b| face_of(b).is_some());
 
     rsx! {
@@ -1179,7 +1181,7 @@ pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default
                             },
                             if let Some(f) = lane_face.clone() {
                                 div { class: "absolute inset-0 flex justify-center", style: "background: #0b0c0f;",
-                                    crate::rig_faces::BlockFace { block: b.clone(), face: f, fill: true }
+                                    crate::rig_faces::BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some("delay".to_string()), algos: Some(("style", DELAY_ALGOS.to_vec())), tempo_bpm: Some(tempo_bpm) }
                                 }
                             } else {
                                 {delay_lane(taps.clone(), win_ms, !dim, color, W, quarter, div_label(b),
@@ -1211,7 +1213,9 @@ pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default
                             }
                             // Per-lane machine + timing, embedded at the
                             // lane's right edge (a face keeps its top-right
-                            // corner clear for them).
+                            // corner clear for them) — unless its face
+                            // prints its own nameplate and Time knob.
+                            if !lane_face.as_ref().is_some_and(|f| f.nameplate) {
                             div {
                                 class: if lane_face.is_some() { "absolute right-1 top-1 flex items-center gap-1 px-1" } else { "absolute right-0 inset-y-0 flex items-center gap-1 pr-1 pl-3" },
                                 style: if lane_face.is_some() { "background: rgba(8,8,8,0.7); border-radius: 4px;" } else { "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);" },
@@ -1243,6 +1247,7 @@ pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default
                                     options: DELAY_ALGOS.to_vec(),
                                     accent: color.to_string(),
                                 }
+                            }
                             }
                         }
                     }
