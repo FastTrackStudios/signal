@@ -145,7 +145,7 @@ fn map_cloud(k: &Knobs) -> Vec<(String, f64)> {
             },
         ),
         // Our pre-delay line holds 500 ms; BigSky reaches 1.5 s past ~110.
-        p("predelay", lookup(CLOUD_PREDELAY_MS, knob(k, "PreDelay"), false).min(500.0)),
+        p("predelay", lookup(CLOUD_PREDELAY_MS, knob(k, "PreDelay"), false)),
         // Our Cloud implements BigSky's Tone (two high shelves); `tone`
         // spans the knob with 0 at noon.
         p("tone", knob(k, "Tone") / 63.5 - 1.0),
