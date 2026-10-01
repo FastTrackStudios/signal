@@ -1244,7 +1244,7 @@ pub fn InputRow(
         // The pedal pages are a board: the pedals side by side at their
         // own proportions, all one scale, the largest that fits — as the
         // drives. The rest are lanes, stacked.
-        let board = only.iter().any(|k| matches!(k.as_str(), "wah" | "dive" | "volume" | "pitch" | "harmony"));
+        let board = only.iter().any(|k| matches!(k.as_str(), "wah" | "dive" | "volume"));
         if board {
             let (ww, wh) = try_use_context::<crate::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
             // The page: the window less the rail, the housing, the bars.
@@ -1266,10 +1266,15 @@ pub fn InputRow(
                 }
             };
         }
+        // The Pitch page: the octaver a third, the harmonizer the rest, side
+        // by side; the rest stacked.
+        let row = only.iter().any(|k| k == "harmony");
+        let dir = if row { "row" } else { "column" };
+        let grow = |k: &str| if k == "harmony" { 2 } else { 1 };
         return rsx! {
-            div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
+            div { style: "display: flex; flex-direction: {dir}; gap: 6px; width: 100%; height: 100%; min-height: 0; min-width: 0;",
                 for (k, b, f) in lanes {
-                    div { key: "{k}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                    div { key: "{k}", style: "flex: {grow(&k)} 1 0%; min-height: 0; min-width: 0; display: flex;",
                         match (b, f) {
                             (Some(b), Some(f)) => rsx! { BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some(b.block_type.as_str().to_string()) } },
                             (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true } },
