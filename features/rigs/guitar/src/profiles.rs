@@ -1035,6 +1035,14 @@ pub const CORE: &str = "Core";
 /// The chain blocks the Core owns besides its drives and amps.
 pub const CORE_BLOCKS: [&str; 4] = [PRE_COMP, "Gate", "Amp EQ", POST_COMP];
 
+/// The Core's blocks that stay live when the Core is frozen into one NAM
+/// capture: the gate. A capture can't gate (its noise floor is the
+/// capture's), so the gate runs after it as itself — the rest of the Core
+/// (compressor, drives, amps, EQ, post compressor) is what the capture
+/// learns, and a frozen Core must play exactly as the live one did. Room
+/// is not in the Core at all.
+pub const UNFROZEN_CORE_BLOCKS: [&str; 1] = ["Gate"];
+
 /// The module a chain block belongs to: `Core` (compressor, gate, amp EQ,
 /// post compressor), `Drive` / `Amp` (the Core's drive board and amps),
 /// `Delay` / `Reverb` (the Time module's lanes) — or none. Most blocks

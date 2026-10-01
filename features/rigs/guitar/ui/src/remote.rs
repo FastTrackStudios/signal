@@ -689,15 +689,6 @@ pub fn GuitarRigRemote() -> Element {
                                 library_open.set(Some(k));
                             },
                         }
-                    } else if perf_now.perform_mode == 0 {
-                        crate::preset_bar::PresetSidebar {
-                            model: perf_now.clone(),
-                            on_browse: move |k: crate::library::Kind| {
-                                let mut library_open = library_open;
-                                library_open.set(Some(k));
-                            },
-                            on_tones: move |()| mode.set(Mode::Tones),
-                        }
                     } else {
                         crate::sidebars::LeftSidebar { model: perf_now.clone() }
                     }
