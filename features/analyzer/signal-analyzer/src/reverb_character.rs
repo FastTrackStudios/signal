@@ -100,7 +100,8 @@ pub struct Character {
     /// First time (ms after onset) the echo density reaches 0.9.
     pub mixing_ms: Option<f64>,
     /// Third-octave levels, dB re their mean: first [`EARLY_MS`] after the
-    /// onset, and the tail after that down to −40 dB (at most 4 s).
+    /// onset, and the tail after that until it stays below −40 dB (at most
+    /// 4 s).
     pub spectrum_early: Vec<f64>,
     pub spectrum_late: Vec<f64>,
     /// Spectral centroid every [`CENTROID_MS`] from the onset, Hz.
@@ -316,12 +317,13 @@ pub fn measure(left: &[f32], right: &[f32], sample_rate: f64, excitation_end_s: 
     let mono: Vec<f64> = l.iter().zip(&r).map(|(a, b)| 0.5 * (a + b)).collect();
     let early_end = (onset + at(EARLY_MS)).min(n);
     let late_start = early_end.max(from);
+    // Where the tail is gone for good: after the LAST window above −40 dB,
+    // not the first below it — a sparse response (low Diffusion) dips
+    // under −40 between reflections, and the first dip emptied the window.
     let late_end = envelope_db
         .iter()
-        .enumerate()
-        .skip(peak_win)
-        .find(|(_, v)| **v < -40.0)
-        .map_or(n, |(k, _)| k * env_win)
+        .rposition(|v| *v >= -40.0)
+        .map_or(n, |k| (k + 1) * env_win)
         .clamp(late_start, (late_start + at(4000.0)).min(n).max(late_start));
     let thirds = third_octaves();
     let mut spectrum = |a: usize, b: usize| {

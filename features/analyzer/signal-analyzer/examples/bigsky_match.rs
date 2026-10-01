@@ -84,7 +84,7 @@ fn lookup(points: &[(f64, f64)], x: f64, log: bool) -> f64 {
 
 /// BigSky Cloud `Decay` (ms, as displayed) → measured T20 (s), impulse,
 /// other knobs at defaults. Not a time: everything up to ~3000 rings for
-/// ~4.5 s, and above that T20 ≈ 11.4·(D/8000)^1.5. 50000 is infinite.
+/// ~4.5 s, and above that T20 ≈ 11.4·(D/8000)^1.5. 50000 is Infinite.
 const CLOUD_DECAY_T20: &[(f64, f64)] = &[
     (1000.0, 4.50),
     (2000.0, 4.53),
@@ -97,7 +97,12 @@ const CLOUD_DECAY_T20: &[(f64, f64)] = &[
     (16000.0, 30.60),
     (24000.0, 57.16),
     (32000.0, 75.19),
+    (40000.0, 93.12),
 ];
+
+/// BigSky's top Decay setting is Infinite; anything at or past this asks
+/// ours for the same (a time past `CLOUD_T60`'s top holds).
+const CLOUD_DECAY_INFINITE: f64 = 49_999.0;
 
 /// BigSky `PreDelay` (0–127) → measured onset (ms). ≈0.023·v² up to 64,
 /// then accelerating to 1.5 s.
@@ -116,29 +121,14 @@ const CLOUD_PREDELAY_MS: &[(f64, f64)] = &[
     (127.0, 1499.8),
 ];
 
-/// BigSky `Tone` (0–127) → cutoff of a static 2-pole (Q≈0.5) low-pass on
-/// the wet, fitted to the octave levels of a noise burst (≤0.7 dB RMS).
-/// Per-band decay does not move with Tone: it is not in-loop damping.
-const CLOUD_TONE_HZ: &[(f64, f64)] = &[
-    (0.0, 926.0),
-    (16.0, 1649.0),
-    (32.0, 2455.0),
-    (48.0, 3276.0),
-    (64.0, 4037.0),
-    (80.0, 4877.0),
-    (96.0, 5776.0),
-    (112.0, 6841.0),
-    (127.0, 8022.0),
-];
-
 /// Our wet level against BigSky's at MIX 127, dB.
-const CLOUD_WET_GAIN_DB: f64 = 4.0;
+const CLOUD_WET_GAIN_DB: f64 = -1.9;
 
 /// Cloud: BigSky `Decay` 1000–50000, `PreDelay`/`Tone`/`MOD` 0–127,
 /// `LowEnd`/`Diffusion` −10…+10.
 ///
-/// Decay, PreDelay and Tone are measured laws (the tables above); LowEnd
-/// maps straight across (our Cloud implements BigSky's law for it). MOD
+/// Decay and PreDelay are measured laws (the tables above); Tone and
+/// LowEnd map straight across (our Cloud implements BigSky's laws for both). MOD
 /// is still a first guess.
 fn map_cloud(k: &Knobs) -> Vec<(String, f64)> {
     let p = |n: &str, v: f64| (n.to_string(), v);
@@ -146,10 +136,19 @@ fn map_cloud(k: &Knobs) -> Vec<(String, f64)> {
         p("algorithm", 4.0),
         p("mix", 1.0),
         p("dry", 0.0),
-        p("decay_time", lookup(CLOUD_DECAY_T20, knob(k, "Decay"), true)),
+        p(
+            "decay_time",
+            if knob(k, "Decay") >= CLOUD_DECAY_INFINITE {
+                1.0e6
+            } else {
+                lookup(CLOUD_DECAY_T20, knob(k, "Decay"), true)
+            },
+        ),
         // Our pre-delay line holds 500 ms; BigSky reaches 1.5 s past ~110.
         p("predelay", lookup(CLOUD_PREDELAY_MS, knob(k, "PreDelay"), false).min(500.0)),
-        p("high_cut", lookup(CLOUD_TONE_HZ, knob(k, "Tone"), true)),
+        // Our Cloud implements BigSky's Tone (two high shelves); `tone`
+        // spans the knob with 0 at noon.
+        p("tone", knob(k, "Tone") / 63.5 - 1.0),
         p("damping", 0.0),
         p("modulation", knob(k, "MOD") / 127.0),
         p("low_end", (knob(k, "LowEnd") + 10.0) / 20.0),
