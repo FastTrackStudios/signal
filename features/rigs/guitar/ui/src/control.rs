@@ -513,7 +513,7 @@ pub(crate) const MOD_ENGINES: [&str; 11] = [
     "Julia",
 ];
 /// `TremMode` order.
-const TREM_MODES: [&str; 3] = ["Mono", "Stereo", "Harmonic"];
+pub(crate) const TREM_MODES: [&str; 3] = ["Mono", "Stereo", "Harmonic"];
 
 pub(crate) const DELAY_ALGOS: [&str; 13] = [
     "Tape", "Digital", "Analog", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum",

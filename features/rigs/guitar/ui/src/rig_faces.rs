@@ -72,6 +72,8 @@ pub struct FaceTier {
     /// It carries the Time knob where the base face may not (a phone's
     /// modulation lane).
     pub time_knob: Option<bool>,
+    /// …and the nameplate.
+    pub nameplate: Option<bool>,
 }
 
 impl FaceEntry {
@@ -92,6 +94,9 @@ impl FaceEntry {
             f.variants.clone_from(&t.variants);
             if let Some(k) = t.time_knob {
                 f.time_knob = k;
+            }
+            if let Some(n) = t.nameplate {
+                f.nameplate = n;
             }
         }
         f
@@ -260,7 +265,7 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
                                 .collect()
                         })
                         .unwrap_or_default();
-                    Some((tier, FaceTier { face, dark: named("dark"), size: (s.first()?.as_f64()?, s.get(1)?.as_f64()?), back: named("back"), back_dark: named("back_dark"), variants, time_knob: t.get("time_knob").and_then(serde_json::Value::as_bool) }))
+                    Some((tier, FaceTier { face, dark: named("dark"), size: (s.first()?.as_f64()?, s.get(1)?.as_f64()?), back: named("back"), back_dark: named("back_dark"), variants, time_knob: t.get("time_knob").and_then(serde_json::Value::as_bool), nameplate: t.get("nameplate").and_then(serde_json::Value::as_bool) }))
                 })
                 .collect()
         })
@@ -1064,6 +1069,19 @@ pub fn PreFxRow(
     let is_mod = |b: &LiveBlock| b.block_type == BlockType::Chorus;
     rsx! {
         Row {
+            // On a phone the units are lanes, stacked (as the Mod / Motion
+            // page's): pre modulation over the tremolo.
+            if part == PrePart::Units && tier <= crate::control::Tier::Phone {
+                div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
+                    for (b, f, _) in items.iter().cloned() {
+                        if let Some(f) = f {
+                            div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                                BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some(b.block_type.as_str().to_string()), tempo_bpm: Some(tempo_bpm), algos: unit_algos(&b) }
+                            }
+                        }
+                    }
+                }
+            } else {
             // Pre modulation, the tremolo, then the lanes at the right.
             for (b, f, extra) in items {
                 if let Some(f) = f {
@@ -1088,6 +1106,7 @@ pub fn PreFxRow(
                 } else {
                     BlockPanel { key: "{b.id}", block: b.clone(), face: None, card: PEDAL }
                 }
+            }
             }
             if !lanes.is_empty() {
                 // One Time lane's width, pinned to the right: the bottom row
@@ -1116,6 +1135,15 @@ pub enum PrePart {
     Units,
     /// The lanes: the delay over the reverb.
     Lanes,
+}
+
+/// A pre unit's menu from its name: a chorus's engines, a tremolo's modes.
+fn unit_algos(b: &LiveBlock) -> Option<(&'static str, Vec<&'static str>)> {
+    match b.block_type {
+        BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => Some(("engine", crate::control::MOD_ENGINES.to_vec())),
+        BlockType::Trem => Some(("mode", crate::control::TREM_MODES.to_vec())),
+        _ => None,
+    }
 }
 
 /// Whether a pre effect's panel carries a picture beside its pedal (a
