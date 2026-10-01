@@ -690,7 +690,8 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
         .filter(|b| b.name.starts_with("Pre ") && !b.name.eq_ignore_ascii_case("Pre Comp"))
         .cloned()
         .collect();
-    let picked: Vec<(LiveBlock, Option<FaceEntry>)> = pre.iter().map(|b| (b.clone(), faces.pre(&b.preset).cloned())).collect();
+    // By its preset, else by the block itself (Pre Mod's unit for any).
+    let picked: Vec<(LiveBlock, Option<FaceEntry>)> = pre.iter().map(|b| (b.clone(), faces.pre(&b.preset).or_else(|| faces.pre(&b.name)).cloned())).collect();
     let absorbed: Vec<String> = picked
         .iter()
         .filter_map(|(_, f)| f.as_ref())
@@ -719,17 +720,18 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
     let laned = |(b, f, _): &(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)| f.is_some() && matches!(b.block_type, BlockType::Delay | BlockType::Reverb);
     let lanes: Vec<(LiveBlock, FaceEntry, Vec<(String, LiveBlock)>)> = items.iter().filter(|i| laned(i)).filter_map(|(b, f, e)| f.clone().map(|f| (b.clone(), f, e.clone()))).collect();
     let items: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = items.into_iter().filter(|i| !laned(i)).collect();
+    // Pre modulation takes what the tremolo and the lanes leave.
+    let is_mod = |b: &LiveBlock| b.block_type == BlockType::Chorus;
     rsx! {
         Row {
-            // Room to come, then the tremolo, then the lanes at the right.
-            div { style: "flex: 1 1 0%; min-width: 0;" }
+            // Pre modulation, the tremolo, then the lanes at the right.
             for (b, f, extra) in items {
                 if let Some(f) = f {
                     // The pedal, then what its block is doing — a delay's
                     // repeats, a reverb's tail. A tremolo shows its pulse on
                     // its own lamp.
-                    Panel { key: "{b.id}", weight: if shows_viz(&b) || self_viewing(&f) { 1.0 } else { 0.0 },
-                        BlockFace { block: b.clone(), face: f.clone(), extra: extra.clone(), fill: self_viewing(&f), stepper: true }
+                    Panel { key: "{b.id}", weight: if shows_viz(&b) || self_viewing(&f) || is_mod(&b) { 1.0 } else { 0.0 },
+                        BlockFace { block: b.clone(), face: f.clone(), extra: extra.clone(), fill: self_viewing(&f) || is_mod(&b), stepper: true }
                         if shows_viz(&b) && !self_viewing(&f) {
                             div { style: "flex: 1 1 0%; min-width: 0; height: 100%; position: relative; display: flex; justify-content: center; border-left: 1px solid #1d1f24;",
                                 // A reverb's own picture from frame (its
@@ -749,9 +751,11 @@ pub fn PreFxRow(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
             }
             if !lanes.is_empty() {
                 // One Time lane's width, pinned to the right: the bottom row
-                // gives its Time module 65 % of the same width this row has,
-                // a lane half of that.
-                div { style: "flex: 0 0 32.5%; min-width: 0; height: 100%; display: flex; flex-direction: column; border-left: 1px solid #1d1f24;",
+                // gives its Time module 65 % of its 1.15-share half, a lane
+                // half of that (32.5 % × 1.15 / 2 = 18.69 % of the group),
+                // and this row is 36.7 % of the group (control.rs):
+                // 18.69 / 36.7.
+                div { style: "flex: 0 0 50.93%; min-width: 0; height: 100%; display: flex; flex-direction: column; border-left: 1px solid #1d1f24;",
                     for (b, f, extra) in lanes {
                         div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
                             BlockFace { block: b.clone(), face: f, extra, fill: true, stepper: true }
@@ -818,7 +822,14 @@ pub fn InputRow(
     let unit = |kind: &str, bt: BlockType| -> (Option<LiveBlock>, Option<FaceEntry>) {
         (blocks.iter().find(|b| b.block_type == bt).cloned(), pick(&faces.input, kind).cloned())
     };
-    let (pitch, pitch_face) = unit("pitch", BlockType::Pitch);
+    // The pitch blocks by name: the transposer and the dive bomb are pitch
+    // blocks too.
+    let named = |kind: &str, name: &str| -> (Option<LiveBlock>, Option<FaceEntry>) {
+        (blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)).cloned(), pick(&faces.input, kind).cloned())
+    };
+    let (pitch, pitch_face) = named("pitch", "Pitch");
+    let (transpose, transpose_face) = named("transpose", "Transpose");
+    let (dive, dive_face) = named("dive", "Dive Bomb");
     let (wah, wah_face) = unit("wah", BlockType::Wah);
     let (filter, filter_face) = unit("filter", BlockType::Filter);
     // The doubler: no block of its own yet — its unit, drawn.
@@ -826,9 +837,19 @@ pub fn InputRow(
     let picture = faces.filter_picture.clone();
     rsx! {
         Row {
+            // The transposer, first in the chain, then the dive bomb.
+            for (b, f, name, kind) in [(transpose, transpose_face, "Transpose", "transpose"), (dive, dive_face, "Dive Bomb", "dive")] {
+                Panel { weight: 0.0,
+                    match (b, f) {
+                        (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, stepper: true } },
+                        (None, Some(f)) => rsx! { UnboundFace { face: f, stepper: Some((name.to_string(), kind.to_string())) } },
+                        _ => rsx! {},
+                    }
+                }
+            }
             // The pitch stage: its voices on their ladder, the doubler —
             // the widest unit here, laid out for its room.
-            Panel { weight: 0.9,
+            Panel { weight: 1.3,
                 match (pitch, pitch_face) {
                     (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, fill: true, stepper: true } },
                     (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true, stepper: Some(("Pitch".to_string(), "pitch".to_string())) } },
@@ -837,8 +858,8 @@ pub fn InputRow(
             }
             // The doubler, after the voices.
             if let Some(f) = doubler_face {
-                Panel { weight: 0.0,
-                    UnboundFace { face: f }
+                Panel { weight: 0.5,
+                    UnboundFace { face: f, fill: true }
                 }
             }
             Panel { weight: 0.0,
@@ -850,7 +871,7 @@ pub fn InputRow(
             }
             // The envelope filter: one unit, its screen inside, filling the
             // room left it (laid out for it).
-            Panel { weight: 0.8,
+            Panel { weight: 0.9,
                 match (filter.clone(), filter_face) {
                     (Some(b), Some(f)) => rsx! { BlockFace { block: b, face: f, fill: true, stepper: true } },
                     (None, Some(f)) => rsx! { UnboundFace { face: f, fill: true, stepper: Some(("Filter".to_string(), "filter".to_string())) } },

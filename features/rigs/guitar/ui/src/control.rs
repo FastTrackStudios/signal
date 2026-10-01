@@ -3023,14 +3023,17 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // the pre effects in front of the amp.
                     if show_pre {
                         div { class: "gap-0 min-h-0 w-full", style: group_style,
-                            div { style: if wide { "flex: 0.85 1 0%; min-width: 0; min-height: 0; display: flex;" } else { "flex: 1 1 0%; min-height: 0; display: flex;" },
+                            // The input stage takes most of the row; the pre
+                            // effects their units' width (the split
+                            // `PreFxRow`'s lane share is reckoned for).
+                            div { style: if wide { "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; overflow: hidden;" } else { "flex: 1 1 0%; min-height: 0; display: flex;" },
                                 crate::rig_faces::InputRow { blocks: blocks.clone(),
                                     // The Pre Comp's visualiser stands at the head of the drive
                                     // board (see the AMP row).
                                     after_filter: VNode::empty(),
                                 }
                             }
-                            div { style: if wide { "flex: 1.15 1 0%; min-width: 0; min-height: 0; display: flex;" } else { "flex: 1 1 0%; min-height: 0; display: flex;" },
+                            div { style: if wide { "flex: 0 0 36.7%; min-width: 0; min-height: 0; display: flex;" } else { "flex: 1 1 0%; min-height: 0; display: flex;" },
                                 crate::rig_faces::PreFxRow { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
                             }
                         }
