@@ -13072,6 +13072,7 @@ name = "signal-analyzer"
 version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
+ "daw",
  "eq-dsp",
  "fx-blocks",
  "hound",
@@ -13403,6 +13404,7 @@ dependencies = [
  "architect",
  "facet",
  "signal-proto",
+ "signal-rigs-proto",
  "vox",
 ]
 
@@ -13554,6 +13556,7 @@ dependencies = [
  "architect",
  "facet",
  "midicore-proto",
+ "signal-rigs-proto",
  "vox",
 ]
 
@@ -14040,6 +14043,7 @@ dependencies = [
 name = "signal-widgets"
 version = "0.1.0"
 dependencies = [
+ "architect",
  "dioxus",
  "signal-proto",
 ]
