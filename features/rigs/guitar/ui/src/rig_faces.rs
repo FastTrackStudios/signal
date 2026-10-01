@@ -539,7 +539,7 @@ pub fn DrivesRow(
 /// along their top edges (the board stays behind the pedals; the black
 /// cables still read against it), the gaps between them black. One gradient, hard
 /// stops.
-const BOARD: &str = "linear-gradient(180deg, #0b0b0c 0%, #0b0b0c 3%, #34373c 3%, #282a2e 4%, #222428 18%, #1c1d21 20%, #0b0b0c 20%, #0b0b0c 24%, #34373c 24%, #282a2e 25%, #222428 41%, #1c1d21 43%, #0b0b0c 43%, #0b0b0c 47%, #34373c 47%, #282a2e 48%, #222428 64%, #1c1d21 66%, #0b0b0c 66%, #0b0b0c 70%, #34373c 70%, #282a2e 71%, #222428 87%, #1c1d21 89%, #0b0b0c 89%, #0b0b0c 100%)";
+const BOARD: &str = "linear-gradient(180deg, #060607 0%, #060607 3%, #18191c 3%, #131416 4%, #101113 18%, #0d0e10 20%, #060607 20%, #060607 24%, #18191c 24%, #131416 25%, #101113 41%, #0d0e10 43%, #060607 43%, #060607 47%, #18191c 47%, #131416 48%, #101113 64%, #0d0e10 66%, #060607 66%, #060607 70%, #18191c 70%, #131416 71%, #101113 87%, #0d0e10 89%, #060607 89%, #060607 100%)";
 /// A cable's black.
 const CORD: &str = "#050506";
 /// The board shows above and below the pedals (the power runs above).

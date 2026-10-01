@@ -2789,6 +2789,17 @@ impl GuitarRigBackend {
         let Some(patch) = active else {
             return Vec::new();
         };
+        // The block presets the patch picks (as the live chain names them):
+        // a surface draws a pre effect by its preset (the Aqua-Puss, the
+        // Gravity Tank), so without them it fell back to a card.
+        let picks = {
+            let comp = RigLibrary::load_compositions();
+            def.patches
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&patch.name))
+                .map(|own| crate::compose::block_picks(&comp, own))
+                .unwrap_or_default()
+        };
         patch
             .chain
             .iter()
@@ -2850,7 +2861,10 @@ impl GuitarRigBackend {
                     // board had no name to show and read as an empty slot —
                     // "the amp is missing" — when the block was there all
                     // along with a capture in it.
-                    preset: Self::asset_stem(block.asset_path()),
+                    preset: Some(Self::asset_stem(block.asset_path()))
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| picks.iter().find(|c| c.block.eq_ignore_ascii_case(&block.name)).map(|c| c.preset.clone()))
+                        .unwrap_or_default(),
                     options: Vec::new(),
                     option: 0,
                     output_level_db: None,
