@@ -6899,6 +6899,8 @@ impl Rig for GuitarRigBackend {
                             blocks: s.blocks.iter().map(|c| signal_guitar_proto::BlockPick { block: c.block.clone(), preset: c.preset.clone() }).collect(),
                             captures: Vec::new(),
                             macros: Vec::new(),
+                            frozen_available: !s.frozen_nam.is_empty(),
+                            frozen: s.frozen && !s.frozen_nam.is_empty(),
                         })
                         .collect(),
                 })
@@ -6965,6 +6967,22 @@ impl Rig for GuitarRigBackend {
                 .collect(),
             active_blocks,
         }
+    }
+
+    fn set_core_frozen(&self, preset: String, snapshot: String, frozen: bool) {
+        let mut comp = RigLibrary::load_compositions();
+        let Some(s) = crate::freeze::snapshot_mut(&mut comp, &preset, &snapshot) else {
+            tracing::warn!(%preset, %snapshot, "set_core_frozen: no such Core snapshot");
+            return;
+        };
+        if frozen && s.frozen_nam.is_empty() {
+            tracing::warn!(%preset, %snapshot, "set_core_frozen: not frozen yet");
+            return;
+        }
+        s.frozen = frozen;
+        RigLibrary::save_compositions(&comp);
+        let report = self.reload_config_now();
+        tracing::info!(%preset, %snapshot, frozen, "Core {} — {report}", if frozen { "frozen" } else { "live" });
     }
 
     fn choose_block(&self, block: String, preset: String) {
@@ -8712,6 +8730,7 @@ fn snapshot_info(s: &crate::compose::ModuleSnapshotDef) -> signal_guitar_proto::
             .map(|p| stem(p))
             .collect(),
         macros: crate::compose::MacroResponseDef::knobs(&s.macros),
+        ..Default::default()
     }
 }
 

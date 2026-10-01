@@ -584,6 +584,13 @@ pub struct ModuleSnapshotInfo {
     /// The macro knobs it tunes on its blocks.
     #[facet(default)]
     pub macros: Vec<String>,
+    /// A Core snapshot frozen into NAM captures (`signal rig freeze`): it
+    /// can play them in place of its settings.
+    #[facet(default)]
+    pub frozen_available: bool,
+    /// It plays its frozen captures now.
+    #[facet(default)]
+    pub frozen: bool,
 }
 
 /// One parameter a block preset sets.
@@ -1410,6 +1417,10 @@ pub mod rig {
         /// Put block preset `preset` on the active patch's block `block`
         /// (`DLY 1`, `VERB 2`, …) — the patch's own pick, saved and rebuilt.
         fn choose_block(&self, block: String, preset: String);
+        /// Play Core snapshot `preset` · `snapshot` frozen (its NAM
+        /// captures) or live (its settings). Both are kept; saved and
+        /// rebuilt.
+        fn set_core_frozen(&self, preset: String, snapshot: String, frozen: bool);
         /// Step the active patch's `module` pick through its preset's
         /// snapshots (`delta` −1 / +1, wrapping). With no pick yet, takes
         /// the module's first preset.

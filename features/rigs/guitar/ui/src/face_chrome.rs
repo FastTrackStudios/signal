@@ -132,3 +132,51 @@ pub fn VizToggle(block: String) -> Element {
         }
     }
 }
+
+/// The playing Core snapshot, live or frozen: shown once it has been
+/// frozen into NAM captures (`signal rig freeze`), its settings kept
+/// either way — flip as often as wanted.
+#[component]
+pub fn CoreFreeze() -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let comp = try_use_context::<FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
+    let Some(pick) = comp.active_modules.iter().find(|m| m.module.eq_ignore_ascii_case("Core")).cloned() else {
+        return rsx! {};
+    };
+    let info = comp
+        .modules
+        .iter()
+        .find(|m| m.module.eq_ignore_ascii_case("Core") && m.name.eq_ignore_ascii_case(&pick.preset))
+        .and_then(|m| {
+            let i = m.snapshots.iter().position(|s| s.eq_ignore_ascii_case(&pick.snapshot)).unwrap_or(0);
+            m.snapshot_info.get(i).cloned()
+        });
+    let Some(info) = info.filter(|i| i.frozen_available) else {
+        return rsx! {};
+    };
+    let set = move |frozen: bool| {
+        let (rig, preset, snapshot) = (rig.clone(), pick.preset.clone(), pick.snapshot.clone());
+        spawn(async move {
+            if let Some(r) = rig {
+                let _ = r.set_core_frozen(preset, snapshot, frozen).await;
+            }
+        });
+    };
+    let seg = |on: bool, color: &str| {
+        if on {
+            format!("flex: 1 1 0%; text-align: center; font-size: 9px; font-weight: 800; letter-spacing: 0.08em; padding: 3px 0; border-radius: 3px; cursor: pointer; color: {color}; background: rgba(255,255,255,0.10);")
+        } else {
+            "flex: 1 1 0%; text-align: center; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; padding: 3px 0; border-radius: 3px; cursor: pointer; color: #71717a;".to_string()
+        }
+    };
+    let (live_style, frozen_style) = (seg(!info.frozen, "#e4e4e7"), seg(info.frozen, "#7dd3fc"));
+    let set_live = set.clone();
+    rsx! {
+        div { style: "display: flex; gap: 2px; width: 100%; margin-top: 4px; padding: 2px; border-radius: 4px; background: rgba(0,0,0,0.35);",
+            title: "Play the Core's settings, or its frozen NAM captures",
+            onclick: move |e: MouseEvent| e.stop_propagation(),
+            span { style: "{live_style}", onclick: move |_| set_live(false), "LIVE" }
+            span { style: "{frozen_style}", onclick: move |_| set(true), "FROZEN" }
+        }
+    }
+}

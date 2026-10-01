@@ -3049,6 +3049,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 ModuleSeparator {
                                     SepSection { label: "Core module", color: "#e4e4e7", rule: "#52525b",
                                         ModuleControls { kind: crate::library::Kind::Compositions, pick: pick_of("Core"), modules: all_modules.clone(), edited: edited.clone(), stacked: true, style: "width: 100%;" }
+                                        crate::face_chrome::CoreFreeze {}
                                     }
                                     SepSection { label: "Drive", color: "#fbbf24", rule: "#f59e0b",
                                         ModuleControls { kind: crate::library::Kind::DriveModules, pick: drive_pick.clone(), modules: all_modules.clone(), edited: edited.clone(), stacked: true, style: "width: 100%;" }
