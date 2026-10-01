@@ -989,9 +989,10 @@ pub fn GateUnit(blocks: Vec<LiveBlock>, in_db: Signal<f32>) -> Element {
 /// The gate's face with the input's level in its meter: its own
 /// component, so only it redraws as the level moves.
 #[component]
-fn GateFace(block: LiveBlock, face: FaceEntry, level: Signal<f32>) -> Element {
+pub(crate) fn GateFace(block: LiveBlock, face: FaceEntry, level: Signal<f32>, #[props(default)] fill: bool) -> Element {
     let live = vec![(format!("{}/in", face.ns), f64::from(level()))];
-    rsx! { BlockFace { block, face, live } }
+    let preset_type = fill.then(|| "gate".to_string());
+    rsx! { BlockFace { block, face, live, fill, preset_type } }
 }
 
 /// A pre effect whose face carries its own picture (the Aqua-Puss unit's

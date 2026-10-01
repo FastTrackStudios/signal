@@ -4305,10 +4305,16 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("fold", 0.0, 1.0, 0.0),
             ("style", 0.0, 4.0, 0.0),
         ]),
+        // mode: 0 gate, 1 expander (2:1 under the threshold); range: how
+        // far it closes (dB); hold (ms) and hysteresis (dB) before it does.
         BlockType::Gate => owned(&[
             ("threshold", -90.0, 0.0, -50.0),
             ("attack", 0.1, 50.0, 1.0),
             ("release", 5.0, 500.0, 120.0),
+            ("mode", 0.0, 1.0, 0.0),
+            ("range", 0.0, 90.0, 90.0),
+            ("hold", 0.0, 500.0, 0.0),
+            ("hysteresis", 0.0, 12.0, 0.0),
         ]),
         BlockType::Volume => owned(&[("gain_db", -24.0, 24.0, 0.0), ("pan", -1.0, 1.0, 0.0)]),
         // The octaver / harmony: voice A (semitones + cents at a_level),

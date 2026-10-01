@@ -476,16 +476,22 @@ fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: 
             }
         }
         Page::GatePostComp => {
+            // Stacked, as the time pages: the gate over the post
+            // compressor, each its face's phone lane.
+            let tier = crate::control::use_tier();
+            let faces = crate::rig_faces::use_faces();
+            let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
             let post = find_block(&blocks, BlockType::Compressor, "Post Comp");
-            let face = crate::rig_faces::use_faces().post_comp;
             rsx! {
-                div { style: "display: flex; flex-direction: row; width: 100%; height: 100%; min-height: 0;",
-                    div { style: "flex: 0 0 auto; height: 100%; display: flex;",
-                        crate::rig_faces::GateUnit { blocks: blocks.clone(), in_db: state.in_peak_db }
+                div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
+                    if let (Some(g), Some(f)) = (gate, faces.gate.clone()) {
+                        div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                            crate::rig_faces::GateFace { block: g, face: f.at(tier), level: state.in_peak_db, fill: true }
+                        }
                     }
-                    div { style: "flex: 1 1 0%; min-width: 0; height: 100%; display: flex; position: relative;",
-                        if let (Some(c), Some(f)) = (post.clone(), face) {
-                            crate::rig_faces::BlockFace { block: c, face: f, stepper: true, fill: true }
+                    div { style: "flex: 1 1 0%; min-height: 0; display: flex; position: relative;",
+                        if let (Some(c), Some(f)) = (post.clone(), faces.post_comp.clone()) {
+                            crate::rig_faces::BlockFace { block: c, face: f.at(tier), fill: true, preset_type: Some("compressor".to_string()) }
                         } else if let Some(c) = post {
                             LiveComp { block: c, state }
                         }
