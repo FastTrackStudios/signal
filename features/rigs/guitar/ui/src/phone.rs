@@ -20,7 +20,7 @@ use signal_guitar_proto::{LiveBlock, PerformanceModel};
 use signal_proto::block::BlockType;
 
 use crate::control::{
-    DelayPanel, LiveComp, LiveEq, ModGroupPanel, ModuleControls, ReverbPanel, ZoomPanel, find_block, group_bypassed, MOD_KINDS,
+    DelayPanel, LiveComp, LiveEq, ModGroupPanel, ModuleControls, ReverbPanel, ZoomPanel, find_block, MOD_KINDS,
     MOTION_KINDS,
 };
 use crate::library::Kind;
@@ -494,11 +494,13 @@ fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: 
             }
         }
         Page::ModMotion => rsx! {
-            div { style: "display: flex; flex-direction: row; width: 100%; height: 100%; min-height: 0;",
-                ZoomPanel { title: "Modulation".to_string(), flush: true, bypassed: group_bypassed(&blocks, &MOD_KINDS, false),
+            // Stacked, as the delays and reverbs: Modulation over Motion,
+            // each its face's lane (no panel chrome over the nameplate).
+            div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
+                div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column;",
                     ModGroupPanel { title: "Mod", kinds: MOD_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm }
                 }
-                ZoomPanel { title: "Motion".to_string(), flush: true, bypassed: group_bypassed(&blocks, &MOTION_KINDS, false),
+                div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column;",
                     ModGroupPanel { title: "Motion", kinds: MOTION_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm, tempo_divisions: true }
                 }
             }

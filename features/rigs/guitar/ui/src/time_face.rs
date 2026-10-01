@@ -12,7 +12,7 @@
 //!   derives the time).
 
 use signal_guitar_proto::LiveBlock;
-use signal_guitar_proto::time::{DELAY_BEATS, FREE_DIV, REVERB_BEATS};
+use signal_guitar_proto::time::{DELAY_BEATS, FREE_DIV, MOD_BEATS, REVERB_BEATS};
 use signal_proto::block::BlockType;
 
 use crate::control::verb_seconds;
@@ -35,6 +35,17 @@ fn v(b: &LiveBlock, name: &str, dflt: f32) -> f32 {
 
 fn seconds_text(s: f64) -> String {
     if s < 1.0 { format!("{:.0} ms", s * 1000.0) } else if s < 10.0 { format!("{s:.1} s") } else { format!("{s:.0} s") }
+}
+
+/// A modulation's rate range the knob sweeps in Time (Hz), logarithmically.
+const MOD_HZ: (f64, f64) = (0.05, 12.0);
+
+fn is_mod(bt: BlockType) -> bool {
+    matches!(bt, BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato | BlockType::Trem | BlockType::Phaser | BlockType::Rotary)
+}
+
+fn hz_text(hz: f64) -> String {
+    format!("{hz:.2} Hz")
 }
 
 /// The delay time range the knob sweeps in Time (ms), logarithmically.
@@ -82,6 +93,17 @@ pub fn view(b: &LiveBlock, bpm: f32) -> Option<TimeView> {
                 }
             })
         }
+        bt if is_mod(bt) => {
+            let hz = f64::from(v(b, "rate", 1.0));
+            let div = v(b, "sync_div", 0.0).round().max(0.0) as usize;
+            Some(match MOD_BEATS.get(div).filter(|_| div > 0) {
+                Some((label, beats)) => {
+                    let synced = 1.0 / (beats * quarter);
+                    TimeView { time: (div as f64 - 1.0) / (MOD_BEATS.len() - 2) as f64, sync: 1.0, text: format!("{label} · {}", hz_text(synced)), playing_ms: None }
+                }
+                None => TimeView { time: ((hz / MOD_HZ.0).ln() / (MOD_HZ.1 / MOD_HZ.0).ln()).clamp(0.0, 1.0), sync: 0.0, text: hz_text(hz), playing_ms: None },
+            })
+        }
         _ => None,
     }
 }
@@ -102,6 +124,12 @@ pub fn turn(b: &LiveBlock, bpm: f32, pos: f64) -> Vec<(&'static str, f32)> {
         (BlockType::Delay, true) => {
             let div = DELAY_BEATS[(pos * (DELAY_BEATS.len() - 1) as f64).round() as usize].1 as f32;
             vec![("tap_div_l", div), ("tap_div_r", div)]
+        }
+        (bt, false) if is_mod(bt) => vec![("rate", (MOD_HZ.0 * (MOD_HZ.1 / MOD_HZ.0).powf(pos)) as f32)],
+        (bt, true) if is_mod(bt) => {
+            let div = 1 + (pos * (MOD_BEATS.len() - 2) as f64).round() as usize;
+            let hz = f64::from(bpm.max(1.0)) / 60.0 / MOD_BEATS[div].1;
+            vec![("sync_div", div as f32), ("rate", hz as f32)]
         }
         _ => Vec::new(),
     }
@@ -133,6 +161,13 @@ pub fn flip(b: &LiveBlock, bpm: f32, beat: bool) -> Vec<(&'static str, f32)> {
             let ms = DELAY_BEATS.iter().find(|d| d.1 == div).map_or(f64::from(v(b, "time", 350.0)), |d| d.2 * quarter * 1000.0);
             vec![("time", ms as f32), ("tap_div_l", FREE_DIV as f32), ("tap_div_r", FREE_DIV as f32)]
         }
+        bt if is_mod(bt) && beat => {
+            // The length nearest its cycle now.
+            let beats = 1.0 / (f64::from(v(b, "rate", 1.0)).max(0.01) * quarter);
+            let div = (1..MOD_BEATS.len()).min_by(|&x, &y| (MOD_BEATS[x].1.ln() - beats.ln()).abs().total_cmp(&(MOD_BEATS[y].1.ln() - beats.ln()).abs())).unwrap_or(5);
+            vec![("sync_div", div as f32), ("rate", (1.0 / (MOD_BEATS[div].1 * quarter)) as f32)]
+        }
+        bt if is_mod(bt) => vec![("sync_div", 0.0)],
         _ => Vec::new(),
     }
 }

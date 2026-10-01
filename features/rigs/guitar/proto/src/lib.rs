@@ -1100,6 +1100,20 @@ pub mod time {
 
     /// The `tap_div` that runs free.
     pub const FREE_DIV: usize = 7;
+
+    /// A modulation's cycle in beats, by its `sync_div` (0: free — its rate
+    /// is its own).
+    pub const MOD_BEATS: [(&str, f64); 9] = [
+        ("Free", 0.0),
+        ("1/16", 0.25),
+        ("1/8T", 1.0 / 3.0),
+        ("1/8", 0.5),
+        ("1/8.", 0.75),
+        ("1/4", 1.0),
+        ("1/2", 2.0),
+        ("1 bar", 4.0),
+        ("2 bars", 8.0),
+    ];
 }
 
 pub mod rig {

@@ -69,6 +69,9 @@ pub struct FaceTier {
     pub back: Option<String>,
     pub back_dark: Option<String>,
     pub variants: Vec<(String, f64)>,
+    /// It carries the Time knob where the base face may not (a phone's
+    /// modulation lane).
+    pub time_knob: Option<bool>,
 }
 
 impl FaceEntry {
@@ -87,6 +90,9 @@ impl FaceEntry {
             f.back.clone_from(&t.back);
             f.back_dark.clone_from(&t.back_dark);
             f.variants.clone_from(&t.variants);
+            if let Some(k) = t.time_knob {
+                f.time_knob = k;
+            }
         }
         f
     }
@@ -254,7 +260,7 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
                                 .collect()
                         })
                         .unwrap_or_default();
-                    Some((tier, FaceTier { face, dark: named("dark"), size: (s.first()?.as_f64()?, s.get(1)?.as_f64()?), back: named("back"), back_dark: named("back_dark"), variants }))
+                    Some((tier, FaceTier { face, dark: named("dark"), size: (s.first()?.as_f64()?, s.get(1)?.as_f64()?), back: named("back"), back_dark: named("back_dark"), variants, time_knob: t.get("time_knob").and_then(serde_json::Value::as_bool) }))
                 })
                 .collect()
         })
@@ -425,6 +431,11 @@ pub fn BlockFace(
     /// The tempo, for a face with the Time knob (its Beat side).
     #[props(default)]
     tempo_bpm: Option<u32>,
+    /// The blocks it is one of (a modulation group: name, id), the one
+    /// playing first among them by `member` — its algorithm menu picks
+    /// among them too.
+    #[props(default)]
+    members: Vec<(String, String)>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     // The nameplate: the preset playing, printed by the face.
@@ -451,7 +462,7 @@ pub fn BlockFace(
     // Where the last press on the face landed (window coordinates): the
     // algorithm menu opens there.
     let mut pressed_at = use_signal(|| (0.0, 0.0));
-    let nameplate = face.nameplate.then(|| (block.clone(), preset_type.clone().unwrap_or_default(), algos.clone(), comp.clone(), playing.clone()));
+    let nameplate = face.nameplate.then(|| (block.clone(), preset_type.clone().unwrap_or_default(), algos.clone(), comp.clone(), playing.clone(), members.clone()));
     let mut values = values_of(&block, &face.ns);
     values.extend(live);
     for m in &face.maps {
@@ -531,11 +542,11 @@ pub fn BlockFace(
                         return;
                     }
                     // The nameplate's presses.
-                    if let Some((b, kind, algos, comp, playing)) = nameplate.as_ref()
+                    if let Some((b, kind, algos, comp, playing, members)) = nameplate.as_ref()
                         && let Some(press) = ["algo_menu", "preset_prev", "preset_next", "preset_browse"].into_iter().find(|p| addr.ends_with(&format!("/{p}")))
                     {
                         if value >= 0.5 {
-                            nameplate_press(rig.clone(), press, b, kind, algos.as_ref(), comp, playing, pressed_at());
+                            nameplate_press(rig.clone(), press, b, kind, algos.as_ref(), comp, playing, pressed_at(), members);
                         }
                         return;
                     }
@@ -569,6 +580,7 @@ fn nameplate_press(
     comp: &signal_guitar_proto::CompositionModel,
     playing: &str,
     at: (f64, f64),
+    members: &[(String, String)],
 ) {
     match press {
         "preset_prev" | "preset_next" => {
@@ -596,18 +608,56 @@ fn nameplate_press(
             let (param, options) = (*param, options.clone());
             let current = block.params.iter().find(|p| p.name == param).map_or(0, |p| p.value.round().max(0.0) as usize);
             let id = block.id.clone();
+            let members = members.to_vec();
+            let playing_id = block.id.clone();
             host.open(
                 at.0,
                 at.1 + 12.0,
                 260.0,
                 move || {
-                    crate::control::algo_grid(&options, current, "#c4b5fd", {
+                    let engines = crate::control::algo_grid(&options, current, "#c4b5fd", {
                         let (rig, id) = (rig.clone(), id.clone());
                         move |i| {
                             crate::control::send_param(&rig, &id, param, i as f32);
                             spawn(async move { host.close() });
                         }
-                    })
+                    });
+                    if members.len() < 2 {
+                        return engines;
+                    }
+                    // A group's members first: a press plays that one (the
+                    // others bypassed); its engines under them.
+                    let (rig, members2) = (rig.clone(), members.clone());
+                    rsx! {
+                        div { style: "display: flex; flex-direction: column; gap: 4px;",
+                            div { style: "display: flex; gap: 4px; padding: 8px 8px 0 8px; background: #18181b; border-radius: 8px 8px 0 0;",
+                                for (name, mid) in members.iter().cloned() {
+                                    {
+                                        let on = mid == playing_id;
+                                        let (rig, all) = (rig.clone(), members2.clone());
+                                        rsx! {
+                                            button { key: "{mid}",
+                                                style: if on { "flex: 1 1 0%; padding: 8px 4px; border-radius: 6px; font-size: 12px; font-weight: 700; background: #e4e4e7; color: #09090b;" } else { "flex: 1 1 0%; padding: 8px 4px; border-radius: 6px; font-size: 12px; font-weight: 600; background: #27272a; color: #d4d4d8;" },
+                                                onclick: move |_| {
+                                                    let (rig, all, mid) = (rig.clone(), all.clone(), mid.clone());
+                                                    spawn(async move {
+                                                        if let Some(r) = rig {
+                                                            for (_, other) in &all {
+                                                                let _ = r.set_block_bypass(other.clone(), *other != mid).await;
+                                                            }
+                                                        }
+                                                        host.close();
+                                                    });
+                                                },
+                                                "{name}"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            {engines}
+                        }
+                    }
                 },
                 || {},
             );

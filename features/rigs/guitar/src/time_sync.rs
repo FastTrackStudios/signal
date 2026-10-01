@@ -4,7 +4,22 @@
 //! tempo — `sync_div` ([`REVERB_BEATS`]) — and is given it again whenever
 //! the tempo or its algorithm changes.
 
-pub use signal_guitar_proto::time::REVERB_BEATS;
+pub use signal_guitar_proto::time::{MOD_BEATS, REVERB_BEATS};
+use signal_proto::BlockType;
+
+/// A block whose rate is a modulation's (the tempo can lock it).
+#[must_use]
+pub fn is_modulation(bt: BlockType) -> bool {
+    matches!(bt, BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato | BlockType::Trem | BlockType::Phaser | BlockType::Rotary)
+}
+
+/// The rate (Hz) for a modulation locked to `sync_div` at `bpm` — a cycle
+/// in its beats — or `None` when it runs free.
+#[must_use]
+pub fn mod_synced_rate(sync_div: f32, bpm: f32) -> Option<f32> {
+    let beats = MOD_BEATS.get(sync_div.round().max(0.0) as usize).map(|b| b.1).filter(|b| *b > 0.0)?;
+    (bpm > 0.0).then(|| (f64::from(bpm) / 60.0 / beats) as f32)
+}
 
 /// The Hall algorithm's feedback law (g = 0.5 + 0.48·d over an ~80 ms
 /// loop): the tail of an algorithm whose decay is not a calibrated time.
@@ -48,6 +63,13 @@ pub fn reverb_synced_decay(algorithm: f32, variant: f32, sync_div: f32, bpm: f32
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A tremolo on eighths at 120 BPM pulses four times a second.
+    #[test]
+    fn a_synced_modulation_cycles_on_its_beats() {
+        assert_eq!(mod_synced_rate(3.0, 120.0), Some(4.0));
+        assert_eq!(mod_synced_rate(0.0, 120.0), None);
+    }
 
     /// A Hall locked to a bar at 120 BPM rings for two seconds.
     #[test]

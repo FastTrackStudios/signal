@@ -2218,6 +2218,20 @@ impl GuitarRigBackend {
         for (id, decay) in writes {
             self.write_live_param(&id, "decay", decay);
         }
+        // The modulations locked to it: their rate, a cycle in their beats.
+        let rates: Vec<(String, f32)> = self
+            .blocks
+            .lock_ok()
+            .iter()
+            .filter(|b| crate::time_sync::is_modulation(b.block_type) && only.is_none_or(|id| b.id == id))
+            .filter_map(|b| {
+                let div = b.params.iter().find(|p| p.name == "sync_div").map_or(0.0, |p| p.value);
+                crate::time_sync::mod_synced_rate(div, bpm as f32).map(|hz| (b.id.clone(), hz))
+            })
+            .collect();
+        for (id, hz) in rates {
+            self.write_live_param(&id, "rate", hz);
+        }
     }
 
     /// The boost currently applied (0.0 while disengaged).
@@ -4384,6 +4398,8 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             // BBD, Tape, Orbit, Juno, CE-2, Dimension, Clone, Tri-Chorus,
             // SCF, Julia.
             ("engine", 0.0, 10.0, 0.0),
+            // Locked to the tempo: the cycle's beats (`time_sync`; 0 free).
+            ("sync_div", 0.0, 8.0, 0.0),
             // The engine's own colour — the wet's tone on most (0.5 = the
             // unit as built), pre-delay on the SCF, Lag on the Julia.
             ("color", 0.0, 1.0, 0.5),
@@ -4396,6 +4412,7 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("mix", 0.0, 1.0, 1.0),
             ("rate", 0.05, 12.0, 4.0),
             ("mode", 0.0, 2.0, 1.0),
+            ("sync_div", 0.0, 8.0, 0.0),
         ]),
         _ => Vec::new(),
     }

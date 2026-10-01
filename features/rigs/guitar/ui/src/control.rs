@@ -1685,7 +1685,7 @@ pub(crate) fn ModGroupPanel(
             // With a face: the members as tabs over it (a press engages that
             // one), Motion's speed beside them; the face's own nameplate has
             // its preset, its engine and its On.
-            if mod_face.is_some() {
+            if mod_face.is_some() && tier > Tier::Phone {
                 div { style: "flex: 0 0 {tab_h}px; display: flex; align-items: stretch; gap: 2px; padding: 3px 6px; background: #0b0c0f; border-bottom: 1px solid #1d1f24;",
                     for (i, m) in members.iter().enumerate() {
                         {
@@ -1717,7 +1717,7 @@ pub(crate) fn ModGroupPanel(
                     title: if engaged { "Bypass group" } else { "Engage" },
                     onclick: {
                         let rig = rig.clone();
-                        let members = members;
+                        let members = members.clone();
                         move |_| {
                             let (rig, members) = (rig.clone(), members.clone());
                             spawn(async move {
@@ -1798,7 +1798,10 @@ pub(crate) fn ModGroupPanel(
             }
             if let Some(f) = mod_face.clone() {
                 div { class: "relative flex-1 min-h-0 flex",
-                    crate::rig_faces::BlockFace { block: cur.clone(), face: f, fill: true, preset_type: Some(cur.block_type.as_str().to_string()), algos: algos.clone(), tempo_bpm: Some(tempo_bpm) }
+                    crate::rig_faces::BlockFace { block: cur.clone(), face: f, fill: true, preset_type: Some(cur.block_type.as_str().to_string()), algos: algos.clone(), tempo_bpm: Some(tempo_bpm),
+                        // On a phone the members are picked from its name.
+                        members: if tier <= Tier::Phone { members.iter().map(|m| (m.name.clone(), m.id.clone())).collect() } else { Vec::new() },
+                    }
                 }
             } else {
             // LFO trace — flat while the group is bypassed (the panel's
