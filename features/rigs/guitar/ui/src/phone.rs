@@ -456,8 +456,10 @@ fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: 
         Page::Drives => {
             // Every pedal across the page's width (the screen less the rail
             // and the housing's clearance).
-            let w = try_use_context::<crate::control::WindowSize>().map_or(874.0, |s| (s.0)().0);
-            rsx! { crate::rig_faces::DrivesRow { blocks, fit_width: Some(w - f64::from(RAIL_W + HOUSING)) } }
+            let (w, h) = try_use_context::<crate::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
+            // The page's height less the bars and the board's rails.
+            let page_h = h - f64::from(LINE_H) - 30.0 - 24.0;
+            rsx! { crate::rig_faces::DrivesRow { blocks, fit_width: Some(w - f64::from(RAIL_W + HOUSING)), fit_height: Some(page_h) } }
         }
         Page::Amps => rsx! { crate::rig_faces::AmpRow { blocks, amps_only: true } },
         Page::Eq => {

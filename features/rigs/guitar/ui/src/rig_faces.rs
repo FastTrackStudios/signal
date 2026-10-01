@@ -709,35 +709,42 @@ pub fn DrivesRow(
     /// the row's full height.
     #[props(default)]
     fit_width: Option<f64>,
+    /// …and no taller than this (points).
+    #[props(default)]
+    fit_height: Option<f64>,
 ) -> Element {
     let faces = use_faces();
+    // Each pedal at the window's tier (on a phone, its narrow version).
+    let tier = crate::control::use_tier();
     let mut slots: Vec<(LiveBlock, Option<FaceEntry>)> = Vec::new();
     slots.extend(
         blocks
             .iter()
             .filter(|b| matches!(b.block_type, BlockType::Boost | BlockType::Drive))
-            .map(|b| (b.clone(), (!b.empty).then(|| faces.drive(&b.preset).cloned()).flatten())),
+            .map(|b| (b.clone(), (!b.empty).then(|| faces.drive(&b.preset).map(|f| f.at(tier))).flatten())),
     );
     let last = slots.len().saturating_sub(1);
     // Fitted: the pedals' height that puts them all across `fit_width`,
     // after the cables' least room.
     let pedal_h = fit_width.map(|w| {
         let aspects: f64 = slots.iter().map(|(_, f)| f.as_ref().map_or(PEDAL.0 / PEDAL.1, |f| f.size.0 / f.size.1)).sum();
-        let cables = 44.0 * last as f64 + 40.0;
-        ((w - cables) / aspects.max(0.1)).max(60.0)
+        // Fitted, the cables take their least: the pedals get the room.
+        let cables = TIGHT_CABLE * last as f64 + 2.0 * TIGHT_CABLE;
+        ((w - cables) / aspects.max(0.1)).max(60.0).min(fit_height.unwrap_or(f64::MAX))
     });
+    let tight = fit_width.is_some();
     let slot_size = pedal_h.map_or_else(|| "height: 100%;".to_string(), |h| format!("height: {h:.0}px; align-self: center;"));
     rsx! {
         div { style: "position: relative; display: flex; flex-direction: row; align-items: stretch; width: 100%; height: 100%; min-height: 0; box-sizing: border-box; padding: {BOARD_PAD_TOP}px 0 {BOARD_PAD_BOTTOM}px 0; background: {BOARD};",
             // The power: one lead along the top, a drop into each pedal.
             div { style: "position: absolute; left: 0; right: 0; top: 4px; height: 3px; border-radius: 2px; background: {CORD}; pointer-events: none;" }
-            Cable { end: CableEnd::In }
+            Cable { end: CableEnd::In, tight }
             if let Some(lead) = leading {
                 // Its own dark ground: a unit on the board, not a hole in it.
                 div { style: "position: relative; height: 100%; min-height: 0; flex: 0 1 300px; min-width: 200px; display: flex; background: #0b0c0f; border-radius: 6px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,0.6);",
                     {lead}
                 }
-                Cable { end: CableEnd::Between }
+                Cable { end: CableEnd::Between, tight }
             }
             for (i, (b, face)) in slots.into_iter().enumerate() {
                 div { key: "{b.id}", style: "position: relative; {slot_size} min-height: 0; flex: 0 0 auto; display: flex;",
@@ -748,7 +755,7 @@ pub fn DrivesRow(
                         NameCard { block: b.clone(), aspect: PEDAL }
                     }
                 }
-                Cable { end: if i == last { CableEnd::Out } else { CableEnd::Between } }
+                Cable { end: if i == last { CableEnd::Out } else { CableEnd::Between }, tight }
             }
         }
     }
@@ -764,6 +771,8 @@ const CORD: &str = "#050506";
 /// The board shows above and below the pedals (the power runs above).
 const BOARD_PAD_TOP: u32 = 12;
 const BOARD_PAD_BOTTOM: u32 = 8;
+/// A cable's least width where the board fits its pedals to a width.
+const TIGHT_CABLE: f64 = 12.0;
 /// Where a pedal's side jacks sit, down its height (the faces' jacks).
 const JACK_AT: f64 = 60.0;
 
@@ -781,8 +790,12 @@ enum CableEnd {
 /// jack to the next's, right-angle plugs at both ends; or a lead running
 /// off the board's edge.
 #[component]
-fn Cable(end: CableEnd) -> Element {
-    let flex = if end == CableEnd::Between { "1 1 0%; min-width: 40px;" } else { "0 1 36px; min-width: 18px;" };
+fn Cable(end: CableEnd, #[props(default)] tight: bool) -> Element {
+    let flex = match (end == CableEnd::Between, tight) {
+        (true, false) => "1 1 0%; min-width: 40px;".to_string(),
+        (false, false) => "0 1 36px; min-width: 18px;".to_string(),
+        (_, true) => format!("1 1 0%; min-width: {TIGHT_CABLE}px;"),
+    };
     let plug = |side: &str| format!("position: absolute; {side}: 0; top: {JACK_AT}%; width: 12px; height: 12px; margin-top: -6px; border-radius: 2px; background: linear-gradient(180deg, #e9eaec 0%, #8e9196 55%, #4a4c50 100%); pointer-events: none;");
     let boot = |side: &str| format!("position: absolute; {side}: 10px; top: {JACK_AT}%; width: 10px; height: 16px; margin-top: -8px; border-radius: 3px; background: linear-gradient(90deg, #1b1b1d 0%, #2c2c30 50%, #151517 100%); pointer-events: none;");
     rsx! {
