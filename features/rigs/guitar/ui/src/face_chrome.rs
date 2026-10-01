@@ -52,7 +52,7 @@ pub fn PresetStepper(
     let names: Vec<String> = comp
         .block_presets
         .iter()
-        .filter(|p| p.block_type.eq_ignore_ascii_case(&block_type))
+        .filter(|p| p.block_type.eq_ignore_ascii_case(&block_type) && preset_fits(&block, &p.name))
         .map(|p| p.name.clone())
         .collect();
     let playing = comp.active_blocks.iter().find(|b| b.block.eq_ignore_ascii_case(&block)).map(|b| b.preset.clone()).unwrap_or_default();
@@ -178,5 +178,20 @@ pub fn CoreFreeze() -> Element {
             span { style: "{live_style}", onclick: move |_| set_live(false), "LIVE" }
             span { style: "{frozen_style}", onclick: move |_| set(true), "FROZEN" }
         }
+    }
+}
+
+/// Whether a block preset belongs on `block`'s stepper beyond its type: the
+/// octaver (Pitch) and the harmonizer are both pitch blocks, and a preset
+/// sets the voices' intervals — the harmonizer's are named "Harmony …",
+/// so neither turns into the other.
+fn preset_fits(block: &str, name: &str) -> bool {
+    let harmony = name.to_lowercase().starts_with("harmony");
+    if block.eq_ignore_ascii_case("Harmonizer") {
+        harmony
+    } else if block.eq_ignore_ascii_case("Pitch") {
+        !harmony
+    } else {
+        true
     }
 }
