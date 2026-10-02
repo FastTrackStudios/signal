@@ -20,7 +20,7 @@
 #[cfg(feature = "signal-keys-rig")]
 use crate::keys_view;
 use dioxus::prelude::*;
-use signal_guitar_ui::{BottomInset, GuitarRigRemote, IslandLeft, PhoneHost, WindowAspect, WindowSize};
+use signal_guitar_ui::{GuitarRigRemote, IslandLeft, PhoneHost, WindowAspect, WindowSize};
 
 use crate::rigs::{Rig, RigMenu};
 
@@ -82,9 +82,6 @@ pub fn MobileApp() -> Element {
     let mut size = use_context_provider(|| WindowSize(Signal::new((402.0, 874.0))));
     let mut aspect = use_context_provider(|| WindowAspect(Signal::new(402.0 / 874.0)));
     let mut island = use_context_provider(|| IslandLeft(Signal::new(false)));
-    // The home indicator's strip: the page is drawn to the bottom edge
-    // (`BLITZ_SAFE_AREA_BOTTOM=0`) and the rig's bottom bar grows by it.
-    let mut foot = use_context_provider(|| BottomInset(Signal::new(0.0)));
     use_future(move || {
         let window = window.clone();
         async move {
@@ -98,10 +95,6 @@ pub fn MobileApp() -> Element {
                         size.0.set(pt);
                         aspect.0.set(pt.0 / pt.1);
                     }
-                }
-                let bottom = f64::from(window.safe_area().bottom) / window.scale_factor().max(0.1);
-                if (*foot.0.peek() - bottom).abs() > 0.5 {
-                    foot.0.set(bottom);
                 }
                 let left = crate::ios_scene::island_on_left() == Some(true);
                 if *island.0.peek() != left {

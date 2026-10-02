@@ -129,16 +129,15 @@ mod mac_activity;
 const LOG_FILTER: &str = "info,vox_core=warn,schema_deser=off";
 
 fn main() {
-    // iPhone: Blitz keeps the safe area's top and bottom out of the
-    // viewport but not its sides — the rig's phone pages run under the
-    // camera housing and keep clear of it themselves (`IslandLeft`).
+    // iPhone: the page is the whole screen — no safe area at all. The rig's
+    // phone pages keep clear of the one thing that matters, the camera
+    // housing, themselves (`IslandLeft`); the bars reach the edges. (UIKit's
+    // safe area is also unreliable here: an app that rotated at launch kept
+    // portrait's insets on a landscape window.)
     #[cfg(target_os = "ios")]
     // SAFETY: first thing in main, before any thread starts.
     unsafe {
-        std::env::set_var("BLITZ_SAFE_AREA_SIDES", "0");
-        // And to the bottom edge: the rig's bottom bar reaches it, keeping
-        // its controls above the home indicator itself (`BottomInset`).
-        std::env::set_var("BLITZ_SAFE_AREA_BOTTOM", "0");
+        std::env::set_var("BLITZ_SAFE_AREA", "0");
     }
     // Before anything starts audio: a backgrounded rig must not be throttled
     // (it xran whenever another app had focus).

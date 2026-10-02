@@ -175,6 +175,12 @@ const DIM: &str = "#8b9099";
 /// The top line's height, and how far it keeps clear of the screen's
 /// rounded corners.
 const LINE_H: u32 = 44;
+/// The page switcher along the top.
+const CHAIN_H: u32 = 34;
+/// How far down the bottom line its middle starts: high enough that the
+/// home indicator (a pill ~8 points above the screen's bottom edge, across
+/// its middle) has the bar's lower part to itself.
+const MIDDLE_TOP: u32 = 4;
 const CORNER: u32 = 16;
 /// The rail down the left.
 const RAIL_W: u32 = 60;
@@ -197,13 +203,6 @@ pub struct PhoneHost {
 #[derive(Clone, Copy)]
 pub struct IslandLeft(pub Signal<bool>);
 
-/// How much of the screen's foot the home indicator takes, in points. The
-/// iOS shell lays the page out to the bottom edge and provides this: the
-/// bottom line's background runs under the indicator, its controls above
-/// it. Without it (a desktop, Android) the line is just its own height.
-#[derive(Clone, Copy)]
-pub struct BottomInset(pub Signal<f64>);
-
 /// The phone's rig surface: the patch along the top, the rail down the
 /// left (Control, Switch, Edit; Profile or Song), and the view — in
 /// Control, a page of the chain over the chain itself.
@@ -221,8 +220,6 @@ pub fn PhoneControl(
     // The housing's clearance: the rail moves out from under it on the
     // left; on the right the view keeps clear of it itself.
     let (lead, trail) = if island_left { (HOUSING, 0) } else { (0, HOUSING) };
-    let foot = try_use_context::<BottomInset>().map_or(0.0, |s| (s.0)()).max(0.0);
-    let bottom_line = f64::from(LINE_H) + foot;
     // `FTS_PHONE_PAGE=<slug>`: open on that page (the shot tool renders
     // every page at once, an app each).
     let mut page = use_signal(|| {
@@ -340,7 +337,7 @@ pub fn PhoneControl(
                             // The chain, along the top (tapped most, so away
                             // from the home indicator): a segment a page,
                             // coloured by where it sits, the one up lit.
-                            div { style: "flex: 0 0 34px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 4px {CORNER}px 4px 4px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
+                            div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 4px {CORNER}px 4px 4px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
                                 for p in Page::ALL {
                                     {
                                         let on = page() == p;
@@ -373,17 +370,21 @@ pub fn PhoneControl(
                     }
                 }
             }
-            // ── The bottom line: the patch at the left, where you are and
-            // the audio in the middle, the page's modules at the right — the
-            // controls out at the sides, clear of the home indicator, which
-            // only the indicators sit near ──
-            div { style: "flex: 0 0 {bottom_line}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px {foot}px; background: {BAR_BG}; border-top: 1px solid {RULE}; min-width: 0;",
+            // ── The bottom line, on the screen's bottom edge: the patch at the
+            // left, where you are and the audio in the middle, the page's
+            // modules at the right — the controls out at the sides, clear of
+            // the home indicator, which only the indicators sit near ──
+            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px; background: {BAR_BG}; border-top: 1px solid {RULE}; min-width: 0;",
                 PatchStepper { revision: model.revision }
                 div { style: "flex: 1 1 0%;" }
-                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {title_color}; white-space: nowrap;",
-                    "{title}"
+                // The middle sits high in the bar: the home indicator runs
+                // along the bottom edge's middle, and nothing goes under it.
+                div { style: "align-self: flex-start; margin-top: {MIDDLE_TOP}px; height: 26px; display: flex; flex-direction: row; align-items: center; gap: 8px;",
+                    span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {title_color}; white-space: nowrap;",
+                        "{title}"
+                    }
+                    AudioBadge { running: (state.running)(), error: (state.audio_error)() }
                 }
-                AudioBadge { running: (state.running)(), error: (state.audio_error)() }
                 div { style: "flex: 1 1 0%;" }
                 for (kind, module) in modules {
                     div { key: "{module}", style: "flex: 0 1 200px; min-width: 0; height: 30px; display: flex;",
@@ -533,7 +534,7 @@ fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: 
             // and the housing's clearance).
             let (w, h) = try_use_context::<crate::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
             // The page's height less the bars and the board's rails.
-            let page_h = h - f64::from(LINE_H) - 30.0 - 24.0;
+            let page_h = h - f64::from(LINE_H) - f64::from(CHAIN_H) - 24.0;
             rsx! { crate::rig_faces::DrivesRow { blocks, fit_width: Some(w - f64::from(RAIL_W + HOUSING)), fit_height: Some(page_h) } }
         }
         Page::Amps => rsx! { crate::rig_faces::AmpRow { blocks, amps_only: true } },
