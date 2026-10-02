@@ -241,10 +241,13 @@ fn main() {
         // The simulator has no audio interface, and the rig opens only for
         // one: run it in design mode, which lists the real profile — its
         // patches, chain and faces — without audio, and writes nothing.
+        // `SIGNAL_RIG_DESIGN=0` runs it as a phone with no interface does.
         #[cfg(target_abi = "sim")]
-        // SAFETY: single-threaded, before the engine bootstrap spawns.
-        unsafe {
-            std::env::set_var("SIGNAL_RIG_DESIGN", "1");
+        if std::env::var_os("SIGNAL_RIG_DESIGN").is_none() {
+            // SAFETY: single-threaded, before the engine bootstrap spawns.
+            unsafe {
+                std::env::set_var("SIGNAL_RIG_DESIGN", "1");
+            }
         }
         // frame's faces ship in the bundle (ios/app-plist.sh copies them in),
         // beside the executable.
