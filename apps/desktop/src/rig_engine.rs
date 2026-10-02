@@ -158,6 +158,11 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         #[cfg(target_os = "ios")]
         if crate::ios_audio::has_external_input() || signal_guitar::library::rig_is_design() {
             backend.start();
+        } else {
+            // No interface yet: the whole surface, with no audio — the top
+            // bar says so, and the hotplug watcher opens the rig when one is
+            // plugged in.
+            backend.show_without_audio();
         }
 
         #[cfg(feature = "signal")]

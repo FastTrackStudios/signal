@@ -315,6 +315,7 @@ pub fn PhoneControl(
                     "{title}"
                 }
                 div { style: "flex: 1 1 0%;" }
+                AudioBadge { running: (state.running)(), error: (state.audio_error)() }
                 for (kind, module) in modules {
                     div { key: "{module}", style: "flex: 0 1 200px; min-width: 0; height: 30px; display: flex;",
                         ModuleControls { kind, pick: pick_of(module), modules: all_modules.clone(), edited: edited.clone(), style: "width: 100%; height: 100%;" }
@@ -378,6 +379,30 @@ pub fn PhoneControl(
                         },
                     }
                 }
+            }
+        }
+    }
+}
+
+/// Whether the audio is running, small, in the top line: the surface works
+/// without it (a phone with no interface plugged in plays nothing, but every
+/// patch and page is there to edit). Tap for Audio settings.
+#[component]
+fn AudioBadge(running: bool, error: String) -> Element {
+    let (dot, label, color) = if running {
+        ("#22c55e", "", DIM)
+    } else if !error.is_empty() {
+        ("#ef4444", "Audio error", "#fca5a5")
+    } else {
+        ("#f59e0b", "No audio", "#fcd34d")
+    };
+    rsx! {
+        div { style: "flex: 0 0 auto; height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 13px; background: {RAISED}; cursor: pointer;",
+            title: if error.is_empty() { "Audio" } else { "{error}" },
+            onclick: move |_| crate::settings::open_audio_settings(),
+            span { style: "width: 7px; height: 7px; border-radius: 4px; background: {dot};" }
+            if !label.is_empty() {
+                span { style: "font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: {color}; white-space: nowrap;", "{label}" }
             }
         }
     }

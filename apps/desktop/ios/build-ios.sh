@@ -21,6 +21,11 @@ ln -sf /usr/bin/xcodebuild "$BIN_IOS/xcodebuild"
 
 unset DEVELOPER_DIR SDKROOT
 export PATH="$BIN_IOS:$PATH"
+# The floor the devshell sets (nix/modules/toolchain.nix) and Info.plist's
+# MinimumOSVersion: a build outside nix otherwise links for iOS 10 while
+# the C++ objects (NAM's Eigen) were compiled for the SDK's own version, and
+# `___chkstk_darwin` is missing at the link.
+export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-15.0}"
 
 dx build --platform ios --no-default-features --features signal-guitar,signal-keys-rig
 

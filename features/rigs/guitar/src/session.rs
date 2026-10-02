@@ -4188,6 +4188,15 @@ impl GuitarRigBackend {
         *self.live_view_patch.lock_ok() = self.live_patch_name().unwrap_or_default();
     }
 
+    /// Lay the profile out with no audio device open — a phone with no
+    /// interface plugged in: the active patch's chain from its definition,
+    /// marked as not playing, every patch choosable and editable. The device
+    /// opens on the same patch when [`start`](RigBackend::start) runs.
+    pub fn show_without_audio(&self) {
+        self.show_chain_offline(signal_guitar_proto::BlockEngine::NO_AUDIO);
+        self.publish_state();
+    }
+
     /// Show the active patch's chain from its definition, every block marked
     /// `engine` — while the device opens, or when it will not.
     fn show_chain_offline(&self, engine: u32) {
@@ -5973,12 +5982,11 @@ impl Rig for GuitarRigBackend {
         let guard = self.rig.lock_ok();
         let Some(prig) = guard.as_ref() else {
             drop(guard);
-            // Design mode builds no engine, but the profile is plain data:
-            // list its patches exactly as the live rig would (same order,
-            // same stacks), so the sidebar shows the real profile.
-            if !crate::library::rig_is_design() {
-                return Vec::new();
-            }
+            // No engine (design mode, or no audio device yet), but the
+            // profile is plain data: list its patches exactly as the live rig
+            // would (same order, same stacks), so the surface shows the real
+            // profile and its patches can be chosen and edited before the
+            // audio opens.
             let profile = self.design_profile();
             let active = self.design_active_patch(&profile);
             return self.patch_infos(&profile.patches, &profile.stacks, active.as_deref(), |_| {
@@ -5999,10 +6007,11 @@ impl Rig for GuitarRigBackend {
                 if let Some(name) = prig.patches().get(index as usize).map(|p| p.name.clone()) {
                     activate_patch_by_name(prig, &name);
                 }
-            } else if crate::library::rig_is_design() {
+            } else {
                 drop(guard);
-                // Same indices as `patches()` above; `resync_blocks` below
-                // rebuilds the design chain from `design_patch`.
+                // No engine: the same indices as `patches()` above;
+                // `resync_blocks` below rebuilds the chain from
+                // `design_patch`, and the device opens on it.
                 if let Some(p) = self.design_profile().patches.get(index as usize) {
                     *self.design_patch.lock_ok() = p.name.clone();
                 }
@@ -6018,7 +6027,9 @@ impl Rig for GuitarRigBackend {
     }
 
     fn presets(&self) -> Vec<PresetInfo> {
-        let design_active = crate::library::rig_is_design() && self.rig.lock_ok().is_none();
+        // No engine (design mode, or no audio device yet): the patch the
+        // surface shows.
+        let design_active = self.rig.lock_ok().is_none();
         let active_patch = if design_active {
             let profile = self.design_profile();
             self.design_active_patch(&profile)
