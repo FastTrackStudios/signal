@@ -478,15 +478,14 @@ fn launch_app() {
 /// (a phone held sideways has no room for it).
 #[cfg(target_os = "ios")]
 fn launch_app() {
-    use dioxus_native::winit::platform::ios::{ValidOrientations, WindowAttributesIos};
+    use dioxus_native::winit::platform::ios::WindowAttributesIos;
     use dioxus_native::{Config, WindowAttributes, launch_cfg};
     // Before UIKit looks the delegate up by the name Info.plist gives it.
     ios_scene::register();
     let window = WindowAttributes::default().with_title("Signal").with_platform_attributes(Box::new(
-        WindowAttributesIos::default()
-            .with_prefers_status_bar_hidden(true)
-            // Landscape only, as Info.plist says (ios/app-plist.sh).
-            .with_valid_orientations(ValidOrientations::Landscape),
+        // Orientations are Info.plist's (ios/app-plist.sh): an iPhone
+        // sideways only, an iPad every way (it keeps multitasking).
+        WindowAttributesIos::default().with_prefers_status_bar_hidden(true),
     ));
     #[cfg(feature = "signal-guitar")]
     let root = mobile_view::MobileApp;
