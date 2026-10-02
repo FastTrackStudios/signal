@@ -296,6 +296,39 @@ const DEFAULT_MODELS: &[(&str, &[u8])] = &[
         "King of Tone ver4 Red channel set to Boost.nam",
         include_bytes!("../default-config/models/King of Tone ver4 Red channel set to Boost.nam"),
     ),
+    // The Blues profile's pedals and amps (TONE3000 captures).
+    (
+        "KLON 2.nam",
+        include_bytes!("../default-config/models/KLON 2.nam"),
+    ),
+    (
+        "marshall-bluesbreaker-pedal-setting1.nam",
+        include_bytes!("../default-config/models/marshall-bluesbreaker-pedal-setting1.nam"),
+    ),
+    (
+        "46-TS808_Hot_Lvl6_OD1_T5.nam",
+        include_bytes!("../default-config/models/46-TS808_Hot_Lvl6_OD1_T5.nam"),
+    ),
+    (
+        "Dumble Steel SS Clean.nam",
+        include_bytes!("../default-config/models/Dumble Steel SS Clean.nam"),
+    ),
+    (
+        "Dumble Steel SS Drive 1.nam",
+        include_bytes!("../default-config/models/Dumble Steel SS Drive 1.nam"),
+    ),
+    (
+        "Two-Rock_ John Mayer Signature Prototype.nam",
+        include_bytes!("../default-config/models/Two-Rock_ John Mayer Signature Prototype.nam"),
+    ),
+    (
+        "Fender_ Vibroverb_ 1964.nam",
+        include_bytes!("../default-config/models/Fender_ Vibroverb_ 1964.nam"),
+    ),
+    (
+        "Fender_ Vibroverb_ 1964  - Dumble_ Steel String Singer_ _002 -  Two-Rock_ John Mayer Signature Prototype __Signature _83__.nam",
+        include_bytes!("../default-config/models/Fender_ Vibroverb_ 1964  - Dumble_ Steel String Singer_ _002 -  Two-Rock_ John Mayer Signature Prototype __Signature _83__.nam"),
+    ),
 ];
 
 /// Write any default NAM model missing from `<rig_dir>/models/`.
@@ -554,6 +587,49 @@ fn seed_profiles(profiles: &mut Vec<ProfileDef>) -> bool {
     gained_default
 }
 
+/// The shipped drive pedals a library has been given, by name, one a line
+/// (`.seeded-drive-presets`): seeded once, so one the player deletes stays
+/// deleted.
+const SEEDED_DRIVES_MARKER: &str = ".seeded-drive-presets";
+
+/// Add each shipped drive pedal (`DEFAULT_DRIVE_PRESETS`) a library from
+/// before it shipped has never had — a shipped profile names its pedals,
+/// and a slot whose pedal the library lacks plays nothing ("Empty"). Whether
+/// any was added (the caller saves).
+fn seed_drive_presets(presets: &mut Vec<DrivePresetDef>) -> bool {
+    let Some(store) = writable_store() else {
+        return false;
+    };
+    let Ok(shipped) = facet_styx::from_str::<DrivePresetLib>(DEFAULT_DRIVE_PRESETS) else {
+        tracing::warn!("rig library: shipped drive presets do not parse");
+        return false;
+    };
+    let marker = store.dir().join(SEEDED_DRIVES_MARKER);
+    let mut seeded: Vec<String> = std::fs::read_to_string(&marker)
+        .map(|t| t.lines().map(str::to_string).collect())
+        .unwrap_or_default();
+    let mut added = false;
+    let mut changed = false;
+    for dp in shipped.presets {
+        if seeded.iter().any(|n| n.eq_ignore_ascii_case(&dp.name)) {
+            continue;
+        }
+        seeded.push(dp.name.clone());
+        changed = true;
+        if !presets.iter().any(|p| p.name.eq_ignore_ascii_case(&dp.name)) {
+            tracing::info!(pedal = %dp.name, "rig library: seeded shipped drive preset");
+            presets.push(dp);
+            added = true;
+        }
+    }
+    if changed {
+        if let Err(e) = std::fs::write(&marker, seeded.join("\n") + "\n") {
+            tracing::warn!("rig library: cannot write {}: {e}", marker.display());
+        }
+    }
+    added
+}
+
 /// Write `profile` (its own patches only) to `profiles/<file>.styx`.
 fn save_profile_file(store: &StyxDir, mut profile: ProfileDef) {
     for preset in &mut profile.presets {
@@ -582,6 +658,9 @@ impl RigLibrary {
                 }
             })
             .presets;
+        if seed_drive_presets(&mut drive_presets) {
+            Self::save_drive_presets(&drive_presets);
+        }
         let songs = read_or_seed::<SongLib>(&store, "songs.styx", DEFAULT_SONGS, || SongLib {
             songs: song_library(),
         })
@@ -721,7 +800,15 @@ impl RigLibrary {
             }
         }
         let presets = one::<crate::compose::PresetLib>(crate::compose::PRESETS_FILE, DEFAULT_PRESETS)
-            .map(|l| l.presets)
+            .map(|mut l| {
+                for p in &mut l.presets {
+                    for snap in &mut p.snapshots {
+                        store.resolve(&mut snap.frozen_nam);
+                        store.resolve(&mut snap.frozen_nam2);
+                    }
+                }
+                l.presets
+            })
             .unwrap_or_else(|()| last_good.map(|c| c.presets.clone()).unwrap_or_default());
         let blocks = one::<crate::compose::BlockLib>(crate::compose::BLOCKS_FILE, DEFAULT_BLOCKS)
             .map(|l| l.presets)
@@ -782,6 +869,13 @@ impl RigLibrary {
                 store.relativize(&mut snap.nam2);
             }
         }
+        let mut presets = comp.presets.clone();
+        for p in &mut presets {
+            for snap in &mut p.snapshots {
+                store.relativize(&mut snap.frozen_nam);
+                store.relativize(&mut snap.frozen_nam2);
+            }
+        }
         let dir = store.dir();
         config_watch::write_guarded(
             &dir.join(crate::compose::MODULES_FILE),
@@ -789,9 +883,7 @@ impl RigLibrary {
         );
         config_watch::write_guarded(
             &dir.join(crate::compose::PRESETS_FILE),
-            &crate::compose::PresetLib {
-                presets: comp.presets.clone(),
-            },
+            &crate::compose::PresetLib { presets },
         );
         config_watch::write_guarded(
             &dir.join(crate::compose::BLOCKS_FILE),
