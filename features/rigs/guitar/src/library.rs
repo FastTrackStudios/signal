@@ -493,9 +493,16 @@ fn load_profiles(store: &StyxDir) -> Vec<ProfileDef> {
 /// deletes stays deleted.
 const SEEDED_MARKER: &str = ".seeded";
 
+/// The default profile a library has been switched to, in
+/// `profiles/.default`: a library opens on [`DEFAULT_PROFILE_NAME`] once
+/// when it changes (an install from before it, whose last-played profile
+/// would otherwise win), then remembers the player's choice.
+const DEFAULT_MARKER: &str = ".default";
+
 /// Add each shipped profile (`DEFAULT_PROFILES`) the library has never had
 /// — a fresh install, or one from before it shipped — to `profiles` and to
-/// `profiles/`. Whether [`DEFAULT_PROFILE_NAME`] was among them.
+/// `profiles/`. Whether the library should open on [`DEFAULT_PROFILE_NAME`]
+/// this once: it was just seeded, or the library has not opened on it yet.
 fn seed_profiles(profiles: &mut Vec<ProfileDef>) -> bool {
     let dir = profiles_store();
     let marker = dir.dir().join(SEEDED_MARKER);
@@ -532,6 +539,15 @@ fn seed_profiles(profiles: &mut Vec<ProfileDef>) -> bool {
         let _ = std::fs::create_dir_all(dir.dir());
         if let Err(e) = std::fs::write(&marker, seeded.join("\n") + "\n") {
             tracing::warn!("rig library: cannot write {}: {e}", marker.display());
+        }
+    }
+    let default_marker = dir.dir().join(DEFAULT_MARKER);
+    let opened_on = std::fs::read_to_string(&default_marker).unwrap_or_default();
+    if !opened_on.trim().eq_ignore_ascii_case(DEFAULT_PROFILE_NAME) && writable_store().is_some() {
+        gained_default = true;
+        let _ = std::fs::create_dir_all(dir.dir());
+        if let Err(e) = std::fs::write(&default_marker, format!("{DEFAULT_PROFILE_NAME}\n")) {
+            tracing::warn!("rig library: cannot write {}: {e}", default_marker.display());
         }
     }
     profiles.sort_by_key(|p| p.name.to_lowercase());

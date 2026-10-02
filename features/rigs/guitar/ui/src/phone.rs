@@ -6,13 +6,13 @@
 //! board, the Core, the effects after it — and the page that is up fills
 //! the screen:
 //!
-//! - along the top, the patch (‹ name ›) and the page's module presets
-//!   (the Core and its Drive and Amp; the Time module and its Delay and
-//!   Reverb);
-//! - the page itself, its units laid out for the room;
-//! - along the bottom, the chain: a segment a page, coloured by where it
+//! - along the top, the chain: a segment a page, coloured by where it
 //!   sits (Core white, Time blue and purple, the rest grey), the page that
-//!   is up lit. Tap one to go there.
+//!   is up lit. Tap one to go there;
+//! - the page itself, its units laid out for the room;
+//! - along the bottom, the profile and patch (‹ name ›; tap the name for
+//!   every profile and patch), and the page's module presets (the Core and
+//!   its Drive and Amp; the Time module and its Delay and Reverb).
 
 use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
@@ -230,6 +230,8 @@ pub fn PhoneControl(
         Page::Amps
     });
     let mut mode = use_signal(|| Mode::Control);
+    // The profile and patch picker, over the whole screen.
+    let mut picker = use_signal(|| false);
     // `FTS_PHONE_TOUR=<secs>`: step through every page on a timer — to look
     // at each without touching the screen.
     #[cfg(not(target_arch = "wasm32"))]
@@ -313,7 +315,7 @@ pub fn PhoneControl(
         // home indicator out) and the screen's full width: the view runs
         // under the camera housing on the right, and what sits beside it
         // keeps clear itself.
-        div { style: "width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; padding-left: {lead}px; background: #0f1012; color: {TEXT};",
+        div { style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; padding-left: {lead}px; background: #0f1012; color: {TEXT};",
             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;",
                 // ── The rail ──
                 div { style: "flex: 0 0 {RAIL_W}px; display: flex; flex-direction: column; justify-content: center; gap: 2px; background: {BAR_BG}; border-right: 1px solid {RULE};",
@@ -375,7 +377,7 @@ pub fn PhoneControl(
             // modules at the right — the controls out at the sides, clear of
             // the home indicator, which only the indicators sit near ──
             div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px; background: {BAR_BG}; border-top: 1px solid {RULE}; min-width: 0;",
-                PatchStepper { revision: model.revision }
+                PatchStepper { revision: model.revision, profile: model.profile_name.clone(), on_pick: move |()| picker.set(true) }
                 div { style: "flex: 1 1 0%;" }
                 // The middle sits high in the bar: the home indicator runs
                 // along the bottom edge's middle, and nothing goes under it.
@@ -394,6 +396,9 @@ pub fn PhoneControl(
                 if mode() == Mode::Control && page().home() == Home::Core {
                     div { style: "flex: 0 0 110px;", crate::face_chrome::CoreFreeze {} }
                 }
+            }
+            if picker() {
+                PatchPicker { revision: model.revision, lead, trail, on_close: move |()| picker.set(false) }
             }
         }
     }
@@ -468,7 +473,7 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
 
 /// The patch playing, stepped ‹ › through the profile's patches.
 #[component]
-fn PatchStepper(revision: u64) -> Element {
+fn PatchStepper(revision: u64, profile: String, on_pick: EventHandler<()>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let patches = use_resource({
         let rig = rig.clone();
@@ -504,8 +509,108 @@ fn PatchStepper(revision: u64) -> Element {
     rsx! {
         div { style: "display: flex; align-items: center; gap: 2px; min-width: 0;",
             span { style: "{arrow}", onclick: move |_| back(-1), "‹" }
-            span { style: "font-size: 13px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden; max-width: 160px;", "{name}" }
+            // The profile over the patch; tap for every profile and patch.
+            div { style: "display: flex; flex-direction: column; justify-content: center; min-width: 0; max-width: 160px; cursor: pointer;",
+                onclick: move |_| on_pick.call(()),
+                span { style: "font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {DIM}; white-space: nowrap; overflow: hidden;", "{profile}" }
+                span { style: "font-size: 13px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{name}" }
+            }
             span { style: "{arrow}", onclick: move |_| step(1), "›" }
+        }
+    }
+}
+
+/// Every profile, and the patches of the one that plays: tap a profile to
+/// load it, a patch to play it (and close). Over the whole screen — a
+/// phone has no room beside it.
+#[component]
+fn PatchPicker(revision: u64, lead: u32, trail: u32, on_close: EventHandler<()>) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let data = use_resource({
+        let rig = rig.clone();
+        move || {
+            let _ = revision;
+            let rig = rig.clone();
+            async move {
+                match rig {
+                    Some(r) => (r.library().await.unwrap_or_default().profiles, r.patches().await.unwrap_or_default()),
+                    None => (Vec::new(), Vec::new()),
+                }
+            }
+        }
+    });
+    let (profiles, patches) = data.read().clone().unwrap_or_default();
+    let load = {
+        let rig = rig.clone();
+        move |name: String| {
+            let rig = rig.clone();
+            spawn(async move {
+                if let Some(r) = rig {
+                    let _ = r.select_profile(name).await;
+                }
+            });
+        }
+    };
+    let play = move |index: u32| {
+        let rig = rig.clone();
+        spawn(async move {
+            if let Some(r) = rig {
+                let _ = r.select_patch(index).await;
+            }
+        });
+        on_close.call(());
+    };
+    let chip = |on: bool| {
+        if on {
+            "background: #f4f4f5; color: #0a0b0d; border: 1px solid #f4f4f5;".to_string()
+        } else {
+            format!("background: {RAISED}; color: {TEXT}; border: 1px solid {RULE};")
+        }
+    };
+    rsx! {
+        div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: column; box-sizing: border-box; padding: 0 {trail}px 0 {lead}px; background: #0f1012; color: {TEXT};",
+            // Profiles, along the top.
+            div { style: "flex: 0 0 auto; display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 8px 10px; background: {BAR_BG}; border-bottom: 1px solid {RULE}; overflow: hidden;",
+                span { style: "flex: 0 0 auto; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {DIM}; margin-right: 4px;", "Profile" }
+                for p in profiles {
+                    {
+                        let name = p.name.clone();
+                        let load = load.clone();
+                        let look = chip(p.active);
+                        rsx! {
+                            div { key: "{p.name}",
+                                style: "flex: 0 0 auto; padding: 6px 14px; border-radius: 5px; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; {look}",
+                                onclick: move |_| load(name.clone()),
+                                "{p.name}"
+                            }
+                        }
+                    }
+                }
+                div { style: "flex: 1 1 0%;" }
+                div { style: "flex: 0 0 auto; padding: 6px 14px; border-radius: 5px; font-size: 13px; font-weight: 700; cursor: pointer; background: {RAISED}; color: {TEXT}; border: 1px solid {RULE};",
+                    onclick: move |_| on_close.call(()),
+                    "Done"
+                }
+            }
+            // Its patches.
+            div { style: "flex: 1 1 0%; min-height: 0; overflow: auto; padding: 10px; display: flex; flex-direction: row; flex-wrap: wrap; align-content: flex-start; gap: 6px;",
+                for (i, p) in patches.into_iter().enumerate() {
+                    {
+                        let play = play.clone();
+                        let look = chip(p.active);
+                        rsx! {
+                            div { key: "{i}-{p.name}",
+                                style: "flex: 0 0 auto; min-width: 120px; box-sizing: border-box; padding: 8px 12px; border-radius: 5px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; {look}",
+                                onclick: move |_| play(i as u32),
+                                if !p.stack.is_empty() {
+                                    span { style: "font-size: 9px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.6; white-space: nowrap;", "{p.stack}" }
+                                }
+                                span { style: "font-size: 13px; font-weight: 700; white-space: nowrap;", "{p.name}" }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
