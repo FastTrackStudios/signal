@@ -43,6 +43,10 @@ signal_app_plist() {
             -c "Add :$key:1 string UIInterfaceOrientationLandscapeRight" \
             "$plist"
     done
+    # Landscape only means no iPad multitasking (App Store Connect refuses a
+    # bundle that limits orientations otherwise — 90474): full screen.
+    $pb -c "Delete :UIRequiresFullScreen" "$plist" 2>/dev/null || true
+    $pb -c "Add :UIRequiresFullScreen bool true" "$plist"
     $pb -c "Add :NSMicrophoneUsageDescription string 'Processes your guitar signal from the connected audio interface or microphone.'" "$plist" 2>/dev/null || true
     # Local network: pack downloads dial the studio engine peer-to-peer
     # (iroh direct paths / LAN WebSocket); without this key iOS silently
