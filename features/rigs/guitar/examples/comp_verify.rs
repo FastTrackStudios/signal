@@ -48,8 +48,15 @@ fn render(patch: &RigPatch, di: &[f32]) -> Option<f64> {
     rig.render_offline(SR as usize / 2);
     rig.start_test_signal(samples);
     let (l, r) = rig.measure_output(di.len(), std::time::Duration::ZERO);
-    let mono: Vec<f64> = l.iter().zip(&r).map(|(a, b)| f64::from(a + b) * 0.5).collect();
-    Some(signal_sampler::loudness::integrated_lufs(&mono, f64::from(SR)))
+    let mono: Vec<f64> = l
+        .iter()
+        .zip(&r)
+        .map(|(a, b)| f64::from(a + b) * 0.5)
+        .collect();
+    Some(signal_sampler::loudness::integrated_lufs(
+        &mono,
+        f64::from(SR),
+    ))
 }
 
 /// The chain up to and including the Post Comp, with it engaged or not.
@@ -143,5 +150,8 @@ fn main() {
         };
         println!("{preset:<22} {snap:<22} {post:<13} GR {gr:>4.1} dB{flag}");
     }
-    println!("\n{} variations, {outside} outside their preset's range", jobs.len());
+    println!(
+        "\n{} variations, {outside} outside their preset's range",
+        jobs.len()
+    );
 }

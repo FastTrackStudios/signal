@@ -46,7 +46,11 @@ use crate::theme::{
 /// delete (refused for the only one), and the library.
 fn set_items(sets: &[String], index: usize) -> Vec<MenuItem> {
     let name = sets.get(index).cloned().unwrap_or_default();
-    let others: Vec<String> = sets.iter().filter(|n| !n.eq_ignore_ascii_case(&name)).cloned().collect();
+    let others: Vec<String> = sets
+        .iter()
+        .filter(|n| !n.eq_ignore_ascii_case(&name))
+        .cloned()
+        .collect();
     vec![
         MenuItem::head(format!("Setlist · {name}")),
         MenuItem::name("rename", "Rename…", "Rename", &name, others),
@@ -60,7 +64,8 @@ fn set_items(sets: &[String], index: usize) -> Vec<MenuItem> {
         MenuItem::name("new", "New setlist…", "Create", "", sets.to_vec()),
         MenuItem::sep(),
         MenuItem::run("up", "Move up the list").unless((index == 0).then(|| "First".to_string())),
-        MenuItem::run("down", "Move down the list").unless((index + 1 >= sets.len()).then(|| "Last".to_string())),
+        MenuItem::run("down", "Move down the list")
+            .unless((index + 1 >= sets.len()).then(|| "Last".to_string())),
         MenuItem::delete(
             "delete",
             "Delete setlist",
@@ -162,7 +167,10 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                     .find(|x| x.name.eq_ignore_ascii_case(patch))
                     .map(|x| x.stack.clone())
             });
-        (patch.to_string(), stack.map_or(DIM, |s| crate::perform::folder_color(&s).0))
+        (
+            patch.to_string(),
+            stack.map_or(DIM, |s| crate::perform::folder_color(&s).0),
+        )
     };
 
     rsx! {
@@ -275,7 +283,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                             "{song.bpm}"
                                         }
                                         if state == Node::Now {
-                                            div { class: if editing_song() { "" } else { "opacity-40 group-hover:opacity-100" }, style: "display: flex; flex-shrink: 0;",
+                                            div { class: if editing_song() { "" } else { signal_widgets::reveal("opacity-40 group-hover:opacity-100") }, style: "display: flex; flex-shrink: 0;",
                                                 Tool {
                                                     icon: fts_chrome::Icon::Pencil,
                                                     title: "Key, tempo and place in this set",
@@ -511,23 +519,30 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                     if st.momentary { tags.push("HOLD"); }
                                                                     if st.no_rotate { tags.push("NO ROTATE"); }
                                                                     let tags = tags.join(" · ");
+                                                                    let open_row_menu = EventHandler::new({
+                                                                        let parts = crate::part_menu::parts_of(&model);
+                                                                        let changes = crate::part_menu::changes_of(&model);
+                                                                        let patch = crate::part_menu::stack_patch(st);
+                                                                        let rig = rig.clone();
+                                                                        move |e: MouseEvent| {
+                                                                            e.prevent_default();
+                                                                            let items = crate::part_menu::items_with_changes(&parts, &changes, &patch);
+                                                                            let (rig, parts, patch) = (rig.clone(), parts.clone(), patch.clone());
+                                                                            crate::kit::context_menu(popup_host, &e, items, EventHandler::new(move |p: crate::kit::Picked| {
+                                                                                crate::part_menu::act(&rig, &parts, &patch, p);
+                                                                            }));
+                                                                        }
+                                                                    });
                                                                     rsx! {
                                                                         div { key: "sw-{st.name}",
                                                                             class: "hover:bg-accent/30",
                                                                             style: "display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 4px 2px 0; border-radius: 4px; cursor: context-menu;",
                                                                             title: "Right-click: make this switch's patch a part, or rename it",
-                                                                            oncontextmenu: {
-                                                                                let parts = crate::part_menu::parts_of(&model);
-                                                                                let changes = crate::part_menu::changes_of(&model);
-                                                                                let patch = crate::part_menu::stack_patch(st);
-                                                                                let rig = rig.clone();
-                                                                                move |e: MouseEvent| {
-                                                                                    e.prevent_default();
-                                                                                    let items = crate::part_menu::items_with_changes(&parts, &changes, &patch);
-                                                                                    let (rig, parts, patch) = (rig.clone(), parts.clone(), patch.clone());
-                                                                                    crate::kit::context_menu(popup_host, &e, items, EventHandler::new(move |p: crate::kit::Picked| {
-                                                                                        crate::part_menu::act(&rig, &parts, &patch, p);
-                                                                                    }));
+                                                                            oncontextmenu: move |e: MouseEvent| open_row_menu.call(e),
+                                                                            // Touch has no right-click: a tap opens the same menu.
+                                                                            onclick: move |e: MouseEvent| {
+                                                                                if signal_widgets::is_touch() {
+                                                                                    open_row_menu.call(e);
                                                                                 }
                                                                             },
                                                                             span { style: "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; background: {colour};" }
@@ -558,20 +573,27 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                     let chip = patch_chip(&patch);
                                                                     let changes = crate::part_menu::changes_of(&model);
                                                                     let rig = rig.clone();
+                                                                    let open_row_menu = EventHandler::new({
+                                                                        let patch = patch.clone();
+                                                                        move |e: MouseEvent| {
+                                                                            e.prevent_default();
+                                                                            let items = crate::part_menu::change_items(&changes, &patch);
+                                                                            let (rig, patch) = (rig.clone(), patch.clone());
+                                                                            crate::kit::context_menu(popup_host, &e, items, EventHandler::new(move |p: crate::kit::Picked| {
+                                                                                crate::part_menu::act(&rig, &[], &patch, p);
+                                                                            }));
+                                                                        }
+                                                                    });
                                                                     rsx! {
                                                                         div { key: "chg-{patch}",
                                                                             class: "hover:bg-accent/30",
                                                                             style: "display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 4px 2px 0; border-radius: 4px; cursor: context-menu;",
                                                                             title: "Right-click: save back to the profile, or discard",
-                                                                            oncontextmenu: {
-                                                                                let patch = patch.clone();
-                                                                                move |e: MouseEvent| {
-                                                                                    e.prevent_default();
-                                                                                    let items = crate::part_menu::change_items(&changes, &patch);
-                                                                                    let (rig, patch) = (rig.clone(), patch.clone());
-                                                                                    crate::kit::context_menu(popup_host, &e, items, EventHandler::new(move |p: crate::kit::Picked| {
-                                                                                        crate::part_menu::act(&rig, &[], &patch, p);
-                                                                                    }));
+                                                                            oncontextmenu: move |e: MouseEvent| open_row_menu.call(e),
+                                                                            // Touch has no right-click: a tap opens the same menu.
+                                                                            onclick: move |e: MouseEvent| {
+                                                                                if signal_widgets::is_touch() {
+                                                                                    open_row_menu.call(e);
                                                                                 }
                                                                             },
                                                                             PatchChip { label: chip.0.clone(), colour: chip.1, lit: false }

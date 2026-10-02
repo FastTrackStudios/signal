@@ -15,6 +15,7 @@ pub mod normalize;
 ///
 /// The Worship profile lives here.
 pub mod profile;
+pub mod user_presets;
 pub mod variations;
 pub use backend::KeysRigBackend;
 pub use profile::{EngineDef, KeysProfile, KeysStackDef, LayerDef, SceneSlot, worship_profile};

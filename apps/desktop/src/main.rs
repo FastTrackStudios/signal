@@ -104,6 +104,9 @@ mod ios_orientation;
 mod keys_view;
 #[cfg(all(feature = "signal-guitar", target_os = "ios"))]
 mod mobile_view;
+// The UIScene lifecycle iOS 27 requires (winit does not adopt it yet).
+#[cfg(target_os = "ios")]
+mod ios_scene;
 /// The rig engine embedded IN-PROCESS. iOS has no choice (it cannot spawn a
 /// child); desktop uses it by default because a rig that needs a second
 /// process and a free port to make a sound is a worse default than one that
@@ -122,7 +125,18 @@ mod mac_menu;
 #[cfg(target_os = "macos")]
 mod mac_activity;
 
+/// The log filter when `RUST_LOG` is unset — the console and the OTel export alike.
+const LOG_FILTER: &str = "info,vox_core=warn,schema_deser=off";
+
 fn main() {
+    // iPhone: Blitz keeps the safe area's top and bottom out of the
+    // viewport but not its sides — the rig's phone pages run under the
+    // camera housing and keep clear of it themselves (`IslandLeft`).
+    #[cfg(target_os = "ios")]
+    // SAFETY: first thing in main, before any thread starts.
+    unsafe {
+        std::env::set_var("BLITZ_SAFE_AREA_SIDES", "0");
+    }
     // Before anything starts audio: a backgrounded rig must not be throttled
     // (it xran whenever another app had focus).
     #[cfg(target_os = "macos")]
@@ -145,6 +159,15 @@ fn main() {
             std::env::set_var("GDK_BACKEND", "x11");
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
+    }
+    // NVIDIA: sleep, don't spin, while a frame waits on the GPU. Its driver
+    // busy-waits in present by default, which on a large window was a
+    // third of the UI thread; this measured ~60% → ~38% of a core at
+    // 5120x1440. Other drivers ignore it; a value already set wins.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("__GL_YIELD").is_none() {
+        // SAFETY: single-threaded, before the renderer or any thread starts.
+        unsafe { std::env::set_var("__GL_YIELD", "USLEEP") };
     }
 
     // `--keys` / `--workspace X --rig Y`: open straight to a place instead of
@@ -186,12 +209,12 @@ fn main() {
         let registry = tracing_subscriber::registry()
             .with(
                 tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| "info,vox_core=warn,schema_deser=off".into()),
+                    .unwrap_or_else(|_| LOG_FILTER.into()),
             )
             .with(tracing_subscriber::fmt::layer())
             .with(log_ring::RingLayer::new())
             .with(architect_telemetry::tracing_layer());
-        match architect_telemetry::otel::init("signal") {
+        match architect_telemetry::otel::init("signal", LOG_FILTER) {
             Some((otel_guard, layers)) => {
                 registry.with(layers).init();
                 std::mem::forget(otel_guard);
@@ -213,6 +236,20 @@ fn main() {
         // folder, Documents/FastTrackStudio/ (file sharing is on), so the
         // seeded guitar config lands writably AND the user can drop
         // keys/drums sample packs in by hand.
+        // The simulator has no audio interface, and the rig opens only for
+        // one: run it in design mode, which lists the real profile — its
+        // patches, chain and faces — without audio, and writes nothing.
+        #[cfg(target_abi = "sim")]
+        // SAFETY: single-threaded, before the engine bootstrap spawns.
+        unsafe {
+            std::env::set_var("SIGNAL_RIG_DESIGN", "1");
+        }
+        // frame's faces ship in the bundle (ios/app-plist.sh copies them in),
+        // beside the executable.
+        if let Some(bundle) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|d| d.join("frame"))) {
+            // SAFETY: single-threaded, before the engine bootstrap spawns.
+            unsafe { std::env::set_var("SIGNAL_FRAME_DIR", bundle) };
+        }
         if let Some(home) = std::env::var_os("HOME") {
             let app_root = std::path::PathBuf::from(&home).join("Documents/FastTrackStudio");
             let _ = std::fs::create_dir_all(&app_root);
@@ -283,8 +320,7 @@ fn window_placement() -> WindowPlacement {
         Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
     }
     let truthy = |v: String| v != "0" && !v.eq_ignore_ascii_case("false");
-    let fullscreen = setting("FTS_WINDOW_FULLSCREEN", "window-fullscreen")
-        .is_some_and(truthy);
+    let fullscreen = setting("FTS_WINDOW_FULLSCREEN", "window-fullscreen").is_some_and(truthy);
     let size = pair("FTS_WINDOW_SIZE", "window-size", 'x');
     let maximized = setting("FTS_WINDOW_MAXIMIZED", "window-maximized")
         .map(truthy)
@@ -309,7 +345,7 @@ fn default_window_size() -> (f64, f64) {
     let (w, h): (f64, f64) = (2560.0, 1440.0);
     match main_screen_size() {
         // Room for the menu bar and a margin; never below the min size.
-        Some((sw, sh)) => (w.min(sw - 40.0).max(720.0), h.min(sh - 80.0).max(480.0)),
+        Some((sw, sh)) => (w.min(sw - 40.0).max(320.0), h.min(sh - 80.0).max(300.0)),
         None => (w, h),
     }
 }
@@ -365,7 +401,7 @@ fn launch_app() {
         .with_title("FastTrackStudio")
         .with_decorations(false)
         .with_surface_size(LogicalSize::new(w, h))
-        .with_min_surface_size(LogicalSize::new(720.0, 480.0))
+        .with_min_surface_size(LogicalSize::new(320.0, 300.0))
         .with_maximized(maximized && !fullscreen);
     // Position first: borderless fullscreen picks the monitor the window is
     // on, so placing it inside the target screen is what selects that screen.
@@ -406,7 +442,7 @@ fn launch_app() {
             let (w, h) = size.unwrap_or_else(default_window_size);
             LogicalSize::new(w, h)
         })
-        .with_min_inner_size(LogicalSize::new(720.0, 480.0))
+        .with_min_inner_size(LogicalSize::new(320.0, 300.0))
         .with_maximized(maximized && !fullscreen);
     if let Some((x, y)) = pos {
         window = window.with_position(LogicalPosition::new(x, y));
@@ -433,13 +469,24 @@ fn launch_app() {
     dioxus::launch(App);
 }
 
-/// iPhone: the phone-sized shell (mobile_view.rs) over the in-process rig.
+/// iPhone: the phone shell (mobile_view.rs) over the in-process rig, on
+/// Blitz like the desktop — the rig's frame faces are painted widgets, which
+/// a WebView cannot host. The window is the screen; the status bar hides
+/// (a phone held sideways has no room for it).
 #[cfg(target_os = "ios")]
 fn launch_app() {
+    use dioxus_native::winit::platform::ios::WindowAttributesIos;
+    use dioxus_native::{Config, WindowAttributes, launch_cfg};
+    // Before UIKit looks the delegate up by the name Info.plist gives it.
+    ios_scene::register();
+    let window = WindowAttributes::default().with_title("Signal").with_platform_attributes(Box::new(
+        WindowAttributesIos::default().with_prefers_status_bar_hidden(true),
+    ));
     #[cfg(feature = "signal-guitar")]
-    dioxus::launch(mobile_view::MobileApp);
+    let root = mobile_view::MobileApp;
     #[cfg(not(feature = "signal-guitar"))]
-    dioxus::launch(App);
+    let root = App;
+    launch_cfg(root, vec![], vec![Box::new(Config::new().with_window_attributes(window))]);
 }
 
 /// Top-level workspaces. Which ones exist depends on compiled features;
@@ -998,11 +1045,11 @@ fn SettingsPanel() -> Element {
 /// else the account gathers, later) works on every machine signed in to it
 /// without a second, per-machine authorization. See `crates/signal/account`
 /// and `crates/signal/docs/tone3000.md`'s "Two ways to be authorized".
-#[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
+#[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 #[component]
 fn AccountSettings() -> Element {
-    use signal_account_proto::account::AccountAuthClient;
     use signal_account_proto::AccountStatus;
+    use signal_account_proto::account::AccountAuthClient;
 
     let client = use_resource(connect_account);
     let mut status = use_signal(AccountStatus::default);
@@ -1016,7 +1063,9 @@ fn AccountSettings() -> Element {
             if *refreshed.peek() {
                 return;
             }
-            let Some(Some(c)) = client.read().clone() else { return };
+            let Some(Some(c)) = client.read().clone() else {
+                return;
+            };
             refreshed.set(true);
             spawn(async move {
                 if let Ok(s) = c.status().await {
@@ -1127,7 +1176,7 @@ fn AccountSettings() -> Element {
 /// child over vox — and hand back its account client. `None` while the
 /// engine is not yet up; the sign-in button says so rather than doing
 /// nothing.
-#[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
+#[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 async fn connect_account() -> Option<signal_account_proto::account::AccountAuthClient> {
     match rig_view::EngineMode::current() {
         rig_view::EngineMode::Embedded => {
@@ -1203,7 +1252,7 @@ fn EngineModeSetting() -> Element {
     rsx! {}
 }
 
-#[cfg(not(all(feature = "signal-guitar", not(target_arch = "wasm32"))))]
+#[cfg(not(all(feature = "signal", not(target_arch = "wasm32"))))]
 #[component]
 fn AccountSettings() -> Element {
     rsx! {}

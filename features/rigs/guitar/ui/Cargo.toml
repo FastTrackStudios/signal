@@ -26,9 +26,6 @@ signal-guitar-proto.workspace = true
 # The TONE3000 catalog browser — mounted as the Tones page. Wasm-clean,
 # like everything else here.
 signal-tone3000-ui.workspace = true
-# Uses `session_ui::PerformanceLayout` (a Dioxus component), so session-ui's
-# `dioxus` must be on — it's optional there, gated behind `web`/`desktop`.
-session-ui = { workspace = true, features = ["web"] }
 # The real FTS-EQ editor: the band model, the response maths and the
 # graph's own painters.
 #
@@ -61,6 +58,8 @@ signal-proto.workspace = true
 signal-grid.workspace = true
 signal-grid-ui.workspace = true
 uuid = { version = "1", features = ["v4"] }
+# frame's faces.json (which face draws which block).
+serde_json.workspace = true
 # use_stream (atom+vox) + the portable sleep (platform: tokio native / gloo wasm).
 architect = { workspace = true, features = ["atom", "vox", "platform"] }
 
@@ -82,6 +81,12 @@ vello.workspace = true
 # than at build time.
 wgpu.workspace = true
 bytemuck = { version = "1", features = ["derive"] }
+# Pages designed in frame, rendered by frame on this window's device and
+# hot-reloaded from their files (see frame_surface.rs). `wgpu_context` is
+# the type Blitz boxes its device in.
+frame-live = { workspace = true, features = ["anyrender-0-11"] }
+wgpu_context = "0.7"
+tracing.workspace = true
 
 # `rig_shot` — the UI rendered to a PNG with no window and no audio device.
 # The backend is a dev-dep because the UI crate does not depend on it (the

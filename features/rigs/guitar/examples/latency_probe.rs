@@ -64,7 +64,11 @@ fn probe(patch: &RigPatch) -> Result<Probe, String> {
     if l.len() < LEN {
         return Err(format!("short capture: {} of {LEN}", l.len()));
     }
-    let y: Vec<f32> = l.iter().zip(&r).map(|(a, b)| a.abs().max(b.abs())).collect();
+    let y: Vec<f32> = l
+        .iter()
+        .zip(&r)
+        .map(|(a, b)| a.abs().max(b.abs()))
+        .collect();
     let (peak_i, peak) = y
         .iter()
         .copied()
@@ -72,7 +76,9 @@ fn probe(patch: &RigPatch) -> Result<Probe, String> {
         .fold((0, 0.0f32), |m, (i, v)| if v > m.1 { (i, v) } else { m });
     let floor = peak * 0.01;
     let onset = if peak > 1e-6 {
-        y.iter().position(|&v| v > floor).map(|i| i as i64 - AT as i64)
+        y.iter()
+            .position(|&v| v > floor)
+            .map(|i| i as i64 - AT as i64)
     } else {
         None
     };
@@ -121,7 +127,11 @@ fn main() {
             for b in &mut bare.chain {
                 b.bypassed = true;
             }
-            println!("{:<44} {}", "baseline (all blocks bypassed)", show(&probe(&bare)));
+            println!(
+                "{:<44} {}",
+                "baseline (all blocks bypassed)",
+                show(&probe(&bare))
+            );
         }
     }
 

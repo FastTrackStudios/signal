@@ -12,7 +12,9 @@ static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[test]
 fn every_macro_call_reports_what_it_did() {
-    let _env = ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _env = ENV
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let root = std::env::temp_dir().join(format!("macro-rpc-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
@@ -30,11 +32,22 @@ fn every_macro_call_reports_what_it_did() {
     // Unknown knobs and ops say so.
     assert!(!Rig::set_macro(&rig, "nope".into(), 0.5).ok);
     assert!(!Rig::reset_macro(&rig, "nope".into()).ok);
-    assert!(!Rig::set_macro_pad(&rig, "space".into(), true).ok, "Space has no pad");
+    assert!(
+        !Rig::set_macro_pad(&rig, "space".into(), true).ok,
+        "Space has no pad"
+    );
 
     let bar = Rig::macros(&rig);
-    let space = bar.iter().find(|k| k.id == "space").expect("the rig has delays and reverbs");
-    let t = space.tune.iter().find(|t| t.param == "level").cloned().expect("Space moves a wet level");
+    let space = bar
+        .iter()
+        .find(|k| k.id == "space")
+        .expect("the rig has delays and reverbs");
+    let t = space
+        .tune
+        .iter()
+        .find(|t| t.param == "level")
+        .cloned()
+        .expect("Space moves a wet level");
     let op = |op: &str, value: f32| MacroTune {
         knob: t.knob.clone(),
         block: t.block.clone(),
@@ -43,13 +56,23 @@ fn every_macro_call_reports_what_it_did() {
         value,
         text: String::new(),
     };
-    let save = |knob: &str, scope: &str, name: &str| MacroSave { knob: knob.into(), scope: scope.into(), name: name.into() };
+    let save = |knob: &str, scope: &str, name: &str| MacroSave {
+        knob: knob.into(),
+        scope: scope.into(),
+        name: name.into(),
+    };
 
     let r = Rig::save_macro_tune(&rig, save("space", "block", ""));
     assert!(!r.ok && r.message.contains("Nothing tuned"), "{r:?}");
     assert!(!Rig::tune_macro(&rig, op("sideways", 1.0)).ok);
     assert!(Rig::tune_macro(&rig, op("max", t.base + 3.0)).ok);
-    assert!(Rig::macros(&rig).iter().find(|k| k.id == "space").unwrap().tuned);
+    assert!(
+        Rig::macros(&rig)
+            .iter()
+            .find(|k| k.id == "space")
+            .unwrap()
+            .tuned
+    );
 
     // No block preset on the block: an offer, and nothing written.
     let r = Rig::save_macro_tune(&rig, save("space", "block", ""));
@@ -59,9 +82,22 @@ fn every_macro_call_reports_what_it_did() {
     let r = Rig::save_macro_tune(&rig, save("space", "block", "Test Wash"));
     assert!(r.ok && r.message.contains("Test Wash"), "{r:?}");
     let comp = RigLibrary::load_compositions();
-    let made = comp.block_preset("Test Wash").expect("the new block preset");
-    assert!(made.macros.iter().any(|d| d.knob == "space" && d.param == "level"));
-    assert!(!Rig::macros(&rig).iter().find(|k| k.id == "space").unwrap().tuned, "saved, so nothing unsaved");
+    let made = comp
+        .block_preset("Test Wash")
+        .expect("the new block preset");
+    assert!(
+        made.macros
+            .iter()
+            .any(|d| d.knob == "space" && d.param == "level")
+    );
+    assert!(
+        !Rig::macros(&rig)
+            .iter()
+            .find(|k| k.id == "space")
+            .unwrap()
+            .tuned,
+        "saved, so nothing unsaved"
+    );
     // The panel's Reset clears it again.
     let r = Rig::reset_macro_scope(&rig, "space".into(), "block".into());
     assert!(r.ok && r.message.contains("Test Wash"), "{r:?}");
@@ -69,11 +105,26 @@ fn every_macro_call_reports_what_it_did() {
     assert!(!r.ok, "nothing left to clear: {r:?}");
 
     // Module scope with no module snapshot: an offer, then a new snapshot.
-    let delay = Rig::macros(&rig).into_iter().find(|k| k.id == "delay").unwrap();
-    let fb = delay.tune.iter().find(|t| t.param == "feedback").cloned().unwrap();
+    let delay = Rig::macros(&rig)
+        .into_iter()
+        .find(|k| k.id == "delay")
+        .unwrap();
+    let fb = delay
+        .tune
+        .iter()
+        .find(|t| t.param == "feedback")
+        .cloned()
+        .unwrap();
     let r = Rig::tune_macro(
         &rig,
-        MacroTune { knob: fb.knob.clone(), block: fb.block.clone(), param: fb.param.clone(), op: "max".into(), value: 0.7, text: String::new() },
+        MacroTune {
+            knob: fb.knob.clone(),
+            block: fb.block.clone(),
+            param: fb.param.clone(),
+            op: "max".into(),
+            value: 0.7,
+            text: String::new(),
+        },
     );
     assert!(r.ok, "{r:?}");
     let r = Rig::save_macro_tune(&rig, save("delay", "module", ""));
@@ -87,7 +138,11 @@ fn every_macro_call_reports_what_it_did() {
         .flat_map(|m| m.snapshots.iter())
         .find(|s| s.name == "Tuned Echo")
         .expect("the new module snapshot");
-    assert!(snap.macros.iter().any(|d| d.param == "feedback" && d.max == Some(0.7)));
+    assert!(
+        snap.macros
+            .iter()
+            .any(|d| d.param == "feedback" && d.max == Some(0.7))
+    );
 
     // Positions: a patch always keeps its own; a preset snapshot only
     // when the patch plays one.
@@ -118,7 +173,9 @@ fn every_macro_call_reports_what_it_did() {
 /// (live writes, drive compensation, delay re-timing included).
 #[test]
 fn a_reset_restores_the_patch_exactly() {
-    let _env = ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _env = ENV
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let root = std::env::temp_dir().join(format!("macro-reset-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
@@ -135,7 +192,12 @@ fn a_reset_restores_the_patch_exactly() {
         let mut out = Vec::new();
         for b in Rig::chain(rig) {
             for p in &b.params {
-                out.push((b.name.clone(), p.name.clone(), p.value.to_bits(), b.bypassed));
+                out.push((
+                    b.name.clone(),
+                    p.name.clone(),
+                    p.value.to_bits(),
+                    b.bypassed,
+                ));
             }
         }
         out
@@ -145,7 +207,12 @@ fn a_reset_restores_the_patch_exactly() {
     let mut ids: Vec<String> = Vec::new();
     for k in &bar {
         ids.push(k.id.clone());
-        ids.extend(k.children.iter().filter(|c| c.steps == 0).map(|c| c.id.clone()));
+        ids.extend(
+            k.children
+                .iter()
+                .filter(|c| c.steps == 0)
+                .map(|c| c.id.clone()),
+        );
     }
     for id in &ids {
         for v in [0.0, 1.0, 0.137, 0.861, 0.5001] {
@@ -154,7 +221,15 @@ fn a_reset_restores_the_patch_exactly() {
         assert!(Rig::reset_macro(&rig, id.clone()).ok, "{id}");
         let after = snapshot(&rig);
         for (a, b) in before.iter().zip(after.iter()) {
-            assert_eq!(a, b, "after {id}: {}.{} {} → {}", a.0, a.1, f32::from_bits(a.2), f32::from_bits(b.2));
+            assert_eq!(
+                a,
+                b,
+                "after {id}: {}.{} {} → {}",
+                a.0,
+                a.1,
+                f32::from_bits(a.2),
+                f32::from_bits(b.2)
+            );
         }
     }
     let _ = std::fs::remove_dir_all(&root);

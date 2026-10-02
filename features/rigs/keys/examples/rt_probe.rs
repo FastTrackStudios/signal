@@ -39,12 +39,30 @@ use std::time::{Duration, Instant};
 /// inside its callback — which is exactly what a multi-hundred-millisecond
 /// render spike looks like.
 fn minor_faults() -> u64 {
-    proc_stat_field(7)
+    rusage().map_or_else(|| proc_stat_field(7), |r| r.1)
 }
 
 /// Major page faults this process has taken (field 12 of `/proc/self/stat`).
 fn major_faults() -> u64 {
-    proc_stat_field(9)
+    rusage().map_or_else(|| proc_stat_field(9), |r| r.0)
+}
+
+/// `(major, minor)` page faults from `getrusage` — macOS has no `/proc`.
+#[cfg(target_os = "macos")]
+fn rusage() -> Option<(u64, u64)> {
+    let mut ru = std::mem::MaybeUninit::<libc::rusage>::zeroed();
+    // SAFETY: a valid out-pointer for the call to fill.
+    let ok = unsafe { libc::getrusage(libc::RUSAGE_SELF, ru.as_mut_ptr()) } == 0;
+    // SAFETY: filled by the successful call above.
+    ok.then(|| {
+        let ru = unsafe { ru.assume_init() };
+        (ru.ru_majflt as u64, ru.ru_minflt as u64)
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn rusage() -> Option<(u64, u64)> {
+    None
 }
 
 fn proc_stat_field(idx: usize) -> u64 {

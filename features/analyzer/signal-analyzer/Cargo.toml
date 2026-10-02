@@ -13,6 +13,9 @@ serde.workspace = true
 # The render bridge (examples/) needs the hosts and our own FX, so those are
 # dev-only: `cargo test -p signal-analyzer` still runs with nothing installed.
 [dev-dependencies]
+# `daw::standalone::offline_fx` drives the reference VST3 and our block
+# through one render path (examples/bigsky_match).
+daw = { workspace = true, features = ["standalone", "vst3-host"] }
 signal-plugin-host = { workspace = true, features = ["clap-host", "vst3-host"] }
 fx-blocks.workspace = true
 reverb-dsp.workspace = true

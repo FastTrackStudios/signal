@@ -35,6 +35,11 @@ pub struct KeysPreset {
     /// them; loading the entry itself loads the default. Empty until a pack
     /// authors variations.
     pub variants: Vec<String>,
+    /// Saved by the player (an engine or layer preset in their library),
+    /// so it can be renamed, duplicated and deleted — the scanned packs and
+    /// patches cannot.
+    #[facet(default)]
+    pub user: bool,
 }
 
 /// A node in the loaded composition tree (engine → layers → blocks) — the
@@ -289,6 +294,9 @@ pub struct KeysStack {
     pub blurb: String,
     /// This stack's scene is the one currently applied.
     pub is_active: bool,
+    /// The tempo pressing it sets (whole BPM); 0 = it leaves the tempo.
+    #[facet(default)]
+    pub tempo_bpm: u32,
 }
 
 /// The live performance model: the profile's stacks + grid mode.
@@ -301,6 +309,13 @@ pub struct KeysPerform {
     /// Grid mode: 0 Preset (browse the library), 1 Profile (stacks),
     /// 2 Setlist (song-adaptive) — mirrors the guitar rig's modes.
     pub perform_mode: u32,
+    /// The band's tempo (whole BPM) the synced delays follow; 0 = none yet.
+    #[facet(default)]
+    pub tempo_bpm: u32,
+    /// The switches' MIDI learn: which is waiting for a pedal, and what the
+    /// bound ones answer to (targets `"stack:N"`, `"tap"`).
+    #[facet(default)]
+    pub learn: signal_rigs_proto::SwitchLearn,
 }
 
 /// One metered node's post-fader output — an engine, a layer or a module,
@@ -544,6 +559,31 @@ pub mod keys {
         /// the first authored variation; the default is `set_layer_patch`.
         fn set_layer_variant(&self, layer: String, module: u32, preset: u32, variant: u32);
 
+        // ── Saved presets ───────────────────────────────────────────────
+        /// Load engine preset `preset` into `engine`: its lanes replace the
+        /// engine's, the engine keeps its place, fader and name. (A layer
+        /// preset goes through [`set_layer_patch`](Self::set_layer_patch),
+        /// which loads it into the whole lane.)
+        fn load_engine_preset(&self, engine: String, preset: u32);
+        /// Save `engine` as it sounds now — its lanes, their sources and
+        /// knobs — as an engine preset named `name`.
+        fn save_engine_preset(&self, engine: String, name: String);
+        /// Save `layer` as it sounds now as a layer preset named `name`.
+        fn save_layer_preset(&self, layer: String, name: String);
+        /// Rename saved preset `preset` (only [`KeysPreset::user`] ones).
+        fn rename_user_preset(&self, preset: u32, name: String);
+        /// Copy saved preset `preset` as `name`.
+        fn duplicate_user_preset(&self, preset: u32, name: String);
+        /// Delete saved preset `preset`.
+        fn delete_user_preset(&self, preset: u32);
+        /// Start auditioning: remember the rig as it is, so the browser can
+        /// load sound after sound and [`audition_end`](Self::audition_end)
+        /// can put it back. A second begin keeps the first snapshot.
+        fn audition_begin(&self);
+        /// Stop auditioning: keep what is loaded, or go back to how the rig
+        /// was at [`audition_begin`](Self::audition_begin).
+        fn audition_end(&self, keep: bool);
+
         /// Set a drone engine's key (0 = C … 11 = B) and whether it sounds.
         /// A drone holds its note until it is switched off; it never reads
         /// the keyboard.
@@ -599,6 +639,24 @@ pub mod keys {
         /// Store the mixer's current state into stack `index` (write the
         /// scene from what you're hearing).
         fn capture_stack(&self, index: u32);
+        /// A new stack at the end, holding the mixer as it is now.
+        fn add_stack(&self, name: String);
+        /// Rename stack `index`.
+        fn rename_stack(&self, index: u32, name: String);
+        /// Remove stack `index`.
+        fn delete_stack(&self, index: u32);
+        /// Learn the next pedal or pad pressed onto switch `target`
+        /// (`"stack:N"`, `"tap"`); [`KeysPerform::learn`] shows it waiting.
+        fn midi_learn(&self, target: String);
+        /// Stop waiting for a pedal.
+        fn midi_learn_cancel(&self);
+        /// Unbind switch `target`.
+        fn midi_unlearn(&self, target: String);
+        /// Tap the band's tempo (the same tempo the guitar rig taps):
+        /// two taps or more within ~2.5 s of each other set it.
+        fn tap_tempo(&self);
+        /// Set the band's tempo outright (BPM; 0 is ignored).
+        fn set_tempo(&self, bpm: u32);
         /// Trigger a note from the UI (velocity 0 = note-off).
         fn trigger(&self, note: u32, velocity: u32);
 
@@ -627,3 +685,6 @@ pub mod keys {
 }
 
 pub use keys::{KeysEvent, KeysRig};
+
+/// The switches' MIDI learn state (shared by every rig).
+pub use signal_rigs_proto::SwitchLearn;

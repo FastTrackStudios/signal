@@ -41,7 +41,9 @@ struct Known {
 static KNOWN: Mutex<BTreeMap<PathBuf, Known>> = Mutex::new(BTreeMap::new());
 
 fn known() -> std::sync::MutexGuard<'static, BTreeMap<PathBuf, Known>> {
-    KNOWN.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    KNOWN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 fn hash(bytes: &[u8]) -> blake3::Hash {
@@ -120,7 +122,9 @@ pub fn read_tracked<T: for<'a> Facet<'a>>(path: &Path) -> Read<T> {
 
 /// `text` (parsed as `value`) is what the rig now holds for `path`.
 pub fn note_read<T: for<'a> Facet<'a>>(path: &Path, text: &str, value: &T) {
-    let canonical = facet_styx::to_string(value).ok().map(|t| hash(t.as_bytes()));
+    let canonical = facet_styx::to_string(value)
+        .ok()
+        .map(|t| hash(t.as_bytes()));
     known().insert(
         path.to_path_buf(),
         Known {
@@ -249,9 +253,14 @@ pub fn write_owned<T: for<'a> Facet<'a>>(path: &Path, value: &T) {
 /// `profiles/worship.styx`, `songs.styx` — a path as the log names it.
 #[must_use]
 pub fn display_name(path: &Path) -> String {
-    let file = path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+    let file = path
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_default();
     match path.parent().and_then(Path::file_name) {
-        Some(dir) if dir == crate::library::PROFILES_DIR => format!("{}/{file}", crate::library::PROFILES_DIR),
+        Some(dir) if dir == crate::library::PROFILES_DIR => {
+            format!("{}/{file}", crate::library::PROFILES_DIR)
+        }
         _ => file,
     }
 }
@@ -410,8 +419,15 @@ pub fn log_path() -> PathBuf {
 /// Append one line to the reload log, stamped with the time.
 pub fn log_line(text: &str) {
     use std::io::Write as _;
-    let line = format!("{}  {text}\n", crate::drop_log::format_local(SystemTime::now()));
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(log_path()) {
+    let line = format!(
+        "{}  {text}\n",
+        crate::drop_log::format_local(SystemTime::now())
+    );
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path())
+    {
         let _ = f.write_all(line.as_bytes());
     }
 }
@@ -460,8 +476,20 @@ mod tests {
         let mut w = Watcher::new();
         assert!(w.poll(&d).is_empty(), "nothing changed since the load");
         tick();
-        assert_eq!(write_guarded(&f, &Doc { name: "A".into(), count: 2 }), Wrote::Written);
-        assert!(settle(&mut w, &d).is_empty(), "the rig wrote it, so it knows it");
+        assert_eq!(
+            write_guarded(
+                &f,
+                &Doc {
+                    name: "A".into(),
+                    count: 2
+                }
+            ),
+            Wrote::Written
+        );
+        assert!(
+            settle(&mut w, &d).is_empty(),
+            "the rig wrote it, so it knows it"
+        );
     }
 
     #[test]
@@ -474,8 +502,17 @@ mod tests {
         assert!(w.poll(&d).is_empty());
         tick();
         std::fs::write(&f, "name \"A\"\ncount 9\n").unwrap();
-        assert!(w.poll(&d).is_empty(), "not reported while it may still be moving");
-        assert_eq!(w.poll(&d), vec![Change { path: f.clone(), deleted: false }]);
+        assert!(
+            w.poll(&d).is_empty(),
+            "not reported while it may still be moving"
+        );
+        assert_eq!(
+            w.poll(&d),
+            vec![Change {
+                path: f.clone(),
+                deleted: false
+            }]
+        );
         assert!(w.poll(&d).is_empty(), "reported once");
     }
 
@@ -493,7 +530,10 @@ mod tests {
             std::fs::write(&f, format!("name \"A\"\ncount {i}{}\n", " ".repeat(i))).unwrap();
             reported.extend(w.poll(&d));
         }
-        assert!(reported.is_empty(), "nothing while the editor is still saving: {reported:?}");
+        assert!(
+            reported.is_empty(),
+            "nothing while the editor is still saving: {reported:?}"
+        );
         assert_eq!(w.poll(&d).len(), 1, "one change once it held still");
     }
 
@@ -514,11 +554,32 @@ mod tests {
         std::fs::write(&f, "name \"A\"\ncount 1\n").unwrap();
         assert!(matches!(read_tracked::<Doc>(&f), Read::Ok(_)));
         std::fs::write(&f, "name \"Mine\"\ncount 1\n").unwrap();
-        assert_eq!(write_guarded(&f, &Doc { name: "A".into(), count: 5 }), Wrote::KeptExternal);
-        assert_eq!(std::fs::read_to_string(&f).unwrap(), "name \"Mine\"\ncount 1\n");
+        assert_eq!(
+            write_guarded(
+                &f,
+                &Doc {
+                    name: "A".into(),
+                    count: 5
+                }
+            ),
+            Wrote::KeptExternal
+        );
+        assert_eq!(
+            std::fs::read_to_string(&f).unwrap(),
+            "name \"Mine\"\ncount 1\n"
+        );
         // Once the rig has loaded it, its saves go through again.
         assert!(matches!(read_tracked::<Doc>(&f), Read::Ok(_)));
-        assert_eq!(write_guarded(&f, &Doc { name: "Mine".into(), count: 5 }), Wrote::Written);
+        assert_eq!(
+            write_guarded(
+                &f,
+                &Doc {
+                    name: "Mine".into(),
+                    count: 5
+                }
+            ),
+            Wrote::Written
+        );
     }
 
     #[test]
@@ -533,12 +594,29 @@ mod tests {
         std::fs::write(&f, "name \"A\"\ncount {{{\n").unwrap();
         let ch = settle(&mut w, &d);
         assert_eq!(ch.len(), 1);
-        let Read::Bad(msg) = read_tracked::<Doc>(&f) else { panic!("it does not parse") };
+        let Read::Bad(msg) = read_tracked::<Doc>(&f) else {
+            panic!("it does not parse")
+        };
         assert!(!msg.is_empty());
-        assert!(msg.starts_with("line 2, column"), "the error says where: {msg}");
+        assert!(
+            msg.starts_with("line 2, column"),
+            "the error says where: {msg}"
+        );
         assert!(settle(&mut w, &d).is_empty(), "a bad file is reported once");
-        assert_eq!(write_guarded(&f, &Doc { name: "A".into(), count: 1 }), Wrote::KeptExternal);
-        assert_eq!(std::fs::read_to_string(&f).unwrap(), "name \"A\"\ncount {{{\n");
+        assert_eq!(
+            write_guarded(
+                &f,
+                &Doc {
+                    name: "A".into(),
+                    count: 1
+                }
+            ),
+            Wrote::KeptExternal
+        );
+        assert_eq!(
+            std::fs::read_to_string(&f).unwrap(),
+            "name \"A\"\ncount {{{\n"
+        );
         // Fixed: the next good save of it is news again.
         tick();
         std::fs::write(&f, "name \"A\"\ncount 3\n").unwrap();
@@ -551,7 +629,9 @@ mod tests {
         let f = d.join("keymap.styx");
         let hand = "// my notes\nname   \"A\"\ncount 1\n";
         std::fs::write(&f, hand).unwrap();
-        let Read::Ok(v) = read_tracked::<Doc>(&f) else { panic!() };
+        let Read::Ok(v) = read_tracked::<Doc>(&f) else {
+            panic!()
+        };
         assert_eq!(write_guarded(&f, &v), Wrote::Unchanged);
         assert_eq!(std::fs::read_to_string(&f).unwrap(), hand);
     }
@@ -565,6 +645,12 @@ mod tests {
         let mut w = Watcher::new();
         w.poll(&d);
         std::fs::remove_file(&f).unwrap();
-        assert_eq!(settle(&mut w, &d), vec![Change { path: f, deleted: true }]);
+        assert_eq!(
+            settle(&mut w, &d),
+            vec![Change {
+                path: f,
+                deleted: true
+            }]
+        );
     }
 }

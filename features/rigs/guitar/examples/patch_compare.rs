@@ -36,8 +36,15 @@ fn render(patch: &RigPatch, input: &[f32]) -> Option<f64> {
     rig.render_offline(SR as usize);
     rig.start_test_signal(samples);
     let (l, r) = rig.measure_output(input.len(), std::time::Duration::ZERO);
-    let mono: Vec<f64> = l.iter().zip(&r).map(|(a, b)| f64::from(a + b) * 0.5).collect();
-    Some(signal_sampler::loudness::integrated_lufs(&mono, f64::from(SR)))
+    let mono: Vec<f64> = l
+        .iter()
+        .zip(&r)
+        .map(|(a, b)| f64::from(a + b) * 0.5)
+        .collect();
+    Some(signal_sampler::loudness::integrated_lufs(
+        &mono,
+        f64::from(SR),
+    ))
 }
 
 fn main() {
@@ -49,7 +56,11 @@ fn main() {
     };
     signal_guitar::levelling::apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
-    let Some(def) = lib.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(name)) else {
+    let Some(def) = lib
+        .profiles
+        .iter()
+        .find(|p| p.name.eq_ignore_ascii_case(name))
+    else {
         eprintln!("no profile {name}");
         std::process::exit(2);
     };
@@ -67,7 +78,10 @@ fn main() {
         (render(p, &di), render(p, &playing))
     });
     let clean = rows.first().and_then(|r| r.0.zip(r.1));
-    println!("{:<16} {:>10} {:>10}   vs first patch (ref / playing)", "patch", "DI ref", "playing");
+    println!(
+        "{:<16} {:>10} {:>10}   vs first patch (ref / playing)",
+        "patch", "DI ref", "playing"
+    );
     for (p, (a, b)) in built.patches.iter().zip(&rows) {
         let rel = match (clean, a, b) {
             (Some((c0, c1)), Some(a), Some(b)) => format!("{:+5.1} / {:+5.1}", a - c0, b - c1),

@@ -178,13 +178,14 @@ mod tests {
                 .iter()
                 .any(|m| m.block_type == BlockType::Arpeggiator)
         );
-        // 12 envelopes: 3 per module × the Part's 4 modules.
+        // 16 envelopes: Amp, Filter and two Mod Envs per module × the
+        // Part's 4 modules.
         let envs: usize = ["Layer A", "Layer B", "Layer C", "Layer D"]
             .iter()
             .filter_map(|n| p.find(n))
             .map(|m| m.modulators.len())
             .sum();
-        assert_eq!(envs, 12, "12 envelopes across the 4 modules");
+        assert_eq!(envs, 16, "16 envelopes across the 4 modules");
     }
 
     /// The placeholder Part renders silence-safely (native Filter/Amp are

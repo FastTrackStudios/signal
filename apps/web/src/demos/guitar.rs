@@ -247,6 +247,11 @@ fn eq_block() -> LiveBlock {
     }
     LiveBlock {
         overridden: false,
+        engine: 0,
+        output_level_db: None,
+        detail: String::new(),
+        asset: String::new(),
+        empty: false,
         id: "eq".into(),
         block_type: BlockType::Eq,
         // ControlView looks this block up by name — see `find_block`.
@@ -339,6 +344,11 @@ fn demo_blocks() -> Vec<LiveBlock> {
         eq_block(),
         LiveBlock {
             overridden: true,
+            engine: 0,
+            output_level_db: None,
+            detail: String::new(),
+            asset: String::new(),
+            empty: false,
             id: "comp".into(),
             block_type: BlockType::Compressor,
             // Also looked up by name by ControlView.
@@ -388,6 +398,11 @@ fn demo_blocks() -> Vec<LiveBlock> {
     blocks.extend(BOARD.iter().copied().map(
         |(id, block_type, name, preset, bypassed, param, value, min, max)| LiveBlock {
             overridden: false,
+            engine: 0,
+            output_level_db: None,
+            detail: String::new(),
+            asset: String::new(),
+            empty: false,
             id: id.into(),
             block_type,
             name: name.into(),
@@ -559,11 +574,17 @@ pub fn GuitarDemo() -> Element {
         stereo_db: Signal::new((-8.4, -9.1, -5.2, -5.6)),
         comp_gr_db: Signal::new(3.6),
         spectrum: Signal::new(spectrum_at(0.5, 0.0)),
-        comp_wave: Signal::new((Vec::new(), Vec::new())),
+        comp_wave: Signal::new(Default::default()),
         perf: Signal::new(worship_performance()),
         blocks: Signal::new(demo_blocks()),
         nodes: Signal::new(demo_nodes()),
         active_patch: Signal::new(Some("Crunch Edge".to_string())),
+        // Healthy, idle defaults for what the demo does not show.
+        audio_error: Signal::new(String::new()),
+        mix_db: Signal::new((-5.2, -5.6)),
+        dsp: Signal::new(Default::default()),
+        levelling: Signal::new(Default::default()),
+        macros: Signal::new(Vec::new()),
     });
 
     // Feed it as a rig would. `use_hook` so the loop is started once per

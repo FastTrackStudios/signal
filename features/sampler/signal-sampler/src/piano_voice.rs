@@ -38,6 +38,9 @@ pub struct PianoOffsets {
     /// `$KK_DYN_OFFSET` — a further addend, applied only in velocity mode 4
     /// (which is the shipped default).
     pub kk_dynamics: i32,
+    /// Whose release script levels the release samples
+    /// (see [`crate::piano_release`]).
+    pub piano: crate::piano_release::NiPiano,
 }
 
 impl PianoOffsets {
@@ -46,24 +49,28 @@ impl PianoOffsets {
         color: 0,
         dynamics: -55,
         kk_dynamics: -25,
+        piano: crate::piano_release::NiPiano::Grandeur,
     };
     /// The Maverick — note the biased Color.
     pub const MAVERICK: Self = Self {
         color: -5,
         dynamics: -50,
         kk_dynamics: -25,
+        piano: crate::piano_release::NiPiano::Maverick,
     };
     /// The Gentleman.
     pub const GENTLEMAN: Self = Self {
         color: 0,
         dynamics: -50,
         kk_dynamics: -10,
+        piano: crate::piano_release::NiPiano::Gentleman,
     };
     /// The Giant, which ships its own script with no offset term at all.
     pub const GIANT: Self = Self {
         color: 0,
         dynamics: 0,
         kk_dynamics: 0,
+        piano: crate::piano_release::NiPiano::Giant,
     };
 
     /// Offsets for a library by name, matching the pack stems
@@ -110,6 +117,9 @@ pub struct PianoVoice {
     /// loaded at all — which is the point of shipping it as its own pack.
     pub resonance: f32,
     pub offsets: PianoOffsets,
+    /// Which saved state of the instrument's controls this plays with — its
+    /// laws are tabulated at it, and the knobs here are changes from it.
+    pub snapshot: crate::piano_release::Snapshot,
 }
 
 impl Default for PianoVoice {
@@ -120,6 +130,7 @@ impl Default for PianoVoice {
             velo_mode_4: true,
             resonance: 0.63,
             offsets: PianoOffsets::GRANDEUR,
+            snapshot: crate::piano_release::Snapshot::Factory,
         }
     }
 }
@@ -226,12 +237,13 @@ impl PianoVoice {
     /// Color and over-compensate.
     ///
     /// **Dynamic Range is applied as a delta**, `law(knob) − law(0)`, so a
-    /// control at rest contributes exactly nothing. The absolute law carries a
-    /// baseline tilt that presupposes Kontakt's per-velocity volume table; our
-    /// packs carry their own recorded levels instead, so importing the tilt
-    /// would apply that voicing twice. The delta is what the knob *does*, and
-    /// it is the part that transfers. Pleasingly it also collapses: the
-    /// offsets cancel, leaving `(vel − 127) × knob` for both arms.
+    /// control at rest contributes exactly nothing: the baseline tilt (and
+    /// Kontakt's per-velocity volume table it belongs with) is the script's
+    /// default voicing, which [`crate::piano_note_law`] applies whole — our
+    /// packs hold the same raw samples Kontakt shapes, so without it the
+    /// velocity response is ~9 dB too steep (A/B against Kontakt). The delta
+    /// is what the knob *does* on top. It also collapses: the offsets cancel,
+    /// leaving `(vel − 127) × knob` for both arms.
     ///
     /// Color needs no such treatment — its `case 0` arm is already zero, so
     /// the control is inherently relative.

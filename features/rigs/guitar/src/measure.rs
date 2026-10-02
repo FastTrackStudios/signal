@@ -51,7 +51,12 @@ pub fn apply_chain_bypass(prig: &ProfileRig) {
         return;
     };
     let ids = prig.active_block_ids();
-    for (block, id) in patch.chain.iter().filter(|b| b.has_backend()).zip(ids.iter()) {
+    for (block, id) in patch
+        .chain
+        .iter()
+        .filter(|b| b.has_backend())
+        .zip(ids.iter())
+    {
         if block.bypassed {
             prig.rig().set_block_slot_bypass(id, true);
         }
@@ -77,7 +82,11 @@ pub fn patch_lufs(patch: &RigPatch, sample_rate: u32) -> Option<f32> {
 /// `patch` with every volume block's pan at the centre.
 fn centre_pans(patch: &RigPatch) -> RigPatch {
     let mut p = patch.clone();
-    for b in p.chain.iter_mut().filter(|b| b.block_type == signal_proto::BlockType::Volume) {
+    for b in p
+        .chain
+        .iter_mut()
+        .filter(|b| b.block_type == signal_proto::BlockType::Volume)
+    {
         for param in b.params.iter_mut().filter(|x| x.name == "pan") {
             param.value = "0".to_string();
         }
@@ -136,4 +145,34 @@ fn render(
         "patch level: measured on the rig"
     );
     Some(lufs)
+}
+
+/// Load `patch` alone on an offline rig, switch it in as the live rig does,
+/// and play `input` through it once (after a warm-up pass): what comes out,
+/// left and right, as long as the input.
+#[must_use]
+pub fn render_through(patch: &RigPatch, sample_rate: u32, input: &[f32]) -> Option<(Vec<f32>, Vec<f32>)> {
+    let rig = GuitarRig::open_offline(sample_rate)
+        .map_err(|e| tracing::warn!(error = %e, "render: no offline rig"))
+        .ok()?;
+    let mut prig = ProfileRig::new(rig);
+    prig.set_level_match(false);
+    let mut profile = RigProfile::new("render");
+    profile.patches.push(patch.clone());
+    if let Err(e) = prig.load_profile(profile, None) {
+        tracing::warn!(patch = %patch.name, error = %e, "render: chain did not build");
+        return None;
+    }
+    if !prig.activate(0) {
+        return None;
+    }
+    apply_chain_bypass(&prig);
+    let samples: Arc<Vec<f32>> = Arc::new(input.to_vec());
+    let frames = samples.len();
+    let rig = prig.rig();
+    rig.start_test_signal(samples.clone());
+    rig.render_offline((WARM_UP_SECS * f64::from(sample_rate)) as usize);
+    rig.start_test_signal(samples);
+    let (l, r) = rig.measure_output(frames, std::time::Duration::ZERO);
+    (l.len() >= frames).then_some((l, r))
 }

@@ -79,6 +79,7 @@ fn test_zone(rr_index: u32) -> crate::spec::ZoneSpec {
         trigger_cc: 0,
         trigger_value_min: 0,
         trigger_value_max: 0,
+        pedal_state: String::new(),
         mic: String::new(),
         articulation: String::new(),
         dynamic: String::new(),
@@ -102,19 +103,19 @@ fn zone_rr_selection_uses_declared_rr_index() {
     let mut rng = 1;
 
     assert_eq!(
-        select_zone_rr_slot(&zones, &indices, 0, None, &mut rng, None),
+        select_zone_rr_slot(&zones, &indices, 0, None, &mut rng, None, &mut Vec::new()),
         10
     );
     assert_eq!(
-        select_zone_rr_slot(&zones, &indices, 1, None, &mut rng, None),
+        select_zone_rr_slot(&zones, &indices, 1, None, &mut rng, None, &mut Vec::new()),
         20
     );
     assert_eq!(
-        select_zone_rr_slot(&zones, &indices, 2, None, &mut rng, None),
+        select_zone_rr_slot(&zones, &indices, 2, None, &mut rng, None, &mut Vec::new()),
         30
     );
     assert_eq!(
-        select_zone_rr_slot(&zones, &indices, 3, None, &mut rng, None),
+        select_zone_rr_slot(&zones, &indices, 3, None, &mut rng, None, &mut Vec::new()),
         10
     );
     assert_eq!(select_zone_rr_index_by_slot(&zones, &indices, 20), 1);
@@ -126,8 +127,10 @@ fn zone_rr_selection_keeps_multimic_slots_aligned() {
     let left_mic = vec![0, 1];
     let right_mic = vec![2, 3];
     let mut rng = 1;
-    let first_slot = select_zone_rr_slot(&zones, &left_mic, 0, None, &mut rng, None);
-    let second_slot = select_zone_rr_slot(&zones, &left_mic, 1, None, &mut rng, None);
+    let first_slot =
+        select_zone_rr_slot(&zones, &left_mic, 0, None, &mut rng, None, &mut Vec::new());
+    let second_slot =
+        select_zone_rr_slot(&zones, &left_mic, 1, None, &mut rng, None, &mut Vec::new());
 
     assert_eq!(first_slot, 0);
     assert_eq!(second_slot, 2);
@@ -160,7 +163,7 @@ fn zone_rr_no_repeat_random_avoids_previous_slot() {
     let mut last = None;
 
     for _ in 0..64 {
-        let slot = select_zone_rr_slot(&zones, &indices, 0, last, &mut rng, None);
+        let slot = select_zone_rr_slot(&zones, &indices, 0, last, &mut rng, None, &mut Vec::new());
         assert_ne!(Some(slot), last);
         last = Some(slot);
     }
@@ -412,9 +415,15 @@ fn piano_color_shifts_which_velocity_layer_plays() {
     eng.set_piano_voice(Some(pv));
     eng.note_on(60, played);
     // (-40 + 150) * -120 mdB at this velocity — the hard layer is louder,
-    // so the trim pulls it back down.
+    // so the trim pulls it back down — on top of the Grandeur's own
+    // note-on voicing at the velocity the note now plays at.
+    let voicing = crate::piano_note_law::NoteOnLaw::of(
+        crate::piano_release::NiPiano::Grandeur,
+        crate::piano_release::Snapshot::Factory,
+    )
+    .gain_db(60, shifted);
     assert!(
-        (eng.piano_trim_db - -13.2).abs() < 0.01,
+        (eng.piano_trim_db - (voicing - 13.2 + crate::piano_release::DRY_GROUP_DB)).abs() < 0.01,
         "compensating trim applied, got {}",
         eng.piano_trim_db
     );
@@ -471,6 +480,43 @@ fn resonance_zones_are_rejected_until_the_pedal_goes_down() {
     eng.set_piano_voice(None);
     eng.cc(64, 0);
     assert!(eng.zone_selected(&reso, 60, 100, ZoneTrigger::Attack));
+}
+
+/// An NI piano's key-up plays the release layer its script picks — from
+/// the struck velocity and the held time — never the key's own velocity.
+#[test]
+fn a_piano_release_plays_the_layer_the_law_picks() {
+    use crate::piano_release::{NiPiano, ReleaseLaw};
+    use crate::piano_voice::{PianoOffsets, PianoVoice};
+    let mut eng = engine_from_styx(
+        "name \"p\"\n\
+             zones (\n\
+               {file \"body.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"DryTones\"}\n\
+               {file \"rel_soft.wav\", key_min 60, key_max 60, root_key 60, vel_min 1, vel_max 13, articulation \"Release\"}\n\
+               {file \"rel_mid.wav\", key_min 60, key_max 60, root_key 60, vel_min 14, vel_max 98, articulation \"Release\"}\n\
+               {file \"rel_hard.wav\", key_min 60, key_max 60, root_key 60, vel_min 99, vel_max 127, articulation \"Release\"}\n\
+             )\n",
+    );
+    eng.set_piano_voice(Some(PianoVoice::new(PianoOffsets::GRANDEUR)));
+    eng.note_on(60, 100);
+    let (vel, _) = eng.strike[60];
+    assert!(vel > 0, "the strike is remembered for the release");
+
+    let law = ReleaseLaw::of(NiPiano::Grandeur);
+    let short = law.release(60, vel, 50.0).expect("a short hold plays a release");
+    let long = law.release(60, vel, 20_000.0).expect("so does a long one");
+    let file = |layer: u8| {
+        let picks = eng.piano_release_zones(60, layer);
+        assert_eq!(picks.len(), 1, "one mic, one round-robin set");
+        eng.patch().spec.zones[picks[0].1[0]].file.clone()
+    };
+    assert_eq!(file(short.layer_velocity), "rel_hard.wav");
+    assert_eq!(file(long.layer_velocity), "rel_soft.wav");
+    // A short, hard release is cut well below unity (before the Release
+    // group's own volume); the long hold's layer 1 is the softest
+    // recording, so it needs less cut.
+    assert!(short.gain_db < -6.0, "{short:?}");
+    assert!(long.fade_in_ms > short.fade_in_ms, "softer layers fade in slower");
 }
 
 #[test]
@@ -1332,4 +1378,86 @@ fn pedal_pair_rejects_noise_body_and_release_follows_pedal() {
         None,
         "noise must never be the body"
     );
+}
+
+/// The key-indexed zone lookup picks exactly what the full scan picks —
+/// for every key, velocity, round-robin slot and layer filter, over a
+/// randomly laid-out zone map (overlapping key and velocity ranges, mixed
+/// case labels, release / pedal / CC zones that note-on must skip, keys no
+/// zone covers).
+#[test]
+fn indexed_zone_lookup_matches_the_full_scan() {
+    let mut seed = 0x9e37_79b9_u32;
+    let mut rnd = |n: u32| {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        seed % n
+    };
+    let pick = |r: u32, xs: &[&'static str]| xs[r as usize % xs.len()];
+    let mut text = String::from("name \"idx\"\nzones (\n");
+    for i in 0..400 {
+        // Mostly single keys on a whole-tone-ish grid (gaps), some spans.
+        let lo = (rnd(44) * 2 + 20) as u8;
+        let hi = if rnd(4) == 0 {
+            lo.saturating_add(rnd(9) as u8).min(127)
+        } else {
+            lo
+        };
+        let v0 = (rnd(4) * 32) as u8;
+        let v1 = (v0 as u32 + 16 + rnd(48)).min(127) as u8;
+        let artic = pick(rnd(3), &["Body", "body", "Other"]);
+        let mic = pick(rnd(3), &["Close", "room", ""]);
+        let dir = pick(rnd(3), &["", "up", "Down"]);
+        let dynamic = pick(rnd(3), &["", "p", "F"]);
+        let trig = pick(rnd(8), &["", "", "", "", "release", "pedal-down", "cc", ""]);
+        text.push_str(&format!(
+            "  {{file \"z{i}.wav\", key_min {lo}, key_max {hi}, root_key {lo}, vel_min {v0}, vel_max {v1}, \
+             articulation \"{artic}\", mic \"{mic}\", direction \"{dir}\", dynamic \"{dynamic}\", trigger_mode \"{trig}\"}}\n"
+        ));
+    }
+    text.push_str(")\n");
+    let spec = crate::LibrarySpec::from_styx(&text).expect("parse styx");
+    let patch = crate::PlayerPatch::from_spec(spec);
+    let mut eng = SampleEngine::new(patch, 48_000, "", "");
+    let mut checked = 0;
+    for solo in [None, Some("ROOM".to_string())] {
+        eng.solo_mic = solo;
+        for vel in [1u8, 40, 64, 100, 127] {
+            eng.last_velocity = vel;
+            for note in 0..128u8 {
+                for artic in ["body", "OTHER", "Missing"] {
+                    for dir in ["", "UP"] {
+                        for dynamic in ["", "p"] {
+                            for rr in 0..5 {
+                                let a = eng.find_layer_zone(artic, dir, dynamic, note, rr);
+                                let b = eng.find_layer_zone_scan(artic, dir, dynamic, note, rr);
+                                assert_eq!(
+                                    a, b,
+                                    "note {note} vel {vel} artic {artic} dir {dir:?} dyn {dynamic:?} rr {rr}"
+                                );
+                                checked += 1;
+                            }
+                        }
+                    }
+                }
+                // `trigger_zoned`'s selection, attack and release.
+                for trigger in [ZoneTrigger::Attack, ZoneTrigger::Release] {
+                    for artic in ["", "body"] {
+                        eng.articulation = artic.to_string();
+                        for dir in ["", "up"] {
+                            eng.play_direction = dir.to_string();
+                            assert_eq!(
+                                eng.zoned_selection(note, vel, trigger, true),
+                                eng.zoned_selection(note, vel, trigger, false),
+                                "zoned: note {note} vel {vel} {trigger:?} artic {artic:?} dir {dir:?}"
+                            );
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(checked > 70_000);
 }

@@ -790,7 +790,7 @@ fn role_tag(role: Role) -> String {
 /// page. Filter cutoff is the calibrated Hz; routes are scoped to the layer by
 /// the `A/B/C/D ` target prefix.
 fn project_layers(patch: &signal_synth::omni_import::OmniPatch) -> Vec<SynthLayer> {
-    use signal_synth::omni_import::{classify_filter_full, omni_cutoff_hz};
+    use signal_synth::omni_import::{classify_filter_full, filter_model, omni_cutoff_hz};
     const NAMES: [&str; 4] = ["Layer A", "Layer B", "Layer C", "Layer D"];
     const LETTERS: [&str; 4] = ["A", "B", "C", "D"];
 
@@ -810,10 +810,22 @@ fn project_layers(patch: &signal_synth::omni_import::OmniPatch) -> Vec<SynthLaye
         .take(4)
         .enumerate()
         .map(|(i, l)| {
-            let (mode, poles, _) = classify_filter_full(&l.filter_name);
+            // The measured model when the algorithm is known, else the
+            // name's family.
+            let corner = |t: Option<f32>, setting: f32| {
+                t.and_then(filter_model)
+                    .map_or_else(|| omni_cutoff_hz(setting), |m| m.corner_hz(setting))
+            };
+            let (mode, poles) = l.filter_type1.and_then(filter_model).map_or_else(
+                || {
+                    let (m, p, _) = classify_filter_full(&l.filter_name);
+                    (m, p)
+                },
+                |m| (m.mode, m.poles),
+            );
             let mut filters = vec![SynthFilter {
                 name: l.filter_name.clone(),
-                cutoff_hz: omni_cutoff_hz(l.filter_freq),
+                cutoff_hz: corner(l.filter_type1, l.filter_freq),
                 resonance: l.filter_res,
                 env_depth: l.filter_env_depth,
                 mode: mode.to_string(),
@@ -822,11 +834,15 @@ fn project_layers(patch: &signal_synth::omni_import::OmniPatch) -> Vec<SynthLaye
             if let Some((f2, r2)) = l.filter2 {
                 filters.push(SynthFilter {
                     name: "Filter 2".to_string(),
-                    cutoff_hz: omni_cutoff_hz(f2),
+                    cutoff_hz: corner(l.filter_type2, f2),
                     resonance: r2,
                     env_depth: 0.0,
-                    mode: "lowpass".to_string(),
-                    poles: 2,
+                    mode: l
+                        .filter_type2
+                        .and_then(filter_model)
+                        .map_or("lowpass", |m| m.mode)
+                        .to_string(),
+                    poles: l.filter_type2.and_then(filter_model).map_or(2, |m| m.poles),
                 });
             }
             let prefix = format!("{} ", LETTERS[i]);

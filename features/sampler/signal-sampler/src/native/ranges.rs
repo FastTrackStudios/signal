@@ -138,6 +138,8 @@ fn declared(block_type: BlockType, param: &str) -> Option<ParameterRange> {
             // range needs a positive minimum. Declaring log here would fall
             // back to linear anyway and leave the taper field lying about it.
             "attack" | "decay" | "release" => Some(seconds(10.0)),
+            // A Mod Env's delay before its attack and hold at the top.
+            "delay" | "hold" => Some(seconds(10.0)),
             "sustain" => Some(unit_interval),
             _ => None,
         },
@@ -147,6 +149,8 @@ fn declared(block_type: BlockType, param: &str) -> Option<ParameterRange> {
             "wave" => Some(steps(5, 4.0)),
             "sync_beats" => Some(ParameterRange::linear(0.0, 16.0, Unit::Beats)),
             "retrigger" => Some(steps(2, 1.0)),
+            // Fade-in after each note (seconds).
+            "fade" => Some(seconds(10.0)),
             _ => None,
         },
         BlockType::Arpeggiator => match param {
@@ -251,7 +255,13 @@ fn taper_and_unit(param: &str) -> (Taper, Unit) {
     let ends = |suffix: &str| param == suffix || param.ends_with(&format!("_{suffix}"));
 
     // Frequency.
-    if ends("freq") || ends("cutoff") || param == "low_cut" || param == "high_cut" || param == "high_pass" || param == "low_pass" {
+    if ends("freq")
+        || ends("cutoff")
+        || param == "low_cut"
+        || param == "high_cut"
+        || param == "high_pass"
+        || param == "low_pass"
+    {
         return (Taper::Logarithmic, Unit::Hz);
     }
     // A side-chain listen band is a frequency too, named for its end.
@@ -267,7 +277,12 @@ fn taper_and_unit(param: &str) -> (Taper, Unit) {
         return (Taper::Logarithmic, Unit::Ratio);
     }
     // Decibels — linear taper on purpose (see the doc comment).
-    if ends("gain") || ends("threshold") || ends("thr") || param.starts_with("gain_db") || param == "level" {
+    if ends("gain")
+        || ends("threshold")
+        || ends("thr")
+        || param.starts_with("gain_db")
+        || param == "level"
+    {
         return (Taper::Linear, Unit::Decibels);
     }
     // Times. The natives are in milliseconds except `decay_time`, which the

@@ -31,7 +31,9 @@ use signal_guitar_proto::{
 
 // The look is the rig's own (`theme`); the buttons, prompts and chips are
 // the kit's, shared with every sidebar.
-use crate::kit::{Button as Act, Chips, DeleteButton as DeleteAct, ListRow, MenuItem, NamePrompt, Picked};
+use crate::kit::{
+    Button as Act, Chips, DeleteButton as DeleteAct, ListRow, MenuItem, NamePrompt, Picked,
+};
 use crate::theme::{BG, FAINT, FOCUS_BG, FOCUS_FG, LINE, LIVE, MUTED, PANE, TEXT};
 
 /// The picker's open state, in context — so a surface deep in the rig (the
@@ -103,6 +105,7 @@ impl Kind {
     #[must_use]
     pub fn for_module(module: &str) -> Option<Self> {
         [
+            Self::Compositions,
             Self::AmpModules,
             Self::DriveModules,
             Self::TimeModules,
@@ -117,6 +120,8 @@ impl Kind {
     #[must_use]
     pub const fn module(self) -> Option<&'static str> {
         match self {
+            // Presets are the Core module: the core tone a patch is built on.
+            Self::Compositions => Some("Core"),
             Self::AmpModules => Some("Amp"),
             Self::DriveModules => Some("Drive"),
             Self::TimeModules => Some("Time"),
@@ -135,7 +140,7 @@ impl Kind {
             Self::Patches => "Patches",
             Self::Presets => "Captures",
             Self::Drives => "Drives",
-            Self::Compositions => "Presets",
+            Self::Compositions => "Core",
             Self::AmpModules => "Amp",
             Self::DriveModules => "Drive",
             Self::TimeModules => "Time",
@@ -155,7 +160,7 @@ impl Kind {
             Self::Patches => "patch",
             Self::Presets => "capture",
             Self::Drives => "drive",
-            Self::Compositions => "preset",
+            Self::Compositions => "core preset",
             Self::AmpModules => "amp preset",
             Self::DriveModules => "drive preset",
             Self::TimeModules => "time preset",
@@ -190,12 +195,12 @@ impl Kind {
         matches!(self, Self::Patches | Self::Presets | Self::Drives)
     }
 
-    /// Where the picker opens for a perform mode (0 Preset / 1 Profile /
-    /// 2 Setlist): the thing that mode plays from.
+    /// Where the picker opens for a perform mode (1 Profile / 2 Setlist;
+    /// the old Preset mode, 0, plays as Profile — presets are the Core now,
+    /// picked under a patch): the thing that mode plays from.
     #[must_use]
     pub const fn for_perform_mode(mode: u32) -> Self {
         match mode {
-            0 => Self::Compositions,
             2 => Self::Setlists,
             _ => Self::Profiles,
         }
@@ -245,7 +250,11 @@ fn rows(
                 active: comp.active_preset.eq_ignore_ascii_case(&p.name),
             })
             .collect(),
-        Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => {
+        Kind::AmpModules
+        | Kind::DriveModules
+        | Kind::TimeModules
+        | Kind::DelayModules
+        | Kind::ReverbModules => {
             let module = kind.module().unwrap_or_default();
             comp.modules
                 .iter()
@@ -265,24 +274,31 @@ fn rows(
         }
         Kind::BlockPresets => {
             let mut v: Vec<Row> = comp
-            .block_presets
-            .iter()
-            .enumerate()
-            .map(|(idx, b)| Row {
-                kind,
-                name: b.name.clone(),
-                idx,
-                sub: {
-                    let what = if b.bypass { format!("{} · off", b.block_type) } else { b.block_type.clone() };
-                    if b.used_by.is_empty() {
-                        what
-                    } else {
-                        format!("{what} · used by {}", b.used_by.len())
-                    }
-                },
-                active: comp.active_blocks.iter().any(|a| a.preset.eq_ignore_ascii_case(&b.name)),
-            })
-            .collect();
+                .block_presets
+                .iter()
+                .enumerate()
+                .map(|(idx, b)| Row {
+                    kind,
+                    name: b.name.clone(),
+                    idx,
+                    sub: {
+                        let what = if b.bypass {
+                            format!("{} · off", b.block_type)
+                        } else {
+                            b.block_type.clone()
+                        };
+                        if b.used_by.is_empty() {
+                            what
+                        } else {
+                            format!("{what} · used by {}", b.used_by.len())
+                        }
+                    },
+                    active: comp
+                        .active_blocks
+                        .iter()
+                        .any(|a| a.preset.eq_ignore_ascii_case(&b.name)),
+                })
+                .collect();
             // Grouped by type (see `group_of`), in library order within one.
             v.sort_by_key(|r| r.sub.split(" · ").next().unwrap_or_default().to_string());
             v
@@ -468,7 +484,11 @@ fn activate(rig: &Option<RigClient>, row: &Row, model: &PerformanceModel) -> boo
         Kind::Compositions => send(rig, move |r| async move {
             let _ = r.choose_preset(name, String::new()).await;
         }),
-        Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => {
+        Kind::AmpModules
+        | Kind::DriveModules
+        | Kind::TimeModules
+        | Kind::DelayModules
+        | Kind::ReverbModules => {
             let module = row.kind.module().unwrap_or_default().to_string();
             send(rig, move |r| async move {
                 let _ = r.choose_module(module, name, String::new()).await;
@@ -1034,7 +1054,11 @@ fn Detail(
                 });
             }
         })),
-        Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules => {
+        Kind::AmpModules
+        | Kind::DriveModules
+        | Kind::TimeModules
+        | Kind::DelayModules
+        | Kind::ReverbModules => {
             let module = kind.module().unwrap_or_default().to_string();
             Some(cbs.cb({
                 let rig = rig.clone();
@@ -1663,7 +1687,11 @@ fn SongDetail(
 }
 
 #[component]
-fn ProfileDetail(profile: ProfileEntry, profiles: Vec<String>, on_go: EventHandler<(Kind, String)>) -> Element {
+fn ProfileDetail(
+    profile: ProfileEntry,
+    profiles: Vec<String>,
+    on_go: EventHandler<(Kind, String)>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut duplicating = use_signal(|| false);
     rsx! {
@@ -2295,7 +2323,13 @@ fn NewForm(
             Kind::Patches => patches.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
             Kind::Presets => presets.iter().any(|s| s.name.eq_ignore_ascii_case(n)),
             Kind::Drives | Kind::All => false,
-            Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules | Kind::BlockPresets => false,
+            Kind::Compositions
+            | Kind::AmpModules
+            | Kind::DriveModules
+            | Kind::TimeModules
+            | Kind::DelayModules
+            | Kind::ReverbModules
+            | Kind::BlockPresets => false,
         }
     };
     let n = name();
@@ -2356,7 +2390,13 @@ fn NewForm(
                     });
                 }
                 Kind::Drives | Kind::All => return,
-                Kind::Compositions | Kind::AmpModules | Kind::DriveModules | Kind::TimeModules | Kind::DelayModules | Kind::ReverbModules | Kind::BlockPresets => {
+                Kind::Compositions
+                | Kind::AmpModules
+                | Kind::DriveModules
+                | Kind::TimeModules
+                | Kind::DelayModules
+                | Kind::ReverbModules
+                | Kind::BlockPresets => {
                     return;
                 }
             }
@@ -2499,7 +2539,8 @@ mod tests {
 
     #[test]
     fn each_perform_mode_opens_on_what_it_plays_from() {
-        assert_eq!(Kind::for_perform_mode(0), Kind::Compositions);
+        // The old Preset mode plays as Profile.
+        assert_eq!(Kind::for_perform_mode(0), Kind::Profiles);
         assert_eq!(Kind::for_perform_mode(1), Kind::Profiles);
         assert_eq!(Kind::for_perform_mode(2), Kind::Setlists);
     }

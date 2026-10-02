@@ -180,7 +180,8 @@ impl Response {
             return base;
         }
         if m > 0.0 {
-            self.max.map_or(base, |to| self.shape.between(entry.unwrap_or(base), to, m))
+            self.max
+                .map_or(base, |to| self.shape.between(entry.unwrap_or(base), to, m))
         } else {
             self.min.map_or(base, |to| self.shape.between(base, to, -m))
         }
@@ -230,7 +231,11 @@ pub struct Edit {
 impl Edit {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.min.is_none() && self.max.is_none() && self.shape.is_none() && self.off.is_none() && self.enter.is_none()
+        self.min.is_none()
+            && self.max.is_none()
+            && self.shape.is_none()
+            && self.off.is_none()
+            && self.enter.is_none()
     }
 }
 
@@ -253,7 +258,14 @@ pub struct Tuned {
 pub fn is_timing(param: &str) -> bool {
     matches!(
         param,
-        "time" | "time_b" | "tap_div_l" | "tap_div_r" | "tempo_bpm" | "predelay" | "density" | "density_ms"
+        "time"
+            | "time_b"
+            | "tap_div_l"
+            | "tap_div_r"
+            | "tempo_bpm"
+            | "predelay"
+            | "density"
+            | "density_ms"
     )
 }
 
@@ -291,7 +303,11 @@ impl Target {
     }
 
     fn log_floor(&self) -> f32 {
-        if self.lo > 0.0 { self.lo } else { (self.hi / 1000.0).max(1e-3) }
+        if self.lo > 0.0 {
+            self.lo
+        } else {
+            (self.hi / 1000.0).max(1e-3)
+        }
     }
 
     fn norm(&self, v: f32) -> f32 {
@@ -304,7 +320,11 @@ impl Target {
                 ((v.max(f) / f).ln() / (self.hi / f).ln()).clamp(0.0, 1.0)
             }
             _ => {
-                if self.hi > self.lo { ((v - self.lo) / (self.hi - self.lo)).clamp(0.0, 1.0) } else { 0.0 }
+                if self.hi > self.lo {
+                    ((v - self.lo) / (self.hi - self.lo)).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                }
             }
         }
     }
@@ -319,7 +339,11 @@ impl Target {
                 }
                 // The floor stands in for a 0 Hz "off": a knob all the way
                 // down is off again, not 20 Hz.
-                if t <= 0.0 { self.lo } else { f * (self.hi / f).powf(t) }
+                if t <= 0.0 {
+                    self.lo
+                } else {
+                    f * (self.hi / f).powf(t)
+                }
             }
             _ => t.mul_add(self.hi - self.lo, self.lo),
         }
@@ -335,7 +359,9 @@ impl Target {
     #[must_use]
     pub fn apply_from(&self, base: f32, m: f32, entry: Option<f32>) -> f32 {
         if let Some(r) = self.effective(base) {
-            return r.apply(base, m, entry).clamp(self.lo.min(self.hi), self.hi.max(self.lo));
+            return r
+                .apply(base, m, entry)
+                .clamp(self.lo.min(self.hi), self.hi.max(self.lo));
         }
         self.apply_engine(base, m)
     }
@@ -348,7 +374,11 @@ impl Target {
         Response {
             min: Some(self.apply_engine(base, -1.0)),
             max: Some(self.apply_engine(base, 1.0)),
-            shape: if self.curve == Curve::Log { Shape::Log } else { Shape::Lin },
+            shape: if self.curve == Curve::Log {
+                Shape::Log
+            } else {
+                Shape::Lin
+            },
             off: false,
             enter: None,
             source: "",
@@ -418,7 +448,9 @@ impl Target {
         // An edit over the engine's own: its other end is read at `live`,
         // near enough to the baseline under it.
         if let Some(r) = self.effective(live) {
-            return r.invert(live, m).map(|v| v.clamp(self.lo.min(self.hi), self.hi.max(self.lo)));
+            return r
+                .invert(live, m)
+                .map(|v| v.clamp(self.lo.min(self.hi), self.hi.max(self.lo)));
         }
         let e = self.effect(m);
         if e == 0.0 {
@@ -441,7 +473,11 @@ impl Target {
 
 /// `t` moved toward 1 (e > 0) or 0 (e < 0) by the fraction `|e|` of the way.
 fn toward(t: f32, e: f32) -> f32 {
-    if e >= 0.0 { (1.0 - t).mul_add(e, t) } else { t.mul_add(e, t) }
+    if e >= 0.0 {
+        (1.0 - t).mul_add(e, t)
+    } else {
+        t.mul_add(e, t)
+    }
 }
 
 /// [`toward`]'s inverse.
@@ -452,7 +488,6 @@ fn away(t: f32, e: f32) -> Option<f32> {
         (e > -0.999).then(|| (t / (1.0 + e)).clamp(0.0, 1.0))
     }
 }
-
 
 /// A knob's offset from its position: −1 at 0, 0 at `rest`, 1 at 1.
 #[must_use]
@@ -471,7 +506,11 @@ pub fn offset_of(value: f32, rest: f32) -> f32 {
 #[must_use]
 pub fn value_of(offset: f32, rest: f32) -> f32 {
     let m = offset.clamp(-1.0, 1.0);
-    if m >= 0.0 { (1.0 - rest).mul_add(m, rest) } else { rest.mul_add(m, rest) }
+    if m >= 0.0 {
+        (1.0 - rest).mul_add(m, rest)
+    } else {
+        rest.mul_add(m, rest)
+    }
 }
 
 // ── Bypass rules (the legacy bar's, generalised) ───────────────────────────
@@ -537,9 +576,17 @@ pub fn journey(on: &[bool]) -> Vec<Stage> {
                 // The first on stage in the chain is the last to go.
                 let drop = on_left / n_on;
                 on_left -= 1.0;
-                Stage { on: true, enter, drop }
+                Stage {
+                    on: true,
+                    enter,
+                    drop,
+                }
             } else {
-                Stage { on: false, enter, drop: 0.0 }
+                Stage {
+                    on: false,
+                    enter,
+                    drop: 0.0,
+                }
             }
         })
         .collect()
@@ -551,8 +598,15 @@ pub fn drive_rules(ids: &[String], stages: &[Stage]) -> Vec<BypassRule> {
     ids.iter()
         .zip(stages)
         .map(|(id, s)| {
-            let lo = if s.on { 0.5 - s.drop / 2.0 } else { 0.5 + s.enter / 2.0 } + 1e-4;
-            BypassRule { child_id: id.clone(), active_ranges: vec![(lo, 1.01)] }
+            let lo = if s.on {
+                0.5 - s.drop / 2.0
+            } else {
+                0.5 + s.enter / 2.0
+            } + 1e-4;
+            BypassRule {
+                child_id: id.clone(),
+                active_ranges: vec![(lo, 1.01)],
+            }
         })
         .collect()
 }
@@ -688,7 +742,11 @@ struct Child {
 
 impl Child {
     fn new(id: &str, label: &str, color: &str, meta: Meta, range: Option<(f32, f32)>) -> Self {
-        Self { knob: knob(id, label, color), meta, range }
+        Self {
+            knob: knob(id, label, color),
+            meta,
+            range,
+        }
     }
 }
 
@@ -722,15 +780,28 @@ fn rel_child(
 }
 
 /// An absolute-choice child over `pname` of `b`, its choices `0..=max`.
-fn select_child(b: &LiveBlock, id: &str, label: &str, color: &str, pname: &str, fmt: &'static str) -> Option<Child> {
+fn select_child(
+    b: &LiveBlock,
+    id: &str,
+    label: &str,
+    color: &str,
+    pname: &str,
+    fmt: &'static str,
+) -> Option<Child> {
     let p = param(b, pname)?;
-    let choices: Vec<f32> = (p.min.round() as i32..=p.max.round() as i32).map(|i| i as f32).collect();
+    let choices: Vec<f32> = (p.min.round() as i32..=p.max.round() as i32)
+        .map(|i| i as f32)
+        .collect();
     Some(Child::new(
         id,
         label,
         color,
         Meta {
-            select: Some(Select { block: b.id.clone(), param: pname.to_string(), choices }),
+            select: Some(Select {
+                block: b.id.clone(),
+                param: pname.to_string(),
+                choices,
+            }),
             fmt,
             show: Some((b.id.clone(), pname.to_string())),
             group: b.name.clone(),
@@ -748,7 +819,9 @@ fn select_child(b: &LiveBlock, id: &str, label: &str, color: &str, pname: &str, 
 pub fn build(blocks: &[LiveBlock]) -> Built {
     let mut out = Built::default();
     let find = |bt: BlockType, name: &str| {
-        blocks.iter().find(|b| b.block_type == bt && b.name.eq_ignore_ascii_case(name))
+        blocks
+            .iter()
+            .find(|b| b.block_type == bt && b.name.eq_ignore_ascii_case(name))
     };
     let post = |pred: &dyn Fn(&LiveBlock) -> bool| -> Vec<&LiveBlock> {
         blocks.iter().filter(|b| !is_pre_fx(b) && pred(b)).collect()
@@ -759,17 +832,30 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
     let verbs: Vec<&LiveBlock> = verbs.into_iter().take(2).collect();
 
     // A knob with its own targets and no panel.
-    let add_single = |out: &mut Built, id: &str, label: &str, color: &str, targets: Vec<Target>, rest: f32| {
-        if targets.is_empty() {
-            return;
-        }
-        let mut k = knob(id, label, color);
-        k.set_value(rest);
-        out.bank.knobs.push(k);
-        out.meta.insert(id.to_string(), Meta { targets, rest, ..Meta::default() });
-    };
+    let add_single =
+        |out: &mut Built, id: &str, label: &str, color: &str, targets: Vec<Target>, rest: f32| {
+            if targets.is_empty() {
+                return;
+            }
+            let mut k = knob(id, label, color);
+            k.set_value(rest);
+            out.bank.knobs.push(k);
+            out.meta.insert(
+                id.to_string(),
+                Meta {
+                    targets,
+                    rest,
+                    ..Meta::default()
+                },
+            );
+        };
     // A bar knob with a panel of children.
-    let add_parent = |out: &mut Built, id: &str, label: &str, color: &str, panel: Panel, children: Vec<Child>| {
+    let add_parent = |out: &mut Built,
+                      id: &str,
+                      label: &str,
+                      color: &str,
+                      panel: Panel,
+                      children: Vec<Child>| {
         if children.is_empty() {
             return;
         }
@@ -796,7 +882,13 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             out.meta.insert(ck.id.clone(), meta);
             parent.children.push(ck);
         }
-        out.meta.insert(id.to_string(), Meta { rest: 0.5, ..Meta::default() });
+        out.meta.insert(
+            id.to_string(),
+            Meta {
+                rest: 0.5,
+                ..Meta::default()
+            },
+        );
         out.panels.insert(id.to_string(), panel);
         out.bank.knobs.push(parent);
     };
@@ -806,17 +898,40 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
         b.block_type == BlockType::Volume
             && (b.name.eq_ignore_ascii_case("Input") || b.name.eq_ignore_ascii_case("Input Trim"))
     }) {
-        let t: Vec<Target> = target(b, "gain_db", Curve::Add(12.0), 1.0, 1.0).into_iter().collect();
+        let t: Vec<Target> = target(b, "gain_db", Curve::Add(12.0), 1.0, 1.0)
+            .into_iter()
+            .collect();
         add_single(&mut out, "input", "Input", "#6B7280", t, 0.5);
     }
 
     // ── Gate ──
     if let Some(b) = blocks.iter().find(|b| b.block_type == BlockType::Gate) {
         let spec: [(&str, &str, &str, &str, Curve, (f32, f32)); 5] = [
-            ("threshold", "Threshold", "#CBD5E1", "db_gain", Curve::Add(12.0), (0.0, 0.8)),
-            ("range", "Range", "#E2E8F0", "db_gain", Curve::Lin, (0.0, 0.9)),
+            (
+                "threshold",
+                "Threshold",
+                "#CBD5E1",
+                "db_gain",
+                Curve::Add(12.0),
+                (0.0, 0.8),
+            ),
+            (
+                "range",
+                "Range",
+                "#E2E8F0",
+                "db_gain",
+                Curve::Lin,
+                (0.0, 0.9),
+            ),
             ("attack", "Attack", "#F1F5F9", "ms", Curve::Log, (0.0, 0.5)),
-            ("release", "Release", "#CBD5E1", "ms", Curve::Log, (0.1, 0.8)),
+            (
+                "release",
+                "Release",
+                "#CBD5E1",
+                "ms",
+                Curve::Log,
+                (0.1, 0.8),
+            ),
             ("hold", "Hold", "#CBD5E1", "ms", Curve::Log, (0.0, 0.6)),
         ];
         let kids = spec
@@ -825,13 +940,30 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
                 rel_child(b, &format!("gate-{p}"), l, c, p, *curve, 1.0, f, Some(*r))
             })
             .collect();
-        add_parent(&mut out, "gate", "Gate", "#94A3B8", Panel { layout: "row", ..Panel::default() }, kids);
+        add_parent(
+            &mut out,
+            "gate",
+            "Gate",
+            "#94A3B8",
+            Panel {
+                layout: "row",
+                ..Panel::default()
+            },
+            kids,
+        );
     }
 
     // ── Pre-Comp / Comp: more = more compression ──
     let comp_kids = |b: &LiveBlock, pfx: &str, colors: [&str; 4]| -> Vec<Child> {
         let spec: [(&str, &str, &str, Curve, f32, (f32, f32)); 4] = [
-            ("threshold", "Threshold", "db_gain", Curve::Add(12.0), -1.0, (0.0, 0.8)),
+            (
+                "threshold",
+                "Threshold",
+                "db_gain",
+                Curve::Add(12.0),
+                -1.0,
+                (0.0, 0.8),
+            ),
             ("ratio", "Ratio", "ratio", Curve::Log, 1.0, (0.0, 0.7)),
             ("attack", "Attack", "ms", Curve::Log, 1.0, (0.0, 0.6)),
             ("release", "Release", "ms", Curve::Log, 1.0, (0.1, 0.8)),
@@ -845,7 +977,17 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
     };
     if let Some(b) = find(BlockType::Compressor, "Pre Comp") {
         let kids = comp_kids(b, "pre-comp", ["#F3F4F6", "#E5E7EB", "#D1D5DB", "#F9FAFB"]);
-        add_parent(&mut out, "pre-comp", "Pre-Comp", "#E5E7EB", Panel { layout: "row", ..Panel::default() }, kids);
+        add_parent(
+            &mut out,
+            "pre-comp",
+            "Pre-Comp",
+            "#E5E7EB",
+            Panel {
+                layout: "row",
+                ..Panel::default()
+            },
+            kids,
+        );
     }
 
     // ── Pitch: the octaves (a POG-style blend on the Pitch block) and the
@@ -862,29 +1004,129 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
                 // octaves; the block comes in above rest (it is bypassed in
                 // most patches) and goes at the bottom.
                 BlockType::Pitch => {
-                    if let Some(mut mix) = rel_child(b, &format!("pitch-mix{tag}"), "Mix", "#FDE047", "mix", Curve::Lin, 1.0, "pct", r) {
+                    if let Some(mut mix) = rel_child(
+                        b,
+                        &format!("pitch-mix{tag}"),
+                        "Mix",
+                        "#FDE047",
+                        "mix",
+                        Curve::Lin,
+                        1.0,
+                        "pct",
+                        r,
+                    ) {
                         mix.meta.pad_block = Some(b.id.clone());
                         kids.push(mix);
                     }
-                    kids.extend(rel_child(b, &format!("pitch-down{tag}"), "Oct Down", "#EAB308", "b_level", Curve::Lin, 1.0, "pct", r));
-                    kids.extend(rel_child(b, &format!("pitch-up{tag}"), "Oct Up", "#FEF08A", "a_level", Curve::Lin, 1.0, "pct", r));
-                    kids.extend(rel_child(b, &format!("pitch-dry{tag}"), "Dry", "#FEFCE8", "dry", Curve::Lin, 1.0, "pct", None));
-                    kids.extend(select_child(b, &format!("pitch-a{tag}"), "Interval A", "#FEF9C3", "semitones", "semitones"));
-                    kids.extend(select_child(b, &format!("pitch-b{tag}"), "Interval B", "#FEF9C3", "b_semitones", "semitones"));
+                    kids.extend(rel_child(
+                        b,
+                        &format!("pitch-down{tag}"),
+                        "Oct Down",
+                        "#EAB308",
+                        "b_level",
+                        Curve::Lin,
+                        1.0,
+                        "pct",
+                        r,
+                    ));
+                    kids.extend(rel_child(
+                        b,
+                        &format!("pitch-up{tag}"),
+                        "Oct Up",
+                        "#FEF08A",
+                        "a_level",
+                        Curve::Lin,
+                        1.0,
+                        "pct",
+                        r,
+                    ));
+                    kids.extend(rel_child(
+                        b,
+                        &format!("pitch-dry{tag}"),
+                        "Dry",
+                        "#FEFCE8",
+                        "dry",
+                        Curve::Lin,
+                        1.0,
+                        "pct",
+                        None,
+                    ));
+                    kids.extend(select_child(
+                        b,
+                        &format!("pitch-a{tag}"),
+                        "Interval A",
+                        "#FEF9C3",
+                        "semitones",
+                        "semitones",
+                    ));
+                    kids.extend(select_child(
+                        b,
+                        &format!("pitch-b{tag}"),
+                        "Interval B",
+                        "#FEF9C3",
+                        "b_semitones",
+                        "semitones",
+                    ));
                 }
                 // The Ice machine: its blend is how much of the repeats is
                 // shifted.
                 BlockType::Delay if !is_pre_fx(b) && value(b, "style", -1.0).round() == 6.0 => {
-                    kids.extend(rel_child(b, &format!("pitch-mix{tag}"), "Blend", "#FDE047", "blend", Curve::Lin, 1.0, "pct", r));
-                    kids.extend(select_child(b, &format!("pitch-a{tag}"), "Interval", "#FEF9C3", "interval", "interval"));
+                    kids.extend(rel_child(
+                        b,
+                        &format!("pitch-mix{tag}"),
+                        "Blend",
+                        "#FDE047",
+                        "blend",
+                        Curve::Lin,
+                        1.0,
+                        "pct",
+                        r,
+                    ));
+                    kids.extend(select_child(
+                        b,
+                        &format!("pitch-a{tag}"),
+                        "Interval",
+                        "#FEF9C3",
+                        "interval",
+                        "interval",
+                    ));
                 }
                 // A shimmer delay has no amount of its own: its level is it.
                 BlockType::Delay if !is_pre_fx(b) && value(b, "style", -1.0).round() == 4.0 => {
-                    kids.extend(rel_child(b, &format!("pitch-mix{tag}"), "Shimmer", "#FDE047", "level", Curve::Add(12.0), 1.0, "db", r));
+                    kids.extend(rel_child(
+                        b,
+                        &format!("pitch-mix{tag}"),
+                        "Shimmer",
+                        "#FDE047",
+                        "level",
+                        Curve::Add(12.0),
+                        1.0,
+                        "db",
+                        r,
+                    ));
                 }
-                BlockType::Reverb if !is_pre_fx(b) && value(b, "algorithm", -1.0).round() == 6.0 => {
-                    kids.extend(rel_child(b, &format!("pitch-mix{tag}"), "Shimmer", "#FDE047", "shim_amount", Curve::Lin, 1.0, "pct", r));
-                    kids.extend(select_child(b, &format!("pitch-a{tag}"), "Shift", "#FEF9C3", "shim_shift1", "semitones"));
+                BlockType::Reverb
+                    if !is_pre_fx(b) && value(b, "algorithm", -1.0).round() == 6.0 =>
+                {
+                    kids.extend(rel_child(
+                        b,
+                        &format!("pitch-mix{tag}"),
+                        "Shimmer",
+                        "#FDE047",
+                        "shim_amount",
+                        Curve::Lin,
+                        1.0,
+                        "pct",
+                        r,
+                    ));
+                    kids.extend(select_child(
+                        b,
+                        &format!("pitch-a{tag}"),
+                        "Shift",
+                        "#FEF9C3",
+                        "shim_shift1",
+                        "semitones",
+                    ));
                 }
                 _ => {}
             }
@@ -892,7 +1134,17 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
                 n += 1;
             }
         }
-        add_parent(&mut out, "pitch", "Pitch", "#FACC15", Panel { layout: "grouped", ..Panel::default() }, kids);
+        add_parent(
+            &mut out,
+            "pitch",
+            "Pitch",
+            "#FACC15",
+            Panel {
+                layout: "grouped",
+                ..Panel::default()
+            },
+            kids,
+        );
     }
 
     // ── Drive: a journey through the drive stages ──
@@ -908,7 +1160,17 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             .iter()
             .enumerate()
             .filter_map(|(k, b)| {
-                let mut c = rel_child(b, &format!("drive-{}", k + 1), &b.name, colors[k % colors.len()], "drive", Curve::Lin, 1.0, "pct", None)?;
+                let mut c = rel_child(
+                    b,
+                    &format!("drive-{}", k + 1),
+                    &b.name,
+                    colors[k % colors.len()],
+                    "drive",
+                    Curve::Lin,
+                    1.0,
+                    "pct",
+                    None,
+                )?;
                 c.meta.rest = 0.5;
                 c.meta.pad_block = Some(b.id.clone());
                 Some(c)
@@ -919,7 +1181,11 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             "drive",
             "Drive",
             "#F97316",
-            Panel { layout: "row", journey: true, ..Panel::default() },
+            Panel {
+                layout: "row",
+                journey: true,
+                ..Panel::default()
+            },
             kids,
         );
     }
@@ -946,7 +1212,17 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             ];
             for ((key, label, color, r), band) in spec.iter().zip(bands) {
                 if let Some(i) = band {
-                    kids.extend(rel_child(eq, &format!("tone-{key}"), label, color, &format!("b{i}_gain"), Curve::Add(9.0), 1.0, "db_gain", Some(*r)));
+                    kids.extend(rel_child(
+                        eq,
+                        &format!("tone-{key}"),
+                        label,
+                        color,
+                        &format!("b{i}_gain"),
+                        Curve::Add(9.0),
+                        1.0,
+                        "db_gain",
+                        Some(*r),
+                    ));
                 }
             }
         }
@@ -971,7 +1247,17 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             ));
         }
         let before = out.bank.knobs.len();
-        add_parent(&mut out, "tone", "Tone", "#22C55E", Panel { layout: "row", ..Panel::default() }, kids);
+        add_parent(
+            &mut out,
+            "tone",
+            "Tone",
+            "#22C55E",
+            Panel {
+                layout: "row",
+                ..Panel::default()
+            },
+            kids,
+        );
         if out.bank.knobs.len() > before {
             if let Some(k) = out.bank.knobs.last_mut() {
                 k.bipolar = true;
@@ -982,18 +1268,36 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
     // ── Comp (post) ──
     if let Some(b) = find(BlockType::Compressor, "Post Comp") {
         let kids = comp_kids(b, "comp", ["#F3F4F6", "#E5E7EB", "#D1D5DB", "#F9FAFB"]);
-        add_parent(&mut out, "comp", "Comp", "#E5E7EB", Panel { layout: "row", ..Panel::default() }, kids);
+        add_parent(
+            &mut out,
+            "comp",
+            "Comp",
+            "#E5E7EB",
+            Panel {
+                layout: "row",
+                ..Panel::default()
+            },
+            kids,
+        );
     }
 
     // ── Mod: depth and mix of the modulation after the amp ──
     {
-        let t = post(&|b| matches!(b.block_type, BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato | BlockType::Phaser))
-            .into_iter()
-            .flat_map(|b| {
-                [target(b, "depth", Curve::Lin, 1.0, 1.0), target(b, "mix", Curve::Lin, 1.0, 1.0)]
-            })
-            .flatten()
-            .collect();
+        let t = post(&|b| {
+            matches!(
+                b.block_type,
+                BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato | BlockType::Phaser
+            )
+        })
+        .into_iter()
+        .flat_map(|b| {
+            [
+                target(b, "depth", Curve::Lin, 1.0, 1.0),
+                target(b, "mix", Curve::Lin, 1.0, 1.0),
+            ]
+        })
+        .flatten()
+        .collect();
         add_single(&mut out, "mod", "Mod", "#7DD3FC", t, 0.5);
     }
 
@@ -1008,54 +1312,181 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
 
     // ── Boost: the boost block's level, ±6 dB on what the pedal gives ──
     if let Some(b) = find(BlockType::Volume, "Boost") {
-        let t = target(b, "gain_db", Curve::Add(6.0), 1.0, 1.0).into_iter().collect();
+        let t = target(b, "gain_db", Curve::Add(6.0), 1.0, 1.0)
+            .into_iter()
+            .collect();
         add_single(&mut out, "boost", "Boost", "#FAFAF9", t, 0.5);
     }
 
     // ── Delay / Reverb: a row per block ──
-    let dual = |blocks: &[&LiveBlock], cols: &dyn Fn(&LiveBlock, usize) -> Vec<Child>| -> Vec<Child> {
-        blocks.iter().enumerate().flat_map(|(i, b)| cols(b, i + 1)).collect()
-    };
+    let dual =
+        |blocks: &[&LiveBlock], cols: &dyn Fn(&LiveBlock, usize) -> Vec<Child>| -> Vec<Child> {
+            blocks
+                .iter()
+                .enumerate()
+                .flat_map(|(i, b)| cols(b, i + 1))
+                .collect()
+        };
     {
         // How strong and what character — never when: no time, no
         // division, no tempo. Both delays run the patch's own times.
         let kids = dual(&delays, &|b, n| {
             [
-                select_child(b, &format!("delay-type{n}"), &format!("Type {n}"), "#60A5FA", "style", "delay_style"),
-                rel_child(b, &format!("delay-fb{n}"), &format!("FB {n}"), "#BFDBFE", "feedback", Curve::Lin, 1.0, "pct", Some((0.0, 0.65))),
-                rel_child(b, &format!("delay-filter{n}"), &format!("Filter {n}"), "#DBEAFE", "high_cut", Curve::Log, 1.0, "hz", Some((0.0, 0.5))),
-                rel_child(b, &format!("delay-level{n}"), &format!("Level {n}"), "#93C5FD", "level", Curve::Add(12.0), 1.0, "db", Some((0.0, 0.7))),
-                rel_child(b, &format!("delay-mod{n}"), &format!("Mod {n}"), "#BFDBFE", "mod_depth", Curve::Lin, 1.0, "pct", Some((0.0, 0.6))),
+                select_child(
+                    b,
+                    &format!("delay-type{n}"),
+                    &format!("Type {n}"),
+                    "#60A5FA",
+                    "style",
+                    "delay_style",
+                ),
+                rel_child(
+                    b,
+                    &format!("delay-fb{n}"),
+                    &format!("FB {n}"),
+                    "#BFDBFE",
+                    "feedback",
+                    Curve::Lin,
+                    1.0,
+                    "pct",
+                    Some((0.0, 0.65)),
+                ),
+                rel_child(
+                    b,
+                    &format!("delay-filter{n}"),
+                    &format!("Filter {n}"),
+                    "#DBEAFE",
+                    "high_cut",
+                    Curve::Log,
+                    1.0,
+                    "hz",
+                    Some((0.0, 0.5)),
+                ),
+                rel_child(
+                    b,
+                    &format!("delay-level{n}"),
+                    &format!("Level {n}"),
+                    "#93C5FD",
+                    "level",
+                    Curve::Add(12.0),
+                    1.0,
+                    "db",
+                    Some((0.0, 0.7)),
+                ),
+                rel_child(
+                    b,
+                    &format!("delay-mod{n}"),
+                    &format!("Mod {n}"),
+                    "#BFDBFE",
+                    "mod_depth",
+                    Curve::Lin,
+                    1.0,
+                    "pct",
+                    Some((0.0, 0.6)),
+                ),
             ]
             .into_iter()
             .flatten()
             .collect()
         });
-        let headers = ["Type", "Feedback", "Filter", "Level", "Mod"].map(String::from).to_vec();
-        add_parent(&mut out, "delay", "Delay", "#3B82F6", Panel { layout: "dual", headers, ..Panel::default() }, kids);
+        let headers = ["Type", "Feedback", "Filter", "Level", "Mod"]
+            .map(String::from)
+            .to_vec();
+        add_parent(
+            &mut out,
+            "delay",
+            "Delay",
+            "#3B82F6",
+            Panel {
+                layout: "dual",
+                headers,
+                ..Panel::default()
+            },
+            kids,
+        );
     }
     {
         // Decay is how much of the tail — a strength. Pre-delay is timing,
         // and stays as the patch has it.
         let kids = dual(&verbs, &|b, n| {
-            let mut decay = rel_child(b, &format!("reverb-time{n}"), &format!("Decay {n}"), "#C4B5FD", "decay", Curve::Lin, 1.0, "verb_s", Some((0.1, 0.9)));
+            let mut decay = rel_child(
+                b,
+                &format!("reverb-time{n}"),
+                &format!("Decay {n}"),
+                "#C4B5FD",
+                "decay",
+                Curve::Lin,
+                1.0,
+                "verb_s",
+                Some((0.1, 0.9)),
+            );
             if let Some(t) = decay.as_mut() {
                 t.meta.aux = Some((b.id.clone(), "algorithm".into()));
             }
             [
-                select_child(b, &format!("reverb-type{n}"), &format!("Type {n}"), "#A78BFA", "algorithm", "verb_algo"),
+                select_child(
+                    b,
+                    &format!("reverb-type{n}"),
+                    &format!("Type {n}"),
+                    "#A78BFA",
+                    "algorithm",
+                    "verb_algo",
+                ),
                 decay,
                 // More reverb is an open, less damped tail.
-                rel_child(b, &format!("reverb-character{n}"), &format!("Char {n}"), "#EDE9FE", "damping", Curve::Lin, -1.0, "pct", Some((0.0, 0.8))),
-                rel_child(b, &format!("reverb-level{n}"), &format!("Level {n}"), "#C4B5FD", "level", Curve::Add(12.0), 1.0, "db", Some((0.0, 0.7))),
-                rel_child(b, &format!("reverb-mod{n}"), &format!("Mod {n}"), "#DDD6FE", "modulation", Curve::Lin, 1.0, "pct", Some((0.0, 0.6))),
+                rel_child(
+                    b,
+                    &format!("reverb-character{n}"),
+                    &format!("Char {n}"),
+                    "#EDE9FE",
+                    "damping",
+                    Curve::Lin,
+                    -1.0,
+                    "pct",
+                    Some((0.0, 0.8)),
+                ),
+                rel_child(
+                    b,
+                    &format!("reverb-level{n}"),
+                    &format!("Level {n}"),
+                    "#C4B5FD",
+                    "level",
+                    Curve::Add(12.0),
+                    1.0,
+                    "db",
+                    Some((0.0, 0.7)),
+                ),
+                rel_child(
+                    b,
+                    &format!("reverb-mod{n}"),
+                    &format!("Mod {n}"),
+                    "#DDD6FE",
+                    "modulation",
+                    Curve::Lin,
+                    1.0,
+                    "pct",
+                    Some((0.0, 0.6)),
+                ),
             ]
             .into_iter()
             .flatten()
             .collect()
         });
-        let headers = ["Type", "Decay", "Character", "Level", "Mod"].map(String::from).to_vec();
-        add_parent(&mut out, "reverb", "Reverb", "#8B5CF6", Panel { layout: "dual", headers, ..Panel::default() }, kids);
+        let headers = ["Type", "Decay", "Character", "Level", "Mod"]
+            .map(String::from)
+            .to_vec();
+        add_parent(
+            &mut out,
+            "reverb",
+            "Reverb",
+            "#8B5CF6",
+            Panel {
+                layout: "dual",
+                headers,
+                ..Panel::default()
+            },
+            kids,
+        );
     }
 
     // ── Space: the whole wash — wet levels, a little feedback and decay ──
@@ -1080,16 +1511,86 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
         let mut kids = Vec::new();
         for (i, b) in delays.iter().enumerate() {
             let n = format!("dly{}", i + 1);
-            kids.extend(rel_child(b, &format!("clarity-{n}-duck"), "Duck", "#5EEAD4", "duck_sens", Curve::Lin, 1.0, "db_gain", Some((0.1, 0.9))));
-            kids.extend(rel_child(b, &format!("clarity-{n}-release"), "Release", "#99F6E4", "duck_release", Curve::Log, 1.0, "s", Some((0.1, 0.9))));
-            kids.extend(rel_child(b, &format!("clarity-{n}-lowcut"), "Lo Cut", "#CCFBF1", "high_pass", Curve::Lin, 1.0, "hz", Some((0.1, 0.9))));
+            kids.extend(rel_child(
+                b,
+                &format!("clarity-{n}-duck"),
+                "Duck",
+                "#5EEAD4",
+                "duck_sens",
+                Curve::Lin,
+                1.0,
+                "db_gain",
+                Some((0.1, 0.9)),
+            ));
+            kids.extend(rel_child(
+                b,
+                &format!("clarity-{n}-release"),
+                "Release",
+                "#99F6E4",
+                "duck_release",
+                Curve::Log,
+                1.0,
+                "s",
+                Some((0.1, 0.9)),
+            ));
+            kids.extend(rel_child(
+                b,
+                &format!("clarity-{n}-lowcut"),
+                "Lo Cut",
+                "#CCFBF1",
+                "high_pass",
+                Curve::Lin,
+                1.0,
+                "hz",
+                Some((0.1, 0.9)),
+            ));
         }
         for (i, b) in verbs.iter().enumerate() {
             let n = format!("verb{}", i + 1);
-            kids.extend(rel_child(b, &format!("clarity-{n}-duck"), "Duck", "#5EEAD4", "duck", Curve::Lin, 1.0, "pct", Some((0.1, 0.9))));
-            kids.extend(rel_child(b, &format!("clarity-{n}-thresh"), "Thresh", "#2DD4BF", "duck_threshold", Curve::Add(12.0), -1.0, "db_gain", Some((0.1, 0.9))));
-            kids.extend(rel_child(b, &format!("clarity-{n}-release"), "Release", "#99F6E4", "duck_release", Curve::Log, 1.0, "ms", Some((0.1, 0.9))));
-            kids.extend(rel_child(b, &format!("clarity-{n}-lowcut"), "Lo Cut", "#CCFBF1", "low_cut", Curve::Log, 1.0, "hz", Some((0.1, 0.9))));
+            kids.extend(rel_child(
+                b,
+                &format!("clarity-{n}-duck"),
+                "Duck",
+                "#5EEAD4",
+                "duck",
+                Curve::Lin,
+                1.0,
+                "pct",
+                Some((0.1, 0.9)),
+            ));
+            kids.extend(rel_child(
+                b,
+                &format!("clarity-{n}-thresh"),
+                "Thresh",
+                "#2DD4BF",
+                "duck_threshold",
+                Curve::Add(12.0),
+                -1.0,
+                "db_gain",
+                Some((0.1, 0.9)),
+            ));
+            kids.extend(rel_child(
+                b,
+                &format!("clarity-{n}-release"),
+                "Release",
+                "#99F6E4",
+                "duck_release",
+                Curve::Log,
+                1.0,
+                "ms",
+                Some((0.1, 0.9)),
+            ));
+            kids.extend(rel_child(
+                b,
+                &format!("clarity-{n}-lowcut"),
+                "Lo Cut",
+                "#CCFBF1",
+                "low_cut",
+                Curve::Log,
+                1.0,
+                "hz",
+                Some((0.1, 0.9)),
+            ));
         }
         let anchor = if out.bank.knobs.iter().any(|k| k.id == "delay") {
             "delay"
@@ -1103,7 +1604,11 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             "clarity",
             "Clarity",
             "#2DD4BF",
-            Panel { layout: "grouped", anchor: anchor.to_string(), ..Panel::default() },
+            Panel {
+                layout: "grouped",
+                anchor: anchor.to_string(),
+                ..Panel::default()
+            },
             kids,
         );
     }
@@ -1121,19 +1626,32 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
         for b in &verbs {
             t.extend(target(b, "pan_a", Curve::Spread, 1.0, 1.0));
         }
-        for b in post(&|b| matches!(b.block_type, BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato)) {
+        for b in post(&|b| {
+            matches!(
+                b.block_type,
+                BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato
+            )
+        }) {
             t.extend(target(b, "width", Curve::Lin, 1.0, 1.0));
         }
         let rest = spread_of(&t, blocks);
         add_single(&mut out, "width", "Width", "#A3E635", t, rest);
         if out.bank.knobs.last().is_some_and(|k| k.id == "width") {
-            out.panels.insert("width".into(), Panel { style: "spread", ..Panel::default() });
+            out.panels.insert(
+                "width".into(),
+                Panel {
+                    style: "spread",
+                    ..Panel::default()
+                },
+            );
         }
     }
 
     // ── Output: the patch's level, ±6 dB ──
     if let Some(b) = find(BlockType::Volume, crate::profiles::TRIM_BLOCK) {
-        let t = target(b, "gain_db", Curve::Add(6.0), 1.0, 1.0).into_iter().collect();
+        let t = target(b, "gain_db", Curve::Add(6.0), 1.0, 1.0)
+            .into_iter()
+            .collect();
         add_single(&mut out, "output", "Output", "#6B7280", t, 0.5);
     }
 
@@ -1243,7 +1761,10 @@ impl Context {
     /// Only the patch's own positions.
     #[must_use]
     pub fn saved(saved: &[MacroValueDef]) -> Self {
-        Self { saved: saved.to_vec(), ..Self::default() }
+        Self {
+            saved: saved.to_vec(),
+            ..Self::default()
+        }
     }
 }
 
@@ -1251,7 +1772,8 @@ impl MacroEngine {
     /// Set a baseline the chain does not carry — the boost pedal's level,
     /// which the rig puts on its gain block after the chain is built.
     pub fn set_base(&mut self, block: &str, param: &str, v: f32) {
-        self.baseline.insert((block.to_string(), param.to_string()), v);
+        self.baseline
+            .insert((block.to_string(), param.to_string()), v);
     }
 
     /// Build the bank again over the same baseline — after a choice that
@@ -1285,7 +1807,11 @@ impl MacroEngine {
         let extra: Vec<((String, String), f32)> = self
             .baseline
             .iter()
-            .filter(|((b, p), _)| !base.iter().any(|x| x.id == *b && x.params.iter().any(|q| q.name == *p)))
+            .filter(|((b, p), _)| {
+                !base
+                    .iter()
+                    .any(|x| x.id == *b && x.params.iter().any(|q| q.name == *p))
+            })
             .map(|(k, v)| (k.clone(), *v))
             .collect();
         self.rebase(&patch, &base, &ctx);
@@ -1301,7 +1827,10 @@ impl MacroEngine {
     /// Whether knob `id` has an ON/OFF pad.
     #[must_use]
     pub fn has_pad(&self, id: &str) -> bool {
-        self.built.meta.get(id).is_some_and(|m| m.pad_block.is_some())
+        self.built
+            .meta
+            .get(id)
+            .is_some_and(|m| m.pad_block.is_some())
     }
 
     /// Block `id`'s params as the patch has them — no macro on them.
@@ -1347,7 +1876,11 @@ impl MacroEngine {
         self.snapshot = ctx.snapshot.clone();
         self.baseline = blocks
             .iter()
-            .flat_map(|b| b.params.iter().map(move |p| ((b.id.clone(), p.name.clone()), p.value)))
+            .flat_map(|b| {
+                b.params
+                    .iter()
+                    .map(move |p| ((b.id.clone(), p.name.clone()), p.value))
+            })
             .collect();
         self.built = build(blocks);
         self.attach(blocks);
@@ -1357,7 +1890,10 @@ impl MacroEngine {
             .values()
             .filter_map(|m| m.pad_block.clone())
             .map(|id| {
-                let byp = blocks.iter().find(|b| b.id == id).is_some_and(|b| b.bypassed);
+                let byp = blocks
+                    .iter()
+                    .find(|b| b.id == id)
+                    .is_some_and(|b| b.bypassed);
                 (id, byp)
             })
             .collect();
@@ -1397,7 +1933,12 @@ impl MacroEngine {
             all.iter().partition(|d| is_parent(&d.id));
         for d in parents.into_iter().chain(kids) {
             if let Some(rest) = self.built.meta.get(&d.id).map(|m| m.rest) {
-                if self.built.meta.get(&d.id).is_some_and(|m| m.select.is_none()) {
+                if self
+                    .built
+                    .meta
+                    .get(&d.id)
+                    .is_some_and(|m| m.select.is_none())
+                {
                     self.set_position(&d.id, value_of(d.value, rest));
                 }
             }
@@ -1424,7 +1965,12 @@ impl MacroEngine {
             let ids: Vec<String> = parent
                 .children
                 .iter()
-                .filter(|c| self.built.meta.get(&c.id).is_some_and(|m| m.pad_block.is_some()))
+                .filter(|c| {
+                    self.built
+                        .meta
+                        .get(&c.id)
+                        .is_some_and(|m| m.pad_block.is_some())
+                })
                 .map(|c| c.id.clone())
                 .collect();
             if ids.is_empty() {
@@ -1469,7 +2015,10 @@ impl MacroEngine {
     /// end to end (a 0..1 binding), so the bar knob's top is the preset's
     /// top. Drive stages without one get [`stage_fallback`].
     fn attach(&mut self, blocks: &[LiveBlock]) {
-        self.names = blocks.iter().map(|b| (b.id.clone(), b.name.clone())).collect();
+        self.names = blocks
+            .iter()
+            .map(|b| (b.id.clone(), b.name.clone()))
+            .collect();
         let mut family: HashMap<String, String> = HashMap::new();
         let mut journey_kids: Vec<String> = Vec::new();
         for p in &self.built.bank.knobs {
@@ -1482,7 +2031,14 @@ impl MacroEngine {
                 }
             }
         }
-        let Self { built, responses, tuned, names, baseline, .. } = self;
+        let Self {
+            built,
+            responses,
+            tuned,
+            names,
+            baseline,
+            ..
+        } = self;
         let mut rebind: Vec<(String, String)> = Vec::new();
         for (kid, meta) in &mut built.meta {
             let fam = family.get(kid).cloned().unwrap_or_else(|| kid.clone());
@@ -1497,9 +2053,14 @@ impl MacroEngine {
                             && (r.def.knob == *kid || r.def.knob == fam)
                     })
                     .map(|r| Response::of(&r.def, r.source));
-                t.edit = tuned.get(&(kid.clone(), t.block.clone(), t.param.clone())).cloned();
+                t.edit = tuned
+                    .get(&(kid.clone(), t.block.clone(), t.param.clone()))
+                    .cloned();
                 if t.resp.is_none() && journey_kids.contains(kid) {
-                    let r = baseline.get(&(t.block.clone(), t.param.clone())).copied().unwrap_or(0.5);
+                    let r = baseline
+                        .get(&(t.block.clone(), t.param.clone()))
+                        .copied()
+                        .unwrap_or(0.5);
                     t.resp = Some(stage_fallback(r));
                 } else if t.resp.is_none() && t.edit.is_none() {
                     all = false;
@@ -1511,7 +2072,11 @@ impl MacroEngine {
         }
         for (p, c) in rebind {
             if let Some(parent) = built.bank.get_mut(&p) {
-                for b in parent.bindings.iter_mut().filter(|b| b.target.param_id == c) {
+                for b in parent
+                    .bindings
+                    .iter_mut()
+                    .filter(|b| b.target.param_id == c)
+                {
                     b.min = 0.0;
                     b.max = 1.0;
                 }
@@ -1548,8 +2113,16 @@ impl MacroEngine {
         if is_timing(param) {
             return Err(format!("macros never move timing ({param})"));
         }
-        let meta = self.built.meta.get(knob).ok_or_else(|| format!("no macro knob {knob:?} on this patch"))?;
-        if !meta.targets.iter().any(|t| t.block == block && t.param == param) {
+        let meta = self
+            .built
+            .meta
+            .get(knob)
+            .ok_or_else(|| format!("no macro knob {knob:?} on this patch"))?;
+        if !meta
+            .targets
+            .iter()
+            .any(|t| t.block == block && t.param == param)
+        {
             return Err(format!("{knob} does not move {param} on that block"));
         }
         let key = (knob.to_string(), block.to_string(), param.to_string());
@@ -1583,7 +2156,11 @@ impl MacroEngine {
         self.built
             .bank
             .get(parent)
-            .map(|p| std::iter::once(p.id.clone()).chain(p.children.iter().map(|c| c.id.clone())).collect())
+            .map(|p| {
+                std::iter::once(p.id.clone())
+                    .chain(p.children.iter().map(|c| c.id.clone()))
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -1600,7 +2177,9 @@ impl MacroEngine {
     pub fn tuned_defs(&self, parent: &str) -> Vec<Tuned> {
         let mut out = Vec::new();
         for id in self.family(parent) {
-            let Some(meta) = self.built.meta.get(&id) else { continue };
+            let Some(meta) = self.built.meta.get(&id) else {
+                continue;
+            };
             for t in meta.targets.iter().filter(|t| t.edit.is_some()) {
                 let base = self.base(&t.block, &t.param).unwrap_or(0.0);
                 let Some(r) = t.effective(base) else { continue };
@@ -1620,9 +2199,15 @@ impl MacroEngine {
     pub fn panel_targets(&self, parent: &str) -> Vec<(String, String, String)> {
         let mut out: Vec<(String, String, String)> = Vec::new();
         for id in self.family(parent) {
-            let Some(meta) = self.built.meta.get(&id) else { continue };
+            let Some(meta) = self.built.meta.get(&id) else {
+                continue;
+            };
             for t in &meta.targets {
-                let e = (self.names.get(&t.block).cloned().unwrap_or_default(), parent.to_string(), t.param.clone());
+                let e = (
+                    self.names.get(&t.block).cloned().unwrap_or_default(),
+                    parent.to_string(),
+                    t.param.clone(),
+                );
                 if !out.contains(&e) {
                     out.push(e);
                 }
@@ -1645,7 +2230,11 @@ impl MacroEngine {
     ///
     /// No such knob, or a choice (it has no rest to go back to).
     pub fn reset_position(&mut self, id: &str) -> Result<(), String> {
-        let meta = self.built.meta.get(id).ok_or_else(|| format!("no macro knob {id:?} on this patch"))?;
+        let meta = self
+            .built
+            .meta
+            .get(id)
+            .ok_or_else(|| format!("no macro knob {id:?} on this patch"))?;
         if meta.select.is_some() {
             return Err("a choice has no rest to go back to".to_string());
         }
@@ -1659,7 +2248,12 @@ impl MacroEngine {
                 .knobs
                 .iter()
                 .find(|p| p.children.iter().any(|c| c.id == id))
-                .and_then(|p| self.implied(p).into_iter().find(|(c, _)| c == id).map(|(_, v)| v))
+                .and_then(|p| {
+                    self.implied(p)
+                        .into_iter()
+                        .find(|(c, _)| c == id)
+                        .map(|(_, v)| v)
+                })
                 .unwrap_or(rest);
             if let Some(k) = self.built.bank.get_knob_mut(id) {
                 k.set_value(put);
@@ -1676,7 +2270,11 @@ impl MacroEngine {
         self.offsets()
             .into_iter()
             .filter(|(_, m, bar)| !*bar || m.abs() > 1e-4)
-            .map(|(id, value, _)| MacroValueDef { id, value, pad: String::new() })
+            .map(|(id, value, _)| MacroValueDef {
+                id,
+                value,
+                pad: String::new(),
+            })
             .collect()
     }
 
@@ -1687,17 +2285,26 @@ impl MacroEngine {
     }
 
     fn base(&self, block: &str, param: &str) -> Option<f32> {
-        self.baseline.get(&(block.to_string(), param.to_string())).copied()
+        self.baseline
+            .get(&(block.to_string(), param.to_string()))
+            .copied()
     }
 
     /// Set a knob's position (and, for a bar knob, its children's).
     fn set_position(&mut self, id: &str, value: f32) {
         let stages = self.journeys.get(id).cloned();
         let rest = self.built.meta.get(id).map_or(0.5, |m| m.rest);
-        let Some(k) = self.built.bank.get_knob_mut(id) else { return };
+        let Some(k) = self.built.bank.get_knob_mut(id) else {
+            return;
+        };
         k.set_value(value);
         let _ = (stages, rest);
-        let implied = self.built.bank.get(id).map(|p| self.implied(p)).unwrap_or_default();
+        let implied = self
+            .built
+            .bank
+            .get(id)
+            .map(|p| self.implied(p))
+            .unwrap_or_default();
         if let Some(parent) = self.built.bank.get_mut(id) {
             for (cid, cv) in implied {
                 if let Some(c) = parent.get_child_mut(&cid) {
@@ -1744,11 +2351,16 @@ impl MacroEngine {
             out.push((parent.id.clone(), self.offset(&parent.id), true));
             let implied = self.implied(parent);
             for c in &parent.children {
-                let Some(meta) = self.built.meta.get(&c.id).filter(|m| m.select.is_none()) else { continue };
+                let Some(meta) = self.built.meta.get(&c.id).filter(|m| m.select.is_none()) else {
+                    continue;
+                };
                 let rest = meta.rest;
                 // Where its bar knob puts it — or, left be by the bar knob,
                 // its rest.
-                let put = implied.iter().find(|(id, _)| *id == c.id).map_or(rest, |(_, v)| *v);
+                let put = implied
+                    .iter()
+                    .find(|(id, _)| *id == c.id)
+                    .map_or(rest, |(_, v)| *v);
                 let own = (put - c.value).abs() > 1e-4;
                 if own {
                     out.push((c.id.clone(), offset_of(c.value, rest), false));
@@ -1790,7 +2402,12 @@ impl MacroEngine {
 
     /// Press a drive stage's pad.
     pub fn set_pad(&mut self, id: &str, on: bool) {
-        if self.built.meta.get(id).is_some_and(|m| m.pad_block.is_some()) {
+        if self
+            .built
+            .meta
+            .get(id)
+            .is_some_and(|m| m.pad_block.is_some())
+        {
             self.pads.insert(id.to_string(), on);
             self.apply_pads();
         }
@@ -1811,14 +2428,20 @@ impl MacroEngine {
         for parent in &self.built.bank.knobs {
             let journey = self.journeys.contains_key(&parent.id);
             for k in std::iter::once(parent).chain(parent.children.iter()) {
-                let Some(meta) = self.built.meta.get(&k.id) else { continue };
+                let Some(meta) = self.built.meta.get(&k.id) else {
+                    continue;
+                };
                 let m = self.offset(&k.id);
                 // A drive stage the patch has off fades in from its floor.
                 let entry = meta
                     .pad_block
                     .as_ref()
                     .filter(|b| journey && self.base_bypass.get(*b).copied().unwrap_or(false));
-                for t in meta.targets.iter().filter(|t| t.block == block && t.param == param) {
+                for t in meta
+                    .targets
+                    .iter()
+                    .filter(|t| t.block == block && t.param == param)
+                {
                     let from = entry.and_then(|_| t.resp.as_ref()).and_then(|r| r.min);
                     out.push((t.clone(), m, from));
                 }
@@ -1887,7 +2510,11 @@ impl MacroEngine {
         let old = self.base(block, param);
         let mut v = live;
         for (t, m, entry) in layers.iter().rev().filter(|(_, m, _)| *m != 0.0) {
-            let inverse = if entry.is_some() && *m > 0.0 { None } else { t.invert(v, *m) };
+            let inverse = if entry.is_some() && *m > 0.0 {
+                None
+            } else {
+                t.invert(v, *m)
+            };
             match inverse {
                 Some(b) => v = b,
                 // Pinned to an end: nothing under it can be told apart, so
@@ -1898,7 +2525,8 @@ impl MacroEngine {
                 }
             }
         }
-        self.baseline.insert((block.to_string(), param.to_string()), v);
+        self.baseline
+            .insert((block.to_string(), param.to_string()), v);
         // A choice made on the block moves its selector's rest with it.
         let moved: Vec<(String, f32)> = self
             .built
@@ -1940,7 +2568,12 @@ impl MacroEngine {
         self.apply_pads();
         // Only where the knob, off rest, would say otherwise: at rest the
         // patch's own state is what plays, and no pad needs keeping.
-        if self.built.bank.get_knob(&id).is_some_and(|k| k.bypassed != bypassed) {
+        if self
+            .built
+            .bank
+            .get_knob(&id)
+            .is_some_and(|k| k.bypassed != bypassed)
+        {
             self.pads.insert(id, !bypassed);
             self.apply_pads();
         }
@@ -1959,7 +2592,9 @@ impl MacroEngine {
             .bank
             .knobs
             .iter()
-            .flat_map(|p| std::iter::once(p.id.clone()).chain(p.children.iter().map(|c| c.id.clone())))
+            .flat_map(|p| {
+                std::iter::once(p.id.clone()).chain(p.children.iter().map(|c| c.id.clone()))
+            })
             .collect();
         for id in ids {
             let own = offsets.iter().find(|(k, _, _)| *k == id);
@@ -1979,7 +2614,11 @@ impl MacroEngine {
             };
             if keep || !pad.is_empty() {
                 let value = m.unwrap_or_else(|| self.offset(&id));
-                out.push(MacroValueDef { id, value, pad: pad.to_string() });
+                out.push(MacroValueDef {
+                    id,
+                    value,
+                    pad: pad.to_string(),
+                });
             }
         }
         out
@@ -1987,18 +2626,31 @@ impl MacroEngine {
 
     /// Every target bar knob `parent` and its panel move, as tune mode
     /// draws it — grouped by block, in panel order.
-    fn tune_views(&self, parent: &MacroKnob, blocks: &[LiveBlock]) -> Vec<signal_guitar_proto::MacroTuneView> {
+    fn tune_views(
+        &self,
+        parent: &MacroKnob,
+        blocks: &[LiveBlock],
+    ) -> Vec<signal_guitar_proto::MacroTuneView> {
         let stages = self.journeys.get(&parent.id);
         let mut out = Vec::new();
-        let kids: Vec<&MacroKnob> = std::iter::once(parent).chain(parent.children.iter()).collect();
+        let kids: Vec<&MacroKnob> = std::iter::once(parent)
+            .chain(parent.children.iter())
+            .collect();
         for (i, k) in kids.iter().enumerate() {
-            let Some(meta) = self.built.meta.get(&k.id).filter(|m| m.select.is_none()) else { continue };
+            let Some(meta) = self.built.meta.get(&k.id).filter(|m| m.select.is_none()) else {
+                continue;
+            };
             let stage = stages.and_then(|s| i.checked_sub(1).and_then(|j| s.get(j)));
             let off_stage = stage.is_some()
-                && meta.pad_block.as_ref().is_some_and(|b| self.base_bypass.get(b).copied().unwrap_or(false));
+                && meta
+                    .pad_block
+                    .as_ref()
+                    .is_some_and(|b| self.base_bypass.get(b).copied().unwrap_or(false));
             let many = meta.targets.len() > 1;
             for t in &meta.targets {
-                let Some(base) = self.base(&t.block, &t.param) else { continue };
+                let Some(base) = self.base(&t.block, &t.param) else {
+                    continue;
+                };
                 let eff = t.effective(base);
                 let entry = eff.as_ref().filter(|_| off_stage).and_then(|r| r.min);
                 let group = self.names.get(&t.block).cloned().unwrap_or_default();
@@ -2009,7 +2661,11 @@ impl MacroEngine {
                 } else {
                     k.label.clone()
                 };
-                let fmt = if meta.fmt.is_empty() || std::ptr::eq(*k, parent) { param_fmt(&t.param) } else { meta.fmt };
+                let fmt = if meta.fmt.is_empty() || std::ptr::eq(*k, parent) {
+                    param_fmt(&t.param)
+                } else {
+                    meta.fmt
+                };
                 let live = blocks
                     .iter()
                     .find(|b| b.id == t.block)
@@ -2035,11 +2691,17 @@ impl MacroEngine {
                     hi: t.apply_from(base, 1.0, entry),
                     min: t.lo,
                     max: t.hi,
-                    curve: eff.as_ref().map_or(if t.curve == Curve::Log { "log" } else { "lin" }, |r| r.shape.name()).to_string(),
+                    curve: eff
+                        .as_ref()
+                        .map_or(if t.curve == Curve::Log { "log" } else { "lin" }, |r| {
+                            r.shape.name()
+                        })
+                        .to_string(),
                     source: eff.as_ref().map_or("", |r| r.source).to_string(),
                     inherited: t.resp.as_ref().map_or("", |r| r.source).to_string(),
                     enter: stage.map_or(-1.0, |s| s.enter),
-                    log: t.curve == Curve::Log || eff.as_ref().is_some_and(|r| r.shape == Shape::Log),
+                    log: t.curve == Curve::Log
+                        || eff.as_ref().is_some_and(|r| r.shape == Shape::Log),
                     off: eff.as_ref().is_some_and(|r| r.off),
                     min_set: edit.min.is_some(),
                     max_set: edit.max.is_some(),
@@ -2056,7 +2718,13 @@ impl MacroEngine {
     pub fn views(&self, blocks: &[LiveBlock]) -> Vec<MacroKnobView> {
         let live = |at: &Option<(String, String)>| -> f32 {
             at.as_ref()
-                .and_then(|(b, p)| blocks.iter().find(|x| x.id == *b).and_then(|x| param(x, p)).map(|p| p.value))
+                .and_then(|(b, p)| {
+                    blocks
+                        .iter()
+                        .find(|x| x.id == *b)
+                        .and_then(|x| param(x, p))
+                        .map(|p| p.value)
+                })
                 .unwrap_or(0.0)
         };
         self.built
@@ -2067,7 +2735,11 @@ impl MacroEngine {
                 let panel = self.built.panels.get(&k.id).cloned().unwrap_or_default();
                 let rest = self.built.meta.get(&k.id).map_or(0.5, |m| m.rest);
                 let readout = if panel.style == "spread" {
-                    if k.value < 0.005 { "Mono".to_string() } else { format!("{:.0}%", k.value * 100.0) }
+                    if k.value < 0.005 {
+                        "Mono".to_string()
+                    } else {
+                        format!("{:.0}%", k.value * 100.0)
+                    }
                 } else {
                     k.format_value()
                 };
@@ -2091,13 +2763,25 @@ impl MacroEngine {
                         .iter()
                         .map(|c| {
                             let meta = self.built.meta.get(&c.id).cloned().unwrap_or_default();
-                            let pedal = self.journeys.contains_key(&k.id).then(|| stage_pedal(&meta, blocks)).flatten();
+                            let pedal = self
+                                .journeys
+                                .contains_key(&k.id)
+                                .then(|| stage_pedal(&meta, blocks))
+                                .flatten();
                             MacroChildView {
                                 id: c.id.clone(),
-                                label: pedal.as_ref().map_or_else(|| c.label.clone(), |p| p.label.clone()),
+                                label: pedal
+                                    .as_ref()
+                                    .map_or_else(|| c.label.clone(), |p| p.label.clone()),
                                 slot: pedal.as_ref().map(|p| p.slot.clone()).unwrap_or_default(),
-                                subtitle: pedal.as_ref().map(|p| p.subtitle.clone()).unwrap_or_default(),
-                                tooltip: pedal.as_ref().map(|p| p.tooltip.clone()).unwrap_or_default(),
+                                subtitle: pedal
+                                    .as_ref()
+                                    .map(|p| p.subtitle.clone())
+                                    .unwrap_or_default(),
+                                tooltip: pedal
+                                    .as_ref()
+                                    .map(|p| p.tooltip.clone())
+                                    .unwrap_or_default(),
                                 empty: pedal.as_ref().is_some_and(|p| p.empty),
                                 color: c.color.clone().unwrap_or_default(),
                                 value: c.value,
@@ -2128,7 +2812,12 @@ fn select_position(s: &Select, v: f32) -> f32 {
         .choices
         .iter()
         .enumerate()
-        .min_by(|a, b| (a.1 - v).abs().partial_cmp(&(b.1 - v).abs()).unwrap_or(std::cmp::Ordering::Equal))
+        .min_by(|a, b| {
+            (a.1 - v)
+                .abs()
+                .partial_cmp(&(b.1 - v).abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
         .map_or(0, |(i, _)| i);
     i as f32 / (n - 1) as f32
 }
@@ -2155,12 +2844,22 @@ struct StagePedal {
 /// The pedal a drive stage's slot plays, from the live chain (the rig puts
 /// the pedal, its capture and the file on the slot's block).
 fn stage_pedal(meta: &Meta, blocks: &[LiveBlock]) -> Option<StagePedal> {
-    let b = blocks.iter().find(|b| Some(&b.id) == meta.pad_block.as_ref())?;
+    let b = blocks
+        .iter()
+        .find(|b| Some(&b.id) == meta.pad_block.as_ref())?;
     let empty = b.empty || b.preset.is_empty();
     Some(StagePedal {
-        label: if empty { "Empty".to_string() } else { b.preset.clone() },
+        label: if empty {
+            "Empty".to_string()
+        } else {
+            b.preset.clone()
+        },
         slot: b.name.clone(),
-        subtitle: if empty { String::new() } else { b.detail.clone() },
+        subtitle: if empty {
+            String::new()
+        } else {
+            b.detail.clone()
+        },
         tooltip: b.asset.clone(),
         empty,
     })
@@ -2199,21 +2898,33 @@ fn resolve_all(comp: &Compositions, patch: &PatchDef) -> Vec<Resolved> {
             continue;
         };
         for d in &snap.macros {
-            out.push(Resolved { block: d.block.clone(), def: d.clone(), source: "module" });
+            out.push(Resolved {
+                block: d.block.clone(),
+                def: d.clone(),
+                source: "module",
+            });
         }
     }
     let picks = crate::compose::block_picks(comp, patch);
     for c in &picks {
         if let Some(p) = comp.block_preset(&c.preset) {
             for d in &p.macros {
-                out.push(Resolved { block: c.block.clone(), def: d.clone(), source: "block" });
+                out.push(Resolved {
+                    block: c.block.clone(),
+                    def: d.clone(),
+                    source: "block",
+                });
             }
         }
     }
     for c in &picks {
         if let Some(p) = comp.block_preset(&c.preset).filter(|p| p.macros.is_empty()) {
             for d in seed_responses(p) {
-                out.push(Resolved { block: c.block.clone(), def: d, source: "seed" });
+                out.push(Resolved {
+                    block: c.block.clone(),
+                    def: d,
+                    source: "seed",
+                });
             }
         }
     }
@@ -2245,9 +2956,17 @@ fn put_entry(list: &mut Vec<MacroResponseDef>, d: MacroResponseDef) {
 /// The module `block` belongs to, by its type — the most specific one
 /// (Delay before Time).
 #[must_use]
-pub fn module_of(comp: &Compositions, block: &str, chain: &[(String, BlockType)]) -> Option<String> {
+pub fn module_of(
+    comp: &Compositions,
+    block: &str,
+    chain: &[(String, BlockType)],
+) -> Option<String> {
     crate::compose::MODULES.iter().rev().find_map(|m| {
-        let bare = crate::profiles::ModuleChoiceDef { module: (*m).to_string(), preset: String::new(), snapshot: String::new() };
+        let bare = crate::profiles::ModuleChoiceDef {
+            module: (*m).to_string(),
+            preset: String::new(),
+            snapshot: String::new(),
+        };
         crate::manage::owned_blocks(comp, &bare, chain)
             .iter()
             .any(|b| b.eq_ignore_ascii_case(block))
@@ -2263,10 +2982,15 @@ fn owner_pick(
     block: &str,
     chain: &[(String, BlockType)],
 ) -> Option<crate::profiles::ModuleChoiceDef> {
-    crate::compose::module_picks(comp, patch).into_iter().rev().find(|p| {
-        comp.module(&p.module, &p.preset).is_some()
-            && crate::manage::owned_blocks(comp, p, chain).iter().any(|b| b.eq_ignore_ascii_case(block))
-    })
+    crate::compose::module_picks(comp, patch)
+        .into_iter()
+        .rev()
+        .find(|p| {
+            comp.module(&p.module, &p.preset).is_some()
+                && crate::manage::owned_blocks(comp, p, chain)
+                    .iter()
+                    .any(|b| b.eq_ignore_ascii_case(block))
+        })
 }
 
 fn snapshot_mut<'a>(
@@ -2275,12 +2999,16 @@ fn snapshot_mut<'a>(
 ) -> Option<&'a mut crate::compose::ModuleSnapshotDef> {
     comp.modules
         .iter_mut()
-        .find(|m| m.module.eq_ignore_ascii_case(&pick.module) && m.name.eq_ignore_ascii_case(&pick.preset))
+        .find(|m| {
+            m.module.eq_ignore_ascii_case(&pick.module) && m.name.eq_ignore_ascii_case(&pick.preset)
+        })
         .and_then(|m| {
             let i = m
                 .snapshots
                 .iter()
-                .position(|s| !pick.snapshot.is_empty() && s.name.eq_ignore_ascii_case(&pick.snapshot))
+                .position(|s| {
+                    !pick.snapshot.is_empty() && s.name.eq_ignore_ascii_case(&pick.snapshot)
+                })
                 .unwrap_or(0);
             m.snapshots.get_mut(i)
         })
@@ -2312,16 +3040,28 @@ pub fn save_tuning(
                 }
                 continue;
             };
-            let Some(snap) = snapshot_mut(comp, &pick) else { continue };
+            let Some(snap) = snapshot_mut(comp, &pick) else {
+                continue;
+            };
             let name = format!("{} · {}", pick.preset, snap.name);
-            put_entry(&mut snap.macros, MacroResponseDef { block: t.block.clone(), ..t.def.clone() });
+            put_entry(
+                &mut snap.macros,
+                MacroResponseDef {
+                    block: t.block.clone(),
+                    ..t.def.clone()
+                },
+            );
             into(name, &mut report);
         } else {
             let picks = crate::compose::block_picks(comp, patch);
             let Some(bp) = picks
                 .iter()
                 .find(|c| c.block.eq_ignore_ascii_case(&t.block))
-                .and_then(|c| comp.blocks.iter_mut().find(|b| b.name.eq_ignore_ascii_case(&c.preset)))
+                .and_then(|c| {
+                    comp.blocks
+                        .iter_mut()
+                        .find(|b| b.name.eq_ignore_ascii_case(&c.preset))
+                })
             else {
                 if !report.missing.contains(&t.block) {
                     report.missing.push(t.block.clone());
@@ -2331,7 +3071,13 @@ pub fn save_tuning(
             if bp.macros.is_empty() {
                 bp.macros = seed_responses(bp);
             }
-            put_entry(&mut bp.macros, MacroResponseDef { block: String::new(), ..t.def.clone() });
+            put_entry(
+                &mut bp.macros,
+                MacroResponseDef {
+                    block: String::new(),
+                    ..t.def.clone()
+                },
+            );
             let name = bp.name.clone();
             into(name, &mut report);
         }
@@ -2374,27 +3120,49 @@ pub fn make_homes(
             let picks = crate::compose::module_picks(comp, patch);
             let current = picks
                 .iter()
-                .find(|p| p.module.eq_ignore_ascii_case(&module) && comp.module(&p.module, &p.preset).is_some())
+                .find(|p| {
+                    p.module.eq_ignore_ascii_case(&module)
+                        && comp.module(&p.module, &p.preset).is_some()
+                })
                 .cloned();
-            let preset = current.as_ref().map_or_else(|| name.to_string(), |c| c.preset.clone());
-            if comp
-                .module(&module, &preset)
-                .is_some_and(|m| m.snapshots.iter().any(|s| s.name.eq_ignore_ascii_case(name)))
-            {
-                return Err(format!("{module} · {preset} already has a snapshot named {name}"));
+            let preset = current
+                .as_ref()
+                .map_or_else(|| name.to_string(), |c| c.preset.clone());
+            if comp.module(&module, &preset).is_some_and(|m| {
+                m.snapshots
+                    .iter()
+                    .any(|s| s.name.eq_ignore_ascii_case(name))
+            }) {
+                return Err(format!(
+                    "{module} · {preset} already has a snapshot named {name}"
+                ));
             }
-            let bare = crate::profiles::ModuleChoiceDef { module: module.clone(), preset: String::new(), snapshot: String::new() };
+            let bare = crate::profiles::ModuleChoiceDef {
+                module: module.clone(),
+                preset: String::new(),
+                snapshot: String::new(),
+            };
             let owned = crate::manage::owned_blocks(comp, current.as_ref().unwrap_or(&bare), chain);
-            let live = crate::manage::LiveModule { current: current.as_ref(), owned: &owned, picks: &picks };
+            let live = crate::manage::LiveModule {
+                current: current.as_ref(),
+                owned: &owned,
+                picks: &picks,
+            };
             crate::manage::save_module_snapshot(comp, patch, &live, &module, &preset, name)?;
         }
     } else {
         let several = missing.len() > 1;
         for b in missing {
-            let Some((block, bt, params, bypassed)) = homes.iter().find(|h| h.0.eq_ignore_ascii_case(b)) else {
+            let Some((block, bt, params, bypassed)) =
+                homes.iter().find(|h| h.0.eq_ignore_ascii_case(b))
+            else {
                 return Err(format!("{b} is not on the live chain"));
             };
-            let preset = if several { format!("{name} {block}") } else { name.to_string() };
+            let preset = if several {
+                format!("{name} {block}")
+            } else {
+                name.to_string()
+            };
             if comp.block_preset(&preset).is_some() {
                 return Err(format!("A block preset named {preset} already exists"));
             }
@@ -2432,8 +3200,12 @@ pub fn reset_scope(
     };
     for (block, knob, param) in targets {
         if scope == "module" {
-            let Some(pick) = owner_pick(comp, patch, block, chain) else { continue };
-            let Some(snap) = snapshot_mut(comp, &pick) else { continue };
+            let Some(pick) = owner_pick(comp, patch, block, chain) else {
+                continue;
+            };
+            let Some(snap) = snapshot_mut(comp, &pick) else {
+                continue;
+            };
             let before = snap.macros.len();
             snap.macros.retain(|d| !hit(d, block, knob, param, true));
             if snap.macros.len() < before {
@@ -2448,7 +3220,11 @@ pub fn reset_scope(
             let Some(bp) = picks
                 .iter()
                 .find(|c| c.block.eq_ignore_ascii_case(block))
-                .and_then(|c| comp.blocks.iter_mut().find(|b| b.name.eq_ignore_ascii_case(&c.preset)))
+                .and_then(|c| {
+                    comp.blocks
+                        .iter_mut()
+                        .find(|b| b.name.eq_ignore_ascii_case(&c.preset))
+                })
             else {
                 continue;
             };
@@ -2508,7 +3284,9 @@ pub fn preset_positions(comp: &Compositions, patch: &PatchDef) -> Vec<MacroValue
         .and_then(|p| {
             p.snapshots
                 .iter()
-                .find(|s| !patch.snapshot.is_empty() && s.name.eq_ignore_ascii_case(&patch.snapshot))
+                .find(|s| {
+                    !patch.snapshot.is_empty() && s.name.eq_ignore_ascii_case(&patch.snapshot)
+                })
                 .or_else(|| p.snapshots.first())
         })
         .map(|s| s.macros.clone())
@@ -2524,7 +3302,9 @@ pub fn context_for(comp: &Compositions, patch: &PatchDef) -> Context {
         .and_then(|p| {
             p.snapshots
                 .iter()
-                .find(|s| !patch.snapshot.is_empty() && s.name.eq_ignore_ascii_case(&patch.snapshot))
+                .find(|s| {
+                    !patch.snapshot.is_empty() && s.name.eq_ignore_ascii_case(&patch.snapshot)
+                })
                 .or_else(|| p.snapshots.first())
                 .map(|s| format!("{} · {}", p.name, s.name))
         })
@@ -2549,7 +3329,12 @@ fn r(knob: &str, param: &str, min: f32, max: f32, curve: &str) -> MacroResponseD
 }
 
 fn off(knob: &str, param: &str) -> MacroResponseDef {
-    MacroResponseDef { knob: knob.into(), param: param.into(), off: true, ..MacroResponseDef::default() }
+    MacroResponseDef {
+        knob: knob.into(),
+        param: param.into(),
+        off: true,
+        ..MacroResponseDef::default()
+    }
 }
 
 /// Musical defaults for a block preset that tunes nothing itself, by its
@@ -2567,7 +3352,12 @@ fn off(knob: &str, param: &str) -> MacroResponseDef {
 /// Each range contains the preset's own value, so rest is always the preset.
 #[must_use]
 pub fn seed_responses(p: &crate::compose::BlockPresetDef) -> Vec<MacroResponseDef> {
-    let v = |name: &str, dflt: f32| p.params.iter().find(|x| x.param == name).map_or(dflt, |x| x.value);
+    let v = |name: &str, dflt: f32| {
+        p.params
+            .iter()
+            .find(|x| x.param == name)
+            .map_or(dflt, |x| x.value)
+    };
     let name = p.name.to_ascii_lowercase();
     let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
     // Keep a range around the preset's own value.
@@ -2580,7 +3370,11 @@ pub fn seed_responses(p: &crate::compose::BlockPresetDef) -> Vec<MacroResponseDe
             // the time.
             let synced = v("tap_div_l", 7.0).round() != 7.0;
             let slap = has(&["slap"]) || (!synced && time < 180.0 && fb <= 0.3);
-            let ambient = !slap && (has(&["ambient", "wash", "swell", "bloom", "shimmer", "pad", "flute"]) || fb >= 0.5 || time >= 550.0);
+            let ambient = !slap
+                && (has(&[
+                    "ambient", "wash", "swell", "bloom", "shimmer", "pad", "flute",
+                ]) || fb >= 0.5
+                    || time >= 550.0);
             if slap {
                 let (a, b) = around(fb, 0.0, 0.25);
                 out.push(r("delay", "feedback", a, b, "lin"));
@@ -2601,9 +3395,26 @@ pub fn seed_responses(p: &crate::compose::BlockPresetDef) -> Vec<MacroResponseDe
             let (decay, level) = (v("decay", 0.4), v("level", -16.0));
             let alg = v("algorithm", 1.0).round() as i32;
             let room = alg == 0 || has(&["room", "tight", "small"]);
-            let big = !room && (matches!(alg, 1 | 4 | 5 | 6 | 7 | 12) || has(&["hall", "ambient", "cathedral", "wash", "swell", "arena", "bloom", "shimmer"]));
+            let big = !room
+                && (matches!(alg, 1 | 4 | 5 | 6 | 7 | 12)
+                    || has(&[
+                        "hall",
+                        "ambient",
+                        "cathedral",
+                        "wash",
+                        "swell",
+                        "arena",
+                        "bloom",
+                        "shimmer",
+                    ]));
             if room {
-                out.push(r("reverb", "decay", decay * 0.8, (decay * 1.2).min(1.0), "lin"));
+                out.push(r(
+                    "reverb",
+                    "decay",
+                    decay * 0.8,
+                    (decay * 1.2).min(1.0),
+                    "lin",
+                ));
                 out.push(off("space", "decay"));
             } else if big && decay > 0.0 {
                 let (a, b) = (decay * 0.5, (decay * 2.0).min(1.0));
@@ -2635,10 +3446,16 @@ pub const LEVEL_EXEMPT: &[&str] = &["output"];
 
 /// [`apply_positions`] for a loudness measurement: every knob where the
 /// patch keeps it except the [`LEVEL_EXEMPT`] ones, which stay at rest.
-pub fn apply_positions_for_level(def: &PatchDef, comp: &Compositions, patch: &mut signal_sampler::RigPatch) {
+pub fn apply_positions_for_level(
+    def: &PatchDef,
+    comp: &Compositions,
+    patch: &mut signal_sampler::RigPatch,
+) {
     let mut ctx = context_for(comp, def);
-    ctx.saved.retain(|m| !LEVEL_EXEMPT.iter().any(|k| m.id.eq_ignore_ascii_case(k)));
-    ctx.defaults.retain(|m| !LEVEL_EXEMPT.iter().any(|k| m.id.eq_ignore_ascii_case(k)));
+    ctx.saved
+        .retain(|m| !LEVEL_EXEMPT.iter().any(|k| m.id.eq_ignore_ascii_case(k)));
+    ctx.defaults
+        .retain(|m| !LEVEL_EXEMPT.iter().any(|k| m.id.eq_ignore_ascii_case(k)));
     apply_ctx(ctx, def, patch);
 }
 
@@ -2651,12 +3468,20 @@ fn apply_ctx(ctx: Context, def: &PatchDef, patch: &mut signal_sampler::RigPatch)
     e.rebase(&def.name, &blocks, &ctx);
     let writes = e.live_params();
     let bypass = e.live_bypass();
-    let index = |id: &str| id.strip_prefix("chain-").and_then(|i| i.parse::<usize>().ok());
+    let index = |id: &str| {
+        id.strip_prefix("chain-")
+            .and_then(|i| i.parse::<usize>().ok())
+    };
     for (id, param, v) in writes {
-        let Some(b) = index(&id).and_then(|i| patch.chain.get_mut(i)) else { continue };
+        let Some(b) = index(&id).and_then(|i| patch.chain.get_mut(i)) else {
+            continue;
+        };
         match b.params.iter_mut().find(|p| p.name == param) {
             Some(p) => p.value = format!("{v}"),
-            None => b.params.push(signal_sampler::rig_node::Param { name: param, value: format!("{v}") }),
+            None => b.params.push(signal_sampler::rig_node::Param {
+                name: param,
+                value: format!("{v}"),
+            }),
         }
     }
     for (id, byp) in bypass {
@@ -2671,7 +3496,13 @@ mod tests {
     use super::*;
 
     fn p(name: &str, value: f32, min: f32, max: f32) -> BlockParam {
-        BlockParam { name: name.into(), value, min, max, overridden: false }
+        BlockParam {
+            name: name.into(),
+            value,
+            min,
+            max,
+            overridden: false,
+        }
     }
 
     fn block(id: &str, bt: BlockType, name: &str, params: Vec<BlockParam>) -> LiveBlock {
@@ -2750,7 +3581,12 @@ mod tests {
 
     fn eq() -> LiveBlock {
         let mut params = Vec::new();
-        for (i, hz, shape) in [(1, 80.0, 3.0), (2, 200.0, 0.0), (3, 700.0, 0.0), (4, 4500.0, 2.0)] {
+        for (i, hz, shape) in [
+            (1, 80.0, 3.0),
+            (2, 200.0, 0.0),
+            (3, 700.0, 0.0),
+            (4, 4500.0, 2.0),
+        ] {
             params.push(p(&format!("b{i}_on"), 1.0, 0.0, 1.0));
             params.push(p(&format!("b{i}_freq"), hz, 10.0, 30000.0));
             params.push(p(&format!("b{i}_gain"), 0.0, -30.0, 30.0));
@@ -2765,12 +3601,21 @@ mod tests {
             drive("d2", "Drive 2", 0.5, true),
             drive("d3", "Drive 3", 0.6, true),
             eq(),
-            block("trim", BlockType::Volume, "Patch Trim", vec![p("gain_db", 0.0, -24.0, 24.0), p("pan", 0.0, -1.0, 1.0)]),
+            block(
+                "trim",
+                BlockType::Volume,
+                "Patch Trim",
+                vec![p("gain_db", 0.0, -24.0, 24.0), p("pan", 0.0, -1.0, 1.0)],
+            ),
             block(
                 "cho",
                 BlockType::Chorus,
                 "Chorus",
-                vec![p("mix", 0.5, 0.0, 1.0), p("depth", 0.4, 0.0, 1.0), p("width", 0.8, 0.0, 1.0)],
+                vec![
+                    p("mix", 0.5, 0.0, 1.0),
+                    p("depth", 0.4, 0.0, 1.0),
+                    p("width", 0.8, 0.0, 1.0),
+                ],
             ),
             delay("dly1", "DLY 1"),
             delay("dly2", "DLY 2"),
@@ -2826,7 +3671,12 @@ mod tests {
         assert!(e.live("eq", low).unwrap() > 5.0);
         assert!(e.live("eq", high).unwrap() < -5.0);
         // The low-cut band at 80 Hz is not a tilt band.
-        assert!(!e.built.meta.values().any(|m| m.targets.iter().any(|t| t.param == "b1_gain")));
+        assert!(
+            !e.built
+                .meta
+                .values()
+                .any(|m| m.targets.iter().any(|t| t.param == "b1_gain"))
+        );
     }
 
     /// Relative, not absolute: every knob at rest leaves every param as the
@@ -2875,15 +3725,26 @@ mod tests {
     #[test]
     fn drive_brings_the_stages_in_and_out_in_order() {
         let mut e = engine();
-        let byp = |e: &MacroEngine| e.live_bypass().into_iter().map(|(_, b)| b).collect::<Vec<_>>();
+        let byp = |e: &MacroEngine| {
+            e.live_bypass()
+                .into_iter()
+                .map(|(_, b)| b)
+                .collect::<Vec<_>>()
+        };
         assert_eq!(byp(&e), vec![false, true, true], "rest = the patch");
         e.set("drive", 0.6);
         assert_eq!(byp(&e), vec![false, true, true], "stage 1 ramps first");
         assert!(e.live("d1", "drive").unwrap() > 0.4);
-        assert!(approx(e.live("d2", "drive").unwrap(), 0.5), "stage 2 not yet");
+        assert!(
+            approx(e.live("d2", "drive").unwrap(), 0.5),
+            "stage 2 not yet"
+        );
         e.set("drive", 0.7);
         assert_eq!(byp(&e), vec![false, false, true], "then stage 2 comes in");
-        assert!(e.live("d2", "drive").unwrap() < 0.25, "fading in from its floor, not jumping to 0.5");
+        assert!(
+            e.live("d2", "drive").unwrap() < 0.25,
+            "fading in from its floor, not jumping to 0.5"
+        );
         e.set("drive", 0.9);
         assert_eq!(byp(&e), vec![false, false, false], "then stage 3");
         e.set("drive", 1.0);
@@ -2894,7 +3755,10 @@ mod tests {
         }
         e.set("drive", 0.3);
         assert_eq!(byp(&e), vec![false, true, true]);
-        assert!(e.live("d1", "drive").unwrap() < 0.4, "stage 1 gentler below rest");
+        assert!(
+            e.live("d1", "drive").unwrap() < 0.4,
+            "stage 1 gentler below rest"
+        );
         e.set("drive", 0.0);
         assert_eq!(byp(&e), vec![true, true, true], "the bottom is dry");
     }
@@ -2919,7 +3783,10 @@ mod tests {
         // All four on in the patch: they drop out last first going down.
         let rules = drive_rules(&ids, &journey(&[true; 4]));
         let on = |v: f32| -> Vec<bool> {
-            rules.iter().map(|r| r.active_ranges.iter().any(|&(lo, hi)| v >= lo && v < hi)).collect()
+            rules
+                .iter()
+                .map(|r| r.active_ranges.iter().any(|&(lo, hi)| v >= lo && v < hi))
+                .collect()
         };
         assert_eq!(on(0.5), vec![true; 4]);
         assert_eq!(on(0.3), vec![true, true, true, false]);
@@ -2933,7 +3800,10 @@ mod tests {
         let mut e = engine();
         e.set_pad("drive-3", true);
         assert_eq!(e.live_bypass()[2], ("d3".to_string(), false));
-        assert_eq!(e.saved().iter().find(|d| d.id == "drive-3").unwrap().pad, "on");
+        assert_eq!(
+            e.saved().iter().find(|d| d.id == "drive-3").unwrap().pad,
+            "on"
+        );
         e.set("drive", 0.5);
         assert_eq!(e.live_bypass()[2], ("d3".to_string(), true));
     }
@@ -2945,7 +3815,11 @@ mod tests {
         let mut e = engine();
         e.direct_bypass("d2", false);
         assert_eq!(e.live_bypass()[1], ("d2".to_string(), false));
-        assert!(e.saved().is_empty(), "at rest nothing to keep: {:?}", e.saved());
+        assert!(
+            e.saved().is_empty(),
+            "at rest nothing to keep: {:?}",
+            e.saved()
+        );
         // Down here the knob has stage 2 out; switching it on holds.
         e.set("drive", 0.2);
         assert_eq!(e.live_bypass()[1], ("d2".to_string(), true));
@@ -2965,7 +3839,10 @@ mod tests {
         assert!(e.live("dly1", "duck_sens").unwrap() > 3.0);
         assert!(e.live("dly1", "high_pass").unwrap() > 40.0);
         assert!(e.live("v1", "duck").unwrap() > 0.2);
-        assert!(e.live("v1", "duck_threshold").unwrap() < -20.0, "a lower threshold ducks more");
+        assert!(
+            e.live("v1", "duck_threshold").unwrap() < -20.0,
+            "a lower threshold ducks more"
+        );
         assert!(e.live("v1", "low_cut").unwrap() > 100.0);
         e.set("clarity", 0.0);
         assert!(e.live("dly1", "duck_sens").unwrap() < 3.0);
@@ -2994,13 +3871,28 @@ mod tests {
         assert!(approx(e.live("dly1", "pan").unwrap(), 0.5));
         assert!(approx(e.live("v1", "pan_a").unwrap(), -0.3));
         e.set("width", 0.0);
-        for (b, p) in [("dly1", "pan"), ("v1", "pan_a"), ("cho", "width"), ("trim", "pan")] {
+        for (b, p) in [
+            ("dly1", "pan"),
+            ("v1", "pan_a"),
+            ("cho", "width"),
+            ("trim", "pan"),
+        ] {
             assert!(approx(e.live(b, p).unwrap(), 0.0), "{b}.{p} not mono");
         }
-        assert_eq!(e.views(&chain()).iter().find(|k| k.id == "width").unwrap().readout, "Mono");
+        assert_eq!(
+            e.views(&chain())
+                .iter()
+                .find(|k| k.id == "width")
+                .unwrap()
+                .readout,
+            "Mono"
+        );
         e.set("width", 1.0);
         assert!(approx(e.live("dly1", "pan").unwrap(), 1.0));
-        assert!(approx(e.live("v1", "pan_a").unwrap(), -1.0), "a pan widens to its own side");
+        assert!(
+            approx(e.live("v1", "pan_a").unwrap(), -1.0),
+            "a pan widens to its own side"
+        );
         assert!(approx(e.live("cho", "width").unwrap(), 1.0));
         e.set("width", rest);
         assert!(approx(e.live("dly1", "pan").unwrap(), 0.5));
@@ -3055,11 +3947,20 @@ mod tests {
     #[test]
     fn positions_persist_with_the_patch() {
         let mut def: crate::profiles::ProfileDef =
-            facet_styx::from_str(crate::library::DEFAULT_PROFILE).expect("a profile without macros parses");
+            facet_styx::from_str(crate::library::DEFAULT_PROFILE)
+                .expect("a profile without macros parses");
         assert!(def.patches.iter().all(|p| p.macros.is_empty()));
         def.patches[0].macros = vec![
-            MacroValueDef { id: "drive".into(), value: 0.4, pad: String::new() },
-            MacroValueDef { id: "drive-2".into(), value: 0.0, pad: "off".into() },
+            MacroValueDef {
+                id: "drive".into(),
+                value: 0.4,
+                pad: String::new(),
+            },
+            MacroValueDef {
+                id: "drive-2".into(),
+                value: 0.0,
+                pad: "off".into(),
+            },
         ];
         let text = facet_styx::to_string(&def).expect("write");
         let back: crate::profiles::ProfileDef = facet_styx::from_str(&text).expect("read back");
@@ -3096,7 +3997,10 @@ mod tests {
         assert!(approx(s.apply(0.0, 0.5, None), 0.5));
         assert!(s.apply(0.0, 0.1, None) < 0.1);
         for r in [&lin, &log, &exp, &s] {
-            assert!(approx(r.apply(0.5, 1.0, None), r.max.unwrap()), "lands on its top");
+            assert!(
+                approx(r.apply(0.5, 1.0, None), r.max.unwrap()),
+                "lands on its top"
+            );
             assert!(approx(r.apply(0.5, 0.0, None), 0.5), "rest is the patch");
         }
         // One-sided: no min, so down changes nothing.
@@ -3112,7 +4016,11 @@ mod tests {
                     continue;
                 }
                 let live = r.apply(0.6, m, None);
-                assert!((r.invert(live, m).unwrap() - 0.6).abs() < 1e-3, "{:?} {m}", r.shape);
+                assert!(
+                    (r.invert(live, m).unwrap() - 0.6).abs() < 1e-3,
+                    "{:?} {m}",
+                    r.shape
+                );
             }
         }
     }
@@ -3152,19 +4060,33 @@ mod tests {
     /// that says nothing, over the engine's own response.
     #[test]
     fn a_module_snapshot_beats_a_block_preset_beats_a_seed() {
-        use crate::compose::{BlockChoiceDef, BlockPresetDef, ModulePresetDef, ModuleSnapshotDef, ParamSetDef};
+        use crate::compose::{
+            BlockChoiceDef, BlockPresetDef, ModulePresetDef, ModuleSnapshotDef, ParamSetDef,
+        };
         use crate::profiles::ModuleChoiceDef;
         let mut comp = Compositions::default();
         comp.blocks.push(BlockPresetDef {
             block_type: "delay".into(),
             name: "Tuned".into(),
-            macros: vec![entry("", "delay", "feedback", 0.1, 0.4), entry("", "delay", "level", -20.0, -10.0)],
+            macros: vec![
+                entry("", "delay", "feedback", 0.1, 0.4),
+                entry("", "delay", "level", -20.0, -10.0),
+            ],
             ..BlockPresetDef::default()
         });
         comp.blocks.push(BlockPresetDef {
             block_type: "delay".into(),
             name: "Slapback".into(),
-            params: vec![ParamSetDef { param: "feedback".into(), value: 0.1 }, ParamSetDef { param: "time".into(), value: 110.0 }],
+            params: vec![
+                ParamSetDef {
+                    param: "feedback".into(),
+                    value: 0.1,
+                },
+                ParamSetDef {
+                    param: "time".into(),
+                    value: 110.0,
+                },
+            ],
             ..BlockPresetDef::default()
         });
         comp.modules.push(ModulePresetDef {
@@ -3173,21 +4095,39 @@ mod tests {
             snapshots: vec![ModuleSnapshotDef {
                 name: "A".into(),
                 blocks: vec![
-                    BlockChoiceDef { block: "DLY 1".into(), preset: "Tuned".into() },
-                    BlockChoiceDef { block: "DLY 2".into(), preset: "Slapback".into() },
+                    BlockChoiceDef {
+                        block: "DLY 1".into(),
+                        preset: "Tuned".into(),
+                    },
+                    BlockChoiceDef {
+                        block: "DLY 2".into(),
+                        preset: "Slapback".into(),
+                    },
                 ],
                 macros: vec![entry("DLY 1", "delay", "feedback", 0.0, 0.9)],
                 ..ModuleSnapshotDef::default()
             }],
         });
         let mut patch = patch_def("P");
-        patch.modules.push(ModuleChoiceDef { module: "Delay".into(), preset: "Rig".into(), snapshot: "A".into() });
+        patch.modules.push(ModuleChoiceDef {
+            module: "Delay".into(),
+            preset: "Rig".into(),
+            snapshot: "A".into(),
+        });
         let ctx = context_for(&comp, &patch);
         let mut e = MacroEngine::default();
         e.rebase("P", &chain(), &ctx);
         let src = |id: &str| e.built.meta[id].targets[0].resp.as_ref().map(|r| r.source);
-        assert_eq!(src("delay-fb1"), Some("module"), "the module snapshot's feedback");
-        assert_eq!(src("delay-level1"), Some("block"), "the block preset's level");
+        assert_eq!(
+            src("delay-fb1"),
+            Some("module"),
+            "the module snapshot's feedback"
+        );
+        assert_eq!(
+            src("delay-level1"),
+            Some("block"),
+            "the block preset's level"
+        );
         assert_eq!(src("delay-fb2"), Some("seed"), "the slapback's seed");
         assert_eq!(src("delay-mod1"), None, "nothing says: the engine's own");
         // A tuned knob follows its bar knob end to end: the bar knob's top
@@ -3195,15 +4135,24 @@ mod tests {
         e.set("delay", 1.0);
         assert!(approx(e.live("dly1", "feedback").unwrap(), 0.9));
         assert!(approx(e.live("dly1", "level").unwrap(), -10.0));
-        assert!(approx(e.live("dly2", "feedback").unwrap(), 0.25), "a slapback tops out at 0.25");
+        assert!(
+            approx(e.live("dly2", "feedback").unwrap(), 0.25),
+            "a slapback tops out at 0.25"
+        );
         e.set("delay", 0.0);
         assert!(approx(e.live("dly1", "feedback").unwrap(), 0.0));
         assert!(approx(e.live("dly1", "level").unwrap(), -20.0));
         e.set("delay", 0.5);
-        assert!(approx(e.live("dly1", "feedback").unwrap(), 0.3), "rest is the patch");
+        assert!(
+            approx(e.live("dly1", "feedback").unwrap(), 0.3),
+            "rest is the patch"
+        );
         // Space: the slapback opts its feedback out.
         e.set("space", 1.0);
-        assert!(approx(e.live("dly2", "feedback").unwrap(), 0.3), "Space leaves a slapback's feedback be");
+        assert!(
+            approx(e.live("dly2", "feedback").unwrap(), 0.3),
+            "Space leaves a slapback's feedback be"
+        );
         assert!(e.live("dly1", "feedback").unwrap() > 0.3);
     }
 
@@ -3215,11 +4164,20 @@ mod tests {
         for (slot, enter, min, max) in [("Drive 2", 0.1, 0.2, 0.55), ("Drive 3", 0.8, 0.35, 0.7)] {
             let mut d = entry(slot, "drive", "drive", min, max);
             d.enter = Some(enter);
-            ctx.responses.push(Resolved { block: slot.into(), def: d, source: "module" });
+            ctx.responses.push(Resolved {
+                block: slot.into(),
+                def: d,
+                source: "module",
+            });
         }
         let mut e = MacroEngine::default();
         e.rebase("Drive", &chain(), &ctx);
-        let byp = |e: &MacroEngine| e.live_bypass().into_iter().map(|(_, b)| b).collect::<Vec<_>>();
+        let byp = |e: &MacroEngine| {
+            e.live_bypass()
+                .into_iter()
+                .map(|(_, b)| b)
+                .collect::<Vec<_>>()
+        };
         e.set("drive", 0.56);
         assert_eq!(byp(&e), vec![false, false, true], "stage 2 comes in early");
         let d2 = e.live("d2", "drive").unwrap();
@@ -3228,10 +4186,21 @@ mod tests {
         assert_eq!(byp(&e), vec![false, false, true], "stage 3 only at 80 % up");
         e.set("drive", 1.0);
         assert_eq!(byp(&e), vec![false, false, false]);
-        assert!(approx(e.live("d2", "drive").unwrap(), 0.55), "its own top, not full");
+        assert!(
+            approx(e.live("d2", "drive").unwrap(), 0.55),
+            "its own top, not full"
+        );
         assert!(approx(e.live("d3", "drive").unwrap(), 0.7));
         let tv = e.views(&chain());
-        let stage = tv.iter().find(|k| k.id == "drive").unwrap().tune.iter().find(|t| t.knob == "drive-3").cloned().unwrap();
+        let stage = tv
+            .iter()
+            .find(|k| k.id == "drive")
+            .unwrap()
+            .tune
+            .iter()
+            .find(|t| t.knob == "drive-3")
+            .cloned()
+            .unwrap();
         assert!(approx(stage.enter, 0.8));
         assert_eq!(stage.source, "module");
     }
@@ -3241,7 +4210,11 @@ mod tests {
     /// a knob turned back to rest over a snapshot that turns it included.
     #[test]
     fn positions_patch_over_snapshot_over_rest() {
-        let pos = |id: &str, v: f32| MacroValueDef { id: id.into(), value: v, pad: String::new() };
+        let pos = |id: &str, v: f32| MacroValueDef {
+            id: id.into(),
+            value: v,
+            pad: String::new(),
+        };
         let ctx = Context {
             saved: vec![pos("delay", -0.5)],
             defaults: vec![pos("delay", 0.4), pos("space", 0.6)],
@@ -3249,9 +4222,24 @@ mod tests {
         };
         let mut e = MacroEngine::default();
         e.rebase("P", &chain(), &ctx);
-        assert!(approx(offset_of(e.built.bank.get("delay").unwrap().value, 0.5), -0.5), "the patch's");
-        assert!(approx(offset_of(e.built.bank.get("space").unwrap().value, 0.5), 0.6), "the snapshot's");
-        assert!(approx(e.built.bank.get("reverb").unwrap().value, 0.5), "rest");
+        assert!(
+            approx(
+                offset_of(e.built.bank.get("delay").unwrap().value, 0.5),
+                -0.5
+            ),
+            "the patch's"
+        );
+        assert!(
+            approx(
+                offset_of(e.built.bank.get("space").unwrap().value, 0.5),
+                0.6
+            ),
+            "the snapshot's"
+        );
+        assert!(
+            approx(e.built.bank.get("reverb").unwrap().value, 0.5),
+            "rest"
+        );
         assert_eq!(e.saved(), vec![pos("delay", -0.5)]);
         // Back to the snapshot's position: nothing of its own.
         e.set("delay", value_of(0.4, 0.5));
@@ -3263,7 +4251,10 @@ mod tests {
         let kept = e.positions();
         assert!(kept.iter().any(|d| d.id == "delay" && approx(d.value, 0.4)));
         assert!(!kept.iter().any(|d| d.id == "space"));
-        assert!(!kept.iter().any(|d| d.id.starts_with("delay-")), "panel knobs where their bar knob puts them");
+        assert!(
+            !kept.iter().any(|d| d.id.starts_with("delay-")),
+            "panel knobs where their bar knob puts them"
+        );
     }
 
     /// Levelling measures a patch with its knobs where it keeps them: the
@@ -3277,13 +4268,22 @@ mod tests {
             .with_param("level", "-14");
         let mut built = RigPatch::new("P").with_block(dly);
         let mut def = patch_def("P");
-        def.macros = vec![MacroValueDef { id: "space".into(), value: 1.0, pad: String::new() }];
+        def.macros = vec![MacroValueDef {
+            id: "space".into(),
+            value: 1.0,
+            pad: String::new(),
+        }];
         apply_positions(&def, &Compositions::default(), &mut built);
         let level = built.chain[0].param_f32("level").unwrap();
-        assert!(level > -14.0, "Space up raised the wet level the meter hears: {level}");
+        assert!(
+            level > -14.0,
+            "Space up raised the wet level the meter hears: {level}"
+        );
         // A patch with no positions is measured as built.
         let mut plain = RigPatch::new("P").with_block(
-            RigBlock::of_type(BlockType::Delay).named("DLY 1").with_param("level", "-14"),
+            RigBlock::of_type(BlockType::Delay)
+                .named("DLY 1")
+                .with_param("level", "-14"),
         );
         apply_positions(&patch_def("P"), &Compositions::default(), &mut plain);
         assert!(approx(plain.chain[0].param_f32("level").unwrap(), -14.0));
@@ -3312,22 +4312,34 @@ mod tests {
         let back: BlockLib = facet_styx::from_str(&facet_styx::to_string(&lib).unwrap()).unwrap();
         assert_eq!(back.presets[0].macros, lib.presets[0].macros);
         let mut p = p;
-        p.presets[0].snapshots[0].macros = vec![MacroValueDef { id: "drive".into(), value: 0.3, pad: String::new() }];
+        p.presets[0].snapshots[0].macros = vec![MacroValueDef {
+            id: "drive".into(),
+            value: 0.3,
+            pad: String::new(),
+        }];
         let back: PresetLib = facet_styx::from_str(&facet_styx::to_string(&p).unwrap()).unwrap();
-        assert_eq!(back.presets[0].snapshots[0].macros, p.presets[0].snapshots[0].macros);
+        assert_eq!(
+            back.presets[0].snapshots[0].macros,
+            p.presets[0].snapshots[0].macros
+        );
     }
 
     /// Saving a tuning writes it where it was asked: the block preset on the
     /// block (keeping the seeds it played on), or the module snapshot.
     #[test]
     fn tuning_saves_into_the_block_preset_or_the_module_snapshot() {
-        use crate::compose::{BlockChoiceDef, BlockPresetDef, ModulePresetDef, ModuleSnapshotDef, ParamSetDef};
+        use crate::compose::{
+            BlockChoiceDef, BlockPresetDef, ModulePresetDef, ModuleSnapshotDef, ParamSetDef,
+        };
         use crate::profiles::ModuleChoiceDef;
         let mut comp = Compositions::default();
         comp.blocks.push(BlockPresetDef {
             block_type: "delay".into(),
             name: "Slapback".into(),
-            params: vec![ParamSetDef { param: "time".into(), value: 110.0 }],
+            params: vec![ParamSetDef {
+                param: "time".into(),
+                value: 110.0,
+            }],
             ..BlockPresetDef::default()
         });
         comp.modules.push(ModulePresetDef {
@@ -3335,32 +4347,58 @@ mod tests {
             name: "Rig".into(),
             snapshots: vec![ModuleSnapshotDef {
                 name: "A".into(),
-                blocks: vec![BlockChoiceDef { block: "DLY 1".into(), preset: "Slapback".into() }],
+                blocks: vec![BlockChoiceDef {
+                    block: "DLY 1".into(),
+                    preset: "Slapback".into(),
+                }],
                 ..ModuleSnapshotDef::default()
             }],
         });
         let mut patch = patch_def("P");
-        patch.modules.push(ModuleChoiceDef { module: "Delay".into(), preset: "Rig".into(), snapshot: "A".into() });
+        patch.modules.push(ModuleChoiceDef {
+            module: "Delay".into(),
+            preset: "Rig".into(),
+            snapshot: "A".into(),
+        });
         let mut e = MacroEngine::default();
         e.rebase("P", &chain(), &context_for(&comp, &patch));
         let tune = |e: &mut MacroEngine, op: &str, v: f32, text: &str| {
-            e.tune_op("delay-fb1", "dly1", "feedback", op, v, text, &chain()).unwrap();
+            e.tune_op("delay-fb1", "dly1", "feedback", op, v, text, &chain())
+                .unwrap();
         };
         tune(&mut e, "min", 0.05, "");
         tune(&mut e, "max", 0.2, "");
         tune(&mut e, "curve", 0.0, "s");
         e.set("delay", 1.0);
-        assert!(approx(e.live("dly1", "feedback").unwrap(), 0.2), "live while tuning");
+        assert!(
+            approx(e.live("dly1", "feedback").unwrap(), 0.2),
+            "live while tuning"
+        );
         let defs = e.tuned_defs("delay");
         assert_eq!(defs[0].block, "DLY 1");
-        let chain_types: Vec<(String, BlockType)> = chain().iter().map(|b| (b.name.clone(), b.block_type)).collect();
+        let chain_types: Vec<(String, BlockType)> = chain()
+            .iter()
+            .map(|b| (b.name.clone(), b.block_type))
+            .collect();
         let mut by_block = comp.clone();
-        assert_eq!(save_tuning(&mut by_block, &patch, &chain_types, &defs, "block").into, vec!["Slapback".to_string()]);
+        assert_eq!(
+            save_tuning(&mut by_block, &patch, &chain_types, &defs, "block").into,
+            vec!["Slapback".to_string()]
+        );
         let saved = &by_block.block_preset("Slapback").unwrap().macros;
-        assert!(saved.iter().any(|d| d.knob == "delay" && d.param == "feedback" && d.max == Some(0.2) && d.curve == "s"));
-        assert!(saved.iter().any(|d| d.knob == "space" && d.off), "the seeds it played on, kept");
+        assert!(saved.iter().any(|d| d.knob == "delay"
+            && d.param == "feedback"
+            && d.max == Some(0.2)
+            && d.curve == "s"));
+        assert!(
+            saved.iter().any(|d| d.knob == "space" && d.off),
+            "the seeds it played on, kept"
+        );
         let mut by_module = comp.clone();
-        assert_eq!(save_tuning(&mut by_module, &patch, &chain_types, &defs, "module").into, vec!["Rig · A".to_string()]);
+        assert_eq!(
+            save_tuning(&mut by_module, &patch, &chain_types, &defs, "module").into,
+            vec!["Rig · A".to_string()]
+        );
         let snap = &by_module.module("Delay", "Rig").unwrap().snapshots[0];
         assert_eq!(snap.macros[0].block, "DLY 1");
         assert_eq!(snap.macros[0].min, Some(0.05));
@@ -3373,21 +4411,48 @@ mod tests {
         let preset = |ty: &str, name: &str, params: &[(&str, f32)]| BlockPresetDef {
             block_type: ty.into(),
             name: name.into(),
-            params: params.iter().map(|(p, v)| ParamSetDef { param: (*p).into(), value: *v }).collect(),
+            params: params
+                .iter()
+                .map(|(p, v)| ParamSetDef {
+                    param: (*p).into(),
+                    value: *v,
+                })
+                .collect(),
             ..BlockPresetDef::default()
         };
-        let find = |list: &[MacroResponseDef], k: &str, p: &str| list.iter().find(|d| d.knob == k && d.param == p).cloned();
-        let slap = seed_responses(&preset("delay", "Slap", &[("feedback", 0.12), ("level", -12.0), ("time", 100.0)]));
+        let find = |list: &[MacroResponseDef], k: &str, p: &str| {
+            list.iter().find(|d| d.knob == k && d.param == p).cloned()
+        };
+        let slap = seed_responses(&preset(
+            "delay",
+            "Slap",
+            &[("feedback", 0.12), ("level", -12.0), ("time", 100.0)],
+        ));
         assert_eq!(find(&slap, "delay", "feedback").unwrap().max, Some(0.25));
         assert!(find(&slap, "space", "feedback").unwrap().off);
-        let amb = seed_responses(&preset("delay", "Ambient Wash", &[("feedback", 0.6), ("level", -10.0)]));
+        let amb = seed_responses(&preset(
+            "delay",
+            "Ambient Wash",
+            &[("feedback", 0.6), ("level", -10.0)],
+        ));
         let fb = find(&amb, "delay", "feedback").unwrap();
         assert_eq!((fb.min, fb.max), (Some(0.3), Some(0.75)));
-        let hall = seed_responses(&preset("reverb", "Big Hall", &[("decay", 0.4), ("algorithm", 1.0)]));
+        let hall = seed_responses(&preset(
+            "reverb",
+            "Big Hall",
+            &[("decay", 0.4), ("algorithm", 1.0)],
+        ));
         let d = find(&hall, "reverb", "decay").unwrap();
         assert!(approx(d.min.unwrap(), 0.2) && approx(d.max.unwrap(), 0.8) && d.curve == "log");
-        let room = seed_responses(&preset("reverb", "Room", &[("decay", 0.3), ("algorithm", 0.0)]));
-        assert!(find(&room, "reverb", "decay").unwrap().max.unwrap() <= 0.36 + 1e-6, "a room stays short");
+        let room = seed_responses(&preset(
+            "reverb",
+            "Room",
+            &[("decay", 0.3), ("algorithm", 0.0)],
+        ));
+        assert!(
+            find(&room, "reverb", "decay").unwrap().max.unwrap() <= 0.36 + 1e-6,
+            "a room stays short"
+        );
         for list in [&slap, &amb, &hall, &room] {
             for d in list.iter().filter(|d| !d.off) {
                 assert!(d.min.unwrap() <= d.max.unwrap());
@@ -3404,11 +4469,21 @@ mod tests {
         let mut e = engine();
         let views = e.views(&chain());
         let space = views.iter().find(|k| k.id == "space").unwrap();
-        let mut got: Vec<(String, String)> = space.tune.iter().map(|t| (t.group.clone(), t.param.clone())).collect();
+        let mut got: Vec<(String, String)> = space
+            .tune
+            .iter()
+            .map(|t| (t.group.clone(), t.param.clone()))
+            .collect();
         got.sort();
         let want: Vec<(String, String)> = [
-            ("DLY 1", "feedback"), ("DLY 1", "level"), ("DLY 2", "feedback"), ("DLY 2", "level"),
-            ("VERB 1", "decay"), ("VERB 1", "level"), ("VERB 2", "decay"), ("VERB 2", "level"),
+            ("DLY 1", "feedback"),
+            ("DLY 1", "level"),
+            ("DLY 2", "feedback"),
+            ("DLY 2", "level"),
+            ("VERB 1", "decay"),
+            ("VERB 1", "level"),
+            ("VERB 2", "decay"),
+            ("VERB 2", "level"),
         ]
         .iter()
         .map(|(a, b)| ((*a).to_string(), (*b).to_string()))
@@ -3416,21 +4491,45 @@ mod tests {
         assert_eq!(got, want);
         assert!(space.tune.iter().all(|t| t.knob == "space"));
         let width = views.iter().find(|k| k.id == "width").unwrap();
-        assert!(width.tune.iter().any(|t| t.group == "Chorus" && t.param == "width"));
-        assert!(width.tune.iter().any(|t| t.group == "Patch Trim" && t.param == "pan"));
+        assert!(
+            width
+                .tune
+                .iter()
+                .any(|t| t.group == "Chorus" && t.param == "width")
+        );
+        assert!(
+            width
+                .tune
+                .iter()
+                .any(|t| t.group == "Patch Trim" && t.param == "pan")
+        );
         // Tone's tilt bands and its wet high cuts, each its own row.
         let tone = views.iter().find(|k| k.id == "tone").unwrap();
         assert!(tone.tune.iter().filter(|t| t.param == "high_cut").count() == 4);
         // One Space target tuned: only that one moves differently.
-        e.tune_op("space", "dly1", "level", "max", -2.0, "", &chain()).unwrap();
+        e.tune_op("space", "dly1", "level", "max", -2.0, "", &chain())
+            .unwrap();
         e.set("space", 1.0);
         assert!(approx(e.live("dly1", "level").unwrap(), -2.0));
-        assert!(approx(e.live("dly2", "level").unwrap(), -14.0 + 9.0), "the other delay: the engine's own +9 dB");
+        assert!(
+            approx(e.live("dly2", "level").unwrap(), -14.0 + 9.0),
+            "the other delay: the engine's own +9 dB"
+        );
         assert!(e.has_edits("space"));
         assert!(!e.has_edits("delay"));
-        assert!(e.tune_op("space", "dly1", "time", "max", 1.0, "", &chain()).is_err(), "Space does not move time");
-        assert!(e.tune_op("nope", "dly1", "level", "max", 1.0, "", &chain()).is_err());
-        assert!(e.tune_op("space", "dly1", "level", "sideways", 1.0, "", &chain()).is_err());
+        assert!(
+            e.tune_op("space", "dly1", "time", "max", 1.0, "", &chain())
+                .is_err(),
+            "Space does not move time"
+        );
+        assert!(
+            e.tune_op("nope", "dly1", "level", "max", 1.0, "", &chain())
+                .is_err()
+        );
+        assert!(
+            e.tune_op("space", "dly1", "level", "sideways", 1.0, "", &chain())
+                .is_err()
+        );
     }
 
     /// Resets go back down the chain: a side to what the presets say (the
@@ -3439,8 +4538,16 @@ mod tests {
     #[test]
     fn a_reset_goes_back_to_what_the_presets_say() {
         let mut ctx = Context::default();
-        ctx.responses.push(Resolved { block: "DLY 1".into(), def: entry("", "delay", "feedback", 0.1, 0.6), source: "module" });
-        ctx.responses.push(Resolved { block: "DLY 1".into(), def: entry("", "delay", "feedback", 0.2, 0.4), source: "block" });
+        ctx.responses.push(Resolved {
+            block: "DLY 1".into(),
+            def: entry("", "delay", "feedback", 0.1, 0.6),
+            source: "module",
+        });
+        ctx.responses.push(Resolved {
+            block: "DLY 1".into(),
+            def: entry("", "delay", "feedback", 0.2, 0.4),
+            source: "block",
+        });
         let mut e = MacroEngine::default();
         e.rebase("P", &chain(), &ctx);
         let tv = |e: &MacroEngine| {
@@ -3454,22 +4561,45 @@ mod tests {
                 .unwrap()
         };
         assert_eq!((tv(&e).source.as_str(), tv(&e).hi), ("module", 0.6));
-        e.tune_op("delay-fb1", "dly1", "feedback", "max", 0.9, "", &chain()).unwrap();
-        e.tune_op("delay-fb1", "dly1", "feedback", "min", 0.0, "", &chain()).unwrap();
+        e.tune_op("delay-fb1", "dly1", "feedback", "max", 0.9, "", &chain())
+            .unwrap();
+        e.tune_op("delay-fb1", "dly1", "feedback", "min", 0.0, "", &chain())
+            .unwrap();
         let t = tv(&e);
-        assert!(t.edited && t.max_set && t.min_set && t.source == "tuning" && t.inherited == "module");
+        assert!(
+            t.edited && t.max_set && t.min_set && t.source == "tuning" && t.inherited == "module"
+        );
         assert!(approx(t.hi, 0.9));
         // Double-click the top handle: that side back to the module's.
-        e.tune_op("delay-fb1", "dly1", "feedback", "reset_max", 0.0, "", &chain()).unwrap();
+        e.tune_op(
+            "delay-fb1",
+            "dly1",
+            "feedback",
+            "reset_max",
+            0.0,
+            "",
+            &chain(),
+        )
+        .unwrap();
         let t = tv(&e);
         assert!(approx(t.hi, 0.6) && approx(t.lo, 0.0) && !t.max_set && t.min_set);
         // Double-click the body: the whole target back.
-        e.tune_op("delay-fb1", "dly1", "feedback", "reset", 0.0, "", &chain()).unwrap();
+        e.tune_op("delay-fb1", "dly1", "feedback", "reset", 0.0, "", &chain())
+            .unwrap();
         let t = tv(&e);
         assert!(!t.edited && approx(t.lo, 0.1) && t.source == "module");
         assert!(!e.has_edits("delay"));
         // Over the engine's own, an edit of one side keeps the other.
-        e.tune_op("delay-filter1", "dly1", "high_cut", "max", 16000.0, "", &chain()).unwrap();
+        e.tune_op(
+            "delay-filter1",
+            "dly1",
+            "high_cut",
+            "max",
+            16000.0,
+            "",
+            &chain(),
+        )
+        .unwrap();
         e.set("delay", 0.0);
         let down = e.live("dly1", "high_cut").unwrap();
         assert!(down < 8000.0, "the engine's own bottom stays: {down}");
@@ -3482,15 +4612,31 @@ mod tests {
     #[test]
     fn off_keeps_the_macro_off_a_param() {
         let mut e = engine();
-        e.tune_op("space", "v1", "decay", "off", 1.0, "", &chain()).unwrap();
+        e.tune_op("space", "v1", "decay", "off", 1.0, "", &chain())
+            .unwrap();
         e.set("space", 1.0);
         assert!(approx(e.live("v1", "decay").unwrap(), 0.4), "left be");
         assert!(e.live("v2", "decay").unwrap() > 0.4);
-        let t = e.views(&chain()).into_iter().find(|k| k.id == "space").unwrap().tune;
-        assert!(t.iter().find(|t| t.block == "v1" && t.param == "decay").unwrap().off);
-        let def = e.tuned_defs("space").into_iter().find(|d| d.def.param == "decay").unwrap();
+        let t = e
+            .views(&chain())
+            .into_iter()
+            .find(|k| k.id == "space")
+            .unwrap()
+            .tune;
+        assert!(
+            t.iter()
+                .find(|t| t.block == "v1" && t.param == "decay")
+                .unwrap()
+                .off
+        );
+        let def = e
+            .tuned_defs("space")
+            .into_iter()
+            .find(|d| d.def.param == "decay")
+            .unwrap();
         assert!(def.def.off, "saved as off");
-        e.tune_op("space", "v1", "decay", "reset_off", 0.0, "", &chain()).unwrap();
+        e.tune_op("space", "v1", "decay", "reset_off", 0.0, "", &chain())
+            .unwrap();
         assert!(e.live("v1", "decay").unwrap() > 0.4);
     }
 
@@ -3504,26 +4650,84 @@ mod tests {
         let mut patch = patch_def("P");
         let mut e = MacroEngine::default();
         e.rebase("P", &chain(), &Context::default());
-        e.tune_op("space", "dly1", "level", "max", -4.0, "", &chain()).unwrap();
+        e.tune_op("space", "dly1", "level", "max", -4.0, "", &chain())
+            .unwrap();
         let defs = e.tuned_defs("space");
-        let chain_types: Vec<(String, BlockType)> = chain().iter().map(|b| (b.name.clone(), b.block_type)).collect();
+        let chain_types: Vec<(String, BlockType)> = chain()
+            .iter()
+            .map(|b| (b.name.clone(), b.block_type))
+            .collect();
         let dry = save_tuning(&mut comp.clone(), &patch, &chain_types, &defs, "block");
         assert_eq!(dry.missing, vec!["DLY 1".to_string()]);
-        let homes = vec![("DLY 1".to_string(), BlockType::Delay, e.baseline_params("dly1"), false)];
-        assert!(make_homes(&mut comp, &mut patch, &chain_types, &homes, &dry.missing, "block", " ").is_err(), "a blank name");
-        make_homes(&mut comp, &mut patch, &chain_types, &homes, &dry.missing, "block", "My Echo").unwrap();
+        let homes = vec![(
+            "DLY 1".to_string(),
+            BlockType::Delay,
+            e.baseline_params("dly1"),
+            false,
+        )];
+        assert!(
+            make_homes(
+                &mut comp,
+                &mut patch,
+                &chain_types,
+                &homes,
+                &dry.missing,
+                "block",
+                " "
+            )
+            .is_err(),
+            "a blank name"
+        );
+        make_homes(
+            &mut comp,
+            &mut patch,
+            &chain_types,
+            &homes,
+            &dry.missing,
+            "block",
+            "My Echo",
+        )
+        .unwrap();
         let report = save_tuning(&mut comp, &patch, &chain_types, &defs, "block");
         assert_eq!(report.into, vec!["My Echo".to_string()]);
-        assert!(patch.blocks.iter().any(|c| c.block == "DLY 1" && c.preset == "My Echo"), "the patch plays it");
-        let lib = BlockLib { presets: comp.blocks.clone() };
+        assert!(
+            patch
+                .blocks
+                .iter()
+                .any(|c| c.block == "DLY 1" && c.preset == "My Echo"),
+            "the patch plays it"
+        );
+        let lib = BlockLib {
+            presets: comp.blocks.clone(),
+        };
         let back: BlockLib = facet_styx::from_str(&facet_styx::to_string(&lib).unwrap()).unwrap();
         let p = &back.presets[0];
         assert_eq!(p.block_type, "delay");
-        assert!(p.params.iter().any(|x| x.param == "feedback" && approx(x.value, 0.3)), "the patch's own values");
-        assert!(p.macros.iter().any(|d| d.knob == "space" && d.param == "level" && d.max == Some(-4.0)));
+        assert!(
+            p.params
+                .iter()
+                .any(|x| x.param == "feedback" && approx(x.value, 0.3)),
+            "the patch's own values"
+        );
+        assert!(
+            p.macros
+                .iter()
+                .any(|d| d.knob == "space" && d.param == "level" && d.max == Some(-4.0))
+        );
         // Taken names are refused.
         let mut again = patch.clone();
-        assert!(make_homes(&mut comp, &mut again, &chain_types, &homes, &dry.missing, "block", "My Echo").is_err());
+        assert!(
+            make_homes(
+                &mut comp,
+                &mut again,
+                &chain_types,
+                &homes,
+                &dry.missing,
+                "block",
+                "My Echo"
+            )
+            .is_err()
+        );
     }
 
     /// With no module snapshot owning a block, a save can make one on the
@@ -3535,21 +4739,46 @@ mod tests {
         let mut patch = patch_def("P");
         let mut e = MacroEngine::default();
         e.rebase("P", &chain(), &Context::default());
-        e.tune_op("delay-fb1", "dly1", "feedback", "max", 0.5, "", &chain()).unwrap();
+        e.tune_op("delay-fb1", "dly1", "feedback", "max", 0.5, "", &chain())
+            .unwrap();
         let defs = e.tuned_defs("delay");
-        let chain_types: Vec<(String, BlockType)> = chain().iter().map(|b| (b.name.clone(), b.block_type)).collect();
+        let chain_types: Vec<(String, BlockType)> = chain()
+            .iter()
+            .map(|b| (b.name.clone(), b.block_type))
+            .collect();
         let dry = save_tuning(&mut comp.clone(), &patch, &chain_types, &defs, "module");
         assert_eq!(dry.missing, vec!["DLY 1".to_string()]);
-        assert_eq!(module_of(&comp, "DLY 1", &chain_types).as_deref(), Some("Delay"));
-        make_homes(&mut comp, &mut patch, &chain_types, &[], &dry.missing, "module", "Tuned").unwrap();
+        assert_eq!(
+            module_of(&comp, "DLY 1", &chain_types).as_deref(),
+            Some("Delay")
+        );
+        make_homes(
+            &mut comp,
+            &mut patch,
+            &chain_types,
+            &[],
+            &dry.missing,
+            "module",
+            "Tuned",
+        )
+        .unwrap();
         let report = save_tuning(&mut comp, &patch, &chain_types, &defs, "module");
         assert_eq!(report.into, vec!["Tuned · Tuned".to_string()]);
         assert!(report.missing.is_empty());
-        let lib = ModuleLib { presets: comp.modules.clone() };
+        let lib = ModuleLib {
+            presets: comp.modules.clone(),
+        };
         let back: ModuleLib = facet_styx::from_str(&facet_styx::to_string(&lib).unwrap()).unwrap();
         let snap = &back.presets[0].snapshots[0];
-        assert_eq!((back.presets[0].module.as_str(), snap.name.as_str()), ("Delay", "Tuned"));
-        assert!(snap.macros.iter().any(|d| d.block == "DLY 1" && d.param == "feedback" && d.max == Some(0.5)));
+        assert_eq!(
+            (back.presets[0].module.as_str(), snap.name.as_str()),
+            ("Delay", "Tuned")
+        );
+        assert!(
+            snap.macros
+                .iter()
+                .any(|d| d.block == "DLY 1" && d.param == "feedback" && d.max == Some(0.5))
+        );
     }
 
     /// A panel's Reset clears what a scope says about its params.
@@ -3560,15 +4789,30 @@ mod tests {
         comp.blocks.push(BlockPresetDef {
             block_type: "delay".into(),
             name: "Tuned".into(),
-            macros: vec![entry("", "delay", "feedback", 0.1, 0.4), entry("", "space", "level", -20.0, -10.0)],
+            macros: vec![
+                entry("", "delay", "feedback", 0.1, 0.4),
+                entry("", "space", "level", -20.0, -10.0),
+            ],
             ..BlockPresetDef::default()
         });
         let mut patch = patch_def("P");
-        patch.blocks.push(BlockChoiceDef { block: "DLY 1".into(), preset: "Tuned".into() });
+        patch.blocks.push(BlockChoiceDef {
+            block: "DLY 1".into(),
+            preset: "Tuned".into(),
+        });
         let mut e = MacroEngine::default();
         e.rebase("P", &chain(), &context_for(&comp, &patch));
-        let chain_types: Vec<(String, BlockType)> = chain().iter().map(|b| (b.name.clone(), b.block_type)).collect();
-        let (names, n) = reset_scope(&mut comp, &patch, &chain_types, &e.panel_targets("delay"), "block");
+        let chain_types: Vec<(String, BlockType)> = chain()
+            .iter()
+            .map(|b| (b.name.clone(), b.block_type))
+            .collect();
+        let (names, n) = reset_scope(
+            &mut comp,
+            &patch,
+            &chain_types,
+            &e.panel_targets("delay"),
+            "block",
+        );
         assert_eq!((names, n), (vec!["Tuned".to_string()], 1));
         let left = &comp.block_preset("Tuned").unwrap().macros;
         assert_eq!(left.len(), 1, "Space's entry stays");
@@ -3589,7 +4833,10 @@ mod tests {
         e.reset_position("delay").unwrap();
         assert!(approx(e.built.bank.get("delay").unwrap().value, 0.5));
         assert!(e.saved().is_empty());
-        assert!(e.reset_position("delay-type1").is_err(), "a choice has no rest");
+        assert!(
+            e.reset_position("delay-type1").is_err(),
+            "a choice has no rest"
+        );
         assert!(e.reset_position("nope").is_err());
     }
 
@@ -3599,26 +4846,77 @@ mod tests {
     #[test]
     fn every_reset_is_exact() {
         let mut blocks = chain();
-        let mut pog = block("pog", BlockType::Pitch, "Pitch", vec![p("mix", 0.5, 0.0, 1.0), p("a_level", 0.7, 0.0, 1.0), p("b_level", 0.7, 0.0, 1.0)]);
+        let mut pog = block(
+            "pog",
+            BlockType::Pitch,
+            "Pitch",
+            vec![
+                p("mix", 0.5, 0.0, 1.0),
+                p("a_level", 0.7, 0.0, 1.0),
+                p("b_level", 0.7, 0.0, 1.0),
+            ],
+        );
         pog.bypassed = true;
         blocks.push(pog);
-        blocks.push(block("g", BlockType::Gate, "Gate", vec![p("threshold", -62.0, -90.0, 0.0), p("attack", 1.0, 0.1, 50.0), p("release", 120.0, 5.0, 500.0)]));
-        blocks.push(block("pc", BlockType::Compressor, "Pre Comp", vec![p("threshold", -22.5, -60.0, 0.0), p("ratio", 3.0, 1.0, 20.0), p("attack", 25.0, 0.1, 200.0), p("release", 200.0, 5.0, 1000.0)]));
-        let mut amp = block("amp", BlockType::Amp, "Amp L", vec![p("drive", 0.37, 0.0, 1.0)]);
+        blocks.push(block(
+            "g",
+            BlockType::Gate,
+            "Gate",
+            vec![
+                p("threshold", -62.0, -90.0, 0.0),
+                p("attack", 1.0, 0.1, 50.0),
+                p("release", 120.0, 5.0, 500.0),
+            ],
+        ));
+        blocks.push(block(
+            "pc",
+            BlockType::Compressor,
+            "Pre Comp",
+            vec![
+                p("threshold", -22.5, -60.0, 0.0),
+                p("ratio", 3.0, 1.0, 20.0),
+                p("attack", 25.0, 0.1, 200.0),
+                p("release", 200.0, 5.0, 1000.0),
+            ],
+        ));
+        let mut amp = block(
+            "amp",
+            BlockType::Amp,
+            "Amp L",
+            vec![p("drive", 0.37, 0.0, 1.0)],
+        );
         amp.preset = "Deluxe".into();
         blocks.push(amp);
-        blocks.push(block("trem", BlockType::Trem, "Tremolo", vec![p("depth", 0.43, 0.0, 1.0)]));
-        blocks.push(block("boost", BlockType::Volume, "Boost", vec![p("gain_db", 0.0, -24.0, 24.0), p("pan", 0.0, -1.0, 1.0)]));
+        blocks.push(block(
+            "trem",
+            BlockType::Trem,
+            "Tremolo",
+            vec![p("depth", 0.43, 0.0, 1.0)],
+        ));
+        blocks.push(block(
+            "boost",
+            BlockType::Volume,
+            "Boost",
+            vec![p("gain_db", 0.0, -24.0, 24.0), p("pan", 0.0, -1.0, 1.0)],
+        ));
         let mut e = MacroEngine::default();
         e.rebase("P", &blocks, &Context::default());
         let bits = |e: &MacroEngine| -> Vec<(String, String, u32)> {
-            e.live_params().into_iter().map(|(b, p, v)| (b, p, v.to_bits())).collect()
+            e.live_params()
+                .into_iter()
+                .map(|(b, p, v)| (b, p, v.to_bits()))
+                .collect()
         };
         let bypass = |e: &MacroEngine| e.live_bypass();
         let (before, before_byp) = (bits(&e), bypass(&e));
         // Every base value is the patch's, bit for bit.
         for (b, p, v) in &before {
-            let x = blocks.iter().find(|x| x.id == *b).and_then(|x| param(x, p)).unwrap().value;
+            let x = blocks
+                .iter()
+                .find(|x| x.id == *b)
+                .and_then(|x| param(x, p))
+                .unwrap()
+                .value;
             assert_eq!(*v, x.to_bits(), "{b}.{p} at rest is the patch's value");
         }
         let ids: Vec<String> = e
@@ -3626,7 +4924,9 @@ mod tests {
             .bank
             .knobs
             .iter()
-            .flat_map(|k| std::iter::once(k.id.clone()).chain(k.children.iter().map(|c| c.id.clone())))
+            .flat_map(|k| {
+                std::iter::once(k.id.clone()).chain(k.children.iter().map(|c| c.id.clone()))
+            })
             .filter(|id| e.built.meta[id].select.is_none())
             .collect();
         // A cheap, fixed pseudo-random walk.
@@ -3683,10 +4983,17 @@ mod tests {
             assert!(!params.iter().any(|x| x == p), "Delay moves {p}");
         }
         let mut e = engine();
-        assert!(e.tune_op("delay-fb1", "dly1", "time", "max", 1.0, "", &chain()).is_err());
+        assert!(
+            e.tune_op("delay-fb1", "dly1", "time", "max", 1.0, "", &chain())
+                .is_err()
+        );
         // A saved entry on a timing param is ignored.
         let mut ctx = Context::default();
-        ctx.responses.push(Resolved { block: "DLY 1".into(), def: entry("", "delay", "time", 100.0, 900.0), source: "block" });
+        ctx.responses.push(Resolved {
+            block: "DLY 1".into(),
+            def: entry("", "delay", "time", 100.0, 900.0),
+            source: "block",
+        });
         e.rebase("P", &chain(), &ctx);
         e.set("delay", 1.0);
         assert_eq!(e.live("dly1", "time"), Some(350.0));
@@ -3707,12 +5014,25 @@ mod tests {
 
     #[test]
     fn curves_invert() {
-        let t = |curve| Target { block: "b".into(), param: "p".into(), lo: 20.0, hi: 2000.0, curve, dir: 1.0, depth: 1.0, resp: None, edit: None };
+        let t = |curve| Target {
+            block: "b".into(),
+            param: "p".into(),
+            lo: 20.0,
+            hi: 2000.0,
+            curve,
+            dir: 1.0,
+            depth: 1.0,
+            resp: None,
+            edit: None,
+        };
         for curve in [Curve::Lin, Curve::Log, Curve::Add(12.0)] {
             let t = t(curve);
             for m in [-0.8, -0.3, 0.4, 0.9] {
                 let live = t.apply(300.0, m);
-                assert!((t.invert(live, m).unwrap() - 300.0).abs() < 0.5, "{curve:?} {m}");
+                assert!(
+                    (t.invert(live, m).unwrap() - 300.0).abs() < 0.5,
+                    "{curve:?} {m}"
+                );
             }
         }
     }

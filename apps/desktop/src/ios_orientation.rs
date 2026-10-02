@@ -9,6 +9,7 @@
 //! `UIInterfaceOrientationMask` values (bit = 1 << UIInterfaceOrientation):
 //! portrait = 2, landscapeLeft = 8, landscapeRight = 16, landscape = 24.
 
+use objc2::rc::{Allocated, Retained};
 use objc2::runtime::AnyObject;
 use objc2::{class, msg_send};
 
@@ -101,8 +102,8 @@ pub fn set_idle_timer_disabled(disabled: bool) {
 }
 
 /// Ask every window scene to adopt `mask`. No-op if the scene isn't up yet.
-/// Manual retain/release (no ARC) — raw pointers are used immediately and
-/// the one owned object (`prefs`) is released after use.
+/// Raw pointers are used immediately; the one owned object (`prefs`) is a
+/// `Retained`, released when it drops.
 fn request(mask: usize) {
     unsafe {
         let app: *mut AnyObject = msg_send![class!(UIApplication), sharedApplication];
@@ -119,15 +120,14 @@ fn request(mask: usize) {
             if !is_window_scene {
                 continue;
             }
-            let prefs: *mut AnyObject =
+            let prefs: Allocated<AnyObject> =
                 msg_send![class!(UIWindowSceneGeometryPreferencesIOS), alloc];
-            let prefs: *mut AnyObject = msg_send![prefs, initWithInterfaceOrientations: mask];
+            let prefs: Retained<AnyObject> = msg_send![prefs, initWithInterfaceOrientations: mask];
             let _: () = msg_send![
                 scene,
-                requestGeometryUpdateWithPreferences: prefs,
+                requestGeometryUpdateWithPreferences: &*prefs,
                 errorHandler: std::ptr::null_mut::<AnyObject>()
             ];
-            let _: () = msg_send![prefs, release];
             // Nudge the root VC to re-evaluate (paired with a supported-
             // orientations override if we add a hard lock later).
             let key_window: *mut AnyObject = msg_send![scene, keyWindow];

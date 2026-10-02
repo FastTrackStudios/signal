@@ -812,7 +812,10 @@ pub fn drive_output_delta_cached(model_path: &Path, sample_rate: f64, drive: f32
     let Some(entry) = drive_curve_cached(model_path, sample_rate) else {
         return 0.0;
     };
-    match (compensation_from(&entry, drive), compensation_from(&entry, 0.5)) {
+    match (
+        compensation_from(&entry, drive),
+        compensation_from(&entry, 0.5),
+    ) {
         (Some((_, at)), Some((_, unity))) => at - unity,
         _ => 0.0,
     }

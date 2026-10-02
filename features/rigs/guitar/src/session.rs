@@ -164,7 +164,9 @@ fn own_recall_mut<'a>(
 /// How many settings `b` changes from `a`: module and block picks,
 /// overrides and macro positions that differ.
 fn patch_differences(a: &crate::profiles::PatchDef, b: &crate::profiles::PatchDef) -> u32 {
-    let key = |o: &crate::profiles::OverrideDef| (o.block.to_ascii_lowercase(), o.op.clone(), o.param.clone());
+    let key = |o: &crate::profiles::OverrideDef| {
+        (o.block.to_ascii_lowercase(), o.op.clone(), o.param.clone())
+    };
     let mut n = 0u32;
     for ob in &b.overrides {
         match a.overrides.iter().find(|oa| key(oa) == key(ob)) {
@@ -173,11 +175,17 @@ fn patch_differences(a: &crate::profiles::PatchDef, b: &crate::profiles::PatchDe
         }
     }
     let mods = |p: &crate::profiles::PatchDef| {
-        p.modules.iter().map(|m| format!("{}|{}|{}", m.module, m.preset, m.snapshot).to_ascii_lowercase()).collect::<std::collections::BTreeSet<_>>()
+        p.modules
+            .iter()
+            .map(|m| format!("{}|{}|{}", m.module, m.preset, m.snapshot).to_ascii_lowercase())
+            .collect::<std::collections::BTreeSet<_>>()
     };
     n += mods(b).difference(&mods(a)).count() as u32;
     let blocks = |p: &crate::profiles::PatchDef| {
-        p.blocks.iter().map(|c| format!("{}|{}", c.block, c.preset).to_ascii_lowercase()).collect::<std::collections::BTreeSet<_>>()
+        p.blocks
+            .iter()
+            .map(|c| format!("{}|{}", c.block, c.preset).to_ascii_lowercase())
+            .collect::<std::collections::BTreeSet<_>>()
     };
     n += blocks(b).difference(&blocks(a)).count() as u32;
     if a.macros != b.macros {
@@ -222,6 +230,10 @@ pub struct GuitarRigBackend {
     /// The preset tab's audition — `(preset, snapshot)` playing on its own,
     /// outside the profile (see `choose_preset`). `None` = a patch is playing.
     audition: Arc<Mutex<Option<(String, String)>>>,
+    /// The sound browser's audition: the profile and songs as they were when
+    /// it began, and whether a pick has changed them since
+    /// (`browse_audition_end` puts them back).
+    browse_undo: Arc<Mutex<Option<(ProfileDef, Vec<SongDef>, bool)>>>,
     /// Boost engaged (tap toggles; the level is remembered separately).
     boost_on: Arc<Mutex<bool>>,
     /// Boost pedal level in dB (hold rotates through [`BOOST_LEVELS`]).
@@ -301,6 +313,9 @@ pub struct GuitarRigBackend {
     open_prefs: Arc<Mutex<Option<String>>>,
     /// Footswitch CC mapping (midi.styx — remappable).
     midi_map: Arc<Mutex<crate::profiles::MidiMapDef>>,
+    /// Pedals learned onto switches from their right-click menus — ahead of
+    /// `midi_map`: a learned pedal is its switch's and nothing else's.
+    learn: Arc<Mutex<signal_rig_host::midi_learn::MidiLearn>>,
     /// Keyboard bindings (keymap.styx).
     keymap: Arc<Mutex<Vec<crate::profiles::KeyBindingDef>>>,
     /// Headphone-cue module state (volume/self-mix staged; mute applied).
@@ -419,6 +434,7 @@ impl GuitarRigBackend {
         let backend = Self {
             rig: Arc::new(Mutex::new(None)),
             audition: Arc::new(Mutex::new(None)),
+            browse_undo: Arc::new(Mutex::new(None)),
             boost_on: Arc::new(Mutex::new(false)),
             boost_level: Arc::new(Mutex::new(BOOST_LEVELS[0])),
             blocks: Arc::new(Mutex::new(Vec::new())),
@@ -450,6 +466,7 @@ impl GuitarRigBackend {
             last_switched: Arc::new(Mutex::new(String::new())),
             open_prefs: Arc::new(Mutex::new(None)),
             midi_map: Arc::new(Mutex::new(lib.midi_map)),
+            learn: Arc::new(Mutex::new(signal_rig_host::midi_learn::MidiLearn::load("guitar"))),
             keymap: Arc::new(Mutex::new(lib.keymap)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
             master_trim: Arc::new(Mutex::new(DEFAULT_MASTER_TRIM_DB)),
@@ -470,6 +487,7 @@ impl GuitarRigBackend {
         };
         backend.spawn_meter_pump("rig-meter-pump");
         backend.spawn_drive_calibration();
+        backend.spawn_tempo_follow();
         backend
     }
 
@@ -575,7 +593,9 @@ impl GuitarRigBackend {
                 match guard.as_ref() {
                     Some(prig) => (
                         prig.rig().collect_drops(&mut pump.drop_seen),
-                        prig.active_patch().map(|p| p.name.clone()).unwrap_or_default(),
+                        prig.active_patch()
+                            .map(|p| p.name.clone())
+                            .unwrap_or_default(),
                     ),
                     None => (Vec::new(), String::new()),
                 }
@@ -631,9 +651,26 @@ impl GuitarRigBackend {
             // (note, down): a note pedal's switches — `None` for a Note On
             // at velocity 0, resolved against the switch's state below.
             let mut notes: Vec<(u8, Option<bool>)> = Vec::new();
+            // Learned pedals: (switch, pressed), and whether one was learned.
+            let mut fired: Vec<(String, bool)> = Vec::new();
+            let mut learned = false;
             {
                 let mut log = self.midi_log.lock_ok();
                 for msg in stream.drain() {
+                    let [status, d1, d2] = msg.bytes();
+                    let outcome = self.learn.lock_ok().on_raw(status, d1, d2);
+                    match outcome {
+                        signal_rig_host::midi_learn::Outcome::Pass => {}
+                        signal_rig_host::midi_learn::Outcome::Learned { target } => {
+                            tracing::info!(target, "guitar: switch learned");
+                            learned = true;
+                            continue;
+                        }
+                        signal_rig_host::midi_learn::Outcome::Fire { target, pressed } => {
+                            fired.push((target, pressed));
+                            continue;
+                        }
+                    }
                     match msg.to_event() {
                         Some(midicore::MidiEvent::ControlChange {
                             controller, value, ..
@@ -672,6 +709,12 @@ impl GuitarRigBackend {
                         log.drain(0..len - 128);
                     }
                 }
+            }
+            for (target, pressed) in fired {
+                self.fire_switch(&target, pressed);
+            }
+            if learned {
+                self.events.publish(RigEvent::Perf(Rig::perf(self)));
             }
             // Remappable mapping (midi.styx) → the shared gesture engine:
             // gesture switches (tap on short release, hold at 500 ms) +
@@ -773,7 +816,11 @@ impl GuitarRigBackend {
         if device.is_empty() || notes.is_empty() {
             return;
         }
-        let active = self.rig.lock_ok().as_ref().and_then(ProfileRig::active_stack);
+        let active = self
+            .rig
+            .lock_ok()
+            .as_ref()
+            .and_then(ProfileRig::active_stack);
         // The stack switches (tap tempo on the last switch keeps its own).
         let jobs = self.switch_actions.lock_ok().clone();
         let want: Vec<bool> = (0..notes.len().min(4))
@@ -781,7 +828,9 @@ impl GuitarRigBackend {
             .collect();
         let now = std::time::Instant::now();
         let due = pump.leds.as_ref() != Some(&want)
-            || pump.leds_at.is_none_or(|t| now.duration_since(t) >= REFRESH);
+            || pump
+                .leds_at
+                .is_none_or(|t| now.duration_since(t) >= REFRESH);
         if !due {
             return;
         }
@@ -1043,7 +1092,8 @@ impl GuitarRigBackend {
         mode: ReloadMode,
         activate: Option<&str>,
     ) -> bool {
-        self.reload_gapless_counted(rebuilt, mode, activate).is_some()
+        self.reload_gapless_counted(rebuilt, mode, activate)
+            .is_some()
     }
 
     /// [`reload_gapless`](Self::reload_gapless), saying how many chains it
@@ -1054,14 +1104,21 @@ impl GuitarRigBackend {
         mode: ReloadMode,
         activate: Option<&str>,
     ) -> Option<hot_reload::ReloadCounts> {
-        let Some(ticket) = self.rig.lock_ok().as_mut().map(|prig| prig.begin_reload(mode)) else {
+        let Some(ticket) = self
+            .rig
+            .lock_ok()
+            .as_mut()
+            .map(|prig| prig.begin_reload(mode))
+        else {
             return None;
         };
         let mut prepared = ticket.plan(rebuilt, None).prepare();
         // The macro bar over the landing patch's new baseline, for its new
         // or retuned chain to come in with (the logged live writes carry
         // the rest; see `ProfileRig::commit_reload`).
-        let landing = activate.map(str::to_string).or_else(|| self.active_patch_name());
+        let landing = activate
+            .map(str::to_string)
+            .or_else(|| self.active_patch_name());
         if let Some(name) = landing.filter(|n| prepared.changes(n)) {
             if let Some(patch) = prepared.patch(&name).cloned() {
                 let overlay = self.macro_overlay(&name, &patch);
@@ -1111,7 +1168,12 @@ impl GuitarRigBackend {
         patch: &signal_sampler::RigPatch,
     ) -> Vec<(String, signal_sampler::LiveWrite)> {
         use signal_sampler::LiveWrite;
-        let reals: Vec<RigBlock> = patch.chain.iter().filter(|b| b.has_backend()).cloned().collect();
+        let reals: Vec<RigBlock> = patch
+            .chain
+            .iter()
+            .filter(|b| b.has_backend())
+            .cloned()
+            .collect();
         let ids = signal_sampler::rig_profile::chain_block_ids(patch);
         let mut blocks = chain_as_live(&reals);
         for (b, id) in blocks.iter_mut().zip(&ids) {
@@ -1145,7 +1207,11 @@ impl GuitarRigBackend {
                 None => {}
             }
         }
-        out.extend(bypass.into_iter().map(|(id, on)| (id, LiveWrite::Bypass(on))));
+        out.extend(
+            bypass
+                .into_iter()
+                .map(|(id, on)| (id, LiveWrite::Bypass(on))),
+        );
         out
     }
 
@@ -1336,16 +1402,19 @@ impl GuitarRigBackend {
     /// module snapshot, the patch's own), the library's boost pedal for an
     /// unassigned boost slot, the native boost, or nothing (`empty`).
     fn label_board(&self) {
-        let Some(patch) = self.live_patch_name() else { return };
+        let Some(patch) = self.live_patch_name() else {
+            return;
+        };
         let comp = RigLibrary::load_compositions();
         let drives = {
             let def = self.profile_def.lock_ok();
             let mut one = def.clone();
             one.patches.retain(|p| p.name.eq_ignore_ascii_case(&patch));
             let flat = crate::compose::flatten(&one, &comp);
-            flat.patches
-                .first()
-                .map_or_else(|| def.drives.clone(), |p| crate::compose::drives_for(&flat, p))
+            flat.patches.first().map_or_else(
+                || def.drives.clone(),
+                |p| crate::compose::drives_for(&flat, p),
+            )
         };
         let dps = self.drive_presets.lock_ok().clone();
         let mut blocks = self.blocks.lock_ok();
@@ -1362,7 +1431,11 @@ impl GuitarRigBackend {
             let sp = crate::profiles::slot_pedal(slot, &drives, &dps);
             if let Some(p) = dps.iter().find(|p| p.name.eq_ignore_ascii_case(&sp.pedal)) {
                 b.options = p.options.iter().map(|o| o.name.clone()).collect();
-                b.option = p.options.iter().position(|o| o.name == sp.option).unwrap_or(0) as u32;
+                b.option = p
+                    .options
+                    .iter()
+                    .position(|o| o.name == sp.option)
+                    .unwrap_or(0) as u32;
             }
             b.preset = sp.pedal;
             b.detail = sp.option;
@@ -1413,7 +1486,9 @@ impl GuitarRigBackend {
     /// Put the active patch's macro bar on the chain just built: the chain
     /// as built is the baseline, the patch's saved positions go on top.
     fn macros_rebase(&self) {
-        let Some(patch) = self.live_patch_name() else { return };
+        let Some(patch) = self.live_patch_name() else {
+            return;
+        };
         let blocks = self.blocks.lock_ok().clone();
         let def = self.effective_patch(&patch);
         // Its positions over its preset snapshot's, and how its presets
@@ -1436,13 +1511,20 @@ impl GuitarRigBackend {
         }
         // In a song, a profile patch's knob positions are the song's.
         if let Some(song) = self.song_edit_target(patch) {
-            if self.effective_patch(patch).is_some_and(|p| p.macros != saved) {
+            if self
+                .effective_patch(patch)
+                .is_some_and(|p| p.macros != saved)
+            {
                 self.edit_song_version(&song, patch, move |v| v.macros = saved);
             }
             return;
         }
         let mut def = self.profile_def.lock_ok();
-        if let Some(p) = def.patches.iter_mut().find(|p| p.name.eq_ignore_ascii_case(patch)) {
+        if let Some(p) = def
+            .patches
+            .iter_mut()
+            .find(|p| p.name.eq_ignore_ascii_case(patch))
+        {
             if p.macros != saved {
                 p.macros = saved;
                 self.library_dirty
@@ -1516,7 +1598,10 @@ impl GuitarRigBackend {
         tracing::info!(model = %path, "drive calibration: not measured yet — measuring in the background");
         let backend = self.clone();
         std::thread::spawn(move || {
-            let _ = signal_sampler::nam_calibrate::drive_curve(std::path::Path::new(&path), sample_rate);
+            let _ = signal_sampler::nam_calibrate::drive_curve(
+                std::path::Path::new(&path),
+                sample_rate,
+            );
             PENDING.lock_ok().retain(|p| p != &path);
             let _ = backend;
         });
@@ -1571,7 +1656,11 @@ impl GuitarRigBackend {
                 let dps = self.drive_presets.lock_ok();
                 let mut built = profile_from_library(&def, &dps);
                 for patch in &mut built.patches {
-                    if let Some(d) = def.patches.iter().find(|d| d.name.eq_ignore_ascii_case(&patch.name)) {
+                    if let Some(d) = def
+                        .patches
+                        .iter()
+                        .find(|d| d.name.eq_ignore_ascii_case(&patch.name))
+                    {
                         crate::macros::apply_positions_for_level(d, &comp, patch);
                     }
                 }
@@ -1590,23 +1679,22 @@ impl GuitarRigBackend {
             }
             self.publish_levelling();
 
-            let measured: Vec<Option<f32>> =
-                crate::levelling::par_map(&patches, 0, |patch| {
-                    let lufs = crate::measure::patch_lufs(patch, sample_rate);
-                    tracing::info!(patch = %patch.name, pass, lufs, "patch levelling: measured");
-                    {
-                        let mut progress = self.levelling.lock_ok();
-                        progress.done += 1;
-                        progress.patch.clone_from(&patch.name);
-                        progress.results.push(signal_guitar_proto::PatchLevel {
-                            patch: patch.name.clone(),
-                            lufs: lufs.unwrap_or(f32::NEG_INFINITY),
-                            trim_db: lufs.map_or(f32::NAN, |l| target_of(&patch.name) - l),
-                        });
-                    }
-                    self.publish_levelling();
-                    lufs
-                });
+            let measured: Vec<Option<f32>> = crate::levelling::par_map(&patches, 0, |patch| {
+                let lufs = crate::measure::patch_lufs(patch, sample_rate);
+                tracing::info!(patch = %patch.name, pass, lufs, "patch levelling: measured");
+                {
+                    let mut progress = self.levelling.lock_ok();
+                    progress.done += 1;
+                    progress.patch.clone_from(&patch.name);
+                    progress.results.push(signal_guitar_proto::PatchLevel {
+                        patch: patch.name.clone(),
+                        lufs: lufs.unwrap_or(f32::NEG_INFINITY),
+                        trim_db: lufs.map_or(f32::NAN, |l| target_of(&patch.name) - l),
+                    });
+                }
+                self.publish_levelling();
+                lufs
+            });
 
             let errors: Vec<(String, f32)> = patches
                 .iter()
@@ -1666,6 +1754,41 @@ impl GuitarRigBackend {
     /// Pre-measure drive curves for every NAM the profile can reach (drive
     /// preset options + the pool presets) — the import-time offline test.
     /// Runs on its own thread; results land in the on-disk cache.
+    /// Follow the band's tempo (`signal_rig_host::tempo`) when another rig
+    /// sets it — the keys rig's tap or a keys stack's song: the delays retime
+    /// as they do on a tap here. Ends when this session is dropped.
+    fn spawn_tempo_follow(&self) {
+        let session = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("guitar-tempo-follow".into())
+            .spawn(move || {
+                let mut seen = signal_rig_host::tempo::generation();
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    // Only this thread's clone left: the session is gone.
+                    if Arc::strong_count(&session.tempo) <= 1 {
+                        return;
+                    }
+                    let now = signal_rig_host::tempo::generation();
+                    if now == seen {
+                        continue;
+                    }
+                    seen = now;
+                    let Some(bpm) = signal_rig_host::tempo::get() else {
+                        continue;
+                    };
+                    let ours = *session.tempo.lock_ok();
+                    if ours.is_some_and(|t| (t - bpm).abs() < 0.05) {
+                        continue; // our own tap, already applied
+                    }
+                    *session.tempo.lock_ok() = Some(bpm);
+                    session.mark_state_dirty();
+                    session.apply_tempo_to_delays();
+                    session.events.publish(RigEvent::Perf(Rig::perf(&session)));
+                }
+            });
+    }
+
     fn spawn_drive_calibration(&self) {
         let backend = self.clone();
         std::thread::spawn(move || backend.run_drive_calibration());
@@ -1750,6 +1873,32 @@ impl GuitarRigBackend {
     }
 
     /// Footswitch `sw` (0-based) tapped: whatever job it has right now.
+    /// A learned pedal went down (or up): do what its switch does. A stack
+    /// switch is pressed on the way down and, when momentary, let go on the
+    /// way up (`release_stack` ignores a latching one); the rest act on the
+    /// press.
+    fn fire_switch(&self, target: &str, pressed: bool) {
+        tracing::info!(target, pressed, "learned pedal");
+        if let Some(i) = target.strip_prefix("stack:").and_then(|i| i.parse::<u32>().ok()) {
+            if pressed {
+                Rig::press_stack(self, i);
+            } else {
+                Rig::release_stack(self, i);
+            }
+            return;
+        }
+        if !pressed {
+            return;
+        }
+        match target {
+            "tap" => Rig::tap_tempo(self),
+            "fx" => Rig::toggle_fx(self),
+            "boost" => Rig::toggle_boost(self),
+            "tuner" => Rig::toggle_tuner(self),
+            other => tracing::warn!(target = other, "learned pedal for an unknown switch"),
+        }
+    }
+
     fn switch_tap(&self, sw: usize) {
         let job = self.switch_job(sw);
         match job.as_str() {
@@ -1975,7 +2124,9 @@ impl GuitarRigBackend {
             *last = Some(std::time::Instant::now());
         }
         let Some(bin) = signal_phones::find_binary() else {
-            tracing::warn!("phones mixer: no signal-phones binary beside the app — the mix will not play");
+            tracing::warn!(
+                "phones mixer: no signal-phones binary beside the app — the mix will not play"
+            );
             return;
         };
         match signal_phones::spawn(&bin, link.path(), &signal_phones::default_log_path()) {
@@ -1988,7 +2139,9 @@ impl GuitarRigBackend {
     /// changes.
     fn supervise_phones(&self) {
         use signal_guitar_proto::{PhonesMixer, PhonesMixerState};
-        let on = self.phones_mixer_on.load(std::sync::atomic::Ordering::Relaxed);
+        let on = self
+            .phones_mixer_on
+            .load(std::sync::atomic::Ordering::Relaxed);
         let now = match (&self.phones, on) {
             (Some(link), true) => {
                 self.ensure_phones_mixer();
@@ -1996,7 +2149,9 @@ impl GuitarRigBackend {
                 PhonesMixer {
                     enabled: true,
                     state: match (st.running, st.state) {
-                        (false, _) | (true, signal_phones::MixerState::Idle) => PhonesMixerState::STARTING,
+                        (false, _) | (true, signal_phones::MixerState::Idle) => {
+                            PhonesMixerState::STARTING
+                        }
                         (true, signal_phones::MixerState::Streaming) => PhonesMixerState::PLAYING,
                         (true, signal_phones::MixerState::NoDevice) => PhonesMixerState::NO_DEVICE,
                     },
@@ -2024,7 +2179,11 @@ impl GuitarRigBackend {
     /// The incoming mix's meter, dBFS — while the mixer plays it.
     fn phones_meter(&self) -> (f32, f32) {
         match &self.phones {
-            Some(link) if self.phones_mixer_on.load(std::sync::atomic::Ordering::Relaxed) => {
+            Some(link)
+                if self
+                    .phones_mixer_on
+                    .load(std::sync::atomic::Ordering::Relaxed) =>
+            {
                 link.meter_db()
             }
             _ => (-90.0, -90.0),
@@ -2073,7 +2232,8 @@ impl GuitarRigBackend {
         let Some(st) = RigLibrary::load_last_state() else {
             return;
         };
-        *self.perform_mode.lock_ok() = st.perform_mode.min(2);
+        // A state saved in the old Preset mode opens in Profile.
+        *self.perform_mode.lock_ok() = if st.perform_mode == 0 { 1 } else { st.perform_mode.min(2) };
         {
             let mut hp = self.headphone.lock_ok();
             let fader = |v: f32, d: f32| if v.is_finite() { v.clamp(0.0, 1.0) } else { d };
@@ -2104,6 +2264,7 @@ impl GuitarRigBackend {
         *self.part_index.lock_ok() = (st.part_index as usize).min(parts.saturating_sub(1));
         if st.tempo_bpm > 0.0 {
             *self.tempo.lock_ok() = Some(st.tempo_bpm.clamp(40.0, 300.0));
+            signal_rig_host::tempo::set(st.tempo_bpm.clamp(40.0, 300.0));
         }
         if !st.active_patch.is_empty() {
             // Recorded whether or not an engine exists: design mode reads it
@@ -2135,7 +2296,9 @@ impl GuitarRigBackend {
         // With the phones on outputs of their own, the mute is the main
         // pair's alone and the phones keep the guitar; on one shared pair it
         // is the master's.
-        let routed = self.phones_routing.load(std::sync::atomic::Ordering::Relaxed);
+        let routed = self
+            .phones_routing
+            .load(std::sync::atomic::Ordering::Relaxed);
         GuitarRig::set_main_pair_mute(routed && mute);
         {
             let guard = self.rig.lock_ok();
@@ -2195,6 +2358,42 @@ impl GuitarRigBackend {
             }
         }
         tracing::info!("tap tempo: {bpm:.1} BPM → delay time {quarter_ms:.0} ms");
+        self.retime_synced_reverbs(None);
+    }
+
+    /// Give every reverb locked to the tempo (`sync_div`) the decay that
+    /// rings for its beats now — or only `only`'s. The engine has no tempo
+    /// of its own for a reverb, so the rig does it on a tempo change, a
+    /// patch load and an algorithm change.
+    fn retime_synced_reverbs(&self, only: Option<&str>) {
+        let Some(bpm) = *self.tempo.lock_ok() else { return };
+        let writes: Vec<(String, f32)> = self
+            .blocks
+            .lock_ok()
+            .iter()
+            .filter(|b| b.block_type == BlockType::Reverb && only.is_none_or(|id| b.id == id))
+            .filter_map(|b| {
+                let v = |n: &str| b.params.iter().find(|p| p.name == n).map_or(0.0, |p| p.value);
+                crate::time_sync::reverb_synced_decay(v("algorithm"), v("variant"), v("sync_div"), bpm as f32).map(|d| (b.id.clone(), d))
+            })
+            .collect();
+        for (id, decay) in writes {
+            self.write_live_param(&id, "decay", decay);
+        }
+        // The modulations locked to it: their rate, a cycle in their beats.
+        let rates: Vec<(String, f32)> = self
+            .blocks
+            .lock_ok()
+            .iter()
+            .filter(|b| crate::time_sync::is_modulation(b.block_type) && only.is_none_or(|id| b.id == id))
+            .filter_map(|b| {
+                let div = b.params.iter().find(|p| p.name == "sync_div").map_or(0.0, |p| p.value);
+                crate::time_sync::mod_synced_rate(div, bpm as f32).map(|hz| (b.id.clone(), hz))
+            })
+            .collect();
+        for (id, hz) in rates {
+            self.write_live_param(&id, "rate", hz);
+        }
     }
 
     /// The boost currently applied (0.0 while disengaged).
@@ -2312,7 +2511,9 @@ impl GuitarRigBackend {
                 };
                 self.edit_song_version(&song, &patch_name, move |v| {
                     match v.overrides.iter_mut().find(|o| {
-                        o.block.eq_ignore_ascii_case(&ov.block) && o.op == ov.op && o.param == ov.param
+                        o.block.eq_ignore_ascii_case(&ov.block)
+                            && o.op == ov.op
+                            && o.param == ov.param
                     }) {
                         Some(o) => o.value = ov.value,
                         None => v.overrides.push(ov),
@@ -2447,7 +2648,9 @@ impl GuitarRigBackend {
     fn profile_with_audition(&self) -> signal_sampler::rig_profile::RigProfile {
         let mut def = self.profile_def.lock_ok().clone();
         if let Some((preset, snapshot)) = self.audition.lock_ok().clone() {
-            if let Some(patch) = crate::compose::snapshot_patch(&def, &preset, &snapshot, AUDITION_PATCH) {
+            if let Some(patch) =
+                crate::compose::snapshot_patch(&def, &preset, &snapshot, AUDITION_PATCH)
+            {
                 def.patches.push(patch);
             }
         }
@@ -2460,11 +2663,30 @@ impl GuitarRigBackend {
         self.audition.lock_ok().take();
     }
 
+    /// Put Core preset `preset` (snapshot `snapshot`, its first when
+    /// empty) under the live patch: its core tone. The patch's own Drive and
+    /// Amp picks and its edits on the core's blocks go, so the Core takes —
+    /// what the patch picks around it (Time, block presets…) stays.
+    fn choose_core(&self, preset: String, snapshot: String) {
+        let comp = RigLibrary::load_compositions();
+        let Some(found) = comp.preset(&preset) else {
+            tracing::warn!(%preset, "choose_core: no such Core preset");
+            return;
+        };
+        let snapshot = if snapshot.is_empty() { found.snapshots.first().map(|s| s.name.clone()).unwrap_or_default() } else { snapshot };
+        let name = found.name.clone();
+        self.end_audition();
+        self.edit_live_patch(move |patch| crate::compose::put_core(patch, &name, &snapshot));
+    }
+
     /// Change the live patch's definition, save it, and rebuild so it is heard.
     fn edit_live_patch(&self, edit: impl FnOnce(&mut crate::profiles::PatchDef)) {
         let Some(name) = self.live_patch_name() else {
             return;
         };
+        if let Some(undo) = self.browse_undo.lock_ok().as_mut() {
+            undo.2 = true;
+        }
         // In a song, a profile patch's change (a module or preset pick) is
         // the song's: its version of the patch.
         if let Some(song) = self.song_edit_target(&name) {
@@ -2507,10 +2729,16 @@ impl GuitarRigBackend {
     fn effective_patch(&self, name: &str) -> Option<crate::profiles::PatchDef> {
         let song = self.current_song_def();
         let def = self.profile_def.lock_ok();
-        let base = def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(name))?;
+        let base = def
+            .patches
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(name))?;
         Some(match song {
             Some(sd) if base.song.is_empty() => {
-                let one = crate::profiles::ProfileDef { patches: vec![base.clone()], ..def.clone() };
+                let one = crate::profiles::ProfileDef {
+                    patches: vec![base.clone()],
+                    ..def.clone()
+                };
                 sd.apply_to(&one).patches.remove(0)
             }
             _ => base.clone(),
@@ -2530,10 +2758,20 @@ impl GuitarRigBackend {
 
     /// Apply `edit` to the song's version of profile patch `name` (made from
     /// the profile's on first use).
-    fn edit_song_version(&self, song: &str, name: &str, edit: impl FnOnce(&mut crate::profiles::PatchDef)) {
+    fn edit_song_version(
+        &self,
+        song: &str,
+        name: &str,
+        edit: impl FnOnce(&mut crate::profiles::PatchDef),
+    ) {
         let (profile, base) = {
             let def = self.profile_def.lock_ok();
-            let Some(b) = def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(name)).cloned() else {
+            let Some(b) = def
+                .patches
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(name))
+                .cloned()
+            else {
                 return;
             };
             (def.name.clone(), b)
@@ -2546,7 +2784,9 @@ impl GuitarRigBackend {
                 let v = sd.version_mut(&profile, &base);
                 for ov in legacy {
                     match v.overrides.iter_mut().find(|o| {
-                        o.block.eq_ignore_ascii_case(&ov.block) && o.op == ov.op && o.param == ov.param
+                        o.block.eq_ignore_ascii_case(&ov.block)
+                            && o.op == ov.op
+                            && o.param == ov.param
                     }) {
                         Some(o) => o.value = ov.value,
                         None => v.overrides.push(ov),
@@ -2671,7 +2911,12 @@ impl GuitarRigBackend {
                         } else {
                             d.rig_preset.clone()
                         };
-                        (points_at, rig_preset, d.snapshot.clone(), d.override_modules())
+                        (
+                            points_at,
+                            rig_preset,
+                            d.snapshot.clone(),
+                            d.override_modules(),
+                        )
                     })
                     .unwrap_or_default();
                 PatchInfo {
@@ -2755,7 +3000,12 @@ impl GuitarRigBackend {
     }
 
     fn design_blocks(&self) -> Vec<LiveBlock> {
-        let wanted = self.design_patch.lock_ok().clone();
+        // A design run can name the patch to show (`SIGNAL_RIG_DESIGN_PATCH`):
+        // the shot tools look at a page on any patch that way.
+        let wanted = std::env::var("SIGNAL_RIG_DESIGN_PATCH")
+            .ok()
+            .filter(|p| !p.is_empty() && crate::library::rig_is_design())
+            .unwrap_or_else(|| self.design_patch.lock_ok().clone());
         let def = self.profile_def.lock_ok();
         let dps = self.drive_presets.lock_ok();
         let profile = profile_from_library(&self.effective_def(&def), &dps);
@@ -2771,6 +3021,17 @@ impl GuitarRigBackend {
             .or_else(|| profile.patches.first().cloned());
         let Some(patch) = active else {
             return Vec::new();
+        };
+        // The block presets the patch picks (as the live chain names them):
+        // a surface draws a pre effect by its preset (the Aqua-Puss, the
+        // Gravity Tank), so without them it fell back to a card.
+        let picks = {
+            let comp = RigLibrary::load_compositions();
+            def.patches
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&patch.name))
+                .map(|own| crate::compose::block_picks(&comp, own))
+                .unwrap_or_default()
         };
         patch
             .chain
@@ -2833,13 +3094,21 @@ impl GuitarRigBackend {
                     // board had no name to show and read as an empty slot —
                     // "the amp is missing" — when the block was there all
                     // along with a capture in it.
-                    preset: Self::asset_stem(block.asset_path()),
+                    preset: Some(Self::asset_stem(block.asset_path()))
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| picks.iter().find(|c| c.block.eq_ignore_ascii_case(&block.name)).map(|c| c.preset.clone()))
+                        .unwrap_or_default(),
                     options: Vec::new(),
                     option: 0,
                     output_level_db: None,
                     overridden: false,
                     detail: String::new(),
-                    asset: String::new(),
+                    // The file it plays, as the live chain names it (the
+                    // amp row shows a second amp only when it plays one).
+                    asset: std::path::Path::new(block.asset_path())
+                        .file_name()
+                        .map(|f| f.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
                     empty: false,
                 }
             })
@@ -2873,7 +3142,10 @@ impl GuitarRigBackend {
             return;
         };
         let put = |list: &mut Vec<crate::profiles::StackDefaultDef>| {
-            match list.iter_mut().find(|d| d.stack.eq_ignore_ascii_case(&stack)) {
+            match list
+                .iter_mut()
+                .find(|d| d.stack.eq_ignore_ascii_case(&stack))
+            {
                 Some(d) => {
                     d.momentary = momentary;
                     d.no_rotate = no_rotate;
@@ -2948,7 +3220,11 @@ impl GuitarRigBackend {
     }
 
     fn switch_mode(&self, index: usize) -> crate::profiles::SwitchMode {
-        self.switch_modes.lock_ok().get(index).copied().unwrap_or_default()
+        self.switch_modes
+            .lock_ok()
+            .get(index)
+            .copied()
+            .unwrap_or_default()
     }
 
     /// The song that is up — only in Setlist mode: in Profile (or Preset)
@@ -2959,7 +3235,9 @@ impl GuitarRigBackend {
             return None;
         }
         let idx = *self.song_index.lock_ok();
-        self.resolved_setlist().get(idx).map(|(name, ..)| name.clone())
+        self.resolved_setlist()
+            .get(idx)
+            .map(|(name, ..)| name.clone())
     }
 
     /// The patch playing now.
@@ -2986,7 +3264,9 @@ impl GuitarRigBackend {
         let mut defaults: Vec<crate::profiles::StackDefaultDef> = if profile_switches {
             Vec::new()
         } else {
-            song.as_ref().map(|s| s.stack_defaults.clone()).unwrap_or_default()
+            song.as_ref()
+                .map(|s| s.stack_defaults.clone())
+                .unwrap_or_default()
         };
         for d in &part_defaults {
             defaults.retain(|x| !x.stack.eq_ignore_ascii_case(&d.stack));
@@ -3035,7 +3315,10 @@ impl GuitarRigBackend {
             .flat_map(|s| s.switch_actions.iter())
             .chain(part.iter().flat_map(|p| p.switch_actions.iter()));
         for a in assigned {
-            if let Some(slot) = (a.switch as usize).checked_sub(1).and_then(|i| jobs.get_mut(i)) {
+            if let Some(slot) = (a.switch as usize)
+                .checked_sub(1)
+                .and_then(|i| jobs.get_mut(i))
+            {
                 if !a.action.is_empty() {
                     *slot = a.action.clone();
                 }
@@ -3183,7 +3466,8 @@ impl GuitarRigBackend {
                 Some(p) => (p.rig().take_di_capture(), p.rig().take_output_capture()),
                 None => return,
             };
-            let dir = std::env::var("SIGNAL_SWITCH_PROBE_DIR").unwrap_or_else(|_| "/Volumes/dev-drive/logs".into());
+            let dir = std::env::var("SIGNAL_SWITCH_PROBE_DIR")
+                .unwrap_or_else(|_| "/Volumes/dev-drive/logs".into());
             let stamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs());
@@ -3315,7 +3599,11 @@ impl GuitarRigBackend {
                                     .is_some_and(|r| r.profile_switches),
                                 repeat_of: {
                                     let src = s.source_part(&name);
-                                    if src.eq_ignore_ascii_case(&name) { String::new() } else { src }
+                                    if src.eq_ignore_ascii_case(&name) {
+                                        String::new()
+                                    } else {
+                                        src
+                                    }
                                 },
                                 name,
                                 patch,
@@ -3345,6 +3633,7 @@ impl GuitarRigBackend {
         };
         *self.part_index.lock_ok() = 0;
         *self.tempo.lock_ok() = Some(bpm as f32);
+        signal_rig_host::tempo::set(bpm as f32);
         self.mark_state_dirty();
         let (profile, start_part, defaults, start_patch) = self
             .songs_lib
@@ -3482,8 +3771,11 @@ impl GuitarRigBackend {
             Ok(g) => {
                 self.audio_error.lock_ok().clear();
                 let mic = mgr.audio.input_device.to_lowercase();
-                let silenced = mic.contains("microphone") || mic.ends_with(" mic") || mic.is_empty() && mgr.audio.allow_builtin_mic;
-                self.input_silenced.store(silenced, std::sync::atomic::Ordering::Relaxed);
+                let silenced = mic.contains("microphone")
+                    || mic.ends_with(" mic")
+                    || mic.is_empty() && mgr.audio.allow_builtin_mic;
+                self.input_silenced
+                    .store(silenced, std::sync::atomic::Ordering::Relaxed);
                 if silenced {
                     g.set_input_mute(true);
                     tracing::warn!(input = %mgr.audio.input_device, "input is a built-in mic — opened silent (no interface; nothing to play through)");
@@ -3574,7 +3866,11 @@ impl GuitarRigBackend {
                 let patch = patch?;
                 let second = block.name.eq_ignore_ascii_case("Amp R");
                 if patch.rig_preset.is_empty() {
-                    let pool = if second { &patch.preset2 } else { &patch.preset };
+                    let pool = if second {
+                        &patch.preset2
+                    } else {
+                        &patch.preset
+                    };
                     return Some(LevelHome::Pool { name: pool.clone() });
                 }
                 crate::compose::module_picks(comp, patch)
@@ -3598,7 +3894,11 @@ impl GuitarRigBackend {
         home: &LevelHome,
     ) -> Option<f32> {
         match home {
-            LevelHome::Amp { preset, snapshot, second } => comp
+            LevelHome::Amp {
+                preset,
+                snapshot,
+                second,
+            } => comp
                 .module("Amp", preset)?
                 .snapshots
                 .iter()
@@ -3641,7 +3941,11 @@ impl GuitarRigBackend {
                 .and_then(|prig| prig.active_patch().map(|p| p.name.clone()));
             let patch = active.and_then(|name| self.effective_patch(&name));
             let def = self.profile_def.lock_ok();
-            (patch, self.drive_presets.lock_ok().clone(), def.presets.clone())
+            (
+                patch,
+                self.drive_presets.lock_ok().clone(),
+                def.presets.clone(),
+            )
         };
         let active_overrides: Vec<crate::profiles::OverrideDef> = {
             let active = self
@@ -3796,8 +4100,58 @@ impl GuitarRigBackend {
                                 // which cab rather than "Cab L".
                                 (Self::asset_stem(&block.ir), Vec::new(), 0)
                             } else {
-                                <(String, Vec<String>, u32)>::default()
+                                // Any other block: the block preset the patch
+                                // picks for it (module snapshot, preset
+                                // snapshot, then the patch's own), so a
+                                // surface can name and draw what is loaded.
+                                def.patches
+                                    .iter()
+                                    .find(|p| p.name.eq_ignore_ascii_case(&patch.name))
+                                    .and_then(|own| {
+                                        crate::compose::block_picks(&comp, own)
+                                            .into_iter()
+                                            .find(|c| c.block.eq_ignore_ascii_case(&name))
+                                    })
+                                    .map(|c| (c.preset, Vec::new(), 0))
+                                    .unwrap_or_default()
                             }
+                        };
+                        // An amp's capture file: its Amp module
+                        // snapshot's `nam` (Amp L) or `nam2` (Amp R), else
+                        // the pool preset the patch points at — what the
+                        // amp plays, for the surface to name (and draw).
+                        let asset = if block.block_type == BlockType::Amp {
+                            let def = self.profile_def.lock_ok();
+                            let right = name.eq_ignore_ascii_case("Amp R");
+                            let own = def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&patch.name));
+                            let composed = own.and_then(|own| {
+                                let pick = crate::compose::module_picks(&comp, own)
+                                    .into_iter()
+                                    .find(|m| m.module.eq_ignore_ascii_case("Amp"))?;
+                                let module = comp.module("Amp", &pick.preset)?;
+                                let snap = module
+                                    .snapshots
+                                    .iter()
+                                    .find(|s| s.name.eq_ignore_ascii_case(&pick.snapshot))
+                                    .or_else(|| module.snapshots.first())?;
+                                Some(if right { snap.nam2.clone() } else { snap.nam.clone() })
+                            });
+                            let pooled = || {
+                                let preset = if right {
+                                    own.map(|p| p.preset2.clone()).unwrap_or_default()
+                                } else {
+                                    pool_preset_of(&def, &patch.name).unwrap_or_default()
+                                };
+                                def.presets
+                                    .iter()
+                                    .find(|p| p.name.eq_ignore_ascii_case(&preset))
+                                    .map(|p| p.nam.clone())
+                                    .unwrap_or_default()
+                            };
+                            let path = composed.filter(|n| !n.is_empty()).unwrap_or_else(pooled);
+                            std::path::Path::new(&path).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default()
+                        } else {
+                            String::new()
                         };
                         out.push(LiveBlock {
                             id: id.clone(),
@@ -3819,7 +4173,7 @@ impl GuitarRigBackend {
                                     Self::stored_level(&comp, &level_drives, &level_pool, &h)
                                 }),
                                 detail: String::new(),
-                                asset: String::new(),
+                                asset,
                                 empty: false,
                         });
                     }
@@ -3832,6 +4186,15 @@ impl GuitarRigBackend {
         self.macros_rebase();
         self.sync_view();
         *self.live_view_patch.lock_ok() = self.live_patch_name().unwrap_or_default();
+    }
+
+    /// Lay the profile out with no audio device open — a phone with no
+    /// interface plugged in: the active patch's chain from its definition,
+    /// marked as not playing, every patch choosable and editable. The device
+    /// opens on the same patch when [`start`](RigBackend::start) runs.
+    pub fn show_without_audio(&self) {
+        self.show_chain_offline(signal_guitar_proto::BlockEngine::NO_AUDIO);
+        self.publish_state();
     }
 
     /// Show the active patch's chain from its definition, every block marked
@@ -3908,8 +4271,12 @@ impl GuitarRigBackend {
     fn sync_view(&self) -> bool {
         let (patch, ids, live) = {
             let guard = self.rig.lock_ok();
-            let Some(prig) = guard.as_ref() else { return false };
-            let Some(patch) = prig.active_patch().cloned() else { return false };
+            let Some(prig) = guard.as_ref() else {
+                return false;
+            };
+            let Some(patch) = prig.active_patch().cloned() else {
+                return false;
+            };
             (patch, prig.active_block_ids(), prig.live_state())
         };
         let reals: Vec<&RigBlock> = patch.chain.iter().filter(|b| b.has_backend()).collect();
@@ -3920,7 +4287,9 @@ impl GuitarRigBackend {
                 if signal_sampler::block_params::native_writes(block).is_none() {
                     continue;
                 }
-                let Some(view) = blocks.iter_mut().find(|b| b.id == *id) else { continue };
+                let Some(view) = blocks.iter_mut().find(|b| b.id == *id) else {
+                    continue;
+                };
                 // Due: the definition, then the live writes in order.
                 let mut due: Vec<(String, f32)> = Vec::new();
                 for p in &view.params {
@@ -3949,7 +4318,9 @@ impl GuitarRigBackend {
                             p.value = v;
                         }
                     }
-                    if view.param_name.as_deref() == Some(name.as_str()) && view.param_value.to_bits() != v.to_bits() {
+                    if view.param_name.as_deref() == Some(name.as_str())
+                        && view.param_value.to_bits() != v.to_bits()
+                    {
                         view.param_value = v;
                     }
                 }
@@ -3966,8 +4337,12 @@ impl GuitarRigBackend {
     /// song has it. Called whenever the chain mirror is rebuilt: every
     /// switch and reload.
     fn apply_song_patch_overrides(&self) {
-        let Some(song) = self.current_song_def() else { return };
-        let Some(patch) = self.live_patch_name() else { return };
+        let Some(song) = self.current_song_def() else {
+            return;
+        };
+        let Some(patch) = self.live_patch_name() else {
+            return;
+        };
         let ovs = song.patch_overrides_for(&patch);
         if ovs.is_empty() {
             return;
@@ -3975,7 +4350,10 @@ impl GuitarRigBackend {
         for ov in &ovs {
             let id = {
                 let mut blocks = self.blocks.lock_ok();
-                let Some(b) = blocks.iter_mut().find(|b| b.name.eq_ignore_ascii_case(&ov.block)) else {
+                let Some(b) = blocks
+                    .iter_mut()
+                    .find(|b| b.name.eq_ignore_ascii_case(&ov.block))
+                else {
                     continue;
                 };
                 match ov.op.as_str() {
@@ -4020,7 +4398,12 @@ impl GuitarRigBackend {
             songs
                 .iter_mut()
                 .find(|x| x.name.eq_ignore_ascii_case(&song))
-                .map(|sd| (sd.take_version(&profile, patch), sd.take_patch_overrides(patch)))
+                .map(|sd| {
+                    (
+                        sd.take_version(&profile, patch),
+                        sd.take_patch_overrides(patch),
+                    )
+                })
                 .unwrap_or_default()
         };
         if version.is_none() && taken.is_empty() {
@@ -4029,12 +4412,20 @@ impl GuitarRigBackend {
         let changed = version.as_ref().map_or(0, |_| 1) + taken.len();
         let rebuilt = {
             let mut def = self.profile_def.lock_ok();
-            let Some(p) = def.patches.iter_mut().find(|p| p.name.eq_ignore_ascii_case(patch)) else {
+            let Some(p) = def
+                .patches
+                .iter_mut()
+                .find(|p| p.name.eq_ignore_ascii_case(patch))
+            else {
                 return format!("The profile has no patch {patch}.");
             };
             // The song's version becomes the profile's patch.
             if let Some(v) = version {
-                *p = crate::profiles::PatchDef { name: p.name.clone(), song: String::new(), ..v };
+                *p = crate::profiles::PatchDef {
+                    name: p.name.clone(),
+                    song: String::new(),
+                    ..v
+                };
             }
             for ov in &taken {
                 match p.overrides.iter_mut().find(|o| {
@@ -4050,7 +4441,8 @@ impl GuitarRigBackend {
         };
         RigLibrary::save_songs(&self.songs_lib.lock_ok());
         self.reload_rebuilt(rebuilt);
-        let msg = format!("{patch}: {song}'s version saved to the profile ({changed} change set(s)).");
+        let msg =
+            format!("{patch}: {song}'s version saved to the profile ({changed} change set(s)).");
         tracing::info!(%song, %patch, changes = changed, "song changes saved back to the profile");
         self.publish_state();
         msg
@@ -4067,7 +4459,12 @@ impl GuitarRigBackend {
             songs
                 .iter_mut()
                 .find(|x| x.name.eq_ignore_ascii_case(&song))
-                .map(|sd| (sd.take_version(&profile, patch), sd.take_patch_overrides(patch)))
+                .map(|sd| {
+                    (
+                        sd.take_version(&profile, patch),
+                        sd.take_patch_overrides(patch),
+                    )
+                })
                 .unwrap_or_default()
         };
         if version.is_none() && taken.is_empty() {
@@ -4080,16 +4477,36 @@ impl GuitarRigBackend {
             self.reload_for_song();
             tracing::info!(%song, %patch, "song's version of the patch discarded");
             self.publish_state();
-            return format!("{song}'s version of {patch} discarded — it plays as the profile has it.");
+            return format!(
+                "{song}'s version of {patch} discarded — it plays as the profile has it."
+            );
         }
         // Put the patch's own values back on the live chain.
         let built = self.rig.lock_ok().as_ref().and_then(|prig| {
-            prig.patches().iter().find(|p| p.name.eq_ignore_ascii_case(patch)).cloned()
+            prig.patches()
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(patch))
+                .cloned()
         });
-        if let (Some(built), true) = (built, self.live_patch_name().is_some_and(|n| n.eq_ignore_ascii_case(patch))) {
+        if let (Some(built), true) = (
+            built,
+            self.live_patch_name()
+                .is_some_and(|n| n.eq_ignore_ascii_case(patch)),
+        ) {
             for ov in &taken {
-                let Some(b) = built.chain.iter().find(|b| b.name.eq_ignore_ascii_case(&ov.block)) else { continue };
-                let id = self.blocks.lock_ok().iter().find(|x| x.name.eq_ignore_ascii_case(&ov.block)).map(|x| x.id.clone());
+                let Some(b) = built
+                    .chain
+                    .iter()
+                    .find(|b| b.name.eq_ignore_ascii_case(&ov.block))
+                else {
+                    continue;
+                };
+                let id = self
+                    .blocks
+                    .lock_ok()
+                    .iter()
+                    .find(|x| x.name.eq_ignore_ascii_case(&ov.block))
+                    .map(|x| x.id.clone());
                 let Some(id) = id else { continue };
                 match ov.op.as_str() {
                     "bypass" => {
@@ -4178,10 +4595,16 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("fold", 0.0, 1.0, 0.0),
             ("style", 0.0, 4.0, 0.0),
         ]),
+        // mode: 0 gate, 1 expander (2:1 under the threshold); range: how
+        // far it closes (dB); hold (ms) and hysteresis (dB) before it does.
         BlockType::Gate => owned(&[
             ("threshold", -90.0, 0.0, -50.0),
             ("attack", 0.1, 50.0, 1.0),
             ("release", 5.0, 500.0, 120.0),
+            ("mode", 0.0, 1.0, 0.0),
+            ("range", 0.0, 90.0, 90.0),
+            ("hold", 0.0, 500.0, 0.0),
+            ("hysteresis", 0.0, 12.0, 0.0),
         ]),
         BlockType::Volume => owned(&[("gain_db", -24.0, 24.0, 0.0), ("pan", -1.0, 1.0, 0.0)]),
         // The octaver / harmony: voice A (semitones + cents at a_level),
@@ -4245,6 +4668,8 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("damping", 0.0, 1.0, 0.3),
             ("tone", -1.0, 1.0, 0.0),
             ("pan_a", -1.0, 1.0, 0.0),
+            // Locked to the tempo: the tail's beats (`time_sync`; 0 free).
+            ("sync_div", 0.0, 7.0, 0.0),
             // The dry guitar through the block; the reverb is added in
             // parallel at `level`.
             ("dry", 0.0, 1.0, 1.0),
@@ -4269,6 +4694,8 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             // BBD, Tape, Orbit, Juno, CE-2, Dimension, Clone, Tri-Chorus,
             // SCF, Julia.
             ("engine", 0.0, 10.0, 0.0),
+            // Locked to the tempo: the cycle's beats (`time_sync`; 0 free).
+            ("sync_div", 0.0, 8.0, 0.0),
             // The engine's own colour — the wet's tone on most (0.5 = the
             // unit as built), pre-delay on the SCF, Lag on the Julia.
             ("color", 0.0, 1.0, 0.5),
@@ -4281,6 +4708,7 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("mix", 0.0, 1.0, 1.0),
             ("rate", 0.05, 12.0, 4.0),
             ("mode", 0.0, 2.0, 1.0),
+            ("sync_div", 0.0, 8.0, 0.0),
         ]),
         _ => Vec::new(),
     }
@@ -4434,6 +4862,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         start_patch: String::new(),
         song_changes: Vec::new(),
         switch_actions: Vec::new(),
+        learn: signal_rigs_proto::SwitchLearn::default(),
     }
 }
 
@@ -4594,12 +5023,13 @@ impl RigBackend for GuitarRigBackend {
             // A rolling window of the same instrument, so the compressor's
             // traces sweep rather than sit still.
             let (wave_in, wave_gr) = crate::design::traces(t, 120);
-            self.events.publish(RigEvent::CompWave(signal_guitar_proto::CompTrace {
-                block: crate::profiles::PRE_COMP.to_string(),
-                input: wave_in,
-                gr: wave_gr,
-                gr_db: 0.0,
-            }));
+            self.events
+                .publish(RigEvent::CompWave(signal_guitar_proto::CompTrace {
+                    block: crate::profiles::PRE_COMP.to_string(),
+                    input: wave_in,
+                    gr: wave_gr,
+                    gr_db: 0.0,
+                }));
             return;
         }
         if let Some(bins) = self.input_spectrum() {
@@ -4624,12 +5054,13 @@ impl RigBackend for GuitarRigBackend {
                 fx_blocks::comp_meter::clear(ch);
             }
             let (input, gr) = fx_blocks::comp_meter::wave_snapshot_of(ch, 3);
-            self.events.publish(RigEvent::CompWave(signal_guitar_proto::CompTrace {
-                block: name,
-                input,
-                gr,
-                gr_db: fx_blocks::comp_meter::gr_db_of(ch),
-            }));
+            self.events
+                .publish(RigEvent::CompWave(signal_guitar_proto::CompTrace {
+                    block: name,
+                    input,
+                    gr,
+                    gr_db: fx_blocks::comp_meter::gr_db_of(ch),
+                }));
         }
     }
 }
@@ -4802,15 +5233,26 @@ impl Rig for GuitarRigBackend {
                         .iter()
                         .filter(|v| v.profile.eq_ignore_ascii_case(&prof.name))
                         .map(|v| v.patch.name.clone())
-                        .chain(def.patch_overrides.iter().filter(|e| !e.overrides.is_empty()).map(|e| e.patch.clone()))
+                        .chain(
+                            def.patch_overrides
+                                .iter()
+                                .filter(|e| !e.overrides.is_empty())
+                                .map(|e| e.patch.clone()),
+                        )
                         .collect();
                     names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
                     let played = def.apply_to(&prof);
                     m.song_changes = names
                         .into_iter()
                         .filter_map(|n| {
-                            let base = prof.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&n))?;
-                            let mine = played.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&n))?;
+                            let base = prof
+                                .patches
+                                .iter()
+                                .find(|p| p.name.eq_ignore_ascii_case(&n))?;
+                            let mine = played
+                                .patches
+                                .iter()
+                                .find(|p| p.name.eq_ignore_ascii_case(&n))?;
                             let count = patch_differences(base, mine);
                             (count > 0).then(|| signal_guitar_proto::SongChange { patch: n, count })
                         })
@@ -4818,7 +5260,9 @@ impl Rig for GuitarRigBackend {
                 }
                 // The switches the song tunes (unless the part that is up
                 // plays the profile's own).
-                let plain = self.current_part_def().is_some_and(|(_, r)| r.profile_switches);
+                let plain = self
+                    .current_part_def()
+                    .is_some_and(|(_, r)| r.profile_switches);
                 if self.current_song_name().is_some() && !plain {
                     for st in &mut m.stacks {
                         st.song_tuned = def
@@ -4833,6 +5277,13 @@ impl Rig for GuitarRigBackend {
         m.headphone.mixer = self.phones_status.lock_ok().clone();
         m.master_trim_db = *self.master_trim.lock_ok();
         m.revision = *self.revision.lock_ok();
+        m.learn = {
+            let learn = self.learn.lock_ok();
+            signal_rigs_proto::SwitchLearn {
+                learning: learn.learning().map(str::to_string),
+                bindings: learn.labels(),
+            }
+        };
         m
     }
 
@@ -5117,6 +5568,21 @@ impl Rig for GuitarRigBackend {
         self.follow_part();
     }
 
+    fn midi_learn(&self, target: String) {
+        self.learn.lock_ok().learn(&target);
+        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+    }
+
+    fn midi_learn_cancel(&self) {
+        self.learn.lock_ok().cancel();
+        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+    }
+
+    fn midi_unlearn(&self, target: String) {
+        self.learn.lock_ok().clear(&target);
+        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+    }
+
     fn release_stack(&self, index: u32) {
         if !self.switch_mode(index as usize).momentary {
             return;
@@ -5157,13 +5623,15 @@ impl Rig for GuitarRigBackend {
                     return false;
                 };
                 let before = r.stack_defaults.len();
-                r.stack_defaults.retain(|d| !d.stack.eq_ignore_ascii_case(&stack));
+                r.stack_defaults
+                    .retain(|d| !d.stack.eq_ignore_ascii_case(&stack));
                 r.stack_defaults.len() != before
             });
         } else if self.current_song_name().is_some() {
             self.edit_current_song("song switch reset", |song| {
                 let before = song.stack_defaults.len();
-                song.stack_defaults.retain(|d| !d.stack.eq_ignore_ascii_case(&stack));
+                song.stack_defaults
+                    .retain(|d| !d.stack.eq_ignore_ascii_case(&stack));
                 song.stack_defaults.len() != before
             });
         } else {
@@ -5176,7 +5644,9 @@ impl Rig for GuitarRigBackend {
     fn set_switch_action(&self, switch: u32, action: String, part: bool) {
         let action = action.trim().to_string();
         if !action.is_empty()
-            && !crate::profiles::SWITCH_ACTIONS.iter().any(|(k, _)| *k == action)
+            && !crate::profiles::SWITCH_ACTIONS
+                .iter()
+                .any(|(k, _)| *k == action)
         {
             tracing::warn!(%action, "set_switch_action: no such action");
             return;
@@ -5351,10 +5821,7 @@ impl Rig for GuitarRigBackend {
                     songs
                         .iter()
                         .find(|s| s.name.eq_ignore_ascii_case(&song_name))
-                        .and_then(|s| {
-                            s.part_recall(&part.name)
-                                .map(|r| r.overrides.clone())
-                        })
+                        .and_then(|s| s.part_recall(&part.name).map(|r| r.overrides.clone()))
                         .unwrap_or_default()
                 }
                 _ => Vec::new(),
@@ -5515,12 +5982,11 @@ impl Rig for GuitarRigBackend {
         let guard = self.rig.lock_ok();
         let Some(prig) = guard.as_ref() else {
             drop(guard);
-            // Design mode builds no engine, but the profile is plain data:
-            // list its patches exactly as the live rig would (same order,
-            // same stacks), so the sidebar shows the real profile.
-            if !crate::library::rig_is_design() {
-                return Vec::new();
-            }
+            // No engine (design mode, or no audio device yet), but the
+            // profile is plain data: list its patches exactly as the live rig
+            // would (same order, same stacks), so the surface shows the real
+            // profile and its patches can be chosen and edited before the
+            // audio opens.
             let profile = self.design_profile();
             let active = self.design_active_patch(&profile);
             return self.patch_infos(&profile.patches, &profile.stacks, active.as_deref(), |_| {
@@ -5541,10 +6007,11 @@ impl Rig for GuitarRigBackend {
                 if let Some(name) = prig.patches().get(index as usize).map(|p| p.name.clone()) {
                     activate_patch_by_name(prig, &name);
                 }
-            } else if crate::library::rig_is_design() {
+            } else {
                 drop(guard);
-                // Same indices as `patches()` above; `resync_blocks` below
-                // rebuilds the design chain from `design_patch`.
+                // No engine: the same indices as `patches()` above;
+                // `resync_blocks` below rebuilds the chain from
+                // `design_patch`, and the device opens on it.
                 if let Some(p) = self.design_profile().patches.get(index as usize) {
                     *self.design_patch.lock_ok() = p.name.clone();
                 }
@@ -5560,7 +6027,9 @@ impl Rig for GuitarRigBackend {
     }
 
     fn presets(&self) -> Vec<PresetInfo> {
-        let design_active = crate::library::rig_is_design() && self.rig.lock_ok().is_none();
+        // No engine (design mode, or no audio device yet): the patch the
+        // surface shows.
+        let design_active = self.rig.lock_ok().is_none();
         let active_patch = if design_active {
             let profile = self.design_profile();
             self.design_active_patch(&profile)
@@ -6317,11 +6786,14 @@ impl Rig for GuitarRigBackend {
     }
 
     fn set_perform_mode(&self, mode: u32) {
-        *self.perform_mode.lock_ok() = mode.min(2);
+        // No Preset mode any more (presets are the Core, picked under a
+        // patch): an old remote asking for it plays Profile.
+        let mode = if mode == 0 { 1 } else { mode.min(2) };
+        *self.perform_mode.lock_ok() = mode;
         self.mark_state_dirty();
         tracing::info!(
             "perform mode → {}",
-            ["preset", "profile", "setlist"][mode.min(2) as usize]
+            ["preset", "profile", "setlist"][mode as usize]
         );
         // Songs are live only in Setlist mode: entering it tunes the
         // switches for the song that is up, leaving it gives the profile its
@@ -6410,7 +6882,9 @@ impl Rig for GuitarRigBackend {
             let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
                 // A silenced built-in mic stays silent whatever the tuner does.
-                let silenced = self.input_silenced.load(std::sync::atomic::Ordering::Relaxed);
+                let silenced = self
+                    .input_silenced
+                    .load(std::sync::atomic::Ordering::Relaxed);
                 prig.rig().set_input_mute(shown || silenced);
             }
         }
@@ -6499,8 +6973,13 @@ impl Rig for GuitarRigBackend {
     }
 
     fn restart_phones_mixer(&self) {
-        let Some(link) = self.phones.clone() else { return };
-        if !self.phones_mixer_on.load(std::sync::atomic::Ordering::Relaxed) {
+        let Some(link) = self.phones.clone() else {
+            return;
+        };
+        if !self
+            .phones_mixer_on
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
             return;
         }
         tracing::info!("phones mixer: restarting");
@@ -6654,6 +7133,7 @@ impl Rig for GuitarRigBackend {
         };
         if let Some(bpm) = new_tempo {
             *self.tempo.lock_ok() = Some(bpm);
+            signal_rig_host::tempo::set(bpm);
             self.mark_state_dirty();
             self.apply_tempo_to_delays();
             self.events.publish(RigEvent::Perf(Rig::perf(self)));
@@ -6741,8 +7221,14 @@ impl Rig for GuitarRigBackend {
                             m.snapshots
                                 .iter()
                                 .map(|s| {
-                                    crate::manage::module_users(&comp, &all, &m.module, &m.name, Some(&s.name))
-                                        .join(", ")
+                                    crate::manage::module_users(
+                                        &comp,
+                                        &all,
+                                        &m.module,
+                                        &m.name,
+                                        Some(&s.name),
+                                    )
+                                    .join(", ")
                                 })
                                 .collect::<Vec<_>>(),
                         )
@@ -6775,27 +7261,80 @@ impl Rig for GuitarRigBackend {
             })
             .unwrap_or_default()
             .into_iter()
-            .map(|c| signal_guitar_proto::BlockPick { block: c.block, preset: c.preset })
+            .map(|c| signal_guitar_proto::BlockPick {
+                block: c.block,
+                preset: c.preset,
+            })
             .collect();
         let (active_preset, active_snapshot, active_modules) = auditioning
             .map(|(preset, snapshot)| (preset, snapshot, Vec::new()))
-            .or_else(|| self.live_patch_name().and_then(|name| {
-                let def = self.profile_def.lock_ok();
-                def.patches
-                    .iter()
-                    .find(|p| p.name.eq_ignore_ascii_case(&name))
-                    .map(|p| {
-                        let picks = crate::compose::module_picks(&comp, p);
-                        (
-                            p.rig_preset.clone(),
-                            p.snapshot.clone(),
-                            picks.iter().map(owned_pick).collect(),
-                        )
-                    })
-            }))
+            .or_else(|| {
+                self.live_patch_name().and_then(|name| {
+                    let def = self.profile_def.lock_ok();
+                    def.patches
+                        .iter()
+                        .find(|p| p.name.eq_ignore_ascii_case(&name))
+                        .map(|p| {
+                            let picks = crate::compose::module_picks(&comp, p);
+                            (
+                                p.rig_preset.clone(),
+                                p.snapshot.clone(),
+                                picks.iter().map(owned_pick).collect(),
+                            )
+                        })
+                })
+            })
             .unwrap_or_default();
+        // The Core presets, as the Core module's presets: each snapshot's
+        // Drive and Amp picks, who plays it.
+        let core_entries: Vec<ModulePresetEntry> = {
+            let active = self.profile_def.lock_ok();
+            let others = self.other_profiles.lock_ok();
+            let all: Vec<&ProfileDef> = std::iter::once(&*active).chain(others.iter()).collect();
+            comp.presets
+                .iter()
+                .zip(&preset_users)
+                .map(|(p, used_by)| ModulePresetEntry {
+                    module: crate::profiles::CORE.to_string(),
+                    name: p.name.clone(),
+                    snapshots: p.snapshots.iter().map(|s| s.name.clone()).collect(),
+                    used_by: used_by.clone(),
+                    snapshot_used_by: p
+                        .snapshots
+                        .iter()
+                        .enumerate()
+                        .map(|(i, s)| {
+                            all.iter()
+                                .flat_map(|prof| prof.patches.iter())
+                                .filter(|x| x.rig_preset.eq_ignore_ascii_case(&p.name) && (x.snapshot.eq_ignore_ascii_case(&s.name) || (x.snapshot.is_empty() && i == 0)))
+                                .map(|x| x.name.clone())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        })
+                        .collect(),
+                    snapshot_info: p
+                        .snapshots
+                        .iter()
+                        .map(|s| signal_guitar_proto::ModuleSnapshotInfo {
+                            modules: s.modules.iter().map(pick).collect(),
+                            blocks: s.blocks.iter().map(|c| signal_guitar_proto::BlockPick { block: c.block.clone(), preset: c.preset.clone() }).collect(),
+                            captures: Vec::new(),
+                            macros: Vec::new(),
+                            frozen_available: !s.frozen_nam.is_empty(),
+                            frozen: s.frozen && !s.frozen_nam.is_empty(),
+                        })
+                        .collect(),
+                })
+                .collect()
+        };
+        // The Core pick leads what plays: its blocks the core's.
+        let mut active_modules = active_modules;
+        if !active_preset.is_empty() {
+            let core_blocks: Vec<String> = chain.iter().filter(|(n, _)| crate::compose::is_core_block(n)).map(|(n, _)| n.clone()).collect();
+            active_modules.insert(0, ModulePick { module: crate::profiles::CORE.to_string(), preset: active_preset.clone(), snapshot: active_snapshot.clone(), blocks: core_blocks });
+        }
         CompositionModel {
-            modules: comp
+            modules: core_entries.into_iter().chain(comp
                 .modules
                 .iter()
                 .zip(module_users)
@@ -6807,6 +7346,7 @@ impl Rig for GuitarRigBackend {
                     snapshot_used_by,
                     snapshot_info: m.snapshots.iter().map(snapshot_info).collect(),
                 })
+                )
                 .collect(),
             presets: comp
                 .presets
@@ -6841,13 +7381,32 @@ impl Rig for GuitarRigBackend {
                     params: b
                         .params
                         .iter()
-                        .map(|p| signal_guitar_proto::PresetParam { name: p.param.clone(), value: p.value })
+                        .map(|p| signal_guitar_proto::PresetParam {
+                            name: p.param.clone(),
+                            value: p.value,
+                        })
                         .collect(),
                     macros: crate::compose::MacroResponseDef::knobs(&b.macros),
                 })
                 .collect(),
             active_blocks,
         }
+    }
+
+    fn set_core_frozen(&self, preset: String, snapshot: String, frozen: bool) {
+        let mut comp = RigLibrary::load_compositions();
+        let Some(s) = crate::freeze::snapshot_mut(&mut comp, &preset, &snapshot) else {
+            tracing::warn!(%preset, %snapshot, "set_core_frozen: no such Core snapshot");
+            return;
+        };
+        if frozen && s.frozen_nam.is_empty() {
+            tracing::warn!(%preset, %snapshot, "set_core_frozen: not frozen yet");
+            return;
+        }
+        s.frozen = frozen;
+        RigLibrary::save_compositions(&comp);
+        let report = self.reload_config_now();
+        tracing::info!(%preset, %snapshot, frozen, "Core {} — {report}", if frozen { "frozen" } else { "live" });
     }
 
     fn choose_block(&self, block: String, preset: String) {
@@ -6879,7 +7438,35 @@ impl Rig for GuitarRigBackend {
         });
     }
 
+    fn browse_audition_begin(&self) {
+        let mut undo = self.browse_undo.lock_ok();
+        if undo.is_none() {
+            let def = self.profile_def.lock_ok().clone();
+            let songs = self.songs_lib.lock_ok().clone();
+            *undo = Some((def, songs, false));
+        }
+    }
+
+    fn browse_audition_end(&self, keep: bool) {
+        let Some((def, songs, dirty)) = self.browse_undo.lock_ok().take() else {
+            return;
+        };
+        if keep || !dirty {
+            return;
+        }
+        RigLibrary::save_profile(&def);
+        RigLibrary::save_songs(&songs);
+        *self.profile_def.lock_ok() = def;
+        *self.songs_lib.lock_ok() = songs;
+        tracing::info!("browser audition undone: the picks from before it are back");
+        self.reload_for_song();
+    }
+
     fn choose_module(&self, module: String, preset: String, snapshot: String) {
+        if module.eq_ignore_ascii_case(crate::profiles::CORE) {
+            self.choose_core(preset, snapshot);
+            return;
+        }
         let comp = RigLibrary::load_compositions();
         let Some(found) = comp.module(&module, &preset) else {
             tracing::warn!(%module, %preset, "choose_module: no such module preset");
@@ -6932,6 +7519,28 @@ impl Rig for GuitarRigBackend {
 
     fn step_module(&self, module: String, delta: i32) {
         let comp = RigLibrary::load_compositions();
+        if module.eq_ignore_ascii_case(crate::profiles::CORE) {
+            // The live patch's Core: its next (or previous) snapshot, or
+            // the library's first Core with none.
+            let live = self.live_patch_name().and_then(|name| {
+                let def = self.profile_def.lock_ok();
+                def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&name)).map(|p| (p.rig_preset.clone(), p.snapshot.clone()))
+            });
+            let (preset, snapshot) = match live.as_ref().and_then(|(p, s)| comp.preset(p).map(|found| (found, s))) {
+                Some((found, s)) => {
+                    let n = found.snapshots.len().max(1) as i32;
+                    let at = found.snapshots.iter().position(|x| x.name.eq_ignore_ascii_case(s)).unwrap_or(0) as i32;
+                    let next = (at + delta).rem_euclid(n) as usize;
+                    (found.name.clone(), found.snapshots.get(next).map(|x| x.name.clone()).unwrap_or_default())
+                }
+                None => match comp.presets.first() {
+                    Some(p) => (p.name.clone(), String::new()),
+                    None => return,
+                },
+            };
+            self.choose_core(preset, snapshot);
+            return;
+        }
         let current = self
             .live_pick(&comp, &module)
             .and_then(|c| comp.module(&c.module, &c.preset).map(|m| (m, c)));
@@ -7517,7 +8126,11 @@ impl Rig for GuitarRigBackend {
                 .iter()
                 .find(|p| p.module.eq_ignore_ascii_case(&module))
                 .cloned();
-            let owned = crate::manage::owned_blocks(comp, &current.clone().unwrap_or_else(|| bare_pick(&module)), &chain);
+            let owned = crate::manage::owned_blocks(
+                comp,
+                &current.clone().unwrap_or_else(|| bare_pick(&module)),
+                &chain,
+            );
             let live = crate::manage::LiveModule {
                 current: current.as_ref(),
                 owned: &owned,
@@ -7551,7 +8164,8 @@ impl Rig for GuitarRigBackend {
 
     fn duplicate_module_preset(&self, module: String, name: String, new_name: String) {
         self.edit_library("duplicate_module_preset", |comp, _| {
-            crate::manage::duplicate_module_preset(comp, &module, &name, &new_name).map(|()| Vec::new())
+            crate::manage::duplicate_module_preset(comp, &module, &name, &new_name)
+                .map(|()| Vec::new())
         });
     }
 
@@ -7562,7 +8176,13 @@ impl Rig for GuitarRigBackend {
         });
     }
 
-    fn rename_module_snapshot(&self, module: String, preset: String, old: String, new_name: String) {
+    fn rename_module_snapshot(
+        &self,
+        module: String,
+        preset: String,
+        old: String,
+        new_name: String,
+    ) {
         self.edit_library("rename_module_snapshot", |comp, all| {
             crate::manage::rename_module_snapshot(comp, all, &module, &preset, &old, &new_name)
         });
@@ -7571,7 +8191,8 @@ impl Rig for GuitarRigBackend {
     fn delete_module_snapshot(&self, module: String, preset: String, snapshot: String) {
         self.edit_library("delete_module_snapshot", |comp, all| {
             let all: Vec<&ProfileDef> = all.iter().map(|p| &**p).collect();
-            crate::manage::delete_module_snapshot(comp, &all, &module, &preset, &snapshot).map(|()| Vec::new())
+            crate::manage::delete_module_snapshot(comp, &all, &module, &preset, &snapshot)
+                .map(|()| Vec::new())
         });
     }
 
@@ -7594,7 +8215,11 @@ impl Rig for GuitarRigBackend {
             let state = crate::manage::LiveBlockState {
                 name: &live.name,
                 block_type: live.block_type.as_str(),
-                params: live.params.iter().map(|p| (p.name.clone(), p.value)).collect(),
+                params: live
+                    .params
+                    .iter()
+                    .map(|p| (p.name.clone(), p.value))
+                    .collect(),
                 bypassed: live.bypassed,
                 current: current.as_deref(),
             };
@@ -7685,7 +8310,10 @@ impl Rig for GuitarRigBackend {
             };
             // Its patches join the profiles it plays on, as loading does.
             let mut plays_here = false;
-            for (i, prof) in std::iter::once(&mut *active).chain(others.iter_mut()).enumerate() {
+            for (i, prof) in std::iter::once(&mut *active)
+                .chain(others.iter_mut())
+                .enumerate()
+            {
                 if copy.profile.is_empty() || copy.profile.eq_ignore_ascii_case(&prof.name) {
                     prof.patches.extend(copy.patches.iter().cloned());
                     plays_here |= i == 0 && !copy.patches.is_empty();
@@ -7765,9 +8393,17 @@ impl Rig for GuitarRigBackend {
         self.write_live_param(&id, &param, value);
         // A new delay machine or reverb algorithm can bring a macro knob in
         // (Pitch, for the Ice machine) or change its rest (Width, a pan).
-        if matches!(param.as_str(), "style" | "algorithm" | "engine" | "pan" | "pan_a" | "width") {
+        if matches!(
+            param.as_str(),
+            "style" | "algorithm" | "engine" | "pan" | "pan_a" | "width"
+        ) {
             let blocks = self.blocks.lock_ok().clone();
             self.macros.lock_ok().refresh(&blocks);
+        }
+        // A reverb locked to the tempo keeps its beats through a new
+        // algorithm (another decay law) or a new length.
+        if matches!(param.as_str(), "algorithm" | "variant" | "sync_div") {
+            self.retime_synced_reverbs(Some(&id));
         }
         // Chain state only — param drags shouldn't re-publish the perf model.
         self.events.publish(RigEvent::Chain(Rig::chain(self)));
@@ -7786,7 +8422,13 @@ impl Rig for GuitarRigBackend {
                 return macro_err(format!("no macro knob {id:?} on this patch"));
             }
             let choice = e.set(&id, value);
-            (choice, e.live_params(), e.live_bypass(), e.saved(), e.patch().to_string())
+            (
+                choice,
+                e.live_params(),
+                e.live_bypass(),
+                e.saved(),
+                e.patch().to_string(),
+            )
         };
         // A Type or Interval knob is a choice made on the patch itself.
         if let Some((block, param, v)) = choice {
@@ -7807,7 +8449,14 @@ impl Rig for GuitarRigBackend {
     fn reset_macro(&self, id: String) -> signal_guitar_proto::MacroResult {
         let r = {
             let mut e = self.macros.lock_ok();
-            e.reset_position(&id).map(|()| (e.live_params(), e.live_bypass(), e.saved(), e.patch().to_string()))
+            e.reset_position(&id).map(|()| {
+                (
+                    e.live_params(),
+                    e.live_bypass(),
+                    e.saved(),
+                    e.patch().to_string(),
+                )
+            })
         };
         match r {
             Ok((writes, bypass, saved, patch)) => {
@@ -7827,8 +8476,16 @@ impl Rig for GuitarRigBackend {
         let blocks = self.blocks.lock_ok().clone();
         let r = {
             let mut e = self.macros.lock_ok();
-            e.tune_op(&tune.knob, &tune.block, &tune.param, &tune.op, tune.value, &tune.text, &blocks)
-                .map(|()| (e.live_params(), e.live_bypass()))
+            e.tune_op(
+                &tune.knob,
+                &tune.block,
+                &tune.param,
+                &tune.op,
+                tune.value,
+                &tune.text,
+                &blocks,
+            )
+            .map(|()| (e.live_params(), e.live_bypass()))
         };
         match r {
             Ok((writes, bypass)) => {
@@ -7843,7 +8500,10 @@ impl Rig for GuitarRigBackend {
         }
     }
 
-    fn save_macro_tune(&self, save: signal_guitar_proto::MacroSave) -> signal_guitar_proto::MacroResult {
+    fn save_macro_tune(
+        &self,
+        save: signal_guitar_proto::MacroSave,
+    ) -> signal_guitar_proto::MacroResult {
         let knob = save.knob.clone();
         let title = knob_title(&knob);
         let (defs, homes) = {
@@ -7856,7 +8516,14 @@ impl Rig for GuitarRigBackend {
                 .lock_ok()
                 .iter()
                 .filter(|b| defs.iter().any(|d| d.block_id == b.id))
-                .map(|b| (b.name.clone(), b.block_type, e.baseline_params(&b.id), e.base_bypassed(&b.id).unwrap_or(b.bypassed)))
+                .map(|b| {
+                    (
+                        b.name.clone(),
+                        b.block_type,
+                        e.baseline_params(&b.id),
+                        e.base_bypassed(&b.id).unwrap_or(b.bypassed),
+                    )
+                })
                 .collect();
             (defs, homes)
         };
@@ -7866,7 +8533,11 @@ impl Rig for GuitarRigBackend {
         if let Some(why) = not_saving() {
             return macro_err(why);
         }
-        let scope = if save.scope == "module" { "module" } else { "block" };
+        let scope = if save.scope == "module" {
+            "module"
+        } else {
+            "block"
+        };
         let chain = self.live_chain();
         let name = save.name.trim().to_string();
         let mut report = crate::macros::SaveReport::default();
@@ -7875,11 +8546,22 @@ impl Rig for GuitarRigBackend {
             let dry = crate::macros::save_tuning(&mut comp.clone(), patch, &chain, &defs, scope);
             if !dry.missing.is_empty() {
                 if name.is_empty() {
-                    offer = if scope == "module" { "new_module_snapshot" } else { "new_block_preset" }.to_string();
-                    return Err(if scope == "module" {
-                        format!("{} plays no module snapshot of its own — save as a new one?", dry.missing.join(", "))
+                    offer = if scope == "module" {
+                        "new_module_snapshot"
                     } else {
-                        format!("{} has no block preset — save as a new one?", dry.missing.join(", "))
+                        "new_block_preset"
+                    }
+                    .to_string();
+                    return Err(if scope == "module" {
+                        format!(
+                            "{} plays no module snapshot of its own — save as a new one?",
+                            dry.missing.join(", ")
+                        )
+                    } else {
+                        format!(
+                            "{} has no block preset — save as a new one?",
+                            dry.missing.join(", ")
+                        )
                     });
                 }
                 crate::macros::make_homes(comp, patch, &chain, &homes, &dry.missing, scope, &name)?;
@@ -7888,7 +8570,10 @@ impl Rig for GuitarRigBackend {
             if report.missing.is_empty() {
                 Ok(())
             } else {
-                Err(format!("no home for {} in the {scope} scope", report.missing.join(", ")))
+                Err(format!(
+                    "no home for {} in the {scope} scope",
+                    report.missing.join(", ")
+                ))
             }
         });
         match result {
@@ -7899,7 +8584,11 @@ impl Rig for GuitarRigBackend {
                 self.publish_state();
                 macro_ok(format!("Saved to {}", report.into.join(", ")))
             }
-            Err(why) => signal_guitar_proto::MacroResult { ok: false, message: why, offer },
+            Err(why) => signal_guitar_proto::MacroResult {
+                ok: false,
+                message: why,
+                offer,
+            },
         }
     }
 
@@ -7917,7 +8606,11 @@ impl Rig for GuitarRigBackend {
             if cleared.1 == 0 {
                 Err(format!(
                     "The {} keeps no {title} ranges here",
-                    if scope == "module" { "module snapshot" } else { "block preset" }
+                    if scope == "module" {
+                        "module snapshot"
+                    } else {
+                        "block preset"
+                    }
                 ))
             } else {
                 Ok(())
@@ -7948,13 +8641,22 @@ impl Rig for GuitarRigBackend {
         };
         self.apply_macro_writes(&writes, &bypass);
         self.publish_macros();
-        macro_ok(if had { format!("{} back as saved", knob_title(&knob)) } else { String::new() })
+        macro_ok(if had {
+            format!("{} back as saved", knob_title(&knob))
+        } else {
+            String::new()
+        })
     }
 
     fn save_macro_positions(&self, scope: String) -> signal_guitar_proto::MacroResult {
         let (positions, saved, patch, snapshot) = {
             let e = self.macros.lock_ok();
-            (e.positions(), e.saved(), e.patch().to_string(), e.snapshot().to_string())
+            (
+                e.positions(),
+                e.saved(),
+                e.patch().to_string(),
+                e.snapshot().to_string(),
+            )
         };
         if patch.is_empty() {
             return macro_err("No patch is playing".to_string());
@@ -7970,7 +8672,9 @@ impl Rig for GuitarRigBackend {
             return macro_ok(format!("Positions kept with {patch}"));
         }
         if snapshot.is_empty() {
-            return macro_err(format!("{patch} plays no preset snapshot — its positions stay with the patch"));
+            return macro_err(format!(
+                "{patch} plays no preset snapshot — its positions stay with the patch"
+            ));
         }
         let Some(patch_def) = self
             .profile_def
@@ -7991,7 +8695,10 @@ impl Rig for GuitarRigBackend {
                 let i = p
                     .snapshots
                     .iter()
-                    .position(|s| !patch_def.snapshot.is_empty() && s.name.eq_ignore_ascii_case(&patch_def.snapshot))
+                    .position(|s| {
+                        !patch_def.snapshot.is_empty()
+                            && s.name.eq_ignore_ascii_case(&patch_def.snapshot)
+                    })
                     .unwrap_or(0);
                 p.snapshots.get_mut(i)
             })
@@ -8035,7 +8742,9 @@ impl Rig for GuitarRigBackend {
         let (built, patch_name) = {
             let guard = self.rig.lock_ok();
             let Some(prig) = guard.as_ref() else { return };
-            let Some(patch) = prig.active_patch() else { return };
+            let Some(patch) = prig.active_patch() else {
+                return;
+            };
             let ids = prig.active_block_ids();
             let built = patch
                 .chain
@@ -8054,13 +8763,19 @@ impl Rig for GuitarRigBackend {
                 .iter()
                 .find(|p| p.name.eq_ignore_ascii_case(&patch_name))
                 .cloned();
-            (patch, self.drive_presets.lock_ok().clone(), def.presets.clone())
+            (
+                patch,
+                self.drive_presets.lock_ok().clone(),
+                def.presets.clone(),
+            )
         };
         let Some(home) = Self::level_home(&comp, patch_def.as_ref(), &block) else {
             tracing::warn!(block = %block.name, "output level: block has no stored level");
             return;
         };
-        let Some(stored) = Self::stored_level(&comp, &drives, &pool, &home) else { return };
+        let Some(stored) = Self::stored_level(&comp, &drives, &pool, &home) else {
+            return;
+        };
 
         if !commit {
             // Live: the built trim, corrected for a drive knob moved since
@@ -8090,7 +8805,11 @@ impl Rig for GuitarRigBackend {
         // Commit: store it with the gear, then rebuild so every patch playing
         // that amp or pedal is built with it.
         match &home {
-            LevelHome::Amp { preset, snapshot, second } => {
+            LevelHome::Amp {
+                preset,
+                snapshot,
+                second,
+            } => {
                 let mut comp = comp;
                 let Some(snap) = comp
                     .modules
@@ -8112,19 +8831,25 @@ impl Rig for GuitarRigBackend {
             }
             LevelHome::Pool { name } => {
                 let mut def = self.profile_def.lock_ok();
-                if let Some(p) = def.presets.iter_mut().find(|p| p.name.eq_ignore_ascii_case(name)) {
+                if let Some(p) = def
+                    .presets
+                    .iter_mut()
+                    .find(|p| p.name.eq_ignore_ascii_case(name))
+                {
                     p.level_db = level_db;
                 }
                 RigLibrary::save_profile(&def);
             }
             LevelHome::Drive { nam } => {
                 let mut dps = self.drive_presets.lock_ok();
-                let file = |p: &str| std::path::Path::new(p).file_name().map(std::ffi::OsStr::to_owned);
-                if let Some(o) = dps
-                    .iter_mut()
-                    .flat_map(|p| p.options.iter_mut())
-                    .find(|o| o.nam == *nam || (file(&o.nam).is_some() && file(&o.nam) == file(nam)))
-                {
+                let file = |p: &str| {
+                    std::path::Path::new(p)
+                        .file_name()
+                        .map(std::ffi::OsStr::to_owned)
+                };
+                if let Some(o) = dps.iter_mut().flat_map(|p| p.options.iter_mut()).find(|o| {
+                    o.nam == *nam || (file(&o.nam).is_some() && file(&o.nam) == file(nam))
+                }) {
                     o.level_db = level_db;
                 }
                 RigLibrary::save_drive_presets(&dps);
@@ -8515,7 +9240,11 @@ mod tests {
 #[derive(Clone, Debug)]
 enum LevelHome {
     /// An amp module snapshot's `level_db` (`level2_db` for Amp R).
-    Amp { preset: String, snapshot: String, second: bool },
+    Amp {
+        preset: String,
+        snapshot: String,
+        second: bool,
+    },
     /// A legacy pool preset's `level_db`.
     Pool { name: String },
     /// The drive option playing this capture.
@@ -8561,7 +9290,10 @@ fn snapshot_info(s: &crate::compose::ModuleSnapshotDef) -> signal_guitar_proto::
         blocks: s
             .blocks
             .iter()
-            .map(|c| signal_guitar_proto::BlockPick { block: c.block.clone(), preset: c.preset.clone() })
+            .map(|c| signal_guitar_proto::BlockPick {
+                block: c.block.clone(),
+                preset: c.preset.clone(),
+            })
             .collect(),
         captures: [&s.nam, &s.cab, &s.nam2, &s.cab2]
             .into_iter()
@@ -8569,27 +9301,38 @@ fn snapshot_info(s: &crate::compose::ModuleSnapshotDef) -> signal_guitar_proto::
             .map(|p| stem(p))
             .collect(),
         macros: crate::compose::MacroResponseDef::knobs(&s.macros),
+        ..Default::default()
     }
 }
 
 fn macro_ok(message: String) -> signal_guitar_proto::MacroResult {
-    signal_guitar_proto::MacroResult { ok: true, message, offer: String::new() }
+    signal_guitar_proto::MacroResult {
+        ok: true,
+        message,
+        offer: String::new(),
+    }
 }
 
 fn macro_err(message: String) -> signal_guitar_proto::MacroResult {
-    signal_guitar_proto::MacroResult { ok: false, message, offer: String::new() }
+    signal_guitar_proto::MacroResult {
+        ok: false,
+        message,
+        offer: String::new(),
+    }
 }
 
 /// Why nothing would be written, when this run saves nothing.
 fn not_saving() -> Option<String> {
-    crate::library::rig_is_ephemeral()
-        .then(|| "Not saved: this rig is a design or ephemeral run, which writes nothing".to_string())
+    crate::library::rig_is_ephemeral().then(|| {
+        "Not saved: this rig is a design or ephemeral run, which writes nothing".to_string()
+    })
 }
 
 /// A bar knob's id as a title (`space` → `Space`).
 fn knob_title(knob: &str) -> String {
     let mut c = knob.chars();
-    c.next().map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
+    c.next()
+        .map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
 }
 
 /// A built chain as live blocks, straight from its definition — ids
@@ -8669,13 +9412,18 @@ impl GuitarRigBackend {
     fn edit_library(
         &self,
         what: &str,
-        edit: impl FnOnce(&mut crate::compose::Compositions, &mut [&mut ProfileDef]) -> Result<Vec<usize>, String>,
+        edit: impl FnOnce(
+            &mut crate::compose::Compositions,
+            &mut [&mut ProfileDef],
+        ) -> Result<Vec<usize>, String>,
     ) {
         let mut comp = RigLibrary::load_compositions();
         {
             let mut active = self.profile_def.lock_ok();
             let mut others = self.other_profiles.lock_ok();
-            let mut all: Vec<&mut ProfileDef> = std::iter::once(&mut *active).chain(others.iter_mut()).collect();
+            let mut all: Vec<&mut ProfileDef> = std::iter::once(&mut *active)
+                .chain(others.iter_mut())
+                .collect();
             match edit(&mut comp, &mut all) {
                 Ok(touched) => {
                     RigLibrary::save_compositions(&comp);
@@ -8699,7 +9447,10 @@ impl GuitarRigBackend {
         &self,
         what: &str,
         save_comp: bool,
-        edit: impl FnOnce(&mut crate::compose::Compositions, &mut crate::profiles::PatchDef) -> Result<(), String>,
+        edit: impl FnOnce(
+            &mut crate::compose::Compositions,
+            &mut crate::profiles::PatchDef,
+        ) -> Result<(), String>,
     ) {
         if let Err(why) = self.try_edit_live_library(what, save_comp, edit) {
             tracing::warn!(what, %why, "library edit refused");
@@ -8712,7 +9463,10 @@ impl GuitarRigBackend {
         &self,
         what: &str,
         save_comp: bool,
-        edit: impl FnOnce(&mut crate::compose::Compositions, &mut crate::profiles::PatchDef) -> Result<(), String>,
+        edit: impl FnOnce(
+            &mut crate::compose::Compositions,
+            &mut crate::profiles::PatchDef,
+        ) -> Result<(), String>,
     ) -> Result<(), String> {
         let _ = what;
         let Some(name) = self.live_patch_name() else {
@@ -8727,7 +9481,9 @@ impl GuitarRigBackend {
                 .find(|p| p.name.eq_ignore_ascii_case(&name))
             else {
                 // An audition is not a patch of the profile.
-                return Err(format!("{name} is an audition, not a patch of this profile"));
+                return Err(format!(
+                    "{name} is an audition, not a patch of this profile"
+                ));
             };
             edit(&mut comp, patch)?;
             if save_comp {
@@ -8764,7 +9520,11 @@ fn audio_error_words(err: &str) -> String {
             s = rest;
         }
     }
-    let s = s.split(": ").filter(|p| !p.starts_with("rig host") && !p.starts_with("audio engine failed")).collect::<Vec<_>>().join(": ");
+    let s = s
+        .split(": ")
+        .filter(|p| !p.starts_with("rig host") && !p.starts_with("audio engine failed"))
+        .collect::<Vec<_>>()
+        .join(": ");
     let mut out = s.trim().to_string();
     if let Some(c) = out.get(0..1) {
         out = c.to_uppercase() + &out[1..];

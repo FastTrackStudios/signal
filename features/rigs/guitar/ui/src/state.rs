@@ -4,7 +4,9 @@
 use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::{RigClient, RigEvent, RigStreamClient};
-use signal_guitar_proto::{LevelProgress, LiveBlock, LiveNode, MacroKnobView, PerformanceModel, RigPerf};
+use signal_guitar_proto::{
+    LevelProgress, LiveBlock, LiveNode, MacroKnobView, PerformanceModel, RigPerf,
+};
 
 use crate::meters::meter_level;
 
@@ -68,6 +70,14 @@ pub fn use_rig_state() -> RigViewState {
     let rig_stream = use_hook(try_consume_context::<RigStreamClient>);
 
     let mut running = use_signal(|| false);
+    // Visualisers and frame faces move only while audio runs: stopped,
+    // there is nothing to show moving, and a moving picture keeps the whole
+    // window redrawing.
+    // `FTS_ANIMATE=1` lets them move regardless (designing, measuring).
+    let always = use_signal(|| true);
+    use_context_provider(|| {
+        fts_audio_ui::animate::Animate(if std::env::var_os("FTS_ANIMATE").is_some() { always } else { running })
+    });
     let mut audio_error = use_signal(String::new);
     let mut in_level = use_signal(|| 0.0f64);
     let mut out_level = use_signal(|| 0.0f64);
@@ -247,7 +257,11 @@ pub fn use_rig_state() -> RigViewState {
                                 let fallen = prev.get(i).copied().unwrap_or(-90.0) - 1.3; // per frame at ~30 Hz ≈ 40 dB/s
                                 out.push(fresh.max(fallen).max(-90.0));
                             }
-                            spectrum.set(out);
+                            // A silent input decays to the floor and stays
+                            // there: don't re-render every reader for that.
+                            if *spectrum.peek() != out {
+                                spectrum.set(out);
+                            }
                         }
                         RigEvent::CompWave(trace) => {
                             // A soft 3-tap along time keeps the rolling traces
@@ -263,9 +277,11 @@ pub fn use_rig_state() -> RigViewState {
                                     .collect()
                             };
                             let entry = (smooth(&trace.input), smooth(&trace.gr), trace.gr_db);
-                            comp_wave.with_mut(|m| {
-                                m.insert(trace.block, entry);
-                            });
+                            if comp_wave.peek().get(&trace.block) != Some(&entry) {
+                                comp_wave.with_mut(|m| {
+                                    m.insert(trace.block, entry);
+                                });
+                            }
                         }
                     }
                 }

@@ -145,9 +145,11 @@ pub fn CpuMeter(perf: RigPerf) -> Element {
         c if c >= 0.5 => "#eab308",
         _ => "#22c55e",
     };
-    let cores_busy = perf.cpu * perf.cores as f32;
+    // In whole cores, so the tooltip changes (and restyles the meter)
+    // only when the load moves by a core, not on every reading.
+    let cores_busy = (perf.cpu * perf.cores as f32).round();
     let title = format!(
-        "Signal is using {pct:.0}% of the machine — {cores_busy:.1} of {} cores",
+        "Signal's share of the machine — about {cores_busy:.0} of {} cores busy",
         perf.cores.max(1)
     );
     rsx! {

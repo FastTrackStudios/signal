@@ -1,0 +1,288 @@
+# Trio Clean
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam= | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
+Amp L | nam=/home/cody/.config/signal/nam/tone3000/65989/Fender_ Vibroverb_ 1964  - Dumble_ Steel String Singer_ _002 -  Two-Rock_ John Mayer Signature Prototype __Signature _83__.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=7.320118
+DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
+DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
+VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
+VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Vibroverb + Dumble
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam= | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
+Amp L | nam=/home/cody/.config/signal/nam/tone3000/65976/Fender_ Vibroverb_ 1964.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam=/home/cody/.config/signal/nam/tone3000/29285/Dumble Steel SS Clean.nam | ir= | bypassed=false | 
+Cab R | nam= | ir= | bypassed=false | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=7.2250137
+DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
+DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
+VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
+VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Stereo Stack
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam= | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | bypassed=false | drive=0.5
+Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=false | drive=0.5
+Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
+Amp L | nam=/home/cody/.config/signal/nam/tone3000/65976/Fender_ Vibroverb_ 1964.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam=/home/cody/.config/signal/nam/tone3000/29285/Dumble Steel SS Drive 1.nam | ir= | bypassed=false | 
+Cab R | nam= | ir= | bypassed=false | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=2.2129402
+DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
+DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
+VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
+VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Vibroverb
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam= | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
+Amp L | nam=/home/cody/.config/signal/nam/tone3000/65976/Fender_ Vibroverb_ 1964.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=5.0025883
+DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
+DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
+VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
+VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Dumble Clean
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam= | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
+Amp L | nam=/home/cody/.config/signal/nam/tone3000/29285/Dumble Steel SS Clean.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=7.5701866
+DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
+DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
+VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
+VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Dumble Klon
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam= | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | bypassed=false | drive=0.5
+Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
+Amp L | nam=/home/cody/.config/signal/nam/tone3000/29285/Dumble Steel SS Drive 1.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=1.7965851
+DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
+DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
+VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
+VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Two-Rock
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam= | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
+Amp L | nam=/home/cody/.config/signal/nam/tone3000/65968/Two-Rock_ John Mayer Signature Prototype.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=5.84556
+DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
+DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
+VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
+VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Two-Rock Screamer
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam= | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=/home/cody/.config/signal/nam/tone3000/2599/KLON 2.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=/home/cody/.config/signal/nam/tone3000/1778/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam=/home/cody/.config/signal/nam/tone3000/30104/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=false | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
+Amp L | nam=/home/cody/.config/signal/nam/tone3000/65968/Two-Rock_ John Mayer Signature Prototype.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=4.813238
+DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
+DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
+VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
+VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1

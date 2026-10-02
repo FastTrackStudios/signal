@@ -35,7 +35,10 @@ fn heard(rig: &GuitarRig, secs: f64) -> Vec<f32> {
 }
 
 fn max_diff(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max)
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, f32::max)
 }
 
 fn rms(x: &[f32]) -> f32 {
@@ -47,7 +50,13 @@ fn pluck() -> Arc<Vec<f32>> {
     let n = SR as usize * 2;
     Arc::new(
         (0..n)
-            .map(|i| if i < SR as usize / 20 { 0.3 * (std::f32::consts::TAU * 220.0 * i as f32 / SR as f32).sin() } else { 0.0 })
+            .map(|i| {
+                if i < SR as usize / 20 {
+                    0.3 * (std::f32::consts::TAU * 220.0 * i as f32 / SR as f32).sin()
+                } else {
+                    0.0
+                }
+            })
             .collect(),
     )
 }
@@ -73,8 +82,16 @@ fn trim() -> RigBlock {
 
 fn profile(lead_delay: RigBlock, clean_delay: RigBlock) -> RigProfile {
     RigProfile::new("Live")
-        .with_patch(RigPatch::new("Lead").with_block(trim()).with_block(lead_delay))
-        .with_patch(RigPatch::new("Clean").with_block(trim()).with_block(clean_delay))
+        .with_patch(
+            RigPatch::new("Lead")
+                .with_block(trim())
+                .with_block(lead_delay),
+        )
+        .with_patch(
+            RigPatch::new("Clean")
+                .with_block(trim())
+                .with_block(clean_delay),
+        )
 }
 
 /// Silence long enough for any tail to die, then a pluck through the patch.
@@ -107,7 +124,10 @@ fn a_knob_on_one_patch_never_reaches_the_next() {
     p.activate(0);
     heard(p.rig(), 0.2);
     let id = block_id(&p, "DLY 1");
-    assert!(p.set_block_param(&id, "time", 120.0), "the knob reaches Lead's delay");
+    assert!(
+        p.set_block_param(&id, "time", 120.0),
+        "the knob reaches Lead's delay"
+    );
     assert!(p.set_block_param(&id, "feedback", 0.8));
     heard(p.rig(), 0.5);
     p.activate(1);
@@ -122,7 +142,10 @@ fn a_knob_on_one_patch_never_reaches_the_next() {
 
     assert!(rms(&want) > 1e-3, "the reference is heard");
     let d = max_diff(&after, &want);
-    assert!(d < 1e-4, "Clean plays Lead's knob after the switch (max diff {d})");
+    assert!(
+        d < 1e-4,
+        "Clean plays Lead's knob after the switch (max diff {d})"
+    );
 }
 
 #[test]
@@ -163,23 +186,33 @@ fn the_live_state_is_what_the_chain_plays() {
     let id = block_id(&p, "DLY 1");
     p.set_block_param(&id, "feedback", 0.6);
     assert!(
-        p.live_state().contains(&(id.clone(), LiveWrite::Param("feedback".into(), 0.6))),
+        p.live_state()
+            .contains(&(id.clone(), LiveWrite::Param("feedback".into(), 0.6))),
         "the knob is in the chain's live state"
     );
     p.activate(1);
     assert!(
-        !p.live_state().iter().any(|(_, w)| *w == LiveWrite::Param("feedback".into(), 0.6)),
+        !p.live_state()
+            .iter()
+            .any(|(_, w)| *w == LiveWrite::Param("feedback".into(), 0.6)),
         "another patch's chain does not carry it"
     );
     p.activate(0);
-    assert!(p.live_state().contains(&(id.clone(), LiveWrite::Param("feedback".into(), 0.6))));
+    assert!(
+        p.live_state()
+            .contains(&(id.clone(), LiveWrite::Param("feedback".into(), 0.6)))
+    );
 
     // A preset pick sets Lead's delay feedback to 0.2 in its definition.
     let ticket = p.begin_reload(ReloadMode::Keep);
-    let prepared = ticket.plan(profile(delay(300.0, 0.2), delay(500.0, 0.45)), None).prepare();
+    let prepared = ticket
+        .plan(profile(delay(300.0, 0.2), delay(500.0, 0.45)), None)
+        .prepare();
     p.commit_reload(prepared, None);
     assert!(
-        !p.live_state().iter().any(|(_, w)| matches!(w, LiveWrite::Param(n, _) if n == "feedback")),
+        !p.live_state()
+            .iter()
+            .any(|(_, w)| matches!(w, LiveWrite::Param(n, _) if n == "feedback")),
         "the old knob does not outlive the preset that set the param"
     );
     let now = pluck_after_silence(p.rig());
@@ -187,7 +220,10 @@ fn the_live_state_is_what_the_chain_plays() {
     want_rig.activate(0);
     let want = pluck_after_silence(want_rig.rig());
     let d = max_diff(&now, &want);
-    assert!(d < 1e-3, "the preset's value plays, not the old knob (max diff {d})");
+    assert!(
+        d < 1e-3,
+        "the preset's value plays, not the old knob (max diff {d})"
+    );
 }
 
 // ── The reconciler, and random sequences ──────────────────────────────────
@@ -205,15 +241,26 @@ fn the_reconciler_corrects_a_stray_write_and_nothing_else() {
     let id = block_id(&p, "DLY 1");
     p.set_block_param(&id, "feedback", 0.6);
     p.set_block_param(&id, "tempo_bpm", 120.0);
-    assert!(p.reconcile().is_empty(), "a knob through the patch rig is its live state");
+    assert!(
+        p.reconcile().is_empty(),
+        "a knob through the patch rig is its live state"
+    );
     p.activate(1);
     assert!(p.reconcile().is_empty());
     p.activate(0);
-    assert!(p.reconcile().is_empty(), "switching back finds it as it was left");
+    assert!(
+        p.reconcile().is_empty(),
+        "switching back finds it as it was left"
+    );
     let ticket = p.begin_reload(ReloadMode::Keep);
-    let prepared = ticket.plan(profile(delay(250.0, 0.3), delay(500.0, 0.45)), None).prepare();
+    let prepared = ticket
+        .plan(profile(delay(250.0, 0.3), delay(500.0, 0.45)), None)
+        .prepare();
     p.commit_reload(prepared, None);
-    assert!(p.reconcile().is_empty(), "a retune lands the chain where it is due");
+    assert!(
+        p.reconcile().is_empty(),
+        "a retune lands the chain where it is due"
+    );
 
     // Around the patch rig: the engine plays it, nothing records it.
     let id = block_id(&p, "DLY 1");
@@ -227,7 +274,10 @@ fn the_reconciler_corrects_a_stray_write_and_nothing_else() {
 struct Lcg(u64);
 impl Lcg {
     fn next(&mut self) -> u32 {
-        self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         (self.0 >> 33) as u32
     }
     fn below(&mut self, n: usize) -> usize {
@@ -253,8 +303,14 @@ fn random_write(g: &mut Lcg) -> (&'static str, &'static str, f32) {
 
 fn random_patch(g: &mut Lcg, name: &str, extra: bool) -> RigPatch {
     let mut p = RigPatch::new(name)
-        .with_block(RigBlock::effect(BlockType::Volume, "Trim").with_param("gain_db", g.range(-6.0, 0.0).round().to_string()))
-        .with_block(delay((g.range(100.0, 600.0)).round(), (g.range(0.1, 0.6) * 10.0).round() / 10.0));
+        .with_block(
+            RigBlock::effect(BlockType::Volume, "Trim")
+                .with_param("gain_db", g.range(-6.0, 0.0).round().to_string()),
+        )
+        .with_block(delay(
+            (g.range(100.0, 600.0)).round(),
+            (g.range(0.1, 0.6) * 10.0).round() / 10.0,
+        ));
     if extra {
         p = p.with_block(RigBlock::effect(BlockType::Volume, "Pad").with_param("gain_db", "-1"));
     }
@@ -262,12 +318,26 @@ fn random_patch(g: &mut Lcg, name: &str, extra: bool) -> RigPatch {
 }
 
 /// The patch as it should play: its definition with its live state baked in.
-fn resolved(patch: &RigPatch, live: &[(String, signal_sampler::LiveWrite)], ids: &[String]) -> RigPatch {
+fn resolved(
+    patch: &RigPatch,
+    live: &[(String, signal_sampler::LiveWrite)],
+    ids: &[String],
+) -> RigPatch {
     let mut out = patch.clone();
-    let reals: Vec<usize> = out.chain.iter().enumerate().filter(|(_, b)| b.has_backend()).map(|(i, _)| i).collect();
+    let reals: Vec<usize> = out
+        .chain
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| b.has_backend())
+        .map(|(i, _)| i)
+        .collect();
     for (id, w) in live {
-        let signal_sampler::LiveWrite::Param(name, v) = w else { continue };
-        let Some(pos) = ids.iter().position(|i| i == id) else { continue };
+        let signal_sampler::LiveWrite::Param(name, v) = w else {
+            continue;
+        };
+        let Some(pos) = ids.iter().position(|i| i == id) else {
+            continue;
+        };
         let Some(&at) = reals.get(pos) else { continue };
         let b = &mut out.chain[at];
         let text = v.to_string();
@@ -315,7 +385,11 @@ fn random_sequences_never_leave_a_patch_off_its_state() {
                 8 => {
                     // A preset pick: one patch's delay settings change.
                     let i = g.below(n);
-                    let c = prof.patches[i].chain.iter().position(|b| b.name == "DLY 1").unwrap();
+                    let c = prof.patches[i]
+                        .chain
+                        .iter()
+                        .position(|b| b.name == "DLY 1")
+                        .unwrap();
                     let t = g.range(100.0, 600.0).round().to_string();
                     let b = prof.patches[i].chain[c].clone();
                     prof.patches[i].chain[c] = set_param(b, "time", &t);
@@ -343,7 +417,10 @@ fn random_sequences_never_leave_a_patch_off_its_state() {
                 }
             }
             let fixed = p.reconcile();
-            assert!(fixed.is_empty(), "seed {seed} step {step}: the chain drifted: {fixed:?}");
+            assert!(
+                fixed.is_empty(),
+                "seed {seed} step {step}: the chain drifted: {fixed:?}"
+            );
         }
 
         // The playing patch against one built as it should be.
@@ -354,7 +431,11 @@ fn random_sequences_never_leave_a_patch_off_its_state() {
         want_rig.activate(0);
         let want = pluck_after_silence(want_rig.rig());
         let d = max_diff(&got, &want);
-        assert!(d < 2e-3, "seed {seed}: {} plays off its state (max diff {d})", playing.name);
+        assert!(
+            d < 2e-3,
+            "seed {seed}: {} plays off its state (max diff {d})",
+            playing.name
+        );
     }
 }
 

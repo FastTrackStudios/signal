@@ -347,6 +347,11 @@ pub struct PerformanceModel {
     /// assignments resolved.
     #[facet(default)]
     pub switch_actions: Vec<String>,
+    /// The switches' MIDI learn: which is waiting for a pedal, and what the
+    /// bound ones answer to (targets `"stack:N"`, `"tap"`, `"fx"`,
+    /// `"boost"`, `"tuner"`).
+    #[facet(default)]
+    pub learn: signal_rigs_proto::SwitchLearn,
 }
 
 /// One patch in the loaded profile — the preset browser's row.
@@ -584,6 +589,13 @@ pub struct ModuleSnapshotInfo {
     /// The macro knobs it tunes on its blocks.
     #[facet(default)]
     pub macros: Vec<String>,
+    /// A Core snapshot frozen into NAM captures (`signal rig freeze`): it
+    /// can play them in place of its settings.
+    #[facet(default)]
+    pub frozen_available: bool,
+    /// It plays its frozen captures now.
+    #[facet(default)]
+    pub frozen: bool,
 }
 
 /// One parameter a block preset sets.
@@ -1060,6 +1072,55 @@ pub struct MacroResult {
 
 pub mod watch;
 
+/// Time effects locked to the tempo — the beat lengths a Time knob's Beat
+/// side steps through, shared by the rig (which follows the tempo) and
+/// every remote (which shows and sets them).
+pub mod time {
+    /// A reverb's tail in beats, by its `sync_div` (0: free — the decay is
+    /// its own).
+    pub const REVERB_BEATS: [(&str, f64); 8] = [
+        ("Free", 0.0),
+        ("1/8", 0.5),
+        ("1/4", 1.0),
+        ("1/2", 2.0),
+        ("1 bar", 4.0),
+        ("2 bars", 8.0),
+        ("4 bars", 16.0),
+        ("8 bars", 32.0),
+    ];
+
+    /// A delay's divisions shortest to longest — (label, its `tap_div`
+    /// index, its length in quarter notes). `FREE_DIV` runs on the time
+    /// knob.
+    pub const DELAY_BEATS: [(&str, usize, f64); 8] = [
+        ("1/16", 4, 0.25),
+        ("1/8T", 3, 1.0 / 3.0),
+        ("1/8", 2, 0.5),
+        ("1/8.", 1, 0.75),
+        ("1/4T", 10, 2.0 / 3.0 * 1.0),
+        ("1/4", 0, 1.0),
+        ("1/4.", 8, 1.5),
+        ("1/2", 9, 2.0),
+    ];
+
+    /// The `tap_div` that runs free.
+    pub const FREE_DIV: usize = 7;
+
+    /// A modulation's cycle in beats, by its `sync_div` (0: free — its rate
+    /// is its own).
+    pub const MOD_BEATS: [(&str, f64); 9] = [
+        ("Free", 0.0),
+        ("1/16", 0.25),
+        ("1/8T", 1.0 / 3.0),
+        ("1/8", 0.5),
+        ("1/8.", 0.75),
+        ("1/4", 1.0),
+        ("1/2", 2.0),
+        ("1 bar", 4.0),
+        ("2 bars", 8.0),
+    ];
+}
+
 pub mod rig {
     //! Live rig control. `Rig` → `RigClient` / `RigService` / `rig_serve`,
     //! plus the `#[subscribe]` stream sibling: `RigStreamClient` /
@@ -1067,9 +1128,9 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode, MacroKnobView, MacroResult,
-        MacroSave, MacroTune,
-        PartOverride, PatchInfo, PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
+        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode,
+        MacroKnobView, MacroResult, MacroSave, MacroTune, PartOverride, PatchInfo,
+        PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
     };
 
     /// One live rig change. Every variant carries **full state** (idempotent
@@ -1384,6 +1445,14 @@ pub mod rig {
         fn play_preset(&self, index: u32);
         /// Tap tempo.
         fn tap_tempo(&self);
+        /// Learn the next pedal or pad pressed onto switch `target`
+        /// (`"stack:N"`, `"tap"`, `"fx"`, `"boost"`, `"tuner"`); the model's
+        /// `learn` shows it waiting. Learned pedals come before `midi.styx`.
+        fn midi_learn(&self, target: String);
+        /// Stop waiting for a pedal.
+        fn midi_learn_cancel(&self);
+        /// Unbind switch `target`.
+        fn midi_unlearn(&self, target: String);
         /// Toggle a block's bypass (by id).
         fn toggle_block_bypass(&self, id: String);
         /// Set a block's bypass explicitly (the rotate controls need set,
@@ -1410,6 +1479,19 @@ pub mod rig {
         /// Put block preset `preset` on the active patch's block `block`
         /// (`DLY 1`, `VERB 2`, …) — the patch's own pick, saved and rebuilt.
         fn choose_block(&self, block: String, preset: String);
+        /// Play Core snapshot `preset` · `snapshot` frozen (its NAM
+        /// captures) or live (its settings). Both are kept; saved and
+        /// rebuilt.
+        fn set_core_frozen(&self, preset: String, snapshot: String, frozen: bool);
+        /// Start auditioning from the sound browser: remember the profile's
+        /// picks (and the song's), so arrowing through presets can be undone
+        /// by [`browse_audition_end`](Self::browse_audition_end). A second
+        /// begin keeps the first snapshot. The same process as the keys rig's
+        /// `audition_begin`.
+        fn browse_audition_begin(&self);
+        /// Stop auditioning: keep what is playing, or put back the picks
+        /// from before it began.
+        fn browse_audition_end(&self, keep: bool);
         /// Step the active patch's `module` pick through its preset's
         /// snapshots (`delta` −1 / +1, wrapping). With no pick yet, takes
         /// the module's first preset.
@@ -1471,7 +1553,13 @@ pub mod rig {
         /// Delete a module preset — refused while anything refers to it.
         fn delete_module_preset(&self, module: String, name: String);
         /// Rename one snapshot of a module preset; references follow.
-        fn rename_module_snapshot(&self, module: String, preset: String, old: String, new_name: String);
+        fn rename_module_snapshot(
+            &self,
+            module: String,
+            preset: String,
+            old: String,
+            new_name: String,
+        );
         /// Delete one snapshot — refused for the last one, or while a
         /// preset or patch names it.
         fn delete_module_snapshot(&self, module: String, preset: String, snapshot: String);
@@ -1602,3 +1690,6 @@ mod tests {
         assert_eq!(perf.buffer_latency_ms(), 0.0);
     }
 }
+
+/// The switches' MIDI learn state (shared by every rig).
+pub use signal_rigs_proto::SwitchLearn;

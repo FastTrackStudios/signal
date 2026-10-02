@@ -75,7 +75,7 @@ fn engine_badge(engine: u32) -> Option<(&'static str, &'static str)> {
 /// Every member of a grouped panel (Mod, Motion) is bypassed — the group is
 /// off. False for a group with no members: that is an empty slot, not a
 /// bypass.
-fn group_bypassed(blocks: &[LiveBlock], kinds: &[BlockType], pre: bool) -> bool {
+pub(crate) fn group_bypassed(blocks: &[LiveBlock], kinds: &[BlockType], pre: bool) -> bool {
     let mut members = blocks
         .iter()
         .filter(|b| kinds.contains(&b.block_type) && is_pre_fx(b) == pre)
@@ -84,7 +84,7 @@ fn group_bypassed(blocks: &[LiveBlock], kinds: &[BlockType], pre: bool) -> bool 
 }
 
 /// Find a chain block by (type, name).
-fn find_block(blocks: &[LiveBlock], bt: BlockType, name: &str) -> Option<LiveBlock> {
+pub(crate) fn find_block(blocks: &[LiveBlock], bt: BlockType, name: &str) -> Option<LiveBlock> {
     blocks
         .iter()
         .find(|b| b.block_type == bt && b.name.eq_ignore_ascii_case(name))
@@ -122,7 +122,11 @@ fn decay_t60_secs(decay: f32) -> f64 {
 /// the engine rings for 12.
 pub(crate) fn verb_seconds(algorithm: f32, variant: f32, decay: f32) -> (f64, bool) {
     let alg = reverb_dsp::algorithm::AlgorithmType::from_index(algorithm.round().max(0.0) as usize);
-    match reverb_dsp::algorithm::decay_seconds(alg, variant.round().max(0.0) as usize, f64::from(decay)) {
+    match reverb_dsp::algorithm::decay_seconds(
+        alg,
+        variant.round().max(0.0) as usize,
+        f64::from(decay),
+    ) {
         Some(t) => (t, true),
         None => (decay_t60_secs(decay), false),
     }
@@ -151,7 +155,11 @@ pub(crate) fn cut_fmt(hz: f32) -> String {
 /// A delay's or reverb's level: it runs fully wet in parallel with the dry,
 /// so how loud the effect sits is its `level`, in dB.
 pub(crate) fn level_fmt(db: f32) -> String {
-    if db <= -59.5 { "Off".into() } else { format!("{db:+.1} dB") }
+    if db <= -59.5 {
+        "Off".into()
+    } else {
+        format!("{db:+.1} dB")
+    }
 }
 
 /// The wet's gain (linear) — what the lanes draw the repeats and tail at.
@@ -206,7 +214,7 @@ pub(crate) fn board_label(b: &LiveBlock) -> String {
 }
 
 /// Fire a param write without blocking the UI.
-fn send_param(rig: &Option<RigClient>, id: &str, name: &str, value: f32) {
+pub(crate) fn send_param(rig: &Option<RigClient>, id: &str, name: &str, value: f32) {
     if let Some(r) = rig.clone() {
         let (id, name) = (id.to_string(), name.to_string());
         spawn(async move {
@@ -248,6 +256,10 @@ pub fn ZoomPanel(
     /// module's presets in the right sidebar.
     #[props(default)]
     module: Option<&'static str>,
+    /// No border: the content (a face) runs edge to edge against the next
+    /// module instead of sitting in a card.
+    #[props(default)]
+    flush: bool,
 ) -> Element {
     let mut zoomed = use_signal(|| false);
     let select = try_use_context::<crate::module_sidebar::SelectedModule>();
@@ -266,7 +278,7 @@ pub fn ZoomPanel(
         ""
     };
     rsx! {
-        div { class: "relative flex flex-col flex-1 border border-border bg-card min-h-0 overflow-hidden",
+        div { class: if flush { "relative flex flex-col flex-1 bg-card min-h-0 overflow-hidden" } else { "relative flex flex-col flex-1 border border-border bg-card min-h-0 overflow-hidden" },
             onclick: move |_| {
                 if let (Some(m), Some(sel)) = (module, select) {
                     sel.set(crate::module_sidebar::Selection::Module(m.to_string()));
@@ -427,11 +439,19 @@ fn StereoMeter(
     let (lp, lc) = bar(l_db);
     let (rp, rc) = bar(r_db);
     let max_db = l_db.max(r_db);
-    let text = if max_db <= -89.0 { "−∞".to_string() } else { format!("{max_db:.0}") };
+    let text = if max_db <= -89.0 {
+        "−∞".to_string()
+    } else {
+        format!("{max_db:.0}")
+    };
     let tick = use_hook(|| std::rc::Rc::new(std::cell::Cell::new((0u32, String::new()))));
     let shown_db = {
         let (n, last) = tick.take();
-        let show = if n % 8 == 0 || last.is_empty() { text } else { last };
+        let show = if n % 8 == 0 || last.is_empty() {
+            text
+        } else {
+            last
+        };
         tick.set((n.wrapping_add(1), show.clone()));
         show
     };
@@ -496,23 +516,44 @@ fn div_label(b: &LiveBlock) -> String {
 /// Division → multiple of a quarter note, for the tap visualization
 /// (Free returns 0 → the caller falls back to the block's `time`).
 pub(crate) fn div_factor(idx: f32) -> f32 {
-    [1.0, 0.75, 0.5, 1.0 / 3.0, 0.25, 0.618, 0.414, 0.0, 1.5, 2.0, 2.0 / 3.0]
-        .get(idx.max(0.0) as usize)
-        .copied()
-        .unwrap_or(0.0)
+    [
+        1.0,
+        0.75,
+        0.5,
+        1.0 / 3.0,
+        0.25,
+        0.618,
+        0.414,
+        0.0,
+        1.5,
+        2.0,
+        2.0 / 3.0,
+    ]
+    .get(idx.max(0.0) as usize)
+    .copied()
+    .unwrap_or(0.0)
 }
 
 /// `delay::DelayStyle` order — the `TimeLine` MX machines.
 /// `chorus::EngineType` order — the modulation algorithms.
 pub(crate) const MOD_ENGINES: [&str; 11] = [
-    "Cubic", "BBD", "Tape", "Orbit", "Juno", "CE-2", "Dimension", "Clone", "Tri-Chorus", "SCF",
+    "Cubic",
+    "BBD",
+    "Tape",
+    "Orbit",
+    "Juno",
+    "CE-2",
+    "Dimension",
+    "Clone",
+    "Tri-Chorus",
+    "SCF",
     "Julia",
 ];
 /// `TremMode` order.
-const TREM_MODES: [&str; 3] = ["Mono", "Stereo", "Harmonic"];
+pub(crate) const TREM_MODES: [&str; 3] = ["Mono", "Stereo", "Harmonic"];
 
 pub(crate) const DELAY_ALGOS: [&str; 13] = [
-    "Tape", "Digital", "dBucket", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum",
+    "Tape", "Digital", "Analog", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum",
     "Oil Can", "MultiTap", "Spectral", "Filter",
 ];
 /// `reverb::AlgorithmType::ALL` order.
@@ -954,7 +995,7 @@ fn AlgoPicker(
 }
 
 /// The algorithm grid, as the popup host draws it.
-fn algo_grid(
+pub(crate) fn algo_grid(
     options: &[&'static str],
     current: usize,
     accent: &str,
@@ -1048,13 +1089,18 @@ fn PKnob(
 #[component]
 fn PatchTrimPanel(block: LiveBlock) -> Element {
     let param = |name: &str, lo: f32, hi: f32| {
-        block.params.iter().find(|p| p.name == name).cloned().unwrap_or(BlockParam {
-            name: name.to_string(),
-            value: 0.0,
-            min: lo,
-            max: hi,
-            overridden: false,
-        })
+        block
+            .params
+            .iter()
+            .find(|p| p.name == name)
+            .cloned()
+            .unwrap_or(BlockParam {
+                name: name.to_string(),
+                value: 0.0,
+                min: lo,
+                max: hi,
+                overridden: false,
+            })
     };
     let pan = param("pan", -1.0, 1.0);
     let gain = param("gain_db", -24.0, 24.0);
@@ -1100,7 +1146,7 @@ fn PatchTrimPanel(block: LiveBlock) -> Element {
 /// stacked (1 top, 2 bottom) — click a lane to select it — with the
 /// selected delay's controls in a strip beneath.
 #[component]
-fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
+pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let pick_block = try_use_context::<crate::module_sidebar::SelectedModule>();
     let mut sel = use_signal(|| 0usize);
@@ -1118,6 +1164,12 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
 
     let cur = delays[sel().min(delays.len() - 1)].clone();
     let cur_id = cur.id.clone();
+    // Each delay drawn by its machine's face (frame), where there is one.
+    let faces = crate::rig_faces::use_faces();
+    // Drawn at the window's tier (a phone draws each face's phone layout).
+    let tier = use_tier();
+    let face_of = |b: &LiveBlock| faces.time(false, DELAY_ALGOS.get(param_v(b, "style", 1.0) as usize).copied().unwrap_or("")).map(|f| f.at(tier));
+    let all_faces = delays.iter().all(|b| face_of(b).is_some());
 
     rsx! {
         div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
@@ -1146,11 +1198,15 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                     };
                     let mut taps = stems(t_l, true);
                     taps.extend(stems(t_r, false));
+                    // Light on top, dark underneath.
+                    let lane_face = face_of(b).map(|f| if di > 0 { f.darkened() } else { f });
                     rsx! {
                         div {
                             key: "lane{di}",
-                            class: if is_sel { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
-                            style: if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", di * 2) } else { format!("order: {}; border-left: 2px solid transparent;", di * 2) },
+                            // A face carries its own controls, so every lane is live at
+                            // full brightness: no dimming, hover or selection tint.
+                            class: if is_sel || lane_face.is_some() { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
+                            style: if lane_face.is_some() { format!("order: {};", di * 2) } else if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", di * 2) } else { format!("order: {}; border-left: 2px solid transparent;", di * 2) },
                             onclick: {
                                 let name = b.name.clone();
                                 move |e: MouseEvent| {
@@ -1165,8 +1221,15 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                                     }
                                 }
                             },
-                            {delay_lane(taps.clone(), win_ms, !dim, color, W, quarter, div_label(b),
-                                param_v(b, "style", 1.0) as u32)}
+                            if let Some(f) = lane_face.clone() {
+                                div { class: "absolute inset-0 flex justify-center", style: "background: #0b0c0f;",
+                                    crate::rig_faces::BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some("delay".to_string()), algos: Some(("style", DELAY_ALGOS.to_vec())), tempo_bpm: Some(tempo_bpm) }
+                                }
+                            } else {
+                                {delay_lane(taps.clone(), win_ms, !dim, color, W, quarter, div_label(b),
+                                    param_v(b, "style", 1.0) as u32)}
+                            }
+                            if lane_face.is_none() {
                             div { class: "absolute top-0.5 left-1.5 flex items-center gap-1.5",
                                 button {
                                     style: if dim { "font-size:10px; line-height:1; color:#52525b;" } else { "font-size:10px; line-height:1; color:#4ade80;" },
@@ -1189,12 +1252,18 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                                     BypassedBadge { small: true }
                                 }
                             }
+                            }
                             // Per-lane machine + timing, embedded at the
-                            // lane's right edge.
+                            // lane's right edge (a face keeps its top-right
+                            // corner clear for them) — unless its face
+                            // prints its own nameplate and Time knob.
+                            if !lane_face.as_ref().is_some_and(|f| f.nameplate) {
                             div {
-                                class: "absolute right-0 inset-y-0 flex items-center gap-1 pr-1 pl-3",
-                                style: "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);",
+                                class: if lane_face.is_some() { "absolute right-1 top-1 flex items-center gap-1 px-1" } else { "absolute right-0 inset-y-0 flex items-center gap-1 pr-1 pl-3" },
+                                style: if lane_face.is_some() { "background: rgba(8,8,8,0.7); border-radius: 4px;" } else { "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);" },
                                 onclick: move |e: MouseEvent| e.stop_propagation(),
+                                // Its preset (the name opens the browser).
+                                crate::face_chrome::PresetStepper { block: b.name.clone(), block_type: "delay".to_string(), accent: color.to_string() }
                                 // One timing division per delay (drives
                                 // both sides).
                                 {
@@ -1221,6 +1290,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                                     accent: color.to_string(),
                                 }
                             }
+                            }
                         }
                     }
                 }
@@ -1228,7 +1298,8 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
 
 
             // ── Knobs for the selected delay (machine + timing live on
-            // the lanes) ──
+            // the lanes); faces carry their own ──
+            if !all_faces {
             div { class: "flex items-end justify-around gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0",
                 style: if cur.bypassed { "order: 1; opacity: 0.4;" } else { "order: 1;" },
                 // The repeats' band: low cut on the wet, high cut in the
@@ -1266,6 +1337,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
                     }
                 }
             }
+            }
 
         }
     }
@@ -1275,7 +1347,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: boo
 /// stacked — click a lane to select — with the selected reverb's controls
 /// beneath.
 #[component]
-fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
+pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let pick_block = try_use_context::<crate::module_sidebar::SelectedModule>();
     let mut sel = use_signal(|| 0usize);
@@ -1290,6 +1362,15 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
     }
     let cur = verbs[sel().min(verbs.len() - 1)].clone();
     let cur_id = cur.id.clone();
+    // Each reverb drawn by its algorithm's face (frame), where there is one.
+    let faces = crate::rig_faces::use_faces();
+    // Drawn at the window's tier (a phone draws each face's phone layout).
+    let tier = use_tier();
+    let face_of = |b: &LiveBlock| faces.time(true, VERB_ALGOS.get(param_v(b, "algorithm", 1.0) as usize).copied().unwrap_or("")).map(|f| f.at(tier));
+    let all_faces = verbs.iter().all(|b| face_of(b).is_some());
+    // On a phone the lane's bar is its preset and algorithm: the face shows
+    // the time itself.
+    let small_room = tier <= Tier::Phone;
 
     rsx! {
         div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
@@ -1338,11 +1419,15 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                     .iter()
                     .map(|(t, l)| (x_of_t(*t), *l))
                     .collect();
+                    // Light on top, dark underneath.
+                    let lane_face = face_of(b).map(|f| if vi > 0 { f.darkened() } else { f });
                     rsx! {
                         div {
                             key: "lane{vi}",
-                            class: if is_sel { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
-                            style: if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", vi * 2) } else { format!("order: {}; border-left: 2px solid transparent;", vi * 2) },
+                            // A face carries its own controls, so every lane is live at
+                            // full brightness: no dimming, hover or selection tint.
+                            class: if is_sel || lane_face.is_some() { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
+                            style: if lane_face.is_some() { format!("order: {};", vi * 2) } else if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", vi * 2) } else { format!("order: {}; border-left: 2px solid transparent;", vi * 2) },
                             onclick: {
                                 let name = b.name.clone();
                                 move |e: MouseEvent| {
@@ -1357,6 +1442,11 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                                     }
                                 }
                             },
+                            if let Some(f) = lane_face.clone() {
+                                div { class: "absolute inset-0 flex justify-center", style: "background: #0b0c0f;",
+                                    crate::rig_faces::BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some("reverb".to_string()), algos: Some(("algorithm", VERB_ALGOS.to_vec())), tempo_bpm: Some(tempo_bpm) }
+                                }
+                            } else {
                             {reverb_lane(
                                 t60 as f32,
                                 size,
@@ -1373,6 +1463,8 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                                 &bot,
                                 x_of_t(t60),
                             )}
+                            }
+                            if lane_face.is_none() {
                             div { class: "absolute top-0.5 left-1.5 flex items-center gap-1.5",
                                 button {
                                     style: if dim { "font-size:10px; line-height:1; color:#52525b;" } else { "font-size:10px; line-height:1; color:#4ade80;" },
@@ -1395,12 +1487,18 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                                     BypassedBadge { small: true }
                                 }
                             }
+                            }
                             // Per-lane algorithm + decay-time readout at the
-                            // lane's right edge (the knob lives in the strip).
+                            // lane's right edge (the knob lives in the strip)
+                            // — unless its face prints its own nameplate.
+                            if !lane_face.as_ref().is_some_and(|f| f.nameplate) {
                             div {
-                                class: "absolute right-0 inset-y-0 flex items-center gap-1.5 pr-1 pl-3",
-                                style: "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);",
+                                class: if lane_face.is_some() { "absolute right-1 top-1 flex items-center gap-1.5 px-1" } else { "absolute right-0 inset-y-0 flex items-center gap-1.5 pr-1 pl-3" },
+                                style: if lane_face.is_some() { "background: rgba(8,8,8,0.7); border-radius: 4px;" } else { "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);" },
                                 onclick: move |e: MouseEvent| e.stop_propagation(),
+                                // Its preset (the name opens the browser).
+                                crate::face_chrome::PresetStepper { block: b.name.clone(), block_type: "reverb".to_string(), accent: color.to_string() }
+                                if !small_room {
                                 div { class: "flex flex-col items-end",
                                     span { style: "font-size:7px; text-transform:uppercase; color:#8a8a92;", "Time" }
                                     span { style: "font-family:ui-monospace,monospace; font-size:10px; color:{color};",
@@ -1408,6 +1506,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                                         // decay here ("0.80") read as a 0.8 s tail.
                                         {verb_seconds_label(param_v(b, "algorithm", 1.0), param_v(b, "variant", 0.0), param_v(b, "decay", 0.4))}
                                     }
+                                }
                                 }
                                 AlgoPicker {
                                     block_id: b.id.clone(),
@@ -1417,13 +1516,16 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                                     accent: color.to_string(),
                                 }
                             }
+                            }
                         }
                     }
                 }
             }
 
 
-            // ── Knobs for the selected reverb (algorithm lives on the lanes) ──
+            // ── Knobs for the selected reverb (algorithm lives on the lanes);
+            // faces carry their own ──
+            if !all_faces {
             div { class: "flex items-end justify-around gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0",
                 style: if cur.bypassed { "order: 1; opacity: 0.4;" } else { "order: 1;" },
                 if let Some(p) = param(&cur, "level") {
@@ -1475,6 +1577,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
                     PKnob { block_id: cur_id, name: "pan_a", label: "Pan", p }
                 }
             }
+            }
 
         }
     }
@@ -1485,7 +1588,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bo
 /// more than one at a time), an LFO visualization of the active effect,
 /// and two intelligently-mapped knobs — Mix and Speed.
 #[component]
-fn ModGroupPanel(
+pub(crate) fn ModGroupPanel(
     title: &'static str,
     /// Member block types, in rotation order.
     kinds: Vec<BlockType>,
@@ -1565,18 +1668,98 @@ fn ModGroupPanel(
         .enumerate()
         .min_by(|a, b| (a.1 - rate).abs().partial_cmp(&(b.1 - rate).abs()).unwrap())
         .map_or(0, |(i, _)| i);
+    // Speed as a note division, mapped to Hz from the tempo (Motion).
+    let speed_picker = rsx! {
+        Picker {
+            options: ["1/4", "1/8.", "1/8", "1/8T", "1/16", "Golden", "Silver"]
+                .iter().map(|l| (*l).to_string()).collect::<Vec<String>>(),
+            selected: cur_div as u32,
+            size: PickerSize::Tiny,
+            on_select: {
+                let rig = rig.clone();
+                let id = cur.id.clone();
+                let div_hz = div_hz.clone();
+                move |i: u32| {
+                    let hz = div_hz.get(i as usize).copied().unwrap_or(2.0);
+                    if let Some(r) = rig.clone() {
+                        let id = id.clone();
+                        spawn(async move {
+                            let _ = r.write_param(id, "rate".into(), hz).await;
+                        });
+                    }
+                }
+            },
+        }
+    };
+    // The shown effect's face, where it has one: its picture and its
+    // knobs, in place of the trace and the loose knobs.
+    // At the window's tier (a phone's own layout).
+    let tier = use_tier();
+    let mod_face = crate::rig_faces::use_faces().modulation(cur.block_type.as_str()).map(|f| f.at(tier));
+    // The face's nameplate opens the member's engines (or modes).
+    let algos: Option<(&'static str, Vec<&'static str>)> = match cur.block_type {
+        BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => Some(("engine", MOD_ENGINES.to_vec())),
+        BlockType::Trem => Some(("mode", TREM_MODES.to_vec())),
+        _ => None,
+    };
+    let tab_h = if tier <= Tier::Phone { 30 } else { 22 };
+    let engage = {
+        let rig = rig.clone();
+        let members = members.clone();
+        move |next: usize| {
+            let (rig, members) = (rig.clone(), members.clone());
+            spawn(async move {
+                let Some(r) = rig else { return };
+                for (i, m) in members.iter().enumerate() {
+                    let _ = r.set_block_bypass(m.id.clone(), i != next).await;
+                }
+            });
+        }
+    };
 
     rsx! {
-        div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
+        div { class: "relative flex flex-col h-full min-h-0", style: "background: #080808;",
             // Header: arrows rotate the engaged member. The right inset keeps
             // the engine picker clear of ZoomPanel's floating expand button.
-            div { class: "flex items-center gap-1 pl-1.5 pt-1 flex-shrink-0", style: "padding-right: 22px;",
+            // With a face, the header is a pill over the face's top-right
+            // corner (which the face keeps clear): the rotation and the
+            // pickers; the face has its own name and On key.
+            // With a face: the members as tabs over it (a press engages that
+            // one), Motion's speed beside them; the face's own nameplate has
+            // its preset, its engine and its On.
+            if mod_face.is_some() && tier > Tier::Phone {
+                div { style: "flex: 0 0 {tab_h}px; display: flex; align-items: stretch; gap: 2px; padding: 3px 6px; background: #0b0c0f; border-bottom: 1px solid #1d1f24;",
+                    for (i, m) in members.iter().enumerate() {
+                        {
+                            let on = i == shown && engaged;
+                            let look = if on { format!("background: {group_color}; color: #0a0b0d;") } else { "background: #16181c; color: #a1a1aa;".to_string() };
+                            let engage = engage.clone();
+                            rsx! {
+                                div { key: "{m.id}",
+                                    style: "flex: 0 0 auto; padding: 0 12px; border-radius: 5px; display: flex; align-items: center; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; cursor: pointer; {look}",
+                                    onclick: move |_| engage(i),
+                                    "{m.name}"
+                                }
+                            }
+                        }
+                    }
+                    div { style: "flex: 1 1 0%;" }
+                    if tempo_divisions {
+                        div { style: "display: flex; align-items: center;", {speed_picker.clone()} }
+                    }
+                }
+            }
+            if mod_face.is_none() {
+            div {
+                class: "flex items-center gap-1 pl-1.5 pt-1 flex-shrink-0",
+                style: if mod_face.is_some() { "right: 24px; top: 6px; z-index: 5; background: rgba(8,8,8,0.72); border-radius: 4px; padding-top: 2px; padding-bottom: 2px;" } else { "padding-right: 22px;" },
+                if mod_face.is_none() {
                 button {
                     style: if engaged { "font-size:10px; line-height:1; color:#4ade80;" } else { "font-size:10px; line-height:1; color:#52525b;" },
                     title: if engaged { "Bypass group" } else { "Engage" },
                     onclick: {
                         let rig = rig.clone();
-                        let members = members;
+                        let members = members.clone();
                         move |_| {
                             let (rig, members) = (rig.clone(), members.clone());
                             spawn(async move {
@@ -1594,6 +1777,7 @@ fn ModGroupPanel(
                     fts_chrome::Glyph { icon: fts_chrome::Icon::Power, size: 12 }
                 }
                 span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "{title}" }
+                }
                 button {
                     class: "ml-auto w-4 h-4 rounded-sm border border-border text-[9px] text-muted-foreground hover:text-foreground leading-none",
                     onclick: {
@@ -1611,8 +1795,8 @@ fn ModGroupPanel(
                     style: if engaged { format!("background-color: {group_color}; color: #000;") } else { String::new() },
                     // Tap the name to engage/bypass the shown member.
                     onclick: {
-                        let rig = rig;
-                        let id = cur.id;
+                        let rig = rig.clone();
+                        let id = cur.id.clone();
                         move |_| {
                             if let Some(r) = rig.clone() {
                                 let id = id.clone();
@@ -1650,7 +1834,18 @@ fn ModGroupPanel(
                     },
                     _ => rsx! {},
                 }
+                // Its preset (the name opens the browser).
+                crate::face_chrome::PresetStepper { block: cur.name.clone(), block_type: cur.block_type.as_str().to_string(), accent: group_color.to_string(), show_empty: true }
             }
+            }
+            if let Some(f) = mod_face.clone() {
+                div { class: "relative flex-1 min-h-0 flex",
+                    crate::rig_faces::BlockFace { block: cur.clone(), face: f, fill: true, preset_type: Some(cur.block_type.as_str().to_string()), algos: algos.clone(), tempo_bpm: Some(tempo_bpm),
+                        // On a phone the members are picked from its name.
+                        members: if tier <= Tier::Phone { members.iter().map(|m| (m.name.clone(), m.id.clone())).collect() } else { Vec::new() },
+                    }
+                }
+            } else {
             // LFO trace — flat while the group is bypassed (the panel's
             // BYPASSED badge says so).
             div { class: "relative flex-1", style: "min-height: 14px;",
@@ -1667,26 +1862,7 @@ fn ModGroupPanel(
                     // Speed as a note division, mapped to Hz from the tempo.
                     div { class: "flex flex-col gap-0.5",
                         span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "Speed" }
-                        Picker {
-                            options: ["1/4", "1/8.", "1/8", "1/8T", "1/16", "Golden", "Silver"]
-                                .iter().map(|l| (*l).to_string()).collect::<Vec<String>>(),
-                            selected: cur_div as u32,
-                            size: PickerSize::Tiny,
-                            on_select: {
-                                let rig = rig.clone();
-                                let id = cur.id.clone();
-                                let div_hz = div_hz.clone();
-                                move |i: u32| {
-                                    let hz = div_hz.get(i as usize).copied().unwrap_or(2.0);
-                                    if let Some(r) = rig.clone() {
-                                        let id = id.clone();
-                                        spawn(async move {
-                                            let _ = r.write_param(id, "rate".into(), hz).await;
-                                        });
-                                    }
-                                }
-                            },
-                        }
+                        {speed_picker.clone()}
                     }
                 } else if let Some(p) = param(&cur, "rate") {
                     PKnob {
@@ -1701,6 +1877,7 @@ fn ModGroupPanel(
                         fmt: Some(crate::knob::FmtFn((|v| format!("{v:.2}Hz")) as fn(f32) -> String)),
                     }
                 }
+            }
             }
         }
     }
@@ -1763,8 +1940,31 @@ fn PreFxPanel(blocks: Vec<LiveBlock>) -> Element {
 /// (preset · snapshot, amber when this patch has edits on the module's
 /// blocks) selects the module for the right sidebar, and ⋯ saves or reverts
 /// those edits and manages the preset — the same menu as the sidebar's.
+/// A module's separator: a column at a row's edge holding its presets,
+/// in sections spread down the row's height.
 #[component]
-fn ModuleControls(
+fn ModuleSeparator(children: Element) -> Element {
+    rsx! {
+        div { style: "flex: 0 0 150px; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: space-around; padding: 12px 10px; box-sizing: border-box; background: linear-gradient(180deg, #111216 0%, #0a0b0d 100%); border-left: 1px solid #23252b; border-right: 1px solid #23252b;",
+            {children}
+        }
+    }
+}
+
+/// One section of a [`ModuleSeparator`]: its label in `color`, ruled at
+/// the left in `rule`, what it loads under it.
+#[component]
+fn SepSection(label: String, color: String, rule: String, children: Element) -> Element {
+    rsx! {
+        div { style: "display: flex; flex-direction: column; gap: 6px; border-left: 2px solid {rule}; padding-left: 7px; min-width: 0;",
+            span { style: "font-size: 9px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: {color};", "{label}" }
+            {children}
+        }
+    }
+}
+
+#[component]
+pub(crate) fn ModuleControls(
     kind: crate::library::Kind,
     pick: Option<signal_guitar_proto::ModulePick>,
     /// Every module preset (this module's are picked out here).
@@ -1777,6 +1977,9 @@ fn ModuleControls(
     /// head or a panel's corner.
     #[props(default)]
     style: String,
+    /// Stacked, for a separator column (see [`crate::kit::PresetBar`]).
+    #[props(default)]
+    stacked: bool,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let library = try_use_context::<crate::library::OpenLibrary>();
@@ -1813,6 +2016,7 @@ fn ModuleControls(
             sub: played.clone(),
             modified,
             compact: true,
+            stacked,
             style: "flex-shrink: 0; {style}",
             options,
             on_pick: {
@@ -1855,7 +2059,7 @@ fn ModuleControls(
 /// The Pitch strip: the note being played (large), a vertical cents meter
 /// with the in-tune zone, and a short trace of the detected pitch.
 #[component]
-fn PitchStrip() -> Element {
+pub(crate) fn PitchStrip() -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut reading = use_signal(signal_guitar_proto::TunerReading::default);
     let mut trace = use_signal(|| std::collections::VecDeque::<f32>::with_capacity(48));
@@ -2354,6 +2558,72 @@ fn delay_lane(
     rsx! { crate::fx_viz::DelayViz { taps, win_ms, on, beat_ms, division, family, color } }
 }
 
+/// One delay block's picture — its repeats on the time line — for a panel
+/// beside the pedal that draws it.
+#[component]
+pub(crate) fn DelayBlockViz(block: LiveBlock, tempo_bpm: u32) -> Element {
+    let b = &block;
+    let quarter = 60_000.0 / tempo_bpm.max(1) as f32;
+    let win_ms = quarter * 4.0;
+    let fb = param_v(b, "feedback", 0.3).clamp(0.0, 0.98);
+    let mix = level_gain(b).clamp(0.02, 1.0);
+    let time_ms = param_v(b, "time", 350.0);
+    let f_l = div_factor(param_v(b, "tap_div_l", 0.0));
+    let f_r = div_factor(param_v(b, "tap_div_r", 0.0));
+    let t_l = if f_l > 0.0 { quarter * f_l } else { time_ms };
+    let t_r = if f_r > 0.0 { quarter * f_r } else { time_ms };
+    let stems = |side_t: f32, up: bool| -> Vec<(f32, f32, bool)> {
+        let mut out = Vec::new();
+        let (mut amp, mut t) = (mix, side_t);
+        while t <= win_ms && amp > 0.015 && out.len() < 32 {
+            out.push((t, amp, up));
+            amp *= fb;
+            t += side_t;
+        }
+        out
+    };
+    let mut taps = stems(t_l, true);
+    taps.extend(stems(t_r, false));
+    delay_lane(taps, win_ms, !b.bypassed, DELAY_COLORS[0], 0.0, quarter, div_label(b), param_v(b, "style", 1.0) as u32)
+}
+
+/// One reverb block's picture — its tail — for a panel beside its pedal.
+#[component]
+pub(crate) fn ReverbBlockViz(block: LiveBlock, tempo_bpm: u32) -> Element {
+    let b = &block;
+    let decay = param_v(b, "decay", 0.4).clamp(0.02, 1.0);
+    let size = param_v(b, "size", 0.5);
+    let mix = level_gain(b).clamp(0.02, 1.0).max(0.15);
+    let t60 = match verb_seconds(param_v(b, "algorithm", 1.0), param_v(b, "variant", 0.0), decay) {
+        (t, true) => t,
+        (t, false) => t * 0.8f64.mul_add(f64::from(size), 0.6),
+    };
+    reverb_lane(
+        t60 as f32,
+        size,
+        param_v(b, "predelay", 0.0),
+        mix,
+        param_v(b, "damp", 0.0).clamp(0.0, 1.0),
+        param_v(b, "algorithm", 1.0) as u32,
+        !b.bypassed,
+        60_000.0 / tempo_bpm.max(1) as f32,
+        &[],
+        VERB_COLORS[0],
+        b.bypassed,
+        "",
+        "",
+        0.0,
+    )
+}
+
+/// One modulation block's picture (a tremolo's pulse, a chorus's sweep).
+#[component]
+pub(crate) fn ModBlockViz(block: LiveBlock) -> Element {
+    let rate = param_v(&block, "rate", 4.0);
+    let depth = param_v(&block, "depth", 0.5);
+    mod_lane(&block, rate, depth, !block.bypassed, "#ec4899", "", "#ec4899")
+}
+
 /// Which of the effect's engines a rig block is.
 ///
 /// Signal's side of the join: `modulation-ui` owns the pictures and knows
@@ -2365,8 +2635,8 @@ fn delay_lane(
 /// Stated here as one list per slot so the pickers below and the visualiser
 /// cannot disagree about which machines belong where — `modulation-ui` owns
 /// the grouping and `modulation_slots` is checked against it.
-const MOD_KINDS: [BlockType; 3] = [BlockType::Chorus, BlockType::Phaser, BlockType::Flanger];
-const MOTION_KINDS: [BlockType; 3] = [BlockType::Trem, BlockType::Vibrato, BlockType::Rotary];
+pub(crate) const MOD_KINDS: [BlockType; 3] = [BlockType::Chorus, BlockType::Phaser, BlockType::Flanger];
+pub(crate) const MOTION_KINDS: [BlockType; 3] = [BlockType::Trem, BlockType::Vibrato, BlockType::Rotary];
 
 fn engine_of(block_type: BlockType) -> Option<crate::mod_viz::Engine> {
     use crate::mod_viz::Engine;
@@ -2443,6 +2713,155 @@ fn eq_panel(block: LiveBlock, spectrum: Vec<f32>) -> Element {
 // ── The Control view ────────────────────────────────────────────────────────
 
 /// The guitar instrument panel — see the module docs for the layout.
+
+/// The Control view is laid out in groups of two rows — PRE, AMP (the
+/// drives and the amps, drawn with frame faces) and POST — instead of the
+/// hand-laid rows alone.
+const FRAME_ROWS: bool = true;
+
+/// A group of two rows on the Control view, in signal order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Group {
+    /// Before the amp: compression, pitch, EQ, and the pre effects.
+    Pre,
+    /// The drives, then the amps (with the Amp EQ and the gate).
+    Amp,
+    /// After the amp: modulation, motion and the Time module.
+    Post,
+}
+
+impl Group {
+    pub const ALL: [Self; 3] = [Self::Pre, Self::Amp, Self::Post];
+
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Pre => "PRE",
+            Self::Amp => "AMP",
+            Self::Post => "POST",
+        }
+    }
+}
+
+/// The window is wide (an ultrawide, 5120 × 1440): every group shows, in
+/// signal order, each on one row with its two halves side by side — the
+/// whole rig at once. Provided by the host, which measures its body.
+#[derive(Clone, Copy)]
+pub struct WideLayout(pub Signal<bool>);
+
+/// The window's width over its height, published by the host (which can
+/// see its window) — the rig goes wide at 2.6 : 1 and over.
+#[derive(Clone, Copy)]
+pub struct WindowAspect(pub Signal<f64>);
+
+/// The window's size in points (logical pixels): which form factor the rig
+/// lays out for. Provided by the host.
+#[derive(Clone, Copy)]
+pub struct WindowSize(pub Signal<(f64, f64)>);
+
+/// The room a face is drawn in, smallest first — which version of a face
+/// (`FaceEntry::at`) the rig draws. Not the device: a desktop window made
+/// phone-sized draws the phone's.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum Tier {
+    Strip,
+    Phone,
+    Ipad,
+    Desktop,
+    Fullscreen,
+}
+
+impl Tier {
+    /// From its name in the manifest.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "strip" => Self::Strip,
+            "phone" => Self::Phone,
+            "ipad" => Self::Ipad,
+            "desktop" => Self::Desktop,
+            "fullscreen" => Self::Fullscreen,
+            _ => return None,
+        })
+    }
+}
+
+/// The tier the window is drawn at (Desktop when the host says nothing).
+#[must_use]
+pub fn use_tier() -> Tier {
+    let size = try_use_context::<WindowSize>().map_or((0.0, 0.0), |s| (s.0)());
+    match FormFactor::of(size) {
+        FormFactor::Phone => Tier::Phone,
+        FormFactor::Desktop => Tier::Desktop,
+    }
+}
+
+/// The form factors the rig lays out for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FormFactor {
+    /// A phone held sideways (an iPhone 16 Pro: 874 × 402): the chain a
+    /// page at a time.
+    Phone,
+    /// Everything larger: the Control view.
+    Desktop,
+}
+
+impl FormFactor {
+    /// From the window's size in points — or `FTS_FORM_FACTOR=phone` to
+    /// try a layout on a desktop.
+    #[must_use]
+    pub fn of(size: (f64, f64)) -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
+        if std::env::var("FTS_FORM_FACTOR").is_ok_and(|v| v.eq_ignore_ascii_case("phone")) {
+            return Self::Phone;
+        }
+        let (w, h) = size;
+        if h > 0.0 && h <= 500.0 && w > h { Self::Phone } else { Self::Desktop }
+    }
+}
+
+/// Which groups the Control view shows, most recently picked last: with
+/// the switches up, the last one; with them hidden, the last two, stacked
+/// in signal order. Provided by the host (the top bar picks).
+#[derive(Clone, Copy)]
+pub struct ShownGroups {
+    pub picked: Signal<Vec<Group>>,
+    /// The switches (and macros) are hidden: two groups fit.
+    pub two: Signal<bool>,
+}
+
+impl ShownGroups {
+    /// AMP with the switches up; AMP over POST without them.
+    #[must_use]
+    pub fn new() -> Self {
+        Self { picked: Signal::new(vec![Group::Post, Group::Amp]), two: Signal::new(false) }
+    }
+
+    /// The groups showing, in signal order.
+    #[must_use]
+    pub fn shown(&self) -> Vec<Group> {
+        let picked = (self.picked)();
+        let n = if (self.two)() { 2 } else { 1 };
+        let last: Vec<Group> = picked.iter().rev().take(n).copied().collect();
+        Group::ALL.into_iter().filter(|g| last.contains(g)).collect()
+    }
+
+    /// Pick `g`: it becomes the most recent.
+    pub fn pick(&self, g: Group) {
+        let mut picked = self.picked;
+        let mut v = picked();
+        v.retain(|x| *x != g);
+        v.push(g);
+        picked.set(v);
+    }
+}
+
+impl Default for ShownGroups {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[component]
 pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     // Callbacks made once per site, not once per render (see `stable`).
@@ -2457,7 +2876,11 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     // The chain's engine state, for every panel's badge: the blocks say it;
     // with none on screen and no audio, there is no audio.
     let chain_engine = blocks.first().map_or(
-        if (state.running)() { signal_guitar_proto::BlockEngine::LIVE } else { signal_guitar_proto::BlockEngine::NO_AUDIO },
+        if (state.running)() {
+            signal_guitar_proto::BlockEngine::LIVE
+        } else {
+            signal_guitar_proto::BlockEngine::NO_AUDIO
+        },
         |b| b.engine,
     );
     let engine_sig = use_context_provider(|| ChainEngine(Signal::new(chain_engine))).0;
@@ -2529,6 +2952,18 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
             }
         }
     });
+    // For the faces: the libraries and what plays (their preset
+    // steppers), and which faces show their visualiser instead.
+    let face_presets = use_context_provider(|| crate::face_chrome::FacePresets(Signal::new(Default::default())));
+    use_context_provider(|| crate::face_chrome::VizMode(Signal::new(std::collections::HashSet::new())));
+    use_effect(move || {
+        if let Some(c) = compositions.read().as_ref() {
+            let mut s = face_presets.0;
+            if *s.peek() != *c {
+                s.set(c.clone());
+            }
+        }
+    });
     let pick_of = |module: &str| {
         compositions.read().as_ref().and_then(|c| {
             c.active_modules
@@ -2558,11 +2993,32 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     );
     let comp = find_block(&blocks, BlockType::Compressor, "Pre Comp");
     let post_comp = find_block(&blocks, BlockType::Compressor, "Post Comp");
+    let post_comp_face = crate::rig_faces::use_faces().post_comp;
+    let trim_face = crate::rig_faces::use_faces().trim;
+    let viz = try_use_context::<crate::face_chrome::VizMode>();
     let comp_title = "Compressor";
 
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
 
     let hp = model.headphone.clone();
+    // The groups the top bar picked (AMP alone by default; AMP over POST
+    // with the switches hidden).
+    let groups = try_use_context::<ShownGroups>().unwrap_or_default();
+    let wide = try_use_context::<WideLayout>().is_some_and(|w| (w.0)());
+    // Wide: the whole rig, every group, each on one row.
+    let shown = if wide { Group::ALL.to_vec() } else { groups.shown() };
+    // A group's two rows: stacked, or side by side on one row when wide.
+    let group_style = if wide {
+        "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;"
+    } else {
+        "flex: 2 1 0%; min-height: 0; display: flex; flex-direction: column;"
+    };
+    let show_input = !FRAME_ROWS;
+    let show_pre = FRAME_ROWS && shown.contains(&Group::Pre);
+    let show_amp = FRAME_ROWS && shown.contains(&Group::Amp);
+    let show_post = FRAME_ROWS && shown.contains(&Group::Post);
+    let show_time = !FRAME_ROWS || show_post;
+    let trim = find_block(&blocks, BlockType::Volume, "Patch Trim");
 
     rsx! {
         div { class: "flex gap-0 h-full min-h-0 overflow-hidden",
@@ -2573,7 +3029,9 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
             // ── Center surface ──
             div { class: "flex flex-col gap-1 flex-1 min-w-0 min-h-0",
                 style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow-y: scroll;",
-                if chain_engine != signal_guitar_proto::BlockEngine::LIVE {
+                // With the groups laid out, audio off is the top bar's
+                // blinking Audio dot, not a banner pushing the page down.
+                if !FRAME_ROWS && chain_engine != signal_guitar_proto::BlockEngine::LIVE {
                     AudioOffBanner { state, loading: chain_engine == signal_guitar_proto::BlockEngine::LOADING }
                 }
                 // Main modules, in signal order: Compressor → Gate → Amp EQ,
@@ -2583,12 +3041,15 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                 // take a share OF and collapses to its basis — which is zero.
                 // The main surface fills the view; what follows it scrolls in.
                 div { class: "flex flex-col gap-0 min-h-0", style: "flex: 0 0 100%; min-height: 0; display: flex; flex-direction: column;",
+                    // The name bars (the modules' picks and each block's
+                    // loaded model) belong to the hand-laid rows.
+                    if !FRAME_ROWS {
                     // ── The board, two rows of four: the pedals (Boost +
                     // Drive 1-3), then the amp stage (Amp L, Cab L, Amp R,
                     // Cab R) in signal order. A drive or amp chunk is its
                     // level fader; a cab chunk only engages/bypasses. ──
                     div { class: "flex gap-0 flex-shrink-0", style: "height: 30px;",
-                        ModuleControls { kind: crate::library::Kind::DriveModules, pick: drive_pick, modules: all_modules.clone(), edited: edited.clone(), style: "width: 200px;" }
+                        ModuleControls { kind: crate::library::Kind::DriveModules, pick: drive_pick.clone(), modules: all_modules.clone(), edited: edited.clone(), style: "width: 200px;" }
                         for b in board.iter() {
                             DriveChunk {
                                 key: "{b.id}",
@@ -2606,7 +3067,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                     }
                     div { class: "flex gap-0 flex-shrink-0", style: "height: 30px;",
-                        ModuleControls { kind: crate::library::Kind::AmpModules, pick: amp_pick, modules: all_modules.clone(), edited: edited.clone(), style: "width: 200px;" }
+                        ModuleControls { kind: crate::library::Kind::AmpModules, pick: amp_pick.clone(), modules: all_modules.clone(), edited: edited.clone(), style: "width: 200px;" }
                         DriveChunk {
                             // Constant-loudness drive: the bar pushes the
                             // capture harder while calibration holds the
@@ -2639,6 +3100,8 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                         CabChunk { cab: cab_r.clone(), amp_loaded: amp_r_preset.is_some() }
                     }
+                    }
+                    if show_input {
                     // Height from the column, not from an aspect ratio.
                     //
                     // This row asked for `aspect-ratio: 25 / 9` to get its
@@ -2649,7 +3112,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     // flex weight against the time row below gives the same
                     // proportion without the ambiguity, and the compressor's
                     // `aspect-square` still takes its width from the height.
-                    div { class: "flex gap-0 min-h-0 w-full", style: "flex: 3 1 0%; min-height: 0;",
+                    div { class: "flex gap-0 min-h-0 w-full", style: if FRAME_ROWS { "flex: 1 1 0%; min-height: 0;" } else { "flex: 3 1 0%; min-height: 0;" },
                         // Height-driven square: width follows the row height.
                         div { class: "min-h-0 h-full aspect-square flex flex-col flex-shrink-0",
                             ZoomPanel {
@@ -2665,7 +3128,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                         });
                                     })
                                 }),
-                                if let Some(comp) = comp {
+                                if let Some(comp) = comp.clone() {
                                     LiveComp { block: comp.clone(), state }
                                 } else {
                                     {empty_slot(comp_title)}
@@ -2693,7 +3156,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                         });
                                     })
                                 }),
-                                if let Some(eq) = eq {
+                                if let Some(eq) = eq.clone() {
                                     // The plugin's own editor where there is a
                                     // renderer that can paint it; the portable
                                     // SVG re-host on wasm. Same band model
@@ -2731,12 +3194,148 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             }
                         }
                     }
+                    }
+                    // PRE: the input stage (gain, pitch, compressor, EQ), then
+                    // the pre effects in front of the amp.
+                    if show_pre {
+                        div { class: "gap-0 min-h-0 w-full", style: group_style,
+                            // The input stage takes most of the row; the pre
+                            // effects their units' width (the split
+                            // `PreFxRow`'s lane share is reckoned for).
+                            div { style: if wide { "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; overflow: hidden;" } else { "flex: 1 1 0%; min-height: 0; display: flex;" },
+                                crate::rig_faces::InputRow { blocks: blocks.clone(),
+                                    // The Pre Comp's visualiser stands at the head of the drive
+                                    // board (see the AMP row).
+                                    after_filter: VNode::empty(),
+                                }
+                            }
+                            div { style: if wide { "flex: 0 0 36.7%; min-width: 0; min-height: 0; display: flex;" } else { "flex: 1 1 0%; min-height: 0; display: flex;" },
+                                crate::rig_faces::PreFxRow { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
+                            }
+                        }
+                    }
+                    // AMP: the drives, then the amps — the blocks the preset
+                    // loaded, each drawn by its frame face (or a card).
+                    if show_amp {
+                        div { class: "gap-0 min-h-0 w-full", style: group_style,
+                            div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;",
+                                // The Core module's separator: the core tone — compressor,
+                                // drives, amps, gate, room, EQ and post compressor —
+                                // and the Drive and Amp modules within it.
+                                ModuleSeparator {
+                                    SepSection { label: "Core module", color: "#e4e4e7", rule: "#52525b",
+                                        ModuleControls { kind: crate::library::Kind::Compositions, pick: pick_of("Core"), modules: all_modules.clone(), edited: edited.clone(), stacked: true, style: "width: 100%;" }
+                                        crate::face_chrome::CoreFreeze {}
+                                    }
+                                    SepSection { label: "Drive", color: "#fbbf24", rule: "#f59e0b",
+                                        ModuleControls { kind: crate::library::Kind::DriveModules, pick: drive_pick.clone(), modules: all_modules.clone(), edited: edited.clone(), stacked: true, style: "width: 100%;" }
+                                    }
+                                    SepSection { label: "Amp", color: "#f87171", rule: "#dc2626",
+                                        ModuleControls { kind: crate::library::Kind::AmpModules, pick: amp_pick.clone(), modules: all_modules.clone(), edited: edited.clone(), stacked: true, style: "width: 100%;" }
+                                    }
+                                }
+                                crate::rig_faces::DrivesRow { blocks: blocks.clone(),
+                                    // The Pre Comp at the head of the board,
+                                    // as its visualiser.
+                                    leading: comp.clone().map(|c| rsx! {
+                                        ZoomPanel {
+                                            title: "Pre Comp".to_string(),
+                                            left_power_on: Some(!c.bypassed),
+                                            LiveComp { block: c, state }
+                                        }
+                                    }),
+                                }
+                            }
+                            // Wide: the amps get more of the row, and a
+                            // loaded cab stands beside its amp.
+                            div { style: if wide { "flex: 1.5 1 0%; min-width: 0; min-height: 0; display: flex;" } else { "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;" },
+                                crate::rig_faces::AmpRow { blocks: blocks.clone(), cabs: wide, in_db: Some(state.in_peak_db),
+                                    // The patch's level and pan, after the gate.
+                                    trailing: rsx! {
+                                        div { class: "min-h-0 h-full flex flex-col flex-shrink-0", style: "width: 92px;",
+                                            if let (Some(t), Some(f)) = (trim.clone(), trim_face.clone()) {
+                                                // Its face, flush in the slot.
+                                                crate::rig_faces::BlockFace { block: t, face: f, fill: true }
+                                            } else {
+                                                ZoomPanel { title: "Level".to_string(),
+                                                    if let Some(t) = trim.clone() {
+                                                        PatchTrimPanel { block: t }
+                                                    } else {
+                                                        {empty_slot("Level")}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                }
+                            }
+                        }
+                    }
+                    // POST: its two rows, stacked or (wide) side by side.
+                    div { class: "gap-0 min-h-0 w-full", style: if show_post || !FRAME_ROWS { group_style } else { "display: none;" },
+                    // POST, top: the EQ, the post compressor and the patch's
+                    // volume (level and boost); the modules follow below.
+                    if show_post {
+                        // Wide, the EQ and compressor give the modulation
+                        // panels some of their room (as PRE's input row does
+                        // its pre effects', so the lanes stay aligned).
+                        div { class: "flex gap-0 min-h-0 w-full", style: if wide { "flex: 0.85 1 0%; min-width: 0; min-height: 0;" } else { "flex: 1 1 0%; min-height: 0;" },
+                            div { class: "min-h-0 h-full flex flex-col", style: "flex: 3 1 0%;",
+                                ZoomPanel {
+                                    title: "EQ".to_string(),
+                                    left_power_on: eq.as_ref().map(|b| !b.bypassed),
+                                    if let Some(e) = eq.clone() {
+                                        div { style: "position: relative; width: 100%; height: 100%;",
+                                            LiveEq { block: e.clone(), state }
+                                            crate::rig_faces::PresetCorner { block: e.name.clone(), block_type: "eq".to_string() }
+                                        }
+                                    } else {
+                                        {empty_slot("EQ")}
+                                    }
+                                }
+                            }
+                            div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
+                                ZoomPanel {
+                                    title: "Post Comp".to_string(),
+                                    flush: post_comp_face.is_some(),
+                                    left_power_on: post_comp.as_ref().map(|b| !b.bypassed),
+                                    if let Some(c) = post_comp.clone() {
+                                        // The unit, laid out to fill the box
+                                        // — or, switched, what it is doing.
+                                        if let Some(f) = post_comp_face.clone().filter(|_| !crate::face_chrome::shows_viz(viz, &c.name)) {
+                                            div { style: "position: relative; display: flex; width: 100%; height: 100%; min-height: 0;",
+                                                crate::rig_faces::BlockFace { block: c.clone(), face: f, stepper: true }
+                                                div { style: "position: absolute; left: 6px; top: 6px;",
+                                                    crate::face_chrome::VizToggle { block: c.name.clone() }
+                                                }
+                                            }
+                                        } else {
+                                            div { style: "position: relative; display: flex; width: 100%; height: 100%; min-height: 0;",
+                                                LiveComp { block: c.clone(), state }
+                                                crate::rig_faces::PresetCorner { block: c.name.clone(), block_type: "compressor".to_string() }
+                                                if post_comp_face.is_some() {
+                                                    div { style: "position: absolute; left: 6px; bottom: 6px;",
+                                                        crate::face_chrome::VizToggle { block: c.name.clone() }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        {empty_slot("Post Comp")}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if show_time {
                     // Time section: stereo delay + stereo reverb + modulation —
                     // or, on PRE, the Pre FX module's motion, delay and reverb.
-                    div { class: "flex gap-0 min-h-0 w-full", style: "flex: 2 1 0%; min-height: 150px;",
-                        div { class: "min-h-0 h-full flex flex-col gap-0", style: "flex: 1 1 0%;",
+                    div { class: "flex gap-0 min-h-0 w-full", style: if FRAME_ROWS && wide { "flex: 1.15 1 0%; min-width: 0; min-height: 150px;" } else if FRAME_ROWS { "flex: 1 1 0%; min-height: 150px;" } else { "flex: 2 1 0%; min-height: 150px;" },
+                        // Modulation and motion side by side, each the row's
+                        // full height.
+                        div { class: "min-h-0 h-full flex gap-0", style: "flex: 1 1 0%; min-width: 0; flex-direction: row;",
                             if !bpre {
-                                ZoomPanel { title: "Modulation".to_string(),
+                                ZoomPanel { title: "Modulation".to_string(), flush: true,
                                     bypassed: group_bypassed(&blocks, &MOD_KINDS, false),
                                     ModGroupPanel {
                                         title: "Mod",
@@ -2746,7 +3345,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                     }
                                 }
                             }
-                            ZoomPanel { title: if bpre { "Pre Motion".to_string() } else { "Motion".to_string() },
+                            ZoomPanel { title: if bpre { "Pre Motion".to_string() } else { "Motion".to_string() }, flush: true,
                                 bypassed: group_bypassed(&blocks, &MOTION_KINDS, bpre),
                                 ModGroupPanel {
                                     title: "Motion",
@@ -2760,7 +3359,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                         // The patch's own level and pan — Patch Trim, the last
                         // block before the Time module, in signal order.
-                        if !bpre {
+                        if !bpre && !FRAME_ROWS {
                             if let Some(trim) = find_block(&blocks, BlockType::Volume, "Patch Trim") {
                                 div { class: "min-h-0 h-full flex flex-col flex-shrink-0", style: "width: 92px;",
                                     ZoomPanel { title: "Patch".to_string(),
@@ -2769,13 +3368,32 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 }
                             }
                         }
-                        // The Time module — delays and reverbs — under one
-                        // preset head, like the board's rows.
-                        div { class: "min-h-0 h-full flex flex-col", style: "flex: 4 1 0%;",
+                        // The Time module's separator: a column between the
+                        // modulation and the time effects, holding the
+                        // module's presets — the Time pick, and the Delay and
+                        // Reverb picks it references. (Each lane's own
+                        // preset is on its face.)
+                        if !bpre {
+                            ModuleSeparator {
+                                SepSection { label: "Time module", color: "#e4e4e7", rule: "#52525b",
+                                    ModuleControls { kind: crate::library::Kind::TimeModules, pick: time_pick.clone(), modules: all_modules.clone(), edited: edited.clone(), stacked: true, style: "width: 100%;" }
+                                }
+                                SepSection { label: "Delay", color: "#60a5fa", rule: "#3b82f6",
+                                    ModuleControls { kind: crate::library::Kind::DelayModules, pick: delay_pick.clone(), modules: all_modules.clone(), edited: edited.clone(), stacked: true, style: "width: 100%;" }
+                                }
+                                SepSection { label: "Reverb", color: "#c4b5fd", rule: "#a78bfa",
+                                    ModuleControls { kind: crate::library::Kind::ReverbModules, pick: reverb_pick.clone(), modules: all_modules.clone(), edited: edited.clone(), stacked: true, style: "width: 100%;" }
+                                }
+                            }
+                        }
+                        // The Time module: 65 % of this half, the Pre FX
+                        // lanes above taking half that — the lanes line up.
+                        div { class: "min-h-0 h-full flex flex-col", style: if FRAME_ROWS && wide { "flex: 0 0 65%; min-width: 0;" } else { "flex: 4 1 0%;" },
                         div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%;",
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
                                 title: if bpre { "Pre Delay".to_string() } else { "Delay".to_string() },
+                                flush: true,
                                 module: if bpre { None } else { Some("Delay") },
                                 power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Delay && is_pre_fx(b) == bpre && !b.bypassed)),
                                 on_power: Some(cbs.cb({
@@ -2803,6 +3421,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
                                 title: if bpre { "Pre Verb".to_string() } else { "Reverb".to_string() },
+                                flush: true,
                                 module: if bpre { None } else { Some("Reverb") },
                                 power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Reverb && is_pre_fx(b) == bpre && !b.bypassed)),
                                 on_power: Some(cbs.cb({
@@ -2828,16 +3447,9 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             }
                         }
                         }
-                        if !bpre {
-                            // The Time module — a Delay pick and a Reverb pick — and
-                            // the two it references, side by side.
-                            div { class: "flex gap-0", style: "height: 22px; width: 100%;",
-                                ModuleControls { kind: crate::library::Kind::TimeModules, pick: time_pick, modules: all_modules.clone(), edited: edited.clone(), style: "height: 22px; flex: 1 1 0%;" }
-                                ModuleControls { kind: crate::library::Kind::DelayModules, pick: delay_pick, modules: all_modules.clone(), edited: edited.clone(), style: "height: 22px; flex: 1 1 0%;" }
-                                ModuleControls { kind: crate::library::Kind::ReverbModules, pick: reverb_pick, modules: all_modules.clone(), edited: edited.clone(), style: "height: 22px; flex: 1 1 0%;" }
-                            }
                         }
-                        }
+                    }
+                    }
                     }
                 }
 
@@ -2997,12 +3609,20 @@ fn AudioOffBanner(state: RigViewState, loading: bool) -> Element {
     // Stopped on purpose (the Audio menu): nothing is wrong to explain.
     let stopped = why == "Audio stopped";
     let (dot, head, body) = if loading {
-        ("#eab308", "Starting audio…", "Opening the interface and building the patch.".to_string())
+        (
+            "#eab308",
+            "Starting audio…",
+            "Opening the interface and building the patch.".to_string(),
+        )
     } else {
         (
             "#ef4444",
             "No audio",
-            if why.is_empty() { "The audio device is closed.".to_string() } else { why },
+            if why.is_empty() {
+                "The audio device is closed.".to_string()
+            } else {
+                why
+            },
         )
     };
     rsx! {
@@ -3056,13 +3676,12 @@ fn LiveStereoMeter(label: &'static str, state: RigViewState, output: bool, muted
 
 /// A compressor surface with its block's live trace and gain reduction.
 #[component]
-fn LiveComp(block: LiveBlock, state: RigViewState) -> Element {
+pub(crate) fn LiveComp(block: LiveBlock, state: RigViewState) -> Element {
     let in_db = state.in_peak_db.cloned();
-    let (wave, gr_db) = state
-        .comp_wave
-        .read()
-        .get(&block.name)
-        .map_or_else(|| ((Vec::new(), Vec::new()), 0.0), |(i, g, gr)| ((i.clone(), g.clone()), *gr));
+    let (wave, gr_db) = state.comp_wave.read().get(&block.name).map_or_else(
+        || ((Vec::new(), Vec::new()), 0.0),
+        |(i, g, gr)| ((i.clone(), g.clone()), *gr),
+    );
     rsx! {
         crate::comp_surface::CompSurface { block, wave, in_db, gr_db }
     }
@@ -3070,7 +3689,7 @@ fn LiveComp(block: LiveBlock, state: RigViewState) -> Element {
 
 /// An EQ panel over the live input spectrum.
 #[component]
-fn LiveEq(block: LiveBlock, state: RigViewState) -> Element {
+pub(crate) fn LiveEq(block: LiveBlock, state: RigViewState) -> Element {
     let spectrum = state.spectrum.cloned();
     eq_panel(block, spectrum)
 }
@@ -3093,23 +3712,38 @@ fn PhonesStrip(hp: signal_guitar_proto::HeadphoneState, state: RigViewState) -> 
     let (mix_l, mix_r) = state.mix_db.cloned();
     let db = |pos: f32| {
         let d = phones_fader_db(pos);
-        if d.is_finite() { format!("{d:+.0}") } else { "off".to_string() }
+        if d.is_finite() {
+            format!("{d:+.0}")
+        } else {
+            "off".to_string()
+        }
     };
     let mixer = hp.mixer.clone();
     let (dot, tip) = match (mixer.enabled, mixer.state) {
-        (false, _) => ("#52525b", "Headphone mixer off — set it up in Audio Settings".to_string()),
+        (false, _) => (
+            "#52525b",
+            "Headphone mixer off — set it up in Audio Settings".to_string(),
+        ),
         (true, PhonesMixerState::PLAYING) => (
             "#22c55e",
-            format!("Headphone mixer playing the mix · {} Hz · {} frames · pid {}", mixer.rate, mixer.block, mixer.pid),
+            format!(
+                "Headphone mixer playing the mix · {} Hz · {} frames · pid {}",
+                mixer.rate, mixer.block, mixer.pid
+            ),
         ),
-        (true, PhonesMixerState::NO_DEVICE) => ("#ef4444", "Headphone mixer: the interface is not there — retrying".to_string()),
+        (true, PhonesMixerState::NO_DEVICE) => (
+            "#ef4444",
+            "Headphone mixer: the interface is not there — retrying".to_string(),
+        ),
         (true, _) => ("#eab308", "Headphone mixer starting…".to_string()),
     };
     let set_mix = {
         let rig = rig.clone();
         move |v: f32| {
             if let Some(r) = rig.clone() {
-                spawn(async move { let _ = r.set_phones_mix(v).await; });
+                spawn(async move {
+                    let _ = r.set_phones_mix(v).await;
+                });
             }
         }
     };
@@ -3118,7 +3752,9 @@ fn PhonesStrip(hp: signal_guitar_proto::HeadphoneState, state: RigViewState) -> 
         let vol = hp.volume;
         move |v: f32| {
             if let Some(r) = rig.clone() {
-                spawn(async move { let _ = r.set_headphone(vol, v).await; });
+                spawn(async move {
+                    let _ = r.set_headphone(vol, v).await;
+                });
             }
         }
     };
@@ -3127,7 +3763,9 @@ fn PhonesStrip(hp: signal_guitar_proto::HeadphoneState, state: RigViewState) -> 
         let gtr = hp.self_mix;
         move |v: f32| {
             if let Some(r) = rig.clone() {
-                spawn(async move { let _ = r.set_headphone(v, gtr).await; });
+                spawn(async move {
+                    let _ = r.set_headphone(v, gtr).await;
+                });
             }
         }
     };

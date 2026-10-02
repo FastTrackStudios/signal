@@ -116,7 +116,11 @@ pub fn level_profile(
     let comp = RigLibrary::load_compositions();
     // Each patch with its macro knobs where it keeps them — as it plays.
     for patch in &mut built.patches {
-        if let Some(d) = raw.patches.iter().find(|d| d.name.eq_ignore_ascii_case(&patch.name)) {
+        if let Some(d) = raw
+            .patches
+            .iter()
+            .find(|d| d.name.eq_ignore_ascii_case(&patch.name))
+        {
             crate::macros::apply_positions_for_level(d, &comp, patch);
         }
     }
@@ -189,8 +193,18 @@ pub fn level_modules(sample_rate: u32, dry_run: bool) -> Vec<ModuleLevel> {
     let di_lufs = signal_sampler::loudness::integrated_lufs(&di.samples, di.sample_rate) as f32;
 
     enum Job {
-        Amp { m: usize, s: usize, second: bool, nam: String, cab: String },
-        Drive { p: usize, o: usize, nam: String },
+        Amp {
+            m: usize,
+            s: usize,
+            second: bool,
+            nam: String,
+            cab: String,
+        },
+        Drive {
+            p: usize,
+            o: usize,
+            nam: String,
+        },
     }
     let mut jobs = Vec::new();
     for (m, module) in comp.modules.iter().enumerate() {
@@ -199,17 +213,33 @@ pub fn level_modules(sample_rate: u32, dry_run: bool) -> Vec<ModuleLevel> {
         }
         for (s, snap) in module.snapshots.iter().enumerate() {
             if !snap.nam.is_empty() {
-                jobs.push(Job::Amp { m, s, second: false, nam: snap.nam.clone(), cab: snap.cab.clone() });
+                jobs.push(Job::Amp {
+                    m,
+                    s,
+                    second: false,
+                    nam: snap.nam.clone(),
+                    cab: snap.cab.clone(),
+                });
             }
             if !snap.nam2.is_empty() {
-                jobs.push(Job::Amp { m, s, second: true, nam: snap.nam2.clone(), cab: snap.cab2.clone() });
+                jobs.push(Job::Amp {
+                    m,
+                    s,
+                    second: true,
+                    nam: snap.nam2.clone(),
+                    cab: snap.cab2.clone(),
+                });
             }
         }
     }
     for (p, pedal) in drives.iter().enumerate() {
         for (o, option) in pedal.options.iter().enumerate() {
             if !option.nam.is_empty() {
-                jobs.push(Job::Drive { p, o, nam: option.nam.clone() });
+                jobs.push(Job::Drive {
+                    p,
+                    o,
+                    nam: option.nam.clone(),
+                });
             }
         }
     }
@@ -224,7 +254,11 @@ pub fn level_modules(sample_rate: u32, dry_run: bool) -> Vec<ModuleLevel> {
                 chain
             }
             Job::Drive { nam, .. } => {
-                vec![RigBlock::of_type(BlockType::Drive).with_nam(nam.clone()).named("Drive")]
+                vec![
+                    RigBlock::of_type(BlockType::Drive)
+                        .with_nam(nam.clone())
+                        .named("Drive"),
+                ]
             }
         };
         let mut patch = signal_sampler::rig_profile::RigPatch::new("module");
@@ -245,11 +279,19 @@ pub fn level_modules(sample_rate: u32, dry_run: bool) -> Vec<ModuleLevel> {
                     if *second { " · R" } else { "" }
                 );
                 let snap = &mut module.snapshots[*s];
-                let level = if *second { &mut snap.level2_db } else { &mut snap.level_db };
+                let level = if *second {
+                    &mut snap.level2_db
+                } else {
+                    &mut snap.level_db
+                };
                 if let Some(l) = lufs {
                     *level = (target - l).clamp(-40.0, 40.0);
                 }
-                out.push(ModuleLevel { what, lufs, level_db: *level });
+                out.push(ModuleLevel {
+                    what,
+                    lufs,
+                    level_db: *level,
+                });
             }
             Job::Drive { p, o, .. } => {
                 let pedal = &mut drives[*p];
@@ -258,7 +300,11 @@ pub fn level_modules(sample_rate: u32, dry_run: bool) -> Vec<ModuleLevel> {
                 if let Some(l) = lufs {
                     option.level_db = (di_lufs - l).clamp(-40.0, 40.0);
                 }
-                out.push(ModuleLevel { what, lufs, level_db: option.level_db });
+                out.push(ModuleLevel {
+                    what,
+                    lufs,
+                    level_db: option.level_db,
+                });
             }
         }
     }
@@ -268,4 +314,3 @@ pub fn level_modules(sample_rate: u32, dry_run: bool) -> Vec<ModuleLevel> {
     }
     out
 }
-

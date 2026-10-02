@@ -41,12 +41,10 @@ use eq_ui::eq_graph_model::EqBandShape;
 /// The plugin's graph, driving one rig block over the wire.
 #[component]
 pub fn EqVelloSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
-    // The analyser moves without the DOM changing — the spectrum lives inside
-    // the widget's scene — so the same clock the other painted panels use.
-    // Without it the graph draws once and the spectrum never appears, which
-    // looks like the data not arriving rather than the frame not being asked
-    // for.
-    crate::fx_viz::use_repaint_clock();
+    // No repaint clock: a new spectrum re-renders this component, and every
+    // update redraws the window, so the analyser moves when (and only when)
+    // there is something new to show. A clock here kept the whole window
+    // redrawing forty times a second with the audio off.
     let rig = use_hook(try_consume_context::<RigClient>);
     let block_id = block.id.clone();
 

@@ -59,6 +59,13 @@
         # plugin builds without needing real Intel hardware (deploy-macos.sh
         # TARGET=x86_64-apple-darwin, nice-plug-xtask's bundle-universal).
         targets = [ "wasm32-unknown-unknown" ]
+          # The Android app (dx build --platform android): the emulator's
+          # x86_64 and phones' aarch64. dx links them with the NDK's clang
+          # (ANDROID_NDK_HOME, from the system SDK).
+          ++ lib.optionals pkgs.stdenv.isLinux [
+            "x86_64-linux-android"
+            "aarch64-linux-android"
+          ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
             "aarch64-apple-ios"
             "aarch64-apple-ios-sim"

@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
@@ -29,14 +29,51 @@ use signal_sampler::rig_node::{RigNode, Role};
 
 use crate::KeysRig;
 
-/// Root of the local Keyscape extraction (per-instrument dirs each holding a
-/// `library.styx`). Used as a fallback when no packs are present. Override with
-/// `FTS_KEYSCAPE_ROOT`.
-const KEYSCAPE_ROOT: &str = "/run/media/AudioHaven/Sampled/Keys/Keyscape";
-/// Root of the built `.signalpack` library (one self-contained pack per
-/// instrument). Preferred over the raw extraction. Override with
-/// `FTS_KEYSCAPE_PACKS`.
-const KEYSCAPE_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs";
+// The local Keyscape extraction (per-instrument dirs each holding a
+// `library.styx`) is `Keys/Keyscape` in the sampled tree — a fallback when no
+// packs are present. Override with `FTS_KEYSCAPE_ROOT`.
+/// The built `.signalpack` library — every pack root below is a folder in
+/// it, so one setting moves them all: `FTS_PACK_LIBRARY` (the sampler's own
+/// library setting — a drive mounted elsewhere, `/Volumes/…` on a Mac), else
+/// the studio machine's mount.
+fn pack_library() -> PathBuf {
+    std::env::var("FTS_PACK_LIBRARY")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map_or_else(
+            || PathBuf::from("/run/media/AudioHaven/Signal/Libraries"),
+            PathBuf::from,
+        )
+}
+
+/// The raw sample and patch tree (the extractions the packs were built from,
+/// and the instruments' own patch files): `FTS_SAMPLED_ROOT`, else the studio
+/// machine's mount.
+fn sampled_root() -> PathBuf {
+    std::env::var("FTS_SAMPLED_ROOT")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map_or_else(
+            || PathBuf::from("/run/media/AudioHaven/Sampled"),
+            PathBuf::from,
+        )
+}
+
+/// A root in the sampled tree: its own override variable, else `rel` in it.
+fn sampled_path(var: &str, rel: &str) -> String {
+    std::env::var(var)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| sampled_root().join(rel).to_string_lossy().into_owned())
+}
+
+/// A pack root: its own override variable, else `rel` in the pack library.
+fn pack_root(var: &str, rel: &str) -> String {
+    std::env::var(var)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| pack_library().join(rel).to_string_lossy().into_owned())
+}
 #[derive(Default)]
 struct State {
     presets: Vec<KeysPreset>,
@@ -67,8 +104,16 @@ struct State {
     rig_spans: BTreeMap<String, (f32, Baseline)>,
     /// Index of the last pressed stack.
     active_stack: Option<usize>,
+    /// The rig as it was when the browser started auditioning (see
+    /// `audition_begin`), to go back to.
+    audition: Option<Box<Audition>>,
     /// Grid mode: 0 Preset, 1 Profile (stacks), 2 Setlist.
     perform_mode: u32,
+    /// The filters the mod wheel moves, by `(lane, module, leaf)`: the
+    /// cutoff it moves each from (the patch's, normalized) and the last it
+    /// wrote. A reading that is no longer the last write means the lane was
+    /// rebuilt under it, and the reading is the patch's value again.
+    wheel_filters: BTreeMap<(String, String, String), (f64, f64)>,
 }
 
 /// What the program builders read: the live profile, the patch-name →
@@ -98,6 +143,19 @@ struct LaneState {
     /// values it started from). The baseline is what the detent returns to,
     /// so a Global Control never destroys the patch's own settings.
     spans: BTreeMap<String, (f32, Baseline)>,
+    /// The Omnisphere patch file this lane's module knobs were seeded from
+    /// (`None`: not an Omnisphere lane, or not seeded yet). A lane hosting a
+    /// whole `.prt_omn` gets one module per patch layer, filled from the
+    /// patch, so its knobs start where the patch is — see `seed_omni_lanes`.
+    omni_seed: Option<PathBuf>,
+    /// Each module's knobs exactly as the patch seeded them (before the
+    /// player's saved values) — the baseline an Omnisphere lane's knobs are
+    /// applied relative to, so an untouched lane plays the imported patch
+    /// as the importer built it.
+    omni_base: Vec<BTreeMap<String, f32>>,
+    /// FX bypass from this lane's scope or any above it (layer, engine,
+    /// rig): the modules' effects are left out while it is on.
+    fx_gated: bool,
 }
 
 /// What a Global Control captured when it left centre: the value each module
@@ -117,6 +175,11 @@ struct ModuleState {
     /// the state the authored parameter sets will apply over.
     variant: String,
     macros: BTreeMap<String, f32>,
+    /// The patch `macros` belong to. When `patch` changes (a stack recall, a
+    /// browser pick) the knobs are reset to that patch's own — its saved
+    /// values over the defaults — before anything is built; see
+    /// `prepare_lanes`.
+    macros_patch: Option<String>,
     gain_db: f32,
     enabled: bool,
 }
@@ -127,35 +190,31 @@ impl Default for ModuleState {
             patch: String::new(),
             variant: String::new(),
             macros: BTreeMap::new(),
+            macros_patch: None,
             gain_db: 0.0,
             enabled: true,
         }
     }
 }
 
-/// **TEMPORARY (2026-09-05): lanes that start switched OFF.**
+/// The engine the mod wheel sweeps the filters of — the gig's pad "Cutoff"
+/// knob (CC77), which moved both Omni Pads parts' global filter cutoff
+/// together (Omnisphere's MIDI-learn `p0_gpfltc` / `p1_gpfltc`). At rest the
+/// patches play as imported; all the way up opens them to 20 kHz, the group
+/// keeping its spacing (see `KeysRigBackend::wheel_cutoff`).
+const WHEEL_CUTOFF_ENGINE: &str = "Pad";
+
+/// No mod-wheel value waiting for the worker.
+const NO_WHEEL: u32 = u32::MAX;
+
+/// Lanes that start muted — a starting position, not a limitation: an
+/// ordinary lane mute, undone in the mixer.
 ///
-/// The rig does not currently fit its deadline with the whole Worship stack
-/// live. Render cost is linear in voice count, and 20 notes across all the
-/// layers is ~233 voices: 7.2ms of work in a 5.33ms block, which the player
-/// hears as crackling roughly once a second. With these three off it is
-/// ~136 voices and 4.2ms, i.e. inside the budget with headroom.
-///
-/// This is a starting position, not a limitation — exactly like the engine
-/// mutes above, these are ordinary module switches and turning any of them
-/// back on in the mixer works normally (and will crackle again until the
-/// voice-render loop is block-processed, which is the actual fix).
-///
-/// `FTS_KEYS_ALL_ON=1` starts everything live, for measuring the real thing.
-///
-/// DELETE THIS once `Voice::render_block` hoists its per-frame branch work:
-/// the whole stack is supposed to play.
-fn starts_switched_off(lane: &str) -> bool {
-    const HEAVY: [&str; 3] = ["Pad", "Shimmer", "Synth 2"];
-    if std::env::var_os("FTS_KEYS_ALL_ON").is_some() {
-        return false;
-    }
-    HEAVY.contains(&lane)
+/// Club Europa's pulsing lead (Synth 2) starts muted: a song reaches for it,
+/// it is not a bed under everything. (A lane mute, not a module switch: an
+/// imported Omnisphere lane has no module gain for the switch to act on.)
+fn starts_muted(lane: &str) -> bool {
+    lane == "Synth 2"
 }
 
 impl LaneState {
@@ -207,16 +266,13 @@ struct MacroDef {
     min: f32,
     max: f32,
     unit: &'static str,
-    live: bool,
 }
 
 /// The canonical macro surface every Signal Engine layer exposes. Grouped
 /// into the layer-zoom's panels; the order here is the render order.
 ///
-/// `live` marks the ones that reach DSP today: the sampler's amp envelope and
-/// unison are real block params, the rest wait on their block's
-/// implementation (filters, vibrato, ambience, FX are placeholders that pass
-/// audio through).
+/// Which ones reach sound is decided by what they drive
+/// (`KeysRigBackend::macro_is_dsp`), not stored here.
 const MACROS: &[MacroDef] = &[
     // ── Source ──────────────────────────────────────────────────────────
     MacroDef {
@@ -227,7 +283,6 @@ const MACROS: &[MacroDef] = &[
         min: -24.0,
         max: 12.0,
         unit: "dB",
-        live: true,
     },
     MacroDef {
         id: "source.pan",
@@ -237,7 +292,6 @@ const MACROS: &[MacroDef] = &[
         min: -1.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "source.transpose",
@@ -247,7 +301,6 @@ const MACROS: &[MacroDef] = &[
         min: -24.0,
         max: 24.0,
         unit: "st",
-        live: false,
     },
     MacroDef {
         id: "source.fine",
@@ -257,7 +310,6 @@ const MACROS: &[MacroDef] = &[
         min: -100.0,
         max: 100.0,
         unit: "c",
-        live: false,
     },
     MacroDef {
         id: "source.unison",
@@ -267,7 +319,6 @@ const MACROS: &[MacroDef] = &[
         min: 1.0,
         max: 8.0,
         unit: "v",
-        live: true,
     },
     MacroDef {
         id: "source.detune",
@@ -277,7 +328,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 2.0,
         unit: "",
-        live: true,
     },
     // ── Filter ──────────────────────────────────────────────────────────
     MacroDef {
@@ -288,7 +338,6 @@ const MACROS: &[MacroDef] = &[
         min: 20.0,
         max: 20000.0,
         unit: "Hz",
-        live: true,
     },
     MacroDef {
         id: "filter.reso",
@@ -298,7 +347,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: true,
     },
     MacroDef {
         id: "filter.env_amt",
@@ -308,7 +356,6 @@ const MACROS: &[MacroDef] = &[
         min: -1.0,
         max: 1.0,
         unit: "",
-        live: true,
     },
     MacroDef {
         id: "filter.keytrack",
@@ -318,7 +365,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "filter.drive",
@@ -328,7 +374,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "filter.mix",
@@ -338,7 +383,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     // ── Envelopes 1..4 ──────────────────────────────────────────────────
     // ENV 1 is bound to the Amp and ENV 2 to the Filter (the bindings the
@@ -352,7 +396,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 2000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "env1.attack",
@@ -362,7 +405,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 5000.0,
         unit: "ms",
-        live: true,
     },
     MacroDef {
         id: "env1.hold",
@@ -372,7 +414,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 2000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "env1.decay",
@@ -382,7 +423,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 5000.0,
         unit: "ms",
-        live: true,
     },
     MacroDef {
         id: "env1.sustain",
@@ -392,7 +432,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: true,
     },
     MacroDef {
         id: "env1.release",
@@ -402,7 +441,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 8000.0,
         unit: "ms",
-        live: true,
     },
     MacroDef {
         id: "env2.delay",
@@ -412,7 +450,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 2000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "env2.attack",
@@ -422,7 +459,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 5000.0,
         unit: "ms",
-        live: true,
     },
     MacroDef {
         id: "env2.hold",
@@ -432,7 +468,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 2000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "env2.decay",
@@ -442,7 +477,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 5000.0,
         unit: "ms",
-        live: true,
     },
     MacroDef {
         id: "env2.sustain",
@@ -452,7 +486,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: true,
     },
     MacroDef {
         id: "env2.release",
@@ -462,7 +495,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 8000.0,
         unit: "ms",
-        live: true,
     },
     MacroDef {
         id: "env3.delay",
@@ -472,17 +504,15 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 2000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "env3.attack",
         name: "Attack",
         group: "Env 3",
-        default: 20.0,
+        default: 3.0,
         min: 0.0,
         max: 5000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "env3.hold",
@@ -492,37 +522,51 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 2000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "env3.decay",
         name: "Decay",
         group: "Env 3",
-        default: 400.0,
+        default: 250.0,
         min: 0.0,
         max: 5000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "env3.sustain",
         name: "Sustain",
         group: "Env 3",
-        default: 0.5,
+        default: 0.8,
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "env3.release",
         name: "Release",
         group: "Env 3",
-        default: 300.0,
+        default: 150.0,
         min: 0.0,
         max: 8000.0,
         unit: "ms",
-        live: false,
+    },
+    MacroDef {
+        id: "env3.depth",
+        name: "Depth",
+        group: "Env 3",
+        default: 0.0,
+        min: -1.0,
+        max: 1.0,
+        unit: "",
+    },
+    MacroDef {
+        id: "env3.dest",
+        name: "Dest",
+        group: "Env 3",
+        default: 0.0,
+        min: 0.0,
+        max: 6.0,
+        unit: "dest",
     },
     MacroDef {
         id: "env4.delay",
@@ -532,7 +576,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 2000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "env4.attack",
@@ -542,7 +585,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 5000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "env4.hold",
@@ -552,7 +594,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 2000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "env4.decay",
@@ -562,7 +603,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 5000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "env4.sustain",
@@ -572,7 +612,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "env4.release",
@@ -582,7 +621,24 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 8000.0,
         unit: "ms",
-        live: false,
+    },
+    MacroDef {
+        id: "env4.depth",
+        name: "Depth",
+        group: "Env 4",
+        default: 0.0,
+        min: -1.0,
+        max: 1.0,
+        unit: "",
+    },
+    MacroDef {
+        id: "env4.dest",
+        name: "Dest",
+        group: "Env 4",
+        default: 0.0,
+        min: 0.0,
+        max: 6.0,
+        unit: "dest",
     },
     // ── LFOs 1..4 ───────────────────────────────────────────────────────
     MacroDef {
@@ -593,7 +649,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.01,
         max: 40.0,
         unit: "Hz",
-        live: false,
     },
     MacroDef {
         id: "lfo1.depth",
@@ -603,7 +658,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "lfo1.shape",
@@ -612,8 +666,7 @@ const MACROS: &[MacroDef] = &[
         default: 0.0,
         min: 0.0,
         max: 4.0,
-        unit: "",
-        live: false,
+        unit: "wave",
     },
     MacroDef {
         id: "lfo1.fade",
@@ -623,7 +676,15 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 4000.0,
         unit: "ms",
-        live: false,
+    },
+    MacroDef {
+        id: "lfo1.dest",
+        name: "Dest",
+        group: "LFO 1",
+        default: 0.0,
+        min: 0.0,
+        max: 6.0,
+        unit: "dest",
     },
     MacroDef {
         id: "lfo2.rate",
@@ -633,7 +694,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.01,
         max: 40.0,
         unit: "Hz",
-        live: false,
     },
     MacroDef {
         id: "lfo2.depth",
@@ -643,7 +703,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "lfo2.shape",
@@ -652,8 +711,7 @@ const MACROS: &[MacroDef] = &[
         default: 1.0,
         min: 0.0,
         max: 4.0,
-        unit: "",
-        live: false,
+        unit: "wave",
     },
     MacroDef {
         id: "lfo2.fade",
@@ -663,7 +721,15 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 4000.0,
         unit: "ms",
-        live: false,
+    },
+    MacroDef {
+        id: "lfo2.dest",
+        name: "Dest",
+        group: "LFO 2",
+        default: 0.0,
+        min: 0.0,
+        max: 6.0,
+        unit: "dest",
     },
     MacroDef {
         id: "lfo3.rate",
@@ -673,7 +739,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.01,
         max: 40.0,
         unit: "Hz",
-        live: false,
     },
     MacroDef {
         id: "lfo3.depth",
@@ -683,7 +748,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "lfo3.shape",
@@ -692,8 +756,7 @@ const MACROS: &[MacroDef] = &[
         default: 2.0,
         min: 0.0,
         max: 4.0,
-        unit: "",
-        live: false,
+        unit: "wave",
     },
     MacroDef {
         id: "lfo3.fade",
@@ -703,7 +766,15 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 4000.0,
         unit: "ms",
-        live: false,
+    },
+    MacroDef {
+        id: "lfo3.dest",
+        name: "Dest",
+        group: "LFO 3",
+        default: 0.0,
+        min: 0.0,
+        max: 6.0,
+        unit: "dest",
     },
     MacroDef {
         id: "lfo4.rate",
@@ -713,7 +784,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.01,
         max: 40.0,
         unit: "Hz",
-        live: false,
     },
     MacroDef {
         id: "lfo4.depth",
@@ -723,7 +793,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "lfo4.shape",
@@ -732,8 +801,7 @@ const MACROS: &[MacroDef] = &[
         default: 3.0,
         min: 0.0,
         max: 4.0,
-        unit: "",
-        live: false,
+        unit: "wave",
     },
     MacroDef {
         id: "lfo4.fade",
@@ -743,7 +811,15 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 4000.0,
         unit: "ms",
-        live: false,
+    },
+    MacroDef {
+        id: "lfo4.dest",
+        name: "Dest",
+        group: "LFO 4",
+        default: 0.0,
+        min: 0.0,
+        max: 6.0,
+        unit: "dest",
     },
     // ── Tone / Vibrato / Ambience / Effects (per module) ─────────────────
     MacroDef {
@@ -754,7 +830,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "tone.drive",
@@ -764,7 +839,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "tone.body",
@@ -774,7 +848,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "vib.rate",
@@ -784,7 +857,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.1,
         max: 12.0,
         unit: "Hz",
-        live: true,
     },
     MacroDef {
         id: "vib.depth",
@@ -794,7 +866,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: true,
     },
     MacroDef {
         id: "vib.delay",
@@ -804,17 +875,16 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 3000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "amb.bypass",
         name: "Bypass",
         group: "Ambience",
-        default: 0.0,
+        // Off until asked for: every patch has its own space already.
+        default: 1.0,
         min: 0.0,
         max: 1.0,
-        unit: "",
-        live: false,
+        unit: "bypass",
     },
     MacroDef {
         id: "amb.algo",
@@ -824,7 +894,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 14.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "amb.size",
@@ -834,7 +903,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "amb.mix",
@@ -844,7 +912,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "amb.predelay",
@@ -854,7 +921,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 250.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "amb.decay",
@@ -864,7 +930,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.02,
         max: 1.0,
         unit: "",
-        live: false,
     },
     // The delay is its own section, not an Effects amount: it is the other
     // half of the time-domain picture the band draws, and it needs a time and
@@ -881,8 +946,7 @@ const MACROS: &[MacroDef] = &[
         default: 0.0,
         min: 0.0,
         max: 1.0,
-        unit: "",
-        live: false,
+        unit: "bypass",
     },
     MacroDef {
         id: "dly.algo",
@@ -892,7 +956,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 12.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "dly.div",
@@ -901,8 +964,7 @@ const MACROS: &[MacroDef] = &[
         default: 3.0,
         min: 0.0,
         max: 7.0,
-        unit: "",
-        live: false,
+        unit: "div",
     },
     MacroDef {
         id: "dly.time",
@@ -912,7 +974,6 @@ const MACROS: &[MacroDef] = &[
         min: 20.0,
         max: 2000.0,
         unit: "ms",
-        live: false,
     },
     MacroDef {
         id: "dly.feedback",
@@ -922,7 +983,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 0.95,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "dly.mix",
@@ -932,7 +992,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "fx.chorus",
@@ -942,7 +1001,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "fx.delay",
@@ -952,7 +1010,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     MacroDef {
         id: "fx.width",
@@ -962,7 +1019,6 @@ const MACROS: &[MacroDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
 ];
 
@@ -991,7 +1047,6 @@ struct GlobalDef {
     min: f32,
     max: f32,
     unit: &'static str,
-    live: bool,
 }
 
 /// The Global Controls, in panel order — Filter, Envelope (Amp + Filter
@@ -1008,7 +1063,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 20.0,
         max: 20000.0,
         unit: "Hz",
-        live: false,
     },
     GlobalDef {
         key: "filter.reso",
@@ -1019,7 +1073,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     GlobalDef {
         key: "filter.env",
@@ -1030,7 +1083,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: -1.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     // ── Envelope: the Amp ADSR (ENV 1) then the Filter ADSR (ENV 2) ──────
     GlobalDef {
@@ -1042,7 +1094,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 5000.0,
         unit: "ms",
-        live: true,
     },
     GlobalDef {
         key: "amp.decay",
@@ -1053,7 +1104,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 5000.0,
         unit: "ms",
-        live: false,
     },
     GlobalDef {
         key: "amp.sustain",
@@ -1064,7 +1114,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     GlobalDef {
         key: "amp.release",
@@ -1075,7 +1124,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 8000.0,
         unit: "ms",
-        live: true,
     },
     GlobalDef {
         key: "fenv.attack",
@@ -1086,7 +1134,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 5000.0,
         unit: "ms",
-        live: false,
     },
     GlobalDef {
         key: "fenv.decay",
@@ -1097,7 +1144,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 5000.0,
         unit: "ms",
-        live: false,
     },
     GlobalDef {
         key: "fenv.sustain",
@@ -1108,7 +1154,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     GlobalDef {
         key: "fenv.release",
@@ -1119,7 +1164,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 8000.0,
         unit: "ms",
-        live: false,
     },
     // ── Vibrato ──────────────────────────────────────────────────────────
     GlobalDef {
@@ -1131,7 +1175,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.1,
         max: 12.0,
         unit: "Hz",
-        live: false,
     },
     GlobalDef {
         key: "vib.depth",
@@ -1142,7 +1185,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     // ── Unison ───────────────────────────────────────────────────────────
     GlobalDef {
@@ -1154,7 +1196,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 1.0,
         max: 8.0,
         unit: "v",
-        live: true,
     },
     GlobalDef {
         key: "uni.detune",
@@ -1165,7 +1206,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 2.0,
         unit: "",
-        live: true,
     },
     // ── Ambience ─────────────────────────────────────────────────────────
     GlobalDef {
@@ -1173,11 +1213,10 @@ const GLOBALS: &[GlobalDef] = &[
         name: "Bypass",
         group: "Ambience",
         target: Some("amb.bypass"),
-        default: 0.0,
+        default: 1.0,
         min: 0.0,
         max: 1.0,
-        unit: "",
-        live: false,
+        unit: "bypass",
     },
     GlobalDef {
         key: "amb.algo",
@@ -1188,7 +1227,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 14.0,
         unit: "",
-        live: false,
     },
     GlobalDef {
         key: "amb.amount",
@@ -1199,7 +1237,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     GlobalDef {
         key: "amb.length",
@@ -1210,7 +1247,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     GlobalDef {
         key: "amb.decay",
@@ -1221,7 +1257,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.02,
         max: 1.0,
         unit: "",
-        live: false,
     },
     // ── Delay, at every level: the rig's tail, an engine's, a lane's ─────
     GlobalDef {
@@ -1232,8 +1267,7 @@ const GLOBALS: &[GlobalDef] = &[
         default: 0.0,
         min: 0.0,
         max: 1.0,
-        unit: "",
-        live: false,
+        unit: "bypass",
     },
     GlobalDef {
         key: "dly.algo",
@@ -1244,7 +1278,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 12.0,
         unit: "",
-        live: false,
     },
     GlobalDef {
         key: "dly.div",
@@ -1254,8 +1287,7 @@ const GLOBALS: &[GlobalDef] = &[
         default: 3.0,
         min: 0.0,
         max: 7.0,
-        unit: "",
-        live: false,
+        unit: "div",
     },
     GlobalDef {
         key: "dly.time",
@@ -1266,7 +1298,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 20.0,
         max: 2000.0,
         unit: "ms",
-        live: false,
     },
     GlobalDef {
         key: "dly.feedback",
@@ -1277,7 +1308,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 0.95,
         unit: "",
-        live: false,
     },
     GlobalDef {
         key: "dly.mix",
@@ -1288,7 +1318,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     // ── Tone: the scope's EQ, centred = bypassed ─────────────────────────
     GlobalDef {
@@ -1300,7 +1329,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: -12.0,
         max: 12.0,
         unit: "dB",
-        live: false,
     },
     GlobalDef {
         key: "tone.mid",
@@ -1311,7 +1339,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: -12.0,
         max: 12.0,
         unit: "dB",
-        live: false,
     },
     GlobalDef {
         key: "tone.high",
@@ -1322,7 +1349,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: -12.0,
         max: 12.0,
         unit: "dB",
-        live: false,
     },
     // ── Effects + Limiter, at the scope's output ─────────────────────────
     GlobalDef {
@@ -1334,7 +1360,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
     GlobalDef {
         key: "limiter",
@@ -1345,7 +1370,6 @@ const GLOBALS: &[GlobalDef] = &[
         min: 0.0,
         max: 1.0,
         unit: "",
-        live: false,
     },
 ];
 
@@ -1381,6 +1405,86 @@ fn macro_def(id: &str) -> Option<&'static MacroDef> {
     MACROS.iter().find(|m| m.id == id)
 }
 
+/// Set macro `id`, clamped to its range (unknown ids are ignored).
+fn set_macro_clamped(macros: &mut BTreeMap<String, f32>, id: &str, v: f32) {
+    if let Some(def) = macro_def(id) {
+        macros.insert(id.to_string(), v.clamp(def.min, def.max));
+    }
+}
+
+/// A module's knobs from an imported Omnisphere layer: filter, envelopes,
+/// unison — the values the patch itself plays with.
+fn seed_module_macros(
+    macros: &mut BTreeMap<String, f32>,
+    m: &signal_synth::engine::ImportedModule,
+) {
+    set_macro_clamped(macros, "filter.cutoff", m.cutoff_hz);
+    set_macro_clamped(macros, "filter.reso", m.resonance);
+    set_macro_clamped(macros, "filter.env_amt", m.filter_env_depth);
+    set_macro_clamped(macros, "source.unison", m.unison as f32);
+    set_macro_clamped(macros, "source.detune", m.detune);
+    if let Some((a, d, sus, r)) = m.amp_env {
+        set_macro_clamped(macros, "env1.attack", a);
+        set_macro_clamped(macros, "env1.decay", d);
+        set_macro_clamped(macros, "env1.sustain", sus);
+        set_macro_clamped(macros, "env1.release", r);
+    }
+    if let Some((a, d, sus, r)) = m.filter_env {
+        set_macro_clamped(macros, "env2.attack", a);
+        set_macro_clamped(macros, "env2.decay", d);
+        set_macro_clamped(macros, "env2.sustain", sus);
+        set_macro_clamped(macros, "env2.release", r);
+    }
+}
+
+/// Whether `path` is an Omnisphere patch file (a whole voice, not a sample
+/// source).
+fn is_omni_patch(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("prt_omn") || e.eq_ignore_ascii_case("mlt_omn"))
+}
+
+/// One more tap at `now`: the tempo of the last (up to) four taps, once
+/// there are two; a gap over 2.5 s starts the count again.
+fn tap_bpm(taps: &mut Vec<std::time::Instant>, now: std::time::Instant) -> Option<f32> {
+    if taps
+        .last()
+        .is_some_and(|t| now.duration_since(*t).as_secs_f32() > 2.5)
+    {
+        taps.clear();
+    }
+    taps.push(now);
+    let n = taps.len();
+    if n > 4 {
+        taps.drain(..n - 4);
+    }
+    (taps.len() >= 2).then(|| {
+        let span = taps[taps.len() - 1].duration_since(taps[0]).as_secs_f32();
+        60.0 * (taps.len() - 1) as f32 / span.max(1e-3)
+    })
+}
+
+#[cfg(test)]
+mod tap_tests {
+    use super::tap_bpm;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn steady_taps_read_their_tempo_and_a_pause_starts_over() {
+        let t0 = Instant::now();
+        let mut taps = Vec::new();
+        assert_eq!(tap_bpm(&mut taps, t0), None, "one tap is no tempo");
+        let mut bpm = None;
+        for i in 1..6 {
+            bpm = tap_bpm(&mut taps, t0 + Duration::from_millis(500 * i));
+        }
+        assert!((bpm.unwrap() - 120.0).abs() < 0.5);
+        // A long pause: the next tap starts a new count.
+        assert_eq!(tap_bpm(&mut taps, t0 + Duration::from_secs(10)), None);
+    }
+}
+
 fn default_macros() -> BTreeMap<String, f32> {
     MACROS
         .iter()
@@ -1404,7 +1508,134 @@ struct EngineState {
     spans: BTreeMap<String, (f32, Baseline)>,
 }
 
+/// What an audition puts back: the profile and the live mixer.
+struct Audition {
+    profile: KeysProfile,
+    lanes: BTreeMap<String, LaneState>,
+    engines: BTreeMap<String, EngineState>,
+    /// Anything was loaded since it started — else there is nothing to undo.
+    dirty: bool,
+}
+
+/// A scope's own settings (Tone, Limiter, FX Bypass) from its live values —
+/// the keys under `prefix`, without it.
+fn own_values(map: &BTreeMap<String, f32>, prefix: &str) -> Vec<crate::profile::MacroValue> {
+    map.iter()
+        .filter_map(|(k, v)| {
+            k.strip_prefix(prefix).map(|id| crate::profile::MacroValue {
+                id: id.to_string(),
+                value: *v,
+            })
+        })
+        .collect()
+}
+
+/// `base`, or `base 2`, `base 3`… — the first `taken` does not hold.
+fn free_name(base: &str, taken: &std::collections::HashSet<String>) -> String {
+    if !taken.contains(base) {
+        return base.to_string();
+    }
+    (2..)
+        .map(|n| format!("{base} {n}"))
+        .find(|c| !taken.contains(c))
+        .unwrap_or_else(|| base.to_string())
+}
+
 impl State {
+    /// A lane's live state as `layer` authors it, in `engine`.
+    fn lane_from_def(engine: &str, layer: &crate::profile::LayerDef) -> LaneState {
+        let mut globals = BTreeMap::new();
+        for v in &layer.scope_values {
+            globals.insert(format!("{LAYER}{}", v.id), v.value);
+        }
+        LaneState {
+            engine: engine.to_string(),
+            gain_db: layer.gain_db,
+            muted: starts_muted(&layer.name),
+            soloed: false,
+            modules: layer
+                .module_patches()
+                .into_iter()
+                .map(|patch| ModuleState {
+                    patch,
+                    macros: default_macros(),
+                    ..ModuleState::default()
+                })
+                .collect(),
+            preset: String::new(),
+            globals,
+            spans: BTreeMap::new(),
+            omni_seed: None,
+            omni_base: Vec::new(),
+            fx_gated: false,
+        }
+    }
+
+    /// Lane `name` as it plays now, as a layer definition: the authored one
+    /// with the live sources, the knobs set on each, its own settings and
+    /// fader. Returns its engine's name too.
+    fn live_layer_def(&self, name: &str) -> Option<(String, crate::profile::LayerDef)> {
+        let (engine, def) = self.profile.layer(name)?;
+        let (engine, mut def) = (engine.name.clone(), def.clone());
+        let lane = self.lanes.get(name)?;
+        let patches: Vec<String> = lane.modules.iter().map(|m| m.patch.clone()).collect();
+        def.patch = patches.first().cloned().unwrap_or_default();
+        def.extra_modules = patches.iter().skip(1).cloned().collect();
+        def.gain_db = lane.gain_db;
+        for (i, m) in lane.modules.iter().enumerate() {
+            if m.patch.is_empty() || m.macros_patch.as_deref() != Some(m.patch.as_str()) {
+                continue;
+            }
+            let values = m
+                .macros
+                .iter()
+                .filter(|(id, _)| {
+                    KeysRigBackend::macro_is_dsp(id) || KeysRigBackend::macro_is_mod(id)
+                })
+                .map(|(id, v)| crate::profile::MacroValue {
+                    id: id.clone(),
+                    value: *v,
+                })
+                .collect();
+            def.remember_macros(&m.patch, i as u32, values);
+        }
+        // Only the knobs for what the lane holds now travel with it.
+        def.patch_macros
+            .retain(|pm| patches.get(pm.module as usize) == Some(&pm.patch));
+        def.scope_values = own_values(&lane.globals, LAYER);
+        Some((engine, def))
+    }
+
+    /// Engine `name` as it plays now (see [`live_layer_def`](Self::live_layer_def)).
+    fn live_engine_def(&self, name: &str) -> Option<crate::profile::EngineDef> {
+        let mut def = self.profile.engine(name)?.clone();
+        def.layers = def
+            .layers
+            .iter()
+            .filter_map(|l| self.live_layer_def(&l.name).map(|(_, d)| d))
+            .collect();
+        if let Some(e) = self.engines.get(name) {
+            def.gain_db = e.gain_db;
+            def.scope_values = own_values(&e.globals, ENGINE);
+        }
+        Some(def)
+    }
+
+    /// Mark the running audition as having changed something.
+    fn touch_audition(&mut self) {
+        if let Some(a) = self.audition.as_mut() {
+            a.dirty = true;
+        }
+    }
+
+    /// Save the profile — unless an audition is running, which saves what it
+    /// keeps when it ends.
+    fn save_profile(&self) {
+        if self.audition.is_none() {
+            self.profile.save();
+        }
+    }
+
     /// Seed the live mixer from a profile's authored defaults.
     fn adopt_profile(&mut self, profile: KeysProfile) {
         self.lanes.clear();
@@ -1418,42 +1649,32 @@ impl State {
                     // the band when a player asks for one, and a drone that
                     // switched itself on at boot would be a fault, not a
                     // feature.
-                    //
-                    // Aux and Pad start muted too, TEMPORARILY, so the piano
-                    // can be judged on its own while the keys rig is being
-                    // worked on — a pad under everything hides exactly the
-                    // attack detail you need to hear. Unmute them in the
-                    // mixer; this only decides where the faders START.
-                    muted: is_drone(&engine.name) || matches!(engine.name.as_str(), "Aux" | "Pad"),
+                    muted: is_drone(&engine.name),
                     ..EngineState::default()
                 },
             );
             for layer in &engine.layers {
-                self.lanes.insert(
-                    layer.name.clone(),
-                    LaneState {
-                        engine: engine.name.clone(),
-                        gain_db: layer.gain_db,
-                        muted: false,
-                        soloed: false,
-                        modules: layer
-                            .module_patches()
-                            .into_iter()
-                            .map(|patch| ModuleState {
-                                patch,
-                                macros: default_macros(),
-                                enabled: !starts_switched_off(&layer.name),
-                                ..ModuleState::default()
-                            })
-                            .collect(),
-                        preset: String::new(),
-                        globals: BTreeMap::new(),
-                        spans: BTreeMap::new(),
-                    },
-                );
+                self.lanes
+                    .insert(layer.name.clone(), Self::lane_from_def(&engine.name, layer));
             }
         }
+        // The profile's saved mixer settings (Tone, Limiter, FX Bypass) at
+        // the engine scope (a lane's come with it, above).
+        for engine in &profile.engines {
+            if let Some(e) = self.engines.get_mut(&engine.name) {
+                for v in &engine.scope_values {
+                    e.globals.insert(format!("{ENGINE}{}", v.id), v.value);
+                }
+            }
+        }
+        for v in &profile.scope_values {
+            self.rig_globals.insert(format!("{RIG}{}", v.id), v.value);
+        }
+        // The rig's output limiter is a safety net, on unless a profile
+        // turns it off: five hard notes stacked in one lane clip otherwise.
+        self.rig_globals.entry(format!("{RIG}limiter")).or_insert(1.0);
         self.profile = profile;
+        KeysRigBackend::refresh_fx_gates(self);
     }
 
     /// Any lane soloed? (Solo silences every un-soloed lane.)
@@ -1510,6 +1731,17 @@ struct Inner {
     /// Bumped by every DSP-parameter edit; a coalescing rebuild only runs if
     /// it is still the latest when its wait is up (see `rebuild_soon`).
     rebuild_gen: std::sync::atomic::AtomicU64,
+    /// Debounce generation for saving the profile after knob edits.
+    save_gen: std::sync::atomic::AtomicU64,
+    /// Recent tempo taps.
+    taps: Mutex<Vec<std::time::Instant>>,
+    /// The mod wheel's latest value ([`NO_WHEEL`] when none is pending),
+    /// handed from the MIDI thread to the `keys-wheel` worker.
+    wheel: AtomicU32,
+    /// That worker, to wake.
+    wheel_worker: std::sync::OnceLock<std::thread::Thread>,
+    /// The switches' MIDI learn table (targets `"stack:N"`, `"tap"`).
+    learn: Mutex<signal_rig_host::midi_learn::MidiLearn>,
 }
 
 /// The keys-rig backend handle. Cheap to clone (all state shared).
@@ -1561,6 +1793,54 @@ fn artefacts() -> signal_keys_proto::KeysRealtime {
 }
 
 impl KeysRigBackend {
+    /// The profile's full program exactly as the rig would build it now —
+    /// lanes seeded, knobs applied — without opening audio. For offline
+    /// probes (`examples/lane_render`).
+    #[doc(hidden)]
+    pub fn debug_profile_program(&self) -> Option<Container> {
+        self.prepare_lanes();
+        self.profile_program()
+    }
+
+    /// The profile as the per-lane daw-track program the app plays —
+    /// lanes seeded, knobs applied — without opening audio
+    /// (`examples/lane_stress`).
+    #[doc(hidden)]
+    pub fn debug_profile_lane_program(&self) -> Option<signal_sampler::keys_rig::LaneProgram> {
+        self.prepare_lanes();
+        self.profile_lane_program()
+    }
+
+    /// Host the profile headless (no audio device) as this backend's own
+    /// rig, at the app's starting levels — so the live paths (knobs, the mod
+    /// wheel) reach it exactly as they do in the app (`examples/rig_render`).
+    #[doc(hidden)]
+    pub fn debug_open_headless(&self, sample_rate: u32) -> bool {
+        let Some(program) = self.debug_profile_lane_program() else {
+            return false;
+        };
+        let Ok(rig) = KeysRig::open_headless(sample_rate, &program) else {
+            return false;
+        };
+        if let Ok(mut slot) = self.inner.rig.lock() {
+            *slot = Some(rig);
+        }
+        self.apply_mixer();
+        true
+    }
+
+    /// Rebuild the hosted program now, as a knob that cannot go live does.
+    #[doc(hidden)]
+    pub fn debug_rebuild(&self) {
+        self.rebuild_program();
+    }
+
+    /// Run `f` on the hosted rig.
+    #[doc(hidden)]
+    pub fn debug_with_rig<R>(&self, f: impl FnOnce(&KeysRig) -> R) -> Option<R> {
+        self.inner.rig.lock().ok()?.as_ref().map(f)
+    }
+
     /// What a module currently holds for `id` (its own value, else the
     /// macro's default).
     fn module_value(lane: &LaneState, index: usize, id: &str) -> f32 {
@@ -1662,7 +1942,9 @@ impl KeysRigBackend {
                         min: def.min,
                         max: def.max,
                         unit: def.unit.to_string(),
-                        live: def.live,
+                        // A scope's own parameter (Tone, Limiter, FX
+                        // bypass): its track's stage plays it.
+                        live: true,
                         bipolar: false,
                         spread: String::new(),
                     };
@@ -1690,7 +1972,8 @@ impl KeysRigBackend {
                         min: def.min,
                         max: def.max,
                         unit: def.unit.to_string(),
-                        live: def.live && !targets.is_empty(),
+                        // Lit when it reaches sound: a DSP target, live.
+                        live: Self::macro_is_dsp(target) && !targets.is_empty(),
                         bipolar: false,
                         spread: fmt_value(value, def.unit),
                     }
@@ -1704,7 +1987,7 @@ impl KeysRigBackend {
                         min: -1.0,
                         max: 1.0,
                         unit: String::new(),
-                        live: def.live,
+                        live: Self::macro_is_dsp(target),
                         bipolar: true,
                         spread: format!(
                             "{} – {}",
@@ -1828,73 +2111,101 @@ impl KeysRigBackend {
     /// voice count changed, otherwise just the live cells and a publish.
     /// Whether this macro is baked into the program and so needs a rebuild
     /// to be heard: the filter's settings, the envelopes' times, unison.
+    /// Recompute every lane's FX gate from the FX Bypass switches of its
+    /// own, its engine's and the rig's scope. Returns whether any changed.
+    fn refresh_fx_gates(s: &mut State) -> bool {
+        let on = |map: &BTreeMap<String, f32>, prefix: &str| {
+            map.get(&format!("{prefix}fx.bypass"))
+                .is_some_and(|v| *v >= 0.5)
+        };
+        let rig = on(&s.rig_globals, RIG);
+        let engines: BTreeMap<String, bool> = s
+            .engines
+            .iter()
+            .map(|(n, e)| (n.clone(), on(&e.globals, ENGINE)))
+            .collect();
+        let mut changed = false;
+        for lane in s.lanes.values_mut() {
+            let gated = rig
+                || engines.get(&lane.engine).copied().unwrap_or(false)
+                || on(&lane.globals, LAYER);
+            changed |= lane.fx_gated != gated;
+            lane.fx_gated = gated;
+        }
+        changed
+    }
+
+    /// Knobs that drive an imported patch's own modulators — its LFOs and
+    /// Mod Env. They reach sound on a lane hosting an Omnisphere patch (its
+    /// routes are the destinations); a keys module has none.
+    fn macro_is_mod(id: &str) -> bool {
+        ["lfo1.", "lfo2.", "lfo3.", "lfo4.", "env3.", "env4."]
+            .iter()
+            .any(|p| id.starts_with(p))
+    }
+
+    /// The modulator knobs an imported patch honours: its own LFOs' rate,
+    /// depth, shape and fade, and its Mod Env's times. Destinations, the
+    /// Mod Env depth and the second Mod Env are a keys module's — an imported
+    /// patch routes its modulators itself.
+    fn mod_reaches_import(id: &str) -> bool {
+        let lfo = ["lfo1.", "lfo2.", "lfo3.", "lfo4."]
+            .iter()
+            .any(|p| id.starts_with(p))
+            && !id.ends_with(".dest");
+        let env = id.starts_with("env3.") && !matches!(id, "env3.depth" | "env3.dest");
+        lfo || env
+    }
+
+    /// Knobs whose change builds a new effect engine (a reverb's algorithm
+    /// and decay) — a coalesced rebuild, not a live write. A delay's machine
+    /// switches live.
+    fn macro_rebuilds(id: &str) -> bool {
+        matches!(id, "amb.algo" | "amb.decay")
+    }
+
     fn macro_is_dsp(id: &str) -> bool {
         id.starts_with("filter.")
             || id.starts_with("env1.")
             || id.starts_with("env2.")
             || id.starts_with("vib.")
-            || id == "source.unison"
-            || id == "source.detune"
+            || id.starts_with("tone.")
+            || id.starts_with("amb.")
+            || id.starts_with("dly.")
+            || matches!(id, "fx.chorus" | "fx.delay" | "fx.width")
+            || matches!(
+                id,
+                "source.unison"
+                    | "source.detune"
+                    | "source.pan"
+                    | "source.transpose"
+                    | "source.fine"
+            )
     }
 
-    /// One module's DSP values, read from live state (own macros, else the
-    /// macro defaults) — everything [`push_module_dsp`](Self::push_module_dsp)
-    /// writes into the running engine.
-    fn module_dsp_values(&self, layer: &str, module: usize) -> Option<[f32; 15]> {
-        let s = self.inner.state.lock().ok()?;
-        let lane = s.lanes.get(layer)?;
-        lane.modules.get(module)?;
-        let v = |id: &str| Self::module_value(lane, module, id);
-        Some([
-            v("filter.cutoff"),
-            v("filter.reso"),
-            v("filter.env_amt"),
-            v("env1.attack"),
-            v("env1.decay"),
-            v("env1.sustain"),
-            v("env1.release"),
-            v("env2.attack"),
-            v("env2.decay"),
-            v("env2.sustain"),
-            v("env2.release"),
-            v("source.unison"),
-            v("source.detune"),
-            v("vib.rate"),
-            v("vib.depth"),
-        ])
-    }
-
-    /// Push one module's DSP macros — filter cutoff/resonance, the Amp and
-    /// Filter envelope ADSRs, the filter-env amount, unison — into the
-    /// RUNNING engine, live. This replaced the rebuild for these edits: the
-    /// filter and env-amount land in the render tree's parameter overlay,
-    /// the envelopes mutate their control sources in place, and the sampler
-    /// source takes its own unison / attack / release setters. Returns
-    /// `false` when nothing could be applied (engine stopped, lane not
-    /// hosted) — the caller falls back to the rebuild path.
+    /// Push one module's knobs into the RUNNING engine, live: the filter
+    /// and the Amp's pan / width / tone through the parameter overlay, the
+    /// envelopes into their sources, the sampler's voice settings through its
+    /// setters, the effects' values in their own units. Returns `false` when
+    /// that is not enough — nothing hosted, or the chain itself must change
+    /// (an effect switched on or off, a reverb algorithm or decay, which
+    /// build a new engine) — and the caller rebuilds.
     fn push_module_dsp(&self, layer: &str, module_idx: usize) -> bool {
         use signal_sampler::native::AdsrParams;
-        let Some(vals) = self.module_dsp_values(layer, module_idx) else {
-            return false;
+        let set = {
+            let Ok(s) = self.inner.state.lock() else {
+                return false;
+            };
+            if !s.lanes.contains_key(layer) {
+                return false;
+            }
+            Self::module_settings_for(&s.lanes, layer, module_idx)
         };
-        let [
-            cutoff_hz,
-            reso,
-            env_amt,
-            a1,
-            d1,
-            s1,
-            r1,
-            a2,
-            d2,
-            s2,
-            r2,
-            unison,
-            detune,
-            vib_rate,
-            vib_depth,
-        ] = vals;
-        let module = format!("{layer} {}", signal_synth::engine::module_slot(module_idx));
+        // A keys module is "<lane> A"; an imported Omnisphere patch keeps
+        // its own "Layer A".."Layer D". Both name their parts alike
+        // ("Soundsource", "Filter 1", "Amp", "Amp Env", "Filter Env").
+        let slot = signal_synth::engine::module_slot(module_idx);
+        let modules = [format!("{layer} {slot}"), format!("Layer {slot}")];
         let Ok(rig) = self.inner.rig.lock() else {
             return false;
         };
@@ -1904,95 +2215,215 @@ impl KeysRigBackend {
         let sample_rate = rig.sample_rate().max(1);
         rig.edit_lane(layer, |inst| {
             let render = inst.render_mut();
-            // Filter block params (normalized on the block's own scale).
-            let cutoff_norm = f64::from(signal_sampler::native::NativeFilter::norm_from_cutoff(
-                cutoff_hz,
-            ));
-            let mut applied = render.set_leaf_param(&module, "Filter 1", "cutoff", cutoff_norm);
-            applied |= render.set_leaf_param(
-                &module,
-                "Filter 1",
-                "resonance",
-                f64::from(reso.clamp(0.0, 1.0)),
-            );
-            // Envelope sources + the env→cutoff amount (synth modules; a
-            // sampler module has no env sources — its voices carry their
-            // own envelope, updated below).
-            let adsr = |a: f32, d: f32, sus: f32, r: f32| AdsrParams {
+            let mut applied = false;
+            let mut rebuild = false;
+            let adsr = |(a, d, sus, r): (f32, f32, f32, f32)| AdsrParams {
                 attack_s: (a / 1000.0).max(0.0),
                 decay_s: (d / 1000.0).max(0.0),
                 sustain: sus.clamp(0.0, 1.0),
                 release_s: (r / 1000.0).max(0.0),
             };
-            applied |= render.set_env(&module, "Amp Env", adsr(a1, d1, s1, r1));
-            applied |= render.set_env(&module, "Filter Env", adsr(a2, d2, s2, r2));
-            applied |= render.set_route_depth(
-                &module,
-                "Filter Env",
-                "Filter 1",
-                "cutoff",
-                env_amt.clamp(-1.0, 1.0),
-            );
-            // Per-voice synth engine (the oscillator source): full amp +
-            // filter ADSRs, its own lowpass, vibrato. Times map onto the
-            // voice's 8 s segment range, normalized.
-            let seg = |ms: f32| f64::from(((ms.max(0.0) / 1000.0) / 8.0).clamp(0.0, 1.0));
-            applied |= render.set_leaf_param(&module, "Soundsource", "amp_attack", seg(a1));
-            render.set_leaf_param(&module, "Soundsource", "amp_decay", seg(d1));
-            render.set_leaf_param(
-                &module,
-                "Soundsource",
-                "amp_sustain",
-                f64::from(s1.clamp(0.0, 1.0)),
-            );
-            render.set_leaf_param(&module, "Soundsource", "amp_release", seg(r1));
-            render.set_leaf_param(&module, "Soundsource", "filter_attack", seg(a2));
-            render.set_leaf_param(&module, "Soundsource", "filter_decay", seg(d2));
-            render.set_leaf_param(
-                &module,
-                "Soundsource",
-                "filter_sustain",
-                f64::from(s2.clamp(0.0, 1.0)),
-            );
-            render.set_leaf_param(&module, "Soundsource", "filter_release", seg(r2));
-            render.set_leaf_param(&module, "Soundsource", "cutoff", cutoff_norm);
-            render.set_leaf_param(
-                &module,
-                "Soundsource",
-                "resonance",
-                f64::from(reso.clamp(0.0, 1.0)),
-            );
-            render.set_leaf_param(
-                &module,
-                "Soundsource",
-                "env_amt",
-                f64::from(f32::midpoint(env_amt.clamp(-1.0, 1.0), 1.0)),
-            );
-            render.set_leaf_param(
-                &module,
-                "Soundsource",
-                "vib_rate",
-                f64::from(vib_rate.clamp(0.1, 12.0) / 12.0),
-            );
-            render.set_leaf_param(
-                &module,
-                "Soundsource",
-                "vib_depth",
-                f64::from(vib_depth.clamp(0.0, 1.0)),
-            );
-
-            // Sampler source: per-voice amp attack/release + unison.
-            applied |= render.with_sampler_source(&module, "Soundsource", |sampler| {
-                let engine = sampler.engine_mut();
-                engine.set_attack_frames(((a1.max(0.0) / 1000.0) * sample_rate as f32) as usize);
-                engine.set_release_frames(((r1.max(0.0) / 1000.0) * sample_rate as f32) as usize);
-                engine.set_unison(
-                    (unison.max(1.0).round() as u8).min(8),
-                    detune.clamp(0.0, 2.0) * 100.0,
-                    0.7,
+            let cutoff_norm = f64::from(signal_sampler::native::NativeFilter::norm_from_cutoff(
+                set.cutoff_hz,
+            ));
+            for module in &modules {
+                if !render.has_leaf(module, "Soundsource") {
+                    continue;
+                }
+                // Envelope sources + the env→cutoff amount (module-level:
+                // a synth module's, an imported patch's route).
+                render.set_env(module, "Amp Env", adsr(set.amp_env));
+                render.set_env(module, "Filter Env", adsr(set.filter_env));
+                render.set_env(module, "Mod Env", adsr(set.mod_env));
+                render.set_env(module, "Mod Env 2", adsr(set.mod_env2));
+                for (i, name) in ["Mod Env", "Mod Env 2"].into_iter().enumerate() {
+                    let (d, h) = set.mod_env_dh[i];
+                    render.set_env_timing(module, name, d.max(0.0) / 1000.0, h.max(0.0) / 1000.0);
+                }
+                // An imported patch's LFOs are part-level (addressed by the
+                // lane, their routes the patch's); a keys module's are its
+                // own, routed to the destinations picked.
+                let imported = module.starts_with("Layer ");
+                let lfo_scope = if imported { layer } else { module.as_str() };
+                for (n, &(rate, depth, wave)) in set.lfos.iter().enumerate() {
+                    let name = format!("LFO {}", n + 1);
+                    let wave = match wave.round() as u32 {
+                        1 => signal_sampler::native::LfoWave::Triangle,
+                        2 => signal_sampler::native::LfoWave::Saw,
+                        3 => signal_sampler::native::LfoWave::Square,
+                        4 => signal_sampler::native::LfoWave::SampleHold,
+                        _ => signal_sampler::native::LfoWave::Sine,
+                    };
+                    let fade = Some(set.lfo_fade_ms[n].max(0.0) / 1000.0);
+                    render.set_lfo(lfo_scope, &name, rate, Some(wave), fade);
+                    if imported {
+                        render.set_source_depth(layer, &name, depth);
+                    }
+                }
+                if !imported {
+                    // The routes the picked destinations need, against the
+                    // routes the tree has: a different set is a rebuild; the
+                    // same set takes its depths live.
+                    let want = set.mod_routes();
+                    for source in ["LFO 1", "LFO 2", "LFO 3", "LFO 4", "Mod Env", "Mod Env 2"] {
+                        let mut have = render.routes_from(module, source);
+                        have.sort();
+                        let mut need: Vec<(String, String)> = want
+                            .iter()
+                            .filter(|r| r.source == source)
+                            .map(|r| (r.leaf.to_lowercase(), r.param.to_lowercase()))
+                            .collect();
+                        need.sort();
+                        if have != need {
+                            rebuild = true;
+                        }
+                    }
+                    for r in &want {
+                        render.set_route_depth(module, &r.source, r.leaf, r.param, r.depth);
+                    }
+                }
+                let routed = render.set_route_depth(
+                    module,
+                    "Filter Env",
+                    "Filter 1",
+                    "cutoff",
+                    set.filter_env_depth.clamp(-1.0, 1.0),
                 );
-            });
-            applied
+                // Sampler source: the per-voice ADSR, filter, vibrato,
+                // tuning and unison.
+                let mut voice_filter = false;
+                let sampler = render.with_sampler_source(module, "Soundsource", |sampler| {
+                    let engine = sampler.engine_mut();
+                    let frames = |ms: f32| ((ms.max(0.0) / 1000.0) * sample_rate as f32) as usize;
+                    engine.set_attack_frames(frames(set.amp_env.0));
+                    engine.set_decay_frames(frames(set.amp_env.1));
+                    engine.set_sustain_level(set.amp_env.2);
+                    engine.set_release_frames(frames(set.amp_env.3));
+                    // A patch that routes its own filter envelope keeps it;
+                    // otherwise the voices' own filter carries the knobs.
+                    let (amount, keytrack) = if routed {
+                        (0.0, 0.0)
+                    } else {
+                        (set.filter_env_depth, set.keytrack)
+                    };
+                    engine.set_voice_filter(
+                        adsr(set.filter_env),
+                        amount,
+                        set.cutoff_hz,
+                        set.resonance,
+                        keytrack,
+                    );
+                    voice_filter = engine.voice_filter_on();
+                    engine.set_vibrato(set.vib_rate, set.vib_depth, set.vib_delay_ms);
+                    engine.set_tune(set.transpose, set.fine);
+                    engine.set_unison(
+                        (set.unison.max(1)).min(8) as u8,
+                        set.detune.clamp(0.0, 2.0) * 100.0,
+                        0.7,
+                    );
+                });
+                applied |= sampler;
+                // The module's shared filter: opened while the voices filter.
+                let (c, r) = if voice_filter {
+                    (1.0, 0.0)
+                } else {
+                    (cutoff_norm, f64::from(set.resonance.clamp(0.0, 1.0)))
+                };
+                applied |= render.set_leaf_param(module, "Filter 1", "cutoff", c);
+                render.set_leaf_param(module, "Filter 1", "resonance", r);
+                render.set_leaf_param(
+                    module,
+                    "Filter 1",
+                    "drive",
+                    f64::from(set.filter_drive.clamp(0.0, 1.0)),
+                );
+                render.set_leaf_param(
+                    module,
+                    "Filter 1",
+                    "mix",
+                    f64::from(set.filter_mix.clamp(0.0, 1.0)),
+                );
+                // Per-voice synth sources (the oscillator / the wavetable):
+                // ADSRs over an 8 s range, vibrato, tuning, their own filter.
+                let seg = |ms: f32| f64::from(((ms.max(0.0) / 1000.0) / 8.0).clamp(0.0, 1.0));
+                let ss = |r: &mut signal_sampler::node_render::RenderNode, p: &str, v: f64| {
+                    r.set_leaf_param(module, "Soundsource", p, v)
+                };
+                applied |= ss(render, "amp_attack", seg(set.amp_env.0));
+                ss(render, "amp_decay", seg(set.amp_env.1));
+                ss(
+                    render,
+                    "amp_sustain",
+                    f64::from(set.amp_env.2.clamp(0.0, 1.0)),
+                );
+                ss(render, "amp_release", seg(set.amp_env.3));
+                ss(render, "filter_attack", seg(set.filter_env.0));
+                ss(render, "filter_decay", seg(set.filter_env.1));
+                ss(
+                    render,
+                    "filter_sustain",
+                    f64::from(set.filter_env.2.clamp(0.0, 1.0)),
+                );
+                ss(render, "filter_release", seg(set.filter_env.3));
+                ss(render, "cutoff", cutoff_norm);
+                ss(
+                    render,
+                    "resonance",
+                    f64::from(set.resonance.clamp(0.0, 1.0)),
+                );
+                ss(
+                    render,
+                    "env_amt",
+                    f64::from(f32::midpoint(set.filter_env_depth.clamp(-1.0, 1.0), 1.0)),
+                );
+                ss(
+                    render,
+                    "vib_rate",
+                    f64::from(set.vib_rate.clamp(0.0, 12.0) / 12.0),
+                );
+                ss(
+                    render,
+                    "vib_depth",
+                    f64::from(set.vib_depth.clamp(0.0, 1.0)),
+                );
+                ss(render, "tune", f64::from(set.wavetable_tune()));
+                // The Amp: pan, width, tone (normalized).
+                let amp = set.amp_block();
+                for p in amp.params.iter().filter(|p| p.name != "gain") {
+                    if let Ok(v) = p.value.parse::<f64>() {
+                        render.set_leaf_param(module, "Amp", &p.name, v);
+                    }
+                }
+                // Effects: an effect switched on or off changes the chain —
+                // a rebuild; one in place takes its values live, in its own
+                // units. A reverb's algorithm and decay build a new engine,
+                // so a change to either rebuilds too.
+                let want: Vec<signal_sampler::rig::RigBlock> = set.fx_blocks();
+                for name in ["Chorus", "Delay", "Ambience"] {
+                    let wanted = want.iter().find(|b| b.display_name() == name);
+                    let present = render.has_leaf(module, name);
+                    match (wanted, present) {
+                        (Some(b), true) => {
+                            for p in &b.params {
+                                let Ok(v) = p.value.parse::<f64>() else {
+                                    continue;
+                                };
+                                // Algorithm and decay build a new engine:
+                                // those knobs rebuild (`macro_rebuilds`).
+                                if name == "Ambience"
+                                    && matches!(p.name.as_str(), "algorithm" | "decay")
+                                {
+                                    continue;
+                                }
+                                render.set_leaf_plain(module, name, &p.name, v);
+                            }
+                        }
+                        (None, false) => {}
+                        _ => rebuild = true,
+                    }
+                }
+            }
+            applied && !rebuild
         })
         .unwrap_or(false)
     }
@@ -2028,7 +2459,20 @@ impl KeysRigBackend {
             });
     }
 
+    /// A scope's own parameter moved (Tone, Limiter, FX Bypass): Tone and
+    /// Limiter go live onto the scope stages; an FX Bypass that changed a
+    /// lane's gate changes chains, so it rebuilds.
+    fn after_scope_param(&self, regate: bool) {
+        self.apply_mixer();
+        self.remember_macros_soon();
+        if regate {
+            self.rebuild_soon();
+        }
+        self.publish_mixer();
+    }
+
     fn after_global(&self, rebuild: bool, targets: &[(String, usize)]) {
+        self.remember_macros_soon();
         // DSP parameters go LIVE into the running engine now (parameter
         // overlay + in-place envelope sources); the rebuild only remains as
         // the fallback when nothing is hosted yet.
@@ -2142,7 +2586,12 @@ impl KeysRigBackend {
             })
             .map(|(p, _)| p.name.clone())
             .collect();
-        let known: Vec<String> = state.presets.iter().map(|p| p.name.clone()).collect();
+        let known: Vec<String> = state
+            .presets
+            .iter()
+            .filter(|p| !p.user)
+            .map(|p| p.name.clone())
+            .collect();
         let canonical = |want: &str| -> Option<String> {
             use signal_synth::omni_import::resolve_name;
             resolve_name(want, pack_names.iter().map(String::as_str))
@@ -2169,10 +2618,188 @@ impl KeysRigBackend {
                 events: architect::rig::events_hub(),
                 pump_started: AtomicBool::new(false),
                 rebuild_gen: std::sync::atomic::AtomicU64::new(0),
+                save_gen: std::sync::atomic::AtomicU64::new(0),
+                taps: Mutex::new(Vec::new()),
+                wheel: AtomicU32::new(NO_WHEEL),
+                wheel_worker: std::sync::OnceLock::new(),
+                learn: Mutex::new(signal_rig_host::midi_learn::MidiLearn::load("keys")),
             }),
         };
         backend.spawn_meter_pump("keys-meter-pump");
+        backend.spawn_tempo_watch();
+        backend.spawn_wheel_worker();
         backend
+    }
+
+    /// Follow the band's tempo (`signal_rig_host::tempo`, the guitar rig's
+    /// tap): when it changes, every module with a synced delay takes the new
+    /// time, live.
+    /// Hand a mod-wheel value to the `keys-wheel` worker (the latest wins).
+    fn queue_wheel(inner: &Inner, value: u8) {
+        inner
+            .wheel
+            .store(u32::from(value.min(127)), std::sync::atomic::Ordering::Relaxed);
+        if let Some(worker) = inner.wheel_worker.get() {
+            worker.unpark();
+        }
+    }
+
+    /// Apply mod-wheel moves off the MIDI thread, coalesced: a sweep sends
+    /// far more values than the cutoff needs to follow.
+    fn spawn_wheel_worker(&self) {
+        let weak = Arc::downgrade(&self.inner);
+        let worker = std::thread::Builder::new()
+            .name("keys-wheel".into())
+            .spawn(move || loop {
+                std::thread::park_timeout(std::time::Duration::from_millis(500));
+                let Some(inner) = weak.upgrade() else { return };
+                let v = inner.wheel.swap(NO_WHEEL, std::sync::atomic::Ordering::Relaxed);
+                if v != NO_WHEEL {
+                    Self { inner }.wheel_cutoff(v as u8);
+                }
+            });
+        if let Ok(handle) = worker {
+            let _ = self.inner.wheel_worker.set(handle.thread().clone());
+        }
+    }
+
+    /// The mod wheel as the gig's pad Cutoff knob, played live like any
+    /// modulation — never an edit, never a rebuild. At rest (0) every filter
+    /// of [`WHEEL_CUTOFF_ENGINE`]'s lanes sits where its patch put it; up,
+    /// all of them rise by the same number of octaves (the group keeps its
+    /// spacing), the brightest reaching 20 kHz at 127. Moves each layer's
+    /// Omnisphere filters (the cutoff overlay, which the filter envelope's
+    /// routes ride on) and its sampler's per-voice filter.
+    fn wheel_cutoff(&self, value: u8) {
+        use signal_sampler::native::NativeFilter;
+        const LEAVES: [&str; 2] = ["Filter 1", "Filter 2"];
+        type Key = (String, String, String);
+        let w = f32::from(value.min(127)) / 127.0;
+        let (lanes, mut known) = {
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
+            if !s.engines.contains_key(WHEEL_CUTOFF_ENGINE) {
+                return;
+            }
+            (
+                Self::engine_lanes(&s, WHEEL_CUTOFF_ENGINE),
+                std::mem::take(&mut s.wheel_filters),
+            )
+        };
+        let modules = |lane: &str| -> Vec<String> {
+            (0..4)
+                .flat_map(|i| {
+                    let slot = signal_synth::engine::module_slot(i);
+                    [format!("{lane} {slot}"), format!("Layer {slot}")]
+                })
+                .collect()
+        };
+        let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(rig) = rig.as_ref() else {
+            return;
+        };
+        // Where every filter sits now — the patch's value, unless the wheel
+        // put it there.
+        let mut bases: Vec<(Key, f64)> = Vec::new();
+        for lane in &lanes {
+            rig.edit_lane(lane, |inst| {
+                let render = inst.render_mut();
+                for module in modules(lane) {
+                    if !render.has_leaf(&module, "Soundsource") {
+                        continue;
+                    }
+                    for leaf in LEAVES {
+                        let Some(now) = render.leaf_param_value(&module, leaf, "cutoff") else {
+                            continue;
+                        };
+                        let key = (lane.clone(), module.clone(), leaf.to_string());
+                        let base = match known.get(&key) {
+                            Some(&(base, wrote)) if (now - wrote).abs() < 1e-6 => base,
+                            _ => now,
+                        };
+                        bases.push((key, base));
+                    }
+                }
+            });
+        }
+        // The group's reach: the brightest filter still closed opens fully.
+        let leader = bases
+            .iter()
+            .map(|(_, b)| *b)
+            .filter(|b| *b < 0.999)
+            .fold(None::<f64>, |m, b| Some(m.map_or(b, |m: f64| m.max(b))));
+        let span = leader.map_or(0.0, |b| {
+            (20_000.0 / NativeFilter::cutoff_from_norm(b as f32)).log2().max(0.0)
+        });
+        let octaves = w * span;
+        known.clear();
+        for lane in &lanes {
+            rig.edit_lane(lane, |inst| {
+                let render = inst.render_mut();
+                for (key, base) in bases.iter().filter(|(k, _)| k.0 == *lane) {
+                    let hz = NativeFilter::cutoff_from_norm(*base as f32) * octaves.exp2();
+                    let v = if *base >= 0.999 {
+                        *base
+                    } else {
+                        f64::from(NativeFilter::norm_from_cutoff(hz.min(20_000.0)))
+                    };
+                    render.set_leaf_param(&key.1, &key.2, "cutoff", v);
+                    known.insert(key.clone(), (*base, v));
+                }
+                for module in modules(lane) {
+                    render.with_sampler_source(&module, "Soundsource", |sampler| {
+                        sampler.engine_mut().set_cutoff_mod(octaves);
+                    });
+                }
+            });
+        }
+        drop(rig);
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.wheel_filters = known;
+        }
+    }
+
+    fn spawn_tempo_watch(&self) {
+        let weak = Arc::downgrade(&self.inner);
+        let _ = std::thread::Builder::new()
+            .name("keys-tempo-watch".into())
+            .spawn(move || {
+                let mut seen = signal_rig_host::tempo::generation();
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    let Some(inner) = weak.upgrade() else { return };
+                    let now = signal_rig_host::tempo::generation();
+                    if now == seen {
+                        continue;
+                    }
+                    seen = now;
+                    let b = Self { inner };
+                    b.publish_perform();
+                    let targets: Vec<(String, usize)> = b
+                        .inner
+                        .state
+                        .lock()
+                        .map(|s| {
+                            s.lanes
+                                .iter()
+                                .flat_map(|(name, lane)| {
+                                    (0..lane.modules.len()).filter_map(move |i| {
+                                        let synced = lane.modules[i]
+                                            .macros
+                                            .get("dly.div")
+                                            .is_some_and(|d| *d >= 0.5);
+                                        synced.then(|| (name.clone(), i))
+                                    })
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    for (lane, i) in targets {
+                        b.push_module_dsp(&lane, i);
+                    }
+                }
+            });
     }
 
     fn program_for(&self, index: usize) -> Option<Container> {
@@ -2184,7 +2811,201 @@ impl KeysRigBackend {
 
     /// The live profile + patch-spec index + lane snapshot behind both
     /// program builders (single tree and lane program).
+    /// Seed every lane that hosts a whole Omnisphere patch it has not been
+    /// seeded from: one module per patch layer (A..D), each module's knobs
+    /// filled from that layer. Runs before every program build, so a lane's
+    /// knobs describe the patch before anything is built from them; a lane
+    /// whose patch changes is seeded again, from the new one.
+    fn seed_omni_lanes(&self) {
+        let todo: Vec<(String, PathBuf, String)> = {
+            let Ok(s) = self.inner.state.lock() else {
+                return;
+            };
+            s.lanes
+                .iter()
+                .filter_map(|(name, lane)| {
+                    let patch = lane.modules.first()?.patch.clone();
+                    let i = s.presets.iter().position(|p| !p.user && p.name == patch)?;
+                    let path = s.specs.get(i)?.clone();
+                    (is_omni_patch(&path) && lane.omni_seed.as_ref() != Some(&path))
+                        .then(|| (name.clone(), path, patch))
+                })
+                .collect()
+        };
+        for (name, path, patch) in todo {
+            let layers = match signal_synth::engine::import_omni_layers(&path) {
+                Ok(l) => l,
+                Err(e) => {
+                    tracing::warn!(lane = %name, ?path, "keys rig: Omnisphere seed failed: {e}");
+                    continue;
+                }
+            };
+            let lfos = signal_synth::engine::import_omni_lfos(&path).unwrap_or_default();
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
+            let Some(lane) = s.lanes.get_mut(&name) else {
+                continue;
+            };
+            let enabled = lane.modules.first().is_none_or(|m| m.enabled);
+            while lane.modules.len() < layers.len() {
+                // Every module names the patch: the lane plays the whole
+                // patch, and a module with no patch is skipped by the
+                // Global Controls.
+                lane.modules.push(ModuleState {
+                    patch: patch.clone(),
+                    macros: default_macros(),
+                    enabled,
+                    ..ModuleState::default()
+                });
+            }
+            for (slot, m) in lane.modules.iter_mut().zip(&layers) {
+                seed_module_macros(&mut slot.macros, m);
+                // The part's LFOs, on every module (they are shared).
+                for (n, (rate, depth, shape)) in lfos.iter().enumerate().take(4) {
+                    let id = format!("lfo{}", n + 1);
+                    set_macro_clamped(&mut slot.macros, &format!("{id}.rate"), *rate);
+                    set_macro_clamped(&mut slot.macros, &format!("{id}.depth"), *depth);
+                    set_macro_clamped(&mut slot.macros, &format!("{id}.shape"), *shape);
+                }
+            }
+            lane.spans.clear();
+            lane.omni_seed = Some(path);
+            lane.omni_base = lane.modules.iter().map(|m| m.macros.clone()).collect();
+            // The player's saved knobs for this patch go over the patch's own.
+            let State { lanes, profile, .. } = &mut *s;
+            if let Some(lane) = lanes.get_mut(&name) {
+                let def = profile
+                    .engines
+                    .iter()
+                    .flat_map(|e| &e.layers)
+                    .find(|l| l.name == name);
+                for (i, slot) in lane.modules.iter_mut().enumerate() {
+                    if let Some(saved) = def.and_then(|d| d.saved_macros(&slot.patch, i as u32)) {
+                        for v in saved {
+                            set_macro_clamped(&mut slot.macros, &v.id, v.value);
+                        }
+                    }
+                    slot.macros_patch = Some(slot.patch.clone());
+                }
+            }
+            tracing::info!(lane = %name, layers = layers.len(), "keys rig: seeded Omnisphere lane knobs");
+        }
+    }
+
+    /// Bring every module's knobs in line with the patch it now holds: an
+    /// Omnisphere lane is seeded from its patch (`seed_omni_lanes`); any
+    /// other module whose patch changed gets the defaults with that patch's
+    /// saved values on top. Runs before every program build.
+    fn prepare_lanes(&self) {
+        self.seed_omni_lanes();
+        let Ok(mut guard) = self.inner.state.lock() else {
+            return;
+        };
+        let State { lanes, profile, .. } = &mut *guard;
+        for (name, lane) in lanes.iter_mut() {
+            if lane.omni_seed.is_some() {
+                continue;
+            }
+            let def = profile
+                .engines
+                .iter()
+                .flat_map(|e| &e.layers)
+                .find(|l| &l.name == name);
+            for (i, m) in lane.modules.iter_mut().enumerate() {
+                if m.patch.is_empty() || m.macros_patch.as_deref() == Some(m.patch.as_str()) {
+                    continue;
+                }
+                m.macros = default_macros();
+                if let Some(saved) = def.and_then(|d| d.saved_macros(&m.patch, i as u32)) {
+                    for v in saved {
+                        set_macro_clamped(&mut m.macros, &v.id, v.value);
+                    }
+                }
+                m.macros_patch = Some(m.patch.clone());
+                lane.spans.clear();
+            }
+        }
+    }
+
+    /// Copy every module's knobs into the profile under the patch it holds,
+    /// and save the profile a moment later (coalesced across a drag).
+    fn remember_macros_soon(&self) {
+        use std::sync::atomic::Ordering;
+        {
+            let Ok(mut guard) = self.inner.state.lock() else {
+                return;
+            };
+            let State { lanes, profile, .. } = &mut *guard;
+            for (name, lane) in lanes.iter() {
+                let Some(def) = profile.layer_mut(name) else {
+                    continue;
+                };
+                for (i, m) in lane.modules.iter().enumerate() {
+                    if m.patch.is_empty() || m.macros_patch.as_deref() != Some(m.patch.as_str()) {
+                        continue;
+                    }
+                    let values = m
+                        .macros
+                        .iter()
+                        .filter(|(id, _)| Self::macro_is_dsp(id) || Self::macro_is_mod(id))
+                        .map(|(id, v)| crate::profile::MacroValue {
+                            id: id.clone(),
+                            value: *v,
+                        })
+                        .collect();
+                    def.remember_macros(&m.patch, i as u32, values);
+                }
+            }
+            // Each scope's own settings (Tone, Limiter, FX Bypass).
+            let own =
+                |map: &BTreeMap<String, f32>, prefix: &str| -> Vec<crate::profile::MacroValue> {
+                    map.iter()
+                        .filter_map(|(k, v)| {
+                            k.strip_prefix(prefix).map(|id| crate::profile::MacroValue {
+                                id: id.to_string(),
+                                value: *v,
+                            })
+                        })
+                        .collect()
+                };
+            let State {
+                lanes,
+                engines,
+                rig_globals,
+                profile,
+                ..
+            } = &mut *guard;
+            for (name, lane) in lanes.iter() {
+                if let Some(def) = profile.layer_mut(name) {
+                    def.scope_values = own(&lane.globals, LAYER);
+                }
+            }
+            for e in &mut profile.engines {
+                if let Some(state) = engines.get(&e.name) {
+                    e.scope_values = own(&state.globals, ENGINE);
+                }
+            }
+            profile.scope_values = own(rig_globals, RIG);
+        }
+        let r#gen = self.inner.save_gen.fetch_add(1, Ordering::AcqRel) + 1;
+        let b = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("keys-profile-save".into())
+            .spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+                if b.inner.save_gen.load(Ordering::Acquire) != r#gen {
+                    return; // a later edit owns the save
+                }
+                let profile = b.inner.state.lock().ok().map(|s| s.profile.clone());
+                if let Some(p) = profile {
+                    p.save();
+                }
+            });
+    }
+
     fn profile_inputs(&self) -> Option<ProfileInputs> {
+        self.prepare_lanes();
         let s = self.inner.state.lock().ok()?;
         if s.profile.engines.is_empty() {
             return None;
@@ -2194,6 +3015,9 @@ impl KeysRigBackend {
             .presets
             .iter()
             .zip(s.specs.iter())
+            // A saved engine or layer preset is not a patch a module can
+            // hold — never let one shadow a pack of the same name.
+            .filter(|(p, _)| !p.user)
             .map(|(p, spec)| (p.name.clone(), spec.clone()))
             .collect();
         // Lanes carry the LIVE patch assignment (a stack recall or a browser
@@ -2220,14 +3044,30 @@ impl KeysRigBackend {
         layer: &str,
         module: usize,
     ) -> signal_synth::engine::ModuleSettings {
-        let mut set = signal_synth::engine::ModuleSettings::default();
         let Some(lane) = lanes.get(layer) else {
-            return set;
+            return signal_synth::engine::ModuleSettings::default();
         };
+        let mut set =
+            Self::settings_from_macros(lane, lane.modules.get(module).map(|m| &m.macros));
+        // An Omnisphere lane: the knobs as seeded, through the same mapping,
+        // so only what the player moved is applied onto the patch.
+        if lane.omni_seed.is_some() {
+            if let Some(base) = lane.omni_base.get(module) {
+                set.baseline = Some(Box::new(Self::settings_from_macros(lane, Some(base))));
+            }
+        }
+        set
+    }
+
+    /// A module's settings from its macro values (defaults for any unset).
+    fn settings_from_macros(
+        lane: &LaneState,
+        macros: Option<&BTreeMap<String, f32>>,
+    ) -> signal_synth::engine::ModuleSettings {
+        let mut set = signal_synth::engine::ModuleSettings::default();
         let v = |id: &str| {
-            lane.modules
-                .get(module)
-                .and_then(|m| m.macros.get(id).copied())
+            macros
+                .and_then(|m| m.get(id).copied())
                 .or_else(|| macro_def(id).map(|d| d.default))
                 .unwrap_or(0.0)
         };
@@ -2248,6 +3088,76 @@ impl KeysRigBackend {
         );
         set.unison = v("source.unison").max(1.0) as u32;
         set.detune = v("source.detune");
+        let fx_on = !lane.fx_gated;
+        set.pan = v("source.pan");
+        set.width = v("fx.width");
+        set.transpose = v("source.transpose");
+        set.fine = v("source.fine");
+        set.keytrack = v("filter.keytrack");
+        set.filter_drive = v("filter.drive");
+        set.filter_mix = v("filter.mix");
+        set.vib_rate = v("vib.rate");
+        set.vib_depth = v("vib.depth");
+        set.vib_delay_ms = v("vib.delay");
+        set.warmth = v("tone.warmth");
+        set.body = v("tone.body");
+        set.drive = v("tone.drive");
+        set.chorus = if fx_on { v("fx.chorus") } else { 0.0 };
+        set.ambience = signal_synth::engine::AmbienceSettings {
+            on: fx_on && v("amb.bypass") < 0.5,
+            algo: v("amb.algo"),
+            size: v("amb.size"),
+            mix: v("amb.mix"),
+            predelay_ms: v("amb.predelay"),
+            decay: v("amb.decay"),
+        };
+        // The Effects page's Delay amount and the Delay section's mix are
+        // one send: whichever is higher.
+        // A note division (1..7) follows the band's tempo when there is one;
+        // 0, or no tempo yet, is the free time in ms.
+        const DIVS: [f32; 7] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 4.0];
+        let div = v("dly.div").round() as usize;
+        let time_ms = match (
+            div.checked_sub(1).and_then(|i| DIVS.get(i)),
+            signal_rig_host::tempo::get(),
+        ) {
+            (Some(factor), Some(bpm)) => 60_000.0 / bpm * factor,
+            _ => v("dly.time"),
+        };
+        set.delay = signal_synth::engine::DelaySettings {
+            on: fx_on && v("dly.bypass") < 0.5,
+            style: v("dly.algo"),
+            time_ms,
+            feedback: v("dly.feedback"),
+            mix: v("dly.mix").max(v("fx.delay")),
+        };
+        for (n, lfo) in set.lfos.iter_mut().enumerate() {
+            let id = |k: &str| format!("lfo{}.{k}", n + 1);
+            *lfo = (v(&id("rate")), v(&id("depth")), v(&id("shape")));
+        }
+        set.mod_env = (
+            v("env3.attack"),
+            v("env3.decay"),
+            v("env3.sustain"),
+            v("env3.release"),
+        );
+        set.mod_env2 = (
+            v("env4.attack"),
+            v("env4.decay"),
+            v("env4.sustain"),
+            v("env4.release"),
+        );
+        for (i, e) in ["env3", "env4"].into_iter().enumerate() {
+            set.mod_env_dh[i] = (v(&format!("{e}.delay")), v(&format!("{e}.hold")));
+            set.mod_env_depth[i] = v(&format!("{e}.depth"));
+            set.mod_env_dest[i] =
+                signal_synth::engine::ModDest::from_value(v(&format!("{e}.dest")));
+        }
+        for n in 0..4 {
+            set.lfo_fade_ms[n] = v(&format!("lfo{}.fade", n + 1));
+            set.lfo_dest[n] =
+                signal_synth::engine::ModDest::from_value(v(&format!("lfo{}.dest", n + 1)));
+        }
         set
     }
 
@@ -2355,6 +3265,27 @@ impl KeysRigBackend {
             }
         }
         rig.set_output_gain(db_to_linear(s.master_db));
+        // Each scope's Tone and Limiter onto its track's stage.
+        use signal_sampler::keys_rig::Scope;
+        let scope = |map: &BTreeMap<String, f32>, prefix: &str| {
+            let v = |k: &str| map.get(&format!("{prefix}{k}")).copied().unwrap_or(0.0);
+            (
+                v("tone.low"),
+                v("tone.mid"),
+                v("tone.high"),
+                v("limiter") >= 0.5,
+            )
+        };
+        let (l, m, h, lim) = scope(&s.rig_globals, RIG);
+        rig.set_scope(&Scope::Rig, l, m, h, lim);
+        for (name, e) in &s.engines {
+            let (l, m, h, lim) = scope(&e.globals, ENGINE);
+            rig.set_scope(&Scope::Engine(name.clone()), l, m, h, lim);
+        }
+        for (name, lane) in &s.lanes {
+            let (l, m, h, lim) = scope(&lane.globals, LAYER);
+            rig.set_scope(&Scope::Layer(name.clone()), l, m, h, lim);
+        }
     }
 
     /// Rebuild the playable program from the profile (patch assignment
@@ -2450,35 +3381,15 @@ impl KeysRigBackend {
                     .unwrap_or_default();
                 slot.gain_db = m.level_db.clamp(MIN_FADER_DB, MAX_FADER_DB);
                 slot.enabled = true;
-                let set = |macros: &mut BTreeMap<String, f32>, id: &str, v: f32| {
-                    if let Some(def) = macro_def(id) {
-                        macros.insert(id.to_string(), v.clamp(def.min, def.max));
-                    }
-                };
-                set(&mut slot.macros, "filter.cutoff", m.cutoff_hz);
-                set(&mut slot.macros, "filter.reso", m.resonance);
-                set(&mut slot.macros, "filter.env_amt", m.filter_env_depth);
-                set(&mut slot.macros, "source.unison", m.unison as f32);
-                set(&mut slot.macros, "source.detune", m.detune);
-                if let Some((a, d, sus, r)) = m.amp_env {
-                    set(&mut slot.macros, "env1.attack", a);
-                    set(&mut slot.macros, "env1.decay", d);
-                    set(&mut slot.macros, "env1.sustain", sus);
-                    set(&mut slot.macros, "env1.release", r);
-                }
-                if let Some((a, d, sus, r)) = m.filter_env {
-                    set(&mut slot.macros, "env2.attack", a);
-                    set(&mut slot.macros, "env2.decay", d);
-                    set(&mut slot.macros, "env2.sustain", sus);
-                    set(&mut slot.macros, "env2.release", r);
-                }
+                seed_module_macros(&mut slot.macros, m);
+                slot.macros_patch = Some(slot.patch.clone());
                 // Omnisphere's LFOs are per-part, so every module of the
                 // patch gets the same four.
                 for (n, (rate, depth, shape)) in imported.lfos.iter().enumerate() {
                     let id = format!("lfo{}", n + 1);
-                    set(&mut slot.macros, &format!("{id}.rate"), *rate);
-                    set(&mut slot.macros, &format!("{id}.depth"), *depth);
-                    set(&mut slot.macros, &format!("{id}.shape"), *shape);
+                    set_macro_clamped(&mut slot.macros, &format!("{id}.rate"), *rate);
+                    set_macro_clamped(&mut slot.macros, &format!("{id}.depth"), *depth);
+                    set_macro_clamped(&mut slot.macros, &format!("{id}.shape"), *shape);
                 }
             }
             // The lane holds exactly the modules the preset uses — an
@@ -2638,11 +3549,51 @@ impl KeysRigBackend {
                     name: st.name.clone(),
                     blurb: st.blurb.clone(),
                     is_active: s.active_stack == Some(i),
+                    tempo_bpm: st.tempo_bpm.max(0.0).round() as u32,
                 })
                 .collect(),
             active_stack: s.active_stack.map_or(u32::MAX, |i| i as u32),
             perform_mode: s.perform_mode,
+            tempo_bpm: signal_rig_host::tempo::get().map_or(0, |b| b.round() as u32),
+            learn: self.learn_model(),
         }
+    }
+
+    /// The switches' learn state, for their badges and menus.
+    fn learn_model(&self) -> signal_rigs_proto::SwitchLearn {
+        let learn = self
+            .inner
+            .learn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        signal_rigs_proto::SwitchLearn {
+            learning: learn.learning().map(str::to_string),
+            bindings: learn.labels(),
+        }
+    }
+
+    /// A learned pedal went down (or up): do what its switch does.
+    fn fire_switch(&self, target: &str, pressed: bool) {
+        // Keys switches latch: the press is the switch.
+        if !pressed {
+            return;
+        }
+        if target == "tap" {
+            KeysRigSvc::tap_tempo(self);
+            self.publish_perform();
+        } else if let Some(i) = target.strip_prefix("stack:").and_then(|i| i.parse().ok()) {
+            KeysRigSvc::press_stack(self, i);
+        }
+    }
+
+    /// Everything a stack edit needs after it: renumbered learn targets are
+    /// the caller's; this saves the profile and republishes.
+    fn after_stack_edit(&self) {
+        let profile = self.inner.state.lock().ok().map(|s| s.profile.clone());
+        if let Some(p) = profile {
+            p.save();
+        }
+        self.publish_perform();
     }
 
     fn publish_mixer(&self) {
@@ -2684,15 +3635,7 @@ impl KeysRigBackend {
             }
             return false;
         }
-        let prefs = AudioIoPrefs {
-            output_device: String::new(),
-            sample_rate: 0,
-            // 256 frames on desktop; on iOS the fixed-size request rides a
-            // macOS-only CoreAudio property (AVAudioSession owns the IO
-            // buffer there), so ask for the backend default instead.
-            buffer_size: if cfg!(target_os = "ios") { 0 } else { 256 },
-            ..Default::default()
-        };
+        let prefs = keys_audio_prefs();
         // Brand the in-flight state and convert panics into a visible
         // error — phone UIs have no logs, and a silent hang and a
         // swallowed thread panic are otherwise indistinguishable from
@@ -2720,6 +3663,12 @@ impl KeysRigBackend {
         });
         match opened {
             Ok(r) => {
+                // Watch the audio callback: log whenever blocks miss their
+                // deadline — "it runs out of buffer" left no trace before.
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some(stats) = r.engine_stats() {
+                    spawn_engine_watch(stats, r.daw().clone(), r.project_guid().to_string());
+                }
                 {
                     let mut rig = self
                         .inner
@@ -2834,6 +3783,54 @@ impl KeysRigBackend {
             }
         };
 
+        // The mod wheel also sweeps the pads' cutoff: note the value for the
+        // worker and move on — the MIDI thread never waits on the rig state.
+        let weak = Arc::downgrade(&self.inner);
+        let sink = move |ev: midicore::TimedEvent| {
+            // A learned pedal is a switch's, not a note to play: learn it,
+            // or fire its switch off this thread, and drop it either way.
+            if let (Some(raw), Some(inner)) = (
+                midicore::RawShortMessage::from_event(&ev.event),
+                weak.upgrade(),
+            ) {
+                let [status, d1, d2] = raw.bytes();
+                let outcome = inner
+                    .learn
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .on_raw(status, d1, d2);
+                use signal_rig_host::midi_learn::Outcome;
+                match outcome {
+                    Outcome::Pass => {}
+                    Outcome::Learned { target } => {
+                        tracing::info!(target, "keys: switch learned");
+                        let b = Self { inner };
+                        let _ = std::thread::Builder::new()
+                            .name("keys-learn".into())
+                            .spawn(move || b.publish_perform());
+                        return;
+                    }
+                    Outcome::Fire { target, pressed } => {
+                        let b = Self { inner };
+                        let _ = std::thread::Builder::new()
+                            .name("keys-switch".into())
+                            .spawn(move || {
+                                let _rt = keys_runtime().enter();
+                                b.fire_switch(&target, pressed);
+                            });
+                        return;
+                    }
+                }
+            }
+            if let midicore::MidiEvent::ControlChange { controller, value, .. } = &ev.event {
+                if controller.get() == 1 {
+                    if let Some(inner) = weak.upgrade() {
+                        Self::queue_wheel(&inner, value.get());
+                    }
+                }
+            }
+            sink(ev);
+        };
         let hub = signal_rig_host::midi_hub::hub();
         let sub = hub.subscribe("keys", port.clone(), sink);
         if let Ok(mut s) = self.inner.state.lock() {
@@ -2965,15 +3962,24 @@ impl KeysRigSvc for KeysRigBackend {
     fn status(&self) -> KeysStatus {
         tracing::debug!("keys rpc: status →");
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-        let s = self
-            .inner
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let loaded_preset = s
-            .loaded
-            .and_then(|i| s.presets.get(i))
-            .map(|p| p.name.clone());
+        // What the status needs from the state, taken and the lock let go
+        // BEFORE the rig lock below: a rebuild holds the rig and then takes
+        // the state (`apply_mixer`), so holding the state into a rig lock
+        // here deadlocked the two as soon as loads came quickly (auditioning).
+        let (loaded_preset, midi_port, last_error) = {
+            let s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            (
+                s.loaded
+                    .and_then(|i| s.presets.get(i))
+                    .map(|p| p.name.clone()),
+                s.midi_port.clone(),
+                s.last_error.clone(),
+            )
+        };
         let (master_peak, meters) = if running {
             self.inner
                 .rig
@@ -3079,8 +4085,8 @@ impl KeysRigSvc for KeysRigBackend {
             master_peak,
             meters,
             voices,
-            midi_port: s.midi_port.clone(),
-            last_error: s.last_error.clone(),
+            midi_port,
+            last_error,
             rt,
         }
     }
@@ -3203,6 +4209,7 @@ impl KeysRigSvc for KeysRigBackend {
                 rig.cc(1, value.min(127) as u8);
             }
         }
+        Self::queue_wheel(&self.inner, value.min(127) as u8);
     }
 
     fn midi_ports(&self) -> Vec<String> {
@@ -3332,6 +4339,24 @@ impl KeysRigSvc for KeysRigBackend {
     }
 
     fn set_layer_patch(&self, layer: String, module: u32, preset: u32) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.touch_audition();
+        }
+        // A saved layer preset is the whole lane, not one module's source.
+        let saved = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.specs.get(preset as usize).cloned())
+            .filter(|p| crate::user_presets::kind_of(p) == Some(crate::user_presets::Kind::Layer));
+        if let Some(file) = saved {
+            match crate::user_presets::read_layer(&file) {
+                Ok(p) => self.apply_layer_preset(&layer, p),
+                Err(e) => self.fail(format!("layer preset: {e}")),
+            }
+            return;
+        }
         // An authored patch (.prt_omn) is a MODULE PRESET, not a bare source:
         // it carries filter, envelopes and unison, and a multi-layer patch
         // spills onto the modules after the one you dropped it on.
@@ -3436,7 +4461,13 @@ impl KeysRigSvc for KeysRigBackend {
                 min: def.min,
                 max: def.max,
                 unit: def.unit.to_string(),
-                live: def.live && here.is_some_and(|m| !m.patch.is_empty()),
+                // Lit when it reaches sound (a live DSP parameter or the
+                // level fader), not by a hand-kept flag that drifted.
+                live: (Self::macro_is_dsp(def.id)
+                    || def.id == "source.level"
+                    || (Self::macro_is_mod(def.id)
+                        && (lane.omni_seed.is_none() || Self::mod_reaches_import(def.id))))
+                    && here.is_some_and(|m| !m.patch.is_empty()),
                 bipolar: false,
                 spread: String::new(),
             })
@@ -3482,8 +4513,9 @@ impl KeysRigSvc for KeysRigBackend {
             let engine = lane.engine.clone();
             let Some(target) = def.target else {
                 lane.globals.insert(id, value.clamp(def.min, def.max));
+                let regate = Self::refresh_fx_gates(&mut s);
                 drop(s);
-                self.publish_mixer();
+                self.after_scope_param(regate);
                 return;
             };
             let targets = Self::scope_targets(&s, std::slice::from_ref(&layer));
@@ -3505,6 +4537,9 @@ impl KeysRigSvc for KeysRigBackend {
                 &id,
             );
             rebuild = Self::macro_is_dsp(target);
+            if Self::macro_rebuilds(target) {
+                self.rebuild_soon();
+            }
             dsp_targets = targets;
         }
         self.after_global(rebuild, &dsp_targets);
@@ -3550,8 +4585,9 @@ impl KeysRigSvc for KeysRigBackend {
                 if let Some(e) = s.engines.get_mut(&engine) {
                     e.globals.insert(id, value.clamp(def.min, def.max));
                 }
+                let regate = Self::refresh_fx_gates(&mut s);
                 drop(s);
-                self.publish_mixer();
+                self.after_scope_param(regate);
                 return;
             };
             let lanes = Self::engine_lanes(&s, &engine);
@@ -3570,6 +4606,9 @@ impl KeysRigSvc for KeysRigBackend {
             // Every lane knob for this parameter has been moved from under it.
             Self::rebase_others(&mut s, std::slice::from_ref(&engine), &lanes, target, &id);
             rebuild = Self::macro_is_dsp(target);
+            if Self::macro_rebuilds(target) {
+                self.rebuild_soon();
+            }
             dsp_targets = targets;
         }
         self.after_global(rebuild, &dsp_targets);
@@ -3594,8 +4633,9 @@ impl KeysRigSvc for KeysRigBackend {
             };
             let Some(target) = def.target else {
                 s.rig_globals.insert(id, value.clamp(def.min, def.max));
+                let regate = Self::refresh_fx_gates(&mut s);
                 drop(s);
-                self.publish_mixer();
+                self.after_scope_param(regate);
                 return;
             };
             let lanes = Self::all_lanes(&s);
@@ -3611,6 +4651,9 @@ impl KeysRigSvc for KeysRigBackend {
             // from under it.
             Self::rebase_others(&mut s, &engines, &lanes, target, &id);
             rebuild = Self::macro_is_dsp(target);
+            if Self::macro_rebuilds(target) {
+                self.rebuild_soon();
+            }
             dsp_targets = targets;
         }
         self.after_global(rebuild, &dsp_targets);
@@ -3647,8 +4690,14 @@ impl KeysRigSvc for KeysRigBackend {
         }
         // DSP macros go live into the running engine (filter / envelopes /
         // unison); the rebuild only remains as the not-yet-hosted fallback.
-        if Self::macro_is_dsp(def.id) && !self.push_module_dsp(&layer, module as usize) {
+        let reaches = Self::macro_is_dsp(def.id) || Self::macro_is_mod(def.id);
+        if reaches
+            && (!self.push_module_dsp(&layer, module as usize) || Self::macro_rebuilds(def.id))
+        {
             self.rebuild_soon();
+        }
+        if reaches {
+            self.remember_macros_soon();
         }
         self.publish_mixer();
     }
@@ -3712,11 +4761,135 @@ impl KeysRigSvc for KeysRigBackend {
         self.publish_mixer();
     }
 
+    fn load_engine_preset(&self, engine: String, preset: u32) {
+        let file = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|mut s| {
+                s.touch_audition();
+                s.specs.get(preset as usize).cloned()
+            })
+            .filter(|p| crate::user_presets::kind_of(p) == Some(crate::user_presets::Kind::Engine));
+        let Some(file) = file else {
+            self.fail(format!("preset {preset} is not an engine preset"));
+            return;
+        };
+        match crate::user_presets::read_engine(&file) {
+            Ok(p) => self.apply_engine_preset(&engine, p),
+            Err(e) => self.fail(format!("engine preset: {e}")),
+        }
+    }
+
+    fn save_engine_preset(&self, engine: String, name: String) {
+        let def = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.live_engine_def(&engine));
+        let Some(def) = def else {
+            self.fail(format!("no engine named {engine}"));
+            return;
+        };
+        let preset = crate::user_presets::EnginePreset {
+            name: name.trim().to_string(),
+            engine: def,
+        };
+        match crate::user_presets::save_engine(&preset) {
+            Ok(path) => tracing::info!(?path, "keys rig: engine preset saved"),
+            Err(e) => return self.fail(format!("engine preset not saved: {e}")),
+        }
+        self.rescan_user_presets();
+    }
+
+    fn save_layer_preset(&self, layer: String, name: String) {
+        let def = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.live_layer_def(&layer));
+        let Some((engine, def)) = def else {
+            self.fail(format!("no lane named {layer}"));
+            return;
+        };
+        let preset = crate::user_presets::LayerPreset {
+            name: name.trim().to_string(),
+            engine,
+            layer: def,
+        };
+        match crate::user_presets::save_layer(&preset) {
+            Ok(path) => tracing::info!(?path, "keys rig: layer preset saved"),
+            Err(e) => return self.fail(format!("layer preset not saved: {e}")),
+        }
+        if let Ok(mut s) = self.inner.state.lock() {
+            if let Some(l) = s.lanes.get_mut(&layer) {
+                l.preset = preset.name.clone();
+            }
+        }
+        self.rescan_user_presets();
+    }
+
+    fn rename_user_preset(&self, preset: u32, name: String) {
+        self.edit_user_preset(preset, |file| crate::user_presets::rename(file, &name, false).map(drop));
+    }
+
+    fn duplicate_user_preset(&self, preset: u32, name: String) {
+        self.edit_user_preset(preset, |file| crate::user_presets::rename(file, &name, true).map(drop));
+    }
+
+    fn delete_user_preset(&self, preset: u32) {
+        self.edit_user_preset(preset, crate::user_presets::delete);
+    }
+
+    fn audition_begin(&self) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            if s.audition.is_none() {
+                s.audition = Some(Box::new(Audition {
+                    profile: s.profile.clone(),
+                    lanes: s.lanes.clone(),
+                    engines: s.engines.clone(),
+                    dirty: false,
+                }));
+            }
+        }
+    }
+
+    fn audition_end(&self, keep: bool) {
+        let restore = {
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
+            let Some(a) = s.audition.take() else {
+                return;
+            };
+            if keep || !a.dirty {
+                if a.dirty {
+                    s.profile.save();
+                }
+                false
+            } else {
+                s.profile = a.profile;
+                s.lanes = a.lanes;
+                s.engines = a.engines;
+                Self::refresh_fx_gates(&mut s);
+                s.profile.save();
+                true
+            }
+        };
+        if restore {
+            self.rebuild_async();
+        }
+    }
+
     fn clear_layer(&self, layer: String, module: u32) {
         {
             let Ok(mut s) = self.inner.state.lock() else {
                 return;
             };
+            s.touch_audition();
             let Some(lane) = s.lanes.get_mut(&layer) else {
                 return;
             };
@@ -3801,6 +4974,10 @@ impl KeysRigSvc for KeysRigBackend {
                 }
             }
             s.active_stack = Some(index as usize);
+            // A stack that knows its song's tempo sets it for the band.
+            if stack.tempo_bpm > 0.0 {
+                signal_rig_host::tempo::set(stack.tempo_bpm);
+            }
             rebuild
         };
         if needs_rebuild {
@@ -3841,6 +5018,126 @@ impl KeysRigSvc for KeysRigBackend {
                     muted: lane.muted,
                 })
                 .collect();
+            // The tempo playing now is this stack's song's.
+            stack.tempo_bpm = signal_rig_host::tempo::get().unwrap_or(0.0);
+        }
+        // Scenes belong to the profile: save it.
+        self.remember_macros_soon();
+        self.publish_perform();
+    }
+
+    fn add_stack(&self, name: String) {
+        let name = name.trim().to_string();
+        let index = {
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
+            let name = if name.is_empty() {
+                format!("Stack {}", s.profile.stacks.len() + 1)
+            } else {
+                name
+            };
+            s.profile.stacks.push(crate::profile::KeysStackDef {
+                name,
+                blurb: String::new(),
+                slots: Vec::new(),
+                tempo_bpm: 0.0,
+            });
+            s.profile.stacks.len() - 1
+        };
+        // It holds what is playing now.
+        KeysRigSvc::capture_stack(self, index as u32);
+        self.after_stack_edit();
+    }
+
+    fn rename_stack(&self, index: u32, name: String) {
+        let name = name.trim().to_string();
+        if name.is_empty() {
+            return;
+        }
+        if let Ok(mut s) = self.inner.state.lock() {
+            let Some(stack) = s.profile.stacks.get_mut(index as usize) else {
+                return;
+            };
+            stack.name = name;
+        }
+        self.after_stack_edit();
+    }
+
+    fn delete_stack(&self, index: u32) {
+        let i = index as usize;
+        {
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
+            if i >= s.profile.stacks.len() {
+                return;
+            }
+            s.profile.stacks.remove(i);
+            s.active_stack = match s.active_stack {
+                Some(a) if a == i => None,
+                Some(a) if a > i => Some(a - 1),
+                other => other,
+            };
+        }
+        // The pedals follow their stacks: the removed one's is freed, the
+        // ones after it move down with them.
+        {
+            let mut learn = self
+                .inner
+                .learn
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            learn.renumber("stack:", i);
+        }
+        self.after_stack_edit();
+    }
+
+    fn midi_learn(&self, target: String) {
+        self.inner
+            .learn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .learn(&target);
+        self.publish_perform();
+    }
+
+    fn midi_learn_cancel(&self) {
+        self.inner
+            .learn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .cancel();
+        self.publish_perform();
+    }
+
+    fn midi_unlearn(&self, target: String) {
+        self.inner
+            .learn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear(&target);
+        self.publish_perform();
+    }
+
+    fn tap_tempo(&self) {
+        let now = std::time::Instant::now();
+        let bpm = {
+            let Ok(mut taps) = self.inner.taps.lock() else {
+                return;
+            };
+            tap_bpm(&mut taps, now)
+        };
+        if let Some(bpm) = bpm {
+            signal_rig_host::tempo::set(bpm);
+            tracing::info!("keys tap tempo: {bpm:.1} BPM");
+        }
+        self.publish_perform();
+    }
+
+    fn set_tempo(&self, bpm: u32) {
+        if bpm > 0 {
+            signal_rig_host::tempo::set(bpm as f32);
         }
         self.publish_perform();
     }
@@ -3902,6 +5199,163 @@ impl Services for KeysRigBackend {
 
 /// Every distinct `.signalpack` `profile`'s lanes reference, in lane order —
 /// resolved through `index` (patch name → scanned spec path), skipping
+/// Saved engine and layer presets.
+impl KeysRigBackend {
+    /// Record `msg` as the last error and tell the remotes.
+    fn fail(&self, msg: String) {
+        tracing::warn!("keys rig: {msg}");
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.last_error = Some(msg);
+        }
+        self.publish_all();
+    }
+
+    /// Recompile the program off the caller's thread.
+    fn rebuild_async(&self) {
+        let b = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("keys-rebuild".into())
+            .spawn(move || {
+                let _rt = keys_runtime().enter();
+                b.rebuild_program();
+            });
+    }
+
+    /// Re-read the saved presets (they sit after every scanned one, so no
+    /// scanned index moves) and publish the library.
+    fn rescan_user_presets(&self) {
+        let (presets, specs) = crate::user_presets::scan();
+        if let Ok(mut s) = self.inner.state.lock() {
+            let keep = s.presets.iter().position(|p| p.user).unwrap_or(s.presets.len());
+            s.presets.truncate(keep);
+            s.specs.truncate(keep);
+            s.presets.extend(presets);
+            s.specs.extend(specs);
+            let n = s.presets.len();
+            if s.loaded.is_some_and(|i| i >= n) {
+                s.loaded = None;
+            }
+        }
+        self.publish_all();
+    }
+
+    /// Change saved preset `preset`'s file with `edit`, then re-read them.
+    fn edit_user_preset(
+        &self,
+        preset: u32,
+        edit: impl FnOnce(&std::path::Path) -> Result<(), String>,
+    ) {
+        let file = self.inner.state.lock().ok().and_then(|s| {
+            s.presets
+                .get(preset as usize)
+                .filter(|p| p.user)
+                .and_then(|_| s.specs.get(preset as usize).cloned())
+        });
+        let Some(file) = file else {
+            return self.fail(format!("preset {preset} is not a saved preset"));
+        };
+        if let Err(e) = edit(&file) {
+            return self.fail(e);
+        }
+        self.rescan_user_presets();
+    }
+
+    /// Load a saved layer preset into lane `target`: the lane takes its
+    /// sources, knobs and own settings, and keeps its name, key range, fader
+    /// and mute — those belong to where it sits.
+    fn apply_layer_preset(&self, target: &str, preset: crate::user_presets::LayerPreset) {
+        {
+            let Ok(mut guard) = self.inner.state.lock() else {
+                return;
+            };
+            let s = &mut *guard;
+            let Some(def) = s.profile.layer_mut(target) else {
+                drop(guard);
+                return self.fail(format!("no lane named {target}"));
+            };
+            let new = crate::profile::LayerDef {
+                name: def.name.clone(),
+                key_lo: def.key_lo,
+                key_hi: def.key_hi,
+                gain_db: def.gain_db,
+                exclude_global: def.exclude_global,
+                ..preset.layer
+            };
+            *def = new.clone();
+            let Some(old) = s.lanes.get(target) else {
+                return;
+            };
+            let mut lane = State::lane_from_def(&old.engine, &new);
+            lane.gain_db = old.gain_db;
+            lane.muted = old.muted;
+            lane.soloed = old.soloed;
+            lane.preset = preset.name;
+            s.lanes.insert(target.to_string(), lane);
+            s.touch_audition();
+            Self::refresh_fx_gates(s);
+            s.save_profile();
+        }
+        self.rebuild_async();
+    }
+
+    /// Load a saved engine preset into engine `target`: its lanes replace the
+    /// engine's (taking the old lanes' names in order, so stacks that name
+    /// them still find them); the engine keeps its name, type, place and
+    /// fader.
+    fn apply_engine_preset(&self, target: &str, preset: crate::user_presets::EnginePreset) {
+        {
+            let Ok(mut guard) = self.inner.state.lock() else {
+                return;
+            };
+            let s = &mut *guard;
+            let Some(old) = s.profile.engine(target).cloned() else {
+                drop(guard);
+                return self.fail(format!("no engine named {target}"));
+            };
+            let old_names: Vec<String> = old.layers.iter().map(|l| l.name.clone()).collect();
+            let mut taken: std::collections::HashSet<String> = s
+                .profile
+                .engines
+                .iter()
+                .filter(|e| e.name != target)
+                .flat_map(|e| e.layers.iter().map(|l| l.name.clone()))
+                .collect();
+            let mut layers = preset.engine.layers.clone();
+            for (i, l) in layers.iter_mut().enumerate() {
+                let base = old_names
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("{target} {}", i + 1));
+                l.name = free_name(&base, &taken);
+                taken.insert(l.name.clone());
+            }
+            for n in &old_names {
+                s.lanes.remove(n);
+            }
+            for l in &layers {
+                let mut lane = State::lane_from_def(target, l);
+                lane.preset = preset.name.clone();
+                s.lanes.insert(l.name.clone(), lane);
+            }
+            if let Some(e) = s.profile.engine_mut(target) {
+                e.layers = layers;
+                e.scope_values = preset.engine.scope_values.clone();
+            }
+            if let Some(e) = s.engines.get_mut(target) {
+                e.globals.clear();
+                for v in &preset.engine.scope_values {
+                    e.globals.insert(format!("{ENGINE}{}", v.id), v.value);
+                }
+                e.spans.clear();
+            }
+            s.touch_audition();
+            Self::refresh_fx_gates(s);
+            s.save_profile();
+        }
+        self.rebuild_async();
+    }
+}
+
 /// non-pack specs (raw `library.styx` extractions, `.prt_omn` patches): a
 /// browser can only stream built packs, and those lanes are exactly the ones
 /// that stay silent natively too.
@@ -3992,6 +5446,8 @@ fn load_profile() -> KeysProfile {
             Some(saved) => {
                 let mut merged = built_in;
                 merged.apply_order(&saved.engine_order());
+                merged.adopt_saved_macros(&saved);
+                merged.adopt_saved_stacks(&saved);
                 merged
             }
             None => built_in,
@@ -4026,7 +5482,13 @@ fn keys_program(name: &str, spec: String) -> Container {
 /// `scan_keyscape` with same-name non-pack presets removed.
 fn prefer_packs_from_scan() -> (Vec<KeysPreset>, Vec<PathBuf>) {
     let (p, s) = scan_keyscape();
-    prefer_packs(p, s)
+    let (mut p, mut s) = prefer_packs(p, s);
+    // The player's saved engine and layer presets, after everything scanned
+    // — so adding or removing one never moves a scanned preset's index.
+    let (up, us) = crate::user_presets::scan();
+    p.extend(up);
+    s.extend(us);
+    (p, s)
 }
 
 /// Drop a preset whose name is already held by a `.signalpack`.
@@ -4077,29 +5539,27 @@ fn prefer_packs(presets: Vec<KeysPreset>, specs: Vec<PathBuf>) -> (Vec<KeysPrese
 /// The stored spec path (`.signalpack` or `library.styx`) is handed to the
 /// sample block; `rig.rs` picks the loader by extension.
 fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
-    let packs_root =
-        std::env::var("FTS_KEYSCAPE_PACKS").unwrap_or_else(|_| KEYSCAPE_PACKS_ROOT.into());
+    // The Keyscape packs (one self-contained pack per instrument, preferred
+    // over the raw extraction).
+    let packs_root = pack_root("FTS_KEYSCAPE_PACKS", "Keys/Keyscape/Packs");
     let (mut packs, mut pack_specs) = scan_packs(&packs_root);
     // One engine, one library: the Omnisphere soundsources are loadable into
     // any lane exactly like a Keyscape pack (they're both just sources for
     // the Signal Engine's Soundsource block).
-    let omni_root =
-        std::env::var("FTS_OMNISPHERE_PACKS").unwrap_or_else(|_| OMNISPHERE_PACKS_ROOT.into());
+    let omni_root = pack_root("FTS_OMNISPHERE_PACKS", "Keys/Omnisphere/Packs");
     let (omni, omni_specs) = scan_packs_recursive_as(&omni_root, "Soundsource", "module", "Synth");
     packs.extend(omni);
     pack_specs.extend(omni_specs);
     // The NI Essential Pianos. A pack is a whole lane's worth of instrument
     // (the Piano packs) or its pedal-down resonance layer, which loads on its
     // own so a tight-memory rig can leave it out — see `ni-pianos.styx`.
-    let ni_root =
-        std::env::var("FTS_NI_PIANO_PACKS").unwrap_or_else(|_| NI_PIANO_PACKS_ROOT.into());
+    let ni_root = pack_root("FTS_NI_PIANO_PACKS", "Full/Keys");
     let (ni, ni_specs) = scan_packs_recursive_as(&ni_root, "Grand", "layer", "Keys");
     tracing::info!(packs = ni.len(), "keys rig: NI piano packs");
     packs.extend(ni);
     pack_specs.extend(ni_specs);
     // Authored Omnisphere patches — these open into a whole layer.
-    let patch_root =
-        std::env::var("FTS_OMNISPHERE_PATCHES").unwrap_or_else(|_| OMNISPHERE_PATCH_ROOT.into());
+    let patch_root = sampled_path("FTS_OMNISPHERE_PATCHES", OMNISPHERE_PATCHES_REL);
     let (patches, patch_specs) = scan_omni_patches(&patch_root);
     tracing::info!(patches = patches.len(), "keys rig: omnisphere patches");
     packs.extend(patches);
@@ -4107,7 +5567,7 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
     if !packs.is_empty() {
         return (packs, pack_specs);
     }
-    let root = std::env::var("FTS_KEYSCAPE_ROOT").unwrap_or_else(|_| KEYSCAPE_ROOT.into());
+    let root = sampled_path("FTS_KEYSCAPE_ROOT", "Keys/Keyscape");
     let mut presets = Vec::new();
     let mut specs = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&root) {
@@ -4138,6 +5598,7 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
                     scope: "layer".into(),
                     tags,
                     variants,
+                    user: false,
                 });
                 specs.push(styx);
             }
@@ -4149,15 +5610,23 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
 /// Root of the Omnisphere patch library (`.prt_omn` presets — the authored
 /// patches, as opposed to raw soundsources). Override with
 /// `FTS_OMNISPHERE_PATCHES`.
-const OMNISPHERE_PATCH_ROOT: &str =
-    "/run/media/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches";
+const OMNISPHERE_PATCHES_REL: &str =
+    "Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches";
 
 /// Enumerate `.prt_omn` patches under `root` — the **module presets**: an
 /// authored voice (source + filter + envelopes + unison) that loads onto a
 /// module, spilling onto the next ones when the patch has several layers.
 fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
-    let mut presets = Vec::new();
-    let mut specs = Vec::new();
+    let mut presets: Vec<KeysPreset> = Vec::new();
+    let mut specs: Vec<PathBuf> = Vec::new();
+    // Display name → slot. Factory names collapse once the library prefix is
+    // stripped ("KEY │ American Obesity", "AV │ American Obesity"), and a
+    // user's saved copy of a patch shares its factory name — the gig's
+    // "Worship Gig 3" patches are edited copies of factory ones. A patch
+    // under `User/` is the player's version, so it shadows the factory one;
+    // otherwise the first found stays.
+    let mut slot: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let is_user = |p: &std::path::Path| p.components().any(|c| c.as_os_str() == "User");
     let mut stack = vec![PathBuf::from(root)];
     while let Some(dir) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -4187,15 +5656,28 @@ fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
             }
             // An Omnisphere patch is authored across a layer's modules.
             let tags = tags_for("Synth", &display);
-            presets.push(KeysPreset {
+            let preset = KeysPreset {
                 kind: "Patch".into(),
-                name: display,
+                name: display.clone(),
                 loaded: false,
                 scope: "layer".into(),
                 tags,
                 variants: crate::variations::variation_names(name),
-            });
-            specs.push(patch);
+                user: false,
+            };
+            match slot.get(&display) {
+                Some(&i) => {
+                    if is_user(&patch) && !is_user(&specs[i]) {
+                        presets[i] = preset;
+                        specs[i] = patch;
+                    }
+                }
+                None => {
+                    slot.insert(display, presets.len());
+                    presets.push(preset);
+                    specs.push(patch);
+                }
+            }
         }
     }
     (presets, specs)
@@ -4207,11 +5689,11 @@ fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
 /// The **Full** tree by default: these are the rig's primary pianos and the
 /// proxy tier is audibly lossy (peak error ~3.7e-2 against source). Point this
 /// at `Libraries/Proxy/Keys` on a machine that cannot spare the disk.
-const NI_PIANO_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Full/Keys";
+// (`Full/Keys` in the pack library — see `pack_root`.)
 
 /// Root of the built Omnisphere soundsource packs — the synth half of the
 /// shared library. Override with `FTS_OMNISPHERE_PACKS`.
-const OMNISPHERE_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
+// (`Keys/Omnisphere/Packs` in the pack library — see `pack_root`.)
 
 /// Enumerate `*.signalpack` files under `root`, at any depth (the Omnisphere
 /// library nests by family; the NI pianos nest by library). The file stem is
@@ -4258,6 +5740,7 @@ fn scan_packs_recursive_as(
                 scope: scope.to_string(),
                 tags,
                 variants: crate::variations::variation_names(name),
+                user: false,
             });
             specs.push(pack);
         }
@@ -4299,6 +5782,7 @@ fn scan_packs(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
                 scope: "layer".into(),
                 tags,
                 variants,
+                user: false,
             });
             specs.push(pack);
         }
@@ -4453,6 +5937,21 @@ mod tests {
             }];
         }
         s
+    }
+
+    /// The rig starts with the pads and synths audible — a muted ENGINE hides
+    /// its lanes however they are switched — and Club Europa muted.
+    #[test]
+    fn the_worship_rig_starts_with_the_pads_on_and_club_europa_muted() {
+        let mut s = State::default();
+        s.adopt_profile(worship_profile());
+        for engine in ["Keys", "Pad", "Bass", "Aux"] {
+            assert!(!s.engines.get(engine).expect("engine").muted, "{engine} starts muted");
+        }
+        for lane in ["Pad", "Shimmer", "Synth 1"] {
+            assert!(!s.lanes.get(lane).expect("lane").muted, "{lane} starts muted");
+        }
+        assert!(s.lanes.get("Synth 2").expect("lane").muted, "Club Europa starts audible");
     }
 
     /// The worship profile keeps the piano (Keys A) OUT of the global scope
@@ -4658,4 +6157,124 @@ mod tests {
             assert_eq!(r.key, format!("/packs/{}.signalpack", r.name));
         }
     }
+}
+
+/// The keys rig's saved audio settings (`rigs/keys-rig.styx`, the guitar
+/// rig's format: device, rate, buffer), as an output-only engine's prefs —
+/// a synth generates, it has no input to open. Unsaved: the system output at
+/// 48 kHz and 256 frames. On iOS the fixed-size request rides a macOS-only
+/// CoreAudio property (AVAudioSession owns the IO buffer there), so the
+/// backend default is asked for instead.
+fn keys_audio_prefs() -> AudioIoPrefs {
+    let mgr = signal_sampler::rig_manager::RigManager::load(KEYS_RIG_NAME);
+    let mut prefs = AudioIoPrefs::from(&mgr.audio);
+    prefs.want_input = false;
+    prefs.input_device = String::new();
+    prefs.phones_routing = false;
+    if cfg!(target_os = "ios") {
+        prefs.buffer_size = 0;
+    }
+    prefs
+}
+
+/// The keys rig's settings name (`rigs/keys-rig.styx`).
+pub const KEYS_RIG_NAME: &str = "Keys Rig";
+
+/// Log the audio callback's health every 2 s while it misbehaves: blocks
+/// over their realtime budget and driver xruns since the last report, the
+/// peak and mean render time against the budget — and where the worst block
+/// spent its time (the snapshot and plugin-map waits, the FX stage, the
+/// slowest lane), so a spike says what it was. Quiet while it keeps up.
+#[cfg(not(target_arch = "wasm32"))]
+fn spawn_engine_watch(
+    stats: std::sync::Arc<daw_audio_io::duplex::EngineStats>,
+    daw: daw::standalone::Standalone,
+    project: String,
+) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let weak = std::sync::Arc::downgrade(&stats);
+    drop(stats);
+    let _ = std::thread::Builder::new()
+        .name("keys-engine-watch".into())
+        .spawn(move || {
+            let (mut over0, mut xrun0, mut calls0, mut total0) = (0u64, 0u64, 0u64, 0u64);
+            let skips = daw::standalone::audio_engine::render::plugin_stage_skips;
+            let mut skip0 = skips();
+            let mut cut0 = signal_sampler::keys_rig::guard_cuts();
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                let Some(st) = weak.upgrade() else {
+                    return;
+                };
+                let (over, xruns) = (st.over_budget.load(Relaxed), st.xruns.load(Relaxed));
+                let (calls, total) = (st.calls.load(Relaxed), st.total_render_ns.load(Relaxed));
+                let frames = st.block_frames.load(Relaxed).max(1);
+                let budget_ms = f64::from(frames) / 48.0;
+                let peak_ms = st.peak_render_ns.swap(0, Relaxed) as f64 / 1e6;
+                let mean_ms = if calls > calls0 {
+                    (total - total0) as f64 / (calls - calls0) as f64 / 1e6
+                } else {
+                    0.0
+                };
+                let skipped = skips();
+                let cuts = signal_sampler::keys_rig::guard_cuts();
+                // Notes cut short: by the guard fading voices (because the
+                // rig ran hot, or held more voices than its budget), or by a
+                // lane's polyphony limit. Each sounds like a sample ending
+                // early, so say which — and in which lane.
+                let lanes = signal_sampler::lane_health::reports();
+                let peak_rig: u32 = lanes.iter().map(|l| l.peak_voices).sum();
+                for l in lanes.iter().filter(|l| l.cut_anything()) {
+                    tracing::warn!(
+                        lane = %l.name,
+                        voices_faded = l.faded,
+                        shed_blocks_by_load = l.shed_by_load,
+                        shed_blocks_by_voice_count = l.shed_by_count,
+                        note_cut_blocks = l.cut_blocks,
+                        notes_stolen = l.stolen,
+                        lane_peak_voices = l.peak_voices,
+                        rig_peak_voices = peak_rig,
+                        "keys audio: notes cut short"
+                    );
+                }
+
+                // Taken every tick, so each report covers its own window.
+                let worst = daw.take_block_profile();
+                if over > over0 || xruns > xrun0 || skipped > skip0 || cuts > cut0 {
+                    if let Some(w) = worst {
+                        let lane = daw
+                            .read_project(&project, |p| {
+                                p.tracks.get(w.slowest_track as usize).map(|t| t.name.clone())
+                            })
+                            .flatten()
+                            .unwrap_or_default();
+                        tracing::warn!(
+                            total_ms = format!("{:.2}", f64::from(w.total_us) / 1e3),
+                            snapshot_ms = format!("{:.2}", f64::from(w.snapshot_us) / 1e3),
+                            plugin_lock_ms = format!("{:.2}", f64::from(w.plugin_lock_us) / 1e3),
+                            fx_ms = format!("{:.2}", f64::from(w.fx_us) / 1e3),
+                            slowest_lane = lane,
+                            slowest_lane_ms = format!("{:.2}", f64::from(w.slowest_track_us) / 1e3),
+                            "keys audio: worst block"
+                        );
+                    }
+                    tracing::warn!(
+                        late_blocks = over - over0,
+                        xruns = xruns - xrun0,
+                        // Blocks rendered with no instruments: the plugin map
+                        // was held by a control thread when the block began.
+                        silent_blocks = skipped - skip0,
+                        // Held notes the CPU guard cut to keep up.
+                        guard_cuts = cuts - cut0,
+                        voices = signal_sampler::keys_rig::total_voices(),
+                        peak_ms = format!("{peak_ms:.2}"),
+                        mean_ms = format!("{mean_ms:.2}"),
+                        budget_ms = format!("{budget_ms:.2}"),
+                        block = frames,
+                        "keys audio: under strain"
+                    );
+                }
+                (over0, xrun0, calls0, total0, skip0, cut0) = (over, xruns, calls, total, skipped, cuts);
+            }
+        });
 }

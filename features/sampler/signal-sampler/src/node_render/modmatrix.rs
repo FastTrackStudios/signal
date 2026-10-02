@@ -46,6 +46,19 @@ pub(super) struct CompiledRoute {
     /// Base (unmodulated) normalized value the depth adds onto.
     pub(super) base: f64,
     pub(super) depth: f32,
+    /// The depth the tree was authored with — what a source's depth knob
+    /// scales ([`ModEngine::set_source_depth`]).
+    pub(super) authored: f32,
+}
+
+/// A modulated modulator depth: `target`'s output is multiplied by
+/// `clamp(base + Σ depth·source, 0, 1)` (e.g. the mod wheel opening an
+/// LFO's swing — Omnisphere's "LFO1 swing" target).
+#[derive(Clone, Debug)]
+pub(super) struct SourceScale {
+    pub(super) target: usize,
+    pub(super) base: f32,
+    pub(super) terms: Vec<(usize, f32)>,
 }
 
 /// The compiled control-rate modulation engine + send-bus state for one tree.
@@ -56,6 +69,8 @@ pub struct ModEngine {
     /// addressing ("which module's Amp Env").
     pub(super) source_paths: Vec<(Vec<String>, String)>,
     pub(super) routes: Vec<CompiledRoute>,
+    /// Modulated modulator depths, applied to the source values each block.
+    pub(super) scales: Vec<SourceScale>,
     /// Per-leaf lower-cased `(container path, display name, params)` — the
     /// live-edit address book (leaf ids index all three).
     pub(super) leaf_paths: Vec<Vec<String>>,
@@ -70,12 +85,42 @@ pub struct ModEngine {
     /// Send buses (indexed by compile-time bus id), zeroed each block.
     pub(super) bus_l: Vec<Vec<f32>>,
     pub(super) bus_r: Vec<Vec<f32>>,
-    /// Tempo for synced LFOs (set by the host via `RenderNode::set_tempo`).
+    /// Tempo for synced LFOs and envelopes: the band's
+    /// (`signal_rig_host::tempo`) when one is set, else what the host set via
+    /// `RenderNode::set_tempo`.
     pub(super) tempo_bpm: f32,
+    /// Leaf parameters that follow the tempo (see [`TempoFollower`]).
+    pub(super) tempo_followers: Vec<TempoFollower>,
+    /// The tempo they were last written at (0: never).
+    pub(super) followed_bpm: f32,
     /// Sample rate captured at prepare (drives the arp clock).
     pub(super) sample_rate: f32,
     /// MIDI-domain arpeggiator, when the preset carries an active Arp.
     pub(super) arp: Option<crate::native::ArpEngine>,
+}
+
+/// A leaf parameter set from the tempo: a block authored with
+/// `sync_ms_<param> = <beats>` gets `<param>` = that many beats in ms, and
+/// `sync_hz_<param> = <beats>` gets one cycle per that many beats in Hz —
+/// rewritten whenever the tempo moves.
+#[derive(Debug, Clone)]
+pub(crate) struct TempoFollower {
+    pub(crate) leaf: usize,
+    pub(crate) param_id: u32,
+    pub(crate) beats: f32,
+    pub(crate) hz: bool,
+}
+
+impl TempoFollower {
+    #[must_use]
+    pub(crate) fn value(&self, bpm: f32) -> f64 {
+        let beat_s = 60.0 / bpm.max(1.0);
+        if self.hz {
+            f64::from(1.0 / (self.beats.max(1e-3) * beat_s))
+        } else {
+            f64::from(self.beats * beat_s * 1000.0)
+        }
+    }
 }
 
 impl ModEngine {
@@ -94,11 +139,19 @@ impl ModEngine {
     pub(super) fn tick(&mut self, events: &PluginEvents<'_>, frames: usize) {
         // Evaluate each source once, then apply every route additively.
         let tempo = self.tempo_bpm;
-        let values: Vec<f32> = self
+        let mut values: Vec<f32> = self
             .sources
             .iter_mut()
             .map(|s| s.tick_at(events, frames, tempo))
             .collect();
+        for sc in &self.scales {
+            let amount = sc.terms.iter().fold(sc.base, |a, &(src, d)| {
+                a + d * values.get(src).copied().unwrap_or(0.0)
+            });
+            if let Some(v) = values.get_mut(sc.target) {
+                *v *= amount.clamp(0.0, 1.0);
+            }
+        }
         accumulate_writes(&self.routes, &values, &self.overlay, &mut self.writes);
     }
 
@@ -159,6 +212,94 @@ impl ModEngine {
 
     /// Live-update a route's depth (e.g. the Filter Env → cutoff amount),
     /// addressed by module + source name + target leaf/param.
+    /// Live-update an LFO source (addressed by module + name, "LFO 1"):
+    /// its rate, and its wave when given.
+    pub fn set_lfo(
+        &mut self,
+        module: &str,
+        name: &str,
+        rate_hz: f32,
+        wave: Option<crate::native::LfoWave>,
+        fade_s: Option<f32>,
+    ) -> bool {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        let mut hit = false;
+        for (i, (path, source_name)) in self.source_paths.iter().enumerate() {
+            if *source_name == name && path.contains(&module) {
+                hit |= self.sources[i].set_lfo(rate_hz, wave, fade_s);
+            }
+        }
+        hit
+    }
+
+    /// The routes from source `name` (in `module`) as `(leaf name, param
+    /// name)`, lower-cased — what a rebuild check compares against.
+    pub fn routes_from(&self, module: &str, name: &str) -> Vec<(String, String)> {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        self.routes
+            .iter()
+            .filter(|r| {
+                let (path, source_name) = &self.source_paths[r.source];
+                *source_name == name && path.contains(&module)
+            })
+            .filter_map(|r| {
+                let leaf = self.leaf_names.get(r.leaf)?.to_lowercase();
+                let param = self
+                    .leaf_params
+                    .get(r.leaf)?
+                    .iter()
+                    .find(|p| p.id == r.param)?;
+                Some((leaf, param.name.to_lowercase()))
+            })
+            .collect()
+    }
+
+    /// Live-update an envelope source's delay and hold (seconds).
+    pub fn set_env_timing(&mut self, module: &str, name: &str, delay_s: f32, hold_s: f32) -> bool {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        let mut hit = false;
+        for (i, (path, source_name)) in self.source_paths.iter().enumerate() {
+            if *source_name == name && path.contains(&module) {
+                hit |= self.sources[i].set_env_timing(delay_s, hold_s);
+            }
+        }
+        hit
+    }
+
+    /// Scale every route from source `name` (in `module`) so the deepest
+    /// one reaches `depth` — the source's depth knob over the routes the
+    /// patch authored, keeping their proportions and signs. `false` when the
+    /// source has no routes (nothing to scale).
+    pub fn set_source_depth(&mut self, module: &str, name: &str, depth: f32) -> bool {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        let ours: Vec<usize> = self
+            .routes
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| {
+                let (path, source_name) = &self.source_paths[r.source];
+                *source_name == name && path.contains(&module)
+            })
+            .map(|(i, _)| i)
+            .collect();
+        let deepest = ours
+            .iter()
+            .map(|&i| self.routes[i].authored.abs())
+            .fold(0.0f32, f32::max);
+        if deepest <= 0.0 {
+            return false;
+        }
+        let scale = depth / deepest;
+        for i in ours {
+            self.routes[i].depth = self.routes[i].authored * scale;
+        }
+        true
+    }
+
     pub fn set_route_depth(
         &mut self,
         module: &str,
@@ -252,11 +393,15 @@ pub(super) struct ModCompiler {
     /// Dedup for MIDI sources.
     midi: Vec<(crate::native::MidiMod, usize)>,
     pub(super) routes: Vec<CompiledRoute>,
+    pub(super) scales: Vec<SourceScale>,
     /// Per-leaf (lower-cased display name, params) for target resolution.
     /// Per-leaf `(id, lower-cased display name, params)`. The id is what a
     /// resolved route matches on; the name is the fallback for a route that
     /// still points by name.
     pub(super) leaves: Vec<(String, String, Vec<signal_plugin_host::PluginParamInfo>)>,
+    /// Leaf parameters declared tempo-synced (`sync_ms_<param>` /
+    /// `sync_hz_<param>` block params).
+    pub(super) tempo_followers: Vec<TempoFollower>,
     /// Per-leaf lower-cased container path — mirrors `leaves`.
     pub(super) leaf_paths: Vec<Vec<String>>,
     /// Container-name stack during compile (lower-cased), for path capture.
@@ -274,7 +419,9 @@ impl ModCompiler {
             scope: Vec::new(),
             midi: Vec::new(),
             routes: Vec::new(),
+            scales: Vec::new(),
             leaves: Vec::new(),
+            tempo_followers: Vec::new(),
             leaf_paths: Vec::new(),
             path: Vec::new(),
             buses: Vec::new(),
@@ -328,6 +475,7 @@ impl ModCompiler {
                     2 => LfoWave::Saw,
                     3 => LfoWave::Square,
                     4 => LfoWave::SampleHold,
+                    5 => LfoWave::SawDown,
                     _ => LfoWave::Sine,
                 };
                 let mut lfo = ControlLfo::new(wave, rate);
@@ -337,7 +485,29 @@ impl ModCompiler {
                 if block.param_f32("retrigger").unwrap_or(0.0) > 0.0 {
                     lfo = lfo.with_retrigger(true);
                 }
+                lfo.fade_s = block.param_f32("fade").unwrap_or(0.0).max(0.0);
+                lfo.amp = block.param_f32("amp").unwrap_or(1.0).clamp(0.0, 1.0);
+                lfo.unipolar = block.param_f32("unipolar").unwrap_or(0.0) > 0.0;
                 ModSource::lfo(lfo, sr)
+            }
+            // A breakpoint envelope: `points` = "time:level:curve:step;…"
+            // (see `SegPoint`), free-running, `loop` / `sync` (beats).
+            BlockType::MultisegEnvelope if block.param_str("points").is_some() => {
+                let points =
+                    crate::native::parse_points(&block.param_str("points").unwrap_or_default());
+                let env = crate::native::ControlMultiseg::new(
+                    points,
+                    block.param_f32("loop").unwrap_or(0.0) > 0.0,
+                    block.param_f32("sync").unwrap_or(0.0) > 0.0,
+                )
+                .with_velocity_sensitivity(block.param_f32("vel_sens").unwrap_or(0.0));
+                // An amp/filter envelope holds at its sustain point.
+                let env = match block.param_f32("sustain") {
+                    Some(i) if i >= 0.0 => env.with_sustain(i as usize),
+                    _ => env,
+                }
+                .with_amp(block.param_f32("amp").unwrap_or(1.0));
+                ModSource::multiseg(env, sr)
             }
             BlockType::Envelope | BlockType::MultisegEnvelope => {
                 let mut p = crate::native::AdsrParams::default();
@@ -353,7 +523,15 @@ impl ModCompiler {
                 if let Some(v) = block.param_f32("release") {
                     p.release_s = v.max(0.0);
                 }
-                ModSource::env(ControlEnv::new(sr, p), sr)
+                let (delay, hold) = (
+                    block.param_f32("delay").unwrap_or(0.0),
+                    block.param_f32("hold").unwrap_or(0.0),
+                );
+                let env = ControlEnv::new(sr, p)
+                    .with_amp(block.param_f32("amp").unwrap_or(1.0))
+                    .with_delay_hold(delay, hold)
+                    .with_velocity_sensitivity(block.param_f32("vel_sens").unwrap_or(0.0));
+                ModSource::env(env, sr)
             }
             _ => return None,
         };
@@ -406,6 +584,25 @@ impl ModCompiler {
             // the name-addressed model always did.
             let bkey = route.target.key();
             let pkey = route.parameter.to_lowercase();
+            // A route onto a modulator's own depth ("amp"): scale that
+            // source rather than a leaf parameter.
+            if pkey == "amp" {
+                if let Some(&(_, target)) = self.scope.iter().rev().find(|(n, _)| *n == bkey) {
+                    match self.scales.iter_mut().find(|s| s.target == target) {
+                        Some(sc) => sc.terms.push((source, route.depth)),
+                        None => {
+                            if let Some(base) = self.sources[target].take_amp() {
+                                self.scales.push(SourceScale {
+                                    target,
+                                    base,
+                                    terms: vec![(source, route.depth)],
+                                });
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
             let mut hit = false;
             for &leaf in subtree {
                 let (id, name, params) = &self.leaves[leaf];
@@ -419,6 +616,7 @@ impl ModCompiler {
                         param: p.id,
                         base: p.default,
                         depth: route.depth,
+                        authored: route.depth,
                     });
                     hit = true;
                 }
@@ -445,6 +643,7 @@ mod tests {
             param,
             base,
             depth,
+            authored: depth,
         }
     }
 

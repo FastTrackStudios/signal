@@ -30,6 +30,8 @@
 //! | `set_layer_mute` / `set_engine_mute` / `set_layer_solo` | real: solo logic mirrors the native mixer (any solo silences un-soloed lanes) |
 //! | `set_layer_exclude_global` | stored + rendered; no DSP effect (no Global Controls run in-tab) |
 //! | `set_layer_patch` / `set_layer_variant` / `clear_layer` | stubs (module sources are resolved on the engine); honest `last_error` |
+//! | `load_engine_preset` / `save_*_preset` / `*_user_preset` | stubs (the saved-preset library is on the engine); honest `last_error` |
+//! | `audition_begin` / `audition_end` | no-ops — nothing loads in-tab |
 //! | `set_module_gain` / `set_module_enabled` | stubs — lanes run one fused instrument in-tab, there is no per-module bus |
 //! | `set_drone` | stub — the lane program carries no drone engines |
 //! | `set_engine_order` | real (layout only): reorders the mixer's engine cards |
@@ -562,6 +564,7 @@ impl WebKeysBackend {
             scope: "engine".into(),
             tags,
             variants: Vec::new(),
+            user: false,
         }]
     }
 
@@ -572,6 +575,7 @@ impl WebKeysBackend {
             stacks: Vec::new(),
             active_stack: u32::MAX,
             perform_mode: s.perform_mode,
+            ..KeysPerform::default()
         }
     }
 
@@ -759,6 +763,36 @@ impl KeysRigSvc for WebKeysBackend {
         self.set_error(ENGINE_ONLY);
     }
 
+    fn load_engine_preset(&self, _engine: String, _preset: u32) {
+        self.set_error(ENGINE_ONLY);
+    }
+
+    fn save_engine_preset(&self, _engine: String, _name: String) {
+        self.set_error(ENGINE_ONLY);
+    }
+
+    fn save_layer_preset(&self, _layer: String, _name: String) {
+        self.set_error(ENGINE_ONLY);
+    }
+
+    fn rename_user_preset(&self, _preset: u32, _name: String) {
+        self.set_error(ENGINE_ONLY);
+    }
+
+    fn duplicate_user_preset(&self, _preset: u32, _name: String) {
+        self.set_error(ENGINE_ONLY);
+    }
+
+    fn delete_user_preset(&self, _preset: u32) {
+        self.set_error(ENGINE_ONLY);
+    }
+
+    fn audition_begin(&self) {
+        // Nothing loads in-tab, so there is nothing to put back.
+    }
+
+    fn audition_end(&self, _keep: bool) {}
+
     fn set_drone(&self, _engine: String, _key: u32, _octave: i32, _playing: bool) {
         // The lane program carries no drone engines.
     }
@@ -877,6 +911,19 @@ impl KeysRigSvc for WebKeysBackend {
     fn capture_stack(&self, _index: u32) {
         // See press_stack.
     }
+
+    fn add_stack(&self, _name: String) {}
+    fn rename_stack(&self, _index: u32, _name: String) {}
+    fn delete_stack(&self, _index: u32) {}
+    /// The tab has no hardware MIDI of its own to learn from.
+    fn midi_learn(&self, _target: String) {}
+    fn midi_learn_cancel(&self) {}
+    fn midi_unlearn(&self, _target: String) {}
+
+    /// The browser rig has no band tempo (no delays synced to one).
+    fn tap_tempo(&self) {}
+
+    fn set_tempo(&self, _bpm: u32) {}
 
     /// No-op: there is no peak to reset without realtime telemetry (see the
     /// `rt` field in `build_status`).

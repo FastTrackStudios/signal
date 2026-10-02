@@ -28,7 +28,7 @@ TMP_DIRS=()
 cleanup_tmp() { [ ${#TMP_DIRS[@]} -eq 0 ] || rm -rf "${TMP_DIRS[@]}"; }
 trap cleanup_tmp EXIT
 
-# Which product to build+ship. Defaults to the FastTrackStudio app; override
+# Which product to build+ship. Defaults to the Signal app; override
 # for Task (or any dx iOS app in the tree):
 #   DX_PACKAGE=task-app-mobile DX_APP_DIR=apps/task/mobile DX_FEATURES="" \
 #   ICONS_DIR=apps/task/mobile/ios/Assets.xcassets ./ios/deploy-testflight.sh
@@ -38,7 +38,7 @@ DX_APP_DIR="${DX_APP_DIR:-apps/desktop}"
 DX_FEATURES="${DX_FEATURES---no-default-features --features signal-guitar,signal-keys-rig}"
 # Bundle id the App Store profile is minted for — must match the built .app's
 # CFBundleIdentifier (from the package's Dioxus.toml).
-DX_BUNDLE_ID="${DX_BUNDLE_ID:-app.fasttrackstudio}"
+DX_BUNDLE_ID="${DX_BUNDLE_ID:-app.fasttrackstudio.signal}"
 # Optional Tailwind input (relative to DX_APP_DIR) to compile → assets/tailwind.css
 # before the build, so the embedded stylesheet isn't a stale stub (Task mobile).
 DX_TAILWIND="${DX_TAILWIND:-}"
@@ -52,7 +52,7 @@ DX_TAILWIND="${DX_TAILWIND:-}"
 WATCH_APP="${WATCH_APP:-}"
 WATCH_SCHEME="${WATCH_SCHEME:-FTSWatch}"       # xcodebuild scheme
 WATCH_PRODUCT="${WATCH_PRODUCT:-FastTrackStudio}"   # built .app product name
-APP_DISPLAY_NAME="${APP_DISPLAY_NAME:-}"            # CFBundleDisplayName; unset = leave dx's
+APP_DISPLAY_NAME="${APP_DISPLAY_NAME:-Signal}"      # CFBundleDisplayName
 WATCH_BUNDLE_ID="${WATCH_BUNDLE_ID:-app.fasttrackstudio.watch}"
 
 TEAM_ID="${TEAM_ID:-28C2G63DA7}"
@@ -185,17 +185,12 @@ fi
 # Minimum OS — App Store rejects a bundle without it (dx doesn't emit one).
 /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 15.0" "$APP/Info.plist" 2>/dev/null \
     || /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string 15.0" "$APP/Info.plist"
-/usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Processes your guitar signal from the connected audio interface or microphone.'" "$APP/Info.plist" 2>/dev/null || true
-# Local network: pack downloads dial the studio engine peer-to-peer (iroh
-# direct paths / LAN WebSocket); without this key iOS silently drops the
-# traffic and the pack host is unreachable on the same Wi-Fi.
-/usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'Connects to your studio engine on the local network to stream and download sound packs.'" "$APP/Info.plist" 2>/dev/null || true
-# The Bonjour type the app browses to RAISE the local-network prompt —
-# iroh's raw UDP gets silently filtered instead of prompting without it.
-/usr/libexec/PlistBuddy -c "Add :NSBonjourServices array" "$APP/Info.plist" 2>/dev/null || true
-/usr/libexec/PlistBuddy -c "Add :NSBonjourServices:0 string _fts._tcp" "$APP/Info.plist" 2>/dev/null || true
-/usr/libexec/PlistBuddy -c "Add :UIFileSharingEnabled bool true" "$APP/Info.plist" 2>/dev/null || true
-/usr/libexec/PlistBuddy -c "Add :LSSupportsOpeningDocumentsInPlace bool true" "$APP/Info.plist" 2>/dev/null || true
+# The app's own keys (scene manifest, dark, background audio, usage
+# strings, file sharing) and frame's faces — the same as build-ios.sh writes.
+# shellcheck source=app-plist.sh
+source "$SCRIPT_DIR/app-plist.sh"
+signal_app_plist "$APP"
+signal_app_faces "$APP"
 # TestFlight requires ITSAppUsesNonExemptEncryption declared (false = no
 # non-standard crypto → no export-compliance docs).
 /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$APP/Info.plist" 2>/dev/null || true

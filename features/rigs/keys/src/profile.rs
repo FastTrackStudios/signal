@@ -90,11 +90,49 @@ pub struct KeysStackDef {
     /// Per-layer state this stack recalls.
     #[facet(default)]
     pub slots: Vec<SceneSlot>,
+    /// The tempo this stack's song runs at (BPM); 0 = pressing it leaves
+    /// the tempo alone.
+    #[facet(default)]
+    pub tempo_bpm: f32,
+}
+
+/// One saved knob value (a module macro id and its value).
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct MacroValue {
+    pub id: String,
+    pub value: f32,
+}
+
+/// The knobs a player set for one patch on one module of a layer: whenever
+/// that patch is on that module again — a stack recall, a browser pick, the
+/// next session — these come back with it.
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct PatchMacros {
+    /// The patch (pack / library / Omnisphere patch name).
+    pub patch: String,
+    /// Module index in the layer (0 = A).
+    #[facet(default)]
+    pub module: u32,
+    #[facet(default)]
+    pub values: Vec<MacroValue>,
+}
+
+/// A build-time parameter for a layer's sample source (the Sampler block's
+/// `params`) — e.g. `piano_snapshot = "worship"`: play an NI piano with a
+/// gig's saved controls rather than the library's defaults.
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct SourceParam {
+    pub name: String,
+    pub value: String,
 }
 
 /// One layer definition inside an engine.
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct LayerDef {
+    /// This layer's own mixer settings — Tone, Limiter, FX Bypass (ids
+    /// without the scope prefix).
+    #[facet(default)]
+    pub scope_values: Vec<MacroValue>,
     /// Container name — unique across the profile (the fader's address).
     pub name: String,
     /// Patch loaded at profile-build time (module A). Empty = an empty lane.
@@ -122,11 +160,47 @@ pub struct LayerDef {
     /// its own macros; it just isn't in the scope the globals drive.
     #[facet(default)]
     pub exclude_global: bool,
+    /// Knob values saved per patch and module (see [`PatchMacros`]).
+    #[facet(default)]
+    pub patch_macros: Vec<PatchMacros>,
+    /// Build-time params for the lane's sample sources (see [`SourceParam`]).
+    #[facet(default)]
+    pub source_params: Vec<SourceParam>,
+    /// Transpose (semitones) of an Omnisphere lane's whole patch — the gig
+    /// part's own Octave setting, which lives on the part, not the patch.
+    #[facet(default)]
+    pub transpose: f32,
 }
 
 impl LayerDef {
+    /// The knobs saved for `patch` on module `module`, if any.
+    #[must_use]
+    pub fn saved_macros(&self, patch: &str, module: u32) -> Option<&[MacroValue]> {
+        self.patch_macros
+            .iter()
+            .find(|p| p.patch == patch && p.module == module)
+            .map(|p| p.values.as_slice())
+    }
+
+    /// Remember `values` as the knobs for `patch` on module `module`.
+    pub fn remember_macros(&mut self, patch: &str, module: u32, values: Vec<MacroValue>) {
+        match self
+            .patch_macros
+            .iter_mut()
+            .find(|p| p.patch == patch && p.module == module)
+        {
+            Some(p) => p.values = values,
+            None => self.patch_macros.push(PatchMacros {
+                patch: patch.to_string(),
+                module,
+                values,
+            }),
+        }
+    }
+
     pub fn new(name: impl Into<String>, patch: impl Into<String>) -> Self {
         Self {
+            scope_values: Vec::new(),
             name: name.into(),
             patch: patch.into(),
             extra_modules: Vec::new(),
@@ -134,6 +208,9 @@ impl LayerDef {
             key_lo: 0,
             key_hi: 127,
             exclude_global: false,
+            patch_macros: Vec::new(),
+            source_params: Vec::new(),
+            transpose: 0.0,
         }
     }
 
@@ -141,6 +218,16 @@ impl LayerDef {
     #[must_use]
     pub const fn excluded_from_globals(mut self) -> Self {
         self.exclude_global = true;
+        self
+    }
+
+    /// Set a build-time param on the lane's sample sources.
+    #[must_use]
+    pub fn with_source_param(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.source_params.push(SourceParam {
+            name: name.into(),
+            value: value.into(),
+        });
         self
     }
 
@@ -172,6 +259,9 @@ impl LayerDef {
 /// One engine: an instrument part holding parallel layers.
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct EngineDef {
+    /// This engine's own mixer settings (see [`LayerDef::scope_values`]).
+    #[facet(default)]
+    pub scope_values: Vec<MacroValue>,
     /// Engine container name ("Keys", "Aux", "Organ", "Pad").
     pub name: String,
     /// The engine's own fader (dB) — rides all its layers.
@@ -213,6 +303,9 @@ impl EngineDef {
 /// A complete keys profile: the mixer shape plus the stacks that recall it.
 #[derive(Debug, Clone, PartialEq, Default, Facet)]
 pub struct KeysProfile {
+    /// The rig's own mixer settings (see [`LayerDef::scope_values`]).
+    #[facet(default)]
+    pub scope_values: Vec<MacroValue>,
     pub name: String,
     pub engines: Vec<EngineDef>,
     #[facet(default)]
@@ -272,6 +365,38 @@ impl KeysProfile {
 
     /// The current engine order, left to right.
     #[must_use]
+    /// Take the knob values `saved` remembers for each layer both profiles
+    /// have (by layer name) — the built-in profile decides what the layers
+    /// are, the player's saved copy what their knobs were set to.
+    pub fn adopt_saved_macros(&mut self, saved: &Self) {
+        for engine in &mut self.engines {
+            for layer in &mut engine.layers {
+                if let Some(s) = saved
+                    .engines
+                    .iter()
+                    .flat_map(|e| &e.layers)
+                    .find(|l| l.name == layer.name)
+                {
+                    layer.patch_macros = s.patch_macros.clone();
+                    layer.scope_values = s.scope_values.clone();
+                }
+            }
+            if let Some(e) = saved.engines.iter().find(|e| e.name == engine.name) {
+                engine.scope_values = e.scope_values.clone();
+            }
+        }
+        self.scope_values = saved.scope_values.clone();
+    }
+
+    /// Take `saved`'s stacks when it has any — they are the player's (built,
+    /// captured and renamed on the switches); the built-in ones only seed a
+    /// profile that has never been saved.
+    pub fn adopt_saved_stacks(&mut self, saved: &Self) {
+        if !saved.stacks.is_empty() {
+            self.stacks = saved.stacks.clone();
+        }
+    }
+
     pub fn engine_order(&self) -> Vec<String> {
         self.engines.iter().map(|e| e.name.clone()).collect()
     }
@@ -441,6 +566,17 @@ impl KeysProfile {
         resolve: &impl Fn(&str) -> Option<String>,
         module_set: &impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
     ) -> Container {
+        // An authored Omnisphere patch (`.prt_omn` / `.mlt_omn`) is a whole
+        // voice — oscillators or soundsources, filters, envelopes, Harmonia —
+        // not a sample source: the importer builds it (a synthesis-mode patch
+        // as a Wavetable voice), inside the lane's own layer so its fader,
+        // mute and scenes are the lane's as any other.
+        if let Some(mut lane) = Self::omni_lane(layer, resolve, module_set) {
+            if !layer.source_params.is_empty() {
+                stamp_source_params(&mut lane, &layer.source_params);
+            }
+            return lane;
+        }
         let sources: Vec<signal_synth::Source> = layer
             .module_patches()
             .into_iter()
@@ -459,6 +595,9 @@ impl KeysProfile {
             })
             .collect();
         let mut lane = signal_synth::engine::signal_layer_with(&layer.name, &settings);
+        if !layer.source_params.is_empty() {
+            stamp_source_params(&mut lane, &layer.source_params);
+        }
         if !layer.is_full_range() {
             lane = lane.zone(signal_sampler::rig_node::Zone {
                 key_lo: layer.key_lo,
@@ -467,6 +606,69 @@ impl KeysProfile {
             });
         }
         lane
+    }
+
+    /// `layer` as its Omnisphere patch, when its first module's patch
+    /// resolves to one (`None`: a sample source, or an import that failed —
+    /// logged, and the lane plays what it would have).
+    fn omni_lane(
+        layer: &LayerDef,
+        resolve: &impl Fn(&str) -> Option<String>,
+        module_set: &impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
+    ) -> Option<Container> {
+        let patch = layer
+            .module_patches()
+            .into_iter()
+            .next()
+            .filter(|p| !p.is_empty())?;
+        let path = resolve(&patch)?;
+        let path = std::path::Path::new(&path);
+        let is_patch = path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+            e.eq_ignore_ascii_case("prt_omn") || e.eq_ignore_ascii_case("mlt_omn")
+        });
+        if !is_patch {
+            return None;
+        }
+        // The real index: a sample-mode patch's layers name soundsources,
+        // and an empty index would leave them silent. Scanned once.
+        static INDEX: std::sync::OnceLock<signal_synth::omni_import::SoundsourceIndex> =
+            std::sync::OnceLock::new();
+        let index = INDEX.get_or_init(signal_synth::omni_import::SoundsourceIndex::scan_default);
+        match signal_synth::omni_import::load_patch_file_transposed(path, index, layer.transpose) {
+            Ok(mut tree) => {
+                // The lane's knobs (seeded from this patch, one module per
+                // patch layer) ride onto the tree, so a rebuild keeps them.
+                for i in 0..layer.module_patches().len().min(4) {
+                    signal_synth::engine::apply_settings_to_omni_layer(
+                        &mut tree,
+                        i,
+                        &module_set(&layer.name, i),
+                    );
+                }
+                // The part's LFOs (shared by its layers) from module A's knobs.
+                let part = module_set(&layer.name, 0);
+                let base = part.baseline.as_deref();
+                signal_synth::engine::apply_lfos_to_omni(&mut tree, &part.lfos, base.map(|b| &b.lfos));
+                signal_synth::engine::apply_lfo_fades_to_omni(
+                    &mut tree,
+                    &part.lfo_fade_ms,
+                    base.map(|b| &b.lfo_fade_ms),
+                );
+                let mut lane = Container::layer(&layer.name).add(tree);
+                if !layer.is_full_range() {
+                    lane = lane.zone(signal_sampler::rig_node::Zone {
+                        key_lo: layer.key_lo,
+                        key_hi: layer.key_hi,
+                        ..signal_sampler::rig_node::Zone::full()
+                    });
+                }
+                Some(lane)
+            }
+            Err(e) => {
+                tracing::warn!(layer = %layer.name, patch = %patch, "keys rig: Omnisphere patch import failed: {e}");
+                None
+            }
+        }
     }
 
     /// The rig's global tail — one shared rotary for the organ, master reverb.
@@ -527,9 +729,11 @@ impl KeysProfile {
 #[must_use]
 pub fn worship_profile() -> KeysProfile {
     KeysProfile {
+        scope_values: Vec::new(),
         name: "Worship".into(),
         engines: vec![
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Keys".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -550,54 +754,90 @@ pub fn worship_profile() -> KeysProfile {
                     // The piano under everything: excluded from the engine
                     // and rig globals by default, so a filter sweep or an
                     // envelope change over the rig leaves it alone.
-                    LayerDef::new("Keys 1", "The Grandeur - Piano").excluded_from_globals(),
+                    // The gig's NI pianos play with its saved controls (Color,
+                    // velocity mode, noise levels, instrument volume) — any
+                    // NI piano picked into this lane, not only the Grandeur.
+                    LayerDef::new("Keys 1", "The Grandeur - Piano")
+                        .excluded_from_globals()
+                        .with_source_param("piano_snapshot", "worship"),
                     LayerDef::new("Keys 2", "Double Felt Grand"),
                     LayerDef::new("Keys 3", ""),
                 ],
             },
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Pad".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
                 // Both lanes are read off the live rig's `Omni Pads` instance
-                // rather than guessed — see `gig_extract omni`. Each patch
-                // stacks two soundsources, which is what modules A and B are
-                // for; levels are the Omnisphere part levels in dB.
+                // rather than guessed — see `gig_extract omni` — and play the
+                // gig's own patches (`User/Worship Gig 3`, edited copies of
+                // the factory ones), imported whole: soundsources, filters,
+                // envelopes, LFOs, mod matrix and effects. The patch fills
+                // one module per layer.
+                //
+                // Levels are the gig's, measured through real Omnisphere (the
+                // gig's own Omni Pads multi rendered with `omni_render
+                // OMNI_STATE`, at its part levels and Cutoff knob) and then
+                // through each pad's Pro-Q 3 in the global rackspace, which
+                // this rig does not model: the Pad's is gentle (−1 dB), the
+                // Shimmer's carves the choir's body and presence (−9.9 dB at
+                // 500 Hz, −10 at 2.3 kHz, −12 at 4.2 kHz; −9 dB overall).
+                // Both then share the Pads bus and its reverb *send* (the
+                // Valhalla is 100 % wet, but on a send — the dry pad passes
+                // untouched).
+                //
+                // The gig's Cutoff knob (CC77) swept both pads' global filter
+                // together; here the mod wheel does it (`wheel_cutoff`).
                 layers: vec![
                     // "KEY │ American Obesity" (Live Keyboardist), part level
-                    // 0.44. An earlier draft had module B as a Juno 60 sub —
-                    // the patch actually stacks a Prophet 5.
+                    // 0.44 (−6.2 dB against our unity render) and its Pro-Q
+                    // (−1 dB). An earlier draft had module B as a Juno 60
+                    // sub — the patch actually stacks a Prophet 5.
                     LayerDef {
+                        scope_values: Vec::new(),
                         name: "Pad".into(),
-                        patch: "OB-8 PWM Big Strings".into(),
-                        extra_modules: vec!["Prophet 5 Classic".into()],
-                        gain_db: -7.1,
+                        // OB-8 PWM Big Strings + Prophet 5 Classic.
+                        patch: "American Obesity".into(),
+                        extra_modules: Vec::new(),
+                        gain_db: -7.2,
                         key_lo: 0,
                         key_hi: 127,
                         exclude_global: false,
+                        patch_macros: Vec::new(),
+                        source_params: Vec::new(),
+                        transpose: 0.0,
                     },
-                    // "AD │ Gentle Gothics" (Ambient Dreams), part level 0.30.
-                    // Not a synth sparkle at all — it is a men's + women's
+                    // "AD │ Gentle Gothics" (Ambient Dreams), part level 0.30
+                    // (−10.5 dB against our unity render) and its Pro-Q
+                    // (−9 dB). Not a synth sparkle at all — it is a men's + women's
                     // choir, which is why the wash sounds vocal rather than
                     // bright.
                     LayerDef {
+                        scope_values: Vec::new(),
                         name: "Shimmer".into(),
-                        patch: "Choir Men Ohs - mf".into(),
-                        extra_modules: vec!["Choir Women Oos - mf".into()],
-                        gain_db: -10.5,
+                        // Choir Men Ohs + Choir Women Oos.
+                        patch: "Gentle Gothics".into(),
+                        extra_modules: Vec::new(),
+                        gain_db: -19.5,
                         key_lo: 0,
                         key_hi: 127,
                         exclude_global: false,
+                        patch_macros: Vec::new(),
+                        source_params: Vec::new(),
+                        transpose: 0.0,
                     },
                 ],
             },
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Organ".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
                 layers: vec![LayerDef::new("Organ A", ""), LayerDef::new("Organ B", "")],
             },
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Bass".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -618,9 +858,19 @@ pub fn worship_profile() -> KeysProfile {
                 // importer resolves it out of the gig / the Spectrasonics user
                 // library. It is the one User patch in the rig, so it exists
                 // nowhere else — back it up.
-                layers: vec![LayerDef::new("Bass", "Worship PHAT Bass")],
+                // The gig's bass is a split on the main keyboard: the global
+                // rackspace's "Mono Bass" MIDI In (same KeyLab 88 as the keys)
+                // passes notes 0–41 only (MaxNote 0.3228 × 127 = 41, F2), so
+                // the left hand below F#2 plays the bass under the pianos.
+                // Its Omnisphere part plays an octave down (part Octave −1).
+                layers: vec![LayerDef {
+                    transpose: -12.0,
+                    key_hi: 41,
+                    ..LayerDef::new("Bass", "Worship PHAT Bass")
+                }],
             },
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Aux".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -633,28 +883,50 @@ pub fn worship_profile() -> KeysProfile {
                     // — the Dulcimer lane. Both its layers are Keyscape
                     // sources played through Omnisphere.
                     LayerDef {
+                        scope_values: Vec::new(),
                         name: "Synth 1".into(),
-                        patch: "Dolceola ^ RR Lite".into(),
-                        extra_modules: vec!["Clavichord a ^ RR".into()],
-                        gain_db: -9.9,
+                        // Dolceola ^ RR Lite + Clavichord a ^ RR.
+                        patch: "Hammered Dolceola".into(),
+                        extra_modules: Vec::new(),
+                        // One mic, as Omnisphere plays a Keyscape soundsource
+                        // (one pre-mixed recording): both mics summed was
+                        // twice the voices — 8 a strike, the lane alone 263
+                        // in a pedalled passage, driving the rig past its
+                        // budget — and the roomier, louder sound noted
+                        // against Omnisphere. Stereo Mics measured closest
+                        // (level and two of four shape/decay checks); +2 dB
+                        // keeps the level the two mics had.
+                        gain_db: -7.9,
                         key_lo: 0,
                         key_hi: 127,
                         exclude_global: false,
+                        patch_macros: Vec::new(),
+                        source_params: vec![SourceParam {
+                            name: "prefer_mic".into(),
+                            value: "Stereo Mics".into(),
+                        }],
+                        transpose: 0.0,
                     },
                     // "CLUB │ Club Europa Plucking Pulsars" (Club Land), part
                     // level 0.34 — the Trance lane, one soundsource.
                     LayerDef {
+                        scope_values: Vec::new(),
                         name: "Synth 2".into(),
-                        patch: "Big Berthas Lead".into(),
+                        // Big Berthas Lead.
+                        patch: "Club Europa Plucking Pulsars".into(),
                         extra_modules: Vec::new(),
                         gain_db: -9.4,
                         key_lo: 0,
                         key_hi: 127,
                         exclude_global: false,
+                        patch_macros: Vec::new(),
+                        source_params: Vec::new(),
+                        transpose: 0.0,
                     },
                 ],
             },
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Drone".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -670,6 +942,7 @@ pub fn worship_profile() -> KeysProfile {
                 layers: vec![LayerDef::new("Drone", "")],
             },
             EngineDef {
+                scope_values: Vec::new(),
                 name: "SFX".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -681,6 +954,7 @@ pub fn worship_profile() -> KeysProfile {
         ],
         stacks: vec![
             KeysStackDef {
+                tempo_bpm: 0.0,
                 name: "Spotlight".into(),
                 blurb: "Solo grand — nothing under it".into(),
                 slots: vec![
@@ -700,6 +974,7 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             KeysStackDef {
+                tempo_bpm: 0.0,
                 name: "Verse".into(),
                 blurb: "Piano + soft pad bed".into(),
                 slots: vec![
@@ -719,6 +994,7 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             KeysStackDef {
+                tempo_bpm: 0.0,
                 name: "Energy".into(),
                 blurb: "Full band — piano, EP, synth, pad".into(),
                 slots: vec![
@@ -738,6 +1014,7 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             KeysStackDef {
+                tempo_bpm: 0.0,
                 name: "Hooks".into(),
                 blurb: "Lead synth over the piano bed".into(),
                 slots: vec![
@@ -757,6 +1034,7 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             KeysStackDef {
+                tempo_bpm: 0.0,
                 name: "Underscore".into(),
                 blurb: "Pad + swell under speaking".into(),
                 slots: vec![
@@ -779,9 +1057,77 @@ pub fn worship_profile() -> KeysProfile {
     }
 }
 
+/// Put `params` on every Sampler block under `node` (a lane's sample
+/// sources), replacing a param of the same name.
+fn stamp_source_params(node: &mut signal_sampler::rig_node::Container, params: &[SourceParam]) {
+    use signal_sampler::rig_node::RigNode;
+    for child in &mut node.children {
+        match child {
+            // A sample source is the block that names a sample spec.
+            RigNode::Block { block } if !block.sample.is_empty() => {
+                for p in params {
+                    block.params.retain(|q| q.name != p.name);
+                    block.params.push(signal_sampler::rig_node::Param {
+                        name: p.name.clone(),
+                        value: p.value.clone(),
+                    });
+                }
+            }
+            RigNode::Container { container } => stamp_source_params(container, params),
+            _ => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn knobs_saved_per_patch_survive_the_file_and_the_merge() {
+        let mut edited = worship_profile();
+        let first = edited.engines[0].layers[0].name.clone();
+        let layer = edited.layer_mut(&first).unwrap();
+        layer.remember_macros(
+            "Some Patch",
+            0,
+            vec![MacroValue {
+                id: "env1.attack".into(),
+                value: 250.0,
+            }],
+        );
+        // Remembering again replaces, it doesn't pile up.
+        layer.remember_macros(
+            "Some Patch",
+            0,
+            vec![MacroValue {
+                id: "env1.attack".into(),
+                value: 300.0,
+            }],
+        );
+        assert_eq!(layer.patch_macros.len(), 1);
+
+        let text = edited.to_styx_string().unwrap();
+        let saved = KeysProfile::from_styx_str(&text).unwrap();
+        let mut merged = worship_profile();
+        merged.adopt_saved_macros(&saved);
+        let got = merged
+            .layer_mut(&first)
+            .unwrap()
+            .saved_macros("Some Patch", 0)
+            .unwrap()
+            .to_vec();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].id, "env1.attack");
+        assert!((got[0].value - 300.0).abs() < 1e-6);
+        assert!(
+            merged
+                .layer_mut(&first)
+                .unwrap()
+                .saved_macros("Some Patch", 1)
+                .is_none()
+        );
+    }
 
     #[test]
     fn worship_shape() {
@@ -877,6 +1223,42 @@ mod tests {
     }
 
     #[test]
+    fn the_worship_bass_is_a_left_hand_split() {
+        let p = worship_profile();
+        let bass = p
+            .engines
+            .iter()
+            .flat_map(|e| &e.layers)
+            .find(|l| l.name == "Bass")
+            .expect("Bass lane");
+        assert_eq!((bass.key_lo, bass.key_hi), (0, 41));
+        let tree = p.build_tree(|name| Some(format!("/patches/{name}.prt_omn")));
+        // The layer, not its like-named engine.
+        let lane = tree
+            .of_role(signal_sampler::rig_node::Role::Layer)
+            .into_iter()
+            .find(|c| c.name == "Bass")
+            .expect("Bass lane in the tree");
+        assert_eq!((lane.zone.key_lo, lane.zone.key_hi), (0, 41));
+    }
+
+    #[test]
+        fn the_worship_piano_lane_plays_the_gig_snapshot() {
+        let p = worship_profile();
+        let tree = p.build_tree(|name| Some(format!("/packs/{name}.signalpack")));
+        let lane = tree.find("Keys 1").expect("Keys 1 lane");
+        let sources: Vec<_> = lane
+            .blocks()
+            .into_iter()
+            .filter(|b| !b.sample.is_empty())
+            .collect();
+        assert!(!sources.is_empty(), "Keys 1 has a sample source");
+        for b in sources {
+            assert_eq!(b.param_str("piano_snapshot").as_deref(), Some("worship"));
+        }
+    }
+
+    #[test]
     fn tree_has_a_fader_per_lane() {
         let p = worship_profile();
         let tree = p.build_tree(|_| None);
@@ -947,6 +1329,7 @@ mod order_tests {
         let saved_order = vec!["SFX".to_string(), "Drone".to_string()];
         let mut fresh = worship_profile();
         fresh.engines.push(EngineDef {
+            scope_values: Vec::new(),
             name: "Brass".into(),
             gain_db: 0.0,
             engine_type: String::new(),
@@ -1058,8 +1441,11 @@ mod order_tests {
         let (resolved, _) = resolve(&lifted.library, &lifted.root, None).expect("resolves");
         let tree = signal_sampler::from_node::to_container(&resolved);
 
+        // Look lanes up as LAYERS: a lane may share its engine's name ("Bass"
+        // in "Bass"), and a plain `find` returns the engine.
+        let layers = tree.of_role(signal_sampler::rig_node::Role::Layer);
         for lane in split_lanes {
-            let found = tree.find(&lane.name).expect(&lane.name);
+            let found = layers.iter().find(|c| c.name == lane.name).expect(&lane.name);
             assert_eq!(found.zone.key_lo, lane.key_lo, "{} key_lo", lane.name);
             assert_eq!(found.zone.key_hi, lane.key_hi, "{} key_hi", lane.name);
         }
@@ -1095,6 +1481,7 @@ mod order_tests {
         // to Keys rather than the type's own default of Guitar.
         assert_eq!(
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Organ".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -1105,6 +1492,7 @@ mod order_tests {
         );
         assert_eq!(
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Aux".into(),
                 gain_db: 0.0,
                 engine_type: String::new(),
@@ -1116,6 +1504,7 @@ mod order_tests {
         );
         assert_eq!(
             EngineDef {
+                scope_values: Vec::new(),
                 name: "Anything".into(),
                 gain_db: 0.0,
                 engine_type: "pad".into(),

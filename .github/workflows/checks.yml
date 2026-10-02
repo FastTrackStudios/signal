@@ -41,6 +41,8 @@ jobs:
           mkdir -p "$dir"
           echo "CARGO_TARGET_DIR=$dir" >> "$GITHUB_ENV"
           echo "target dir: $dir ($(du -sh "$dir" 2>/dev/null | cut -f1))"
+      - name: Sibling repos (the ../ checkouts the [patch] sections build from)
+        run: scripts/ci-siblings.sh
       - name: Manifests + lockfile
         run: ${NIX_DEV} cargo metadata --locked --format-version 1 > /dev/null
       - name: cargo fmt --check

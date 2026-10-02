@@ -41,7 +41,11 @@ impl Account {
     /// - [`AccountError::Issuer`] — the account has not linked that
     ///   provider (`not_linked`), the session lacks the provider's scope
     ///   (`insufficient_scope`), or the request failed.
-    async fn linked_request(&self, provider: &str, token: &str) -> Result<reqwest::Response, AccountError> {
+    async fn linked_request(
+        &self,
+        provider: &str,
+        token: &str,
+    ) -> Result<reqwest::Response, AccountError> {
         self.http()
             .get(format!("{}/oauth2/linked-token", self.issuer()))
             .query(&[("provider", provider)])

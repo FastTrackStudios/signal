@@ -171,7 +171,9 @@ pub fn live_param_ids(block_type: BlockType) -> Option<&'static HashMap<String, 
     static CACHE: OnceLock<std::sync::Mutex<HashMap<BlockType, &'static HashMap<String, u32>>>> =
         OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
-    let mut cache = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut cache = cache
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some(ids) = cache.get(&block_type) {
         return Some(ids);
     }
@@ -254,7 +256,10 @@ impl BlockState {
                     self.params.insert(*id, *v);
                 }
             }
-            ResolvedWrite::Nam { input_db, output_db } => {
+            ResolvedWrite::Nam {
+                input_db,
+                output_db,
+            } => {
                 if input_db.is_some() {
                     self.nam_in = *input_db;
                 }
@@ -273,15 +278,24 @@ impl BlockState {
         let mut events: Vec<(u32, f64)> = due
             .params
             .iter()
-            .filter(|(id, v)| self.params.get(id).is_none_or(|have| have.to_bits() != v.to_bits()))
+            .filter(|(id, v)| {
+                self.params
+                    .get(id)
+                    .is_none_or(|have| have.to_bits() != v.to_bits())
+            })
             .map(|(id, v)| (*id, *v))
             .collect();
         events.sort_by_key(|(id, _)| *id);
         if !events.is_empty() {
             out.push(ResolvedWrite::Events(events));
         }
-        let differs = |a: Option<f32>, b: Option<f32>| b.is_some() && a.map(f32::to_bits) != b.map(f32::to_bits);
-        let (i, o) = (differs(self.nam_in, due.nam_in), differs(self.nam_out, due.nam_out));
+        let differs = |a: Option<f32>, b: Option<f32>| {
+            b.is_some() && a.map(f32::to_bits) != b.map(f32::to_bits)
+        };
+        let (i, o) = (
+            differs(self.nam_in, due.nam_in),
+            differs(self.nam_out, due.nam_out),
+        );
         if i || o {
             out.push(ResolvedWrite::Nam {
                 input_db: due.nam_in.filter(|_| i),
@@ -300,7 +314,10 @@ pub enum BlockWrite {
     /// A NAM block's trims (dB) — what the build sets from the block's
     /// `input_trim_db` / `output_trim_db` (a drive knob's compensation
     /// lands here). `None` leaves one as it is.
-    Nam { input_db: Option<f32>, output_db: Option<f32> },
+    Nam {
+        input_db: Option<f32>,
+        output_db: Option<f32>,
+    },
 }
 
 /// How a block differs from the version of it that is running.
@@ -332,7 +349,10 @@ fn same_shape(a: &RigBlock, b: &RigBlock) -> bool {
 }
 
 fn params_text(b: &RigBlock) -> Vec<(&str, &str)> {
-    b.params.iter().map(|p| (p.name.as_str(), p.value.as_str())).collect()
+    b.params
+        .iter()
+        .map(|p| (p.name.as_str(), p.value.as_str()))
+        .collect()
 }
 
 /// How `new` differs from `old` (the block running), for the build.
@@ -352,7 +372,10 @@ pub fn block_delta(old: &RigBlock, new: &RigBlock) -> BlockDelta {
         return if input.is_none() && output.is_none() {
             BlockDelta::Same
         } else {
-            BlockDelta::Live(BlockWrite::Nam { input_db: input, output_db: output })
+            BlockDelta::Live(BlockWrite::Nam {
+                input_db: input,
+                output_db: output,
+            })
         };
     }
     if new.is_cab_ir() || new.is_plugin() {
@@ -406,7 +429,10 @@ pub fn block_delta(old: &RigBlock, new: &RigBlock) -> BlockDelta {
             // where the build does. Otherwise only what changed —
             // re-sending an unchanged param is not free (a delay re-derives
             // its times) and a running block should hear only the edit.
-            if changed.iter().any(|(n, _)| order_sensitive(new.block_type, n)) {
+            if changed
+                .iter()
+                .any(|(n, _)| order_sensitive(new.block_type, n))
+            {
                 BlockDelta::Live(BlockWrite::Params(b))
             } else {
                 BlockDelta::Live(BlockWrite::Params(changed))
@@ -428,7 +454,10 @@ pub fn block_delta(old: &RigBlock, new: &RigBlock) -> BlockDelta {
 #[derive(Clone, Debug)]
 pub enum ResolvedWrite {
     Events(Vec<(u32, f64)>),
-    Nam { input_db: Option<f32>, output_db: Option<f32> },
+    Nam {
+        input_db: Option<f32>,
+        output_db: Option<f32>,
+    },
 }
 
 impl ResolvedWrite {
@@ -444,7 +473,10 @@ impl ResolvedWrite {
                     .collect();
                 (!events.is_empty()).then_some(Self::Events(events))
             }
-            BlockWrite::Nam { input_db, output_db } => Some(Self::Nam {
+            BlockWrite::Nam {
+                input_db,
+                output_db,
+            } => Some(Self::Nam {
                 input_db: *input_db,
                 output_db: *output_db,
             }),
@@ -467,7 +499,10 @@ impl ResolvedWrite {
                 let _ = inst.process_block(&[], &[], &mut [], &mut [], &ev);
             }
             #[cfg(not(target_arch = "wasm32"))]
-            Self::Nam { input_db, output_db } => {
+            Self::Nam {
+                input_db,
+                output_db,
+            } => {
                 if let Some(nam) = inst
                     .as_any_mut()
                     .and_then(|a| a.downcast_mut::<crate::nam::NamProcessor>())

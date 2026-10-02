@@ -5,6 +5,7 @@
 //!     "<sampled_root>" <ni-pianos.styx> "<full_out_root>" "<proxy_out_root>" \
 //!     [--libraries "The Grandeur,The Giant"] [--packs Piano] \
 //!     [--variant both|lossless|proxy] [--quality 0.8] [--dry-run] [--force] [--allow-partial]
+//!     [--spec-only]   (rewrite existing packs' specs only; audio untouched)
 //! ```
 //!
 //! Inputs, per library, under `<sampled_root>/<dir>/`:
@@ -102,6 +103,11 @@ struct Zone {
     vel_hi: u8,
     root: u8,
     tune_cents: f32,
+    /// Kontakt's zone volume (`zvol`, linear) as dB — 0 when the zones.tsv
+    /// predates the column. It is not cosmetic: the hammer zones ship at
+    /// −19 dB and the overtones at −25, so without it a noise layer plays
+    /// ~20 dB hot.
+    gain_db: f32,
     loop_start: i64,
     loop_end: i64,
     /// Path relative to the library's `wav/` root.
@@ -138,6 +144,8 @@ fn read_zones(tsv: &Path, spec: &NiPianoSpec) -> Result<Vec<Zone>, String> {
     let (c_root, c_tune) = (col("root")?, col("tune")?);
     let (c_ls, c_le) = (col("loop_start")?, col("loop_end")?);
     let c_sample = col("sample")?;
+    // Newer `nki --zones` exports carry the zone volume.
+    let c_zvol = col("zvol").ok();
 
     let mut out = Vec::new();
     for (n, line) in lines.enumerate() {
@@ -172,6 +180,11 @@ fn read_zones(tsv: &Path, spec: &NiPianoSpec) -> Result<Vec<Zone>, String> {
             // a real pitch bug, and an invisible one, because the zone roots
             // were all correct and the tuning rides `rate` on the zoned path.
             tune_cents: ratio_to_cents(get(c_tune)?.trim().parse::<f32>().unwrap_or(1.0)),
+            gain_db: c_zvol
+                .and_then(|c| f.get(c))
+                .and_then(|v| v.trim().parse::<f32>().ok())
+                .filter(|v| *v > 0.0)
+                .map_or(0.0, |v| 20.0 * v.log10()),
             loop_start: num(c_ls)?,
             loop_end: num(c_le)?,
             group: spec.classify(&sample).to_string(),
@@ -272,6 +285,9 @@ fn library_styx(lib_name: &str, pack: &str, vendor: &str, zones: &[Zone]) -> Str
         if z.tune_cents != 0.0 {
             let _ = writeln!(s, "    tune_cents   {:.3}", z.tune_cents);
         }
+        if z.gain_db.abs() > 0.005 {
+            let _ = writeln!(s, "    gain_db      {:.3}", z.gain_db);
+        }
         // Kontakt writes -1 for "no loop"; the spec's sentinel is 0/0.
         if z.loop_start >= 0 && z.loop_end > z.loop_start {
             let _ = writeln!(s, "    loop_start   {}", z.loop_start);
@@ -297,6 +313,9 @@ struct Args {
     dry_run: bool,
     force: bool,
     allow_partial: bool,
+    /// Rewrite only the embedded spec of packs that already exist — the
+    /// audio is untouched (a spec-level fix such as the zone volumes).
+    spec_only: bool,
 }
 
 fn parse_args() -> Args {
@@ -313,6 +332,7 @@ fn parse_args() -> Args {
         dry_run: false,
         force: false,
         allow_partial: false,
+        spec_only: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -323,6 +343,7 @@ fn parse_args() -> Args {
             "--variant" => a.variant = it.next().expect("--variant needs a value"),
             "--quality" => a.quality = it.next().expect("--quality").parse().expect("quality"),
             "--dry-run" => a.dry_run = true,
+            "--spec-only" => a.spec_only = true,
             "--force" => a.force = true,
             "--allow-partial" => a.allow_partial = true,
             _ => pos.push(arg),
@@ -415,7 +436,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .iter()
             .filter(|z| !wav_root.join(&z.wav).exists())
             .collect();
-        if !missing.is_empty() {
+        // A spec-only rewrite leaves the packed audio alone, so the decoded
+        // WAVs need not be on this machine.
+        if !missing.is_empty() && !args.spec_only {
             for z in missing.iter().take(5) {
                 eprintln!("  MISSING {}", wav_root.join(&z.wav).display());
             }
@@ -473,6 +496,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     continue;
                 }
                 let out = root.join(&rel);
+                if args.spec_only {
+                    if !out.exists() {
+                        eprintln!("    {variant}: no pack to respec");
+                        continue;
+                    }
+                    signal_sampler::LibrarySpec::from_styx(&styx)
+                        .map_err(|e| format!("{}: generated spec does not parse: {e}", out.display()))?;
+                    signal_sampler::pack_rewrite::rewrite_embedded_spec(&out, |_| styx.clone())
+                        .map_err(|e| format!("{}: {e}", out.display()))?;
+                    eprintln!("    {variant}: spec rewritten");
+                    built += 1;
+                    continue;
+                }
                 if out.exists() && !args.force {
                     eprintln!("    {variant}: exists — skipping (use --force)");
                     skipped += 1;

@@ -17,6 +17,7 @@ workspace = true
 architect.workspace = true
 vox = { workspace = true, optional = true }
 facet.workspace = true
+signal-rigs-proto.workspace = true
 # BlockType — the one domain type the wire model carries (block coloring/UI).
 signal-proto.workspace = true
 

@@ -70,15 +70,21 @@ impl DragBus {
         }
     }
 
-    /// The root element's `onpointermove`.
+    /// The root element's `onpointermove`. A live drag owns the pointer:
+    /// the move's default is prevented, or a finger dragging a knob in a
+    /// scrolling panel would scroll the panel too (Blitz pans on a finger's
+    /// move unless a handler prevents it).
     pub fn root_move(self, e: &PointerEvent) {
         let handler = self.active.read().clone();
         let Some(h) = handler else { return };
+        e.prevent_default();
         let p = e.client_coordinates();
         h(DragEvent::Move { x: p.x, y: p.y });
     }
 
-    /// The root element's `onpointerup`.
+    /// The root element's `onpointerup` — and its `onpointercancel`: a
+    /// touch the system took back (a notification, a gesture) ends the drag
+    /// just as a release does.
     pub fn root_up(self) {
         self.end();
     }

@@ -340,6 +340,12 @@ impl SampleEngine {
         if velocity < zone.vel_min || velocity > zone.vel_max {
             return false;
         }
+        // A pedal-state layer sounds only in its state (dampers down / up).
+        match zone.pedal_state.as_str() {
+            "down" if !self.cc64_held => return false,
+            "up" if self.cc64_held => return false,
+            _ => {}
+        }
         // Sympathetic resonance sounds only under a held pedal, and only when
         // its control is up (`r[keys.piano.resonance.pedal-gate]`). Gating here
         // rather than at spawn keeps the voice from being allocated at all,

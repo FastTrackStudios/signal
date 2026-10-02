@@ -25,15 +25,14 @@ on:
     branches: [main]
     paths:
       - "apps/desktop/**"
-      - "features/rigs/**"
-      - "features/fx/**"
-      - "features/nam/**"
-      - "features/plugin-host/**"
-      - "libs/neural-amp-modeler/**"
-      - "crates/signal/**"
-      - "crates/daw/**"
-      - "crates/audiocore/**"
-      - "crates/midicore/**"
+      - "features/**"
+      - "crates/**"
+      - "libs/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      # A sibling moved (daw, processor, blitz, frame — the faces ship in
+      # the app).
+      - ".github/siblings"
       - "flake.nix"
       - "flake.lock"
       - ".github/workflows/ios.yml"
@@ -80,19 +79,32 @@ jobs:
     steps:
       # clean:false keeps target/ between runs so nix+cargo build incrementally
       # (a fresh checkout each time would recompile the whole tree).
+      - name: Preflight — build volume mounted
+        run: |
+          if [ ! -d /Volumes/build-disk ]; then
+            echo "ERROR: /Volumes/build-disk is not mounted on this runner." >&2
+            exit 1
+          fi
+          df -h /Volumes/build-disk | tail -1
+
       - uses: actions/checkout@v4
         with:
           clean: false
+
+      # The sibling repos the workspace builds from (`../<dir>`: daw,
+      # processor, blitz, frame, …), each at the commit .github/siblings
+      # pins — the same ones a dev tree builds against.
+      - name: Sibling checkouts
+        run: scripts/ci-siblings.sh
 
       - name: Build, sign, and upload to TestFlight
         env:
           KEYCHAIN: fts-build.keychain
           KEYCHAIN_PW: fts-build
           MARKETING_VER: ${{ inputs.marketing_version || '0.0.1' }}
-          # Build/sign/upload with the release Xcode (xcode-select → 26.6 GM),
-          # but compile the icon catalog with the beta's actool — 26.6's actool
-          # can't produce Assets.car on macOS 27 (simulator-SDK mismatch).
-          ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
+          # The release Xcode xcode-select points at (27, on macOS 27) builds,
+          # compiles the icon catalog, signs and uploads: App Store Connect
+          # refuses a beta SDK (90534), and actool must match the macOS.
           # ── Telemetry ────────────────────────────────────────────────
           # Baked at build time via option_env! in architect-telemetry: a
           # shipped app has nobody to set env vars for it, and the exporter
@@ -103,6 +115,11 @@ jobs:
           TASK_OTLP_TOKEN: ${{ secrets.TASK_OTLP_TOKEN }}
           TASK_SENTRY_DSN: ${{ secrets.TASK_SENTRY_DSN }}
           # ── Signal product identity ──────────────────────────────────
+          # The app crate (apps/desktop) — the Mac's Blitz app, which lays
+          # the rig out for a phone — with the guitar and keys rigs.
+          DX_PACKAGE: signal-desktop
+          DX_APP_DIR: apps/desktop
+          DX_FEATURES: --no-default-features --features signal-guitar,signal-keys-rig
           # Bundle id must match apps/desktop/Dioxus.toml.
           DX_BUNDLE_ID: app.fasttrackstudio.signal
           # Home-screen name. Without this the device shows the dx-derived

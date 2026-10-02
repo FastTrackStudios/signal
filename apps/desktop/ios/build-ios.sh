@@ -11,7 +11,8 @@
 # With --sim, also installs + relaunches on that simulator.
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+HERE="$(cd "$(dirname "$0")" && pwd)"
+cd "$HERE/.."
 
 BIN_IOS="$HOME/bin-ios"
 mkdir -p "$BIN_IOS"
@@ -20,20 +21,25 @@ ln -sf /usr/bin/xcodebuild "$BIN_IOS/xcodebuild"
 
 unset DEVELOPER_DIR SDKROOT
 export PATH="$BIN_IOS:$PATH"
+# The floor the devshell sets (nix/modules/toolchain.nix) and Info.plist's
+# MinimumOSVersion: a build outside nix otherwise links for iOS 10 while
+# the C++ objects (NAM's Eigen) were compiled for the SDK's own version, and
+# `___chkstk_darwin` is missing at the link.
+export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-15.0}"
 
 dx build --platform ios --no-default-features --features signal-guitar,signal-keys-rig
 
-APP="$(cd ../.. && pwd)/target/dx/signal-desktop/debug/ios/Signal-desktop.app"
+# dx names the bundle from the package (SignalDesktop.app today; it has
+# changed between dx versions), so take the newest one it wrote.
+APP="$(ls -dt "$(cd ../.. && pwd)"/target/dx/signal-desktop/debug/ios/*.app 2>/dev/null | head -1)"
+[ -n "$APP" ] && [ -f "$APP/Info.plist" ] || { echo "ERROR: dx produced no app" >&2; exit 1; }
 
-# The app rotates per-screen at runtime (ios_orientation.rs), so Info.plist
-# keeps BOTH portrait and landscape (dx's default) — no orientation patch.
-# Add the mic/audio-interface usage string the rig needs.
-/usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Processes your guitar signal from the connected audio interface or microphone.'" "$APP/Info.plist" 2>/dev/null || true
-# Local network: pack downloads dial the studio engine p2p (iroh direct
-# paths / LAN WebSocket) — without this key iOS drops the traffic.
-/usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'Connects to your studio engine on the local network to stream and download sound packs.'" "$APP/Info.plist" 2>/dev/null || true
-/usr/libexec/PlistBuddy -c "Add :NSBonjourServices array" "$APP/Info.plist" 2>/dev/null || true
-/usr/libexec/PlistBuddy -c "Add :NSBonjourServices:0 string _fts._tcp" "$APP/Info.plist" 2>/dev/null || true
+# Info.plist (scene manifest, dark, usage strings) and frame's faces —
+# the same as the TestFlight build writes.
+# shellcheck source=app-plist.sh
+source "$HERE/app-plist.sh"
+signal_app_plist "$APP"
+signal_app_faces "$APP"
 
 echo "built: $APP"
 

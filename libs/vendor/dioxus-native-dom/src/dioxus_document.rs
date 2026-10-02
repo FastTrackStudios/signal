@@ -229,6 +229,12 @@ impl Document for DioxusDocument {
     }
 
     fn poll(&mut self, cx: Option<TaskContext>) -> bool {
+        // A focus change a task parked (see `events::apply_pending_focus`):
+        // first, since with no work queued the poll returns before the
+        // render below.
+        if let Ok(mut inner) = self.inner.try_borrow_mut() {
+            crate::events::apply_pending_focus(&mut inner);
+        }
         {
             let fut = self.vdom.wait_for_work();
             let mut pinned_fut = pin!(fut);
@@ -245,6 +251,7 @@ impl Document for DioxusDocument {
         let mut writer = MutationWriter::new(&mut inner, &mut self.vdom_state);
         self.vdom.render_immediate(&mut writer);
         drop(writer);
+        crate::events::apply_pending_focus(&mut inner);
         drop(inner);
         self.layout_stale.set(true);
         self.flush_queued_mounted_events();
@@ -264,6 +271,10 @@ impl Document for DioxusDocument {
         };
         let mut driver = EventDriver::new(&mut self.inner, handler);
         driver.handle_ui_event(event);
+        drop(driver);
+        if let Ok(mut inner) = self.inner.try_borrow_mut() {
+            crate::events::apply_pending_focus(&mut inner);
+        }
     }
 }
 

@@ -28,7 +28,10 @@ rather than pushing a tag to test:
 architect = { path = "../architect/architect" }
 ```
 
-Never commit those overrides — the paths are machine-specific.
+Commit those overrides freely on a working branch while co-developing.
+**Never push with a local `[patch]` in place** — the paths are
+machine-specific. Before pushing, squash the branch's commits and swap
+each override for the tagged (or branch-pinned) git dep it stands in for.
 
 **The dependency arrow is bidirectional** (a deliberate choice): this repo
 takes `editor`, `editor-keyflow*`, `view-knowledge-graph`,

@@ -19,10 +19,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use signal_proto::block::BlockType;
+use signal_sampler::rig_profile::RigStack;
 use signal_sampler::{
     CommitStatus, GuitarRig, ProfileRig, ReloadMode, RigBlock, RigPatch, RigProfile,
 };
-use signal_sampler::rig_profile::RigStack;
 
 const SR: u32 = 48_000;
 
@@ -48,7 +48,9 @@ fn rms(x: &[f32]) -> f32 {
 }
 
 fn max_step(x: &[f32]) -> f32 {
-    x.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0, f32::max)
+    x.windows(2)
+        .map(|w| (w[1] - w[0]).abs())
+        .fold(0.0, f32::max)
 }
 
 fn error_db(a: &[f32], b: &[f32]) -> f32 {
@@ -101,7 +103,9 @@ fn delay(ms: f32, feedback: f32) -> RigBlock {
 }
 
 fn patch(name: &str, blocks: Vec<RigBlock>) -> RigPatch {
-    blocks.into_iter().fold(RigPatch::new(name), RigPatch::with_block)
+    blocks
+        .into_iter()
+        .fold(RigPatch::new(name), RigPatch::with_block)
 }
 
 /// "Lead" (a long reverb, playing) and "Clean" (a delay).
@@ -153,7 +157,11 @@ fn an_edit_to_the_playing_patch_does_not_drop_out() {
     assert_eq!((report.built, report.reused), (1, 1), "only Lead rebuilds");
     assert!(report.switched, "Lead's new chain switched in");
     assert_eq!(prig.active_patch().map(|p| p.name.as_str()), Some("Lead"));
-    assert_eq!(prig.rig().tail_voices(), 1, "the old reverb rings on as a tail");
+    assert_eq!(
+        prig.rig().tail_voices(),
+        1,
+        "the old reverb rings on as a tail"
+    );
 
     let around = heard(prig.rig(), 0.1);
     let around_fs = heard(footswitch.rig(), 0.1);
@@ -184,7 +192,10 @@ fn an_edit_to_the_playing_patch_does_not_drop_out() {
         at_footswitch,
         steady_step,
     );
-    assert!(quietest > steady * 0.7, "a window dropped out: {quietest} vs {steady}");
+    assert!(
+        quietest > steady * 0.7,
+        "a window dropped out: {quietest} vs {steady}"
+    );
     assert!(
         at_commit < steady_step * 1.3,
         "largest step at the commit {at_commit} vs the note's own {steady_step}"
@@ -193,7 +204,10 @@ fn an_edit_to_the_playing_patch_does_not_drop_out() {
         at_commit <= at_footswitch * 1.01,
         "largest step at the commit {at_commit} vs a footswitch's {at_footswitch}"
     );
-    assert!(vs_footswitch < -100.0, "a reload is a footswitch: {vs_footswitch:.1} dB");
+    assert!(
+        vs_footswitch < -100.0,
+        "a reload is a footswitch: {vs_footswitch:.1} dB"
+    );
 }
 
 /// After the reload the old reverb's tail rings on sample for sample as it
@@ -215,7 +229,10 @@ fn the_old_tail_rings_on_through_a_reload() {
     assert!(rms(&want[skip..]) > 1e-3, "the reference rings");
     let e = error_db(&got[skip..], &want[skip..]);
     println!("old tail after a reload vs never reloaded: error {e:.1} dB");
-    assert!(e < -60.0, "the tail is the unreloaded tail: error {e:.1} dB");
+    assert!(
+        e < -60.0,
+        "the tail is the unreloaded tail: error {e:.1} dB"
+    );
 }
 
 /// An edit to a patch that is not playing: the output does not change by a
@@ -299,26 +316,46 @@ fn the_switcher_state_survives_a_reload() {
     edited.patches.rotate_left(1);
     let report = prig.reload_profile(edited, None);
     assert_eq!(report.status, CommitStatus::Committed);
-    assert_eq!((report.built, report.retuned, report.reused), (0, 1, 3), "a settings edit");
+    assert_eq!(
+        (report.built, report.retuned, report.reused),
+        (0, 1, 3),
+        "a settings edit"
+    );
     // And a structural one (Lead's decay rebuilds its reverb), same checks.
     let mut edited = stacked(0.3);
     edited.patches.rotate_left(1);
     let report = prig.reload_profile(edited, None);
     assert_eq!((report.built, report.reused), (1, 3), "Lead rebuilt");
 
-    assert_eq!(prig.active_patch().unwrap().name, "Lead", "the playing patch plays on");
+    assert_eq!(
+        prig.active_patch().unwrap().name,
+        "Lead",
+        "the playing patch plays on"
+    );
     assert_eq!(prig.stack_position(0), 2, "A's cursor on Lead");
     assert_eq!(prig.active_stack(), Some(0));
-    assert_eq!(prig.stacks()[1].patches, ["Ambient", "Crunch"], "the song's rotation");
+    assert_eq!(
+        prig.stacks()[1].patches,
+        ["Ambient", "Crunch"],
+        "the song's rotation"
+    );
     assert_eq!(prig.stack_position(1), 1, "B's cursor on Crunch");
     // The session re-applies the song's tuning after a reload: the same
     // rotation, so no switch moves.
     prig.retune_stacks(&[("B".into(), vec!["Ambient".into(), "Crunch".into()])]);
-    assert_eq!(prig.stack_position(1), 1, "re-tuning the same rotation keeps B's cursor");
+    assert_eq!(
+        prig.stack_position(1),
+        1,
+        "re-tuning the same rotation keeps B's cursor"
+    );
     // B latches: pressing it lands on Crunch and stays there.
     assert!(prig.activate_stack(1));
     assert!(prig.activate_stack(1));
-    assert_eq!(prig.active_patch().unwrap().name, "Crunch", "B still does not rotate");
+    assert_eq!(
+        prig.active_patch().unwrap().name,
+        "Crunch",
+        "B still does not rotate"
+    );
     // The song goes: the profile's own rotation comes back.
     prig.retune_stacks(&[]);
     assert_eq!(prig.stacks()[1].patches, ["Ambient"]);
@@ -329,14 +366,26 @@ fn the_switcher_state_survives_a_reload() {
 #[test]
 fn only_the_newest_reload_commits() {
     let mut prig = rig(two_patch(0.6, 300.0));
-    let first = prig.begin_reload(ReloadMode::Keep).plan(two_patch(0.2, 300.0), None);
-    let second = prig.begin_reload(ReloadMode::Keep).plan(two_patch(0.4, 300.0), None);
+    let first = prig
+        .begin_reload(ReloadMode::Keep)
+        .plan(two_patch(0.2, 300.0), None);
+    let second = prig
+        .begin_reload(ReloadMode::Keep)
+        .plan(two_patch(0.4, 300.0), None);
     let (first, second) = (first.prepare(), second.prepare());
     let late = prig.commit_reload(second, None);
     assert_eq!(late.status, CommitStatus::Committed);
     let stale = prig.commit_reload(first, None);
-    assert_eq!(stale.status, CommitStatus::Stale, "the older reload is discarded");
-    assert_eq!(prig.rig().slots().len(), 2, "no chain from the stale reload installed");
+    assert_eq!(
+        stale.status,
+        CommitStatus::Stale,
+        "the older reload is discarded"
+    );
+    assert_eq!(
+        prig.rig().slots().len(),
+        2,
+        "no chain from the stale reload installed"
+    );
     let decay = prig.active_patch().unwrap().chain[1].param_str("decay");
     assert_eq!(decay.as_deref(), Some("0.4"));
 }
@@ -349,16 +398,23 @@ fn a_profile_switch_does_not_go_silent() {
     prig.rig().start_test_signal(sine(110.0, 0.2));
     heard(prig.rig(), 0.5);
     let before = heard(prig.rig(), 0.2);
-    let other = RigProfile::new("Other")
-        .with_patch(patch("Warm", vec![gain(6.0), delay(250.0, 0.3)]));
+    let other =
+        RigProfile::new("Other").with_patch(patch("Warm", vec![gain(6.0), delay(250.0, 0.3)]));
     prig.load_profile(other, None).expect("loads");
     assert_eq!(prig.active_patch().unwrap().name, "Warm");
     assert_eq!(prig.rig().tail_voices(), 1, "the old patch rings out");
     let around = heard(prig.rig(), 0.1);
     let win = (SR / 400) as usize;
     let quietest = around.chunks(win).map(rms).fold(f32::INFINITY, f32::min);
-    assert!(quietest > rms(&before) * 0.5, "no silence at the switch: {quietest}");
-    assert_eq!(prig.rig().slots().len(), 1, "the old profile's chains retired");
+    assert!(
+        quietest > rms(&before) * 0.5,
+        "no silence at the switch: {quietest}"
+    );
+    assert_eq!(
+        prig.rig().slots().len(),
+        1,
+        "the old profile's chains retired"
+    );
 }
 
 /// The locked part of a one-patch reload is short; the build runs off the
@@ -428,7 +484,11 @@ fn a_footswitch_during_the_build_is_not_held_up() {
     assert_eq!(report.status, CommitStatus::Committed);
     assert_eq!(report.built, PATCHES);
     let prig = shared.into_inner().unwrap();
-    assert_eq!(prig.active_patch().unwrap().name, chosen, "the footswitch's pick survives");
+    assert_eq!(
+        prig.active_patch().unwrap().name,
+        chosen,
+        "the footswitch's pick survives"
+    );
 
     // One patch changed: the common edit.
     let mut prig = prig;

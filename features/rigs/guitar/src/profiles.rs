@@ -338,7 +338,14 @@ impl OverrideDef {
 /// dry at the block's `dry`, the effect added on top — so each runs fully
 /// wet (`mix` pinned at 1 in the chain) and how loud the effect sits is its
 /// `level`, in dB.
-pub const PARALLEL_FX: [&str; 6] = ["Pre Verb", "Pre Delay", "DLY 1", "DLY 2", "VERB 1", "VERB 2"];
+pub const PARALLEL_FX: [&str; 6] = [
+    "Pre Verb",
+    "Pre Delay",
+    "DLY 1",
+    "DLY 2",
+    "VERB 1",
+    "VERB 2",
+];
 
 #[must_use]
 pub fn is_parallel_fx(block: &str) -> bool {
@@ -349,7 +356,11 @@ pub fn is_parallel_fx(block: &str) -> bool {
 /// the level's −60 dB (off).
 #[must_use]
 pub fn mix_to_level_db(mix: f32) -> f32 {
-    if mix <= 0.001 { -60.0 } else { (20.0 * mix.log10()).max(-60.0) }
+    if mix <= 0.001 {
+        -60.0
+    } else {
+        (20.0 * mix.log10()).max(-60.0)
+    }
 }
 
 impl OverrideDef {
@@ -357,7 +368,8 @@ impl OverrideDef {
     /// same: before the effects ran fully wet, their amount was `mix`, and
     /// stored presets, patches and sections still say so.
     pub fn pin_parallel_mix(&mut self) {
-        if self.op == "set" && self.param.eq_ignore_ascii_case("mix") && is_parallel_fx(&self.block) {
+        if self.op == "set" && self.param.eq_ignore_ascii_case("mix") && is_parallel_fx(&self.block)
+        {
             self.param = "level".into();
             self.value = mix_to_level_db(self.value);
         }
@@ -643,11 +655,20 @@ pub fn slot_pedal(slot: &str, drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -
         .iter()
         .find(|d| d.block.eq_ignore_ascii_case(slot))
         .map(|d| (d.preset.clone(), d.option))
-        .or_else(|| slot.eq_ignore_ascii_case(BOOST_SLOT).then(|| default_boost(dps)).flatten());
+        .or_else(|| {
+            slot.eq_ignore_ascii_case(BOOST_SLOT)
+                .then(|| default_boost(dps))
+                .flatten()
+        });
     let found = assignment.and_then(|(preset, i)| {
         let p = dps.iter().find(|p| p.name.eq_ignore_ascii_case(&preset))?;
         let o = p.options.get(i).or_else(|| p.options.first())?;
-        Some(SlotPedal { pedal: p.name.clone(), option: o.name.clone(), nam: o.nam.clone(), empty: false })
+        Some(SlotPedal {
+            pedal: p.name.clone(),
+            option: o.name.clone(),
+            nam: o.nam.clone(),
+            empty: false,
+        })
     });
     match found {
         Some(s) => s,
@@ -655,12 +676,15 @@ pub fn slot_pedal(slot: &str, drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -
             pedal: "Clean Boost (built-in)".to_string(),
             ..SlotPedal::default()
         },
-        None => SlotPedal { empty: true, ..SlotPedal::default() },
+        None => SlotPedal {
+            empty: true,
+            ..SlotPedal::default()
+        },
     }
 }
 
-/// Build the boost slot: the captured pedal assigned to it; unassigned, the
-/// library's boost capture (a drive preset option named for boosting, e.g.
+/// Build the boost slot: the captured pedal assigned to it (one with no
+/// capture plays the native boost); unassigned, the library's boost capture (a drive preset option named for boosting, e.g.
 /// King of Tone "Red = Boost"); with none in the library, the native clean
 /// boost. Off by default, like every board slot.
 fn boost_block(drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -> RigBlock {
@@ -681,11 +705,14 @@ fn boost_block(drives: &[DriveSlotDef], dps: &[DrivePresetDef]) -> RigBlock {
     // A captured boost is a pedal like the drives (a NAM Drive block, as
     // the library's pedal nodes resolve); only the native fallback is a
     // Boost block.
+    // A pedal preset whose option has no capture names the native boost
+    // (a rig's "Keeley Katana" as the built-in clean boost): it plays the
+    // Boost block, under the pedal's name.
     let mut b = match assigned {
-        Some(opt) => RigBlock::of_type(BlockType::Drive)
+        Some(opt) if !opt.nam.is_empty() => RigBlock::of_type(BlockType::Drive)
             .with_nam(opt.nam)
             .with_param("drive", "0.5"),
-        None => RigBlock::of_type(BlockType::Boost).with_param("drive", "0.5"),
+        _ => RigBlock::of_type(BlockType::Boost).with_param("drive", "0.5"),
     };
     b = b.named(BOOST_SLOT);
     b.bypassed = true;
@@ -739,6 +766,22 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             b
         };
         let head = RigPatch::new(name)
+            // The transposer, before everything: the whole rig hears the
+            // guitar in the key it is set to (down a step, up a capo…) —
+            // the clean engine, the shifted signal alone.
+            .with_block(off_fx(
+                BlockType::Pitch,
+                TRANSPOSE,
+                &[("semitones", "0"), ("cents", "0"), ("engine", "0"), ("mix", "1"), ("a_level", "1"), ("b_level", "0"), ("dry", "0")],
+            ))
+            // The dive bomb: a whammy — one voice, the shifted signal alone,
+            // its interval swept by the treadle; short frames, so it
+            // follows the foot.
+            .with_block(off_fx(
+                BlockType::Pitch,
+                DIVE_BOMB,
+                &[("semitones", "0"), ("cents", "0"), ("engine", "0"), ("live", "1"), ("mix", "1"), ("a_level", "1"), ("b_level", "0"), ("dry", "0")],
+            ))
             // Pedal-style squeeze before everything (off until a preset
             // engages it): slow-ish attack lets the pick through.
             // (No explicit module for these two single blocks: a module named
@@ -754,7 +797,21 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     ("release", "200"),
                 ],
             ))
-            .with_block(off(BlockType::Pitch, "Pitch"))
+            // Its voices stored, so a preset or snapshot can set them: A an
+            // octave up, B an octave down.
+            .with_block(off_fx(
+                BlockType::Pitch,
+                "Pitch",
+                &[("semitones", "12"), ("cents", "0"), ("a_level", "0.7"), ("b_semitones", "-12"), ("b_level", "0.7"), ("dry", "1"), ("mix", "0.5")],
+            ))
+            // The harmonizer: a pitch block of its own beside the octaver
+            // (Pitch), so each keeps its intervals — a major third and a
+            // fifth over the note.
+            .with_block(off_fx(
+                BlockType::Pitch,
+                "Harmonizer",
+                &[("semitones", "4"), ("cents", "0"), ("a_level", "0.6"), ("b_semitones", "7"), ("b_level", "0.5"), ("dry", "1"), ("mix", "0.5")],
+            ))
             // Volume pedal (clean gain, unity default) — the Control view's
             // left pedal drives it.
             .with_block(on_fx(
@@ -769,13 +826,12 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             // Pre FX: what sits in front of the amp — a motion block, and a
             // reverb (a spring, like the tank in a Fender) and delay the amp
             // then colours. All off until a preset engages them.
-            .with_block(in_module(off(BlockType::Trem, "Pre Motion"), PRE_FX))
+            // Pre FX in the John Mayer X order: the slap first, into the
+            // tank's tremolo and spring.
+            // Modulation into the amp first (a chorus or vibe on the
+            // board, before the slap).
             .with_block(in_module(
-                off_fx(
-                    BlockType::Reverb,
-                    "Pre Verb",
-                    &[("algorithm", "3"), ("mix", "1"), ("level", "-16.5"), ("decay", "0.35")],
-                ),
+                off_fx(BlockType::Chorus, PRE_MOD, &[("engine", "5"), ("rate", "0.6"), ("depth", "0.4"), ("mix", "0.5")]),
                 PRE_FX,
             ))
             .with_block(in_module(
@@ -794,6 +850,15 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 ),
                 PRE_FX,
             ))
+            .with_block(in_module(off(BlockType::Trem, "Pre Motion"), PRE_FX))
+            .with_block(in_module(
+                off_fx(
+                    BlockType::Reverb,
+                    "Pre Verb",
+                    &[("algorithm", "3"), ("mix", "1"), ("level", "-16.5"), ("decay", "0.35")],
+                ),
+                PRE_FX,
+            ))
             // The Amp module: the amp stage, then what shapes it — gate,
             // studio-style glue compression, and the amp EQ.
             .with_block(in_module(amp_l, "Amp"))
@@ -801,7 +866,8 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             .with_block(in_module(amp_r, "Amp"))
             .with_block(in_module(cab_r, "Amp"))
             .with_block(in_module(
-                on_fx(BlockType::Gate, "Gate", &[("threshold", "-50")]),
+                // Attack and release stored too, so a preset can set them.
+                on_fx(BlockType::Gate, "Gate", &[("threshold", "-50"), ("attack", "1"), ("release", "120")]),
                 "Amp",
             ))
             .with_block(in_module(
@@ -884,6 +950,10 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     &[
                         ("mix", "1"),
                         ("level", "-20"),
+                        // Stored (Digital, the engine's default) so a preset
+                        // or snapshot can switch its machine: an override
+                        // only sets a param the block has.
+                        ("style", "1"),
                         ("time", "600"),
                         ("feedback", "0.62"),
                         ("tap_div_l", "1"),
@@ -896,7 +966,12 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 on_fx(
                     BlockType::Reverb,
                     "VERB 1",
-                    &[("mix", "1"), ("level", "-22"), ("decay", "0.42"), ("size", "0.45")],
+                    &[
+                        ("mix", "1"),
+                        ("level", "-22"),
+                        ("decay", "0.42"),
+                        ("size", "0.45"),
+                    ],
                 ),
                 "Time",
             ))
@@ -904,7 +979,10 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 off_fx(
                     BlockType::Reverb,
                     "VERB 2",
-                    &[("mix", "1"), ("level", "-20"), ("decay", "0.85"), ("size", "0.92")],
+                    // Its algorithm stored (Hall, the engine's default) so
+                    // a preset or snapshot can switch it: an override only
+                    // sets a param the block has.
+                    &[("mix", "1"), ("level", "-20"), ("algorithm", "1"), ("decay", "0.85"), ("size", "0.92")],
                 ),
                 "Time",
             ))
@@ -1007,6 +1085,55 @@ pub const POST_COMP: &str = "Post Comp";
 pub const LIMITER: &str = "Limiter";
 /// The module holding what sits in front of the amp.
 pub const PRE_FX: &str = "Pre FX";
+
+/// The Core module: the core tone a patch is built on — its compressor,
+/// its drive board (the Drive module), its amps (the Amp module), the gate,
+/// the amp EQ and the post compressor. A patch's preset *is* its Core.
+pub const CORE: &str = "Core";
+
+/// The transposer: the first block of the chain.
+pub const TRANSPOSE: &str = "Transpose";
+/// The dive bomb (whammy), after the transposer.
+pub const DIVE_BOMB: &str = "Dive Bomb";
+/// Modulation in front of the amp: the first of the Pre FX.
+pub const PRE_MOD: &str = "Pre Mod";
+
+/// The chain blocks the Core owns besides its drives and amps.
+pub const CORE_BLOCKS: [&str; 4] = [PRE_COMP, "Gate", "Amp EQ", POST_COMP];
+
+/// The Core's blocks that stay live when the Core is frozen into one NAM
+/// capture: the gate. A capture can't gate (its noise floor is the
+/// capture's), so the gate runs after it as itself — the rest of the Core
+/// (compressor, drives, amps, EQ, post compressor) is what the capture
+/// learns, and a frozen Core must play exactly as the live one did. Room
+/// is not in the Core at all.
+pub const UNFROZEN_CORE_BLOCKS: [&str; 1] = ["Gate"];
+
+/// The module a chain block belongs to: `Core` (compressor, gate, amp EQ,
+/// post compressor), `Drive` / `Amp` (the Core's drive board and amps),
+/// `Delay` / `Reverb` (the Time module's lanes) — or none. Most blocks
+/// belong to no module (the pre effects, pitch, wah, filter, chorus,
+/// tremolo…): a patch picks their block presets directly.
+#[must_use]
+pub fn module_of_block(name: &str, bt: BlockType) -> Option<&'static str> {
+    use signal_proto::BlockCategory;
+    let is = |b: &str| b.eq_ignore_ascii_case(name);
+    if CORE_BLOCKS.iter().any(|b| is(b)) {
+        return Some(CORE);
+    }
+    // The pre effects are blocks of their own, whatever their type.
+    if name.len() > 4 && name[..4].eq_ignore_ascii_case("pre ") {
+        return None;
+    }
+    match bt.category() {
+        BlockCategory::Drive => Some("Drive"),
+        BlockCategory::Amp => Some("Amp"),
+        _ if bt == BlockType::Cabinet => Some("Amp"),
+        _ if bt == BlockType::Delay => Some("Delay"),
+        _ if bt == BlockType::Reverb => Some("Reverb"),
+        _ => None,
+    }
+}
 
 /// Put a patch's level on its trim block, INSIDE the chain and upstream of
 /// the time effects.
@@ -1175,10 +1302,17 @@ impl SongDef {
     /// Record `ov` on `patch` for this song (replacing the same block /
     /// param / op).
     pub fn set_patch_override(&mut self, patch: &str, ov: OverrideDef) {
-        let entry = match self.patch_overrides.iter().position(|e| e.patch.eq_ignore_ascii_case(patch)) {
+        let entry = match self
+            .patch_overrides
+            .iter()
+            .position(|e| e.patch.eq_ignore_ascii_case(patch))
+        {
             Some(i) => &mut self.patch_overrides[i],
             None => {
-                self.patch_overrides.push(SongPatchOverridesDef { patch: patch.to_string(), overrides: Vec::new() });
+                self.patch_overrides.push(SongPatchOverridesDef {
+                    patch: patch.to_string(),
+                    overrides: Vec::new(),
+                });
                 self.patch_overrides.last_mut().expect("just pushed")
             }
         };
@@ -1205,7 +1339,9 @@ impl SongDef {
     pub fn version_of(&self, profile: &str, patch: &str) -> Option<&PatchDef> {
         self.patch_versions
             .iter()
-            .find(|v| v.profile.eq_ignore_ascii_case(profile) && v.patch.name.eq_ignore_ascii_case(patch))
+            .find(|v| {
+                v.profile.eq_ignore_ascii_case(profile) && v.patch.name.eq_ignore_ascii_case(patch)
+            })
             .map(|v| &v.patch)
     }
 
@@ -1259,7 +1395,11 @@ impl SongDef {
 
     /// Take the song's changes to `patch` out of it.
     pub fn take_patch_overrides(&mut self, patch: &str) -> Vec<OverrideDef> {
-        match self.patch_overrides.iter().position(|e| e.patch.eq_ignore_ascii_case(patch)) {
+        match self
+            .patch_overrides
+            .iter()
+            .position(|e| e.patch.eq_ignore_ascii_case(patch))
+        {
             Some(i) => self.patch_overrides.remove(i).overrides,
             None => Vec::new(),
         }
@@ -1293,7 +1433,11 @@ impl SongDef {
             let next = self
                 .own_recall(&cur)
                 .map(|r| r.repeat_of.trim().to_string())
-                .filter(|n| !n.is_empty() && !n.eq_ignore_ascii_case(&cur) && self.parts.iter().any(|p| p.eq_ignore_ascii_case(n)));
+                .filter(|n| {
+                    !n.is_empty()
+                        && !n.eq_ignore_ascii_case(&cur)
+                        && self.parts.iter().any(|p| p.eq_ignore_ascii_case(n))
+                });
             match next {
                 Some(n) => cur = n,
                 None => break,
@@ -1402,9 +1546,18 @@ impl SongDef {
     pub fn remove_part(&mut self, name: &str) -> bool {
         // Its repeats keep its sound: each takes a copy of what it recalled.
         if let Some(src) = self.own_recall(name).cloned() {
-            for r in self.part_recalls.iter_mut().filter(|r| r.repeat_of.eq_ignore_ascii_case(name)) {
+            for r in self
+                .part_recalls
+                .iter_mut()
+                .filter(|r| r.repeat_of.eq_ignore_ascii_case(name))
+            {
                 let (part, section) = (r.part.clone(), r.section.clone());
-                *r = PartRecallDef { part, section, repeat_of: src.repeat_of.clone(), ..src.clone() };
+                *r = PartRecallDef {
+                    part,
+                    section,
+                    repeat_of: src.repeat_of.clone(),
+                    ..src.clone()
+                };
             }
         }
         let before = self.parts.len();
@@ -1986,13 +2139,26 @@ mod song_tests {
     #[test]
     fn a_repeat_is_linked_to_its_part() {
         let mut s = song();
-        s.parts = ["Verse 2", "Chorus 2", "Bridge", "Dance! (V2)"].map(String::from).to_vec();
+        s.parts = ["Verse 2", "Chorus 2", "Bridge", "Dance! (V2)"]
+            .map(String::from)
+            .to_vec();
         s.part_recalls = vec![
-            PartRecallDef { part: "Verse 2".into(), patch: "Dry Chorus Clean L".into(), ..Default::default() },
-            PartRecallDef { part: "Dance! (V2)".into(), repeat_of: "Verse 2".into(), ..Default::default() },
+            PartRecallDef {
+                part: "Verse 2".into(),
+                patch: "Dry Chorus Clean L".into(),
+                ..Default::default()
+            },
+            PartRecallDef {
+                part: "Dance! (V2)".into(),
+                repeat_of: "Verse 2".into(),
+                ..Default::default()
+            },
         ];
         assert_eq!(s.source_part("Dance! (V2)"), "Verse 2");
-        assert_eq!(s.part_recall("Dance! (V2)").unwrap().patch, "Dry Chorus Clean L");
+        assert_eq!(
+            s.part_recall("Dance! (V2)").unwrap().patch,
+            "Dry Chorus Clean L"
+        );
         assert!(s.rename_part("Verse 2", "V2"));
         assert_eq!(s.source_part("Dance! (V2)"), "V2");
         assert!(s.remove_part("V2"));
@@ -2006,19 +2172,38 @@ mod song_tests {
     #[test]
     fn a_song_plays_its_version_of_a_patch() {
         let prof = worship_def();
-        let base = prof.patches.iter().find(|p| p.name == "Lead").cloned().expect("Lead");
+        let base = prof
+            .patches
+            .iter()
+            .find(|p| p.name == "Lead")
+            .cloned()
+            .expect("Lead");
         let mut s = song();
-        s.version_mut(&prof.name, &base).modules.push(ModuleChoiceDef {
-            module: "Delay".into(),
-            preset: "U2 Edge".into(),
-            snapshot: "Streets".into(),
-        });
+        s.version_mut(&prof.name, &base)
+            .modules
+            .push(ModuleChoiceDef {
+                module: "Delay".into(),
+                preset: "U2 Edge".into(),
+                snapshot: "Streets".into(),
+            });
         let played = s.apply_to(&prof);
         let lead = played.patches.iter().find(|p| p.name == "Lead").unwrap();
         assert!(lead.modules.iter().any(|m| m.snapshot == "Streets"));
-        let other = ProfileDef { name: "Blues".into(), ..prof.clone() };
+        let other = ProfileDef {
+            name: "Blues".into(),
+            ..prof.clone()
+        };
         let blues = s.apply_to(&other);
-        assert!(!blues.patches.iter().find(|p| p.name == "Lead").unwrap().modules.iter().any(|m| m.snapshot == "Streets"));
+        assert!(
+            !blues
+                .patches
+                .iter()
+                .find(|p| p.name == "Lead")
+                .unwrap()
+                .modules
+                .iter()
+                .any(|m| m.snapshot == "Streets")
+        );
         assert!(s.take_version(&prof.name, "Lead").is_some());
         assert!(s.version_of(&prof.name, "Lead").is_none());
     }
@@ -2136,13 +2321,24 @@ mod trim_tests {
             .iter()
             .position(|b| b.name.eq_ignore_ascii_case(TRIM_BLOCK))
             .expect("trim block");
-        for m in ["Chorus", "Flanger", "Phaser", "Tremolo", "Vibrato", "Rotary", "Boost", "Amp L", "Amp EQ"] {
-            if let Some(i) = patch.chain.iter().position(|b| b.name.eq_ignore_ascii_case(m)) {
+        for m in [
+            "Chorus", "Flanger", "Phaser", "Tremolo", "Vibrato", "Rotary", "Boost", "Amp L",
+            "Amp EQ",
+        ] {
+            if let Some(i) = patch
+                .chain
+                .iter()
+                .position(|b| b.name.eq_ignore_ascii_case(m))
+            {
                 assert!(i < trim, "{m} must come before the trim");
             }
         }
         let next = patch.chain.get(trim + 1).expect("the time module follows");
-        assert!(next.is_time_module(), "the first block after the trim is the Time module's, got {}", next.name);
+        assert!(
+            next.is_time_module(),
+            "the first block after the trim is the Time module's, got {}",
+            next.name
+        );
     }
 
     /// Calibration and the player's own level ADD. Normalisation puts every
@@ -2486,13 +2682,22 @@ mod slot_tests {
             name: name.into(),
             options: options
                 .iter()
-                .map(|(n, f)| DriveOptionDef { name: (*n).into(), nam: (*f).into(), hash: String::new(), level_db: 0.0 })
+                .map(|(n, f)| DriveOptionDef {
+                    name: (*n).into(),
+                    nam: (*f).into(),
+                    hash: String::new(),
+                    level_db: 0.0,
+                })
                 .collect(),
         }
     }
 
     fn slot(block: &str, preset: &str, option: usize) -> DriveSlotDef {
-        DriveSlotDef { block: block.into(), preset: preset.into(), option }
+        DriveSlotDef {
+            block: block.into(),
+            preset: preset.into(),
+            option,
+        }
     }
 
     /// A slot names the pedal assigned to it and which capture; the boost
@@ -2501,15 +2706,24 @@ mod slot_tests {
     #[test]
     fn a_slot_names_the_pedal_it_plays() {
         let dps = vec![
-            pedal("King of Tone", &[("Red", "/m/kot red.nam"), ("Both Sides", "/m/kot both.nam")]),
+            pedal(
+                "King of Tone",
+                &[("Red", "/m/kot red.nam"), ("Both Sides", "/m/kot both.nam")],
+            ),
             pedal("Clean Boost", &[("King of Tone Red", "/m/kot red.nam")]),
         ];
         let drives = vec![slot("Drive 1", "King of Tone", 1)];
         let d1 = slot_pedal("Drive 1", &drives, &dps);
-        assert_eq!((d1.pedal.as_str(), d1.option.as_str(), d1.empty), ("King of Tone", "Both Sides", false));
+        assert_eq!(
+            (d1.pedal.as_str(), d1.option.as_str(), d1.empty),
+            ("King of Tone", "Both Sides", false)
+        );
         assert_eq!(d1.nam, "/m/kot both.nam");
         let boost = slot_pedal("Boost", &drives, &dps);
-        assert_eq!((boost.pedal.as_str(), boost.option.as_str()), ("Clean Boost", "King of Tone Red"));
+        assert_eq!(
+            (boost.pedal.as_str(), boost.option.as_str()),
+            ("Clean Boost", "King of Tone Red")
+        );
         let native = slot_pedal("Boost", &drives, &dps[..1]);
         assert_eq!(native.pedal, "Clean Boost (built-in)");
         assert!(!native.empty);
@@ -2517,5 +2731,28 @@ mod slot_tests {
         assert!(empty.empty && empty.pedal.is_empty());
         // A slot assigned a pedal the library no longer has is empty too.
         assert!(slot_pedal("Drive 2", &[slot("Drive 2", "Gone", 0)], &dps).empty);
+    }
+}
+
+#[cfg(test)]
+mod module_of_block_tests {
+    use super::*;
+
+    #[test]
+    fn the_core_owns_its_tone_and_the_rest_are_blocks_of_their_own() {
+        assert_eq!(module_of_block(PRE_COMP, BlockType::Compressor), Some(CORE));
+        assert_eq!(module_of_block("Gate", BlockType::Gate), Some(CORE));
+        assert_eq!(module_of_block("Amp EQ", BlockType::Eq), Some(CORE));
+        assert_eq!(module_of_block(POST_COMP, BlockType::Compressor), Some(CORE));
+        assert_eq!(module_of_block("Drive 1", BlockType::Drive), Some("Drive"));
+        assert_eq!(module_of_block("Amp L", BlockType::Amp), Some("Amp"));
+        assert_eq!(module_of_block("DLY 1", BlockType::Delay), Some("Delay"));
+        assert_eq!(module_of_block("VERB 2", BlockType::Reverb), Some("Reverb"));
+        // The pre effects, pitch, chorus, tremolo: no module's.
+        assert_eq!(module_of_block("Pre Delay", BlockType::Delay), None);
+        assert_eq!(module_of_block("Pre Verb", BlockType::Reverb), None);
+        assert_eq!(module_of_block("Chorus", BlockType::Chorus), None);
+        assert_eq!(module_of_block("Tremolo", BlockType::Trem), None);
+        assert_eq!(module_of_block("Pitch", BlockType::Pitch), None);
     }
 }

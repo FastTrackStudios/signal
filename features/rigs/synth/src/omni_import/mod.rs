@@ -19,6 +19,7 @@
 mod xml;
 
 pub use xml::{XmlNode, omni_num, parse_xml};
+pub mod effects;
 mod index;
 mod model;
 mod multi;
@@ -27,10 +28,11 @@ mod tree;
 
 pub use index::{SoundsourceIndex, normalize_soundsource_name, resolve_name};
 pub use model::{
-    OmniLayer, OmniModRoute, OmniPatch, classify_filter_full, omni_cutoff_hz, parse_patch,
+    FilterModel, OmniLayer, OmniLfo, OmniModEnv, OmniModRoute, OmniPatch, classify_filter_full,
+    filter_model, omni_cutoff_hz, omni_filter_setting, parse_patch, wavetable_path,
 };
 pub use multi::{OmniMulti, load_multi_file, multi_to_container, parse_multi};
-pub use tree::{load_patch_file, patch_to_container};
+pub use tree::{LAYER_NAMES, load_patch_file, load_patch_file_transposed, patch_to_container};
 
 #[cfg(test)]
 use model::classify_effect;
@@ -69,7 +71,7 @@ mod tests {
 <OSC level="3f400000" fm="3e800000" am="0" hrmOn="3f800000" hrmLv="3f800000" >
 <UNI umix="3f800000" ucnt="3f800000" udpth="3e4ccccd" uwdth="3f800000" >
 </UNI>
-<HARM Act1="3f800000" lvl1="3f000000" smi1="3f4aaaab" pan1="3f000000" wfm1="0" >
+<HARM Act1="3f800000" lvl1="3f000000" smi1="3f428f5c" pan1="3f000000" wfm1="0" >
 </HARM>
 </OSC>
 <WAVESHAPER act="3f800000" dpth="3f000000" bc="0" srrdc="0" mix="3f800000" >
@@ -193,11 +195,13 @@ mod tests {
         assert_eq!(l.level, 0.75);
         assert_eq!(l.fx[0], "Chorus Echo");
         assert_eq!(p.common_fx[0], "PRO-Verb");
-        // Oscillator stack: 8-voice unison at 20 cents, FM 0.25, one
+        // Oscillator stack: 8-voice unison at 20 cents, FM on (ratio
+        // 2·modint → 0.5, index 0.1725·moddepth/ratio → 0.345), one
         // harmonia voice +14 semitones at half level, drive-0.5 waveshaper.
         assert_eq!(l.unison_count, 8);
         assert!((l.unison_detune - 0.2).abs() < 1e-3);
-        assert!((l.fm_depth - 0.25).abs() < 1e-6);
+        assert!((l.fm_depth - 0.345).abs() < 1e-6);
+        assert!((l.fm_ratio - 0.5).abs() < 1e-6);
         assert_eq!(l.harmonia.len(), 1);
         let (level, smi, pan, _shape) = l.harmonia[0];
         assert!((level - 0.5).abs() < 1e-3);
@@ -217,6 +221,190 @@ mod tests {
         assert_eq!(p.mod_routes.len(), 1);
         assert_eq!(p.mod_routes[0].source, "Layer A FENV");
         assert_eq!(p.mod_routes[0].target, "A freq");
+    }
+
+    #[test]
+    fn seeding_the_knobs_and_writing_them_back_changes_nothing() {
+        // A lane's knobs are seeded from the patch's layers; a rebuild writes
+        // them back onto the imported tree. Untouched, that must be the
+        // identity — or every rebuild would drift the patch.
+        let dir = std::env::temp_dir().join(format!("omni-seed-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("mini.prt_omn");
+        std::fs::write(&file, MINI_PATCH).unwrap();
+        let layers = crate::engine::import_omni_layers(&file).unwrap();
+        let before = patch_to_container(
+            &parse_patch(MINI_PATCH).unwrap(),
+            &SoundsourceIndex::default(),
+        );
+        let mut after = before.clone();
+        for (i, m) in layers.iter().enumerate() {
+            let set = crate::engine::ModuleSettings {
+                cutoff_hz: m.cutoff_hz,
+                resonance: m.resonance,
+                filter_env_depth: m.filter_env_depth,
+                amp_env: m.amp_env.unwrap_or((0.0, 0.0, 1.0, 120.0)),
+                filter_env: m.filter_env.unwrap_or((0.0, 0.0, 1.0, 120.0)),
+                ..Default::default()
+            };
+            assert!(crate::engine::apply_settings_to_omni_layer(
+                &mut after, i, &set
+            ));
+        }
+        let layer = |t: &signal_sampler::rig_node::Container, name: &str| {
+            let f1 = t
+                .find("Layer A")
+                .unwrap()
+                .find("Filters")
+                .unwrap()
+                .blocks()
+                .into_iter()
+                .find(|b| b.display_name() == "Filter 1")
+                .unwrap()
+                .param_f32(name);
+            f1
+        };
+        for p in ["cutoff", "resonance"] {
+            let (b, a) = (layer(&before, p), layer(&after, p));
+            if let (Some(b), Some(a)) = (b, a) {
+                assert!((b - a).abs() < 2e-3, "{p}: {b} -> {a}");
+            }
+        }
+        let fe = |t: &signal_sampler::rig_node::Container, name: &str| {
+            t.find("Layer A")
+                .unwrap()
+                .modulators
+                .iter()
+                .find(|m| m.display_name() == "Filter Env")
+                .unwrap()
+                .param_f32(name)
+        };
+        for p in ["attack", "decay", "sustain", "release"] {
+            let (b, a) = (fe(&before, p).unwrap_or(0.0), fe(&after, p).unwrap_or(0.0));
+            assert!((b - a).abs() < 1e-3, "filter env {p}: {b} -> {a}");
+        }
+        let depth = |t: &signal_sampler::rig_node::Container| {
+            t.find("Layer A")
+                .unwrap()
+                .mod_routes
+                .iter()
+                .map(|r| r.depth)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(depth(&before), depth(&after));
+        // The LFOs too: seeded from the file, written back, nothing moves.
+        let lfos = crate::engine::import_omni_lfos(&file).unwrap();
+        let mut four = [(2.0, 0.0, 0.0); 4];
+        for (slot, l) in four.iter_mut().zip(&lfos) {
+            *slot = *l;
+        }
+        let mut again = after.clone();
+        crate::engine::apply_lfos_to_omni(&mut again, &four, None);
+        let lfo = |t: &signal_sampler::rig_node::Container, p: &str| -> Vec<Option<f32>> {
+            t.modulators
+                .iter()
+                .filter(|m| m.display_name().starts_with("LFO"))
+                .map(|m| m.param_f32(p))
+                .collect()
+        };
+        for p in ["rate", "wave"] {
+            let (b, a) = (lfo(&after, p), lfo(&again, p));
+            for (b, a) in b.iter().zip(&a) {
+                if let (Some(b), Some(a)) = (b, a) {
+                    assert!((b - a).abs() < 1e-3, "LFO {p}: {b} -> {a}");
+                }
+            }
+        }
+        let all_depths = |t: &signal_sampler::rig_node::Container| {
+            let mut v: Vec<f32> = Vec::new();
+            fn walk(c: &signal_sampler::rig_node::Container, v: &mut Vec<f32>) {
+                v.extend(c.mod_routes.iter().map(|r| r.depth));
+                for ch in &c.children {
+                    if let signal_sampler::rig_node::RigNode::Container { container } = ch {
+                        walk(container, v);
+                    }
+                }
+            }
+            walk(t, &mut v);
+            v
+        };
+        for (b, a) in all_depths(&after).iter().zip(all_depths(&again)) {
+            assert!((b - a).abs() < 1e-5, "route depth {b} -> {a}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Machine-local: every Worship Gig 3 patch survives seeding its knobs
+    /// (layers + LFOs) and writing them back, route for route.
+    /// Skips where the patches are not present.
+    #[test]
+    fn worship_patches_seed_and_reapply_as_the_identity() {
+        let root = std::path::Path::new(
+            "/Volumes/dev-drive/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches/User/Worship Gig 3",
+        );
+        let Ok(dir) = std::fs::read_dir(root) else {
+            eprintln!("skipping: {root:?} not present");
+            return;
+        };
+        let mut checked = 0;
+        for entry in dir.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("prt_omn") {
+                continue;
+            }
+            let xml = std::fs::read_to_string(&path).unwrap();
+            let before =
+                patch_to_container(&parse_patch(&xml).unwrap(), &SoundsourceIndex::default());
+            let mut after = before.clone();
+            for (i, m) in crate::engine::import_omni_layers(&path)
+                .unwrap()
+                .iter()
+                .enumerate()
+            {
+                let set = crate::engine::ModuleSettings {
+                    cutoff_hz: m.cutoff_hz,
+                    resonance: m.resonance,
+                    filter_env_depth: m.filter_env_depth,
+                    amp_env: m.amp_env.unwrap_or((0.0, 0.0, 1.0, 120.0)),
+                    filter_env: m.filter_env.unwrap_or((0.0, 0.0, 1.0, 120.0)),
+                    ..Default::default()
+                };
+                crate::engine::apply_settings_to_omni_layer(&mut after, i, &set);
+            }
+            let mut four = [(2.0, 0.0, 0.0); 4];
+            for (slot, l) in four
+                .iter_mut()
+                .zip(crate::engine::import_omni_lfos(&path).unwrap())
+            {
+                *slot = l;
+            }
+            crate::engine::apply_lfos_to_omni(&mut after, &four, None);
+            fn depths(c: &signal_sampler::rig_node::Container, v: &mut Vec<(String, f32)>) {
+                v.extend(c.mod_routes.iter().map(|r| (r.source.key(), r.depth)));
+                for ch in &c.children {
+                    if let signal_sampler::rig_node::RigNode::Container { container } = ch {
+                        depths(container, v);
+                    }
+                }
+            }
+            let (mut b, mut a) = (Vec::new(), Vec::new());
+            depths(&before, &mut b);
+            depths(&after, &mut a);
+            assert_eq!(b.len(), a.len(), "{path:?}");
+            for ((src, db), (_, da)) in b.iter().zip(&a) {
+                assert!((db - da).abs() < 1e-4, "{path:?}: {src} depth {db} -> {da}");
+            }
+            let rates = |t: &signal_sampler::rig_node::Container| -> Vec<Option<f32>> {
+                t.modulators.iter().map(|m| m.param_f32("rate")).collect()
+            };
+            for (rb, ra) in rates(&before).iter().zip(rates(&after)) {
+                if let (Some(rb), Some(ra)) = (rb, ra) {
+                    assert!((rb - ra).abs() < 1e-3, "{path:?}: LFO rate {rb} -> {ra}");
+                }
+            }
+            checked += 1;
+        }
+        eprintln!("{checked} Worship patches round-trip");
     }
 
     #[test]
@@ -247,13 +435,16 @@ mod tests {
         assert!(tree.params.iter().any(|p| p.name == "tag:Author"));
         assert!(tree.params.iter().any(|p| p.name == "mod0"));
         // Two live routes on Layer A: the filter section's own envdpth route
-        // plus the matrix row — both "Filter Env" → cutoff at 0.5.
+        // plus the matrix row — both "Filter Env" → the cutoff knob, half a
+        // knob setting each (the knob param spans 1.5 settings).
         assert_eq!(layer.mod_routes.len(), 2);
         for r in &layer.mod_routes {
             assert_eq!(r.source.key(), "filter env");
-            assert_eq!(r.target.key(), "lpf test");
-            assert_eq!(r.parameter, "cutoff");
-            assert!((r.depth - 0.5).abs() < 1e-6);
+            // The layer's first filter is "Filter 1" (the keys-module name);
+            // Omnisphere's "LPF Test" is its `model`.
+            assert_eq!(r.target.key(), "filter 1");
+            assert_eq!(r.parameter, "knob");
+            assert!((r.depth - 0.5 / 1.5).abs() < 1e-6, "{}", r.depth);
         }
         // The filter envelope modulator carries its imported ADSR.
         let fe = layer
@@ -269,11 +460,12 @@ mod tests {
             .unwrap()
             .blocks()
             .into_iter()
-            .find(|b| b.display_name() == "LPF Test")
+            .find(|b| b.display_name() == "Filter 1")
             .expect("filter 1");
-        // Omnisphere freq 0.5 → 15·2^(9.55/2) ≈ 411 Hz (calibrated curve) →
-        // our normalized cutoff log10(411/20)/3 ≈ 0.4375.
-        assert!((f1.param_f32("cutoff").unwrap() - 0.4375).abs() < 1e-3);
+        assert_eq!(f1.param_str("model").as_deref(), Some("LPF Test"));
+        // Omnisphere freq 0.5 (no per-filter offset, no measured `type1`) →
+        // the knob taper's 4374 Hz → our normalized log10(4374/20)/3 ≈ 0.780.
+        assert!((f1.param_f32("cutoff").unwrap() - 0.780).abs() < 1e-3);
         assert_eq!(f1.param_f32("resonance"), Some(0.25));
         // Renders (placeholder-safe).
         let mut rn = signal_sampler::node_render::RenderNode::compile(&tree, 48_000);
@@ -316,7 +508,7 @@ mod tests {
                     let xml = std::fs::read_to_string(&p).unwrap_or_default();
                     if let Ok(parsed) = parse_patch(&xml) {
                         if parsed.layers.iter().any(|l| {
-                            !l.soundsource.is_empty() && index.find(&l.soundsource).is_some()
+                            !l.soundsource.is_empty() && index.find_source(&l.soundsource).is_some()
                         }) {
                             patch_path = Some(p);
                             break 'outer;
@@ -358,6 +550,63 @@ mod tests {
         assert!(
             heard > 1e-3,
             "imported patch should be audible, rms={heard}"
+        );
+    }
+
+    /// Machine-local: a factory wavetable-oscillator patch plays its own
+    /// waves from the extraction — the layer's Soundsource names them, and it
+    /// sounds. Skips where the factory patches or the wavetables are missing.
+    #[test]
+    fn a_wavetable_patch_plays_its_real_waves() {
+        use signal_plugin_host::{PluginEvents, PluginMidiEvent};
+        let path = Path::new(
+            "/Volumes/dev-drive/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches/Factory/Live Keyboardist/Synths/Synth Brass/KEY │ Memorymoog Swellee.prt_omn",
+        );
+        if !path.exists() || std::env::var_os("FTS_SAMPLED_ROOT").is_none() {
+            eprintln!("skipping: needs the factory patch and FTS_SAMPLED_ROOT");
+            return;
+        }
+        let patch = parse_patch(&std::fs::read_to_string(path).unwrap()).unwrap();
+        assert!(patch.layers[0].waves.is_some(), "the layer names its waves");
+        let tree = patch_to_container(&patch, &SoundsourceIndex::default());
+        let osc = tree
+            .find("Layer A")
+            .unwrap()
+            .find("Oscillator")
+            .unwrap()
+            .blocks()
+            .into_iter()
+            .find(|b| b.display_name() == "Soundsource")
+            .unwrap()
+            .clone();
+        let wave = osc.param_str("wave0").expect("the patch's wave, resolved");
+        assert!(wave.ends_with("Moog Modular Saw.wav"), "{wave}");
+
+        let mut rn = signal_sampler::node_render::RenderNode::compile(&tree, 48_000);
+        rn.prepare(48_000.0, 512);
+        let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+        let midi = [PluginMidiEvent {
+            offset: 0,
+            message: daw::service::MidiEvent::NoteOn {
+                channel: daw::service::Channel::new(0),
+                key: daw::service::KeyNumber::new(48),
+                velocity: daw::service::Velocity::new(100),
+            },
+        }];
+        let mut heard = 0.0f32;
+        for i in 0..200 {
+            let ev = PluginEvents {
+                params: &[],
+                midi: if i == 0 { &midi } else { &[] },
+                note_expressions: &[],
+            };
+            rn.render(&mut l, &mut r, &ev);
+            let rms = (l.iter().map(|s| s * s).sum::<f32>() / l.len() as f32).sqrt();
+            heard = heard.max(rms);
+        }
+        assert!(
+            heard > 1e-3,
+            "the wavetable patch should sound, rms={heard}"
         );
     }
 
@@ -489,4 +738,35 @@ mod tests {
             failed.len()
         );
     }
+
+    /// An untouched lane (its knobs at the seeded baseline) must be the
+    /// imported tree exactly — the knob model is coarser than the patch.
+    #[test]
+    fn untouched_knobs_leave_the_imported_tree_alone() {
+        let before =
+            patch_to_container(&parse_patch(MINI_PATCH).unwrap(), &SoundsourceIndex::default());
+        let mut after = before.clone();
+        let mut set = crate::engine::ModuleSettings {
+            cutoff_hz: 900.0,
+            resonance: 0.3,
+            filter_env_depth: 0.4,
+            amp_env: (5.0, 300.0, 0.7, 250.0),
+            ..Default::default()
+        };
+        set.baseline = Some(Box::new(set.clone()));
+        for i in 0..4 {
+            crate::engine::apply_settings_to_omni_layer(&mut after, i, &set);
+        }
+        let lfos = set.lfos;
+        crate::engine::apply_lfos_to_omni(&mut after, &lfos, Some(&lfos));
+        assert_eq!(format!("{before:?}"), format!("{after:?}"));
+
+        // A moved cutoff moves only the cutoff, relative to the patch.
+        let mut moved = set.clone();
+        moved.cutoff_hz = 1800.0;
+        let mut tweaked = before.clone();
+        crate::engine::apply_settings_to_omni_layer(&mut tweaked, 0, &moved);
+        assert_ne!(format!("{before:?}"), format!("{tweaked:?}"));
+    }
+
 }

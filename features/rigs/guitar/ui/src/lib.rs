@@ -18,6 +18,11 @@ pub use modulation_ui::viz as mod_viz;
 /// The plugin's own vello EQ editor — native only (a painted scene needs a
 /// Blitz host natively, a canvas in a browser).
 mod eq_vello;
+mod face_chrome;
+/// Pages designed in frame, running live (hot-reloaded from their files).
+mod frame_surface;
+/// The rig's blocks drawn with frame faces, chosen by what is loaded.
+mod rig_faces;
 mod grid;
 /// The shared audio-gui knob (moved to signal-widgets).
 pub use signal_widgets::knob;
@@ -26,37 +31,40 @@ mod indicators;
 mod kit;
 mod library;
 mod macro_bar;
-mod module_sidebar;
 mod meters;
+mod module_sidebar;
 mod palette;
-mod part_menu;
 pub mod param_writer;
+mod part_menu;
 mod perform;
-mod preset_bar;
+mod phone;
 mod preset_look;
 mod remote;
 mod setlist_bar;
 mod settings;
 mod sidebars;
 mod stable;
+mod time_face;
 mod state;
 mod theme;
 mod wire_param;
 
 pub use chain::ChainStrip;
 pub use comp_surface::CompSurface;
-pub use control::{ControlView, MidiIndicator, ZoomPanel};
+pub use control::{ControlView, FormFactor, MidiIndicator, WindowAspect, WindowSize, ZoomPanel};
+pub use phone::{IslandLeft, PhoneHost};
 pub use grid::RigGraph;
 pub use icons::module_icon;
 pub use library::{Kind as LibraryKind, LibraryPicker};
 pub use macro_bar::{MacroBar, MacroPanelOpen, MacroShotStatus, MacroTuneMode};
-pub use module_sidebar::{InitialSelection, Selection as ModuleSelection};
 pub use meters::{CpuMeter, DspReadout, MeterBar, MeterPair, meter_level};
+pub use module_sidebar::{InitialSelection, Selection as ModuleSelection};
 pub use perform::PerformGrid;
-pub use preset_bar::PresetSidebar;
 pub use remote::GuitarRigRemote;
 pub use setlist_bar::SetlistSidebar;
-pub use settings::{AUDIO_SETTINGS_OPEN, AudioSettingsBridge, AudioSettingsModal, open_audio_settings};
+pub use settings::{
+    AUDIO_SETTINGS_OPEN, AudioSettingsBridge, AudioSettingsModal, open_audio_settings,
+};
 pub use sidebars::{LeftSidebar, LevellingChip};
 /// The node/preset tree (moved to signal-widgets — both rigs draw it).
 pub use signal_widgets::PresetTree;

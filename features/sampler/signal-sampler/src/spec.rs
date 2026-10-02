@@ -1102,6 +1102,7 @@ fn zone_from_sfz(
         trigger_cc: sfz_u8(group, region, "on_locc").unwrap_or(0),
         trigger_value_min: sfz_u8(group, region, "on_locc").unwrap_or(0),
         trigger_value_max: sfz_u8(group, region, "on_hicc").unwrap_or(0),
+        pedal_state: String::new(),
         mic: String::new(),
         articulation: String::new(),
         dynamic: String::new(),
@@ -2066,6 +2067,11 @@ pub struct ZoneSpec {
     /// Highest CC value that fires a CC-threshold trigger. 0 means 127.
     #[facet(default)]
     pub trigger_value_max: u8,
+    /// The sustain-pedal state the zone sounds in: `"up"` / `"down"`, empty
+    /// for either. A piano sampled with the dampers down and lifted (Keyscape's
+    /// `Pedal Up` / `Pedal Down` layers) plays one or the other at note-on.
+    #[facet(default)]
+    pub pedal_state: String,
     /// Microphone / output-bus identifier — references a `MicSpec.id` in the
     /// containing `LibrarySpec.mics`. Empty string means the zone is
     /// mic-agnostic (single-mic libraries / synth zones).

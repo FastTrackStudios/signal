@@ -619,9 +619,37 @@ pub(crate) enum ZoneTrigger {
 
 // ── SampleEngine ──────────────────────────────────────────────────────────────────
 
+/// Notes a sampler engine sounds at most unless a patch says otherwise: a
+/// safety bound for live use (smashing the keyboard with the sustain pedal
+/// down must not pile up unbounded voices). Kontakt/Keyscape pianos run a
+/// few dozen notes; this leaves room for a pedalled wash.
+pub const DEFAULT_MAX_NOTES: usize = 48;
+
 /// Real-time sample playback engine for one sample library section.
 pub struct SampleEngine {
     patch: PlayerPatch,
+    /// Per key (0..128): the attack-trigger zones whose key range covers it,
+    /// in zone order — what `find_layer_zone` looks through instead of every
+    /// zone in the patch (thousands on a sampled piano, scanned per layer per
+    /// note on the audio thread). Built once: the zones never change after
+    /// the engine is made.
+    zone_keys: Box<[Box<[u32]>]>,
+    /// The same, for the release-trigger zones (a note-off's).
+    release_keys: Box<[Box<[u32]>]>,
+    /// Each zone's mic as its rank among the patch's mic names sorted — the
+    /// order the zoned trigger path groups by (it used a `BTreeMap` keyed by
+    /// the mic string, cloning each name per note).
+    zone_mic_rank: Box<[u16]>,
+    /// The mic names by rank.
+    mic_rank_names: Box<[String]>,
+    /// Reusable per-note buffers for the zoned trigger path: the matching
+    /// `(mic rank, zone)` pairs, their zones flattened in group order, each
+    /// group's `(rank, start, end)`, and the round-robin slots. Taken and put
+    /// back, so they allocate only while growing, never in steady state.
+    zoned_pairs: Vec<(u16, u32)>,
+    zoned_idx: Vec<usize>,
+    zoned_groups: Vec<(u16, u32, u32)>,
+    rr_slots_scratch: Vec<u32>,
     cache: SampleCache,
     voices: VoicePool,
     /// Pitch-bend range in semitones (full wheel throw).
@@ -636,11 +664,11 @@ pub struct SampleEngine {
     pub sample_rate: u32,
 
     /// Active section ID (e.g. `"1v"`, `"Va"`, `"Ce"`).
-    section: String,
+    section: std::sync::Arc<str>,
     /// Active articulation ID (e.g. `"Vibsus"`, `"Staccato"`).
     articulation: String,
     /// Active microphone position ID (e.g. `"Mix"`, `"Main"`).
-    mic: String,
+    mic: std::sync::Arc<str>,
     /// Opt-in single-mic filter for multi-mic zone sets that declare no
     /// `mics` block (so `mic_index` folds everything to bus 0). When `Some`,
     /// only zones whose `mic` matches fire — otherwise every mic in the set
@@ -752,6 +780,16 @@ pub struct SampleEngine {
     /// (linear; default -10 dB, matching Keyscape). Applied to the body's
     /// measured peak at note-off so the release always sits under the note.
     release_gain: f32,
+    /// Level of every key-up release voice this engine spawns (linear; 1 =
+    /// as mapped, 0 = none) — an Omnisphere layer's soundsource Release
+    /// Volume (`relVol`).
+    release_level: f32,
+    /// Scale each key-up release by how far the note's body has decayed
+    /// (an Omnisphere soundsource's release follows the note it ends).
+    release_follows_body: bool,
+    /// Polyphony in NOTES (a patch's voice count); `None` = the pool's own
+    /// voice cap only.
+    max_notes: Option<usize>,
     /// Mechanical pedal-noise level (linear; default -20 dB). Absolute, scaled
     /// by recent playing velocity.
     mech_noise_gain: f32,
@@ -805,6 +843,13 @@ pub struct SampleEngine {
     /// hosting one of those libraries. `None` for everything else, which is
     /// most things — see [`crate::piano_voice`].
     piano_voice: Option<crate::piano_voice::PianoVoice>,
+    /// Per key: the velocity it was last struck at (after the piano voice's
+    /// Color shift) and that note's piano trim — the NI release law's
+    /// inputs, still needed after note-off has cleared `held_notes`.
+    strike: [(u8, f32); 128],
+    /// The NI piano's per-key tuning (cents), from its note-on law —
+    /// every voice of the key (body and release) carries it.
+    piano_key_cents: [f32; 128],
     /// Gain trim (dB) the piano controls computed for the note currently being
     /// dispatched, folded into the voice gain at spawn.
     ///
@@ -911,6 +956,45 @@ pub struct SampleEngine {
     /// Attack envelope (frames) ramped in on sustain onset. 0 = the sample's
     /// natural attack (CSS attack parameter; user-adjustable).
     attack_frames: usize,
+    /// Decay (frames) and sustain level (0..=1) of the zone voices' ADSR —
+    /// see `Voice::with_decay`. `(0, 1.0)` = none, the sample as recorded.
+    decay_frames: usize,
+    sustain_level: f32,
+    /// Zone voices' breakpoint amplitude envelope (an Omnisphere layer's
+    /// AENV) — see `Voice::with_amp_points`. `None`: the ADSR above.
+    amp_points: Option<std::sync::Arc<crate::native::breakpoints::Breakpoints>>,
+    /// Omnisphere's amp velocity law on zone voices, `1 − s + s·v²` with
+    /// `v = vel/127`; `None` leaves velocity to pick the layer only.
+    velocity_sens: Option<f32>,
+    /// Pick zones as if played at this velocity — one dynamic layer of a
+    /// multi-dynamic source (an Omnisphere "Choir Men Ohs - mf").
+    zone_velocity: Option<u8>,
+    /// Harmonia: extra voices at `(interval semitones, level, pan)` on top of
+    /// the played one — an Omnisphere sample layer's (up to four).
+    harmonia: Vec<(f32, f32, f32)>,
+    /// Transpose zones by playback rate (resampling, as Omnisphere and
+    /// Keyscape do) instead of the time-preserving shifter.
+    resample_transpose: bool,
+    /// Timbre Shift (semitones): zones are picked for `note − shift` and
+    /// played at `note`, so a positive shift plays a lower key pitched up.
+    timbre_shift: i32,
+    /// Zone voices' filter envelope: `(ADSR, amount, cutoff Hz)`. `None` or
+    /// amount 0 = no per-voice filter (and no cost).
+    filter_env: Option<(crate::native::AdsrParams, f32, f32)>,
+    /// The voice filter's resonance and key tracking (0..1 each). Key
+    /// tracking alone also switches the voice filter on.
+    filter_res: f32,
+    filter_keytrack: f32,
+    /// Vibrato for zone voices; depth 0 = none.
+    vibrato: voice::Vibrato,
+    /// The pitch wheel's factor and the transpose/fine-tune ratio, applied
+    /// together as the voices' bend.
+    wheel_bend: f64,
+    tune_ratio: f64,
+    /// Modulation on top: a pitch offset (semitones) and the voice filter's
+    /// cutoff offset (octaves), written per block by the mod engine.
+    pitch_mod_st: f32,
+    cutoff_mod_oct: f32,
     /// Unison playback: `(voices, detune cents, stereo width)`. Every zone
     /// trigger spawns `voices` copies spread symmetrically across ±detune/2
     /// cents and panned by `width`, level-compensated 1/√n. `(1, _, _)` = off.
@@ -946,7 +1030,6 @@ pub struct SampleEngine {
 
     /// Reusable scratch for the zoned trigger path so note-on doesn't allocate.
     /// Drained/refilled each note-on via `mem::take` + restore.
-    zone_indices_scratch: Vec<usize>,
     zone_choked_scratch: Vec<u64>,
     zone_capped_scratch: Vec<(u64, usize)>,
 
@@ -975,6 +1058,15 @@ impl SampleEngine {
     ) -> Self {
         let section = section_id.into();
         let mic = mic_id.into();
+        // An NI Essential Piano pack plays through its instrument's script
+        // (Color / Dynamic Range offsets) from load, whichever path built it
+        // — a keys layer or the bank. Anything else plays flat.
+        let piano_voice = if patch.spec.vendor.to_ascii_lowercase().contains("native") {
+            crate::piano_voice::PianoOffsets::for_library(&patch.spec.name)
+                .map(crate::piano_voice::PianoVoice::new)
+        } else {
+            None
+        };
 
         // Default to a playable articulation. Sustain is preferred; if the
         // spec has no Sustain (e.g. Keyscape Rhodes — all samples are
@@ -1054,17 +1146,28 @@ impl SampleEngine {
         // Resolve the latched-CC articulation selector once (control-path
         // lookups stay allocation-free at runtime).
         let latched_cc_selector = patch.spec.latched_cc_selector();
+        let zone_keys = zone_key_index(&patch.spec.zones, ZoneTrigger::Attack);
+        let release_keys = zone_key_index(&patch.spec.zones, ZoneTrigger::Release);
+        let (zone_mic_rank, mic_rank_names) = zone_mic_ranks(&patch.spec.zones);
 
         Self {
+            zone_keys,
+            release_keys,
+            zone_mic_rank,
+            mic_rank_names,
+            zoned_pairs: Vec::with_capacity(64),
+            zoned_idx: Vec::with_capacity(64),
+            zoned_groups: Vec::with_capacity(16),
+            rr_slots_scratch: Vec::with_capacity(32),
             patch,
             cache,
             voices: VoicePool::new(),
             bend_range_st: 2.0,
             rr: RefCell::new(RrCounters::new()),
             sample_rate,
-            section,
+            section: section.into(),
             articulation,
-            mic,
+            mic: mic.into(),
             solo_mic: None,
             keyswitch_notes,
             play_direction: "up".to_string(),
@@ -1094,6 +1197,9 @@ impl SampleEngine {
             note_strike_vel: [0; 128],
             // Keyscape defaults: release -10 dB, mechanical -20 dB, pedal -20 dB.
             release_gain: db_to_gain(-10.0),
+            release_level: 1.0,
+            release_follows_body: false,
+            max_notes: Some(DEFAULT_MAX_NOTES),
             mech_noise_gain: db_to_gain(-20.0),
             pedal_noise_gain: db_to_gain(-20.0),
             no_pedal_articulation: None,
@@ -1108,7 +1214,15 @@ impl SampleEngine {
             sustain_fade_in: None,
             legato_sustain: false,
             legato_trim: false,
-            piano_voice: None,
+            piano_voice,
+            strike: [(0, 0.0); 128],
+            piano_key_cents: piano_voice.map_or([0.0; 128], |pv| {
+                let law = crate::piano_note_law::NoteOnLaw::of(
+                    pv.offsets.piano,
+                    crate::piano_release::Snapshot::Factory,
+                );
+                std::array::from_fn(|k| law.tune_cents(k as u8))
+            }),
             piano_trim_db: 0.0,
             legato_attack_dip_db: 0.0,
             ab_anchor_frame: 0,
@@ -1139,6 +1253,27 @@ impl SampleEngine {
             last_velocity: 90,
             release_frames,
             attack_frames: spec_attack_frames,
+            decay_frames: 0,
+            sustain_level: 1.0,
+            amp_points: None,
+            velocity_sens: None,
+            zone_velocity: None,
+            harmonia: Vec::new(),
+            resample_transpose: false,
+            timbre_shift: 0,
+            filter_env: None,
+            filter_res: 0.0,
+            filter_keytrack: 0.0,
+            vibrato: voice::Vibrato {
+                rate_hz: 5.0,
+                cents: 0.0,
+                delay_frames: 0,
+                sample_rate: sample_rate as f32,
+            },
+            wheel_bend: 1.0,
+            tune_ratio: 1.0,
+            pitch_mod_st: 0.0,
+            cutoff_mod_oct: 0.0,
             unison: (1, 0.0, 0.0),
             zone_rr_counter: 0,
             zone_rr_random_state: 0x9e37_79b9_7f4a_7c15,
@@ -1146,7 +1281,6 @@ impl SampleEngine {
             forced_rr: None,
             spawn_align_lead: None,
             spawn_arrival_override_ms: None,
-            zone_indices_scratch: Vec::with_capacity(32),
             zone_choked_scratch: Vec::with_capacity(16),
             zone_capped_scratch: Vec::with_capacity(16),
             mic_ids,
@@ -1432,7 +1566,7 @@ impl SampleEngine {
 
     /// Switch to a different section. Resets RR counters.
     pub fn set_section(&mut self, section_id: impl Into<String>) {
-        self.section = section_id.into();
+        self.section = section_id.into().into();
         self.rr.borrow_mut().reset();
         self.zone_rr_counter = 0;
         self.zone_rr_last_slots.clear();
@@ -1440,7 +1574,7 @@ impl SampleEngine {
 
     /// Switch to a different microphone position.
     pub fn set_mic(&mut self, mic_id: impl Into<String>) {
-        self.mic = mic_id.into();
+        self.mic = mic_id.into().into();
     }
 
     /// Restrict zoned playback to a single mic. `Some("Mix")` makes only zones
@@ -1452,10 +1586,180 @@ impl SampleEngine {
         self.solo_mic = mic_id.filter(|m| !m.is_empty());
     }
 
+    /// Whether this engine's zones record a mic named `name` (any case).
+    #[must_use]
+    pub fn has_mic(&self, name: &str) -> bool {
+        self.mic_rank_names.iter().any(|m| m.eq_ignore_ascii_case(name))
+    }
+
     /// Attack envelope length in frames for sustained notes (CSS attack
     /// parameter). 0 = the sample's natural attack.
     pub fn set_attack_frames(&mut self, frames: usize) {
         self.attack_frames = frames;
+    }
+
+    /// Decay length in frames for zone voices: after the attack they fall to
+    /// the sustain level over this long. Applies to notes started after it.
+    pub fn set_decay_frames(&mut self, frames: usize) {
+        self.decay_frames = frames;
+    }
+
+    /// Sustain level (0..=1) zone voices decay to and hold at until note-off.
+    /// 1.0 = no decay stage.
+    pub fn set_sustain_level(&mut self, level: f32) {
+        self.sustain_level = level.clamp(0.0, 1.0);
+    }
+
+    /// A breakpoint amplitude envelope for zone voices (notes started
+    /// after), in place of the attack/decay/sustain/release; `None` clears.
+    pub fn set_amp_points(&mut self, bp: Option<crate::native::breakpoints::Breakpoints>) {
+        self.amp_points = bp.map(std::sync::Arc::new);
+    }
+
+    /// Scale zone voices by `1 − s + s·(vel/127)²` (Omnisphere's amp
+    /// velocity law); `None`: velocity only picks the sampled layer.
+    pub fn set_velocity_sens(&mut self, s: Option<f32>) {
+        self.velocity_sens = s.map(|s| s.clamp(0.0, 1.0));
+    }
+
+    /// Transpose zones by resampling (pitch and speed together) instead of
+    /// the time-preserving shifter — how Spectrasonics instruments play.
+    pub fn set_resample_transpose(&mut self, on: bool) {
+        self.resample_transpose = on;
+    }
+
+    /// Harmonia voices `(interval semitones, level, pan)`, up to four.
+    pub fn set_harmonia(&mut self, voices: Vec<(f32, f32, f32)>) {
+        self.harmonia = voices.into_iter().take(4).collect();
+    }
+
+    /// The voice stack a note plays: itself, then its Harmonia voices.
+    pub(crate) fn harmonia_stack(&self) -> ([(f32, f32, f32); 5], usize) {
+        let mut out = [(0.0, 1.0, 0.0); 5];
+        for (slot, v) in out[1..].iter_mut().zip(&self.harmonia) {
+            *slot = *v;
+        }
+        (out, 1 + self.harmonia.len())
+    }
+
+    /// Timbre Shift in semitones (see the field); 0 is off.
+    pub fn set_timbre_shift(&mut self, semis: i32) {
+        self.timbre_shift = semis.clamp(-48, 48);
+    }
+
+    /// Pin zone selection to one velocity (one dynamic layer); `None`: the
+    /// played velocity.
+    pub fn set_zone_velocity(&mut self, v: Option<u8>) {
+        self.zone_velocity = v.map(|v| v.clamp(1, 127));
+    }
+
+    /// The zone voices' filter envelope: each new note gets its own ADSR and
+    /// lowpass (see `voice::VoiceFilter`), `amount` in -1..=1 against the
+    /// layer's cutoff `cutoff_hz`. Notes already held follow a new cutoff and
+    /// amount at once; the ADSR applies to notes started after. `amount == 0`
+    /// switches it off.
+    pub fn set_filter_env(
+        &mut self,
+        params: crate::native::AdsrParams,
+        amount: f32,
+        cutoff_hz: f32,
+    ) {
+        self.set_voice_filter(
+            params,
+            amount,
+            cutoff_hz,
+            self.filter_res,
+            self.filter_keytrack,
+        );
+    }
+
+    /// The zone voices' own filter, in full: its envelope and amount, the
+    /// cutoff it works under, resonance and key tracking. It is on when the
+    /// amount or the key tracking is — then it is the layer's filter (the
+    /// caller opens the module's shared one) — and off (no cost) otherwise.
+    /// Held notes follow the cutoff, amount and resonance at once.
+    pub fn set_voice_filter(
+        &mut self,
+        params: crate::native::AdsrParams,
+        amount: f32,
+        cutoff_hz: f32,
+        resonance: f32,
+        keytrack: f32,
+    ) {
+        let amount = amount.clamp(-1.0, 1.0);
+        self.filter_res = resonance.clamp(0.0, 1.0);
+        self.filter_keytrack = keytrack.clamp(0.0, 1.0);
+        self.filter_env =
+            (amount != 0.0 || self.filter_keytrack > 0.0).then_some((params, amount, cutoff_hz));
+        let (res, base) = (self.filter_res, cutoff_hz * self.cutoff_mod_oct.exp2());
+        for v in self.voices.voices_mut() {
+            v.set_filter_base(base, amount, res);
+        }
+    }
+
+    /// Whether zone voices carry their own filter (see `set_voice_filter`).
+    #[must_use]
+    pub fn voice_filter_on(&self) -> bool {
+        self.filter_env.is_some()
+    }
+
+    fn new_voice_filter(&self, note: u8) -> Option<voice::VoiceFilter> {
+        self.filter_env.map(|(params, amount, hz)| {
+            let hz = hz * self.cutoff_mod_oct.exp2();
+            voice::VoiceFilter::new(self.sample_rate as f32, params, amount, hz)
+                .with_resonance(self.filter_res)
+                .with_keytrack(self.filter_keytrack, note)
+        })
+    }
+
+    /// Vibrato on zone voices: `rate_hz`, `depth` 0..1 (up to 50 cents),
+    /// starting `delay_ms` after each note. Held notes take the new rate and
+    /// depth at once.
+    pub fn set_vibrato(&mut self, rate_hz: f32, depth: f32, delay_ms: f32) {
+        self.vibrato = voice::Vibrato {
+            rate_hz: rate_hz.clamp(0.05, 20.0),
+            cents: depth.clamp(0.0, 1.0) * 50.0,
+            delay_frames: (delay_ms.max(0.0) / 1000.0 * self.sample_rate as f32) as u32,
+            sample_rate: self.sample_rate as f32,
+        };
+        let vib = self.vibrato;
+        for v in self.voices.voices_mut() {
+            v.set_vibrato(vib);
+        }
+    }
+
+    /// Transpose (semitones) plus fine tune (cents) for every voice, sounding
+    /// and new, on top of the pitch wheel.
+    pub fn set_tune(&mut self, semitones: f32, cents: f32) {
+        self.tune_ratio = 2f64.powf(f64::from(semitones * 100.0 + cents) / 1200.0);
+        self.apply_bend();
+    }
+
+    /// A modulation pitch offset in semitones (an LFO or Mod Env routed to
+    /// pitch), on every voice.
+    pub fn set_pitch_mod(&mut self, semitones: f32) {
+        if (semitones - self.pitch_mod_st).abs() > 1e-5 {
+            self.pitch_mod_st = semitones;
+            self.apply_bend();
+        }
+    }
+
+    /// A modulation offset in octaves on the voices' own filter cutoff.
+    pub fn set_cutoff_mod(&mut self, octaves: f32) {
+        if (octaves - self.cutoff_mod_oct).abs() > 1e-5 {
+            self.cutoff_mod_oct = octaves;
+            if let Some((_, amount, hz)) = self.filter_env {
+                let (res, base) = (self.filter_res, hz * octaves.exp2());
+                for v in self.voices.voices_mut() {
+                    v.set_filter_base(base, amount, res);
+                }
+            }
+        }
+    }
+
+    fn apply_bend(&mut self) {
+        let m = 2f64.powf(f64::from(self.pitch_mod_st) / 12.0);
+        self.voices.set_bend(self.wheel_bend * self.tune_ratio * m);
     }
 
     /// Release fade length in frames on note-off (CSS release parameter); the
@@ -1476,7 +1780,8 @@ impl SampleEngine {
         }
         let norm = ((raw as f64 - 8192.0) / 8192.0).clamp(-1.0, 1.0);
         let factor = 2f64.powf(norm * self.bend_range_st as f64 / 12.0);
-        self.voices.set_bend(factor);
+        self.wheel_bend = factor;
+        self.apply_bend();
     }
 
     /// Pitch-bend range in semitones (full wheel throw; default 2).
@@ -1491,6 +1796,31 @@ impl SampleEngine {
     /// derives them from a pack name. `None` restores plain behaviour.
     pub fn set_piano_voice(&mut self, voice: Option<crate::piano_voice::PianoVoice>) {
         self.piano_voice = voice;
+        self.piano_key_cents = voice.map_or([0.0; 128], |pv| {
+            let law = crate::piano_note_law::NoteOnLaw::of(
+                    pv.offsets.piano,
+                    crate::piano_release::Snapshot::Factory,
+                );
+            std::array::from_fn(|k| law.tune_cents(k as u8))
+        });
+    }
+
+    /// Polyphony in notes (≥ 1); a new note past it steals the stalest.
+    pub fn set_max_notes(&mut self, n: Option<usize>) {
+        self.max_notes = n.map(|n| n.max(1));
+    }
+
+    /// Shed voices under CPU pressure — see [`VoicePool::shed`].
+    pub fn shed_voices(&mut self, level: u8) {
+        self.voices.shed(level);
+    }
+
+    /// Play the NI piano with a saved snapshot of its controls (a gig's —
+    /// see [`crate::piano_release::Snapshot`]); nothing for another engine.
+    pub fn set_piano_snapshot(&mut self, snapshot: crate::piano_release::Snapshot) {
+        if let Some(pv) = self.piano_voice.as_mut() {
+            pv.snapshot = snapshot;
+        }
     }
 
     /// The piano controls in force, if any.
@@ -1655,6 +1985,16 @@ impl SampleEngine {
     pub fn set_release_gain_db(&mut self, db: f32) {
         self.release_gain = db_to_gain(db.clamp(-60.0, 0.0));
     }
+    /// Level of the key-up release voices, dB (`None` = no releases at all):
+    /// an Omnisphere layer's soundsource Release Volume.
+    pub fn set_release_level_db(&mut self, db: Option<f32>) {
+        self.release_level = db.map_or(0.0, db_to_gain);
+        // Omnisphere's release follows the body it ends: measured on the
+        // gig's Hammered Dolceola, a key-up after a 2 s hold (body ~15 dB
+        // down) releases ~15 dB quieter than one after 0.5 s.
+        self.release_follows_body = true;
+    }
+
     /// Mechanical pedal-noise level, dB (Keyscape default -20).
     pub fn set_mech_noise_gain_db(&mut self, db: f32) {
         self.mech_noise_gain = db_to_gain(db.clamp(-60.0, 6.0));
@@ -2098,10 +2438,18 @@ pub(crate) fn steady_loop_region_cached(
     let key = (Arc::as_ptr(data) as usize, lo, hi, min_len);
     // `try_lock`, never `lock`: this runs on the audio thread, and losing the
     // race to the worker costs one fallback note, not a dropout. The worker
-    // holds it only long enough to insert.
-    let Ok(mut guard) = LOOP_REGIONS.try_lock() else {
-        return None;
-    };
+    // holds it only long enough to insert. Lanes render on several threads,
+    // so a sibling lane may hold it for its own lookup — a few retries ride
+    // that out rather than give its note the fallback.
+    let mut guard = None;
+    for _ in 0..64 {
+        if let Ok(g) = LOOP_REGIONS.try_lock() {
+            guard = Some(g);
+            break;
+        }
+        std::hint::spin_loop();
+    }
+    let mut guard = guard?;
     let map = guard.get_or_insert_with(HashMap::new);
     match map.get(&key) {
         Some(LoopScan::Done(found)) => *found,
@@ -2259,50 +2607,75 @@ fn push_unique_group_limit(values: &mut Vec<(u64, usize)>, group: u64, limit: us
     }
 }
 
+/// Whether `s`, trimmed, is one of `keys` ignoring ASCII case — the zone
+/// labels' matching, without lowercasing into a new string: these run per
+/// zone per note on the audio thread, where an allocation is a spike.
+fn is_one_of(s: &str, keys: &[&str]) -> bool {
+    let t = s.trim();
+    keys.iter().any(|k| t.eq_ignore_ascii_case(k))
+}
+
 fn zone_is_one_shot(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.trigger_mode.trim().to_ascii_lowercase().as_str(),
-        "one-shot" | "one_shot" | "oneshot"
-    )
+    is_one_of(&zone.trigger_mode, &["one-shot", "one_shot", "oneshot"])
 }
 
 fn zone_is_release_trigger(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.trigger_mode.trim().to_ascii_lowercase().as_str(),
-        "release" | "note-release" | "note_release" | "key-up" | "key_up"
+    is_one_of(
+        &zone.trigger_mode,
+        &[
+            "release",
+            "note-release",
+            "note_release",
+            "key-up",
+            "key_up",
+        ],
     )
 }
 
 fn zone_is_pedal_down_trigger(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.trigger_mode.trim().to_ascii_lowercase().as_str(),
-        "pedal-down" | "pedal_down" | "pedaldown" | "sustain-down" | "sustain_down"
+    is_one_of(
+        &zone.trigger_mode,
+        &[
+            "pedal-down",
+            "pedal_down",
+            "pedaldown",
+            "sustain-down",
+            "sustain_down",
+        ],
     )
 }
 
 fn zone_is_pedal_up_trigger(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.trigger_mode.trim().to_ascii_lowercase().as_str(),
-        "pedal-up" | "pedal_up" | "pedalup" | "sustain-up" | "sustain_up"
+    is_one_of(
+        &zone.trigger_mode,
+        &[
+            "pedal-up",
+            "pedal_up",
+            "pedalup",
+            "sustain-up",
+            "sustain_up",
+        ],
     )
 }
 
 fn zone_is_cc_trigger(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.trigger_mode.trim().to_ascii_lowercase().as_str(),
-        "cc" | "cc-threshold" | "cc_threshold" | "controller"
+    is_one_of(
+        &zone.trigger_mode,
+        &["cc", "cc-threshold", "cc_threshold", "controller"],
     )
 }
 
 fn zone_is_aftertouch_trigger(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.trigger_mode.trim().to_ascii_lowercase().as_str(),
-        "aftertouch"
-            | "channel-aftertouch"
-            | "channel_aftertouch"
-            | "poly-aftertouch"
-            | "poly_aftertouch"
-            | "pressure"
+    is_one_of(
+        &zone.trigger_mode,
+        &[
+            "aftertouch",
+            "channel-aftertouch",
+            "channel_aftertouch",
+            "poly-aftertouch",
+            "poly_aftertouch",
+            "pressure",
+        ],
     )
 }
 
@@ -2367,6 +2740,34 @@ fn spec_is_percussion(spec: &crate::spec::LibrarySpec) -> bool {
     PERC.iter().any(|p| inst.contains(p))
 }
 
+/// Each zone's mic rank among the sorted distinct mic names, and the names
+/// (see `SampleEngine::zone_mic_rank`).
+fn zone_mic_ranks(zones: &[crate::spec::ZoneSpec]) -> (Box<[u16]>, Box<[String]>) {
+    let mut names: Vec<String> = zones.iter().map(|z| z.mic.clone()).collect();
+    names.sort();
+    names.dedup();
+    let ranks = zones
+        .iter()
+        .map(|z| names.binary_search(&z.mic).map_or(0, |i| i as u16))
+        .collect();
+    (ranks, names.into_boxed_slice())
+}
+
+/// For each key, the `trigger` zones covering it, in zone order (see
+/// `SampleEngine::zone_keys`).
+fn zone_key_index(zones: &[crate::spec::ZoneSpec], trigger: ZoneTrigger) -> Box<[Box<[u32]>]> {
+    let mut keys: Vec<Vec<u32>> = vec![Vec::new(); 128];
+    for (i, z) in zones.iter().enumerate() {
+        if !zone_trigger_matches(z, trigger) {
+            continue;
+        }
+        for k in z.key_min..=z.key_max.min(127) {
+            keys[k as usize].push(i as u32);
+        }
+    }
+    keys.into_iter().map(Vec::into_boxed_slice).collect()
+}
+
 fn zone_trigger_matches(zone: &crate::spec::ZoneSpec, trigger: ZoneTrigger) -> bool {
     match trigger {
         ZoneTrigger::Attack => {
@@ -2385,9 +2786,9 @@ fn zone_trigger_matches(zone: &crate::spec::ZoneSpec, trigger: ZoneTrigger) -> b
 }
 
 fn zone_is_alternating_loop(zone: &crate::spec::ZoneSpec) -> bool {
-    matches!(
-        zone.playback_mode.trim().to_ascii_lowercase().as_str(),
-        "alternate" | "alternating" | "ping-pong" | "ping_pong"
+    is_one_of(
+        &zone.playback_mode,
+        &["alternate", "alternating", "ping-pong", "ping_pong"],
     )
 }
 
@@ -2420,12 +2821,12 @@ fn select_zone_rr_slot(
     last_slot: Option<u32>,
     random_state: &mut u64,
     forced: Option<u32>,
+    rr_slots: &mut Vec<u32>,
 ) -> u32 {
     debug_assert!(!indices.is_empty());
-    let mut rr_slots = indices
-        .iter()
-        .map(|&idx| zones[idx].rr_index)
-        .collect::<Vec<_>>();
+    // A reused buffer: this runs per note on the audio thread.
+    rr_slots.clear();
+    rr_slots.extend(indices.iter().map(|&idx| zones[idx].rr_index));
     rr_slots.sort_unstable();
     rr_slots.dedup();
     if rr_slots.len() == 1 {
@@ -2438,8 +2839,19 @@ fn select_zone_rr_slot(
         return rr_slots[(f as usize) % rr_slots.len()];
     }
 
-    let mode = zones[indices[0]].rr_mode.trim().to_ascii_lowercase();
-    match mode.as_str() {
+    // Matched without lowercasing into a new string: this runs per note.
+    let raw = zones[indices[0]].rr_mode.trim();
+    let mode = [
+        "random",
+        "no-repeat-random",
+        "no_repeat_random",
+        "norepeat",
+        "no-repeat",
+    ]
+    .into_iter()
+    .find(|k| raw.eq_ignore_ascii_case(k))
+    .unwrap_or("");
+    match mode {
         "random" => rr_slots[next_zone_random(random_state) % rr_slots.len()],
         "no-repeat-random" | "no_repeat_random" | "norepeat" | "no-repeat" => {
             let mut slot = rr_slots[next_zone_random(random_state) % rr_slots.len()];
