@@ -216,6 +216,36 @@ const DEFAULT_SONGS: &str = include_str!("../default-config/songs.styx");
 const DEFAULT_SETLISTS: &str = include_str!("../default-config/setlists.styx");
 const DEFAULT_MIDI: &str = include_str!("../default-config/midi.styx");
 const DEFAULT_KEYMAP: &str = include_str!("../default-config/keymap.styx");
+// The composition libraries a shipped profile is built from (the Blues
+// profile's "John Mayer" Core, its Time module, its blocks).
+const DEFAULT_MODULES: &str = include_str!("../default-config/modules.styx");
+const DEFAULT_PRESETS: &str = include_str!("../default-config/presets.styx");
+const DEFAULT_BLOCKS: &str = include_str!("../default-config/blocks.styx");
+
+/// The profiles the app ships (`profiles/<file>`), seeded into a library
+/// that has never had them — see [`seed_profiles`].
+const DEFAULT_PROFILES: &[(&str, &str)] = &[
+    ("blues.styx", include_str!("../default-config/profiles/blues.styx")),
+    ("worship.styx", include_str!("../default-config/profiles/worship.styx")),
+];
+
+/// The profile a rig plays when nothing has chosen one (and the one a
+/// library that newly gains it switches to, once).
+pub const DEFAULT_PROFILE_NAME: &str = "Blues";
+
+/// The shipped Cores frozen into NAM captures (rig-dir-relative
+/// `frozen/<name>`, see `crate::freeze`): with them a shipped profile plays
+/// without a download.
+const DEFAULT_FROZEN: &[(&str, &[u8])] = &[
+    ("john-mayer--dumble-L.nam", include_bytes!("../default-config/frozen/john-mayer--dumble-L.nam")),
+    ("john-mayer--dumble-klon-L.nam", include_bytes!("../default-config/frozen/john-mayer--dumble-klon-L.nam")),
+    ("john-mayer--stereo-L.nam", include_bytes!("../default-config/frozen/john-mayer--stereo-L.nam")),
+    ("john-mayer--stereo-stack-L.nam", include_bytes!("../default-config/frozen/john-mayer--stereo-stack-L.nam")),
+    ("john-mayer--trio-L.nam", include_bytes!("../default-config/frozen/john-mayer--trio-L.nam")),
+    ("john-mayer--two-rock-L.nam", include_bytes!("../default-config/frozen/john-mayer--two-rock-L.nam")),
+    ("john-mayer--two-rock-screamer-L.nam", include_bytes!("../default-config/frozen/john-mayer--two-rock-screamer-L.nam")),
+    ("john-mayer--vibroverb-L.nam", include_bytes!("../default-config/frozen/john-mayer--vibroverb-L.nam")),
+];
 
 /// The NAM captures the default config references (rig-dir-relative
 /// `models/<name>`), embedded for first-run seeding.
@@ -270,20 +300,25 @@ const DEFAULT_MODELS: &[(&str, &[u8])] = &[
 
 /// Write any default NAM model missing from `<rig_dir>/models/`.
 fn seed_models() {
-    let dir = rig_dir().join("models");
-    for (name, bytes) in DEFAULT_MODELS {
+    seed_files(&rig_dir().join("models"), DEFAULT_MODELS);
+    seed_files(&rig_dir().join("frozen"), DEFAULT_FROZEN);
+}
+
+/// Write each `(name, bytes)` into `dir` unless it is there already.
+fn seed_files(dir: &std::path::Path, files: &[(&str, &[u8])]) {
+    for (name, bytes) in files {
         let path = dir.join(name);
         if path.exists() {
             continue;
         }
-        if let Err(e) = std::fs::create_dir_all(&dir) {
+        if let Err(e) = std::fs::create_dir_all(dir) {
             tracing::warn!("rig library: cannot create {}: {e}", dir.display());
             return;
         }
         if let Err(e) = std::fs::write(&path, bytes) {
-            tracing::warn!("rig library: seed model {name} failed: {e}");
+            tracing::warn!("rig library: seed {name} failed: {e}");
         } else {
-            tracing::info!("rig library: seeded model {name}");
+            tracing::info!("rig library: seeded {name}");
         }
     }
 }
@@ -453,6 +488,56 @@ fn load_profiles(store: &StyxDir) -> Vec<ProfileDef> {
     profiles
 }
 
+/// The shipped profiles a library has been given, by name, one a line in
+/// `profiles/.seeded`: a shipped profile is seeded once, so one the player
+/// deletes stays deleted.
+const SEEDED_MARKER: &str = ".seeded";
+
+/// Add each shipped profile (`DEFAULT_PROFILES`) the library has never had
+/// — a fresh install, or one from before it shipped — to `profiles` and to
+/// `profiles/`. Whether [`DEFAULT_PROFILE_NAME`] was among them.
+fn seed_profiles(profiles: &mut Vec<ProfileDef>) -> bool {
+    let dir = profiles_store();
+    let marker = dir.dir().join(SEEDED_MARKER);
+    let mut seeded: Vec<String> = std::fs::read_to_string(&marker)
+        .map(|t| t.lines().map(str::to_string).collect())
+        .unwrap_or_default();
+    let mut gained_default = false;
+    let mut changed = false;
+    for (file, text) in DEFAULT_PROFILES {
+        let def: ProfileDef = match facet_styx::from_str(text) {
+            Ok(def) => def,
+            Err(e) => {
+                tracing::warn!(file, error = %e, "rig library: shipped profile does not parse");
+                continue;
+            }
+        };
+        let had = seeded.iter().any(|n| n.eq_ignore_ascii_case(&def.name));
+        let present = profiles.iter().any(|p| p.name.eq_ignore_ascii_case(&def.name));
+        if !had {
+            seeded.push(def.name.clone());
+            changed = true;
+        }
+        if had || present {
+            continue;
+        }
+        if writable_store().is_some() {
+            config_watch::write_guarded(&dir.dir().join(file), &def);
+        }
+        tracing::info!(profile = %def.name, "rig library: seeded shipped profile");
+        gained_default |= def.name.eq_ignore_ascii_case(DEFAULT_PROFILE_NAME);
+        profiles.push(def);
+    }
+    if changed && writable_store().is_some() {
+        let _ = std::fs::create_dir_all(dir.dir());
+        if let Err(e) = std::fs::write(&marker, seeded.join("\n") + "\n") {
+            tracing::warn!("rig library: cannot write {}: {e}", marker.display());
+        }
+    }
+    profiles.sort_by_key(|p| p.name.to_lowercase());
+    gained_default
+}
+
 /// Write `profile` (its own patches only) to `profiles/<file>.styx`.
 fn save_profile_file(store: &StyxDir, mut profile: ProfileDef) {
     for preset in &mut profile.presets {
@@ -472,6 +557,7 @@ impl RigLibrary {
         seed_models();
         let store = store();
         let mut profiles = load_profiles(&store);
+        let gained_default = seed_profiles(&mut profiles);
         Self::split_core_once(&store, &mut profiles);
         let mut drive_presets =
             read_or_seed::<DrivePresetLib>(&store, "drive-presets.styx", DEFAULT_DRIVE_PRESETS, || {
@@ -502,9 +588,13 @@ impl RigLibrary {
             }
             attach_song_patches(profile, &songs);
         }
+        // The profile last played; the default when none was, or when the
+        // library has just gained it (once — an install from before it
+        // shipped opens on it the first time, then remembers the choice).
         let wanted = Self::load_last_state()
             .map(|s| s.profile)
-            .unwrap_or_default();
+            .filter(|p| !p.is_empty() && !gained_default)
+            .unwrap_or_else(|| DEFAULT_PROFILE_NAME.to_string());
         let profile = profiles
             .iter()
             .find(|p| p.name.eq_ignore_ascii_case(&wanted))
@@ -578,11 +668,22 @@ impl RigLibrary {
     fn read_compositions(
         last_good: Option<&crate::compose::Compositions>,
     ) -> crate::compose::Compositions {
-        fn one<T: for<'a> Facet<'a> + Default>(file: &str) -> Result<T, ()> {
+        fn one<T: for<'a> Facet<'a> + Default>(file: &str, seed: &str) -> Result<T, ()> {
             let path = rig_dir().join(file);
             match config_watch::read_tracked::<T>(&path) {
                 Read::Ok(v) => Ok(v),
-                Read::Missing => Ok(T::default()),
+                // A library that has never had it gets the shipped one:
+                // without it a shipped profile's composed patches resolve
+                // to nothing (written where this run may write).
+                Read::Missing => {
+                    if writable_store().is_some() {
+                        let _ = std::fs::create_dir_all(rig_dir());
+                        if let Err(e) = std::fs::write(&path, seed) {
+                            tracing::warn!("rig library: seed {file} failed: {e}");
+                        }
+                    }
+                    Ok(facet_styx::from_str(seed).unwrap_or_default())
+                }
                 Read::Bad(e) => {
                     report_bad(&path, &e);
                     Err(())
@@ -591,7 +692,7 @@ impl RigLibrary {
         }
         let store = store();
         let modules =
-            one::<crate::compose::ModuleLib>(crate::compose::MODULES_FILE).map(|l| l.presets);
+            one::<crate::compose::ModuleLib>(crate::compose::MODULES_FILE, DEFAULT_MODULES).map(|l| l.presets);
         let fresh_modules = modules.is_ok();
         let mut modules =
             modules.unwrap_or_else(|()| last_good.map(|c| c.modules.clone()).unwrap_or_default());
@@ -603,10 +704,10 @@ impl RigLibrary {
                 }
             }
         }
-        let presets = one::<crate::compose::PresetLib>(crate::compose::PRESETS_FILE)
+        let presets = one::<crate::compose::PresetLib>(crate::compose::PRESETS_FILE, DEFAULT_PRESETS)
             .map(|l| l.presets)
             .unwrap_or_else(|()| last_good.map(|c| c.presets.clone()).unwrap_or_default());
-        let blocks = one::<crate::compose::BlockLib>(crate::compose::BLOCKS_FILE)
+        let blocks = one::<crate::compose::BlockLib>(crate::compose::BLOCKS_FILE, DEFAULT_BLOCKS)
             .map(|l| l.presets)
             .unwrap_or_else(|()| last_good.map(|c| c.blocks.clone()).unwrap_or_default());
         crate::compose::Compositions {

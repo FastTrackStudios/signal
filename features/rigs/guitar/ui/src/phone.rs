@@ -197,6 +197,13 @@ pub struct PhoneHost {
 #[derive(Clone, Copy)]
 pub struct IslandLeft(pub Signal<bool>);
 
+/// How much of the screen's foot the home indicator takes, in points. The
+/// iOS shell lays the page out to the bottom edge and provides this: the
+/// bottom line's background runs under the indicator, its controls above
+/// it. Without it (a desktop, Android) the line is just its own height.
+#[derive(Clone, Copy)]
+pub struct BottomInset(pub Signal<f64>);
+
 /// The phone's rig surface: the patch along the top, the rail down the
 /// left (Control, Switch, Edit; Profile or Song), and the view — in
 /// Control, a page of the chain over the chain itself.
@@ -214,6 +221,8 @@ pub fn PhoneControl(
     // The housing's clearance: the rail moves out from under it on the
     // left; on the right the view keeps clear of it itself.
     let (lead, trail) = if island_left { (HOUSING, 0) } else { (0, HOUSING) };
+    let foot = try_use_context::<BottomInset>().map_or(0.0, |s| (s.0)()).max(0.0);
+    let bottom_line = f64::from(LINE_H) + foot;
     // `FTS_PHONE_PAGE=<slug>`: open on that page (the shot tool renders
     // every page at once, an app each).
     let mut page = use_signal(|| {
@@ -308,23 +317,6 @@ pub fn PhoneControl(
         // under the camera housing on the right, and what sits beside it
         // keeps clear itself.
         div { style: "width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; padding-left: {lead}px; background: #0f1012; color: {TEXT};",
-            // ── The top line: the patch, where you are, its modules ──
-            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
-                PatchStepper { revision: model.revision }
-                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {title_color}; white-space: nowrap;",
-                    "{title}"
-                }
-                div { style: "flex: 1 1 0%;" }
-                AudioBadge { running: (state.running)(), error: (state.audio_error)() }
-                for (kind, module) in modules {
-                    div { key: "{module}", style: "flex: 0 1 200px; min-width: 0; height: 30px; display: flex;",
-                        ModuleControls { kind, pick: pick_of(module), modules: all_modules.clone(), edited: edited.clone(), style: "width: 100%; height: 100%;" }
-                    }
-                }
-                if mode() == Mode::Control && page().home() == Home::Core {
-                    div { style: "flex: 0 0 110px;", crate::face_chrome::CoreFreeze {} }
-                }
-            }
             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;",
                 // ── The rail ──
                 div { style: "flex: 0 0 {RAIL_W}px; display: flex; flex-direction: column; justify-content: center; gap: 2px; background: {BAR_BG}; border-right: 1px solid {RULE};",
@@ -345,12 +337,10 @@ pub fn PhoneControl(
                 div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
                     match mode() {
                         Mode::Control => rsx! {
-                            div { style: "flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
-                                PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm }
-                            }
-                            // The chain: a segment a page, coloured by
-                            // where it sits, the one up lit.
-                            div { style: "flex: 0 0 30px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 4px; background: {BAR_BG}; border-top: 1px solid {RULE};",
+                            // The chain, along the top (tapped most, so away
+                            // from the home indicator): a segment a page,
+                            // coloured by where it sits, the one up lit.
+                            div { style: "flex: 0 0 34px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 4px {CORNER}px 4px 4px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
                                 for p in Page::ALL {
                                     {
                                         let on = page() == p;
@@ -366,6 +356,9 @@ pub fn PhoneControl(
                                     }
                                 }
                             }
+                            div { style: "flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
+                                PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm }
+                            }
                         },
                         Mode::Switch => rsx! {
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; box-sizing: border-box; padding: 6px {trail}px 6px 6px;",
@@ -380,11 +373,32 @@ pub fn PhoneControl(
                     }
                 }
             }
+            // ── The bottom line: the patch at the left, where you are and
+            // the audio in the middle, the page's modules at the right — the
+            // controls out at the sides, clear of the home indicator, which
+            // only the indicators sit near ──
+            div { style: "flex: 0 0 {bottom_line}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px {foot}px; background: {BAR_BG}; border-top: 1px solid {RULE}; min-width: 0;",
+                PatchStepper { revision: model.revision }
+                div { style: "flex: 1 1 0%;" }
+                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {title_color}; white-space: nowrap;",
+                    "{title}"
+                }
+                AudioBadge { running: (state.running)(), error: (state.audio_error)() }
+                div { style: "flex: 1 1 0%;" }
+                for (kind, module) in modules {
+                    div { key: "{module}", style: "flex: 0 1 200px; min-width: 0; height: 30px; display: flex;",
+                        ModuleControls { kind, pick: pick_of(module), modules: all_modules.clone(), edited: edited.clone(), style: "width: 100%; height: 100%;" }
+                    }
+                }
+                if mode() == Mode::Control && page().home() == Home::Core {
+                    div { style: "flex: 0 0 110px;", crate::face_chrome::CoreFreeze {} }
+                }
+            }
         }
     }
 }
 
-/// Whether the audio is running, small, in the top line: the surface works
+/// Whether the audio is running, small, in the bottom line: the surface works
 /// without it (a phone with no interface plugged in plays nothing, but every
 /// patch and page is there to edit). Tap for Audio settings.
 #[component]

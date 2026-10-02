@@ -34,8 +34,15 @@ signal_app_plist() {
     $pb -c "Add :UIBackgroundModes array" "$plist"
     $pb -c "Add :UIBackgroundModes:0 string audio" "$plist"
 
-    # The app rotates per screen at runtime (ios_orientation.rs), so the
-    # orientations stay dx's superset (portrait and landscape).
+    # Landscape only, either way round: the whole app is laid out for a
+    # phone on its side (the rig's pages, the rail, the bars).
+    for key in UISupportedInterfaceOrientations "UISupportedInterfaceOrientations~ipad"; do
+        $pb -c "Delete :$key" "$plist" 2>/dev/null || true
+        $pb -c "Add :$key array" \
+            -c "Add :$key:0 string UIInterfaceOrientationLandscapeLeft" \
+            -c "Add :$key:1 string UIInterfaceOrientationLandscapeRight" \
+            "$plist"
+    done
     $pb -c "Add :NSMicrophoneUsageDescription string 'Processes your guitar signal from the connected audio interface or microphone.'" "$plist" 2>/dev/null || true
     # Local network: pack downloads dial the studio engine peer-to-peer
     # (iroh direct paths / LAN WebSocket); without this key iOS silently

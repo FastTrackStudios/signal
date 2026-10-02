@@ -20,7 +20,7 @@
 #[cfg(feature = "signal-keys-rig")]
 use crate::keys_view;
 use dioxus::prelude::*;
-use signal_guitar_ui::{GuitarRigRemote, IslandLeft, PhoneHost, WindowAspect, WindowSize};
+use signal_guitar_ui::{BottomInset, GuitarRigRemote, IslandLeft, PhoneHost, WindowAspect, WindowSize};
 
 use crate::rigs::{Rig, RigMenu};
 
@@ -82,6 +82,9 @@ pub fn MobileApp() -> Element {
     let mut size = use_context_provider(|| WindowSize(Signal::new((402.0, 874.0))));
     let mut aspect = use_context_provider(|| WindowAspect(Signal::new(402.0 / 874.0)));
     let mut island = use_context_provider(|| IslandLeft(Signal::new(false)));
+    // The home indicator's strip: the page is drawn to the bottom edge
+    // (`BLITZ_SAFE_AREA_BOTTOM=0`) and the rig's bottom bar grows by it.
+    let mut foot = use_context_provider(|| BottomInset(Signal::new(0.0)));
     use_future(move || {
         let window = window.clone();
         async move {
@@ -95,6 +98,10 @@ pub fn MobileApp() -> Element {
                         size.0.set(pt);
                         aspect.0.set(pt.0 / pt.1);
                     }
+                }
+                let bottom = f64::from(window.safe_area().bottom) / window.scale_factor().max(0.1);
+                if (*foot.0.peek() - bottom).abs() > 0.5 {
+                    foot.0.set(bottom);
                 }
                 let left = crate::ios_scene::island_on_left() == Some(true);
                 if *island.0.peek() != left {
@@ -173,10 +180,9 @@ fn Router() -> Element {
     }
 }
 
-/// The front door: the shared instrument menu, portrait, phone layout.
+/// The front door: the shared instrument menu, phone layout.
 #[component]
 fn MenuPage(on_pick: EventHandler<Rig>) -> Element {
-    use_hook(crate::ios_orientation::portrait);
     rsx! {
         div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto;",
             RigMenu { phone: true, on_pick }
@@ -184,12 +190,11 @@ fn MenuPage(on_pick: EventHandler<Rig>) -> Element {
     }
 }
 
-/// The guitar rig, held sideways: the shared remote, which lays itself out
-/// for the phone (frame's phone faces, a page at a time). Its rail's Rigs
-/// button comes back here.
+/// The guitar rig: the shared remote, which lays itself out for the phone
+/// (frame's phone faces, a page at a time). Its rail's Rigs button comes
+/// back here.
 #[component]
 fn GuitarPage(on_home: EventHandler<()>) -> Element {
-    use_hook(crate::ios_orientation::landscape);
     use_context_provider(|| PhoneHost {
         on_home: Callback::new(move |()| on_home.call(())),
     });

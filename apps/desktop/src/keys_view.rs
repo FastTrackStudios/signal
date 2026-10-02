@@ -57,12 +57,11 @@ fn sync_keep_awake(downloads: &HashMap<String, DlState>) {
     let _ = active;
 }
 
-/// The keys shell: tab bar + page, portrait.
+/// The keys shell: tab bar + page.
 #[component]
 pub fn KeysShell(on_home: EventHandler<()>) -> Element {
     #[cfg(target_os = "ios")]
     use_hook(|| {
-        crate::ios_orientation::portrait();
         // Raise the Local Network prompt before the first p2p dial —
         // without it iOS silently drops LAN traffic and every transfer
         // crawls through the relays.

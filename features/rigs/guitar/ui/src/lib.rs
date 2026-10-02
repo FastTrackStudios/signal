@@ -52,7 +52,7 @@ mod wire_param;
 pub use chain::ChainStrip;
 pub use comp_surface::CompSurface;
 pub use control::{ControlView, FormFactor, MidiIndicator, WindowAspect, WindowSize, ZoomPanel};
-pub use phone::{IslandLeft, PhoneHost};
+pub use phone::{BottomInset, IslandLeft, PhoneHost};
 pub use grid::RigGraph;
 pub use icons::module_icon;
 pub use library::{Kind as LibraryKind, LibraryPicker};

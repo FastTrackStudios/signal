@@ -136,6 +136,9 @@ fn main() {
     // SAFETY: first thing in main, before any thread starts.
     unsafe {
         std::env::set_var("BLITZ_SAFE_AREA_SIDES", "0");
+        // And to the bottom edge: the rig's bottom bar reaches it, keeping
+        // its controls above the home indicator itself (`BottomInset`).
+        std::env::set_var("BLITZ_SAFE_AREA_BOTTOM", "0");
     }
     // Before anything starts audio: a backgrounded rig must not be throttled
     // (it xran whenever another app had focus).
@@ -475,12 +478,15 @@ fn launch_app() {
 /// (a phone held sideways has no room for it).
 #[cfg(target_os = "ios")]
 fn launch_app() {
-    use dioxus_native::winit::platform::ios::WindowAttributesIos;
+    use dioxus_native::winit::platform::ios::{ValidOrientations, WindowAttributesIos};
     use dioxus_native::{Config, WindowAttributes, launch_cfg};
     // Before UIKit looks the delegate up by the name Info.plist gives it.
     ios_scene::register();
     let window = WindowAttributes::default().with_title("Signal").with_platform_attributes(Box::new(
-        WindowAttributesIos::default().with_prefers_status_bar_hidden(true),
+        WindowAttributesIos::default()
+            .with_prefers_status_bar_hidden(true)
+            // Landscape only, as Info.plist says (ios/app-plist.sh).
+            .with_valid_orientations(ValidOrientations::Landscape),
     ));
     #[cfg(feature = "signal-guitar")]
     let root = mobile_view::MobileApp;
