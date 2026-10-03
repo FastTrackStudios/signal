@@ -198,7 +198,7 @@ const RAISED: &str = "#26292f";
 const TEXT: &str = "#e5e7eb";
 const DIM: &str = "#8b9099";
 /// The status line's height (along the top).
-const LINE_H: u32 = 30;
+const LINE_H: u32 = 36;
 /// The chain along the bottom edge, small (the rail's Chain raises it).
 const CHAIN_H: u32 = 22;
 /// The raised chain, as a share of the view's height.
@@ -565,7 +565,7 @@ fn AudioBadge(running: bool, error: String) -> Element {
         ("#f59e0b", "No audio", "#fcd34d")
     };
     rsx! {
-        div { style: "flex: 0 0 auto; height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 11px; background: {RAISED}; cursor: pointer;",
+        div { style: "flex: 0 0 auto; height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 13px; background: {RAISED}; cursor: pointer;",
             title: if error.is_empty() { "Audio" } else { "{error}" },
             onclick: move |_| crate::settings::open_audio_settings(),
             span { style: "width: 7px; height: 7px; border-radius: 4px; background: {dot};" }
@@ -625,7 +625,7 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
 #[component]
 fn StatusName(label: String, name: String, on_open: EventHandler<()>) -> Element {
     rsx! {
-        div { style: "flex: 0 1 auto; min-width: 0; height: 24px; display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 0 8px; border-radius: 5px; background: {RAISED}; cursor: pointer; overflow: hidden;",
+        div { style: "flex: 0 1 auto; min-width: 0; height: 30px; display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 0 10px; border-radius: 5px; background: {RAISED}; cursor: pointer; overflow: hidden;",
             onclick: move |_| on_open.call(()),
             span { style: "flex: 0 0 auto; font-size: 8px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {DIM}; white-space: nowrap;", "{label}" }
             span { style: "min-width: 0; font-size: 12px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{name}" }
