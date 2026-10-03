@@ -184,11 +184,12 @@ impl Page {
     }
 }
 
-/// What the rail picks: the chain's pages, or the footswitches.
+/// What the rail picks: the chain's pages, the footswitches, or audio.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Mode {
     Control,
     Switch,
+    Audio,
 }
 
 /// The bars' colours (the Sessions app's, so the two read as one family).
@@ -300,6 +301,21 @@ pub fn PhoneControl(
         Page::Amps
     });
     let mut mode = use_signal(|| Mode::Control);
+    // `FTS_PHONE_OPEN=audio`: open on the Audio page, for the shot tool.
+    #[cfg(not(target_arch = "wasm32"))]
+    use_hook(|| {
+        if std::env::var("FTS_PHONE_OPEN").is_ok_and(|v| v == "audio") {
+            crate::settings::open_audio_settings();
+        }
+    });
+    // Whatever asks for the audio settings (the badge, a banner, the shot
+    // tool) gets the Audio mode: on a phone they live beside the rail.
+    use_effect(move || {
+        if *crate::settings::AUDIO_SETTINGS_OPEN.read() {
+            *crate::settings::AUDIO_SETTINGS_OPEN.write() = false;
+            mode.set(Mode::Audio);
+        }
+    });
     // An edge swipe under way: where it started, and which way it turns
     // (+1 from the right edge, the next page; -1 from the left, the one
     // before).
@@ -521,7 +537,12 @@ pub fn PhoneControl(
                 // Audio, Switch, Profile/Setlist, and Control (Chain once on
                 // it — the chain raised over the page for picking one).
                 div { style: "flex: 0 0 {RAIL_W + lead}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding: 0 0 {rail_foot}px {lead}px; background: {BAR_BG}; border-right: 1px solid {RULE};",
-                    RailButton { on: false, label: "Audio", icon: "Audio", onclick: move |()| crate::settings::open_audio_settings() }
+                    RailButton { on: mode() == Mode::Audio, label: "Audio", icon: "Audio",
+                        onclick: move |()| {
+                            chain_tall.set(false);
+                            mode.set(Mode::Audio);
+                        },
+                    }
                     RailButton { on: mode() == Mode::Switch, label: "Switch", icon: "Switch",
                         onclick: move |()| {
                             chain_tall.set(false);
@@ -585,6 +606,11 @@ pub fn PhoneControl(
                                 }
                             }
                         },
+                        Mode::Audio => rsx! {
+                            div { style: "flex: 1 1 0%; min-height: 0; display: flex; box-sizing: border-box; padding-right: {trail}px;",
+                                crate::phone_audio::PhoneAudio { state }
+                            }
+                        },
                         Mode::Switch => rsx! {
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; box-sizing: border-box; padding: 6px {trail}px 6px 6px;",
                                 {switches}
@@ -610,7 +636,7 @@ pub fn PhoneControl(
 fn AudioBadge(running: bool, error: String) -> Element {
     let (dot, label, color) = if running {
         ("#22c55e", "", DIM)
-    } else if !error.is_empty() {
+    } else if !error.is_empty() && error != "Audio stopped" {
         ("#ef4444", "Audio error", "#fca5a5")
     } else {
         ("#f59e0b", "No audio", "#fcd34d")

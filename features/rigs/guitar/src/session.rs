@@ -296,6 +296,14 @@ pub struct GuitarRigBackend {
     /// The rig is meant to be playing (started, not stopped): the audio
     /// watchdog brings it back when its device drops out and returns.
     wants_audio: Arc<std::sync::atomic::AtomicBool>,
+    /// The DI player is on: every open loops the recording through the
+    /// chain in the instrument's place (see [`Rig::play_di`]).
+    di_wanted: Arc<std::sync::atomic::AtomicBool>,
+    /// Which recording it plays (`signal_guitar_proto::DI_CLIPS`).
+    di_clip: Arc<std::sync::atomic::AtomicU32>,
+    /// The rig opens its output only — the DI player with no interface to
+    /// play into it. A plain [`Rig::start`] clears it.
+    output_only: Arc<std::sync::atomic::AtomicBool>,
     /// Each stack switch's behaviour right now (the song's entry for it,
     /// else the profile's stack), in stack order — see `apply_song_stacks`.
     switch_modes: Arc<Mutex<Vec<crate::profiles::SwitchMode>>>,
@@ -459,6 +467,9 @@ impl GuitarRigBackend {
             state_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             opening: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             wants_audio: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            di_wanted: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            di_clip: Arc::new(std::sync::atomic::AtomicU32::new(0)),
+            output_only: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             switch_modes: Arc::new(Mutex::new(Vec::new())),
             switch_actions: Arc::new(Mutex::new(default_switch_actions(false))),
             part_tuned: Arc::new(Mutex::new(Vec::new())),
@@ -906,6 +917,8 @@ impl GuitarRigBackend {
                 mix_db_l: -90.0,
                 mix_db_r: -90.0,
                 audio_error: String::new(),
+                di_playing: false,
+                di_clip: 0,
             };
         }
         let guard = self.rig.lock_ok();
@@ -965,6 +978,8 @@ impl GuitarRigBackend {
             mix_db_l: -90.0,
             mix_db_r: -90.0,
             audio_error: String::new(),
+            di_playing: self.di_wanted.load(std::sync::atomic::Ordering::Relaxed),
+            di_clip: self.di_clip.load(std::sync::atomic::Ordering::Relaxed),
         }
     }
 
@@ -3754,8 +3769,10 @@ impl GuitarRigBackend {
         let cal = mgr.audio.nam_calibration();
         signal_sampler::nam::set_interface_calibration_dbu(cal);
         tracing::info!(nam.calibration_dbu = ?cal, "rig open: NAM level calibration");
-        // Monitor + play through a single duplex interface.
-        if mgr.audio.output_device.is_empty() && !mgr.audio.input_device.is_empty() {
+        // Monitor + play through a single duplex interface. (Not on iOS: an
+        // input there is one of the session's ports, and the output is the
+        // route's — a port's name as the output names nothing.)
+        if !cfg!(target_os = "ios") && mgr.audio.output_device.is_empty() && !mgr.audio.input_device.is_empty() {
             mgr.audio.output_device = mgr.audio.input_device.clone();
             let _ = mgr.save();
         }
@@ -3767,7 +3784,8 @@ impl GuitarRigBackend {
         // What is on screen meanwhile: the chain, from its definition, as
         // loading.
         self.show_chain_offline(signal_guitar_proto::BlockEngine::LOADING);
-        match GuitarRig::open(&mgr.audio) {
+        let output_only = self.output_only.load(std::sync::atomic::Ordering::Relaxed);
+        match GuitarRig::open_with(&mgr.audio, !output_only) {
             Ok(g) => {
                 self.audio_error.lock_ok().clear();
                 let mic = mgr.audio.input_device.to_lowercase();
@@ -3813,7 +3831,11 @@ impl GuitarRigBackend {
                     *slot = Some(prig);
                 }
                 // Record what we opened with, for the start() no-op check.
-                *self.open_prefs.lock_ok() = Some(format!("{:?}", mgr.audio));
+                *self.open_prefs.lock_ok() = Some(format!("{:?} output_only={output_only}", mgr.audio));
+                // The DI player, if it is on, plays on through the reopen.
+                if self.di_wanted.load(std::sync::atomic::Ordering::Relaxed) {
+                    self.inject_di();
+                }
             }
             Err(e) => {
                 *self.open_prefs.lock_ok() = None;
@@ -5065,8 +5087,21 @@ impl RigBackend for GuitarRigBackend {
     }
 }
 
-impl Rig for GuitarRigBackend {
-    fn start(&self) {
+impl GuitarRigBackend {
+    /// Loop the DI recording through the open rig's chain (no rig: nothing —
+    /// the next open does it).
+    fn inject_di(&self) {
+        let guard = self.rig.lock_ok();
+        let Some(prig) = guard.as_ref() else { return };
+        let rig = prig.rig();
+        let clip = self.di_clip.load(std::sync::atomic::Ordering::Relaxed);
+        rig.start_test_signal(crate::di_player::recording(clip, rig.sample_rate));
+        tracing::info!(di.clip = clip, di.rate = rig.sample_rate, "di player: looping a DI recording through the chain");
+    }
+
+    /// Open the audio device off-thread — [`Rig::start`] without clearing
+    /// an output-only open (the DI player's, and a restart of it).
+    fn start_inner(&self) {
         self.wants_audio
             .store(true, std::sync::atomic::Ordering::Relaxed);
         // One open at a time: concurrent starts would race the
@@ -5089,7 +5124,13 @@ impl Rig for GuitarRigBackend {
             let opened = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 // Already live with unchanged prefs? Reopening would drop
                 // the device mid-note for nothing — no-op.
-                let prefs = format!("{:?}", RigManager::load(AUDIO_RIG_NAME).audio);
+                // (Output only is part of what was opened: the DI player's
+                // output-only rig is not the instrument's.)
+                let prefs = format!(
+                    "{:?} output_only={}",
+                    RigManager::load(AUDIO_RIG_NAME).audio,
+                    backend.output_only.load(std::sync::atomic::Ordering::Relaxed)
+                );
                 let live = backend.rig.lock_ok().is_some();
                 if live && backend.open_prefs.lock_ok().as_deref() == Some(prefs.as_str()) {
                     tracing::info!("rig start: already live with unchanged prefs — no-op");
@@ -5104,6 +5145,53 @@ impl Rig for GuitarRigBackend {
                 tracing::error!("rig open panicked ({})", panic_message(&*panic));
             }
         });
+    }
+}
+
+impl Rig for GuitarRigBackend {
+    fn start(&self) {
+        // A plain start plays the instrument: the input opens again.
+        self.output_only
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        self.start_inner();
+    }
+
+    fn restart(&self) {
+        // Drop what is open (and its "unchanged prefs" no-op with it), then
+        // open as before — output only stays output only.
+        *self.rig.lock_ok() = None;
+        *self.open_prefs.lock_ok() = None;
+        tracing::info!("rig restart");
+        self.start_inner();
+    }
+
+    fn play_di(&self, clip: u32, on: bool) {
+        use std::sync::atomic::Ordering;
+        self.di_wanted.store(on, Ordering::Relaxed);
+        self.di_clip.store(clip, Ordering::Relaxed);
+        if on {
+            if self.rig.lock_ok().is_some() {
+                self.inject_di();
+            } else {
+                // Nothing open (no interface): the output alone plays it.
+                self.output_only.store(true, Ordering::Relaxed);
+                self.start_inner();
+            }
+        } else {
+            if let Some(prig) = self.rig.lock_ok().as_ref() {
+                prig.rig().stop_test_signal();
+            }
+            // Opened for the DI alone: back to no audio, quietly.
+            if self.output_only.swap(false, Ordering::Relaxed) {
+                self.wants_audio.store(false, Ordering::Relaxed);
+                *self.rig.lock_ok() = None;
+                *self.open_prefs.lock_ok() = None;
+                self.audio_error.lock_ok().clear();
+                self.show_chain_offline(signal_guitar_proto::BlockEngine::NO_AUDIO);
+            }
+        }
+        tracing::info!(di.on = on, di.clip = clip, "di player");
+        self.publish_state();
     }
 
     fn stop(&self) {

@@ -27,6 +27,10 @@ pub struct AudioDevice {
     pub default_sample_rate: u32,
 }
 
+/// The DI player's recordings, in the order [`rig::Rig::play_di`] indexes
+/// them: a guitar played straight into an interface, shipped with the app.
+pub const DI_CLIPS: &[&str] = &["Chords", "Palm-mute picking", "Riff"];
+
 /// Enumerated inputs + outputs, fetched in one call.
 #[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct AudioDevices {
@@ -195,6 +199,13 @@ pub struct RigStatus {
     pub mix_db_l: f32,
     #[facet(default)]
     pub mix_db_r: f32,
+    /// The DI player is looping its recording through the chain in the
+    /// instrument's place ([`Rig::play_di`](rig::Rig::play_di)).
+    #[facet(default)]
+    pub di_playing: bool,
+    /// Which of [`DI_CLIPS`] it plays.
+    #[facet(default)]
+    pub di_clip: u32,
 }
 
 /// A compressor block's rolling telemetry.
@@ -1169,6 +1180,15 @@ pub mod rig {
         fn start(&self);
         /// Close the audio device.
         fn stop(&self);
+        /// Close and reopen the audio device even when nothing changed — a
+        /// route that changed under it, a permission just granted, or a
+        /// player asking.
+        fn restart(&self);
+        /// Loop a DI recording ([`DI_CLIPS`](crate::DI_CLIPS), by index)
+        /// through the chain in the instrument's place (on), or go back to the
+        /// instrument (off) — tones dialled in with no guitar to hand. With no
+        /// audio open, it opens the output only.
+        fn play_di(&self, clip: u32, on: bool);
         /// Live transport + meter snapshot.
         fn status(&self) -> RigStatus;
         /// Current performance model (profile + footswitch stacks + state).

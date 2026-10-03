@@ -1904,13 +1904,28 @@ impl GuitarRig {
     ///
     /// Returns an error if the audio engine cannot be started or the project cannot be set up.
     pub fn open(prefs: &RigAudioPrefs) -> eyre::Result<Self> {
+        Self::open_with(prefs, true)
+    }
+
+    /// [`open`](Self::open), with or without the input: output only plays
+    /// the chain from an injected signal ([`start_test_signal`](Self::start_test_signal)
+    /// — a DI file) with no interface to play into it, and opens no
+    /// microphone in an interface's place.
+    ///
+    /// # Errors
+    ///
+    /// As [`open`](Self::open).
+    pub fn open_with(prefs: &RigAudioPrefs, want_input: bool) -> eyre::Result<Self> {
         let (project, track_guid, slot_guids, output_tap_guid) =
             Self::seed(prefs.input_channel as u32)?;
 
         // 3. Open the duplex realtime engine (`prefs.into()` carries the
-        //    device/routing config; the host forces `want_input` on) and the
-        //    per-track meter bank (one cell, post-fader output peak).
-        let host = project.start_duplex(&prefs.into())?;
+        //    device/routing config; the host forces `want_input` on unless
+        //    this open is output only) and the per-track meter bank (one
+        //    cell, post-fader output peak).
+        let mut io: daw_audio_io::AudioIoPrefs = prefs.into();
+        io.want_input = want_input;
+        let host = project.start_duplex_as_given(&io)?;
         let sample_rate = host.sample_rate();
         let engine_stats = host.stats();
         let meters = host.install_meters(1);

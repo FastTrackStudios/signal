@@ -111,6 +111,12 @@ impl HostedEngine for AudioEngine {
     fn sample_rate(&self) -> u32 {
         Self::sample_rate(self)
     }
+    // The cpal engine counts its callbacks too (iOS runs on it): without
+    // them a rig's audio watchdog sees no blocks rendered, takes the engine
+    // for stalled two seconds in, and drops and reopens it over and over.
+    fn stats(&self) -> Option<Arc<EngineStats>> {
+        Self::stats(self)
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -328,6 +334,18 @@ impl RigProject {
         let mut io = prefs.clone();
         io.want_input = true;
         self.start_with::<DuplexEngine>(&io)
+    }
+
+    /// [`start_duplex`](Self::start_duplex), honouring `prefs.want_input`:
+    /// with it off the engine opens its output only (a rig played from an
+    /// injected signal, with no interface to play into it).
+    ///
+    /// # Errors
+    ///
+    /// As [`start_duplex`](Self::start_duplex).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn start_duplex_as_given(self, prefs: &AudioIoPrefs) -> eyre::Result<DuplexRigHost> {
+        self.start_with::<DuplexEngine>(prefs)
     }
 
     #[cfg(not(target_arch = "wasm32"))]

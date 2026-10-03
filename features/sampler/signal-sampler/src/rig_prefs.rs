@@ -160,7 +160,13 @@ impl From<&RigAudioPrefs> for daw_audio_io::AudioIoPrefs {
             input_device: p.input_device.clone(),
             output_device: p.output_device.clone(),
             sample_rate: p.sample_rate,
-            buffer_size: p.buffer_size,
+            // iOS's audio unit takes 256..=4096 frames and refuses anything
+            // smaller outright (the stream does not build).
+            buffer_size: if cfg!(target_os = "ios") && p.buffer_size != 0 {
+                p.buffer_size.clamp(256, 4096)
+            } else {
+                p.buffer_size
+            },
             want_input: true,
             allow_builtin_mic: p.allow_builtin_mic,
             // The guitar rig keeps the engine's default node name; the caller
