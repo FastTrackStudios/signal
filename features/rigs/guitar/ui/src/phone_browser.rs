@@ -1,47 +1,56 @@
 //! The phone's browser: one full-screen picker for everything a player
-//! chooses — profiles, patches, songs and setlists, the module presets (the
-//! Core and Time; Drive, Amp, Delay, Reverb), one block's preset and
-//! algorithm, one drive slot's pedal and capture.
+//! chooses, in columns that narrow left to right — the family, then its
+//! variations, then the one that plays:
 //!
-//! It opens on what was tapped — a name on the status line, a face's
-//! preset name or algorithm — and follows Apple's guidance for this kind of
-//! screen (the Human Interface Guidelines' sheets, lists, segmented
-//! controls and accessibility pages):
+//! - a set: **Setlist › Song › Part**;
+//! - a profile: **Profile › Stack › Patch**;
+//! - a module (Core, Time; Drive, Amp, Delay, Reverb): **Preset › Variation**;
+//! - a block (a delay, a reverb): **Group › Preset**, its algorithm first;
+//! - a drive slot: **Pedal › Capture**.
 //!
-//! - a sidebar, not a strip of tabs: more than about five sections is
-//!   navigation, and in landscape that is a list down the side (Settings'
-//!   shape) — grouped (this page's blocks; what plays; the modules), each
-//!   row 44 points tall and saying what it is on now;
-//! - the section on the right: ‹ what plays › on 44-point steppers, then
-//!   every choice, the chosen one marked with a checkmark (not inverted),
-//!   a choice that leads somewhere (a profile to its patches, a setlist to
-//!   its songs, a pedal to its captures) with a chevron;
-//! - a pick applies at once, so there is no Save — Done, trailing, closes,
-//!   and so does a swipe down from the head;
-//! - no text under 11 points, targets no smaller than 44.
+//! It opens on what was tapped — the status line's names (what plays: the
+//! set in Setlist mode, the profile in Profile mode; a module), a face's
+//! preset name or algorithm — on what plays now, every column showing the
+//! path to it. Across the top, that path, and ‹ › stepping through its last
+//! step (the next part, patch, variation, preset, capture).
+//!
+//! Apple's guidance for this kind of screen, as followed: lists in columns
+//! (drill-down, Settings' and Music's shape) rather than a strip of tabs;
+//! rows 44 points tall or more; what plays marked with a checkmark in an
+//! accent, a row that leads on with a chevron; picks apply at once, so
+//! Done (trailing) or a swipe down from the head closes; no text under 11
+//! points. A row that is something to play (a setlist, a song, a profile)
+//! plays as it opens its column; a row that only groups (a stack, a preset
+//! family) just opens it.
 
 use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{CompositionModel, LibraryModel, LiveBlock, PatchInfo, PerformanceModel};
 use signal_proto::block::BlockType;
+use signal_proto::live_node::LiveNode;
 
 use crate::state::RigViewState;
 
 const BG: &str = "#0f1012";
+const COL_BG: &str = "#141518";
 const BAR_BG: &str = "#17181b";
 const RAISED: &str = "#26292f";
 const RULE: &str = "#2a2c31";
 const TEXT: &str = "#e5e7eb";
 const DIM: &str = "#8b9099";
+/// The accent what plays is marked with.
+const ACCENT: &str = "#0a84ff";
+/// The algorithm's row key in a block's first column (not a preset group).
+const ALGORITHM: &str = "\u{1}algorithm";
 
-/// What the browser is on.
+/// What the browser is opened on.
 #[derive(Clone, PartialEq, Debug)]
 pub enum BrowseTab {
     Profiles,
     Patches,
     Songs,
     Setlists,
-    /// A module's presets and their snapshots (`Core`, `Time`, `Drive`,
+    /// A module's presets and their variations (`Core`, `Time`, `Drive`,
     /// `Amp`, `Delay`, `Reverb`).
     Module(&'static str),
     /// One block's presets (and, for a delay or reverb, its algorithm) —
@@ -70,69 +79,60 @@ impl BrowseTab {
     pub fn for_module(module: &str) -> Option<Self> {
         Self::MODULES.iter().find(|m| m.eq_ignore_ascii_case(module)).map(|m| Self::Module(m))
     }
-
-    fn label(&self) -> String {
-        match self {
-            Self::Profiles => "Profile".to_string(),
-            Self::Patches => "Patch".to_string(),
-            Self::Songs => "Song".to_string(),
-            Self::Setlists => "Setlist".to_string(),
-            Self::Module(m) => (*m).to_string(),
-            Self::Block { name, .. } | Self::Pedal { name } => name.clone(),
-        }
-    }
 }
 
-/// The accent a choice that plays is marked with.
-const ACCENT: &str = "#0a84ff";
+/// One row of a column.
+#[derive(Clone, PartialEq, Debug)]
+struct Row {
+    /// Unique within its column (what the column's selection holds).
+    key: String,
+    name: String,
+    sub: String,
+    /// It plays now (a checkmark).
+    live: bool,
+    /// It opens the next column (a chevron).
+    leads: bool,
+}
 
-/// One choice: a tile, its kind small over its name, a checkmark when it
-/// is what plays and a chevron when it leads on.
+/// A column: its heading and its rows.
+#[derive(Clone, PartialEq, Debug)]
+struct Column {
+    title: String,
+    rows: Vec<Row>,
+}
+
+/// One row: 48 points tall, a checkmark when it plays, a chevron when it
+/// leads on; the open one raised.
 #[component]
-fn Tile(name: String, #[props(default)] sub: String, on: bool, #[props(default)] leads: bool, onpick: EventHandler<()>) -> Element {
-    let look = if on {
-        format!("background: rgba(10, 132, 255, 0.18); border: 1px solid {ACCENT};")
-    } else {
-        format!("background: {RAISED}; border: 1px solid {RULE};")
-    };
+fn ListRow(row: Row, open: bool, onpick: EventHandler<()>) -> Element {
+    let bg = if open { RAISED } else { "transparent" };
+    let name_color = if row.live { ACCENT } else { TEXT };
     rsx! {
-        div { style: "min-height: 56px; box-sizing: border-box; padding: 8px 12px; border-radius: 12px; display: flex; flex-direction: row; align-items: center; gap: 8px; cursor: pointer; overflow: hidden; color: {TEXT}; {look}",
+        div { style: "min-height: 48px; flex: 0 0 auto; box-sizing: border-box; padding: 6px 10px 6px 12px; border-radius: 10px; display: flex; flex-direction: row; align-items: center; gap: 8px; cursor: pointer; background: {bg};",
             onclick: move |_| onpick.call(()),
-            div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px;",
-                if !sub.is_empty() {
-                    span { style: "font-size: 11px; font-weight: 700; color: {DIM}; white-space: nowrap; overflow: hidden;", "{sub}" }
+            div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px;",
+                span { style: "font-size: 15px; font-weight: 700; color: {name_color}; white-space: nowrap; overflow: hidden;", "{row.name}" }
+                if !row.sub.is_empty() {
+                    span { style: "font-size: 11px; font-weight: 600; color: {DIM}; white-space: nowrap; overflow: hidden;", "{row.sub}" }
                 }
-                span { style: "font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden;", "{name}" }
             }
-            if on {
+            if row.live {
                 // Drawn: the checkmark glyph is not in Blitz's fonts.
                 svg { width: "18", height: "18", view_box: "0 0 24 24", fill: "none", stroke: ACCENT, stroke_width: "3", stroke_linecap: "round", stroke_linejoin: "round",
                     path { d: "M5 12.5l4.5 4.5L19 7" }
                 }
-            } else if leads {
-                span { style: "flex: 0 0 auto; font-size: 20px; color: {DIM};", "›" }
+            }
+            if row.leads {
+                svg { width: "14", height: "14", view_box: "0 0 24 24", fill: "none", stroke: DIM, stroke_width: "2.5", stroke_linecap: "round", stroke_linejoin: "round",
+                    path { d: "M9 6l6 6-6 6" }
+                }
             }
         }
     }
 }
 
-/// A run of tiles under a heading.
-#[component]
-fn Section(title: String, children: Element) -> Element {
-    rsx! {
-        div { style: "display: flex; flex-direction: column; gap: 8px;",
-            if !title.is_empty() {
-                span { style: "font-size: 13px; font-weight: 700; color: {DIM}; padding-left: 4px;", "{title}" }
-            }
-            // A grid (not a wrapped flex row — Blitz places one in a
-            // scroller above its top), 12 points between tiles.
-            div { style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px;", {children} }
-        }
-    }
-}
-
-/// The browser, over the whole screen, on `tab`. `lead`/`trail` keep its
-/// sides clear of the camera housing and the screen's corners.
+/// The browser, over the whole screen, opened on `tab`. `lead`/`trail`
+/// keep its sides clear of the camera housing and the screen's corners.
 #[component]
 pub fn PhoneBrowser(
     tab: BrowseTab,
@@ -140,23 +140,9 @@ pub fn PhoneBrowser(
     state: RigViewState,
     lead: u32,
     trail: u32,
-    /// The page's own blocks, as tabs at the front of the strip (a drive
-    /// page's slots, a delay page's delays).
-    #[props(default)]
-    context: Vec<BrowseTab>,
     on_close: EventHandler<()>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let mut on = use_signal(|| tab.clone());
-    // The page's blocks first, and a block or pedal opened from a face
-    // that is not one of them.
-    let front = use_hook(|| {
-        let mut front = context.clone();
-        if matches!(tab, BrowseTab::Block { .. } | BrowseTab::Pedal { .. }) && !front.contains(&tab) {
-            front.insert(0, tab.clone());
-        }
-        front
-    });
     let revision = model.revision;
     let data = use_resource({
         let rig = rig.clone();
@@ -171,40 +157,15 @@ pub fn PhoneBrowser(
                         r.compositions().await.unwrap_or_default(),
                         r.nodes().await.unwrap_or_default(),
                     ),
-                    None => (LibraryModel::default(), Vec::<PatchInfo>::new(), CompositionModel::default(), Vec::new()),
+                    None => (LibraryModel::default(), Vec::<PatchInfo>::new(), CompositionModel::default(), Vec::<LiveNode>::new()),
                 }
             }
         }
     });
-    let (lib, patches, comp, fetched_nodes) = data.read().clone().unwrap_or_default();
+    let (lib, patches, comp, nodes) = data.read().clone().unwrap_or_default();
     let blocks: Vec<LiveBlock> = (state.blocks)();
-    // The rig's nodes, as fetched with the rest (the live view's own copy
-    // can still be empty while nothing has changed the chain yet).
-    let nodes = if fetched_nodes.is_empty() { (state.nodes)() } else { fetched_nodes };
-    // A drive slot's node: by its name or its pedal's (a slot's node is
-    // named for the pedal in it), else the slot's place among the board's
-    // slots — the nodes that offer pedals, in chain order.
-    let slot_node = {
-        let (blocks, nodes) = (blocks.clone(), nodes.clone());
-        move |slot: &str| -> Option<signal_proto::live_node::LiveNode> {
-            let slots: Vec<_> = nodes.iter().filter(|n| !n.alternatives.is_empty()).cloned().collect();
-            let block = blocks.iter().find(|b| b.name.eq_ignore_ascii_case(slot));
-            slots
-                .iter()
-                .find(|n| n.name.eq_ignore_ascii_case(slot) || block.is_some_and(|b| !b.preset.is_empty() && n.name.eq_ignore_ascii_case(&b.preset)))
-                .cloned()
-                .or_else(|| {
-                    let at = blocks
-                        .iter()
-                        .filter(|b| matches!(b.block_type, BlockType::Drive | BlockType::Boost))
-                        .position(|b| b.name.eq_ignore_ascii_case(slot))?;
-                    slots.get(at).cloned()
-                })
-        }
-    };
 
-    // Every RPC a pick or a step makes, fired and forgotten. The client in
-    // a signal (it is `Copy`), so every tile's closure can hold it.
+    // The client in a signal (it is `Copy`), so every row's closure holds it.
     let client = use_signal(|| rig.clone());
     macro_rules! fire {
         ($r:ident => $body:expr) => {{
@@ -216,67 +177,302 @@ pub fn PhoneBrowser(
         }};
     }
 
-    // What plays, per tab: (its heading, the name, a line under it).
-    let now = |t: &BrowseTab| -> (String, String, String) { match t {
-        BrowseTab::Profiles => ("Profile".into(), model.profile_name.clone(), String::new()),
-        BrowseTab::Patches => (
-            model.profile_name.clone(),
-            patches.iter().find(|p| p.active).map(|p| p.name.clone()).unwrap_or_default(),
-            patches.iter().find(|p| p.active).map(|p| p.stack.clone()).unwrap_or_default(),
-        ),
-        BrowseTab::Songs => (
-            model.setlists.get(model.setlist_index as usize).cloned().unwrap_or_else(|| "Song".into()),
-            model.songs.get(model.song_index as usize).map(|s| s.name.clone()).unwrap_or_default(),
-            model.songs.get(model.song_index as usize).map(|s| format!("{} · {} bpm", s.key, s.bpm)).unwrap_or_default(),
-        ),
-        BrowseTab::Setlists => (
-            "Setlist".into(),
-            model.setlists.get(model.setlist_index as usize).cloned().unwrap_or_default(),
-            String::new(),
-        ),
+    // The kind: what plays opens on the set or the profile, by mode.
+    let kind = match &tab {
+        BrowseTab::Profiles | BrowseTab::Patches | BrowseTab::Songs | BrowseTab::Setlists => {
+            if model.perform_mode == 2 { BrowseTab::Setlists } else { BrowseTab::Profiles }
+        }
+        t => t.clone(),
+    };
+    // The open row of the first two columns (by key; `None`: the one on the
+    // path to what plays).
+    let mut open1 = use_signal(|| None::<String>);
+    let mut open2 = use_signal(|| None::<String>);
+    let live_module = |m: &str| comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m)).cloned();
+    let block = |name: &str| blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)).cloned();
+
+    // ── The columns, per kind, and the path to what plays ──
+    let (columns, path): (Vec<Column>, Vec<String>) = match &kind {
+        BrowseTab::Setlists => {
+            let live_set = model.setlists.get(model.setlist_index as usize).cloned().unwrap_or_default();
+            let set = open1().unwrap_or_else(|| live_set.clone());
+            let songs = lib.setlists.iter().find(|s| s.name == set).map(|s| s.songs.clone()).unwrap_or_default();
+            let live_song = model.songs.get(model.song_index as usize).map(|s| s.name.clone()).unwrap_or_default();
+            let song = open2().unwrap_or_else(|| {
+                if set == live_set { live_song.clone() } else { songs.first().map(|s| s.name.clone()).unwrap_or_default() }
+            });
+            let parts = lib.songs.iter().find(|s| s.name == song).map(|s| s.parts.clone()).unwrap_or_default();
+            let playing_song = set == live_set && song == live_song;
+            let live_part = model.parts.get(model.part_index as usize).map(|p| p.name.clone()).unwrap_or_default();
+            (
+                vec![
+                    Column {
+                        title: "Setlist".into(),
+                        rows: lib.setlists.iter().map(|s| Row { key: s.name.clone(), name: s.name.clone(), sub: format!("{} songs", s.songs.len()), live: s.name == live_set, leads: true }).collect(),
+                    },
+                    Column {
+                        title: "Song".into(),
+                        rows: songs.iter().map(|s| Row { key: s.name.clone(), name: s.name.clone(), sub: format!("{} · {} bpm", s.key, s.bpm), live: set == live_set && s.name == live_song, leads: true }).collect(),
+                    },
+                    Column {
+                        title: "Part".into(),
+                        rows: parts.iter().enumerate().map(|(i, p)| Row { key: format!("{i}"), name: p.clone(), sub: String::new(), live: playing_song && *p == live_part, leads: false }).collect(),
+                    },
+                ],
+                vec![live_set, live_song, live_part],
+            )
+        }
+        BrowseTab::Profiles => {
+            let live_profile = model.profile_name.clone();
+            let profile = open1().unwrap_or_else(|| live_profile.clone());
+            let entry = lib.profiles.iter().find(|p| p.name == profile).cloned().unwrap_or_default();
+            let live_patch = patches.iter().find(|p| p.active).cloned();
+            let mut stacks: Vec<String> = entry.stacks.clone();
+            if entry.patch_list.iter().any(|p| p.stack.is_empty()) {
+                stacks.push(String::new());
+            }
+            let live_stack = if profile == live_profile { live_patch.as_ref().map(|p| p.stack.clone()) } else { None };
+            let stack = open2().unwrap_or_else(|| live_stack.clone().unwrap_or_else(|| stacks.first().cloned().unwrap_or_default()));
+            let stack_name = |s: &str| if s.is_empty() { "Patches".to_string() } else { s.to_string() };
+            (
+                vec![
+                    Column {
+                        title: "Profile".into(),
+                        rows: lib.profiles.iter().map(|p| Row { key: p.name.clone(), name: p.name.clone(), sub: format!("{} patches", p.patches), live: p.name == live_profile, leads: true }).collect(),
+                    },
+                    Column {
+                        title: "Stack".into(),
+                        rows: stacks
+                            .iter()
+                            .map(|s| Row { key: s.clone(), name: stack_name(s), sub: format!("{} patches", entry.patch_list.iter().filter(|p| p.stack == *s).count()), live: live_stack.as_deref() == Some(s.as_str()), leads: true })
+                            .collect(),
+                    },
+                    Column {
+                        title: "Patch".into(),
+                        rows: entry
+                            .patch_list
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, p)| p.stack == stack)
+                            .map(|(i, p)| Row { key: format!("{i}"), name: p.name.clone(), sub: String::new(), live: profile == live_profile && live_patch.as_ref().is_some_and(|l| l.name == p.name), leads: false })
+                            .collect(),
+                    },
+                ],
+                vec![live_profile, live_stack.map(|s| stack_name(&s)).unwrap_or_default(), live_patch.map(|p| p.name).unwrap_or_default()],
+            )
+        }
         BrowseTab::Module(m) => {
-            let pick = comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m));
-            ((*m).to_string(), pick.map(|p| p.preset.clone()).unwrap_or_default(), pick.map(|p| p.snapshot.clone()).unwrap_or_default())
+            let mine: Vec<_> = comp.modules.iter().filter(|p| p.module.eq_ignore_ascii_case(m)).cloned().collect();
+            let pick = live_module(m);
+            let live_preset = pick.as_ref().map(|p| p.preset.clone()).unwrap_or_default();
+            let preset = open1().unwrap_or_else(|| live_preset.clone());
+            let snaps = mine.iter().find(|p| p.name == preset).map(|p| p.snapshots.clone()).unwrap_or_default();
+            let live_snaps = mine.iter().find(|p| p.name == live_preset).map(|p| p.snapshots.clone()).unwrap_or_default();
+            let live_snap = pick
+                .as_ref()
+                .map(|p| if p.snapshot.is_empty() { live_snaps.first().cloned().unwrap_or_default() } else { p.snapshot.clone() })
+                .unwrap_or_default();
+            (
+                vec![
+                    Column {
+                        title: format!("{m} preset"),
+                        rows: mine.iter().map(|p| Row { key: p.name.clone(), name: p.name.clone(), sub: format!("{} variations", p.snapshots.len()), live: p.name == live_preset, leads: true }).collect(),
+                    },
+                    Column {
+                        title: "Variation".into(),
+                        rows: snaps.iter().map(|s| Row { key: s.clone(), name: s.clone(), sub: String::new(), live: preset == live_preset && *s == live_snap, leads: false }).collect(),
+                    },
+                ],
+                vec![live_preset, live_snap],
+            )
         }
-        BrowseTab::Block { name, .. } => (
-            name.clone(),
-            comp.active_blocks.iter().find(|b| b.block.eq_ignore_ascii_case(name)).map(|b| b.preset.clone()).unwrap_or_default(),
-            String::new(),
-        ),
+        BrowseTab::Block { name, block_type } => {
+            let b = block(name);
+            let algos: Option<(&'static str, &'static [&'static str])> = match b.as_ref().map(|b| b.block_type) {
+                Some(BlockType::Delay) => Some(("style", &crate::control::DELAY_ALGOS)),
+                Some(BlockType::Reverb) => Some(("algorithm", &crate::control::VERB_ALGOS)),
+                _ => None,
+            };
+            let presets: Vec<_> = comp.block_presets.iter().filter(|p| p.block_type.eq_ignore_ascii_case(block_type)).cloned().collect();
+            let groups = crate::preset_look::grouped(&presets);
+            let playing = comp.active_blocks.iter().find(|x| x.block.eq_ignore_ascii_case(name)).map(|x| x.preset.clone()).unwrap_or_default();
+            let live_group = groups.iter().find(|(_, v)| v.iter().any(|(p, _)| p.name == playing)).map(|(g, _)| g.clone()).unwrap_or_default();
+            let algo_now = b
+                .as_ref()
+                .zip(algos)
+                .and_then(|(b, (param, names))| b.params.iter().find(|p| p.name == param).and_then(|p| names.get(p.value.round().max(0.0) as usize)).map(|s| (*s).to_string()));
+            let mut first: Vec<Row> = Vec::new();
+            if algos.is_some() {
+                first.push(Row { key: ALGORITHM.into(), name: "Algorithm".into(), sub: algo_now.clone().unwrap_or_default(), live: false, leads: true });
+            }
+            first.extend(groups.iter().map(|(g, v)| Row {
+                key: g.clone(),
+                name: if g.is_empty() { "Presets".into() } else { g.clone() },
+                sub: format!("{} presets", v.len()),
+                live: *g == live_group,
+                leads: true,
+            }));
+            let open = open1().unwrap_or_else(|| live_group.clone());
+            let (second_title, second) = if open == ALGORITHM {
+                (
+                    "Algorithm".to_string(),
+                    algos
+                        .map(|(_, names)| names.iter().enumerate().map(|(i, a)| Row { key: format!("{i}"), name: (*a).to_string(), sub: String::new(), live: algo_now.as_deref() == Some(*a), leads: false }).collect())
+                        .unwrap_or_default(),
+                )
+            } else {
+                (
+                    "Preset".to_string(),
+                    groups
+                        .iter()
+                        .find(|(g, _)| *g == open)
+                        .map(|(_, v)| v.iter().map(|(p, _)| Row { key: p.name.clone(), name: p.name.clone(), sub: String::new(), live: p.name == playing, leads: false }).collect())
+                        .unwrap_or_default(),
+                )
+            };
+            (
+                vec![Column { title: name.clone(), rows: first }, Column { title: second_title, rows: second }],
+                vec![algo_now.unwrap_or_default(), playing],
+            )
+        }
         BrowseTab::Pedal { name } => {
-            let b = blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name));
-            (name.clone(), b.map(|b| b.preset.clone()).unwrap_or_default(), b.map(|b| b.detail.clone()).unwrap_or_default())
+            let b = block(name);
+            let pedal = b.as_ref().map(|b| b.preset.clone()).unwrap_or_default();
+            let open = open1().unwrap_or_else(|| pedal.clone());
+            // The captures: the playing pedal's from the chain, another's
+            // from the library.
+            let captures: Vec<String> = if open == pedal {
+                b.as_ref().map(|b| b.options.clone()).unwrap_or_default()
+            } else {
+                lib.drives.iter().find(|d| d.name == open).map(|d| d.options.clone()).unwrap_or_default()
+            };
+            let live_capture = b.as_ref().map(|b| b.detail.clone()).unwrap_or_default();
+            (
+                vec![
+                    Column {
+                        title: "Pedal".into(),
+                        rows: lib.drives.iter().map(|d| Row { key: d.name.clone(), name: d.name.clone(), sub: d.slots.join(", "), live: d.name == pedal, leads: true }).collect(),
+                    },
+                    Column {
+                        title: "Capture".into(),
+                        rows: captures.iter().enumerate().map(|(i, c)| Row { key: format!("{i}"), name: c.clone(), sub: String::new(), live: open == pedal && b.as_ref().is_some_and(|b| b.option as usize == i), leads: false }).collect(),
+                    },
+                ],
+                vec![pedal, live_capture],
+            )
         }
-    } };
-    let current = on();
-    let (head_label, head_name, head_sub) = now(&current);
+        _ => (Vec::new(), Vec::new()),
+    };
+
+    // ── A pick in a column ──
+    let pick = {
+        let (kind, model, lib, nodes, blocks, comp) = (kind.clone(), model.clone(), lib.clone(), nodes.clone(), blocks.clone(), comp.clone());
+        move |col: usize, key: String| match (&kind, col) {
+            // A set and a song play as they open.
+            (BrowseTab::Setlists, 0) => {
+                if let Some(i) = lib.setlists.iter().position(|s| s.name == key) {
+                    fire!(r => r.select_setlist(i as u32));
+                }
+                open1.set(Some(key));
+                open2.set(None);
+            }
+            (BrowseTab::Setlists, 1) => {
+                let set = open1.peek().clone().or_else(|| model.setlists.get(model.setlist_index as usize).cloned()).unwrap_or_default();
+                let set_i = lib.setlists.iter().position(|s| s.name == set);
+                let song_i = lib.setlists.iter().find(|s| s.name == set).and_then(|s| s.songs.iter().position(|x| x.name == key));
+                if let (Some(set_i), Some(song_i)) = (set_i, song_i) {
+                    let same = set_i as u32 == model.setlist_index;
+                    fire!(r => async move {
+                        if !same {
+                            let _ = r.select_setlist(set_i as u32).await;
+                        }
+                        r.select_song(song_i as u32).await
+                    });
+                }
+                open2.set(Some(key));
+            }
+            (BrowseTab::Setlists, _) => {
+                if let Ok(i) = key.parse::<u32>() {
+                    fire!(r => r.select_part(i));
+                }
+            }
+            // A profile plays as it opens; a stack only opens.
+            (BrowseTab::Profiles, 0) => {
+                let name = key.clone();
+                fire!(r => r.select_profile(name));
+                open1.set(Some(key));
+                open2.set(None);
+            }
+            (BrowseTab::Profiles, 1) => open2.set(Some(key)),
+            (BrowseTab::Profiles, _) => {
+                let profile = open1.peek().clone().unwrap_or_else(|| model.profile_name.clone());
+                if let Ok(i) = key.parse::<u32>() {
+                    let switch = profile != model.profile_name;
+                    fire!(r => async move {
+                        if switch {
+                            let _ = r.select_profile(profile).await;
+                        }
+                        r.select_patch(i).await
+                    });
+                }
+            }
+            // A module's preset opens; a variation plays.
+            (BrowseTab::Module(_), 0) => open1.set(Some(key)),
+            (BrowseTab::Module(m), _) => {
+                let preset = open1
+                    .peek()
+                    .clone()
+                    .or_else(|| comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m)).map(|p| p.preset.clone()))
+                    .unwrap_or_default();
+                let m = (*m).to_string();
+                fire!(r => r.choose_module(m, preset, key));
+            }
+            // A block's group opens; an algorithm or preset plays.
+            (BrowseTab::Block { .. }, 0) => open1.set(Some(key)),
+            (BrowseTab::Block { name, .. }, _) => {
+                if open1.peek().as_deref() == Some(ALGORITHM) {
+                    if let (Some(b), Ok(i)) = (blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)), key.parse::<usize>()) {
+                        let param = if b.block_type == BlockType::Reverb { "algorithm" } else { "style" };
+                        crate::control::send_param(&client.peek(), &b.id, param, i as f32);
+                    }
+                } else {
+                    let block = name.clone();
+                    fire!(r => r.choose_block(block, key));
+                }
+            }
+            // A pedal goes into the slot (where the slot is the profile's to
+            // fill) and opens its captures; a capture plays.
+            (BrowseTab::Pedal { name }, 0) => {
+                if let Some(node) = slot_node(&nodes, &blocks, name)
+                    && let Some(alt) = node.alternatives.iter().find(|a| a.name == key)
+                {
+                    let (id, with) = (node.id.clone(), alt.id.clone());
+                    fire!(r => r.replace_node(id, with));
+                }
+                open1.set(Some(key));
+            }
+            (BrowseTab::Pedal { name }, _) => {
+                if let (Some(b), Ok(i)) = (blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)), key.parse::<u32>()) {
+                    let id = b.id.clone();
+                    fire!(r => r.set_block_option(id, i));
+                }
+            }
+            _ => {}
+        }
+    };
+
+    // ── ‹ › through the path's last step ──
     let step = {
-        let current = current.clone();
-        let slot_node = slot_node.clone();
-        let (lib, patches, comp, blocks, model) = (lib.clone(), patches.clone(), comp.clone(), blocks.clone(), model.clone());
+        let (kind, patches, comp, blocks) = (kind.clone(), patches.clone(), comp.clone(), blocks.clone());
         move |d: i32| {
             let wrap = |at: Option<usize>, n: usize| -> Option<usize> {
                 (n > 0).then(|| at.map_or(0, |i| (i as i64 + i64::from(d)).rem_euclid(n as i64) as usize))
             };
-            match &current {
+            match &kind {
+                BrowseTab::Setlists => fire!(r => r.step_part(d, false)),
                 BrowseTab::Profiles => {
-                    let at = lib.profiles.iter().position(|p| p.active);
-                    if let Some(i) = wrap(at, lib.profiles.len()) {
-                        let name = lib.profiles[i].name.clone();
-                        fire!(r => r.select_profile(name));
-                    }
-                }
-                BrowseTab::Patches => {
                     if let Some(i) = wrap(patches.iter().position(|p| p.active), patches.len()) {
                         fire!(r => r.select_patch(i as u32));
-                    }
-                }
-                BrowseTab::Songs => {
-                    if d > 0 { fire!(r => r.next_song()) } else { fire!(r => r.prev_song()) }
-                }
-                BrowseTab::Setlists => {
-                    if let Some(i) = wrap(Some(model.setlist_index as usize), model.setlists.len()) {
-                        fire!(r => r.select_setlist(i as u32));
                     }
                 }
                 BrowseTab::Module(m) => {
@@ -286,45 +482,44 @@ pub fn PhoneBrowser(
                 BrowseTab::Block { name, block_type } => {
                     let names: Vec<String> = comp.block_presets.iter().filter(|p| p.block_type.eq_ignore_ascii_case(block_type)).map(|p| p.name.clone()).collect();
                     let playing = comp.active_blocks.iter().find(|b| b.block.eq_ignore_ascii_case(name)).map(|b| b.preset.clone());
-                    let at = playing.and_then(|p| names.iter().position(|n| *n == p));
-                    if let Some(i) = wrap(at, names.len()) {
+                    if let Some(i) = wrap(playing.and_then(|p| names.iter().position(|n| *n == p)), names.len()) {
                         let (block, preset) = (name.clone(), names[i].clone());
                         fire!(r => r.choose_block(block, preset));
                     }
                 }
                 BrowseTab::Pedal { name } => {
-                    let Some(node) = slot_node(name) else { return };
-                    let node = &node;
-                    let pedal = blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)).map(|b| b.preset.clone()).unwrap_or_default();
-                    let at = node.alternatives.iter().position(|a| a.name.eq_ignore_ascii_case(&pedal));
-                    if let Some(i) = wrap(at, node.alternatives.len()) {
-                        let (id, with) = (node.id.clone(), node.alternatives[i].id.clone());
-                        fire!(r => r.replace_node(id, with));
+                    if let Some(b) = blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name))
+                        && let Some(i) = wrap(Some(b.option as usize), b.options.len())
+                    {
+                        let id = b.id.clone();
+                        fire!(r => r.set_block_option(id, i as u32));
                     }
                 }
+                _ => {}
             }
         }
     };
 
-    // The sidebar's groups: this page's blocks (and the block or pedal it
-    // was opened on), what plays, the modules.
-    let groups: Vec<(&str, Vec<BrowseTab>)> = vec![
-        ("This page", front.clone()),
-        ("Playing", vec![BrowseTab::Profiles, BrowseTab::Patches, BrowseTab::Songs, BrowseTab::Setlists]),
-        ("Modules", BrowseTab::MODULES.iter().map(|m| BrowseTab::Module(m)).collect()),
-    ];
-    let rows: Vec<(String, Vec<(BrowseTab, String, String)>)> = groups
-        .into_iter()
-        .filter(|(_, tabs)| !tabs.is_empty())
-        .map(|(g, tabs)| (g.to_string(), tabs.into_iter().map(|t| { let (_, n, _) = now(&t); let l = t.label(); (t, l, n) }).collect()))
-        .collect();
+    let crumbs: Vec<String> = path.into_iter().filter(|p| !p.is_empty()).collect();
+    let title = match &kind {
+        BrowseTab::Setlists => "Setlist".to_string(),
+        BrowseTab::Profiles => "Profile".to_string(),
+        BrowseTab::Module(m) => (*m).to_string(),
+        BrowseTab::Block { name, .. } | BrowseTab::Pedal { name } => name.clone(),
+        _ => String::new(),
+    };
+    let last = crumbs.last().cloned().unwrap_or_default();
+    let before = crumbs[..crumbs.len().saturating_sub(1)].join("  ›  ");
+    let heading = if before.is_empty() { title } else { format!("{title}  ·  {before}") };
     let arrow = format!("flex: 0 0 56px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: {RAISED}; border: 1px solid {RULE}; color: {TEXT}; font-size: 24px; font-weight: 700; cursor: pointer;");
     let back = step.clone();
     // A swipe down from the head closes it (where a sheet's grabber is).
     let mut drag = use_signal(|| None::<f64>);
+    let cols = columns.len();
+    let open_keys = [open1(), open2()];
 
     rsx! {
-        div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: row; box-sizing: border-box; padding: 0 {trail}px 0 {lead}px; background: {BG}; color: {TEXT};",
+        div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: column; box-sizing: border-box; padding: 0 {trail}px 0 {lead}px; background: {BG}; color: {TEXT};",
             onpointermove: move |e: PointerEvent| {
                 if let Some(from) = drag() && e.client_coordinates().y - from > 70.0 {
                     drag.set(None);
@@ -332,40 +527,13 @@ pub fn PhoneBrowser(
                 }
             },
             onpointerup: move |_| drag.set(None),
-            // ── The sidebar ──
-            div { style: "flex: 0 0 216px; height: 100%; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box; padding: 10px 8px; background: {BAR_BG}; border-right: 1px solid {RULE};",
-                for (group, tabs) in rows {
-                    span { key: "g-{group}", style: "font-size: 12px; font-weight: 700; color: {DIM}; padding: 10px 10px 4px;", "{group}" }
-                    for (t, label, value) in tabs {
-                        {
-                            let selected = t == current;
-                            let look = if selected { format!("background: {RAISED};") } else { String::new() };
-                            let key = format!("{t:?}");
-                            rsx! {
-                                div { key: "{key}", style: "min-height: 44px; flex: 0 0 auto; box-sizing: border-box; padding: 5px 10px; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; cursor: pointer; {look}",
-                                    onclick: move |_| on.set(t.clone()),
-                                    span { style: "font-size: 15px; font-weight: 700; color: {TEXT}; white-space: nowrap; overflow: hidden;", "{label}" }
-                                    if !value.is_empty() {
-                                        span { style: "font-size: 11px; font-weight: 600; color: {DIM}; white-space: nowrap; overflow: hidden;", "{value}" }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // ── The section ──
-            div { style: "flex: 1 1 0%; min-width: 0; height: 100%; display: flex; flex-direction: column;",
-            // What plays, stepped — and the head a swipe down closes from.
-            div { style: "flex: 0 0 auto; display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid {RULE};",
+            // ── What plays, and ‹ › through it ──
+            div { style: "flex: 0 0 auto; display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 8px 12px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
                 onpointerdown: move |e: PointerEvent| drag.set(Some(e.client_coordinates().y)),
                 div { style: "{arrow}", onclick: move |_| back(-1), "‹" }
                 div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; align-items: center;",
-                    span { style: "font-size: 12px; font-weight: 700; color: {DIM};", "{head_label}" }
-                    span { style: "font-size: 19px; font-weight: 800; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{head_name}" }
-                    if !head_sub.is_empty() {
-                        span { style: "font-size: 12px; font-weight: 600; color: {DIM}; white-space: nowrap;", "{head_sub}" }
-                    }
+                    span { style: "font-size: 12px; font-weight: 700; color: {DIM}; white-space: nowrap; overflow: hidden;", "{heading}" }
+                    span { style: "font-size: 19px; font-weight: 800; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{last}" }
                 }
                 div { style: "{arrow}", onclick: move |_| step(1), "›" }
                 div { style: "flex: 0 0 auto; height: 44px; display: flex; align-items: center; padding: 0 18px; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; color: {ACCENT};",
@@ -373,149 +541,33 @@ pub fn PhoneBrowser(
                     "Done"
                 }
             }
-            // ── Everything there is to choose ──
-            div { style: "flex: 1 1 0%; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 12px;",
-                match current.clone() {
-                    BrowseTab::Profiles => rsx! {
-                        Section { title: String::new(),
-                            for p in lib.profiles.clone() {
-                                Tile { key: "{p.name}", name: p.name.clone(), sub: format!("{} patches", p.patches), on: p.active, leads: true,
-                                    // A profile leads to its patches.
-                                    onpick: { let name = p.name.clone(); move |()| { let name = name.clone(); fire!(r => r.select_profile(name)); on.set(BrowseTab::Patches); } },
-                                }
-                            }
-                        }
-                    },
-                    BrowseTab::Patches => {
-                        let mut stacks: Vec<(String, Vec<(usize, PatchInfo)>)> = Vec::new();
-                        for (i, p) in patches.iter().cloned().enumerate() {
-                            match stacks.iter_mut().find(|(s, _)| *s == p.stack) {
-                                Some((_, list)) => list.push((i, p)),
-                                None => stacks.push((p.stack.clone(), vec![(i, p)])),
-                            }
-                        }
+            // ── The columns ──
+            div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;",
+                for (i, col) in columns.into_iter().enumerate() {
+                    {
+                        // A column that leads on shows its open row: the one
+                        // picked, else the one on the path to what plays.
+                        let open_key = open_keys.get(i).cloned().flatten().or_else(|| col.rows.iter().find(|r| r.live).map(|r| r.key.clone()));
+                        let last_col = i + 1 == cols;
+                        let border = if last_col { String::new() } else { format!("border-right: 1px solid {RULE};") };
+                        let bg = if i == 0 { COL_BG } else { BG };
+                        let pick = pick.clone();
                         rsx! {
-                            for (stack, list) in stacks {
-                                Section { key: "{stack}", title: stack.clone(),
-                                    for (i, p) in list {
-                                        Tile { key: "{i}", name: p.name.clone(), on: p.active,
-                                            onpick: move |()| { fire!(r => r.select_patch(i as u32)); on_close.call(()); },
-                                        }
+                            div { key: "{i}-{col.title}", style: "flex: 1 1 0%; min-width: 0; height: 100%; display: flex; flex-direction: column; background: {bg}; {border}",
+                                span { style: "flex: 0 0 auto; font-size: 12px; font-weight: 700; color: {DIM}; padding: 12px 16px 6px;", "{col.title}" }
+                                div { style: "flex: 1 1 0%; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 2px; padding: 0 8px 12px;",
+                                    if col.rows.is_empty() {
+                                        span { style: "font-size: 13px; color: {DIM}; padding: 12px 8px;", "Nothing here." }
                                     }
-                                }
-                            }
-                        }
-                    }
-                    BrowseTab::Songs => rsx! {
-                        Section { title: String::new(),
-                            for (i, s) in model.songs.iter().cloned().enumerate() {
-                                Tile { key: "{i}-{s.name}", name: s.name.clone(), sub: format!("{} · {} bpm", s.key, s.bpm), on: i as u32 == model.song_index,
-                                    onpick: move |()| { fire!(r => r.select_song(i as u32)); on_close.call(()); },
-                                }
-                            }
-                        }
-                    },
-                    BrowseTab::Setlists => rsx! {
-                        Section { title: String::new(),
-                            for (i, s) in model.setlists.iter().cloned().enumerate() {
-                                Tile { key: "{i}-{s}", name: s.clone(), on: i as u32 == model.setlist_index, leads: true,
-                                    // A setlist leads to its songs.
-                                    onpick: move |()| { fire!(r => r.select_setlist(i as u32)); on.set(BrowseTab::Songs); },
-                                }
-                            }
-                        }
-                    },
-                    BrowseTab::Module(m) => {
-                        let mine: Vec<_> = comp.modules.iter().filter(|p| p.module.eq_ignore_ascii_case(m)).cloned().collect();
-                        let pick = comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m)).cloned();
-                        rsx! {
-                            if mine.is_empty() {
-                                span { style: "font-size: 14px; color: {DIM};", "No {m} presets yet." }
-                            }
-                            for p in mine {
-                                Section { key: "{p.name}", title: p.name.clone(),
-                                    for (i, s) in p.snapshots.iter().cloned().enumerate() {
+                                    for row in col.rows {
                                         {
-                                            let live = pick.as_ref().is_some_and(|k| k.preset.eq_ignore_ascii_case(&p.name) && (k.snapshot.eq_ignore_ascii_case(&s) || (k.snapshot.is_empty() && i == 0)));
-                                            let (preset, snap) = (p.name.clone(), s.clone());
+                                            let open = !last_col && open_key.as_deref() == Some(row.key.as_str());
+                                            let key = row.key.clone();
+                                            let mut pick = pick.clone();
                                             rsx! {
-                                                Tile { key: "{s}", name: s.clone(), on: live,
-                                                    onpick: move |()| { let (m, preset, snap) = (m.to_string(), preset.clone(), snap.clone()); fire!(r => r.choose_module(m, preset, snap)); on_close.call(()); },
-                                                }
+                                                ListRow { key: "{row.key}", row, open, onpick: move |()| pick(i, key.clone()) }
                                             }
                                         }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    BrowseTab::Block { name, block_type } => {
-                        let block = blocks.iter().find(|b| b.name.eq_ignore_ascii_case(&name)).cloned();
-                        // The algorithm: a delay's style, a reverb's algorithm.
-                        let algos: Option<(&'static str, &'static [&'static str])> = match block.as_ref().map(|b| b.block_type) {
-                            Some(BlockType::Delay) => Some(("style", &crate::control::DELAY_ALGOS)),
-                            Some(BlockType::Reverb) => Some(("algorithm", &crate::control::VERB_ALGOS)),
-                            _ => None,
-                        };
-                        let presets: Vec<String> = comp.block_presets.iter().filter(|p| p.block_type.eq_ignore_ascii_case(&block_type)).map(|p| p.name.clone()).collect();
-                        let playing = comp.active_blocks.iter().find(|b| b.block.eq_ignore_ascii_case(&name)).map(|b| b.preset.clone()).unwrap_or_default();
-                        rsx! {
-                            if let (Some((param, names)), Some(b)) = (algos, block.clone()) {
-                                {
-                                    let now = b.params.iter().find(|p| p.name == param).map_or(-1.0, |p| p.value);
-                                    rsx! {
-                                        Section { title: "Algorithm".to_string(),
-                                            for (i, a) in names.iter().enumerate() {
-                                                Tile { key: "{a}", name: (*a).to_string(), on: (now - i as f32).abs() < 0.5,
-                                                    onpick: { let id = b.id.clone(); move |()| crate::control::send_param(&client.peek(), &id, param, i as f32) },
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            Section { title: "Presets".to_string(),
-                                for p in presets {
-                                    Tile { key: "{p}", name: p.clone(), on: p == playing,
-                                        onpick: { let (block, preset) = (name.clone(), p.clone()); move |()| { let (block, preset) = (block.clone(), preset.clone()); fire!(r => r.choose_block(block, preset)); on_close.call(()); } },
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    BrowseTab::Pedal { name } => {
-                        let block = blocks.iter().find(|b| b.name.eq_ignore_ascii_case(&name)).cloned();
-                        let node = slot_node(&name);
-                        let pedal = block.as_ref().map(|b| b.preset.clone()).unwrap_or_default();
-                        rsx! {
-                            if let Some(b) = block.clone() {
-                                if b.options.len() > 1 {
-                                    Section { title: format!("{pedal} — capture"),
-                                        for (i, o) in b.options.iter().cloned().enumerate() {
-                                            Tile { key: "{i}-{o}", name: o.clone(), on: i as u32 == b.option,
-                                                onpick: { let id = b.id.clone(); move |()| { let id = id.clone(); fire!(r => r.set_block_option(id, i as u32)); on_close.call(()); } },
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            if let Some(n) = node {
-                                Section { title: "Pedal".to_string(),
-                                    for a in n.alternatives.clone() {
-                                        // A pedal leads to its captures: the
-                                        // browser stays open on them.
-                                        Tile { key: "{a.id}", name: a.name.clone(), on: a.name.eq_ignore_ascii_case(&pedal), leads: true,
-                                            onpick: { let (id, with) = (n.id.clone(), a.id.clone()); move |()| { let (id, with) = (id.clone(), with.clone()); fire!(r => r.replace_node(id, with)); } },
-                                        }
-                                    }
-                                }
-                            } else {
-                                // The slot's pedal is the Drive module's to say
-                                // (a module scene names its slots): it changes
-                                // there.
-                                Section { title: "This slot's pedal comes from the Drive module".to_string(),
-                                    Tile { name: "Drive module".to_string(), sub: comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case("Drive")).map(|p| format!("{} · {}", p.preset, p.snapshot)).unwrap_or_default(), on: false, leads: true,
-                                        onpick: move |()| on.set(BrowseTab::Module("Drive")),
                                     }
                                 }
                             }
@@ -523,7 +575,22 @@ pub fn PhoneBrowser(
                     }
                 }
             }
-            }
         }
     }
+}
+
+/// A drive slot's node: by its name or its pedal's (a slot's node is named
+/// for the pedal in it), else the slot's place among the board's slots —
+/// the nodes that offer pedals, in chain order.
+fn slot_node(nodes: &[LiveNode], blocks: &[LiveBlock], slot: &str) -> Option<LiveNode> {
+    let slots: Vec<&LiveNode> = nodes.iter().filter(|n| !n.alternatives.is_empty()).collect();
+    let block = blocks.iter().find(|b| b.name.eq_ignore_ascii_case(slot));
+    slots
+        .iter()
+        .find(|n| n.name.eq_ignore_ascii_case(slot) || block.is_some_and(|b| !b.preset.is_empty() && n.name.eq_ignore_ascii_case(&b.preset)))
+        .map(|n| (*n).clone())
+        .or_else(|| {
+            let at = blocks.iter().filter(|b| matches!(b.block_type, BlockType::Drive | BlockType::Boost)).position(|b| b.name.eq_ignore_ascii_case(slot))?;
+            slots.get(at).map(|n| (*n).clone())
+        })
 }

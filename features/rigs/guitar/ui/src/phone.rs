@@ -474,19 +474,6 @@ pub fn PhoneControl(
         (Mode::Control, Page::Reverbs) => vec!["Time", "Reverb"],
         _ => Vec::new(),
     };
-    // The page's own blocks, as the browser's first tabs: a drive page's
-    // slots (pedal and capture), a delay or reverb page's blocks (preset
-    // and algorithm).
-    let page_blocks: Vec<crate::phone_browser::BrowseTab> = blocks
-        .iter()
-        .filter(|b| match page() {
-            Page::Drives => matches!(b.block_type, BlockType::Drive | BlockType::Boost),
-            Page::Delays => b.block_type == BlockType::Delay,
-            Page::Reverbs => b.block_type == BlockType::Reverb,
-            _ => false,
-        })
-        .map(|b| crate::phone_browser::BrowseTab::for_block(&b.name, b.block_type.as_str()))
-        .collect();
     let (top_module, page_module) = (modules.first().copied(), modules.get(1).copied());
     // A module's preset as the status line names it.
     let name_of = |module: &str| {
@@ -702,7 +689,6 @@ pub fn PhoneControl(
             }
             if let Some(tab) = browse() {
                 crate::phone_browser::PhoneBrowser { key: "{tab:?}", tab, model: model.clone(), state, lead: sheet_left, trail: sheet_right,
-                    context: page_blocks.clone(),
                     on_close: move |()| browse.set(None),
                 }
             }
