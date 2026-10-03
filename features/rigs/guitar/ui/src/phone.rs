@@ -426,6 +426,22 @@ pub fn PhoneControl(
         // on the housing's side when it is on the left, the page's on the
         // right.
         div { style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; background: #0f1012; color: {TEXT};",
+            // An edge swipe, followed here: a touch keeps going to what it
+            // first landed on (the edge strip), and its moves bubble up to
+            // the root — a layer mounted over the screen mid-touch never
+            // hears them.
+            onpointermove: move |e: PointerEvent| {
+                let Some((from, way)) = swipe() else { return };
+                let dx = e.client_coordinates().x - from;
+                if dx * f64::from(-way) > SWIPE_TURN {
+                    let at = Page::ALL.iter().position(|p| *p == page()).unwrap_or(0) as i32;
+                    if let Some(p) = Page::ALL.get((at + way).clamp(0, Page::ALL.len() as i32 - 1) as usize) {
+                        page.set(*p);
+                    }
+                    swipe.set(None);
+                }
+            },
+            onpointerup: move |_| swipe.set(None),
             // ── The status, along the top: what plays (tap for every profile
             // and patch), the page's module presets — the top-level module,
             // then the page's own — and the audio ──
@@ -536,23 +552,6 @@ pub fn PhoneControl(
                             }
                         },
                     }
-                }
-            }
-            // The swipe, followed over the whole screen until it turns the
-            // page or the finger lifts.
-            if let Some((from, way)) = swipe() {
-                div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 30;",
-                    onpointermove: move |e: PointerEvent| {
-                        let dx = e.client_coordinates().x - from;
-                        if dx * f64::from(-way) > SWIPE_TURN {
-                            let at = Page::ALL.iter().position(|p| *p == page()).unwrap_or(0) as i32;
-                            if let Some(p) = Page::ALL.get((at + way).clamp(0, Page::ALL.len() as i32 - 1) as usize) {
-                                page.set(*p);
-                            }
-                            swipe.set(None);
-                        }
-                    },
-                    onpointerup: move |_| swipe.set(None),
                 }
             }
             if let Some(module) = module_open() {
