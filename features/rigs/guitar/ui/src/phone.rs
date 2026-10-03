@@ -10,7 +10,8 @@
 //!   tap the name for every profile and patch), the page's module presets
 //!   (the top-level module — the Core, Time — then the page's own — Drive,
 //!   Amp, Delay, Reverb), and the audio;
-//! - the page itself, its units laid out for the room;
+//! - the page itself, its units laid out for the room — swipe in from its
+//!   right edge for the next page, from its left for the one before;
 //! - along the bottom edge, the chain: a thin segment a page, coloured by
 //!   where it sits (Core white, Time blue and purple, the rest grey), the
 //!   page that is up lit. Tap one to go there — or the rail's Chain for a
@@ -180,10 +181,14 @@ const LINE_H: u32 = 40;
 /// The chain along the bottom edge, small (the rail's Chain raises it).
 const CHAIN_H: u32 = 22;
 /// The raised chain, as a share of the view's height.
-const CHAIN_TALL: &str = "62%";
+const CHAIN_TALL: &str = "31%";
 /// One page of the raised chain at its narrowest: past this the chain
 /// scrolls sideways instead of squeezing.
 const CHAIN_TILE_MIN: u32 = 46;
+/// The strips along the page's sides that a swipe to the next or previous
+/// page starts in, and how far it must travel to turn the page.
+const EDGE_W: u32 = 22;
+const SWIPE_TURN: f64 = 40.0;
 /// How far the bars keep clear of the screen's rounded corners.
 const CORNER: u32 = 16;
 /// The rail down the left.
@@ -207,8 +212,8 @@ pub struct PhoneHost {
 #[derive(Clone, Copy)]
 pub struct IslandLeft(pub Signal<bool>);
 
-/// The phone's rig surface: the patch along the top, the rail down the
-/// left (Control, Switch, Edit; Profile or Song), and the view — in
+/// The phone's rig surface: the status along the top, the rail down the
+/// left (Control, Switch, Edit, Chain; Profile/Song), and the view — in
 /// Control, a page of the chain over the chain itself.
 #[component]
 pub fn PhoneControl(
@@ -234,6 +239,10 @@ pub fn PhoneControl(
         Page::Amps
     });
     let mut mode = use_signal(|| Mode::Control);
+    // An edge swipe under way: where it started, and which way it turns
+    // (+1 from the right edge, the next page; -1 from the left, the one
+    // before).
+    let mut swipe = use_signal(|| None::<(f64, i32)>);
     // The chain raised over the page, for picking one (`FTS_PHONE_CHAIN=tall`
     // opens it so, for the shot tool).
     let mut chain_tall = use_signal(|| {
@@ -316,8 +325,9 @@ pub fn PhoneControl(
             });
         }
     };
-    let play_song = set_play.clone();
 
+    // The rail's Profile/Song button: which one plays.
+    let plays: &'static str = if song { "Song" } else { "Profile" };
     // What plays: the song in Song, else the profile.
     let playing = if song {
         model.songs.get(model.song_index as usize).map_or_else(|| model.profile_name.clone(), |s| s.name.clone())
@@ -391,8 +401,9 @@ pub fn PhoneControl(
                         },
                     }
                     div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
-                    RailButton { on: !song, label: "Profile", icon: "Profile", onclick: move |()| set_play(1) }
-                    RailButton { on: song, label: "Song", icon: "Song", onclick: move |()| play_song(2) }
+                    // Profile or Song, one button that flips between them:
+                    // it shows which one plays.
+                    RailButton { on: true, label: plays, icon: plays, onclick: move |()| set_play(if song { 1 } else { 2 }) }
                     div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
                     RailButton { on: false, label: "Audio", icon: "Audio", onclick: move |()| crate::settings::open_audio_settings() }
                 }
@@ -400,8 +411,16 @@ pub fn PhoneControl(
                 div { style: "position: relative; flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
                     match mode() {
                         Mode::Control => rsx! {
-                            div { style: "flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
+                            div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
                                 PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm }
+                                // Swipe in from the right edge for the next
+                                // page, from the left for the one before.
+                                div { style: "position: absolute; top: 0; left: 0; width: {EDGE_W}px; height: 100%; z-index: 4;",
+                                    onpointerdown: move |e: PointerEvent| swipe.set(Some((e.client_coordinates().x, -1))),
+                                }
+                                div { style: "position: absolute; top: 0; right: 0; width: {EDGE_W + trail}px; height: 100%; z-index: 4;",
+                                    onpointerdown: move |e: PointerEvent| swipe.set(Some((e.client_coordinates().x, 1))),
+                                }
                             }
                             // The chain, thin, on the screen's bottom edge.
                             div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-top: 1px solid {RULE};",
@@ -435,6 +454,23 @@ pub fn PhoneControl(
                             }
                         },
                     }
+                }
+            }
+            // The swipe, followed over the whole screen until it turns the
+            // page or the finger lifts.
+            if let Some((from, way)) = swipe() {
+                div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 30;",
+                    onpointermove: move |e: PointerEvent| {
+                        let dx = e.client_coordinates().x - from;
+                        if dx * f64::from(-way) > SWIPE_TURN {
+                            let at = Page::ALL.iter().position(|p| *p == page()).unwrap_or(0) as i32;
+                            if let Some(p) = Page::ALL.get((at + way).clamp(0, Page::ALL.len() as i32 - 1) as usize) {
+                                page.set(*p);
+                            }
+                            swipe.set(None);
+                        }
+                    },
+                    onpointerup: move |_| swipe.set(None),
                 }
             }
             if picker() {
