@@ -6,10 +6,11 @@
 //! board, the Core, the effects after it — and the page that is up fills
 //! the screen:
 //!
-//! - along the top, the status: the profile (or song) and patch (‹ name ›;
-//!   tap the name for every profile and patch), the page's module presets
-//!   (the top-level module — the Core, Time — then the page's own — Drive,
-//!   Amp, Delay, Reverb), and the audio;
+//! - along the top, the status — names only, each a tap from its picker
+//!   (‹ › steppers and everything to choose from): the way back, the
+//!   profile (or song) and patch, the page's module presets (the top-level
+//!   module — the Core, Time — then the page's own — Drive, Amp, Delay,
+//!   Reverb), and the audio;
 //! - the page itself, its units laid out for the room — swipe in from its
 //!   right edge for the next page, from its left for the one before;
 //! - along the bottom edge, the chain: a thin segment a page, coloured by
@@ -24,10 +25,9 @@ use signal_guitar_proto::{LiveBlock, PerformanceModel};
 use signal_proto::block::BlockType;
 
 use crate::control::{
-    DelayPanel, LiveComp, LiveEq, ModGroupPanel, ModuleControls, ReverbPanel, ZoomPanel, find_block, MOD_KINDS,
+    DelayPanel, LiveComp, LiveEq, ModGroupPanel, ReverbPanel, ZoomPanel, find_block, MOD_KINDS,
     MOTION_KINDS,
 };
-use crate::library::Kind;
 use crate::rig_faces::PrePart;
 use crate::state::RigViewState;
 
@@ -77,25 +77,6 @@ impl Page {
         Self::Delays,
         Self::Reverbs,
     ];
-
-    fn title(self) -> &'static str {
-        match self {
-            Self::Input => "Input · Transpose · Doubler",
-            Self::Pedals => "Pedals · Wah · Dive · Volume",
-            Self::Pitch => "Pitch · Octaver · Harmonizer",
-            Self::Filter => "Filter",
-            Self::PreModTrem => "Pre Mod · Pre Trem",
-            Self::PreDelayVerb => "Pre Delay · Pre Verb",
-            Self::PreComp => "Compressor",
-            Self::Drives => "Drives",
-            Self::Amps => "Amps",
-            Self::Eq => "EQ",
-            Self::GatePostComp => "Gate · Post Comp",
-            Self::ModMotion => "Modulation · Motion",
-            Self::Delays => "Delays",
-            Self::Reverbs => "Reverbs",
-        }
-    }
 
     /// Its name in a file or a setting (`drives`, `gate-post-comp`).
     pub fn slug(self) -> &'static str {
@@ -162,12 +143,11 @@ impl Page {
     }
 }
 
-/// What the rail picks: the chain's pages, the footswitches, or editing.
+/// What the rail picks: the chain's pages, or the footswitches.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Mode {
     Control,
     Switch,
-    Edit,
 }
 
 /// The bars' colours (the Sessions app's, so the two read as one family).
@@ -213,7 +193,7 @@ pub struct PhoneHost {
 pub struct IslandLeft(pub Signal<bool>);
 
 /// The phone's rig surface: the status along the top, the rail down the
-/// left (Control, Switch, Edit, Chain; Profile/Song), and the view — in
+/// left (Control — Chain once on it —, Switch; Profile/Setlist), and the view — in
 /// Control, a page of the chain over the chain itself.
 #[component]
 pub fn PhoneControl(
@@ -285,6 +265,25 @@ pub fn PhoneControl(
             }
         }
     });
+    // The patch playing, for the status line.
+    let patches = use_resource({
+        let rig = rig.clone();
+        move || {
+            let _ = comp_rev();
+            let rig = rig.clone();
+            async move {
+                match rig {
+                    Some(r) => r.patches().await.unwrap_or_default(),
+                    None => Vec::new(),
+                }
+            }
+        }
+    });
+    let patch_name = patches
+        .read()
+        .as_ref()
+        .and_then(|l| l.iter().find(|p| p.active).map(|p| p.name.clone()))
+        .unwrap_or_else(|| "—".to_string());
     let face_presets = use_context_provider(|| crate::face_chrome::FacePresets(Signal::new(Default::default())));
     use_context_provider(|| crate::face_chrome::VizMode(Signal::new(std::collections::HashSet::new())));
     use_effect(move || {
@@ -302,16 +301,17 @@ pub fn PhoneControl(
             .and_then(|c| c.active_modules.iter().find(|m| m.module.eq_ignore_ascii_case(module)).cloned())
     };
     let all_modules: Vec<signal_guitar_proto::ModulePresetEntry> = compositions.read().as_ref().map(|c| c.modules.clone()).unwrap_or_default();
-    let edited: Vec<String> = blocks.iter().filter(|b| b.overridden).map(|b| b.name.clone()).collect();
     // The page's module presets, for the top line.
-    let modules: Vec<(Kind, &'static str)> = match (mode(), page()) {
-        (Mode::Control, Page::Drives) => vec![(Kind::Compositions, "Core"), (Kind::DriveModules, "Drive")],
-        (Mode::Control, Page::Amps) => vec![(Kind::Compositions, "Core"), (Kind::AmpModules, "Amp")],
-        (Mode::Control, p) if p.home() == Home::Core => vec![(Kind::Compositions, "Core")],
-        (Mode::Control, Page::Delays) => vec![(Kind::TimeModules, "Time"), (Kind::DelayModules, "Delay")],
-        (Mode::Control, Page::Reverbs) => vec![(Kind::TimeModules, "Time"), (Kind::ReverbModules, "Reverb")],
+    let modules: Vec<&'static str> = match (mode(), page()) {
+        (Mode::Control, Page::Drives) => vec!["Core", "Drive"],
+        (Mode::Control, Page::Amps) => vec!["Core", "Amp"],
+        (Mode::Control, p) if p.home() == Home::Core => vec!["Core"],
+        (Mode::Control, Page::Delays) => vec!["Time", "Delay"],
+        (Mode::Control, Page::Reverbs) => vec!["Time", "Reverb"],
         _ => Vec::new(),
     };
+    // The module whose presets are open over the screen.
+    let mut module_open = use_signal(|| None::<&'static str>);
     // Profile or Song: the perform mode, shared with every remote.
     let song = model.perform_mode == 2;
     let set_play = {
@@ -326,8 +326,9 @@ pub fn PhoneControl(
         }
     };
 
-    // The rail's Profile/Song button: which one plays.
-    let plays: &'static str = if song { "Song" } else { "Profile" };
+    let control_label: &'static str = if mode() == Mode::Control { "Chain" } else { "Control" };
+    // The rail's Profile/Setlist button: which one plays.
+    let plays: &'static str = if song { "Setlist" } else { "Profile" };
     // What plays: the song in Song, else the profile.
     let playing = if song {
         model.songs.get(model.song_index as usize).map_or_else(|| model.profile_name.clone(), |s| s.name.clone())
@@ -339,22 +340,20 @@ pub fn PhoneControl(
         let on = page() == p;
         let color = p.color();
         let look = if on { format!("background: {color}; color: #0a0b0d;") } else { format!("background: {RAISED}; color: {color};") };
+        // Raised, the names sit along the tiles' tops, level with each other.
         let size = if tall {
-            format!("flex: 1 0 {CHAIN_TILE_MIN}px; flex-direction: column; gap: 6px; border-radius: 6px; font-size: 13px;")
+            format!("flex: 1 0 {CHAIN_TILE_MIN}px; align-items: flex-start; padding-top: 10px; border-radius: 6px; font-size: 13px;")
         } else {
-            "flex: 1 1 0%; border-radius: 3px; font-size: 9px;".to_string()
+            "flex: 1 1 0%; align-items: center; border-radius: 3px; font-size: 9px;".to_string()
         };
         rsx! {
             div { key: "{p.short()}",
-                style: "min-width: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; overflow: hidden; {size} {look}",
+                style: "min-width: 0; display: flex; justify-content: center; box-sizing: border-box; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; overflow: hidden; {size} {look}",
                 onclick: move |_| {
                     page.set(p);
                     chain_tall.set(false);
                 },
-                span { "{p.short()}" }
-                if tall {
-                    span { style: "font-size: 8px; font-weight: 700; opacity: 0.7; text-align: center; padding: 0 3px;", "{p.title()}" }
-                }
+                "{p.short()}"
             }
         }
     };
@@ -366,46 +365,52 @@ pub fn PhoneControl(
             // ── The status, along the top: what plays (tap for every profile
             // and patch), the page's module presets — the top-level module,
             // then the page's own — and the audio ──
-            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px 0 8px; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
-                PatchStepper { revision: model.revision, profile: playing, on_pick: move |()| picker.set(true) }
-                for (kind, module) in modules {
-                    div { key: "{module}", style: "flex: 0 1 200px; min-width: 0; height: 30px; display: flex;",
-                        ModuleControls { kind, pick: pick_of(module), modules: all_modules.clone(), edited: edited.clone(), style: "width: 100%; height: 100%;" }
+            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px 0 4px; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
+                // Back to the instrument menu.
+                if let Some(host) = host {
+                    div { style: "flex: 0 0 auto; width: 36px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer;",
+                        onclick: move |_| host.on_home.call(()),
+                        RailIcon { name: "Rigs", color: TEXT }
+                    }
+                }
+                // Names only: a tap opens the picker, with its steppers.
+                StatusName { label: playing, name: patch_name.clone(), on_open: move |()| picker.set(true) }
+                for module in modules {
+                    {
+                        let (preset, snapshot) = pick_of(module).map(|p| (p.preset, p.snapshot)).unwrap_or_default();
+                        let name = if snapshot.is_empty() { preset } else { format!("{preset} · {snapshot}") };
+                        rsx! {
+                            StatusName { key: "{module}", label: module.to_string(), name, on_open: move |()| module_open.set(Some(module)) }
+                        }
                     }
                 }
                 div { style: "flex: 1 1 0%;" }
-                if mode() == Mode::Control && page().home() == Home::Core {
-                    div { style: "flex: 0 0 110px;", crate::face_chrome::CoreFreeze {} }
-                }
                 AudioBadge { running: (state.running)(), error: (state.audio_error)() }
             }
             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;",
                 // ── The rail ──
                 div { style: "flex: 0 0 {RAIL_W}px; display: flex; flex-direction: column; justify-content: center; gap: 2px; background: {BAR_BG}; border-right: 1px solid {RULE};",
-                    if let Some(host) = host {
-                        RailButton { on: false, label: "Rigs", icon: "Rigs", onclick: move |()| host.on_home.call(()) }
-                        div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
-                    }
-                    for (m, label) in [(Mode::Control, "Control"), (Mode::Switch, "Switch"), (Mode::Edit, "Edit")] {
-                        RailButton { key: "{label}", on: mode() == m, label, icon: label, onclick: move |()| mode.set(m) }
-                    }
-                    // The chain, raised over the page for picking one.
-                    RailButton { on: chain_tall(), label: "Chain", icon: "Chain",
+                    // Control — and once on it, Chain: the chain raised over
+                    // the page for picking one.
+                    RailButton { on: mode() == Mode::Control, label: control_label, icon: control_label,
                         onclick: move |()| {
                             if mode() == Mode::Control {
                                 chain_tall.toggle();
                             } else {
                                 mode.set(Mode::Control);
-                                chain_tall.set(true);
                             }
                         },
                     }
+                    RailButton { on: mode() == Mode::Switch, label: "Switch", icon: "Switch",
+                        onclick: move |()| {
+                            chain_tall.set(false);
+                            mode.set(Mode::Switch);
+                        },
+                    }
                     div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
-                    // Profile or Song, one button that flips between them:
-                    // it shows which one plays.
+                    // Profile or Setlist, one button that flips between
+                    // them: it shows which one plays.
                     RailButton { on: true, label: plays, icon: plays, onclick: move |()| set_play(if song { 1 } else { 2 }) }
-                    div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
-                    RailButton { on: false, label: "Audio", icon: "Audio", onclick: move |()| crate::settings::open_audio_settings() }
                 }
                 // ── The view ──
                 div { style: "position: relative; flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
@@ -448,11 +453,6 @@ pub fn PhoneControl(
                                 {switches}
                             }
                         },
-                        Mode::Edit => rsx! {
-                            div { style: "flex: 1 1 0%; display: flex; align-items: center; justify-content: center; color: {DIM}; font-size: 12px; padding-right: {trail}px;",
-                                "Edit — coming next"
-                            }
-                        },
                     }
                 }
             }
@@ -472,6 +472,9 @@ pub fn PhoneControl(
                     },
                     onpointerup: move |_| swipe.set(None),
                 }
+            }
+            if let Some(module) = module_open() {
+                ModuleSheet { module, pick: pick_of(module), presets: all_modules.clone(), lead, trail, on_close: move |()| module_open.set(None) }
             }
             if picker() {
                 PatchPicker { revision: model.revision, lead, trail, on_close: move |()| picker.set(false) }
@@ -527,16 +530,12 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
         "Control" => &["M6 4v16", "M12 4v16", "M18 4v16", "M4 9h4", "M10 15h4", "M16 7h4"],
         // The footswitches: two rows of three.
         "Switch" => &["M3 6h5v5H3z", "M10 6h4v5h-4z", "M16 6h5v5h-5z", "M3 14h5v5H3z", "M10 14h4v5h-4z", "M16 14h5v5h-5z"],
-        // A pencil.
-        "Edit" => &["M4 20l4-1 11-11-3-3L5 16z", "M14 7l3 3"],
         // A person.
         "Profile" => &["M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M4 21c1-4 4-6 8-6s7 2 8 6"],
         // Back to the instrument menu.
         "Rigs" => &["M14 6l-6 6 6 6"],
         // The chain: a row of segments, raised.
         "Chain" => &["M3 15h4v5H3z", "M10 15h4v5h-4z", "M17 15h4v5h-4z", "M8 9l4-4 4 4"],
-        // A speaker.
-        "Audio" => &["M4 9h3l4-3.5v13L7 15H4z", "M15 9.5a4 4 0 0 1 0 5", "M17.5 7a7.5 7.5 0 0 1 0 10"],
         // A note.
         _ => &["M9 18V5l11-2v13", "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z", "M20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"],
     };
@@ -549,57 +548,121 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
     }
 }
 
-/// The patch playing, stepped ‹ › through the profile's patches.
+/// One name on the status line, its kind small over it ("BLUES" over the
+/// patch, "CORE" over the Core's preset). A tap opens its picker, where the
+/// steppers are — the line keeps only the names.
 #[component]
-fn PatchStepper(revision: u64, profile: String, on_pick: EventHandler<()>) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
-    let patches = use_resource({
-        let rig = rig.clone();
-        move || {
-            let _ = revision;
-            let rig = rig.clone();
-            async move {
-                match rig {
-                    Some(r) => r.patches().await.unwrap_or_default(),
-                    None => Vec::new(),
-                }
-            }
-        }
-    });
-    let list = patches.read().clone().unwrap_or_default();
-    let at = list.iter().position(|p| p.active);
-    let name = at.and_then(|i| list.get(i)).map_or_else(|| "—".to_string(), |p| p.name.clone());
-    let n = list.len();
-    let step = move |d: i64| {
-        if n == 0 {
-            return;
-        }
-        let next = at.map_or(0, |i| (i as i64 + d).rem_euclid(n as i64) as u32);
-        let rig = rig.clone();
-        spawn(async move {
-            if let Some(r) = rig {
-                let _ = r.select_patch(next).await;
-            }
-        });
-    };
-    let arrow = "font-size: 15px; line-height: 1; color: #a1a1aa; padding: 0 6px; cursor: pointer;";
-    let back = step.clone();
+fn StatusName(label: String, name: String, on_open: EventHandler<()>) -> Element {
     rsx! {
-        div { style: "display: flex; align-items: center; gap: 2px; min-width: 0;",
-            span { style: "{arrow}", onclick: move |_| back(-1), "‹" }
-            // The profile over the patch; tap for every profile and patch.
-            div { style: "display: flex; flex-direction: column; justify-content: center; min-width: 0; max-width: 160px; cursor: pointer;",
-                onclick: move |_| on_pick.call(()),
-                span { style: "font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {DIM}; white-space: nowrap; overflow: hidden;", "{profile}" }
-                span { style: "font-size: 13px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{name}" }
-            }
-            span { style: "{arrow}", onclick: move |_| step(1), "›" }
+        div { style: "flex: 0 1 auto; min-width: 0; max-width: 220px; height: 32px; display: flex; flex-direction: column; justify-content: center; padding: 0 10px; border-radius: 6px; background: {RAISED}; cursor: pointer;",
+            onclick: move |_| on_open.call(()),
+            span { style: "font-size: 8px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {DIM}; white-space: nowrap; overflow: hidden;", "{label}" }
+            span { style: "font-size: 12px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{name}" }
         }
     }
 }
 
-/// Every profile, and the patches of the one that plays: tap a profile to
-/// load it, a patch to play it (and close). Over the whole screen — a
+/// A picker's head: ‹ the name › with big steppers either side, and Done.
+#[component]
+fn PickerStepper(label: String, name: String, sub: String, on_step: EventHandler<i32>, on_close: EventHandler<()>) -> Element {
+    let arrow = format!("flex: 0 0 56px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: {RAISED}; border: 1px solid {RULE}; color: {TEXT}; font-size: 24px; font-weight: 700; cursor: pointer;");
+    rsx! {
+        div { style: "flex: 0 0 auto; display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 8px 10px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
+            div { style: "{arrow}", onclick: move |_| on_step.call(-1), "‹" }
+            div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; align-items: center;",
+                span { style: "font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {DIM};", "{label}" }
+                span { style: "font-size: 17px; font-weight: 800; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{name}" }
+                if !sub.is_empty() {
+                    span { style: "font-size: 11px; font-weight: 600; color: {DIM}; white-space: nowrap;", "{sub}" }
+                }
+            }
+            div { style: "{arrow}", onclick: move |_| on_step.call(1), "›" }
+            div { style: "flex: 0 0 auto; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; background: {RAISED}; color: {TEXT}; border: 1px solid {RULE};",
+                onclick: move |_| on_close.call(()),
+                "Done"
+            }
+        }
+    }
+}
+
+/// A module's presets over the whole screen: ‹ the one playing › stepped,
+/// and every preset's snapshots to pick from (a pick plays it and closes).
+#[component]
+fn ModuleSheet(
+    module: &'static str,
+    pick: Option<signal_guitar_proto::ModulePick>,
+    presets: Vec<signal_guitar_proto::ModulePresetEntry>,
+    lead: u32,
+    trail: u32,
+    on_close: EventHandler<()>,
+) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mine: Vec<signal_guitar_proto::ModulePresetEntry> =
+        presets.into_iter().filter(|m| m.module.eq_ignore_ascii_case(module)).collect();
+    let (options, targets) = crate::module_sidebar::module_options(&mine, pick.as_ref());
+    let (preset, snapshot) = pick.map(|p| (p.preset, p.snapshot)).unwrap_or_default();
+    let step = {
+        let rig = rig.clone();
+        move |delta: i32| {
+            if let Some(r) = rig.clone() {
+                spawn(async move {
+                    let _ = r.step_module(module.to_string(), delta).await;
+                });
+            }
+        }
+    };
+    let choose = move |i: usize| {
+        if let (Some(r), Some((p, s))) = (rig.clone(), targets.get(i).cloned()) {
+            spawn(async move {
+                let _ = r.choose_module(module.to_string(), p, s).await;
+            });
+        }
+        on_close.call(());
+    };
+    // The options in their presets' groups, in order.
+    let mut groups: Vec<(String, Vec<(usize, crate::kit::PickOption)>)> = Vec::new();
+    for (i, o) in options.into_iter().enumerate() {
+        match groups.last_mut() {
+            Some((g, list)) if *g == o.group => list.push((i, o)),
+            _ => groups.push((o.group.clone(), vec![(i, o)])),
+        }
+    }
+    rsx! {
+        div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: column; box-sizing: border-box; padding: 0 {trail}px 0 {lead}px; background: #0f1012; color: {TEXT};",
+            PickerStepper { label: module.to_string(), name: preset, sub: snapshot, on_step: step, on_close }
+            div { style: "flex: 1 1 0%; min-height: 0; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px;",
+                for (group, list) in groups {
+                    div { key: "{group}", style: "display: flex; flex-direction: column; gap: 6px;",
+                        span { style: "font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {DIM};", "{group}" }
+                        div { style: "display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px;",
+                            for (i, o) in list {
+                                {
+                                    let choose = choose.clone();
+                                    let look = if o.live {
+                                        "background: #f4f4f5; color: #0a0b0d; border: 1px solid #f4f4f5;".to_string()
+                                    } else {
+                                        format!("background: {RAISED}; color: {TEXT}; border: 1px solid {RULE};")
+                                    };
+                                    rsx! {
+                                        div { key: "{i}",
+                                            style: "flex: 0 0 auto; min-width: 110px; box-sizing: border-box; padding: 10px 14px; border-radius: 6px; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; {look}",
+                                            onclick: move |_| choose(i),
+                                            "{o.label}"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Every profile, the patch playing stepped ‹ ›, and the patches of the
+/// profile that plays: tap a profile to load it, a patch to play it (and
+/// close). Over the whole screen — a
 /// phone has no room beside it.
 #[component]
 fn PatchPicker(revision: u64, lead: u32, trail: u32, on_close: EventHandler<()>) -> Element {
@@ -625,6 +688,24 @@ fn PatchPicker(revision: u64, lead: u32, trail: u32, on_close: EventHandler<()>)
             spawn(async move {
                 if let Some(r) = rig {
                     let _ = r.select_profile(name).await;
+                }
+            });
+        }
+    };
+    let at = patches.iter().position(|p| p.active);
+    let current = at.and_then(|i| patches.get(i)).map(|p| p.name.clone()).unwrap_or_default();
+    let n = patches.len();
+    let step = {
+        let rig = rig.clone();
+        move |d: i32| {
+            if n == 0 {
+                return;
+            }
+            let next = at.map_or(0, |i| (i as i64 + i64::from(d)).rem_euclid(n as i64) as u32);
+            let rig = rig.clone();
+            spawn(async move {
+                if let Some(r) = rig {
+                    let _ = r.select_patch(next).await;
                 }
             });
         }
@@ -664,12 +745,9 @@ fn PatchPicker(revision: u64, lead: u32, trail: u32, on_close: EventHandler<()>)
                         }
                     }
                 }
-                div { style: "flex: 1 1 0%;" }
-                div { style: "flex: 0 0 auto; padding: 6px 14px; border-radius: 5px; font-size: 13px; font-weight: 700; cursor: pointer; background: {RAISED}; color: {TEXT}; border: 1px solid {RULE};",
-                    onclick: move |_| on_close.call(()),
-                    "Done"
-                }
             }
+            // The patch playing, stepped.
+            PickerStepper { label: "Patch".to_string(), name: current, sub: String::new(), on_step: step, on_close }
             // Its patches.
             div { style: "flex: 1 1 0%; min-height: 0; overflow: auto; padding: 10px; display: flex; flex-direction: row; flex-wrap: wrap; align-content: flex-start; gap: 6px;",
                 for (i, p) in patches.into_iter().enumerate() {
