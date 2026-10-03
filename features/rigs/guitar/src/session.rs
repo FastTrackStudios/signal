@@ -1420,6 +1420,20 @@ impl GuitarRigBackend {
         let Some(patch) = self.live_patch_name() else {
             return;
         };
+        // The blocks the patch has edits on (an override, or — on a patch
+        // that plays modules — a pedal or capture of its own in a slot), for
+        // the `*`: a view built with no engine has them from here.
+        let edits: Vec<String> = self
+            .effective_patch(&patch)
+            .map(|p| {
+                let composed = !p.rig_preset.is_empty() || !p.modules.is_empty();
+                let mut edits: Vec<String> = p.overrides.iter().map(|o| o.block.clone()).collect();
+                if composed {
+                    edits.extend(p.drives.iter().map(|d| d.block.clone()));
+                }
+                edits
+            })
+            .unwrap_or_default();
         let comp = RigLibrary::load_compositions();
         let drives = {
             let def = self.profile_def.lock_ok();
@@ -1433,6 +1447,11 @@ impl GuitarRigBackend {
         };
         let dps = self.drive_presets.lock_ok().clone();
         let mut blocks = self.blocks.lock_ok();
+        for b in blocks.iter_mut() {
+            if edits.iter().any(|e| e.eq_ignore_ascii_case(&b.name)) {
+                b.overridden = true;
+            }
+        }
         // The board's slots by position — its Drive/Boost blocks in chain
         // order are Boost, Drive 1-3 — not by name: a captured pedal can
         // come through the node library under its pedal's name ("Clean
@@ -2465,7 +2484,14 @@ impl GuitarRigBackend {
                     None => false,
                 }
             });
-            if patch.overrides.len() == before {
+            // The whole block reverted: on a patch that plays modules, its
+            // own pedal or capture in this slot goes too.
+            let composed = !patch.rig_preset.is_empty() || !patch.modules.is_empty();
+            let slot_before = patch.drives.len();
+            if param.is_none() && composed {
+                patch.drives.retain(|d| !d.block.eq_ignore_ascii_case(&block_name));
+            }
+            if patch.overrides.len() == before && patch.drives.len() == slot_before {
                 return;
             }
             tracing::info!(
@@ -3969,14 +3995,21 @@ impl GuitarRigBackend {
                 def.presets.clone(),
             )
         };
-        let active_overrides: Vec<crate::profiles::OverrideDef> = {
+        let (active_overrides, own_slots): (Vec<crate::profiles::OverrideDef>, Vec<String>) = {
             let active = self
                 .rig
                 .lock_ok()
                 .as_ref()
                 .and_then(|prig| prig.active_patch().map(|p| p.name.clone()));
             active
-                .and_then(|name| self.effective_patch(&name).map(|p| p.overrides))
+                .and_then(|name| self.effective_patch(&name))
+                .map(|p| {
+                    // A pedal or capture the patch picks over its modules'
+                    // slots is an edit too.
+                    let composed = !p.rig_preset.is_empty() || !p.modules.is_empty();
+                    let slots = if composed { p.drives.iter().map(|d| d.block.clone()).collect() } else { Vec::new() };
+                    (p.overrides, slots)
+                })
                 .unwrap_or_default()
         };
         {
@@ -4029,7 +4062,7 @@ impl GuitarRigBackend {
                                 overridden: is_overridden(pname),
                             })
                             .collect();
-                        let block_overridden = !overrides.is_empty();
+                        let block_overridden = !overrides.is_empty() || own_slots.iter().any(|b| b.eq_ignore_ascii_case(&name));
                         // Drive slots: surface the loaded drive preset and
                         // its NAM options for the board's quick switch.
                         // Drive slots: surface the loaded drive preset and its
@@ -5088,6 +5121,51 @@ impl RigBackend for GuitarRigBackend {
 }
 
 impl GuitarRigBackend {
+    /// Edit drive slot `slot` where it plays from: on a patch that plays
+    /// modules, the patch's own slot — its pick over the module's, an
+    /// override the module's revert clears — else the profile's board. `f`
+    /// gets the slot as it plays now. Whether there was such a slot.
+    fn edit_drive_slot(&self, slot: &str, f: impl FnOnce(&mut crate::profiles::DriveSlotDef)) -> bool {
+        // Asked before the definition is locked (see `LOCK ORDER`).
+        let active = self.live_patch_name();
+        let comp = RigLibrary::load_compositions();
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let composed = active.as_ref().and_then(|n| {
+                def.patches
+                    .iter()
+                    .position(|p| p.name.eq_ignore_ascii_case(n) && (!p.rig_preset.is_empty() || !p.modules.is_empty()))
+            });
+            // The slot as it plays now.
+            let current = {
+                let flat = crate::compose::flatten(&def, &comp);
+                let drives = active
+                    .as_ref()
+                    .and_then(|n| flat.patches.iter().find(|p| p.name.eq_ignore_ascii_case(n)))
+                    .map_or_else(|| flat.drives.clone(), |p| crate::compose::drives_for(&flat, p));
+                drives.into_iter().find(|d| d.block.eq_ignore_ascii_case(slot))
+            };
+            let Some(mut edited) = current else { return false };
+            f(&mut edited);
+            let slots = match composed {
+                Some(i) => &mut def.patches[i].drives,
+                None => &mut def.drives,
+            };
+            match slots.iter_mut().find(|d| d.block.eq_ignore_ascii_case(slot)) {
+                Some(d) => *d = edited.clone(),
+                None => slots.push(edited.clone()),
+            }
+            tracing::info!(slot = %edited.block, pedal = %edited.preset, option = edited.option, on_patch = composed.is_some(), "guitar: drive slot set");
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&self.effective_def(&def), &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+        self.resync_blocks();
+        self.publish_state();
+        true
+    }
+
     /// Loop the DI recording through the open rig's chain (no rig: nothing —
     /// the next open does it).
     fn inject_di(&self) {
@@ -6343,34 +6421,15 @@ impl Rig for GuitarRigBackend {
             return;
         }
 
-        let rebuilt = {
-            let mut def = self.profile_def.lock_ok();
-            let Some(slot) = def
-                .drives
-                .iter_mut()
-                .find(|d| d.block.eq_ignore_ascii_case(&block_name))
-            else {
-                return;
-            };
-            let n_options = self
-                .drive_presets
-                .lock_ok()
-                .iter()
-                .find(|p| p.name.eq_ignore_ascii_case(&slot.preset))
-                .map_or(0, |p| p.options.len());
-            if n_options == 0 {
-                return;
+        // A drive slot: its capture, where the slot plays from (the
+        // patch's own pick over a module's, else the profile's board).
+        let dps = self.drive_presets.lock_ok().clone();
+        self.edit_drive_slot(&block_name, |slot| {
+            let n = dps.iter().find(|p| p.name.eq_ignore_ascii_case(&slot.preset)).map_or(0, |p| p.options.len());
+            if n > 0 {
+                slot.option = (option as usize).min(n - 1);
             }
-            slot.option = (option as usize).min(n_options - 1);
-            tracing::info!("{} → {} option {}", slot.block, slot.preset, slot.option);
-            RigLibrary::save_profile(&def);
-            {
-                let dps = self.drive_presets.lock_ok();
-                profile_from_library(&self.effective_def(&def), &dps)
-            }
-        };
-        // Gapless: only the chains playing this drive slot rebuild.
-        self.reload_rebuilt(rebuilt);
+        });
     }
 
     fn add_preset(&self, name: String, nam_path: String) {
@@ -7833,6 +7892,21 @@ impl Rig for GuitarRigBackend {
             setlists,
             drives,
         }
+    }
+
+    fn set_drive_pedal(&self, slot: String, pedal: String) {
+        let known = self.drive_presets.lock_ok().iter().any(|p| p.name.eq_ignore_ascii_case(&pedal));
+        if !known {
+            tracing::warn!(slot = %slot, pedal = %pedal, "set_drive_pedal: no such pedal");
+            return;
+        }
+        self.edit_drive_slot(&slot, |d| {
+            if !d.preset.eq_ignore_ascii_case(&pedal) {
+                d.preset = pedal;
+                // A different pedal has its own captures.
+                d.option = 0;
+            }
+        });
     }
 
     fn select_profile(&self, name: String) {

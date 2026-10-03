@@ -407,6 +407,8 @@ pub fn owned_blocks(
     }) {
         snap.blocks.iter().for_each(|c| add(&c.block));
         snap.overrides.iter().for_each(|o| add(&o.block));
+        // The slots it fills (a pedal swapped into one is its edit).
+        snap.drives.iter().for_each(|d| add(&d.block));
     }
     out
 }
@@ -552,11 +554,13 @@ pub fn save_module_snapshot(
 /// Drop the patch's own edits on `owned` blocks — back to what the modules
 /// and preset say. Returns whether anything changed.
 pub fn revert_blocks(patch: &mut PatchDef, owned: &[String]) -> bool {
-    let before = patch.overrides.len() + patch.blocks.len();
+    let before = patch.overrides.len() + patch.blocks.len() + patch.drives.len();
     let owned = |b: &str| owned.iter().any(|x| eq(x, b));
     patch.overrides.retain(|o| !owned(&o.block));
     patch.blocks.retain(|c| !owned(&c.block));
-    before != patch.overrides.len() + patch.blocks.len()
+    // A pedal or capture the patch picked in a module's slot is an edit too.
+    patch.drives.retain(|d| !owned(&d.block));
+    before != patch.overrides.len() + patch.blocks.len() + patch.drives.len()
 }
 
 // ── Block presets ──────────────────────────────────────────────────────────

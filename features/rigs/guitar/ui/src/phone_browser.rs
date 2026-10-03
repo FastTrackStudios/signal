@@ -27,7 +27,6 @@ use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{CompositionModel, LibraryModel, LiveBlock, PatchInfo, PerformanceModel};
 use signal_proto::block::BlockType;
-use signal_proto::live_node::LiveNode;
 
 use crate::state::RigViewState;
 
@@ -40,6 +39,8 @@ const TEXT: &str = "#e5e7eb";
 const DIM: &str = "#8b9099";
 /// The accent what plays is marked with.
 const ACCENT: &str = "#0a84ff";
+/// The mark of what plays changed from how it was saved.
+const EDITED: &str = "#f59e0b";
 /// The algorithm's row key in a block's first column (not a preset group).
 const ALGORITHM: &str = "\u{1}algorithm";
 
@@ -92,6 +93,8 @@ struct Row {
     live: bool,
     /// It opens the next column (a chevron).
     leads: bool,
+    /// What plays, changed from how it was saved (a `*` after its name).
+    modified: bool,
 }
 
 /// A column: its heading and its rows.
@@ -111,7 +114,12 @@ fn ListRow(row: Row, open: bool, onpick: EventHandler<()>) -> Element {
         div { style: "min-height: 48px; flex: 0 0 auto; box-sizing: border-box; padding: 6px 10px 6px 12px; border-radius: 10px; display: flex; flex-direction: row; align-items: center; gap: 8px; cursor: pointer; background: {bg};",
             onclick: move |_| onpick.call(()),
             div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px;",
-                span { style: "font-size: 15px; font-weight: 700; color: {name_color}; white-space: nowrap; overflow: hidden;", "{row.name}" }
+                span { style: "font-size: 15px; font-weight: 700; color: {name_color}; white-space: nowrap; overflow: hidden;",
+                    "{row.name}"
+                    if row.modified {
+                        span { style: "color: {EDITED};", " *" }
+                    }
+                }
                 if !row.sub.is_empty() {
                     span { style: "font-size: 11px; font-weight: 600; color: {DIM}; white-space: nowrap; overflow: hidden;", "{row.sub}" }
                 }
@@ -155,14 +163,13 @@ pub fn PhoneBrowser(
                         r.library().await.unwrap_or_default(),
                         r.patches().await.unwrap_or_default(),
                         r.compositions().await.unwrap_or_default(),
-                        r.nodes().await.unwrap_or_default(),
                     ),
-                    None => (LibraryModel::default(), Vec::<PatchInfo>::new(), CompositionModel::default(), Vec::<LiveNode>::new()),
+                    None => (LibraryModel::default(), Vec::<PatchInfo>::new(), CompositionModel::default()),
                 }
             }
         }
     });
-    let (lib, patches, comp, nodes) = data.read().clone().unwrap_or_default();
+    let (lib, patches, comp) = data.read().clone().unwrap_or_default();
     let blocks: Vec<LiveBlock> = (state.blocks)();
 
     // The client in a signal (it is `Copy`), so every row's closure holds it.
@@ -191,8 +198,18 @@ pub fn PhoneBrowser(
     let live_module = |m: &str| comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m)).cloned();
     let block = |name: &str| blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)).cloned();
 
+    // What plays, edited from how it was saved: a module with edits on any
+    // block it owns (a pedal it put in a slot swapped included), a block
+    // with edits of its own.
+    let edited = |name: &str| blocks.iter().any(|b| b.overridden && b.name.eq_ignore_ascii_case(name));
+    let modified = match &kind {
+        BrowseTab::Module(m) => live_module(m).is_some_and(|p| p.blocks.iter().any(|b| edited(b))),
+        BrowseTab::Block { name, .. } | BrowseTab::Pedal { name } => edited(name),
+        _ => false,
+    };
+
     // ── The columns, per kind, and the path to what plays ──
-    let (columns, path): (Vec<Column>, Vec<String>) = match &kind {
+    let (mut columns, path): (Vec<Column>, Vec<String>) = match &kind {
         BrowseTab::Setlists => {
             let live_set = model.setlists.get(model.setlist_index as usize).cloned().unwrap_or_default();
             let set = open1().unwrap_or_else(|| live_set.clone());
@@ -208,15 +225,15 @@ pub fn PhoneBrowser(
                 vec![
                     Column {
                         title: "Setlist".into(),
-                        rows: lib.setlists.iter().map(|s| Row { key: s.name.clone(), name: s.name.clone(), sub: format!("{} songs", s.songs.len()), live: s.name == live_set, leads: true }).collect(),
+                        rows: lib.setlists.iter().map(|s| Row { key: s.name.clone(), name: s.name.clone(), sub: format!("{} songs", s.songs.len()), live: s.name == live_set, leads: true, modified: false }).collect(),
                     },
                     Column {
                         title: "Song".into(),
-                        rows: songs.iter().map(|s| Row { key: s.name.clone(), name: s.name.clone(), sub: format!("{} · {} bpm", s.key, s.bpm), live: set == live_set && s.name == live_song, leads: true }).collect(),
+                        rows: songs.iter().map(|s| Row { key: s.name.clone(), name: s.name.clone(), sub: format!("{} · {} bpm", s.key, s.bpm), live: set == live_set && s.name == live_song, leads: true, modified: false }).collect(),
                     },
                     Column {
                         title: "Part".into(),
-                        rows: parts.iter().enumerate().map(|(i, p)| Row { key: format!("{i}"), name: p.clone(), sub: String::new(), live: playing_song && *p == live_part, leads: false }).collect(),
+                        rows: parts.iter().enumerate().map(|(i, p)| Row { key: format!("{i}"), name: p.clone(), sub: String::new(), live: playing_song && *p == live_part, leads: false, modified: false }).collect(),
                     },
                 ],
                 vec![live_set, live_song, live_part],
@@ -238,13 +255,13 @@ pub fn PhoneBrowser(
                 vec![
                     Column {
                         title: "Profile".into(),
-                        rows: lib.profiles.iter().map(|p| Row { key: p.name.clone(), name: p.name.clone(), sub: format!("{} patches", p.patches), live: p.name == live_profile, leads: true }).collect(),
+                        rows: lib.profiles.iter().map(|p| Row { key: p.name.clone(), name: p.name.clone(), sub: format!("{} patches", p.patches), live: p.name == live_profile, leads: true, modified: false }).collect(),
                     },
                     Column {
                         title: "Stack".into(),
                         rows: stacks
                             .iter()
-                            .map(|s| Row { key: s.clone(), name: stack_name(s), sub: format!("{} patches", entry.patch_list.iter().filter(|p| p.stack == *s).count()), live: live_stack.as_deref() == Some(s.as_str()), leads: true })
+                            .map(|s| Row { key: s.clone(), name: stack_name(s), sub: format!("{} patches", entry.patch_list.iter().filter(|p| p.stack == *s).count()), live: live_stack.as_deref() == Some(s.as_str()), leads: true, modified: false })
                             .collect(),
                     },
                     Column {
@@ -254,7 +271,7 @@ pub fn PhoneBrowser(
                             .iter()
                             .enumerate()
                             .filter(|(_, p)| p.stack == stack)
-                            .map(|(i, p)| Row { key: format!("{i}"), name: p.name.clone(), sub: String::new(), live: profile == live_profile && live_patch.as_ref().is_some_and(|l| l.name == p.name), leads: false })
+                            .map(|(i, p)| Row { key: format!("{i}"), name: p.name.clone(), sub: String::new(), live: profile == live_profile && live_patch.as_ref().is_some_and(|l| l.name == p.name), leads: false, modified: false })
                             .collect(),
                     },
                 ],
@@ -276,11 +293,11 @@ pub fn PhoneBrowser(
                 vec![
                     Column {
                         title: format!("{m} preset"),
-                        rows: mine.iter().map(|p| Row { key: p.name.clone(), name: p.name.clone(), sub: format!("{} variations", p.snapshots.len()), live: p.name == live_preset, leads: true }).collect(),
+                        rows: mine.iter().map(|p| Row { key: p.name.clone(), name: p.name.clone(), sub: format!("{} variations", p.snapshots.len()), live: p.name == live_preset, leads: true, modified: false }).collect(),
                     },
                     Column {
                         title: "Variation".into(),
-                        rows: snaps.iter().map(|s| Row { key: s.clone(), name: s.clone(), sub: String::new(), live: preset == live_preset && *s == live_snap, leads: false }).collect(),
+                        rows: snaps.iter().map(|s| Row { key: s.clone(), name: s.clone(), sub: String::new(), live: preset == live_preset && *s == live_snap, leads: false, modified: false }).collect(),
                     },
                 ],
                 vec![live_preset, live_snap],
@@ -303,7 +320,7 @@ pub fn PhoneBrowser(
                 .and_then(|(b, (param, names))| b.params.iter().find(|p| p.name == param).and_then(|p| names.get(p.value.round().max(0.0) as usize)).map(|s| (*s).to_string()));
             let mut first: Vec<Row> = Vec::new();
             if algos.is_some() {
-                first.push(Row { key: ALGORITHM.into(), name: "Algorithm".into(), sub: algo_now.clone().unwrap_or_default(), live: false, leads: true });
+                first.push(Row { key: ALGORITHM.into(), name: "Algorithm".into(), sub: algo_now.clone().unwrap_or_default(), live: false, leads: true, modified: false });
             }
             first.extend(groups.iter().map(|(g, v)| Row {
                 key: g.clone(),
@@ -311,13 +328,14 @@ pub fn PhoneBrowser(
                 sub: format!("{} presets", v.len()),
                 live: *g == live_group,
                 leads: true,
+                modified: false,
             }));
             let open = open1().unwrap_or_else(|| live_group.clone());
             let (second_title, second) = if open == ALGORITHM {
                 (
                     "Algorithm".to_string(),
                     algos
-                        .map(|(_, names)| names.iter().enumerate().map(|(i, a)| Row { key: format!("{i}"), name: (*a).to_string(), sub: String::new(), live: algo_now.as_deref() == Some(*a), leads: false }).collect())
+                        .map(|(_, names)| names.iter().enumerate().map(|(i, a)| Row { key: format!("{i}"), name: (*a).to_string(), sub: String::new(), live: algo_now.as_deref() == Some(*a), leads: false, modified: false }).collect())
                         .unwrap_or_default(),
                 )
             } else {
@@ -326,7 +344,7 @@ pub fn PhoneBrowser(
                     groups
                         .iter()
                         .find(|(g, _)| *g == open)
-                        .map(|(_, v)| v.iter().map(|(p, _)| Row { key: p.name.clone(), name: p.name.clone(), sub: String::new(), live: p.name == playing, leads: false }).collect())
+                        .map(|(_, v)| v.iter().map(|(p, _)| Row { key: p.name.clone(), name: p.name.clone(), sub: String::new(), live: p.name == playing, leads: false, modified: false }).collect())
                         .unwrap_or_default(),
                 )
             };
@@ -351,11 +369,11 @@ pub fn PhoneBrowser(
                 vec![
                     Column {
                         title: "Pedal".into(),
-                        rows: lib.drives.iter().map(|d| Row { key: d.name.clone(), name: d.name.clone(), sub: d.slots.join(", "), live: d.name == pedal, leads: true }).collect(),
+                        rows: lib.drives.iter().map(|d| Row { key: d.name.clone(), name: d.name.clone(), sub: d.slots.join(", "), live: d.name == pedal, leads: true, modified: false }).collect(),
                     },
                     Column {
                         title: "Capture".into(),
-                        rows: captures.iter().enumerate().map(|(i, c)| Row { key: format!("{i}"), name: c.clone(), sub: String::new(), live: open == pedal && b.as_ref().is_some_and(|b| b.option as usize == i), leads: false }).collect(),
+                        rows: captures.iter().enumerate().map(|(i, c)| Row { key: format!("{i}"), name: c.clone(), sub: String::new(), live: open == pedal && b.as_ref().is_some_and(|b| b.option as usize == i), leads: false, modified: false }).collect(),
                     },
                 ],
                 vec![pedal, live_capture],
@@ -364,9 +382,16 @@ pub fn PhoneBrowser(
         _ => (Vec::new(), Vec::new()),
     };
 
+    // The rows that play carry the mark.
+    for col in &mut columns {
+        for row in &mut col.rows {
+            row.modified = row.live && modified;
+        }
+    }
+
     // ── A pick in a column ──
     let pick = {
-        let (kind, model, lib, nodes, blocks, comp) = (kind.clone(), model.clone(), lib.clone(), nodes.clone(), blocks.clone(), comp.clone());
+        let (kind, model, lib, blocks, comp) = (kind.clone(), model.clone(), lib.clone(), blocks.clone(), comp.clone());
         move |col: usize, key: String| match (&kind, col) {
             // A set and a song play as they open.
             (BrowseTab::Setlists, 0) => {
@@ -442,13 +467,12 @@ pub fn PhoneBrowser(
             }
             // A pedal goes into the slot (where the slot is the profile's to
             // fill) and opens its captures; a capture plays.
+            // A pedal goes into the slot — on a patch that plays modules,
+            // the patch's own pick over the Drive module's (an override) —
+            // and opens its captures.
             (BrowseTab::Pedal { name }, 0) => {
-                if let Some(node) = slot_node(&nodes, &blocks, name)
-                    && let Some(alt) = node.alternatives.iter().find(|a| a.name == key)
-                {
-                    let (id, with) = (node.id.clone(), alt.id.clone());
-                    fire!(r => r.replace_node(id, with));
-                }
+                let (slot, pedal) = (name.clone(), key.clone());
+                fire!(r => r.set_drive_pedal(slot, pedal));
                 open1.set(Some(key));
             }
             (BrowseTab::Pedal { name }, _) => {
@@ -509,6 +533,7 @@ pub fn PhoneBrowser(
         _ => String::new(),
     };
     let last = crumbs.last().cloned().unwrap_or_default();
+    let last = if modified { format!("{last} *") } else { last };
     let before = crumbs[..crumbs.len().saturating_sub(1)].join("  ›  ");
     let heading = if before.is_empty() { title } else { format!("{title}  ·  {before}") };
     let arrow = format!("flex: 0 0 56px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: {RAISED}; border: 1px solid {RULE}; color: {TEXT}; font-size: 24px; font-weight: 700; cursor: pointer;");
@@ -577,20 +602,4 @@ pub fn PhoneBrowser(
             }
         }
     }
-}
-
-/// A drive slot's node: by its name or its pedal's (a slot's node is named
-/// for the pedal in it), else the slot's place among the board's slots —
-/// the nodes that offer pedals, in chain order.
-fn slot_node(nodes: &[LiveNode], blocks: &[LiveBlock], slot: &str) -> Option<LiveNode> {
-    let slots: Vec<&LiveNode> = nodes.iter().filter(|n| !n.alternatives.is_empty()).collect();
-    let block = blocks.iter().find(|b| b.name.eq_ignore_ascii_case(slot));
-    slots
-        .iter()
-        .find(|n| n.name.eq_ignore_ascii_case(slot) || block.is_some_and(|b| !b.preset.is_empty() && n.name.eq_ignore_ascii_case(&b.preset)))
-        .map(|n| (*n).clone())
-        .or_else(|| {
-            let at = blocks.iter().filter(|b| matches!(b.block_type, BlockType::Drive | BlockType::Boost)).position(|b| b.name.eq_ignore_ascii_case(slot))?;
-            slots.get(at).map(|n| (*n).clone())
-        })
 }

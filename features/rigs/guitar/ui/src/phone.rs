@@ -475,6 +475,11 @@ pub fn PhoneControl(
         _ => Vec::new(),
     };
     let (top_module, page_module) = (modules.first().copied(), modules.get(1).copied());
+    // A module with edits on any block it owns (a pedal swapped into one of
+    // its slots included): its name carries a `*`.
+    let module_edited = |module: &str| {
+        pick_of(module).is_some_and(|p| p.blocks.iter().any(|b| blocks.iter().any(|x| x.overridden && x.name.eq_ignore_ascii_case(b))))
+    };
     // A module's preset as the status line names it.
     let name_of = |module: &str| {
         let (preset, snapshot) = pick_of(module).map(|p| (p.preset, p.snapshot)).unwrap_or_default();
@@ -588,13 +593,13 @@ pub fn PhoneControl(
                 // Centre: the top-level module (the Core, Time).
                 div { style: "flex: 0 1 auto; min-width: 0; display: flex; justify-content: center;",
                     if let Some(module) = top_module {
-                        StatusName { label: module.to_string(), name: name_of(module), on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)) }
+                        StatusName { label: module.to_string(), name: name_of(module), modified: module_edited(module), on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)) }
                     }
                 }
                 // Right: the page's own module, and the audio.
                 div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px;",
                     if let Some(module) = page_module {
-                        StatusName { label: module.to_string(), name: name_of(module), on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)) }
+                        StatusName { label: module.to_string(), name: name_of(module), modified: module_edited(module), on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)) }
                     }
                     AudioBadge { running: (state.running)(), error: (state.audio_error)() }
                 }
@@ -767,12 +772,24 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
 /// the patch, "CORE" before the Core's preset). A tap opens the browser, where the
 /// steppers are — the line keeps only the names.
 #[component]
-fn StatusName(label: String, name: String, on_open: EventHandler<()>) -> Element {
+fn StatusName(
+    label: String,
+    name: String,
+    /// Changed from how it was saved: a `*` after the name.
+    #[props(default)]
+    modified: bool,
+    on_open: EventHandler<()>,
+) -> Element {
     rsx! {
         div { style: "flex: 0 1 auto; min-width: 0; height: 30px; display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 0 10px; border-radius: 5px; background: {RAISED}; cursor: pointer; overflow: hidden;",
             onclick: move |_| on_open.call(()),
             span { style: "flex: 0 0 auto; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: {DIM}; white-space: nowrap;", "{label}" }
-            span { style: "min-width: 0; font-size: 12px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{name}" }
+            span { style: "min-width: 0; font-size: 12px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;",
+                "{name}"
+                if modified {
+                    span { style: "color: #f59e0b;", " *" }
+                }
+            }
             // Opens its picker.
             svg { width: "10", height: "10", view_box: "0 0 24 24", fill: "none", stroke: DIM, stroke_width: "2.5", stroke_linecap: "round", stroke_linejoin: "round",
                 path { d: "M6 9l6 6 6-6" }

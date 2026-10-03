@@ -1523,6 +1523,11 @@ pub mod rig {
         /// Play a different profile. Rebuilds the rig from it (an audio gap,
         /// like any rebuild) and remembers it across restarts.
         fn select_profile(&self, name: String);
+        /// Put pedal `pedal` (a drive preset's name) in drive slot `slot`
+        /// (`Drive 1`, `Boost`), on its first capture. On a patch that plays
+        /// modules it is the patch's own pick over the module's — an
+        /// override, reverted with the module — else the profile's board.
+        fn set_drive_pedal(&self, slot: String, pedal: String);
         /// Create a profile. With `from` naming a profile, a copy of it;
         /// empty, a starter holding the active profile's presets and drive
         /// slots with one stack and one patch, so it plays from the start.
