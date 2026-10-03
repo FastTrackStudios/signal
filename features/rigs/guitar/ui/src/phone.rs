@@ -11,13 +11,14 @@
 //!   profile (or song) and patch, the page's module presets (the top-level
 //!   module — the Core, Time — then the page's own — Drive, Amp, Delay,
 //!   Reverb), and the audio;
+//! - under it, the chain: a thin segment a page, coloured by where it
+//!   sits (Core white, Time blue and purple, the rest grey), the page that
+//!   is up lit. Tap one to go there — or the page's button on the status
+//!   line to drop a tall one down over the page, easier to hit, that goes back up
+//!   once a page is picked (and scrolls sideways when a chain has more
+//!   pages than fit);
 //! - the page itself, its units laid out for the room — swipe in from its
-//!   right edge for the next page, from its left for the one before;
-//! - along the bottom edge, the chain: a thin segment a page, coloured by
-//!   where it sits (Core white, Time blue and purple, the rest grey), the
-//!   page that is up lit. Tap one to go there — or the rail's Chain for a
-//!   tall one over the page, easier to hit, that drops back once a page is
-//!   picked (and scrolls sideways when a chain has more pages than fit).
+//!   right edge for the next page, from its left for the one before.
 
 use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
@@ -199,8 +200,8 @@ const RAISED: &str = "#26292f";
 const TEXT: &str = "#e5e7eb";
 const DIM: &str = "#8b9099";
 /// The status line's height (along the top).
-const LINE_H: u32 = 36;
-/// The chain along the bottom edge, small (the rail's Chain raises it).
+const LINE_H: u32 = 48;
+/// The chain under the status line, small (the page's button drops it down).
 const CHAIN_H: u32 = 24;
 /// The raised chain, as a share of the view's height.
 const CHAIN_TALL: &str = "31%";
@@ -261,8 +262,7 @@ pub(crate) fn screen_radius() -> f64 {
 }
 
 /// The phone's rig surface: the status along the top, the rail down the
-/// left (bottom up: Control — Chain once on it —, Profile/Setlist, Switch,
-/// Audio), and the view — in
+/// left (bottom up: Control, Profile/Setlist, Switch, Audio), and the view — in
 /// Control, a page of the chain over the chain itself.
 #[component]
 pub fn PhoneControl(
@@ -287,9 +287,6 @@ pub fn PhoneControl(
     // (5 down).
     let back_left = lead.max(clear(f64::from(LINE_H - 20) / 2.0));
     let status_right = CORNER.max(clear(f64::from(LINE_H - 26) / 2.0));
-    // The chain's far end, thin (3 up) and raised (8 up).
-    let chain_right = CORNER.max(clear(3.0));
-    let tall_right = CORNER.max(clear(8.0));
     // The rail's lowest button, 4 in from its side (past the housing, when
     // that is the rail's side).
     let rail_foot = 6u32.max(clear(f64::from(lead) + 4.0));
@@ -500,7 +497,6 @@ pub fn PhoneControl(
         }
     };
 
-    let control_label: &'static str = if mode() == Mode::Control { "Chain" } else { "Control" };
     // The rail's Profile/Setlist button: which one plays.
     let plays: &'static str = if song { "Setlist" } else { "Profile" };
     // What plays: the song in Song, else the profile.
@@ -509,7 +505,9 @@ pub fn PhoneControl(
     } else {
         model.profile_name.clone()
     };
-    // One chain segment: thin along the bottom, a tall tile when raised.
+    // The page with the chain down: dimmed, its presses its parent's.
+    let page_veil = if chain_tall() { "opacity: 0.4; pointer-events: none;" } else { "" };
+    // One chain segment: thin under the status line, a tall tile dropped down.
     let segment = move |p: Page, tall: bool| {
         let on = page() == p;
         let color = p.color();
@@ -584,20 +582,29 @@ pub fn PhoneControl(
                         RailIcon { name: "Rigs", color: TEXT }
                     }
                 }
-                // Left: what plays.
-                div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 4px;",
+                // Left: what plays, and the page that is up (its button
+                // drops the chain down — in Control; elsewhere it goes there).
+                div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 8px;",
                     StatusName { label: playing, name: patch_name.clone(),
                         on_open: move |()| browse.set(Some(if song { crate::phone_browser::BrowseTab::Songs } else { crate::phone_browser::BrowseTab::Patches })),
                     }
+                    ChainButton { title: page().short(), color: page().color(), open: chain_tall(),
+                        on_toggle: move |()| {
+                            if mode() == Mode::Control {
+                                chain_tall.toggle();
+                            } else {
+                                mode.set(Mode::Control);
+                                chain_tall.set(true);
+                            }
+                        },
+                    }
                 }
-                // Centre: the top-level module (the Core, Time).
-                div { style: "flex: 0 1 auto; min-width: 0; display: flex; justify-content: center;",
+                // Right: the page's modules — the top-level one (the Core,
+                // Time), then the page's own — and the audio.
+                div { style: "flex: 0 1 auto; min-width: 0; display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px;",
                     if let Some(module) = top_module {
                         StatusName { label: module.to_string(), name: name_of(module), modified: module_edited(module), on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)) }
                     }
-                }
-                // Right: the page's own module, and the audio.
-                div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px;",
                     if let Some(module) = page_module {
                         StatusName { label: module.to_string(), name: name_of(module), modified: module_edited(module), on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)) }
                     }
@@ -607,8 +614,7 @@ pub fn PhoneControl(
             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;",
                 // ── The rail ──
                 // Bottom-aligned, the most used lowest, under the thumb:
-                // Audio, Switch, Profile/Setlist, and Control (Chain once on
-                // it — the chain raised over the page for picking one).
+                // Audio, Switch, Profile/Setlist, Control.
                 div { style: "flex: 0 0 {RAIL_W + lead}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding: 0 0 {rail_foot}px {lead}px; background: {BAR_BG}; border-right: 1px solid {RULE};",
                     RailButton { on: mode() == Mode::Audio, label: "Audio", icon: "Audio",
                         onclick: move |()| {
@@ -625,15 +631,7 @@ pub fn PhoneControl(
                     // Profile or Setlist, one button that flips between
                     // them: it shows which one plays.
                     RailButton { on: true, label: plays, icon: plays, onclick: move |()| set_play(if song { 1 } else { 2 }) }
-                    RailButton { on: mode() == Mode::Control, label: control_label, icon: control_label,
-                        onclick: move |()| {
-                            if mode() == Mode::Control {
-                                chain_tall.toggle();
-                            } else {
-                                mode.set(Mode::Control);
-                            }
-                        },
-                    }
+                    RailButton { on: mode() == Mode::Control, label: "Control", icon: "Control", onclick: move |()| mode.set(Mode::Control) }
                 }
                 // ── The view ──
                 // An explicit height: Blitz lays absolutely placed content out
@@ -641,40 +639,45 @@ pub fn PhoneControl(
                 div { style: "position: relative; flex: 1 1 0%; height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
                     match mode() {
                         Mode::Control => rsx! {
-                            div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
-                                PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm }
-                                // Swipe in from the right edge for the next
-                                // page, from the left for the one before.
-                                div { style: "position: absolute; top: 0; left: 0; width: {EDGE_W}px; height: 100%; z-index: 4;",
-                                    onpointerdown: move |e: PointerEvent| swipe.set(Some((e.client_coordinates().x, -1))),
-                                }
-                                div { style: "position: absolute; top: 0; right: 0; width: {EDGE_W + trail}px; height: 100%; z-index: 4;",
-                                    onpointerdown: move |e: PointerEvent| swipe.set(Some((e.client_coordinates().x, 1))),
-                                }
-                                // The chain raised: the page above it dimmed
-                                // (tap there to drop it back). Mounted only
-                                // while up — a hidden layer still takes
-                                // presses in Blitz.
-                                if chain_tall() {
-                                    div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; background: rgba(0, 0, 0, 0.55);",
-                                        onclick: move |_| chain_tall.set(false),
-                                    }
-                                }
-                            }
-                            // The chain on the screen's bottom edge: thin, or
-                            // raised as tall tiles. Laid out in the column
-                            // (not over the page) so its tiles are hit where
-                            // they are drawn.
+                            // The chain, under the status line: thin, or
+                            // dropped down as tall tiles. Laid out in the
+                            // column (not over the page) so its tiles are hit
+                            // where they are drawn.
                             if chain_tall() {
-                                div { style: "flex: 0 0 {CHAIN_TALL}; display: flex; flex-direction: row; gap: 4px; box-sizing: border-box; padding: 8px {tall_right}px 8px 8px; overflow-x: auto; overflow-y: hidden; background: {BAR_BG}; border-top: 1px solid {RULE};",
+                                div { style: "flex: 0 0 {CHAIN_TALL}; display: flex; flex-direction: row; gap: 4px; box-sizing: border-box; padding: 8px {CORNER}px 8px 8px; overflow-x: auto; overflow-y: hidden; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
                                     for p in Page::ALL {
                                         {segment(p, true)}
                                     }
                                 }
                             } else {
-                                div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {chain_right}px 3px 3px; background: {BAR_BG}; border-top: 1px solid {RULE};",
+                                div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
                                     for p in Page::ALL {
                                         {segment(p, false)}
+                                    }
+                                }
+                            }
+                            // The page. With the chain down it dims and takes
+                            // no presses itself, and a tap on it puts the chain
+                            // back up — no layer over it: an absolute layer here
+                            // was laid out against the whole view, over the
+                            // chain's tiles, and took their presses.
+                            div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
+                                onclick: move |_| {
+                                    if chain_tall() {
+                                        chain_tall.set(false);
+                                    }
+                                },
+                                div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; {page_veil}",
+                                    PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm }
+                                }
+                                // Swipe in from the right edge for the next
+                                // page, from the left for the one before.
+                                if !chain_tall() {
+                                    div { style: "position: absolute; top: 0; left: 0; width: {EDGE_W}px; height: 100%; z-index: 4;",
+                                        onpointerdown: move |e: PointerEvent| swipe.set(Some((e.client_coordinates().x, -1))),
+                                    }
+                                    div { style: "position: absolute; top: 0; right: 0; width: {EDGE_W + trail}px; height: 100%; z-index: 4;",
+                                        onpointerdown: move |e: PointerEvent| swipe.set(Some((e.client_coordinates().x, 1))),
                                     }
                                 }
                             }
@@ -755,7 +758,7 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
         // A speaker.
         "Audio" => &["M4 9h3l4-3.5v13L7 15H4z", "M15 9.5a4 4 0 0 1 0 5", "M17.5 7a7.5 7.5 0 0 1 0 10"],
         // The chain: a row of segments, raised.
-        "Chain" => &["M3 15h4v5H3z", "M10 15h4v5h-4z", "M17 15h4v5h-4z", "M8 9l4-4 4 4"],
+        "Chain" => &["M3 4h4v5H3z", "M10 4h4v5h-4z", "M17 4h4v5h-4z", "M8 15l4 4 4-4"],
         // A note.
         _ => &["M9 18V5l11-2v13", "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z", "M20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"],
     };
@@ -768,9 +771,10 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
     }
 }
 
-/// One name on the status line, its kind small before it ("BLUES" before
-/// the patch, "CORE" before the Core's preset). A tap opens the browser, where the
-/// steppers are — the line keeps only the names.
+/// One name on the status line: its kind small over it ("BLUES" over the
+/// patch, "CORE" over the Core's preset), a chevron for the browser it
+/// opens — where the steppers are; the line keeps only the names. 40
+/// points tall, in a 48-point line (a full-size target).
 #[component]
 fn StatusName(
     label: String,
@@ -781,18 +785,40 @@ fn StatusName(
     on_open: EventHandler<()>,
 ) -> Element {
     rsx! {
-        div { style: "flex: 0 1 auto; min-width: 0; height: 30px; display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 0 10px; border-radius: 5px; background: {RAISED}; cursor: pointer; overflow: hidden;",
+        div { style: "flex: 0 1 auto; min-width: 0; max-width: 240px; height: 40px; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 0 10px 0 12px; border-radius: 10px; background: {RAISED}; cursor: pointer; overflow: hidden;",
             onclick: move |_| on_open.call(()),
-            span { style: "flex: 0 0 auto; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: {DIM}; white-space: nowrap;", "{label}" }
-            span { style: "min-width: 0; font-size: 12px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;",
-                "{name}"
-                if modified {
-                    span { style: "color: #f59e0b;", " *" }
+            div { style: "flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center;",
+                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: {DIM}; white-space: nowrap; overflow: hidden;", "{label}" }
+                span { style: "font-size: 14px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;",
+                    "{name}"
+                    if modified {
+                        span { style: "color: #f59e0b;", " *" }
+                    }
                 }
             }
-            // Opens its picker.
-            svg { width: "10", height: "10", view_box: "0 0 24 24", fill: "none", stroke: DIM, stroke_width: "2.5", stroke_linecap: "round", stroke_linejoin: "round",
+            svg { width: "12", height: "12", view_box: "0 0 24 24", fill: "none", stroke: DIM, stroke_width: "2.5", stroke_linecap: "round", stroke_linejoin: "round",
                 path { d: "M6 9l6 6 6-6" }
+            }
+        }
+    }
+}
+
+/// The chain's button on the status line: the page that is up, in its
+/// colour, and the arrow that drops the chain down from under the line
+/// (pointing up while it is down).
+#[component]
+fn ChainButton(title: &'static str, color: &'static str, open: bool, on_toggle: EventHandler<()>) -> Element {
+    let (bg, arrow) = if open { (format!("background: {color}; color: #0a0b0d;"), "M6 15l6-6 6 6") } else { (format!("background: {RAISED}; color: {color};"), "M6 9l6 6 6-6") };
+    let ink = if open { "#0a0b0d" } else { color };
+    rsx! {
+        div { style: "flex: 0 0 auto; height: 40px; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 0 12px; border-radius: 10px; cursor: pointer; {bg}",
+            onclick: move |_| on_toggle.call(()),
+            div { style: "display: flex; flex-direction: column; justify-content: center;",
+                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.7;", "Page" }
+                span { style: "font-size: 14px; font-weight: 800; white-space: nowrap;", "{title}" }
+            }
+            svg { width: "14", height: "14", view_box: "0 0 24 24", fill: "none", stroke: ink, stroke_width: "2.8", stroke_linecap: "round", stroke_linejoin: "round",
+                path { d: arrow }
             }
         }
     }
