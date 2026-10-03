@@ -20,7 +20,7 @@
 #[cfg(feature = "signal-keys-rig")]
 use crate::keys_view;
 use dioxus::prelude::*;
-use signal_guitar_ui::{GuitarRigRemote, IslandLeft, PhoneHost, WindowAspect, WindowSize};
+use signal_guitar_ui::{GuitarRigRemote, IslandLeft, PhoneHost, ScreenCorners, WindowAspect, WindowSize};
 
 use crate::rigs::{Rig, RigMenu};
 
@@ -82,6 +82,11 @@ pub fn MobileApp() -> Element {
     let mut size = use_context_provider(|| WindowSize(Signal::new((402.0, 874.0))));
     let mut aspect = use_context_provider(|| WindowAspect(Signal::new(402.0 / 874.0)));
     let mut island = use_context_provider(|| IslandLeft(Signal::new(false)));
+    // The screen's corner radius, for what sits in its corners to clear the
+    // curve: a current iPhone's (62 points on the 16 and 17 Pro, the
+    // largest — a smaller one only leaves a little to spare) or an iPad's.
+    // UIKit does not publish it.
+    let mut corners = use_context_provider(|| ScreenCorners(Signal::new(PHONE_CORNER_RADIUS)));
     use_future(move || {
         let window = window.clone();
         async move {
@@ -94,6 +99,11 @@ pub fn MobileApp() -> Element {
                     if (was.0 - pt.0).abs() > 1.0 || (was.1 - pt.1).abs() > 1.0 {
                         size.0.set(pt);
                         aspect.0.set(pt.0 / pt.1);
+                        // A phone's short side is under 500 points.
+                        let radius = if pt.0.min(pt.1) < 500.0 { PHONE_CORNER_RADIUS } else { PAD_CORNER_RADIUS };
+                        if *corners.0.peek() != radius {
+                            corners.0.set(radius);
+                        }
                     }
                 }
                 let left = crate::ios_scene::island_on_left() == Some(true);
@@ -138,6 +148,10 @@ pub fn MobileApp() -> Element {
         }
     }
 }
+
+/// The screen corner radii the layout clears (points).
+const PHONE_CORNER_RADIUS: f64 = 62.0;
+const PAD_CORNER_RADIUS: f64 = 18.0;
 
 /// Menu → rig. Each screen owns its orientation (set on mount), so
 /// navigating swaps the component and rotates the phone.

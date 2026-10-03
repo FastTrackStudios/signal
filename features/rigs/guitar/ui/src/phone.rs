@@ -233,6 +233,27 @@ pub struct PhoneHost {
 #[derive(Clone, Copy)]
 pub struct IslandLeft(pub Signal<bool>);
 
+/// The screen's corner radius in points, for what sits in its corners to
+/// keep clear of the curve. Provided by the iOS shell; without it (the
+/// Android remote, the shot tool) the corners are taken to be square.
+#[derive(Clone, Copy)]
+pub struct ScreenCorners(pub Signal<f64>);
+
+/// How far in from one edge content must start to clear a screen corner
+/// rounded at `r`, when it comes to within `e` of the other edge (a circle's
+/// chord: nothing at `e >= r`, all of `r` at `e = 0`).
+pub(crate) fn corner_clear(r: f64, e: f64) -> f64 {
+    if r <= 0.0 || e >= r {
+        return 0.0;
+    }
+    r - (r * r - (r - e) * (r - e)).sqrt()
+}
+
+/// The screen's corner radius from context (0 without the iOS shell).
+pub(crate) fn screen_radius() -> f64 {
+    try_use_context::<ScreenCorners>().map_or(0.0, |c| (c.0)())
+}
+
 /// The phone's rig surface: the status along the top, the rail down the
 /// left (bottom up: Control — Chain once on it —, Profile/Setlist, Switch,
 /// Audio), and the view — in
@@ -251,6 +272,24 @@ pub fn PhoneControl(
     // The housing's clearance: the rail moves out from under it on the
     // left; on the right the view keeps clear of it itself.
     let (lead, trail) = if island_left { (HOUSING, 0) } else { (0, HOUSING) };
+    // What sits in the screen's rounded corners keeps clear of their curve
+    // (the bars themselves run into them): how far in, for each corner's
+    // content, from how close it comes to the other edge. Rounded up.
+    let r = screen_radius();
+    let clear = |e: f64| (corner_clear(r, e) + 2.0).ceil() as u32;
+    // The status line's ends: the back arrow (8 down) and the audio badge
+    // (5 down).
+    let back_left = lead.max(clear(f64::from(LINE_H - 20) / 2.0));
+    let status_right = CORNER.max(clear(f64::from(LINE_H - 26) / 2.0));
+    // The chain's far end, thin (3 up) and raised (8 up).
+    let chain_right = CORNER.max(clear(3.0));
+    let tall_right = CORNER.max(clear(8.0));
+    // The rail's lowest button, 4 in from its side (past the housing, when
+    // that is the rail's side).
+    let rail_foot = 6u32.max(clear(f64::from(lead) + 4.0));
+    // The pickers over the screen: their heads' buttons, 8 down.
+    let sheet_left = lead.max(clear(8.0));
+    let sheet_right = trail.max(clear(8.0));
     // `FTS_PHONE_PAGE=<slug>`: open on that page (the shot tool renders
     // every page at once, an app each).
     let mut page = use_signal(|| {
@@ -445,10 +484,10 @@ pub fn PhoneControl(
             // ── The status, along the top: what plays (tap for every profile
             // and patch), the page's module presets — the top-level module,
             // then the page's own — and the audio ──
-            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
+            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {status_right}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
                 // The way back, over the rail and as wide as it: the corner
                 // the two make reads as one column.
-                div { style: "flex: 0 0 {RAIL_W + lead}px; align-self: stretch; box-sizing: border-box; padding-left: {lead}px; display: flex; align-items: center; justify-content: center; border-right: 1px solid {RULE}; cursor: pointer;",
+                div { style: "flex: 0 0 {RAIL_W + lead}px; align-self: stretch; box-sizing: border-box; padding-left: {back_left}px; display: flex; align-items: center; justify-content: center; border-right: 1px solid {RULE}; cursor: pointer;",
                     onclick: move |_| {
                         if let Some(host) = host {
                             host.on_home.call(());
@@ -481,7 +520,7 @@ pub fn PhoneControl(
                 // Bottom-aligned, the most used lowest, under the thumb:
                 // Audio, Switch, Profile/Setlist, and Control (Chain once on
                 // it — the chain raised over the page for picking one).
-                div { style: "flex: 0 0 {RAIL_W + lead}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding: 0 0 6px {lead}px; background: {BAR_BG}; border-right: 1px solid {RULE};",
+                div { style: "flex: 0 0 {RAIL_W + lead}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding: 0 0 {rail_foot}px {lead}px; background: {BAR_BG}; border-right: 1px solid {RULE};",
                     RailButton { on: false, label: "Audio", icon: "Audio", onclick: move |()| crate::settings::open_audio_settings() }
                     RailButton { on: mode() == Mode::Switch, label: "Switch", icon: "Switch",
                         onclick: move |()| {
@@ -533,13 +572,13 @@ pub fn PhoneControl(
                             // (not over the page) so its tiles are hit where
                             // they are drawn.
                             if chain_tall() {
-                                div { style: "flex: 0 0 {CHAIN_TALL}; display: flex; flex-direction: row; gap: 4px; box-sizing: border-box; padding: 8px {CORNER}px 8px 8px; overflow-x: auto; overflow-y: hidden; background: {BAR_BG}; border-top: 1px solid {RULE};",
+                                div { style: "flex: 0 0 {CHAIN_TALL}; display: flex; flex-direction: row; gap: 4px; box-sizing: border-box; padding: 8px {tall_right}px 8px 8px; overflow-x: auto; overflow-y: hidden; background: {BAR_BG}; border-top: 1px solid {RULE};",
                                     for p in Page::ALL {
                                         {segment(p, true)}
                                     }
                                 }
                             } else {
-                                div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-top: 1px solid {RULE};",
+                                div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {chain_right}px 3px 3px; background: {BAR_BG}; border-top: 1px solid {RULE};",
                                     for p in Page::ALL {
                                         {segment(p, false)}
                                     }
@@ -555,10 +594,10 @@ pub fn PhoneControl(
                 }
             }
             if let Some(module) = module_open() {
-                ModuleSheet { module, pick: pick_of(module), presets: all_modules.clone(), lead, trail, on_close: move |()| module_open.set(None) }
+                ModuleSheet { module, pick: pick_of(module), presets: all_modules.clone(), lead: sheet_left, trail: sheet_right, on_close: move |()| module_open.set(None) }
             }
             if picker() {
-                PatchPicker { revision: model.revision, lead, trail, on_close: move |()| picker.set(false) }
+                PatchPicker { revision: model.revision, lead: sheet_left, trail: sheet_right, on_close: move |()| picker.set(false) }
             }
         }
     }

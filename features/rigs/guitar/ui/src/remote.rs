@@ -260,6 +260,7 @@ pub fn GuitarRigRemote() -> Element {
     // A phone held sideways: the chain a page at a time, nothing else.
     let size = try_use_context::<crate::control::WindowSize>().map_or((0.0, 0.0), |s| (s.0)());
     if crate::control::FormFactor::of(size) == crate::control::FormFactor::Phone {
+        let sheet_side = (crate::phone::corner_clear(crate::phone::screen_radius(), 8.0) + 2.0).ceil() as u32;
         return rsx! {
             fts_audio_ui::drag::DragProvider { fill: true,
                 div { style: "position: relative; width: 100%; height: 100%; display: flex;",
@@ -275,7 +276,9 @@ pub fn GuitarRigRemote() -> Element {
                     // Audio Settings (the rail's Audio), over the whole page:
                     // a phone has no room beside it.
                     if audio_open() {
-                        div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; overflow: auto; background: #0f1012;",
+                        // Kept clear of the screen's rounded corners (its
+                        // head's buttons sit in the top two).
+                        div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; overflow: auto; box-sizing: border-box; padding: 0 {sheet_side}px; background: #0f1012;",
                             AudioSettingsModal {
                                 bridge: live_bridge.clone().unwrap_or_else(|| AudioSettingsBridge {
                                     inputs: Vec::new(),
