@@ -143,6 +143,47 @@ impl Page {
     }
 }
 
+impl Page {
+    /// The page's icon (24-unit strokes), in the middle of its raised tile.
+    fn icon(self) -> &'static [&'static str] {
+        match self {
+            // A jack plug.
+            Self::Input => &["M12 2v6", "M8 8h8v5a4 4 0 0 1-8 0z", "M12 17v5"],
+            // An expression pedal, rocked.
+            Self::Pedals => &["M4 20h16", "M6 20L9 6l10 3-3 11"],
+            // A note, raised.
+            Self::Pitch => &["M9 18V6l6-2", "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z", "M18 14V4", "M15 7l3-3 3 3"],
+            // A low-pass curve.
+            Self::Filter => &["M3 8h8c4 0 5 10 10 10"],
+            // One wave.
+            Self::PreModTrem => &["M2 12c2.5-6 5-6 7.5 0s5 6 7.5 0 3.5-3 5-3"],
+            // Repeats dying away.
+            Self::PreDelayVerb => &["M4 6v12", "M10 9v6", "M15 10.5v3", "M19 11.5v1"],
+            // Squeezed in from both sides.
+            Self::PreComp => &["M12 3v6", "M9 6l3 3 3-3", "M12 21v-6", "M9 18l3-3 3 3", "M4 12h16"],
+            // A flame.
+            Self::Drives => &["M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-7 1 1 2 2 3 4"],
+            // A combo: its panel and its speaker.
+            Self::Amps => &["M4 5h16v14H4z", "M4 9h16", "M9 14a3 3 0 1 0 6 0 3 3 0 1 0-6 0"],
+            // Three bands.
+            Self::Eq => &["M6 4v16", "M12 4v16", "M18 4v16", "M4 14h4", "M10 8h4", "M16 16h4"],
+            // A gate, open.
+            Self::GatePostComp => &["M3 18h5V6h8v12h5"],
+            // Two waves.
+            Self::ModMotion => &["M2 9c2.5-4 5-4 7.5 0s5 4 7.5 0 3.5-2 5-2", "M2 15c2.5-4 5-4 7.5 0s5 4 7.5 0 3.5-2 5-2"],
+            // Echoes, each smaller.
+            Self::Delays => &[
+                "M3 12a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0",
+                "M10.5 12a1.8 1.8 0 1 0 3.6 0 1.8 1.8 0 1 0-3.6 0",
+                "M16.5 12a1.1 1.1 0 1 0 2.2 0 1.1 1.1 0 1 0-2.2 0",
+                "M21 12h.01",
+            ],
+            // A room ringing out.
+            Self::Reverbs => &["M12 12h.01", "M8.5 8.5a5 5 0 0 0 0 7", "M15.5 8.5a5 5 0 0 1 0 7", "M5.5 5.5a9 9 0 0 0 0 13", "M18.5 5.5a9 9 0 0 1 0 13"],
+        }
+    }
+}
+
 /// What the rail picks: the chain's pages, or the footswitches.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Mode {
@@ -157,7 +198,7 @@ const RAISED: &str = "#26292f";
 const TEXT: &str = "#e5e7eb";
 const DIM: &str = "#8b9099";
 /// The status line's height (along the top).
-const LINE_H: u32 = 40;
+const LINE_H: u32 = 30;
 /// The chain along the bottom edge, small (the rail's Chain raises it).
 const CHAIN_H: u32 = 22;
 /// The raised chain, as a share of the view's height.
@@ -193,7 +234,8 @@ pub struct PhoneHost {
 pub struct IslandLeft(pub Signal<bool>);
 
 /// The phone's rig surface: the status along the top, the rail down the
-/// left (Control — Chain once on it —, Switch; Profile/Setlist), and the view — in
+/// left (bottom up: Control — Chain once on it —, Profile/Setlist, Switch,
+/// Audio), and the view — in
 /// Control, a page of the chain over the chain itself.
 #[component]
 pub fn PhoneControl(
@@ -310,6 +352,12 @@ pub fn PhoneControl(
         (Mode::Control, Page::Reverbs) => vec!["Time", "Reverb"],
         _ => Vec::new(),
     };
+    let (top_module, page_module) = (modules.first().copied(), modules.get(1).copied());
+    // A module's preset as the status line names it.
+    let name_of = |module: &str| {
+        let (preset, snapshot) = pick_of(module).map(|p| (p.preset, p.snapshot)).unwrap_or_default();
+        if snapshot.is_empty() { preset } else { format!("{preset} · {snapshot}") }
+    };
     // The module whose presets are open over the screen.
     let mut module_open = use_signal(|| None::<&'static str>);
     // Profile or Song: the perform mode, shared with every remote.
@@ -341,19 +389,30 @@ pub fn PhoneControl(
         let color = p.color();
         let look = if on { format!("background: {color}; color: #0a0b0d;") } else { format!("background: {RAISED}; color: {color};") };
         // Raised, the names sit along the tiles' tops, level with each other.
+        // Under it, the page's icon in the middle of the tile.
+        let ink = if on { "#0a0b0d" } else { color };
         let size = if tall {
-            format!("flex: 1 0 {CHAIN_TILE_MIN}px; align-items: flex-start; padding-top: 10px; border-radius: 6px; font-size: 13px;")
+            format!("flex: 1 0 {CHAIN_TILE_MIN}px; flex-direction: column; align-items: center; padding-top: 10px; border-radius: 6px; font-size: 13px;")
         } else {
-            "flex: 1 1 0%; align-items: center; border-radius: 3px; font-size: 9px;".to_string()
+            "flex: 1 1 0%; align-items: center; justify-content: center; border-radius: 3px; font-size: 9px;".to_string()
         };
         rsx! {
             div { key: "{p.short()}",
-                style: "min-width: 0; display: flex; justify-content: center; box-sizing: border-box; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; overflow: hidden; {size} {look}",
+                style: "min-width: 0; display: flex; box-sizing: border-box; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; overflow: hidden; {size} {look}",
                 onclick: move |_| {
                     page.set(p);
                     chain_tall.set(false);
                 },
-                "{p.short()}"
+                span { "{p.short()}" }
+                if tall {
+                    div { style: "flex: 1 1 0%; display: flex; align-items: center; justify-content: center;",
+                        svg { width: "26", height: "26", view_box: "0 0 24 24", fill: "none", stroke: ink, stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round",
+                            for d in p.icon().iter() {
+                                path { d: *d }
+                            }
+                        }
+                    }
+                }
             }
         }
     };
@@ -365,33 +424,53 @@ pub fn PhoneControl(
             // ── The status, along the top: what plays (tap for every profile
             // and patch), the page's module presets — the top-level module,
             // then the page's own — and the audio ──
-            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px 0 4px; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
-                // Back to the instrument menu.
-                if let Some(host) = host {
-                    div { style: "flex: 0 0 auto; width: 36px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer;",
-                        onclick: move |_| host.on_home.call(()),
+            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
+                // The way back, over the rail and as wide as it: the corner
+                // the two make reads as one column.
+                div { style: "flex: 0 0 {RAIL_W}px; align-self: stretch; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-right: 1px solid {RULE}; cursor: pointer;",
+                    onclick: move |_| {
+                        if let Some(host) = host {
+                            host.on_home.call(());
+                        }
+                    },
+                    if host.is_some() {
                         RailIcon { name: "Rigs", color: TEXT }
                     }
                 }
-                // Names only: a tap opens the picker, with its steppers.
-                StatusName { label: playing, name: patch_name.clone(), on_open: move |()| picker.set(true) }
-                for module in modules {
-                    {
-                        let (preset, snapshot) = pick_of(module).map(|p| (p.preset, p.snapshot)).unwrap_or_default();
-                        let name = if snapshot.is_empty() { preset } else { format!("{preset} · {snapshot}") };
-                        rsx! {
-                            StatusName { key: "{module}", label: module.to_string(), name, on_open: move |()| module_open.set(Some(module)) }
-                        }
+                // Left: what plays.
+                div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 4px;",
+                    StatusName { label: playing, name: patch_name.clone(), on_open: move |()| picker.set(true) }
+                }
+                // Centre: the top-level module (the Core, Time).
+                div { style: "flex: 0 1 auto; min-width: 0; display: flex; justify-content: center;",
+                    if let Some(module) = top_module {
+                        StatusName { label: module.to_string(), name: name_of(module), on_open: move |()| module_open.set(Some(module)) }
                     }
                 }
-                div { style: "flex: 1 1 0%;" }
-                AudioBadge { running: (state.running)(), error: (state.audio_error)() }
+                // Right: the page's own module, and the audio.
+                div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px;",
+                    if let Some(module) = page_module {
+                        StatusName { label: module.to_string(), name: name_of(module), on_open: move |()| module_open.set(Some(module)) }
+                    }
+                    AudioBadge { running: (state.running)(), error: (state.audio_error)() }
+                }
             }
             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;",
                 // ── The rail ──
-                div { style: "flex: 0 0 {RAIL_W}px; display: flex; flex-direction: column; justify-content: center; gap: 2px; background: {BAR_BG}; border-right: 1px solid {RULE};",
-                    // Control — and once on it, Chain: the chain raised over
-                    // the page for picking one.
+                // Bottom-aligned, the most used lowest, under the thumb:
+                // Audio, Switch, Profile/Setlist, and Control (Chain once on
+                // it — the chain raised over the page for picking one).
+                div { style: "flex: 0 0 {RAIL_W}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding-bottom: 6px; background: {BAR_BG}; border-right: 1px solid {RULE};",
+                    RailButton { on: false, label: "Audio", icon: "Audio", onclick: move |()| crate::settings::open_audio_settings() }
+                    RailButton { on: mode() == Mode::Switch, label: "Switch", icon: "Switch",
+                        onclick: move |()| {
+                            chain_tall.set(false);
+                            mode.set(Mode::Switch);
+                        },
+                    }
+                    // Profile or Setlist, one button that flips between
+                    // them: it shows which one plays.
+                    RailButton { on: true, label: plays, icon: plays, onclick: move |()| set_play(if song { 1 } else { 2 }) }
                     RailButton { on: mode() == Mode::Control, label: control_label, icon: control_label,
                         onclick: move |()| {
                             if mode() == Mode::Control {
@@ -401,16 +480,6 @@ pub fn PhoneControl(
                             }
                         },
                     }
-                    RailButton { on: mode() == Mode::Switch, label: "Switch", icon: "Switch",
-                        onclick: move |()| {
-                            chain_tall.set(false);
-                            mode.set(Mode::Switch);
-                        },
-                    }
-                    div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
-                    // Profile or Setlist, one button that flips between
-                    // them: it shows which one plays.
-                    RailButton { on: true, label: plays, icon: plays, onclick: move |()| set_play(if song { 1 } else { 2 }) }
                 }
                 // ── The view ──
                 div { style: "position: relative; flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
@@ -496,7 +565,7 @@ fn AudioBadge(running: bool, error: String) -> Element {
         ("#f59e0b", "No audio", "#fcd34d")
     };
     rsx! {
-        div { style: "flex: 0 0 auto; height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 13px; background: {RAISED}; cursor: pointer;",
+        div { style: "flex: 0 0 auto; height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 11px; background: {RAISED}; cursor: pointer;",
             title: if error.is_empty() { "Audio" } else { "{error}" },
             onclick: move |_| crate::settings::open_audio_settings(),
             span { style: "width: 7px; height: 7px; border-radius: 4px; background: {dot};" }
@@ -534,6 +603,8 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
         "Profile" => &["M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M4 21c1-4 4-6 8-6s7 2 8 6"],
         // Back to the instrument menu.
         "Rigs" => &["M14 6l-6 6 6 6"],
+        // A speaker.
+        "Audio" => &["M4 9h3l4-3.5v13L7 15H4z", "M15 9.5a4 4 0 0 1 0 5", "M17.5 7a7.5 7.5 0 0 1 0 10"],
         // The chain: a row of segments, raised.
         "Chain" => &["M3 15h4v5H3z", "M10 15h4v5h-4z", "M17 15h4v5h-4z", "M8 9l4-4 4 4"],
         // A note.
@@ -548,16 +619,20 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
     }
 }
 
-/// One name on the status line, its kind small over it ("BLUES" over the
-/// patch, "CORE" over the Core's preset). A tap opens its picker, where the
+/// One name on the status line, its kind small before it ("BLUES" before
+/// the patch, "CORE" before the Core's preset). A tap opens its picker, where the
 /// steppers are — the line keeps only the names.
 #[component]
 fn StatusName(label: String, name: String, on_open: EventHandler<()>) -> Element {
     rsx! {
-        div { style: "flex: 0 1 auto; min-width: 0; max-width: 220px; height: 32px; display: flex; flex-direction: column; justify-content: center; padding: 0 10px; border-radius: 6px; background: {RAISED}; cursor: pointer;",
+        div { style: "flex: 0 1 auto; min-width: 0; height: 24px; display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 0 8px; border-radius: 5px; background: {RAISED}; cursor: pointer; overflow: hidden;",
             onclick: move |_| on_open.call(()),
-            span { style: "font-size: 8px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {DIM}; white-space: nowrap; overflow: hidden;", "{label}" }
-            span { style: "font-size: 12px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{name}" }
+            span { style: "flex: 0 0 auto; font-size: 8px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {DIM}; white-space: nowrap;", "{label}" }
+            span { style: "min-width: 0; font-size: 12px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{name}" }
+            // Opens its picker.
+            svg { width: "10", height: "10", view_box: "0 0 24 24", fill: "none", stroke: DIM, stroke_width: "2.5", stroke_linecap: "round", stroke_linejoin: "round",
+                path { d: "M6 9l6 6 6-6" }
+            }
         }
     }
 }
