@@ -318,7 +318,7 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
                                                 div { key: "{frames}", style: "min-width: 76px; height: 44px; padding: 0 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; {look}",
                                                     onclick: move |_| apply(AudioPrefs { buffer_size: frames, ..p.clone() }),
                                                     span { style: "font-size: 15px; font-weight: 800;", "{frames}" }
-                                                    span { style: "font-size: 10px; font-weight: 600; opacity: 0.7;", "{ms:.1} ms" }
+                                                    span { style: "font-size: 11px; font-weight: 600; opacity: 0.7;", "{ms:.1} ms" }
                                                 }
                                             }
                                         }
@@ -415,7 +415,9 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
                                                 },
                                                 span { style: "flex: 1 1 0%; font-size: 16px; font-weight: 700;", "{label}" }
                                                 if on {
-                                                    span { style: "font-size: 18px; font-weight: 800; color: {GREEN};", "✓" }
+                                                    svg { width: "20", height: "20", view_box: "0 0 24 24", fill: "none", stroke: GREEN, stroke_width: "3", stroke_linecap: "round", stroke_linejoin: "round",
+                                                        path { d: "M5 12.5l4.5 4.5L19 7" }
+                                                    }
                                                 }
                                             }
                                         }

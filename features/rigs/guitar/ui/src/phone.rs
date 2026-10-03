@@ -201,7 +201,7 @@ const DIM: &str = "#8b9099";
 /// The status line's height (along the top).
 const LINE_H: u32 = 36;
 /// The chain along the bottom edge, small (the rail's Chain raises it).
-const CHAIN_H: u32 = 22;
+const CHAIN_H: u32 = 24;
 /// The raised chain, as a share of the view's height.
 const CHAIN_TALL: &str = "31%";
 /// One page of the raised chain at its narrowest: past this the chain
@@ -528,7 +528,7 @@ pub fn PhoneControl(
         let size = if tall {
             format!("flex: 1 0 {CHAIN_TILE_MIN}px; flex-direction: column; align-items: center; padding-top: 10px; border-radius: 6px; font-size: 13px;")
         } else {
-            "flex: 1 1 0%; align-items: center; justify-content: center; border-radius: 3px; font-size: 9px;".to_string()
+            "flex: 1 1 0%; align-items: center; justify-content: center; border-radius: 3px; font-size: 11px;".to_string()
         };
         rsx! {
             div { key: "{p.short()}",
@@ -728,7 +728,7 @@ fn AudioBadge(running: bool, error: String) -> Element {
             onclick: move |_| crate::settings::open_audio_settings(),
             span { style: "width: 7px; height: 7px; border-radius: 4px; background: {dot};" }
             if !label.is_empty() {
-                span { style: "font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: {color}; white-space: nowrap;", "{label}" }
+                span { style: "font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: {color}; white-space: nowrap;", "{label}" }
             }
         }
     }
@@ -743,7 +743,7 @@ fn RailButton(on: bool, label: &'static str, icon: &'static str, onclick: EventH
         div { style: "height: 48px; margin: 0 4px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: {bg}; cursor: pointer;",
             onclick: move |_| onclick.call(()),
             RailIcon { name: icon, color: fg }
-            span { style: "font-size: 9px; font-weight: 600; color: {fg};", "{label}" }
+            span { style: "font-size: 11px; font-weight: 600; color: {fg};", "{label}" }
         }
     }
 }
@@ -785,7 +785,7 @@ fn StatusName(label: String, name: String, on_open: EventHandler<()>) -> Element
     rsx! {
         div { style: "flex: 0 1 auto; min-width: 0; height: 30px; display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 0 10px; border-radius: 5px; background: {RAISED}; cursor: pointer; overflow: hidden;",
             onclick: move |_| on_open.call(()),
-            span { style: "flex: 0 0 auto; font-size: 8px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {DIM}; white-space: nowrap;", "{label}" }
+            span { style: "flex: 0 0 auto; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: {DIM}; white-space: nowrap;", "{label}" }
             span { style: "min-width: 0; font-size: 12px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{name}" }
             // Opens its picker.
             svg { width: "10", height: "10", view_box: "0 0 24 24", fill: "none", stroke: DIM, stroke_width: "2.5", stroke_linecap: "round", stroke_linejoin: "round",

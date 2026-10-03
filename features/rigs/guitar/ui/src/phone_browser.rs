@@ -4,11 +4,21 @@
 //! algorithm, one drive slot's pedal and capture.
 //!
 //! It opens on what was tapped — a name on the status line, a face's
-//! preset name — and a strip of tabs along the top reaches the rest. Each
-//! tab is the same shape: ‹ what plays › on big steppers, then everything
-//! there is to choose, as tiles a thumb hits without aiming. A pick plays
-//! at once; one that leads somewhere (a profile to its patches, a setlist
-//! to its songs, a pedal to its captures) keeps the browser open there.
+//! preset name or algorithm — and follows Apple's guidance for this kind of
+//! screen (the Human Interface Guidelines' sheets, lists, segmented
+//! controls and accessibility pages):
+//!
+//! - a sidebar, not a strip of tabs: more than about five sections is
+//!   navigation, and in landscape that is a list down the side (Settings'
+//!   shape) — grouped (this page's blocks; what plays; the modules), each
+//!   row 44 points tall and saying what it is on now;
+//! - the section on the right: ‹ what plays › on 44-point steppers, then
+//!   every choice, the chosen one marked with a checkmark (not inverted),
+//!   a choice that leads somewhere (a profile to its patches, a setlist to
+//!   its songs, a pedal to its captures) with a chevron;
+//! - a pick applies at once, so there is no Save — Done, trailing, closes,
+//!   and so does a swipe down from the head;
+//! - no text under 11 points, targets no smaller than 44.
 
 use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
@@ -73,26 +83,35 @@ impl BrowseTab {
     }
 }
 
-/// A tile's look: lit when it is what plays.
-fn tile(on: bool) -> String {
-    if on {
-        "background: #f4f4f5; color: #0a0b0d; border: 1px solid #f4f4f5;".to_string()
-    } else {
-        format!("background: {RAISED}; color: {TEXT}; border: 1px solid {RULE};")
-    }
-}
+/// The accent a choice that plays is marked with.
+const ACCENT: &str = "#0a84ff";
 
-/// One choice: a big tile, its kind small over its name.
+/// One choice: a tile, its kind small over its name, a checkmark when it
+/// is what plays and a chevron when it leads on.
 #[component]
-fn Tile(name: String, #[props(default)] sub: String, on: bool, onpick: EventHandler<()>) -> Element {
-    let look = tile(on);
+fn Tile(name: String, #[props(default)] sub: String, on: bool, #[props(default)] leads: bool, onpick: EventHandler<()>) -> Element {
+    let look = if on {
+        format!("background: rgba(10, 132, 255, 0.18); border: 1px solid {ACCENT};")
+    } else {
+        format!("background: {RAISED}; border: 1px solid {RULE};")
+    };
     rsx! {
-        div { style: "flex: 0 0 auto; width: 168px; min-height: 58px; box-sizing: border-box; padding: 9px 12px; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; gap: 2px; cursor: pointer; overflow: hidden; {look}",
+        div { style: "min-height: 56px; box-sizing: border-box; padding: 8px 12px; border-radius: 12px; display: flex; flex-direction: row; align-items: center; gap: 8px; cursor: pointer; overflow: hidden; color: {TEXT}; {look}",
             onclick: move |_| onpick.call(()),
-            if !sub.is_empty() {
-                span { style: "font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.6; white-space: nowrap; overflow: hidden;", "{sub}" }
+            div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px;",
+                if !sub.is_empty() {
+                    span { style: "font-size: 11px; font-weight: 700; color: {DIM}; white-space: nowrap; overflow: hidden;", "{sub}" }
+                }
+                span { style: "font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden;", "{name}" }
             }
-            span { style: "font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden;", "{name}" }
+            if on {
+                // Drawn: the checkmark glyph is not in Blitz's fonts.
+                svg { width: "18", height: "18", view_box: "0 0 24 24", fill: "none", stroke: ACCENT, stroke_width: "3", stroke_linecap: "round", stroke_linejoin: "round",
+                    path { d: "M5 12.5l4.5 4.5L19 7" }
+                }
+            } else if leads {
+                span { style: "flex: 0 0 auto; font-size: 20px; color: {DIM};", "›" }
+            }
         }
     }
 }
@@ -103,11 +122,11 @@ fn Section(title: String, children: Element) -> Element {
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 8px;",
             if !title.is_empty() {
-                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {DIM};", "{title}" }
+                span { style: "font-size: 13px; font-weight: 700; color: {DIM}; padding-left: 4px;", "{title}" }
             }
-            // Rows of tiles, laid out as fixed rows (a wrapped flex row in a
-            // scroller is placed above its top in Blitz).
-            div { style: "display: grid; grid-template-columns: repeat(auto-fill, 168px); gap: 8px;", {children} }
+            // A grid (not a wrapped flex row — Blitz places one in a
+            // scroller above its top), 12 points between tiles.
+            div { style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px;", {children} }
         }
     }
 }
@@ -150,15 +169,39 @@ pub fn PhoneBrowser(
                         r.library().await.unwrap_or_default(),
                         r.patches().await.unwrap_or_default(),
                         r.compositions().await.unwrap_or_default(),
+                        r.nodes().await.unwrap_or_default(),
                     ),
-                    None => (LibraryModel::default(), Vec::<PatchInfo>::new(), CompositionModel::default()),
+                    None => (LibraryModel::default(), Vec::<PatchInfo>::new(), CompositionModel::default(), Vec::new()),
                 }
             }
         }
     });
-    let (lib, patches, comp) = data.read().clone().unwrap_or_default();
+    let (lib, patches, comp, fetched_nodes) = data.read().clone().unwrap_or_default();
     let blocks: Vec<LiveBlock> = (state.blocks)();
-    let nodes = (state.nodes)();
+    // The rig's nodes, as fetched with the rest (the live view's own copy
+    // can still be empty while nothing has changed the chain yet).
+    let nodes = if fetched_nodes.is_empty() { (state.nodes)() } else { fetched_nodes };
+    // A drive slot's node: by its name or its pedal's (a slot's node is
+    // named for the pedal in it), else the slot's place among the board's
+    // slots — the nodes that offer pedals, in chain order.
+    let slot_node = {
+        let (blocks, nodes) = (blocks.clone(), nodes.clone());
+        move |slot: &str| -> Option<signal_proto::live_node::LiveNode> {
+            let slots: Vec<_> = nodes.iter().filter(|n| !n.alternatives.is_empty()).cloned().collect();
+            let block = blocks.iter().find(|b| b.name.eq_ignore_ascii_case(slot));
+            slots
+                .iter()
+                .find(|n| n.name.eq_ignore_ascii_case(slot) || block.is_some_and(|b| !b.preset.is_empty() && n.name.eq_ignore_ascii_case(&b.preset)))
+                .cloned()
+                .or_else(|| {
+                    let at = blocks
+                        .iter()
+                        .filter(|b| matches!(b.block_type, BlockType::Drive | BlockType::Boost))
+                        .position(|b| b.name.eq_ignore_ascii_case(slot))?;
+                    slots.get(at).cloned()
+                })
+        }
+    };
 
     // Every RPC a pick or a step makes, fired and forgotten. The client in
     // a signal (it is `Copy`), so every tile's closure can hold it.
@@ -173,9 +216,8 @@ pub fn PhoneBrowser(
         }};
     }
 
-    // What plays, and the step, per tab.
-    let current = on();
-    let (head_label, head_name, head_sub): (String, String, String) = match &current {
+    // What plays, per tab: (its heading, the name, a line under it).
+    let now = |t: &BrowseTab| -> (String, String, String) { match t {
         BrowseTab::Profiles => ("Profile".into(), model.profile_name.clone(), String::new()),
         BrowseTab::Patches => (
             model.profile_name.clone(),
@@ -205,10 +247,13 @@ pub fn PhoneBrowser(
             let b = blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name));
             (name.clone(), b.map(|b| b.preset.clone()).unwrap_or_default(), b.map(|b| b.detail.clone()).unwrap_or_default())
         }
-    };
+    } };
+    let current = on();
+    let (head_label, head_name, head_sub) = now(&current);
     let step = {
         let current = current.clone();
-        let (lib, patches, comp, blocks, nodes, model) = (lib.clone(), patches.clone(), comp.clone(), blocks.clone(), nodes.clone(), model.clone());
+        let slot_node = slot_node.clone();
+        let (lib, patches, comp, blocks, model) = (lib.clone(), patches.clone(), comp.clone(), blocks.clone(), model.clone());
         move |d: i32| {
             let wrap = |at: Option<usize>, n: usize| -> Option<usize> {
                 (n > 0).then(|| at.map_or(0, |i| (i as i64 + i64::from(d)).rem_euclid(n as i64) as usize))
@@ -248,7 +293,8 @@ pub fn PhoneBrowser(
                     }
                 }
                 BrowseTab::Pedal { name } => {
-                    let Some(node) = nodes.iter().find(|n| n.name.eq_ignore_ascii_case(name) && !n.alternatives.is_empty()) else { return };
+                    let Some(node) = slot_node(name) else { return };
+                    let node = &node;
                     let pedal = blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)).map(|b| b.preset.clone()).unwrap_or_default();
                     let at = node.alternatives.iter().position(|a| a.name.eq_ignore_ascii_case(&pedal));
                     if let Some(i) = wrap(at, node.alternatives.len()) {
@@ -260,44 +306,69 @@ pub fn PhoneBrowser(
         }
     };
 
-    // The strip: the block or pedal it was opened on, then what plays,
-    // then the modules.
-    let mut tabs: Vec<BrowseTab> = front.clone();
-    tabs.extend([BrowseTab::Profiles, BrowseTab::Patches, BrowseTab::Songs, BrowseTab::Setlists]);
-    tabs.extend(BrowseTab::MODULES.iter().map(|m| BrowseTab::Module(m)));
-    let arrow = format!("flex: 0 0 64px; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: {RAISED}; border: 1px solid {RULE}; color: {TEXT}; font-size: 26px; font-weight: 700; cursor: pointer;");
+    // The sidebar's groups: this page's blocks (and the block or pedal it
+    // was opened on), what plays, the modules.
+    let groups: Vec<(&str, Vec<BrowseTab>)> = vec![
+        ("This page", front.clone()),
+        ("Playing", vec![BrowseTab::Profiles, BrowseTab::Patches, BrowseTab::Songs, BrowseTab::Setlists]),
+        ("Modules", BrowseTab::MODULES.iter().map(|m| BrowseTab::Module(m)).collect()),
+    ];
+    let rows: Vec<(String, Vec<(BrowseTab, String, String)>)> = groups
+        .into_iter()
+        .filter(|(_, tabs)| !tabs.is_empty())
+        .map(|(g, tabs)| (g.to_string(), tabs.into_iter().map(|t| { let (_, n, _) = now(&t); let l = t.label(); (t, l, n) }).collect()))
+        .collect();
+    let arrow = format!("flex: 0 0 56px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: {RAISED}; border: 1px solid {RULE}; color: {TEXT}; font-size: 24px; font-weight: 700; cursor: pointer;");
     let back = step.clone();
+    // A swipe down from the head closes it (where a sheet's grabber is).
+    let mut drag = use_signal(|| None::<f64>);
 
     rsx! {
-        div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: column; box-sizing: border-box; padding: 0 {trail}px 0 {lead}px; background: {BG}; color: {TEXT};",
-            // ── The tabs ──
-            div { style: "flex: 0 0 auto; display: flex; flex-direction: row; gap: 4px; padding: 6px 8px; overflow-x: auto; overflow-y: hidden; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
-                for t in tabs {
-                    {
-                        let look = tile(t == current);
-                        let label = t.label();
-                        let key = format!("{t:?}");
-                        rsx! {
-                            div { key: "{key}", style: "flex: 1 0 auto; min-width: 64px; padding: 0 8px; box-sizing: border-box; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 12px; font-weight: 800; cursor: pointer; overflow: hidden; white-space: nowrap; {look}",
-                                onclick: move |_| on.set(t.clone()),
-                                "{label}"
+        div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: row; box-sizing: border-box; padding: 0 {trail}px 0 {lead}px; background: {BG}; color: {TEXT};",
+            onpointermove: move |e: PointerEvent| {
+                if let Some(from) = drag() && e.client_coordinates().y - from > 70.0 {
+                    drag.set(None);
+                    on_close.call(());
+                }
+            },
+            onpointerup: move |_| drag.set(None),
+            // ── The sidebar ──
+            div { style: "flex: 0 0 216px; height: 100%; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box; padding: 10px 8px; background: {BAR_BG}; border-right: 1px solid {RULE};",
+                for (group, tabs) in rows {
+                    span { key: "g-{group}", style: "font-size: 12px; font-weight: 700; color: {DIM}; padding: 10px 10px 4px;", "{group}" }
+                    for (t, label, value) in tabs {
+                        {
+                            let selected = t == current;
+                            let look = if selected { format!("background: {RAISED};") } else { String::new() };
+                            let key = format!("{t:?}");
+                            rsx! {
+                                div { key: "{key}", style: "min-height: 44px; flex: 0 0 auto; box-sizing: border-box; padding: 5px 10px; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; cursor: pointer; {look}",
+                                    onclick: move |_| on.set(t.clone()),
+                                    span { style: "font-size: 15px; font-weight: 700; color: {TEXT}; white-space: nowrap; overflow: hidden;", "{label}" }
+                                    if !value.is_empty() {
+                                        span { style: "font-size: 11px; font-weight: 600; color: {DIM}; white-space: nowrap; overflow: hidden;", "{value}" }
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
-            // ── What plays, stepped ──
-            div { style: "flex: 0 0 auto; display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid {RULE};",
+            // ── The section ──
+            div { style: "flex: 1 1 0%; min-width: 0; height: 100%; display: flex; flex-direction: column;",
+            // What plays, stepped — and the head a swipe down closes from.
+            div { style: "flex: 0 0 auto; display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid {RULE};",
+                onpointerdown: move |e: PointerEvent| drag.set(Some(e.client_coordinates().y)),
                 div { style: "{arrow}", onclick: move |_| back(-1), "‹" }
                 div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; align-items: center;",
-                    span { style: "font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {DIM};", "{head_label}" }
-                    span { style: "font-size: 18px; font-weight: 800; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{head_name}" }
+                    span { style: "font-size: 12px; font-weight: 700; color: {DIM};", "{head_label}" }
+                    span { style: "font-size: 19px; font-weight: 800; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{head_name}" }
                     if !head_sub.is_empty() {
                         span { style: "font-size: 12px; font-weight: 600; color: {DIM}; white-space: nowrap;", "{head_sub}" }
                     }
                 }
                 div { style: "{arrow}", onclick: move |_| step(1), "›" }
-                div { style: "flex: 0 0 auto; padding: 12px 18px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; background: {RAISED}; border: 1px solid {RULE};",
+                div { style: "flex: 0 0 auto; height: 44px; display: flex; align-items: center; padding: 0 18px; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; color: {ACCENT};",
                     onclick: move |_| on_close.call(()),
                     "Done"
                 }
@@ -308,7 +379,7 @@ pub fn PhoneBrowser(
                     BrowseTab::Profiles => rsx! {
                         Section { title: String::new(),
                             for p in lib.profiles.clone() {
-                                Tile { key: "{p.name}", name: p.name.clone(), sub: format!("{} patches", p.patches), on: p.active,
+                                Tile { key: "{p.name}", name: p.name.clone(), sub: format!("{} patches", p.patches), on: p.active, leads: true,
                                     // A profile leads to its patches.
                                     onpick: { let name = p.name.clone(); move |()| { let name = name.clone(); fire!(r => r.select_profile(name)); on.set(BrowseTab::Patches); } },
                                 }
@@ -347,7 +418,7 @@ pub fn PhoneBrowser(
                     BrowseTab::Setlists => rsx! {
                         Section { title: String::new(),
                             for (i, s) in model.setlists.iter().cloned().enumerate() {
-                                Tile { key: "{i}-{s}", name: s.clone(), on: i as u32 == model.setlist_index,
+                                Tile { key: "{i}-{s}", name: s.clone(), on: i as u32 == model.setlist_index, leads: true,
                                     // A setlist leads to its songs.
                                     onpick: move |()| { fire!(r => r.select_setlist(i as u32)); on.set(BrowseTab::Songs); },
                                 }
@@ -414,7 +485,7 @@ pub fn PhoneBrowser(
                     }
                     BrowseTab::Pedal { name } => {
                         let block = blocks.iter().find(|b| b.name.eq_ignore_ascii_case(&name)).cloned();
-                        let node = nodes.iter().find(|n| n.name.eq_ignore_ascii_case(&name) && !n.alternatives.is_empty()).cloned();
+                        let node = slot_node(&name);
                         let pedal = block.as_ref().map(|b| b.preset.clone()).unwrap_or_default();
                         rsx! {
                             if let Some(b) = block.clone() {
@@ -433,17 +504,25 @@ pub fn PhoneBrowser(
                                     for a in n.alternatives.clone() {
                                         // A pedal leads to its captures: the
                                         // browser stays open on them.
-                                        Tile { key: "{a.id}", name: a.name.clone(), on: a.name.eq_ignore_ascii_case(&pedal),
+                                        Tile { key: "{a.id}", name: a.name.clone(), on: a.name.eq_ignore_ascii_case(&pedal), leads: true,
                                             onpick: { let (id, with) = (n.id.clone(), a.id.clone()); move |()| { let (id, with) = (id.clone(), with.clone()); fire!(r => r.replace_node(id, with)); } },
                                         }
                                     }
                                 }
                             } else {
-                                span { style: "font-size: 14px; color: {DIM};", "This slot has no other pedals to choose." }
+                                // The slot's pedal is the Drive module's to say
+                                // (a module scene names its slots): it changes
+                                // there.
+                                Section { title: "This slot's pedal comes from the Drive module".to_string(),
+                                    Tile { name: "Drive module".to_string(), sub: comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case("Drive")).map(|p| format!("{} · {}", p.preset, p.snapshot)).unwrap_or_default(), on: false, leads: true,
+                                        onpick: move |()| on.set(BrowseTab::Module("Drive")),
+                                    }
+                                }
                             }
                         }
                     }
                 }
+            }
             }
         }
     }

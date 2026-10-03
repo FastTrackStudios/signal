@@ -630,6 +630,76 @@ fn seed_drive_presets(presets: &mut Vec<DrivePresetDef>) -> bool {
     added
 }
 
+/// Add each shipped module preset and block preset a library from before
+/// it shipped has never had, to `modules.styx` and `blocks.styx` — once
+/// (`.seeded-modules`, `.seeded-blocks`), so one the player deletes stays
+/// deleted. A file the library does not have yet is seeded whole on first
+/// read (see `read_compositions`); this is for the one it already has.
+fn seed_compositions() {
+    let Some(store) = writable_store() else { return };
+    seed_entries::<crate::compose::ModuleLib, crate::compose::ModulePresetDef>(
+        &store,
+        crate::compose::MODULES_FILE,
+        DEFAULT_MODULES,
+        ".seeded-modules",
+        |l| &mut l.presets,
+        |p| format!("{}\t{}", p.module, p.name),
+    );
+    seed_entries::<crate::compose::BlockLib, crate::compose::BlockPresetDef>(
+        &store,
+        crate::compose::BLOCKS_FILE,
+        DEFAULT_BLOCKS,
+        ".seeded-blocks",
+        |l| &mut l.presets,
+        |p| format!("{}\t{}", p.block_type, p.name),
+    );
+}
+
+/// [`seed_compositions`] for one file: the shipped entries (by `key`) not in
+/// the library's file nor in its `marker` are added and written back.
+fn seed_entries<L, E>(
+    store: &StyxDir,
+    file: &str,
+    shipped: &str,
+    marker: &str,
+    list: impl Fn(&mut L) -> &mut Vec<E>,
+    key: impl Fn(&E) -> String,
+) where
+    L: for<'a> Facet<'a>,
+    E: Clone,
+{
+    let path = store.dir().join(file);
+    let Read::Ok(mut lib) = config_watch::read_tracked::<L>(&path) else { return };
+    let Ok(mut ship) = facet_styx::from_str::<L>(shipped) else {
+        tracing::warn!(file, "rig library: shipped compositions do not parse");
+        return;
+    };
+    let marker = store.dir().join(marker);
+    let mut seeded: Vec<String> = std::fs::read_to_string(&marker)
+        .map(|t| t.lines().map(str::to_string).collect())
+        .unwrap_or_default();
+    let have: Vec<String> = list(&mut lib).iter().map(&key).map(|k| k.to_lowercase()).collect();
+    let mut added = 0usize;
+    for e in list(&mut ship).iter() {
+        let k = key(e).to_lowercase();
+        if seeded.contains(&k) {
+            continue;
+        }
+        seeded.push(k.clone());
+        if !have.contains(&k) {
+            list(&mut lib).push(e.clone());
+            added += 1;
+        }
+    }
+    if added > 0 {
+        config_watch::write_guarded(&path, &lib);
+        tracing::info!(file, added, "rig library: seeded shipped presets");
+    }
+    if let Err(e) = std::fs::write(&marker, seeded.join("\n") + "\n") {
+        tracing::warn!("rig library: cannot write {}: {e}", marker.display());
+    }
+}
+
 /// Write `profile` (its own patches only) to `profiles/<file>.styx`.
 fn save_profile_file(store: &StyxDir, mut profile: ProfileDef) {
     for preset in &mut profile.presets {
@@ -661,6 +731,7 @@ impl RigLibrary {
         if seed_drive_presets(&mut drive_presets) {
             Self::save_drive_presets(&drive_presets);
         }
+        seed_compositions();
         let songs = read_or_seed::<SongLib>(&store, "songs.styx", DEFAULT_SONGS, || SongLib {
             songs: song_library(),
         })
@@ -1055,6 +1126,17 @@ impl RigLibrary {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_shipped_compositions_parse_with_the_time_delay_and_reverb_presets() {
+        let modules: crate::compose::ModuleLib = facet_styx::from_str(super::DEFAULT_MODULES).expect("modules.styx parses");
+        let blocks: crate::compose::BlockLib = facet_styx::from_str(super::DEFAULT_BLOCKS).expect("blocks.styx parses");
+        let count = |m: &str| modules.presets.iter().filter(|p| p.module == m).count();
+        assert!(count("Time") >= 10, "Time presets ship");
+        assert!(count("Delay") >= 9, "Delay presets ship");
+        assert!(count("Reverb") >= 8, "Reverb presets ship");
+        assert!(blocks.presets.len() >= 100, "block presets ship");
+    }
+
     #[test]
     fn nam_paths_roundtrip_relative() {
         // TODO: Audit that the environment access only happens in single-threaded code.
