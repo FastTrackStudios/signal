@@ -3418,6 +3418,7 @@ dependencies = [
  "cpal",
  "facet",
  "libspa",
+ "objc2 0.6.4",
  "pipewire",
  "rtrb",
  "tracing",
@@ -14294,6 +14295,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "blitz-shell",
+ "block2 0.6.2",
  "daw-proto",
  "dioxus",
  "dioxus-native",
@@ -20578,6 +20580,14 @@ dependencies = [
 ]
 
 [[patch.unused]]
+name = "keyflow-proto"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "keyflow-syntax"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "chord-tool"
 version = "0.1.0"
 
@@ -20587,12 +20597,4 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "session"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "keyflow-proto"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "keyflow-syntax"
 version = "0.1.0"
