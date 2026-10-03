@@ -488,14 +488,14 @@ fn launch_app() {
         // Orientations are Info.plist's (ios/app-plist.sh): an iPhone
         // sideways only, an iPad every way (it keeps multitasking).
         //
-        // The bottom edge is the rig's (the chain runs along it): a swipe
-        // there wakes the home indicator before it leaves the app or
-        // switches apps, so a stray one mid-song does neither — and the
-        // indicator fades while the screen is left alone.
+        // The bottom edge is the rig's (the chain runs along it): locked —
+        // a swipe there only wakes the home indicator, and it takes a second
+        // to leave the app or switch apps, so a stray one mid-song does
+        // neither. (Not auto-hidden too: an auto-hidden indicator overrides
+        // the deferral, and the first swipe goes through.)
         WindowAttributesIos::default()
             .with_prefers_status_bar_hidden(true)
-            .with_preferred_screen_edges_deferring_system_gestures(ScreenEdge::BOTTOM)
-            .with_prefers_home_indicator_hidden(true),
+            .with_preferred_screen_edges_deferring_system_gestures(ScreenEdge::BOTTOM),
     ));
     #[cfg(feature = "signal-guitar")]
     let root = mobile_view::MobileApp;

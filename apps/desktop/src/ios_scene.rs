@@ -112,6 +112,14 @@ fn attach(mtm: MainThreadMarker) {
         &*scene.coordinateSpace(),
     ));
     window.makeKeyAndVisible();
+    // winit asked for the bottom edge's gestures to be deferred while its
+    // window had no scene; the system reads that from the root view
+    // controller of a window on screen, so it is asked again now that there
+    // is one.
+    if let Some(root) = window.rootViewController() {
+        root.setNeedsUpdateOfScreenEdgesDeferringSystemGestures();
+        root.setNeedsUpdateOfHomeIndicatorAutoHidden();
+    }
     tracing::info!(
         ios.scene = "adopted",
         "ios: winit's window joined the scene"

@@ -420,14 +420,19 @@ pub fn PhoneControl(
     rsx! {
         // The whole screen: the view runs under the camera housing on
         // whichever side it is, and what sits beside it keeps clear itself.
-        div { style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; padding-left: {lead}px; background: #0f1012; color: {TEXT};",
+        // Every bar runs to the screen's edges, into its rounded corners —
+        // the app takes the phone's shape. Only what sits in them keeps clear
+        // of the camera housing: the rail's and the corner block's contents
+        // on the housing's side when it is on the left, the page's on the
+        // right.
+        div { style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; background: #0f1012; color: {TEXT};",
             // ── The status, along the top: what plays (tap for every profile
             // and patch), the page's module presets — the top-level module,
             // then the page's own — and the audio ──
             div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
                 // The way back, over the rail and as wide as it: the corner
                 // the two make reads as one column.
-                div { style: "flex: 0 0 {RAIL_W}px; align-self: stretch; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-right: 1px solid {RULE}; cursor: pointer;",
+                div { style: "flex: 0 0 {RAIL_W + lead}px; align-self: stretch; box-sizing: border-box; padding-left: {lead}px; display: flex; align-items: center; justify-content: center; border-right: 1px solid {RULE}; cursor: pointer;",
                     onclick: move |_| {
                         if let Some(host) = host {
                             host.on_home.call(());
@@ -460,7 +465,7 @@ pub fn PhoneControl(
                 // Bottom-aligned, the most used lowest, under the thumb:
                 // Audio, Switch, Profile/Setlist, and Control (Chain once on
                 // it — the chain raised over the page for picking one).
-                div { style: "flex: 0 0 {RAIL_W}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding-bottom: 6px; background: {BAR_BG}; border-right: 1px solid {RULE};",
+                div { style: "flex: 0 0 {RAIL_W + lead}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding: 0 0 6px {lead}px; background: {BAR_BG}; border-right: 1px solid {RULE};",
                     RailButton { on: false, label: "Audio", icon: "Audio", onclick: move |()| crate::settings::open_audio_settings() }
                     RailButton { on: mode() == Mode::Switch, label: "Switch", icon: "Switch",
                         onclick: move |()| {
@@ -482,7 +487,9 @@ pub fn PhoneControl(
                     }
                 }
                 // ── The view ──
-                div { style: "position: relative; flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+                // An explicit height: Blitz lays absolutely placed content out
+                // against a stretched flex item's pre-stretch height.
+                div { style: "position: relative; flex: 1 1 0%; height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
                     match mode() {
                         Mode::Control => rsx! {
                             div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
@@ -495,24 +502,30 @@ pub fn PhoneControl(
                                 div { style: "position: absolute; top: 0; right: 0; width: {EDGE_W + trail}px; height: 100%; z-index: 4;",
                                     onpointerdown: move |e: PointerEvent| swipe.set(Some((e.client_coordinates().x, 1))),
                                 }
-                            }
-                            // The chain, thin, on the screen's bottom edge.
-                            div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-top: 1px solid {RULE};",
-                                for p in Page::ALL {
-                                    {segment(p, false)}
+                                // The chain raised: the page above it dimmed
+                                // (tap there to drop it back). Mounted only
+                                // while up — a hidden layer still takes
+                                // presses in Blitz.
+                                if chain_tall() {
+                                    div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; background: rgba(0, 0, 0, 0.55);",
+                                        onclick: move |_| chain_tall.set(false),
+                                    }
                                 }
                             }
-                            // Raised: over the page's lower part, the page
-                            // above it dimmed (tap there to drop it back).
-                            // Mounted only while up — a hidden layer still
-                            // takes presses in Blitz.
+                            // The chain on the screen's bottom edge: thin, or
+                            // raised as tall tiles. Laid out in the column
+                            // (not over the page) so its tiles are hit where
+                            // they are drawn.
                             if chain_tall() {
-                                div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; display: flex; flex-direction: column;",
-                                    div { style: "flex: 1 1 0%; background: rgba(0, 0, 0, 0.55);", onclick: move |_| chain_tall.set(false) }
-                                    div { style: "flex: 0 0 {CHAIN_TALL}; display: flex; flex-direction: row; gap: 4px; box-sizing: border-box; padding: 8px {CORNER}px 8px 8px; overflow-x: auto; overflow-y: hidden; background: {BAR_BG}; border-top: 1px solid {RULE};",
-                                        for p in Page::ALL {
-                                            {segment(p, true)}
-                                        }
+                                div { style: "flex: 0 0 {CHAIN_TALL}; display: flex; flex-direction: row; gap: 4px; box-sizing: border-box; padding: 8px {CORNER}px 8px 8px; overflow-x: auto; overflow-y: hidden; background: {BAR_BG}; border-top: 1px solid {RULE};",
+                                    for p in Page::ALL {
+                                        {segment(p, true)}
+                                    }
+                                }
+                            } else {
+                                div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-top: 1px solid {RULE};",
+                                    for p in Page::ALL {
+                                        {segment(p, false)}
                                     }
                                 }
                             }
