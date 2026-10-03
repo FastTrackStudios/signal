@@ -39,6 +39,7 @@ mod part_menu;
 mod perform;
 mod phone;
 mod phone_audio;
+mod phone_browser;
 mod preset_look;
 mod remote;
 mod setlist_bar;

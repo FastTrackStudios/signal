@@ -610,8 +610,9 @@ fn nameplate_press(
         }
         "algo_menu" => {
             // A face picked by its preset (a Pre FX pedal): its name opens
-            // the presets.
-            if algos.is_none() {
+            // the presets. On a phone, every pick opens the browser on the
+            // block (its algorithm and its presets) — no popup grid.
+            if algos.is_none() || try_consume_context::<crate::phone::PhoneBrowses>().is_some() {
                 if let Some(s) = try_consume_context::<crate::module_sidebar::SelectedModule>() {
                     s.set(crate::module_sidebar::Selection::Block { name: block.name.clone(), block_type: kind.to_string() });
                 }
