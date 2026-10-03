@@ -6,13 +6,16 @@
 //! board, the Core, the effects after it — and the page that is up fills
 //! the screen:
 //!
-//! - along the top, the chain: a segment a page, coloured by where it
-//!   sits (Core white, Time blue and purple, the rest grey), the page that
-//!   is up lit. Tap one to go there;
+//! - along the top, the status: the profile (or song) and patch (‹ name ›;
+//!   tap the name for every profile and patch), the page's module presets
+//!   (the top-level module — the Core, Time — then the page's own — Drive,
+//!   Amp, Delay, Reverb), and the audio;
 //! - the page itself, its units laid out for the room;
-//! - along the bottom, the profile and patch (‹ name ›; tap the name for
-//!   every profile and patch), and the page's module presets (the Core and
-//!   its Drive and Amp; the Time module and its Delay and Reverb).
+//! - along the bottom edge, the chain: a thin segment a page, coloured by
+//!   where it sits (Core white, Time blue and purple, the rest grey), the
+//!   page that is up lit. Tap one to go there — or the rail's Chain for a
+//!   tall one over the page, easier to hit, that drops back once a page is
+//!   picked (and scrolls sideways when a chain has more pages than fit).
 
 use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
@@ -172,15 +175,16 @@ const RULE: &str = "#2a2c31";
 const RAISED: &str = "#26292f";
 const TEXT: &str = "#e5e7eb";
 const DIM: &str = "#8b9099";
-/// The top line's height, and how far it keeps clear of the screen's
-/// rounded corners.
-const LINE_H: u32 = 44;
-/// The page switcher along the top.
-const CHAIN_H: u32 = 34;
-/// How far down the bottom line its middle starts: high enough that the
-/// home indicator (a pill ~8 points above the screen's bottom edge, across
-/// its middle) has the bar's lower part to itself.
-const MIDDLE_TOP: u32 = 4;
+/// The status line's height (along the top).
+const LINE_H: u32 = 40;
+/// The chain along the bottom edge, small (the rail's Chain raises it).
+const CHAIN_H: u32 = 22;
+/// The raised chain, as a share of the view's height.
+const CHAIN_TALL: &str = "62%";
+/// One page of the raised chain at its narrowest: past this the chain
+/// scrolls sideways instead of squeezing.
+const CHAIN_TILE_MIN: u32 = 46;
+/// How far the bars keep clear of the screen's rounded corners.
 const CORNER: u32 = 16;
 /// The rail down the left.
 const RAIL_W: u32 = 60;
@@ -230,6 +234,15 @@ pub fn PhoneControl(
         Page::Amps
     });
     let mut mode = use_signal(|| Mode::Control);
+    // The chain raised over the page, for picking one (`FTS_PHONE_CHAIN=tall`
+    // opens it so, for the shot tool).
+    let mut chain_tall = use_signal(|| {
+        #[cfg(not(target_arch = "wasm32"))]
+        if std::env::var("FTS_PHONE_CHAIN").is_ok_and(|v| v == "tall") {
+            return true;
+        }
+        false
+    });
     // The profile and patch picker, over the whole screen.
     let mut picker = use_signal(|| false);
     // `FTS_PHONE_TOUR=<secs>`: step through every page on a timer — to look
@@ -290,11 +303,6 @@ pub fn PhoneControl(
         (Mode::Control, Page::Reverbs) => vec![(Kind::TimeModules, "Time"), (Kind::ReverbModules, "Reverb")],
         _ => Vec::new(),
     };
-    let (title, title_color) = match mode() {
-        Mode::Control => (page().title(), page().color()),
-        Mode::Switch => ("Switches", TEXT),
-        Mode::Edit => ("Edit", TEXT),
-    };
     // Profile or Song: the perform mode, shared with every remote.
     let song = model.perform_mode == 2;
     let set_play = {
@@ -310,12 +318,57 @@ pub fn PhoneControl(
     };
     let play_song = set_play.clone();
 
+    // What plays: the song in Song, else the profile.
+    let playing = if song {
+        model.songs.get(model.song_index as usize).map_or_else(|| model.profile_name.clone(), |s| s.name.clone())
+    } else {
+        model.profile_name.clone()
+    };
+    // One chain segment: thin along the bottom, a tall tile when raised.
+    let segment = move |p: Page, tall: bool| {
+        let on = page() == p;
+        let color = p.color();
+        let look = if on { format!("background: {color}; color: #0a0b0d;") } else { format!("background: {RAISED}; color: {color};") };
+        let size = if tall {
+            format!("flex: 1 0 {CHAIN_TILE_MIN}px; flex-direction: column; gap: 6px; border-radius: 6px; font-size: 13px;")
+        } else {
+            "flex: 1 1 0%; border-radius: 3px; font-size: 9px;".to_string()
+        };
+        rsx! {
+            div { key: "{p.short()}",
+                style: "min-width: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; overflow: hidden; {size} {look}",
+                onclick: move |_| {
+                    page.set(p);
+                    chain_tall.set(false);
+                },
+                span { "{p.short()}" }
+                if tall {
+                    span { style: "font-size: 8px; font-weight: 700; opacity: 0.7; text-align: center; padding: 0 3px;", "{p.title()}" }
+                }
+            }
+        }
+    };
+
     rsx! {
-        // The viewport is the safe area's height (the iOS shell keeps the
-        // home indicator out) and the screen's full width: the view runs
-        // under the camera housing on the right, and what sits beside it
-        // keeps clear itself.
+        // The whole screen: the view runs under the camera housing on
+        // whichever side it is, and what sits beside it keeps clear itself.
         div { style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; padding-left: {lead}px; background: #0f1012; color: {TEXT};",
+            // ── The status, along the top: what plays (tap for every profile
+            // and patch), the page's module presets — the top-level module,
+            // then the page's own — and the audio ──
+            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px 0 8px; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
+                PatchStepper { revision: model.revision, profile: playing, on_pick: move |()| picker.set(true) }
+                for (kind, module) in modules {
+                    div { key: "{module}", style: "flex: 0 1 200px; min-width: 0; height: 30px; display: flex;",
+                        ModuleControls { kind, pick: pick_of(module), modules: all_modules.clone(), edited: edited.clone(), style: "width: 100%; height: 100%;" }
+                    }
+                }
+                div { style: "flex: 1 1 0%;" }
+                if mode() == Mode::Control && page().home() == Home::Core {
+                    div { style: "flex: 0 0 110px;", crate::face_chrome::CoreFreeze {} }
+                }
+                AudioBadge { running: (state.running)(), error: (state.audio_error)() }
+            }
             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;",
                 // ── The rail ──
                 div { style: "flex: 0 0 {RAIL_W}px; display: flex; flex-direction: column; justify-content: center; gap: 2px; background: {BAR_BG}; border-right: 1px solid {RULE};",
@@ -326,6 +379,17 @@ pub fn PhoneControl(
                     for (m, label) in [(Mode::Control, "Control"), (Mode::Switch, "Switch"), (Mode::Edit, "Edit")] {
                         RailButton { key: "{label}", on: mode() == m, label, icon: label, onclick: move |()| mode.set(m) }
                     }
+                    // The chain, raised over the page for picking one.
+                    RailButton { on: chain_tall(), label: "Chain", icon: "Chain",
+                        onclick: move |()| {
+                            if mode() == Mode::Control {
+                                chain_tall.toggle();
+                            } else {
+                                mode.set(Mode::Control);
+                                chain_tall.set(true);
+                            }
+                        },
+                    }
                     div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
                     RailButton { on: !song, label: "Profile", icon: "Profile", onclick: move |()| set_play(1) }
                     RailButton { on: song, label: "Song", icon: "Song", onclick: move |()| play_song(2) }
@@ -333,30 +397,31 @@ pub fn PhoneControl(
                     RailButton { on: false, label: "Audio", icon: "Audio", onclick: move |()| crate::settings::open_audio_settings() }
                 }
                 // ── The view ──
-                div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+                div { style: "position: relative; flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
                     match mode() {
                         Mode::Control => rsx! {
-                            // The chain, along the top (tapped most, so away
-                            // from the home indicator): a segment a page,
-                            // coloured by where it sits, the one up lit.
-                            div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 4px {CORNER}px 4px 4px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
+                            div { style: "flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
+                                PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm }
+                            }
+                            // The chain, thin, on the screen's bottom edge.
+                            div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-top: 1px solid {RULE};",
                                 for p in Page::ALL {
-                                    {
-                                        let on = page() == p;
-                                        let color = p.color();
-                                        let look = if on { format!("background: {color}; color: #0a0b0d;") } else { format!("background: {RAISED}; color: {color};") };
-                                        rsx! {
-                                            div { key: "{p.short()}",
-                                                style: "flex: 1 1 0%; min-width: 0; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; overflow: hidden; {look}",
-                                                onclick: move |_| page.set(p),
-                                                "{p.short()}"
-                                            }
+                                    {segment(p, false)}
+                                }
+                            }
+                            // Raised: over the page's lower part, the page
+                            // above it dimmed (tap there to drop it back).
+                            // Mounted only while up — a hidden layer still
+                            // takes presses in Blitz.
+                            if chain_tall() {
+                                div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; display: flex; flex-direction: column;",
+                                    div { style: "flex: 1 1 0%; background: rgba(0, 0, 0, 0.55);", onclick: move |_| chain_tall.set(false) }
+                                    div { style: "flex: 0 0 {CHAIN_TALL}; display: flex; flex-direction: row; gap: 4px; box-sizing: border-box; padding: 8px {CORNER}px 8px 8px; overflow-x: auto; overflow-y: hidden; background: {BAR_BG}; border-top: 1px solid {RULE};",
+                                        for p in Page::ALL {
+                                            {segment(p, true)}
                                         }
                                     }
                                 }
-                            }
-                            div { style: "flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
-                                PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm }
                             }
                         },
                         Mode::Switch => rsx! {
@@ -370,31 +435,6 @@ pub fn PhoneControl(
                             }
                         },
                     }
-                }
-            }
-            // ── The bottom line, on the screen's bottom edge: the patch at the
-            // left, where you are and the audio in the middle, the page's
-            // modules at the right — the controls out at the sides, clear of
-            // the home indicator, which only the indicators sit near ──
-            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px; background: {BAR_BG}; border-top: 1px solid {RULE}; min-width: 0;",
-                PatchStepper { revision: model.revision, profile: model.profile_name.clone(), on_pick: move |()| picker.set(true) }
-                div { style: "flex: 1 1 0%;" }
-                // The middle sits high in the bar: the home indicator runs
-                // along the bottom edge's middle, and nothing goes under it.
-                div { style: "align-self: flex-start; margin-top: {MIDDLE_TOP}px; height: 26px; display: flex; flex-direction: row; align-items: center; gap: 8px;",
-                    span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {title_color}; white-space: nowrap;",
-                        "{title}"
-                    }
-                    AudioBadge { running: (state.running)(), error: (state.audio_error)() }
-                }
-                div { style: "flex: 1 1 0%;" }
-                for (kind, module) in modules {
-                    div { key: "{module}", style: "flex: 0 1 200px; min-width: 0; height: 30px; display: flex;",
-                        ModuleControls { kind, pick: pick_of(module), modules: all_modules.clone(), edited: edited.clone(), style: "width: 100%; height: 100%;" }
-                    }
-                }
-                if mode() == Mode::Control && page().home() == Home::Core {
-                    div { style: "flex: 0 0 110px;", crate::face_chrome::CoreFreeze {} }
                 }
             }
             if picker() {
@@ -457,6 +497,8 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
         "Profile" => &["M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M4 21c1-4 4-6 8-6s7 2 8 6"],
         // Back to the instrument menu.
         "Rigs" => &["M14 6l-6 6 6 6"],
+        // The chain: a row of segments, raised.
+        "Chain" => &["M3 15h4v5H3z", "M10 15h4v5h-4z", "M17 15h4v5h-4z", "M8 9l4-4 4 4"],
         // A speaker.
         "Audio" => &["M4 9h3l4-3.5v13L7 15H4z", "M15 9.5a4 4 0 0 1 0 5", "M17.5 7a7.5 7.5 0 0 1 0 10"],
         // A note.

@@ -480,14 +480,22 @@ fn launch_app() {
 /// (a phone held sideways has no room for it).
 #[cfg(target_os = "ios")]
 fn launch_app() {
-    use dioxus_native::winit::platform::ios::WindowAttributesIos;
+    use dioxus_native::winit::platform::ios::{ScreenEdge, WindowAttributesIos};
     use dioxus_native::{Config, WindowAttributes, launch_cfg};
     // Before UIKit looks the delegate up by the name Info.plist gives it.
     ios_scene::register();
     let window = WindowAttributes::default().with_title("Signal").with_platform_attributes(Box::new(
         // Orientations are Info.plist's (ios/app-plist.sh): an iPhone
         // sideways only, an iPad every way (it keeps multitasking).
-        WindowAttributesIos::default().with_prefers_status_bar_hidden(true),
+        //
+        // The bottom edge is the rig's (the chain runs along it): a swipe
+        // there wakes the home indicator before it leaves the app or
+        // switches apps, so a stray one mid-song does neither — and the
+        // indicator fades while the screen is left alone.
+        WindowAttributesIos::default()
+            .with_prefers_status_bar_hidden(true)
+            .with_preferred_screen_edges_deferring_system_gestures(ScreenEdge::BOTTOM)
+            .with_prefers_home_indicator_hidden(true),
     ));
     #[cfg(feature = "signal-guitar")]
     let root = mobile_view::MobileApp;
