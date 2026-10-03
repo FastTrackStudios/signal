@@ -370,9 +370,11 @@ dioxus = { workspace = true, default-features = true, features = ["mobile", "lau
 # itself is built on — plus the AVAudioSession bootstrap (ios_audio.rs) and
 # the orientation / pasteboard / Bonjour calls (ios_orientation.rs).
 objc2 = "0.6"
+# The record-permission request's completion handler (ios_audio.rs).
+block2 = "0.6"
 objc2-ui-kit = { version = "0.3", features = [
     "UIApplication", "UIResponder", "UIScene", "UISceneOptions", "UISceneSession",
-    "UIWindowScene", "UIWindow", "UIView", "UIScreen", "UIOrientation", "block2",
+    "UIWindowScene", "UIWindow", "UIView", "UIViewController", "UIScreen", "UIOrientation", "block2",
 ] }
 objc2-foundation = { version = "0.3", features = ["NSArray", "NSSet", "NSString"] }
 

@@ -225,28 +225,52 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
 
     let _ = ENGINE.set(engine);
 
-    // iOS: watch for audio-interface hotplug. When an external interface is
-    // connected/disconnected, reconfigure the session (record vs
-    // output-only — the built-in mic is never engaged) and reopen the rig
-    // so cpal binds the new device. Polling is fine for device hotplug.
+    // iOS: watch for audio-interface hotplug and the record permission.
+    // Polling is fine for device hotplug.
+    //
+    // - An interface plugged in: a plain start, which opens its input (and
+    //   takes over from the DI player's output-only rig, if that was up).
+    // - Unplugged: stop — never reopened on the built-in mic, which plays
+    //   straight back out of the speaker — and if the DI player was on, it
+    //   carries on output only.
+    // - The record permission just granted: restart, so the input that was
+    //   silent until now is heard.
     #[cfg(target_os = "ios")]
     {
+        crate::ios_audio::request_record_permission();
         let rig = ENGINE.get().unwrap().rig.clone();
         let handle = runtime.handle().clone();
         std::thread::spawn(move || {
             let mut had = crate::ios_audio::has_external_input();
+            let mut granted = crate::ios_audio::record_permission_granted();
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(1000));
                 let now = crate::ios_audio::has_external_input();
+                let perm = crate::ios_audio::record_permission_granted();
                 if now != had {
                     had = now;
-                    tracing::info!(external = now, "audio route changed — reopening rig");
+                    tracing::info!(external = now, "audio route changed");
                     crate::ios_audio::configure();
                     let rig = rig.clone();
                     handle.spawn(async move {
-                        let _ = rig.start().await;
+                        if now {
+                            let _ = rig.start().await;
+                        } else {
+                            let di = rig.status().await.ok().filter(|s| s.di_playing).map(|s| s.di_clip);
+                            let _ = rig.stop().await;
+                            if let Some(clip) = di {
+                                let _ = rig.play_di(clip, true).await;
+                            }
+                        }
+                    });
+                } else if perm && !granted && now {
+                    tracing::info!("record permission granted — restarting the rig");
+                    let rig = rig.clone();
+                    handle.spawn(async move {
+                        let _ = rig.restart().await;
                     });
                 }
+                granted = perm;
             }
         });
     }

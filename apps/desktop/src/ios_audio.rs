@@ -139,7 +139,51 @@ pub fn configure() {
         if active.is_err() {
             tracing::warn!("AVAudioSession activation failed");
         }
+        // Every channel the route has, not the two a session gets by
+        // default: a four-in interface's inputs 3-4 (and outputs 3-4) are
+        // otherwise not there to pick. Only meaningful once active.
+        let max_in: isize = msg_send![&*session, maximumInputNumberOfChannels];
+        if max_in > 0 {
+            let _: Result<(), Retained<NSObject>> =
+                msg_send![&*session, setPreferredInputNumberOfChannels: max_in, error: _];
+        }
+        let max_out: isize = msg_send![&*session, maximumOutputNumberOfChannels];
+        if max_out > 0 {
+            let _: Result<(), Retained<NSObject>> =
+                msg_send![&*session, setPreferredOutputNumberOfChannels: max_out, error: _];
+        }
         // After activation, availableInputs is populated — log what's there.
         log_available_inputs();
+    }
+}
+
+/// `AVAudioSessionRecordPermission` values (four-char codes).
+const RECORD_GRANTED: usize = 0x6772_6e74; // 'grnt'
+const RECORD_UNDETERMINED: usize = 0x756e_6474; // 'undt'
+
+/// Whether the player has let the app record (an interface's input is a
+/// recording, as far as iOS is concerned).
+pub fn record_permission_granted() -> bool {
+    unsafe {
+        let session: *mut AnyObject = msg_send![class!(AVAudioSession), sharedInstance];
+        let p: usize = msg_send![session, recordPermission];
+        p == RECORD_GRANTED
+    }
+}
+
+/// Ask for the record permission if it has never been asked: without it an
+/// interface's input is silent. The answer arrives later; the route watcher
+/// (`rig_engine`) restarts the rig when it turns to granted.
+pub fn request_record_permission() {
+    unsafe {
+        let session: *mut AnyObject = msg_send![class!(AVAudioSession), sharedInstance];
+        let p: usize = msg_send![session, recordPermission];
+        if p != RECORD_UNDETERMINED {
+            return;
+        }
+        let done = block2::RcBlock::new(|granted: objc2::runtime::Bool| {
+            tracing::info!(granted = granted.as_bool(), "ios: record permission answered");
+        });
+        let _: () = msg_send![session, requestRecordPermission: &*done];
     }
 }

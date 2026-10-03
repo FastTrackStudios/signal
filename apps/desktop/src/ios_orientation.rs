@@ -1,30 +1,10 @@
-//! Per-screen orientation on iOS.
-//!
-//! The app is portrait by default (home page); the guitar-rig surface is a
-//! wide control panel that wants landscape. Info.plist lists BOTH portrait
-//! and landscape (the superset); at runtime we ask the window scene to
-//! rotate with `requestGeometryUpdate` (iOS 16+) as the user moves between
-//! screens.
-//!
-//! `UIInterfaceOrientationMask` values (bit = 1 << UIInterfaceOrientation):
-//! portrait = 2, landscapeLeft = 8, landscapeRight = 16, landscape = 24.
+//! Small UIKit calls the iPhone shell makes: the Local Network prompt, the
+//! pasteboard, the build number, the idle timer. (The app is landscape
+//! only — Info.plist's orientations, written by ios/app-plist.sh — so there
+//! is no per-screen rotation here any more.)
 
-use objc2::rc::{Allocated, Retained};
 use objc2::runtime::AnyObject;
 use objc2::{class, msg_send};
-
-const MASK_PORTRAIT: usize = 1 << 1; // 2
-const MASK_LANDSCAPE: usize = (1 << 3) | (1 << 4); // 24 (left|right)
-
-/// Rotate to landscape (the guitar rig).
-pub fn landscape() {
-    request(MASK_LANDSCAPE);
-}
-
-/// Rotate to portrait (the home page and everything else).
-pub fn portrait() {
-    request(MASK_PORTRAIT);
-}
 
 /// Force the Local Network permission prompt. iOS only asks when it
 /// notices "local network" API use, and iroh's raw UDP unicast gets
@@ -101,42 +81,3 @@ pub fn set_idle_timer_disabled(disabled: bool) {
     }
 }
 
-/// Ask every window scene to adopt `mask`. No-op if the scene isn't up yet.
-/// Raw pointers are used immediately; the one owned object (`prefs`) is a
-/// `Retained`, released when it drops.
-fn request(mask: usize) {
-    unsafe {
-        let app: *mut AnyObject = msg_send![class!(UIApplication), sharedApplication];
-        if app.is_null() {
-            return;
-        }
-        let scenes: *mut AnyObject = msg_send![app, connectedScenes];
-        let all: *mut AnyObject = msg_send![scenes, allObjects];
-        let count: usize = msg_send![all, count];
-        let window_scene_cls = class!(UIWindowScene);
-        for i in 0..count {
-            let scene: *mut AnyObject = msg_send![all, objectAtIndex: i];
-            let is_window_scene: bool = msg_send![scene, isKindOfClass: window_scene_cls];
-            if !is_window_scene {
-                continue;
-            }
-            let prefs: Allocated<AnyObject> =
-                msg_send![class!(UIWindowSceneGeometryPreferencesIOS), alloc];
-            let prefs: Retained<AnyObject> = msg_send![prefs, initWithInterfaceOrientations: mask];
-            let _: () = msg_send![
-                scene,
-                requestGeometryUpdateWithPreferences: &*prefs,
-                errorHandler: std::ptr::null_mut::<AnyObject>()
-            ];
-            // Nudge the root VC to re-evaluate (paired with a supported-
-            // orientations override if we add a hard lock later).
-            let key_window: *mut AnyObject = msg_send![scene, keyWindow];
-            if !key_window.is_null() {
-                let root_vc: *mut AnyObject = msg_send![key_window, rootViewController];
-                if !root_vc.is_null() {
-                    let _: () = msg_send![root_vc, setNeedsUpdateOfSupportedInterfaceOrientations];
-                }
-            }
-        }
-    }
-}

@@ -129,13 +129,15 @@ mod mac_activity;
 const LOG_FILTER: &str = "info,vox_core=warn,schema_deser=off";
 
 fn main() {
-    // iPhone: Blitz keeps the safe area's top and bottom out of the
-    // viewport but not its sides — the rig's phone pages run under the
-    // camera housing and keep clear of it themselves (`IslandLeft`).
+    // iPhone: the page is the whole screen — no safe area at all. The rig's
+    // phone pages keep clear of the one thing that matters, the camera
+    // housing, themselves (`IslandLeft`); the bars reach the edges. (UIKit's
+    // safe area is also unreliable here: an app that rotated at launch kept
+    // portrait's insets on a landscape window.)
     #[cfg(target_os = "ios")]
     // SAFETY: first thing in main, before any thread starts.
     unsafe {
-        std::env::set_var("BLITZ_SAFE_AREA_SIDES", "0");
+        std::env::set_var("BLITZ_SAFE_AREA", "0");
     }
     // Before anything starts audio: a backgrounded rig must not be throttled
     // (it xran whenever another app had focus).
@@ -239,10 +241,13 @@ fn main() {
         // The simulator has no audio interface, and the rig opens only for
         // one: run it in design mode, which lists the real profile — its
         // patches, chain and faces — without audio, and writes nothing.
+        // `SIGNAL_RIG_DESIGN=0` runs it as a phone with no interface does.
         #[cfg(target_abi = "sim")]
-        // SAFETY: single-threaded, before the engine bootstrap spawns.
-        unsafe {
-            std::env::set_var("SIGNAL_RIG_DESIGN", "1");
+        if std::env::var_os("SIGNAL_RIG_DESIGN").is_none() {
+            // SAFETY: single-threaded, before the engine bootstrap spawns.
+            unsafe {
+                std::env::set_var("SIGNAL_RIG_DESIGN", "1");
+            }
         }
         // frame's faces ship in the bundle (ios/app-plist.sh copies them in),
         // beside the executable.
@@ -475,12 +480,22 @@ fn launch_app() {
 /// (a phone held sideways has no room for it).
 #[cfg(target_os = "ios")]
 fn launch_app() {
-    use dioxus_native::winit::platform::ios::WindowAttributesIos;
+    use dioxus_native::winit::platform::ios::{ScreenEdge, WindowAttributesIos};
     use dioxus_native::{Config, WindowAttributes, launch_cfg};
     // Before UIKit looks the delegate up by the name Info.plist gives it.
     ios_scene::register();
     let window = WindowAttributes::default().with_title("Signal").with_platform_attributes(Box::new(
-        WindowAttributesIos::default().with_prefers_status_bar_hidden(true),
+        // Orientations are Info.plist's (ios/app-plist.sh): an iPhone
+        // sideways only, an iPad every way (it keeps multitasking).
+        //
+        // The bottom edge is the rig's (the chain runs along it): locked —
+        // a swipe there only wakes the home indicator, and it takes a second
+        // to leave the app or switch apps, so a stray one mid-song does
+        // neither. (Not auto-hidden too: an auto-hidden indicator overrides
+        // the deferral, and the first swipe goes through.)
+        WindowAttributesIos::default()
+            .with_prefers_status_bar_hidden(true)
+            .with_preferred_screen_edges_deferring_system_gestures(ScreenEdge::BOTTOM),
     ));
     #[cfg(feature = "signal-guitar")]
     let root = mobile_view::MobileApp;

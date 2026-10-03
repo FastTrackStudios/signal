@@ -578,6 +578,10 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
             continue;
         }
         let (core, own) = pick_layers(comp, patch);
+        // The patch's own drive slots — a pedal or capture picked on it over
+        // what its modules put there — are the last word, as its overrides
+        // are: a module snapshot names its slots, and a patch swaps one.
+        let own_drives = patch.drives.clone();
         let mut overrides: Vec<OverrideDef> = Vec::new();
         for pick in in_signal_order(&core) {
             apply_pick(comp, pick, patch, &mut overrides, &mut synthesised);
@@ -602,6 +606,12 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
         }
         for pick in in_signal_order(&own) {
             apply_pick(comp, pick, patch, &mut overrides, &mut synthesised);
+        }
+        for d in own_drives {
+            match patch.drives.iter_mut().find(|x| x.block.eq_ignore_ascii_case(&d.block)) {
+                Some(x) => *x = d,
+                None => patch.drives.push(d),
+            }
         }
         // The patch's own block presets, over everything above.
         for choice in &patch.blocks {
@@ -1089,6 +1099,24 @@ mod tests {
             .find(|p| p.name == patch.preset2)
             .expect("Amp R loaded");
         assert_eq!(r.nam, "/caps/ac30.nam");
+    }
+
+    #[test]
+    fn a_pedal_the_patch_picks_wins_over_its_drive_modules() {
+        let mut def = composed("Clean");
+        def.patches[0].modules = vec![choice("Drive", "Klon", "On")];
+        // The patch swaps the module's pedal in Drive 1 (an override).
+        def.patches[0].drives = vec![DriveSlotDef { block: "Drive 1".into(), preset: "Ibanez TS808".into(), option: 0 }];
+        let flat = flatten(&def, &comp());
+        let slot = flat.patches[0].drives.iter().find(|d| d.block == "Drive 1").expect("Drive 1 set");
+        assert_eq!(slot.preset, "Ibanez TS808", "the patch's pedal, not the module's Morning Glory");
+        // Reverting the module's edits drops the swap: the module's pedal plays.
+        let mut patch = def.patches[0].clone();
+        assert!(crate::manage::revert_blocks(&mut patch, &["Drive 1".to_string()]));
+        def.patches[0] = patch;
+        let flat = flatten(&def, &comp());
+        let slot = flat.patches[0].drives.iter().find(|d| d.block == "Drive 1").expect("Drive 1 set");
+        assert_eq!(slot.preset, "JHS Morning Glory");
     }
 
     #[test]

@@ -274,20 +274,7 @@ pub fn GuitarRigRemote() -> Element {
                     }
                     // Audio Settings (the rail's Audio), over the whole page:
                     // a phone has no room beside it.
-                    if audio_open() {
-                        div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; overflow: auto; background: #0f1012;",
-                            AudioSettingsModal {
-                                bridge: live_bridge.clone().unwrap_or_else(|| AudioSettingsBridge {
-                                    inputs: Vec::new(),
-                                    outputs: Vec::new(),
-                                    prefs: prefs(),
-                                    on_save: apply,
-                                }),
-                                state: Some(state),
-                                on_close: move |()| audio_open.set(false),
-                            }
-                        }
-                    }
+                    // (Audio is a rail mode of `PhoneControl`'s on a phone.)
                     signal_widgets::PopupLayer {}
                 }
             }

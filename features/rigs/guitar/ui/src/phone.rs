@@ -6,13 +6,19 @@
 //! board, the Core, the effects after it — and the page that is up fills
 //! the screen:
 //!
-//! - along the top, the patch (‹ name ›) and the page's module presets
-//!   (the Core and its Drive and Amp; the Time module and its Delay and
-//!   Reverb);
-//! - the page itself, its units laid out for the room;
-//! - along the bottom, the chain: a segment a page, coloured by where it
+//! - along the top, the status — names only, each a tap from its picker
+//!   (‹ › steppers and everything to choose from): the way back, the
+//!   profile (or song) and patch, the page's module presets (the top-level
+//!   module — the Core, Time — then the page's own — Drive, Amp, Delay,
+//!   Reverb), and the audio;
+//! - under it, the chain: a thin segment a page, coloured by where it
 //!   sits (Core white, Time blue and purple, the rest grey), the page that
-//!   is up lit. Tap one to go there.
+//!   is up lit. Tap one to go there — or the page's button on the status
+//!   line to drop a tall one down over the page, easier to hit, that goes back up
+//!   once a page is picked (and scrolls sideways when a chain has more
+//!   pages than fit);
+//! - the page itself, its units laid out for the room — swipe in from its
+//!   right edge for the next page, from its left for the one before.
 
 use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
@@ -20,10 +26,9 @@ use signal_guitar_proto::{LiveBlock, PerformanceModel};
 use signal_proto::block::BlockType;
 
 use crate::control::{
-    DelayPanel, LiveComp, LiveEq, ModGroupPanel, ModuleControls, ReverbPanel, ZoomPanel, find_block, MOD_KINDS,
+    DelayPanel, LiveComp, LiveEq, ModGroupPanel, ReverbPanel, ZoomPanel, find_block, MOD_KINDS,
     MOTION_KINDS,
 };
-use crate::library::Kind;
 use crate::rig_faces::PrePart;
 use crate::state::RigViewState;
 
@@ -73,25 +78,6 @@ impl Page {
         Self::Delays,
         Self::Reverbs,
     ];
-
-    fn title(self) -> &'static str {
-        match self {
-            Self::Input => "Input · Transpose · Doubler",
-            Self::Pedals => "Pedals · Wah · Dive · Volume",
-            Self::Pitch => "Pitch · Octaver · Harmonizer",
-            Self::Filter => "Filter",
-            Self::PreModTrem => "Pre Mod · Pre Trem",
-            Self::PreDelayVerb => "Pre Delay · Pre Verb",
-            Self::PreComp => "Compressor",
-            Self::Drives => "Drives",
-            Self::Amps => "Amps",
-            Self::Eq => "EQ",
-            Self::GatePostComp => "Gate · Post Comp",
-            Self::ModMotion => "Modulation · Motion",
-            Self::Delays => "Delays",
-            Self::Reverbs => "Reverbs",
-        }
-    }
 
     /// Its name in a file or a setting (`drives`, `gate-post-comp`).
     pub fn slug(self) -> &'static str {
@@ -158,12 +144,53 @@ impl Page {
     }
 }
 
-/// What the rail picks: the chain's pages, the footswitches, or editing.
+impl Page {
+    /// The page's icon (24-unit strokes), in the middle of its raised tile.
+    fn icon(self) -> &'static [&'static str] {
+        match self {
+            // A jack plug.
+            Self::Input => &["M12 2v6", "M8 8h8v5a4 4 0 0 1-8 0z", "M12 17v5"],
+            // An expression pedal, rocked.
+            Self::Pedals => &["M4 20h16", "M6 20L9 6l10 3-3 11"],
+            // A note, raised.
+            Self::Pitch => &["M9 18V6l6-2", "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z", "M18 14V4", "M15 7l3-3 3 3"],
+            // A low-pass curve.
+            Self::Filter => &["M3 8h8c4 0 5 10 10 10"],
+            // One wave.
+            Self::PreModTrem => &["M2 12c2.5-6 5-6 7.5 0s5 6 7.5 0 3.5-3 5-3"],
+            // Repeats dying away.
+            Self::PreDelayVerb => &["M4 6v12", "M10 9v6", "M15 10.5v3", "M19 11.5v1"],
+            // Squeezed in from both sides.
+            Self::PreComp => &["M12 3v6", "M9 6l3 3 3-3", "M12 21v-6", "M9 18l3-3 3 3", "M4 12h16"],
+            // A flame.
+            Self::Drives => &["M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-7 1 1 2 2 3 4"],
+            // A combo: its panel and its speaker.
+            Self::Amps => &["M4 5h16v14H4z", "M4 9h16", "M9 14a3 3 0 1 0 6 0 3 3 0 1 0-6 0"],
+            // Three bands.
+            Self::Eq => &["M6 4v16", "M12 4v16", "M18 4v16", "M4 14h4", "M10 8h4", "M16 16h4"],
+            // A gate, open.
+            Self::GatePostComp => &["M3 18h5V6h8v12h5"],
+            // Two waves.
+            Self::ModMotion => &["M2 9c2.5-4 5-4 7.5 0s5 4 7.5 0 3.5-2 5-2", "M2 15c2.5-4 5-4 7.5 0s5 4 7.5 0 3.5-2 5-2"],
+            // Echoes, each smaller.
+            Self::Delays => &[
+                "M3 12a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0",
+                "M10.5 12a1.8 1.8 0 1 0 3.6 0 1.8 1.8 0 1 0-3.6 0",
+                "M16.5 12a1.1 1.1 0 1 0 2.2 0 1.1 1.1 0 1 0-2.2 0",
+                "M21 12h.01",
+            ],
+            // A room ringing out.
+            Self::Reverbs => &["M12 12h.01", "M8.5 8.5a5 5 0 0 0 0 7", "M15.5 8.5a5 5 0 0 1 0 7", "M5.5 5.5a9 9 0 0 0 0 13", "M18.5 5.5a9 9 0 0 1 0 13"],
+        }
+    }
+}
+
+/// What the rail picks: the chain's pages, the footswitches, or audio.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Mode {
     Control,
     Switch,
-    Edit,
+    Audio,
 }
 
 /// The bars' colours (the Sessions app's, so the two read as one family).
@@ -172,9 +199,20 @@ const RULE: &str = "#2a2c31";
 const RAISED: &str = "#26292f";
 const TEXT: &str = "#e5e7eb";
 const DIM: &str = "#8b9099";
-/// The top line's height, and how far it keeps clear of the screen's
-/// rounded corners.
-const LINE_H: u32 = 44;
+/// The status line's height (along the top).
+const LINE_H: u32 = 48;
+/// The chain under the status line, small (the page's button drops it down).
+const CHAIN_H: u32 = 24;
+/// The raised chain, as a share of the view's height.
+const CHAIN_TALL: &str = "31%";
+/// One page of the raised chain at its narrowest: past this the chain
+/// scrolls sideways instead of squeezing.
+const CHAIN_TILE_MIN: u32 = 46;
+/// The strips along the page's sides that a swipe to the next or previous
+/// page starts in, and how far it must travel to turn the page.
+const EDGE_W: u32 = 22;
+const SWIPE_TURN: f64 = 40.0;
+/// How far the bars keep clear of the screen's rounded corners.
 const CORNER: u32 = 16;
 /// The rail down the left.
 const RAIL_W: u32 = 60;
@@ -197,8 +235,34 @@ pub struct PhoneHost {
 #[derive(Clone, Copy)]
 pub struct IslandLeft(pub Signal<bool>);
 
-/// The phone's rig surface: the patch along the top, the rail down the
-/// left (Control, Switch, Edit; Profile or Song), and the view — in
+/// Present under the phone's surface: a face's algorithm or preset press
+/// opens the browser (through `SelectedModule`) instead of a popup.
+#[derive(Clone, Copy)]
+pub struct PhoneBrowses;
+
+/// The screen's corner radius in points, for what sits in its corners to
+/// keep clear of the curve. Provided by the iOS shell; without it (the
+/// Android remote, the shot tool) the corners are taken to be square.
+#[derive(Clone, Copy)]
+pub struct ScreenCorners(pub Signal<f64>);
+
+/// How far in from one edge content must start to clear a screen corner
+/// rounded at `r`, when it comes to within `e` of the other edge (a circle's
+/// chord: nothing at `e >= r`, all of `r` at `e = 0`).
+pub(crate) fn corner_clear(r: f64, e: f64) -> f64 {
+    if r <= 0.0 || e >= r {
+        return 0.0;
+    }
+    r - (r * r - (r - e) * (r - e)).sqrt()
+}
+
+/// The screen's corner radius from context (0 without the iOS shell).
+pub(crate) fn screen_radius() -> f64 {
+    try_use_context::<ScreenCorners>().map_or(0.0, |c| (c.0)())
+}
+
+/// The phone's rig surface: the status along the top, the rail down the
+/// left (bottom up: Control, Profile/Setlist, Switch, Audio), and the view — in
 /// Control, a page of the chain over the chain itself.
 #[component]
 pub fn PhoneControl(
@@ -214,6 +278,21 @@ pub fn PhoneControl(
     // The housing's clearance: the rail moves out from under it on the
     // left; on the right the view keeps clear of it itself.
     let (lead, trail) = if island_left { (HOUSING, 0) } else { (0, HOUSING) };
+    // What sits in the screen's rounded corners keeps clear of their curve
+    // (the bars themselves run into them): how far in, for each corner's
+    // content, from how close it comes to the other edge. Rounded up.
+    let r = screen_radius();
+    let clear = |e: f64| (corner_clear(r, e) + 2.0).ceil() as u32;
+    // The status line's ends: the back arrow (8 down) and the audio badge
+    // (5 down).
+    let back_left = lead.max(clear(f64::from(LINE_H - 20) / 2.0));
+    let status_right = CORNER.max(clear(f64::from(LINE_H - 26) / 2.0));
+    // The rail's lowest button, 4 in from its side (past the housing, when
+    // that is the rail's side).
+    let rail_foot = 6u32.max(clear(f64::from(lead) + 4.0));
+    // The pickers over the screen: their heads' buttons, 8 down.
+    let sheet_left = lead.max(clear(8.0));
+    let sheet_right = trail.max(clear(8.0));
     // `FTS_PHONE_PAGE=<slug>`: open on that page (the shot tool renders
     // every page at once, an app each).
     let mut page = use_signal(|| {
@@ -224,6 +303,99 @@ pub fn PhoneControl(
         Page::Amps
     });
     let mut mode = use_signal(|| Mode::Control);
+    // `FTS_PHONE_OPEN=audio`: open on the Audio page, for the shot tool.
+    #[cfg(not(target_arch = "wasm32"))]
+    use_hook(|| {
+        if std::env::var("FTS_PHONE_OPEN").is_ok_and(|v| v == "audio") {
+            crate::settings::open_audio_settings();
+        }
+    });
+    // Whatever asks for the audio settings (the badge, a banner, the shot
+    // tool) gets the Audio mode: on a phone they live beside the rail.
+    use_effect(move || {
+        if *crate::settings::AUDIO_SETTINGS_OPEN.read() {
+            *crate::settings::AUDIO_SETTINGS_OPEN.write() = false;
+            mode.set(Mode::Audio);
+        }
+    });
+    // An edge swipe under way: where it started, and which way it turns
+    // (+1 from the right edge, the next page; -1 from the left, the one
+    // before).
+    let mut swipe = use_signal(|| None::<(f64, i32)>);
+    // The chain raised over the page, for picking one (`FTS_PHONE_CHAIN=tall`
+    // opens it so, for the shot tool).
+    let mut chain_tall = use_signal(|| {
+        #[cfg(not(target_arch = "wasm32"))]
+        if std::env::var("FTS_PHONE_CHAIN").is_ok_and(|v| v == "tall") {
+            return true;
+        }
+        false
+    });
+    use_context_provider(|| PhoneBrowses);
+    // The browser over the screen, on a tab (closed: `None`).
+    // `FTS_PHONE_BROWSE=patches|songs|module:Delay|block:DLY 1:delay|pedal:Drive 1`:
+    // open on that tab, for the shot tool.
+    let mut browse = use_signal(|| {
+        use crate::phone_browser::BrowseTab;
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Ok(v) = std::env::var("FTS_PHONE_BROWSE") {
+            let mut parts = v.splitn(3, ':');
+            return match (parts.next(), parts.next(), parts.next()) {
+                (Some("patches"), ..) => Some(BrowseTab::Patches),
+                (Some("profiles"), ..) => Some(BrowseTab::Profiles),
+                (Some("songs"), ..) => Some(BrowseTab::Songs),
+                (Some("setlists"), ..) => Some(BrowseTab::Setlists),
+                (Some("module"), Some(m), _) => BrowseTab::for_module(m),
+                (Some("block"), Some(n), Some(t)) => Some(BrowseTab::for_block(n, t)),
+                (Some("pedal"), Some(n), _) => Some(BrowseTab::Pedal { name: n.to_string() }),
+                _ => None,
+            };
+        }
+        None::<BrowseTab>
+    });
+    // A face's preset name, its nameplate's browse, a panel's module: they
+    // ask the desktop's sidebar and library for the presets, by these two
+    // contexts — on a phone the browser answers them.
+    let selected = try_use_context::<crate::module_sidebar::SelectedModule>();
+    let library_open = try_use_context::<crate::library::OpenLibrary>();
+    use_effect(move || {
+        use crate::module_sidebar::Selection;
+        if let Some(sel) = selected {
+            let mut sig = sel.0;
+            let asked = sig.read().clone();
+            if let Some(asked) = asked {
+                sig.set(None);
+                let tab = match asked {
+                    Selection::Module(m) => crate::phone_browser::BrowseTab::for_module(&m),
+                    Selection::Block { name, block_type } => Some(crate::phone_browser::BrowseTab::for_block(&name, &block_type)),
+                };
+                if tab.is_some() {
+                    browse.set(tab);
+                }
+            }
+        }
+    });
+    use_effect(move || {
+        use crate::library::Kind;
+        use crate::phone_browser::BrowseTab;
+        if let Some(lib) = library_open {
+            let mut sig = lib.0;
+            let asked = *sig.read();
+            if let Some(kind) = asked {
+                sig.set(None);
+                let tab = match kind {
+                    Kind::Profiles => Some(BrowseTab::Profiles),
+                    Kind::Patches => Some(BrowseTab::Patches),
+                    Kind::Songs => Some(BrowseTab::Songs),
+                    Kind::Setlists => Some(BrowseTab::Setlists),
+                    k => k.module().and_then(BrowseTab::for_module),
+                };
+                if tab.is_some() {
+                    browse.set(tab);
+                }
+            }
+        }
+    });
     // `FTS_PHONE_TOUR=<secs>`: step through every page on a timer — to look
     // at each without touching the screen.
     #[cfg(not(target_arch = "wasm32"))]
@@ -255,6 +427,25 @@ pub fn PhoneControl(
             }
         }
     });
+    // The patch playing, for the status line.
+    let patches = use_resource({
+        let rig = rig.clone();
+        move || {
+            let _ = comp_rev();
+            let rig = rig.clone();
+            async move {
+                match rig {
+                    Some(r) => r.patches().await.unwrap_or_default(),
+                    None => Vec::new(),
+                }
+            }
+        }
+    });
+    let patch_name = patches
+        .read()
+        .as_ref()
+        .and_then(|l| l.iter().find(|p| p.active).map(|p| p.name.clone()))
+        .unwrap_or_else(|| "—".to_string());
     let face_presets = use_context_provider(|| crate::face_chrome::FacePresets(Signal::new(Default::default())));
     use_context_provider(|| crate::face_chrome::VizMode(Signal::new(std::collections::HashSet::new())));
     use_effect(move || {
@@ -271,22 +462,27 @@ pub fn PhoneControl(
             .as_ref()
             .and_then(|c| c.active_modules.iter().find(|m| m.module.eq_ignore_ascii_case(module)).cloned())
     };
-    let all_modules: Vec<signal_guitar_proto::ModulePresetEntry> = compositions.read().as_ref().map(|c| c.modules.clone()).unwrap_or_default();
-    let edited: Vec<String> = blocks.iter().filter(|b| b.overridden).map(|b| b.name.clone()).collect();
     // The page's module presets, for the top line.
-    let modules: Vec<(Kind, &'static str)> = match (mode(), page()) {
-        (Mode::Control, Page::Drives) => vec![(Kind::Compositions, "Core"), (Kind::DriveModules, "Drive")],
-        (Mode::Control, Page::Amps) => vec![(Kind::Compositions, "Core"), (Kind::AmpModules, "Amp")],
-        (Mode::Control, p) if p.home() == Home::Core => vec![(Kind::Compositions, "Core")],
-        (Mode::Control, Page::Delays) => vec![(Kind::TimeModules, "Time"), (Kind::DelayModules, "Delay")],
-        (Mode::Control, Page::Reverbs) => vec![(Kind::TimeModules, "Time"), (Kind::ReverbModules, "Reverb")],
+    let modules: Vec<&'static str> = match (mode(), page()) {
+        (Mode::Control, Page::Drives) => vec!["Core", "Drive"],
+        (Mode::Control, Page::Amps) => vec!["Core", "Amp"],
+        (Mode::Control, p) if p.home() == Home::Core => vec!["Core"],
+        (Mode::Control, Page::Delays) => vec!["Time", "Delay"],
+        (Mode::Control, Page::Reverbs) => vec!["Time", "Reverb"],
         _ => Vec::new(),
     };
-    let (title, title_color) = match mode() {
-        Mode::Control => (page().title(), page().color()),
-        Mode::Switch => ("Switches", TEXT),
-        Mode::Edit => ("Edit", TEXT),
+    let (top_module, page_module) = (modules.first().copied(), modules.get(1).copied());
+    // A module with edits on any block it owns (a pedal swapped into one of
+    // its slots included): its name carries a `*`.
+    let module_edited = |module: &str| {
+        pick_of(module).is_some_and(|p| p.blocks.iter().any(|b| blocks.iter().any(|x| x.overridden && x.name.eq_ignore_ascii_case(b))))
     };
+    // A module's preset as the status line names it.
+    let name_of = |module: &str| {
+        let (preset, snapshot) = pick_of(module).map(|p| (p.preset, p.snapshot)).unwrap_or_default();
+        if snapshot.is_empty() { preset } else { format!("{preset} · {snapshot}") }
+    };
+
     // Profile or Song: the perform mode, shared with every remote.
     let song = model.perform_mode == 2;
     let set_play = {
@@ -300,71 +496,195 @@ pub fn PhoneControl(
             });
         }
     };
-    let play_song = set_play.clone();
 
-    rsx! {
-        // The viewport is the safe area's height (the iOS shell keeps the
-        // home indicator out) and the screen's full width: the view runs
-        // under the camera housing on the right, and what sits beside it
-        // keeps clear itself.
-        div { style: "width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; padding-left: {lead}px; background: #0f1012; color: {TEXT};",
-            // ── The top line: the patch, where you are, its modules ──
-            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {CORNER}px; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
-                PatchStepper { revision: model.revision }
-                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {title_color}; white-space: nowrap;",
-                    "{title}"
-                }
-                div { style: "flex: 1 1 0%;" }
-                AudioBadge { running: (state.running)(), error: (state.audio_error)() }
-                for (kind, module) in modules {
-                    div { key: "{module}", style: "flex: 0 1 200px; min-width: 0; height: 30px; display: flex;",
-                        ModuleControls { kind, pick: pick_of(module), modules: all_modules.clone(), edited: edited.clone(), style: "width: 100%; height: 100%;" }
+    // The rail's Profile/Setlist button: which one plays.
+    let plays: &'static str = if song { "Setlist" } else { "Profile" };
+    // What plays: the song in Song, else the profile.
+    let playing = if song {
+        model.songs.get(model.song_index as usize).map_or_else(|| model.profile_name.clone(), |s| s.name.clone())
+    } else {
+        model.profile_name.clone()
+    };
+    // The page with the chain down: dimmed, its presses its parent's.
+    let page_veil = if chain_tall() { "opacity: 0.4; pointer-events: none;" } else { "" };
+    // One chain segment: thin under the status line, a tall tile dropped down.
+    let segment = move |p: Page, tall: bool| {
+        let on = page() == p;
+        let color = p.color();
+        let look = if on { format!("background: {color}; color: #0a0b0d;") } else { format!("background: {RAISED}; color: {color};") };
+        // Raised, the names sit along the tiles' tops, level with each other.
+        // Under it, the page's icon in the middle of the tile.
+        let ink = if on { "#0a0b0d" } else { color };
+        let size = if tall {
+            format!("flex: 1 0 {CHAIN_TILE_MIN}px; flex-direction: column; align-items: center; padding-top: 10px; border-radius: 6px; font-size: 13px;")
+        } else {
+            "flex: 1 1 0%; align-items: center; justify-content: center; border-radius: 3px; font-size: 11px;".to_string()
+        };
+        rsx! {
+            div { key: "{p.short()}",
+                style: "min-width: 0; display: flex; box-sizing: border-box; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; overflow: hidden; {size} {look}",
+                onclick: move |_| {
+                    page.set(p);
+                    chain_tall.set(false);
+                },
+                span { "{p.short()}" }
+                if tall {
+                    div { style: "flex: 1 1 0%; display: flex; align-items: center; justify-content: center;",
+                        svg { width: "26", height: "26", view_box: "0 0 24 24", fill: "none", stroke: ink, stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round",
+                            for d in p.icon().iter() {
+                                path { d: *d }
+                            }
+                        }
                     }
                 }
-                if mode() == Mode::Control && page().home() == Home::Core {
-                    div { style: "flex: 0 0 110px;", crate::face_chrome::CoreFreeze {} }
+            }
+        }
+    };
+
+    rsx! {
+        // The whole screen: the view runs under the camera housing on
+        // whichever side it is, and what sits beside it keeps clear itself.
+        // Every bar runs to the screen's edges, into its rounded corners —
+        // the app takes the phone's shape. Only what sits in them keeps clear
+        // of the camera housing: the rail's and the corner block's contents
+        // on the housing's side when it is on the left, the page's on the
+        // right.
+        div { style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; background: #0f1012; color: {TEXT};",
+            // An edge swipe, followed here: a touch keeps going to what it
+            // first landed on (the edge strip), and its moves bubble up to
+            // the root — a layer mounted over the screen mid-touch never
+            // hears them.
+            onpointermove: move |e: PointerEvent| {
+                let Some((from, way)) = swipe() else { return };
+                let dx = e.client_coordinates().x - from;
+                if dx * f64::from(-way) > SWIPE_TURN {
+                    let at = Page::ALL.iter().position(|p| *p == page()).unwrap_or(0) as i32;
+                    if let Some(p) = Page::ALL.get((at + way).clamp(0, Page::ALL.len() as i32 - 1) as usize) {
+                        page.set(*p);
+                    }
+                    swipe.set(None);
+                }
+            },
+            onpointerup: move |_| swipe.set(None),
+            // ── The status, along the top: what plays (tap for every profile
+            // and patch), the page's module presets — the top-level module,
+            // then the page's own — and the audio ──
+            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {status_right}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
+                // The way back, over the rail and as wide as it: the corner
+                // the two make reads as one column.
+                div { style: "flex: 0 0 {RAIL_W + lead}px; align-self: stretch; box-sizing: border-box; padding-left: {back_left}px; display: flex; align-items: center; justify-content: center; border-right: 1px solid {RULE}; cursor: pointer;",
+                    onclick: move |_| {
+                        if let Some(host) = host {
+                            host.on_home.call(());
+                        }
+                    },
+                    if host.is_some() {
+                        RailIcon { name: "Rigs", color: TEXT }
+                    }
+                }
+                // Left: what plays, and the page that is up (its button
+                // drops the chain down — in Control; elsewhere it goes there).
+                div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 8px;",
+                    StatusName { label: playing, name: patch_name.clone(),
+                        on_open: move |()| browse.set(Some(if song { crate::phone_browser::BrowseTab::Songs } else { crate::phone_browser::BrowseTab::Patches })),
+                    }
+                    ChainButton { title: page().short(), color: page().color(), open: chain_tall(),
+                        on_toggle: move |()| {
+                            if mode() == Mode::Control {
+                                chain_tall.toggle();
+                            } else {
+                                mode.set(Mode::Control);
+                                chain_tall.set(true);
+                            }
+                        },
+                    }
+                }
+                // Right: the page's modules — the top-level one (the Core,
+                // Time), then the page's own — and the audio.
+                div { style: "flex: 0 1 auto; min-width: 0; display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px;",
+                    if let Some(module) = top_module {
+                        StatusName { label: module.to_string(), name: name_of(module), modified: module_edited(module), on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)) }
+                    }
+                    if let Some(module) = page_module {
+                        StatusName { label: module.to_string(), name: name_of(module), modified: module_edited(module), on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)) }
+                    }
+                    AudioBadge { running: (state.running)(), error: (state.audio_error)() }
                 }
             }
             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;",
                 // ── The rail ──
-                div { style: "flex: 0 0 {RAIL_W}px; display: flex; flex-direction: column; justify-content: center; gap: 2px; background: {BAR_BG}; border-right: 1px solid {RULE};",
-                    if let Some(host) = host {
-                        RailButton { on: false, label: "Rigs", icon: "Rigs", onclick: move |()| host.on_home.call(()) }
-                        div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
+                // Bottom-aligned, the most used lowest, under the thumb:
+                // Audio, Switch, Profile/Setlist, Control.
+                div { style: "flex: 0 0 {RAIL_W + lead}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding: 0 0 {rail_foot}px {lead}px; background: {BAR_BG}; border-right: 1px solid {RULE};",
+                    RailButton { on: mode() == Mode::Audio, label: "Audio", icon: "Audio",
+                        onclick: move |()| {
+                            chain_tall.set(false);
+                            mode.set(Mode::Audio);
+                        },
                     }
-                    for (m, label) in [(Mode::Control, "Control"), (Mode::Switch, "Switch"), (Mode::Edit, "Edit")] {
-                        RailButton { key: "{label}", on: mode() == m, label, icon: label, onclick: move |()| mode.set(m) }
+                    RailButton { on: mode() == Mode::Switch, label: "Switch", icon: "Switch",
+                        onclick: move |()| {
+                            chain_tall.set(false);
+                            mode.set(Mode::Switch);
+                        },
                     }
-                    div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
-                    RailButton { on: !song, label: "Profile", icon: "Profile", onclick: move |()| set_play(1) }
-                    RailButton { on: song, label: "Song", icon: "Song", onclick: move |()| play_song(2) }
-                    div { style: "height: 1px; margin: 6px 12px; background: {RULE};" }
-                    RailButton { on: false, label: "Audio", icon: "Audio", onclick: move |()| crate::settings::open_audio_settings() }
+                    // Profile or Setlist, one button that flips between
+                    // them: it shows which one plays.
+                    RailButton { on: true, label: plays, icon: plays, onclick: move |()| set_play(if song { 1 } else { 2 }) }
+                    RailButton { on: mode() == Mode::Control, label: "Control", icon: "Control", onclick: move |()| mode.set(Mode::Control) }
                 }
                 // ── The view ──
-                div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+                // An explicit height: Blitz lays absolutely placed content out
+                // against a stretched flex item's pre-stretch height.
+                div { style: "position: relative; flex: 1 1 0%; height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
                     match mode() {
                         Mode::Control => rsx! {
-                            div { style: "flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
-                                PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm }
-                            }
-                            // The chain: a segment a page, coloured by
-                            // where it sits, the one up lit.
-                            div { style: "flex: 0 0 30px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 4px; background: {BAR_BG}; border-top: 1px solid {RULE};",
-                                for p in Page::ALL {
-                                    {
-                                        let on = page() == p;
-                                        let color = p.color();
-                                        let look = if on { format!("background: {color}; color: #0a0b0d;") } else { format!("background: {RAISED}; color: {color};") };
-                                        rsx! {
-                                            div { key: "{p.short()}",
-                                                style: "flex: 1 1 0%; min-width: 0; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; overflow: hidden; {look}",
-                                                onclick: move |_| page.set(p),
-                                                "{p.short()}"
-                                            }
-                                        }
+                            // The chain, under the status line: thin, or
+                            // dropped down as tall tiles. Laid out in the
+                            // column (not over the page) so its tiles are hit
+                            // where they are drawn.
+                            if chain_tall() {
+                                div { style: "flex: 0 0 {CHAIN_TALL}; display: flex; flex-direction: row; gap: 4px; box-sizing: border-box; padding: 8px {CORNER}px 8px 8px; overflow-x: auto; overflow-y: hidden; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
+                                    for p in Page::ALL {
+                                        {segment(p, true)}
                                     }
                                 }
+                            } else {
+                                div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
+                                    for p in Page::ALL {
+                                        {segment(p, false)}
+                                    }
+                                }
+                            }
+                            // The page. With the chain down it dims and takes
+                            // no presses itself, and a tap on it puts the chain
+                            // back up — no layer over it: an absolute layer here
+                            // was laid out against the whole view, over the
+                            // chain's tiles, and took their presses.
+                            div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
+                                onclick: move |_| {
+                                    if chain_tall() {
+                                        chain_tall.set(false);
+                                    }
+                                },
+                                div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; {page_veil}",
+                                    PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm }
+                                }
+                                // Swipe in from the right edge for the next
+                                // page, from the left for the one before.
+                                if !chain_tall() {
+                                    div { style: "position: absolute; top: 0; left: 0; width: {EDGE_W}px; height: 100%; z-index: 4;",
+                                        onpointerdown: move |e: PointerEvent| swipe.set(Some((e.client_coordinates().x, -1))),
+                                    }
+                                    div { style: "position: absolute; top: 0; right: 0; width: {EDGE_W + trail}px; height: 100%; z-index: 4;",
+                                        onpointerdown: move |e: PointerEvent| swipe.set(Some((e.client_coordinates().x, 1))),
+                                    }
+                                }
+                            }
+                        },
+                        Mode::Audio => rsx! {
+                            div { style: "flex: 1 1 0%; min-height: 0; display: flex; box-sizing: border-box; padding-right: {trail}px;",
+                                crate::phone_audio::PhoneAudio { state }
                             }
                         },
                         Mode::Switch => rsx! {
@@ -372,26 +692,26 @@ pub fn PhoneControl(
                                 {switches}
                             }
                         },
-                        Mode::Edit => rsx! {
-                            div { style: "flex: 1 1 0%; display: flex; align-items: center; justify-content: center; color: {DIM}; font-size: 12px; padding-right: {trail}px;",
-                                "Edit — coming next"
-                            }
-                        },
                     }
+                }
+            }
+            if let Some(tab) = browse() {
+                crate::phone_browser::PhoneBrowser { key: "{tab:?}", tab, model: model.clone(), state, lead: sheet_left, trail: sheet_right,
+                    on_close: move |()| browse.set(None),
                 }
             }
         }
     }
 }
 
-/// Whether the audio is running, small, in the top line: the surface works
+/// Whether the audio is running, small, in the bottom line: the surface works
 /// without it (a phone with no interface plugged in plays nothing, but every
 /// patch and page is there to edit). Tap for Audio settings.
 #[component]
 fn AudioBadge(running: bool, error: String) -> Element {
     let (dot, label, color) = if running {
         ("#22c55e", "", DIM)
-    } else if !error.is_empty() {
+    } else if !error.is_empty() && error != "Audio stopped" {
         ("#ef4444", "Audio error", "#fca5a5")
     } else {
         ("#f59e0b", "No audio", "#fcd34d")
@@ -402,7 +722,7 @@ fn AudioBadge(running: bool, error: String) -> Element {
             onclick: move |_| crate::settings::open_audio_settings(),
             span { style: "width: 7px; height: 7px; border-radius: 4px; background: {dot};" }
             if !label.is_empty() {
-                span { style: "font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: {color}; white-space: nowrap;", "{label}" }
+                span { style: "font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: {color}; white-space: nowrap;", "{label}" }
             }
         }
     }
@@ -417,7 +737,7 @@ fn RailButton(on: bool, label: &'static str, icon: &'static str, onclick: EventH
         div { style: "height: 48px; margin: 0 4px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: {bg}; cursor: pointer;",
             onclick: move |_| onclick.call(()),
             RailIcon { name: icon, color: fg }
-            span { style: "font-size: 9px; font-weight: 600; color: {fg};", "{label}" }
+            span { style: "font-size: 11px; font-weight: 600; color: {fg};", "{label}" }
         }
     }
 }
@@ -431,14 +751,14 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
         "Control" => &["M6 4v16", "M12 4v16", "M18 4v16", "M4 9h4", "M10 15h4", "M16 7h4"],
         // The footswitches: two rows of three.
         "Switch" => &["M3 6h5v5H3z", "M10 6h4v5h-4z", "M16 6h5v5h-5z", "M3 14h5v5H3z", "M10 14h4v5h-4z", "M16 14h5v5h-5z"],
-        // A pencil.
-        "Edit" => &["M4 20l4-1 11-11-3-3L5 16z", "M14 7l3 3"],
         // A person.
         "Profile" => &["M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M4 21c1-4 4-6 8-6s7 2 8 6"],
         // Back to the instrument menu.
         "Rigs" => &["M14 6l-6 6 6 6"],
         // A speaker.
         "Audio" => &["M4 9h3l4-3.5v13L7 15H4z", "M15 9.5a4 4 0 0 1 0 5", "M17.5 7a7.5 7.5 0 0 1 0 10"],
+        // The chain: a row of segments, raised.
+        "Chain" => &["M3 4h4v5H3z", "M10 4h4v5h-4z", "M17 4h4v5h-4z", "M8 15l4 4 4-4"],
         // A note.
         _ => &["M9 18V5l11-2v13", "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z", "M20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"],
     };
@@ -451,46 +771,55 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
     }
 }
 
-/// The patch playing, stepped ‹ › through the profile's patches.
+/// One name on the status line: its kind small over it ("BLUES" over the
+/// patch, "CORE" over the Core's preset), a chevron for the browser it
+/// opens — where the steppers are; the line keeps only the names. 40
+/// points tall, in a 48-point line (a full-size target).
 #[component]
-fn PatchStepper(revision: u64) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
-    let patches = use_resource({
-        let rig = rig.clone();
-        move || {
-            let _ = revision;
-            let rig = rig.clone();
-            async move {
-                match rig {
-                    Some(r) => r.patches().await.unwrap_or_default(),
-                    None => Vec::new(),
+fn StatusName(
+    label: String,
+    name: String,
+    /// Changed from how it was saved: a `*` after the name.
+    #[props(default)]
+    modified: bool,
+    on_open: EventHandler<()>,
+) -> Element {
+    rsx! {
+        div { style: "flex: 0 1 auto; min-width: 0; max-width: 240px; height: 40px; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 0 10px 0 12px; border-radius: 10px; background: {RAISED}; cursor: pointer; overflow: hidden;",
+            onclick: move |_| on_open.call(()),
+            div { style: "flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center;",
+                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: {DIM}; white-space: nowrap; overflow: hidden;", "{label}" }
+                span { style: "font-size: 14px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;",
+                    "{name}"
+                    if modified {
+                        span { style: "color: #f59e0b;", " *" }
+                    }
                 }
             }
-        }
-    });
-    let list = patches.read().clone().unwrap_or_default();
-    let at = list.iter().position(|p| p.active);
-    let name = at.and_then(|i| list.get(i)).map_or_else(|| "—".to_string(), |p| p.name.clone());
-    let n = list.len();
-    let step = move |d: i64| {
-        if n == 0 {
-            return;
-        }
-        let next = at.map_or(0, |i| (i as i64 + d).rem_euclid(n as i64) as u32);
-        let rig = rig.clone();
-        spawn(async move {
-            if let Some(r) = rig {
-                let _ = r.select_patch(next).await;
+            svg { width: "12", height: "12", view_box: "0 0 24 24", fill: "none", stroke: DIM, stroke_width: "2.5", stroke_linecap: "round", stroke_linejoin: "round",
+                path { d: "M6 9l6 6 6-6" }
             }
-        });
-    };
-    let arrow = "font-size: 15px; line-height: 1; color: #a1a1aa; padding: 0 6px; cursor: pointer;";
-    let back = step.clone();
+        }
+    }
+}
+
+/// The chain's button on the status line: the page that is up, in its
+/// colour, and the arrow that drops the chain down from under the line
+/// (pointing up while it is down).
+#[component]
+fn ChainButton(title: &'static str, color: &'static str, open: bool, on_toggle: EventHandler<()>) -> Element {
+    let (bg, arrow) = if open { (format!("background: {color}; color: #0a0b0d;"), "M6 15l6-6 6 6") } else { (format!("background: {RAISED}; color: {color};"), "M6 9l6 6 6-6") };
+    let ink = if open { "#0a0b0d" } else { color };
     rsx! {
-        div { style: "display: flex; align-items: center; gap: 2px; min-width: 0;",
-            span { style: "{arrow}", onclick: move |_| back(-1), "‹" }
-            span { style: "font-size: 13px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden; max-width: 160px;", "{name}" }
-            span { style: "{arrow}", onclick: move |_| step(1), "›" }
+        div { style: "flex: 0 0 auto; height: 40px; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 0 12px; border-radius: 10px; cursor: pointer; {bg}",
+            onclick: move |_| on_toggle.call(()),
+            div { style: "display: flex; flex-direction: column; justify-content: center;",
+                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.7;", "Page" }
+                span { style: "font-size: 14px; font-weight: 800; white-space: nowrap;", "{title}" }
+            }
+            svg { width: "14", height: "14", view_box: "0 0 24 24", fill: "none", stroke: ink, stroke_width: "2.8", stroke_linecap: "round", stroke_linejoin: "round",
+                path { d: arrow }
+            }
         }
     }
 }
@@ -519,7 +848,7 @@ fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: 
             // and the housing's clearance).
             let (w, h) = try_use_context::<crate::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
             // The page's height less the bars and the board's rails.
-            let page_h = h - f64::from(LINE_H) - 30.0 - 24.0;
+            let page_h = h - f64::from(LINE_H) - f64::from(CHAIN_H) - 24.0;
             rsx! { crate::rig_faces::DrivesRow { blocks, fit_width: Some(w - f64::from(RAIL_W + HOUSING)), fit_height: Some(page_h) } }
         }
         Page::Amps => rsx! { crate::rig_faces::AmpRow { blocks, amps_only: true } },

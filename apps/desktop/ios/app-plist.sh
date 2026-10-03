@@ -34,8 +34,25 @@ signal_app_plist() {
     $pb -c "Add :UIBackgroundModes array" "$plist"
     $pb -c "Add :UIBackgroundModes:0 string audio" "$plist"
 
-    # The app rotates per screen at runtime (ios_orientation.rs), so the
-    # orientations stay dx's superset (portrait and landscape).
+    # An iPhone holds the app sideways only (a portrait layout comes
+    # later); an iPad takes every orientation, so it keeps multitasking —
+    # App Store Connect refuses a bundle that limits an iPad's orientations
+    # without giving multitasking up (90474), and the layout follows the
+    # window's size anyway.
+    orientations() {
+        local key="$1"; shift
+        $pb -c "Delete :$key" "$plist" 2>/dev/null || true
+        $pb -c "Add :$key array" "$plist"
+        local i=0
+        for o in "$@"; do
+            $pb -c "Add :$key:$i string UIInterfaceOrientation$o" "$plist"
+            i=$((i + 1))
+        done
+    }
+    orientations "UISupportedInterfaceOrientations~iphone" LandscapeLeft LandscapeRight
+    orientations "UISupportedInterfaceOrientations~ipad" Portrait PortraitUpsideDown LandscapeLeft LandscapeRight
+    orientations UISupportedInterfaceOrientations Portrait PortraitUpsideDown LandscapeLeft LandscapeRight
+    $pb -c "Delete :UIRequiresFullScreen" "$plist" 2>/dev/null || true
     $pb -c "Add :NSMicrophoneUsageDescription string 'Processes your guitar signal from the connected audio interface or microphone.'" "$plist" 2>/dev/null || true
     # Local network: pack downloads dial the studio engine peer-to-peer
     # (iroh direct paths / LAN WebSocket); without this key iOS silently

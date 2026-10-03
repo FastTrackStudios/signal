@@ -35,10 +35,35 @@ impl StyxDir {
     }
 
     /// Resolve a dir-relative asset path (`models/…`, `irs/…`) to absolute;
-    /// absolute paths and empties pass through.
+    /// empties pass through, and so do absolute paths that exist.
+    ///
+    /// An absolute path that does not exist here was written on another
+    /// machine (a library carried over, or a default captured on a
+    /// developer's box): the same file in this dir is used when there is
+    /// one — under the folder it sat in (`…/frozen/x.nam` → `frozen/x.nam`)
+    /// or under `models/` — so a library moves between machines without
+    /// its paths being edited.
     pub fn resolve(&self, path: &mut String) {
-        if !path.is_empty() && !std::path::Path::new(path.as_str()).is_absolute() {
-            *path = self.dir.join(path.as_str()).to_string_lossy().into_owned();
+        if path.is_empty() {
+            return;
+        }
+        let given = std::path::Path::new(path.as_str());
+        if !given.is_absolute() {
+            *path = self.dir.join(given).to_string_lossy().into_owned();
+            return;
+        }
+        if given.exists() {
+            return;
+        }
+        let Some(file) = given.file_name() else { return };
+        let folder = given.parent().and_then(std::path::Path::file_name);
+        let found = folder
+            .map(|f| self.dir.join(f).join(file))
+            .into_iter()
+            .chain(std::iter::once(self.dir.join("models").join(file)))
+            .find(|p| p.exists());
+        if let Some(p) = found {
+            *path = p.to_string_lossy().into_owned();
         }
     }
 
@@ -168,6 +193,32 @@ mod tests {
         });
         assert_eq!(v.count, 7);
         assert!(store.dir().join("seeded.styx").exists());
+    }
+
+    #[test]
+    fn a_path_from_another_machine_finds_the_file_here() {
+        let store = tmp_store("foreign");
+        for (dir, file) in [("models", "Klon.nam"), ("frozen", "core-L.nam")] {
+            std::fs::create_dir_all(store.dir().join(dir)).unwrap();
+            std::fs::write(store.dir().join(dir).join(file), b"x").unwrap();
+        }
+        let here = |p: &str| {
+            let mut p = p.to_string();
+            store.resolve(&mut p);
+            p
+        };
+        // Under models/, wherever it was downloaded to there.
+        assert_eq!(
+            here("/home/someone/.config/signal/nam/tone3000/2599/Klon.nam"),
+            store.dir().join("models/Klon.nam").to_string_lossy()
+        );
+        // Under the folder it sat in.
+        assert_eq!(
+            here("/home/someone/.config/signal/rig/frozen/core-L.nam"),
+            store.dir().join("frozen/core-L.nam").to_string_lossy()
+        );
+        // Nowhere here: left as written, for the error to name.
+        assert_eq!(here("/nowhere/Missing.nam"), "/nowhere/Missing.nam");
     }
 
     #[test]
