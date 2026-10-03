@@ -4620,11 +4620,14 @@ fn pool_preset_of(def: &crate::profiles::ProfileDef, patch: &str) -> Option<Stri
         .map(|p| p.preset.clone())
 }
 
-/// Every controllable param for a block type: `(name, min, max, default)` —
-/// mirrors the native DSP's param specs (fx-blocks). The Control view's
+/// Every controllable param for a block type: `(name, min, max, default)`.
+///
+/// Mirrors the native DSP's param specs (fx-blocks). The Control view's
 /// panels render from this; values come from the patch's build-time params
-/// (incl. overrides) and live edits.
-fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
+/// (incl. overrides) and live edits. Public so a tool can lay a chain out
+/// the way the rig presents it without running the engine (`examples/rig_dump`).
+#[must_use]
+pub fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
     fn owned(t: &[(&str, f32, f32, f32)]) -> Vec<(String, f32, f32, f32)> {
         t.iter()
             .map(|(n, a, b, c)| (n.to_string(), *a, *b, *c))
