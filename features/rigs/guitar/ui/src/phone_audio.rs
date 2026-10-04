@@ -41,11 +41,75 @@ const BUFFERS: &[u32] = if cfg!(target_os = "ios") { &[256, 512, 1024] } else { 
 
 /// The page's tabs.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Tab {
+pub(crate) enum Tab {
     Status,
     Interface,
     Di,
     Log,
+}
+
+/// Which Audio tab is up — shared, because the phone's top bar shows the
+/// tabs (it is the mode's own bar) and the page shows the tab. Provided by
+/// the phone shell; without it the page keeps its own, with its own tab row.
+#[derive(Clone, Copy)]
+pub(crate) struct AudioTab(pub Signal<Tab>);
+
+impl AudioTab {
+    /// The tab to open on: `FTS_PHONE_AUDIO_TAB=interface|di|log` for the
+    /// shot tool, else Status.
+    pub(crate) fn initial() -> Tab {
+        #[cfg(not(target_arch = "wasm32"))]
+        match std::env::var("FTS_PHONE_AUDIO_TAB").as_deref() {
+            Ok("interface") => return Tab::Interface,
+            Ok("di") => return Tab::Di,
+            Ok("log") => return Tab::Log,
+            _ => {}
+        }
+        Tab::Status
+    }
+}
+
+/// The tabs, with their names: Log where the shell gives a log.
+fn tab_list(log: bool) -> Vec<(Tab, &'static str)> {
+    let mut tabs = vec![(Tab::Status, "Status"), (Tab::Interface, "Interface"), (Tab::Di, "DI player")];
+    if log {
+        tabs.push((Tab::Log, "Log"));
+    }
+    tabs
+}
+
+/// A tab's chip: the one up filled.
+fn chip(on: bool) -> String {
+    if on {
+        "background: #f4f4f5; color: #0a0b0d; border: 1px solid #f4f4f5;".to_string()
+    } else {
+        format!("background: {RAISED}; color: {TEXT}; border: 1px solid {RULE};")
+    }
+}
+
+/// The Audio tabs as a row of chips — in the phone's top bar, which is the
+/// mode's own bar (the presets in Control, the macros in Switch).
+#[component]
+pub(crate) fn AudioTabBar() -> Element {
+    let Some(AudioTab(mut tab)) = try_use_context::<AudioTab>() else {
+        return rsx! {};
+    };
+    let tabs = tab_list(try_use_context::<LogFeed>().is_some());
+    rsx! {
+        div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: row; gap: 6px;",
+            for (t, label) in tabs {
+                {
+                    let look = chip(tab() == t);
+                    rsx! {
+                        div { key: "{label}", style: "flex: 1 1 0%; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; {look}",
+                            onclick: move |_| tab.set(t),
+                            "{label}"
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// The app's log, for the Audio mode's Log tab: its recent lines (oldest
@@ -80,17 +144,11 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     let mut devices = use_signal(AudioDevices::default);
     let mut status = use_signal(RigStatus::default);
     let mut list = use_signal(|| None::<List>);
-    // `FTS_PHONE_AUDIO_TAB=interface|di`: open on that tab, for the shot tool.
-    let mut tab = use_signal(|| {
-        #[cfg(not(target_arch = "wasm32"))]
-        match std::env::var("FTS_PHONE_AUDIO_TAB").as_deref() {
-            Ok("interface") => return Tab::Interface,
-            Ok("di") => return Tab::Di,
-            Ok("log") => return Tab::Log,
-            _ => {}
-        }
-        Tab::Status
-    });
+    // The tab up: the shell's (its top bar shows the tabs), else the page's
+    // own, with its own row.
+    let shared = try_use_context::<AudioTab>();
+    let own = use_signal(AudioTab::initial);
+    let mut tab = shared.map_or(own, |s| s.0);
 
     // The prefs once, then the devices and the rig's status on a short
     // timer while the page is up: an interface plugged in shows up, and the
@@ -236,13 +294,7 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     let rate = if st.perf.sample_rate > 0 { st.perf.sample_rate } else { 48_000 };
 
     let row = format!("min-height: {ROW_H}px; display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 0 16px; border-top: 1px solid {RULE};");
-    let chip = |on: bool| {
-        if on {
-            "background: #f4f4f5; color: #0a0b0d; border: 1px solid #f4f4f5;".to_string()
-        } else {
-            format!("background: {RAISED}; color: {TEXT}; border: 1px solid {RULE};")
-        }
-    };
+
     let button = |tone: &str| {
         format!("flex: 1 1 0%; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; background: {tone}; color: #0a0b0d;")
     };
@@ -259,21 +311,21 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     let card = format!("display: flex; flex-direction: column; border-radius: 14px; background: {CARD}; border: 1px solid {RULE};");
     // The Log tab, where the shell gives the app's log.
     let feed = try_use_context::<LogFeed>();
-    let mut tabs = vec![(Tab::Status, "Status"), (Tab::Interface, "Interface"), (Tab::Di, "DI player")];
-    if feed.is_some() {
-        tabs.push((Tab::Log, "Log"));
-    }
+    let tabs = tab_list(feed.is_some());
     rsx! {
         div { style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; background: {BG}; color: {TEXT};",
-            // ── The tabs ──
-            div { style: "flex: 0 0 auto; display: flex; flex-direction: row; gap: 6px; padding: 8px 12px; border-bottom: 1px solid {RULE};",
-                for (t, label) in tabs.iter().copied() {
-                    {
-                        let look = chip(tab() == t);
-                        rsx! {
-                            div { key: "{label}", style: "flex: 1 1 0%; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; {look}",
-                                onclick: move |_| tab.set(t),
-                                "{label}"
+            // ── The tabs (here only when the shell's top bar does not show
+            // them) ──
+            if shared.is_none() {
+                div { style: "flex: 0 0 auto; display: flex; flex-direction: row; gap: 6px; padding: 8px 12px; border-bottom: 1px solid {RULE};",
+                    for (t, label) in tabs.iter().copied() {
+                        {
+                            let look = chip(tab() == t);
+                            rsx! {
+                                div { key: "{label}", style: "flex: 1 1 0%; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; {look}",
+                                    onclick: move |_| tab.set(t),
+                                    "{label}"
+                                }
                             }
                         }
                     }

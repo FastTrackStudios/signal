@@ -303,12 +303,15 @@ pub fn PhoneControl(
         Page::Amps
     });
     let mut mode = use_signal(|| Mode::Control);
-    // `FTS_PHONE_OPEN=audio`: open on the Audio page, for the shot tool.
+    // The Audio tab up, shared by the top bar (where the tabs are, in Audio)
+    // and the page.
+    use_context_provider(|| crate::phone_audio::AudioTab(Signal::new(crate::phone_audio::AudioTab::initial())));
+    // `FTS_PHONE_OPEN=audio|switch`: open on that mode, for the shot tool.
     #[cfg(not(target_arch = "wasm32"))]
-    use_hook(|| {
-        if std::env::var("FTS_PHONE_OPEN").is_ok_and(|v| v == "audio") {
-            crate::settings::open_audio_settings();
-        }
+    use_hook(|| match std::env::var("FTS_PHONE_OPEN").as_deref() {
+        Ok("audio") => crate::settings::open_audio_settings(),
+        Ok("switch") => mode.set(Mode::Switch),
+        _ => {}
     });
     // Whatever asks for the audio settings (the badge, a banner, the shot
     // tool) gets the Audio mode: on a phone they live beside the rail.
@@ -541,6 +544,10 @@ pub fn PhoneControl(
         }
     };
 
+    // The bar's items: centred in the line, but stretched in Switch so the
+    // macro bar's own height (taller than the line) is the bar's.
+    let bar_align = if mode() == Mode::Switch { "stretch" } else { "center" };
+
     rsx! {
         // The whole screen: the view runs under the camera housing on
         // whichever side it is, and what sits beside it keeps clear itself.
@@ -568,7 +575,10 @@ pub fn PhoneControl(
             onpointerup: move |_| swipe.set(None),
             // ── The status, along the top: what plays (tap for every profile
             // and patch), the page, and the page's module presets ──
-            div { style: "position: relative; z-index: 3; flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 6px; box-sizing: border-box; padding: 0 {status_right}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
+            // The mode's own bar: Control's presets, Audio's tabs, Switch's
+            // macros — the last as tall as its knobs need (the switches
+            // under it take the rest).
+            div { style: "position: relative; z-index: 3; flex: 0 0 auto; min-height: {LINE_H}px; display: flex; flex-direction: row; align-items: {bar_align}; gap: 6px; box-sizing: border-box; padding: 0 {status_right}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
                 // The way back, over the rail and as wide as it: the corner
                 // the two make reads as one column.
                 div { style: "flex: 0 0 {RAIL_W + lead}px; align-self: stretch; box-sizing: border-box; padding-left: {back_left}px; display: flex; align-items: center; justify-content: center; border-right: 1px solid {RULE}; cursor: pointer;",
@@ -581,6 +591,18 @@ pub fn PhoneControl(
                         RailIcon { name: "Rigs", color: TEXT }
                     }
                 }
+                match mode() {
+                Mode::Audio => rsx! {
+                    div { style: "flex: 1 1 0%; min-width: 0; display: flex; padding: 4px 0;",
+                        crate::phone_audio::AudioTabBar {}
+                    }
+                },
+                Mode::Switch => rsx! {
+                    div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; justify-content: center;",
+                        crate::macro_bar::MacroBar { macros: state.macros }
+                    }
+                },
+                Mode::Control => rsx! {
                 // Three slots, each where it always is, whatever the page: what
                 // plays, then the page's two modules — the top-level one
                 // (Core, Time) and the page's own. A slot a page has no module
@@ -599,6 +621,8 @@ pub fn PhoneControl(
                     } else {
                         TopSlot { key: "{slot}", grow: 3, label: "Module".to_string(), name: String::new() }
                     }
+                }
+                },
                 }
             }
             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;",
