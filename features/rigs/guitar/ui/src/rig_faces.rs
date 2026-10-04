@@ -1105,10 +1105,13 @@ pub fn PreFxRow(
             // On a phone the units are lanes, stacked (as the Mod / Motion
             // page's): pre modulation over the tremolo.
             if part == PrePart::Units && tier <= crate::control::Tier::Phone {
-                div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
+                // Each lane at most half the page (a face lays itself out
+                // for its box, so one alone at full height came out twice
+                // its size and ran off both sides), centred when alone.
+                div { style: "display: flex; flex-direction: column; justify-content: center; width: 100%; height: 100%; min-height: 0;",
                     for (b, f, _) in items.iter().cloned() {
                         if let Some(f) = f {
-                            div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                            div { key: "{b.id}", style: "flex: 0 1 50%; min-height: 0; display: flex;",
                                 BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some(b.block_type.as_str().to_string()), tempo_bpm: Some(tempo_bpm), algos: unit_algos(&b) }
                             }
                         }
@@ -1147,9 +1150,11 @@ pub fn PreFxRow(
                 // half of that (32.5 % × 1.15 / 2 = 18.69 % of the group),
                 // and this row is 36.7 % of the group (control.rs):
                 // 18.69 / 36.7.
-                div { style: "flex: {lane_flex}; min-width: 0; height: 100%; display: flex; flex-direction: column; border-left: 1px solid #1d1f24;",
+                // Each lane at most half the height, centred when alone (as
+                // the units above).
+                div { style: "flex: {lane_flex}; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: center; border-left: 1px solid #1d1f24;",
                     for (b, f, extra) in lanes {
-                        div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
+                        div { key: "{b.id}", style: "flex: 0 1 50%; min-height: 0; display: flex;",
                             BlockFace { block: b.clone(), face: f, extra, fill: true, stepper: true, preset_type: Some(b.block_type.as_str().to_string()), tempo_bpm: Some(tempo_bpm) }
                         }
                     }
