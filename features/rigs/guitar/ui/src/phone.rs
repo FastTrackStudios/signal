@@ -581,25 +581,16 @@ pub fn PhoneControl(
                         RailIcon { name: "Rigs", color: TEXT }
                     }
                 }
-                // Four slots, each where it always is, whatever the page: what
-                // plays, the page (its button drops the chain), then the
-                // page's two modules — the top-level one (Core, Time) and
-                // the page's own. A slot a page has no module for stays,
-                // dimmed, so nothing slides into its place; a long name is
-                // cut inside its slot rather than pushing the others.
+                // Three slots, each where it always is, whatever the page: what
+                // plays, then the page's two modules — the top-level one
+                // (Core, Time) and the page's own. A slot a page has no module
+                // for stays, dimmed, so nothing slides into its place; a long
+                // name is cut inside its slot rather than pushing the others.
+                // (The page is picked on the chain under the line.)
                 TopSlot { grow: 4, label: playing, name: patch_name.clone(),
                     on_open: move |()| browse.set(Some(if song { crate::phone_browser::BrowseTab::Songs } else { crate::phone_browser::BrowseTab::Patches })),
                 }
-                PageSlot { title: page().short(), color: page().color(), open: chain_tall() && mode() == Mode::Control,
-                    on_toggle: move |()| {
-                        if mode() == Mode::Control {
-                            chain_tall.toggle();
-                        } else {
-                            mode.set(Mode::Control);
-                            chain_tall.set(true);
-                        }
-                    },
-                }
+
                 for (slot, module) in [(0, top_module), (1, page_module)] {
                     if let Some(module) = module {
                         TopSlot { key: "{slot}", grow: 3, label: module.to_string(), name: name_of(module), modified: module_edited(module),
@@ -822,35 +813,6 @@ fn TopSlot(
                 svg { width: "12", height: "12", view_box: "0 0 24 24", fill: "none", stroke: DIM, stroke_width: "2.5", stroke_linecap: "round", stroke_linejoin: "round",
                     path { d: "M6 9l6 6 6-6" }
                 }
-            }
-        }
-    }
-}
-
-/// The page's slot: a fixed width, the page's name by a dot of its colour,
-/// and the arrow that drops the chain down from under the line. While the
-/// chain is down the slot fills with the page's colour, its arrow up.
-#[component]
-fn PageSlot(title: &'static str, color: &'static str, open: bool, on_toggle: EventHandler<()>) -> Element {
-    let (bg, ink, label_color, arrow) = if open {
-        (color, "#0a0b0d", "#0a0b0d", "M6 15l6-6 6 6")
-    } else {
-        (RAISED, "#f4f4f5", DIM, "M6 9l6 6 6-6")
-    };
-    rsx! {
-        div { style: "flex: 0 0 118px; {SLOT} background: {bg}; border: 1px solid {RAISED}; cursor: pointer;",
-            onclick: move |_| on_toggle.call(()),
-            div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; justify-content: center;",
-                span { style: "font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {label_color};", "Page" }
-                div { style: "display: flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0;",
-                    if !open {
-                        span { style: "flex: 0 0 8px; width: 8px; height: 8px; border-radius: 4px; background: {color};" }
-                    }
-                    span { style: "font-size: 14px; font-weight: 800; color: {ink}; white-space: nowrap; overflow: hidden;", "{title}" }
-                }
-            }
-            svg { width: "14", height: "14", view_box: "0 0 24 24", fill: "none", stroke: ink, stroke_width: "2.8", stroke_linecap: "round", stroke_linejoin: "round",
-                path { d: arrow }
             }
         }
     }
