@@ -655,6 +655,31 @@ fn seed_compositions() {
     );
 }
 
+/// Add each shipped song and setlist a library from before it shipped has
+/// never had — once (`.seeded-songs`, `.seeded-setlists`), so one the
+/// player deletes stays deleted. A set the app ships (a worship night's
+/// order) reaches a phone that already has its own songs.
+fn seed_songs_and_setlists() {
+    let Some(store) = writable_store() else { return };
+    let store = &store;
+    seed_entries::<SongLib, crate::profiles::SongDef>(
+        store,
+        "songs.styx",
+        DEFAULT_SONGS,
+        ".seeded-songs",
+        |l| &mut l.songs,
+        |s| s.name.clone(),
+    );
+    seed_entries::<SetlistLib, crate::profiles::SetlistDef>(
+        store,
+        "setlists.styx",
+        DEFAULT_SETLISTS,
+        ".seeded-setlists",
+        |l| &mut l.setlists,
+        |s| s.name.clone(),
+    );
+}
+
 /// [`seed_compositions`] for one file: the shipped entries (by `key`) not in
 /// the library's file nor in its `marker` are added and written back.
 fn seed_entries<L, E>(
@@ -732,6 +757,7 @@ impl RigLibrary {
             Self::save_drive_presets(&drive_presets);
         }
         seed_compositions();
+        seed_songs_and_setlists();
         let songs = read_or_seed::<SongLib>(&store, "songs.styx", DEFAULT_SONGS, || SongLib {
             songs: song_library(),
         })
@@ -1156,6 +1182,25 @@ mod tests {
     /// The shipped config and the structs that read it must agree — a
     /// mismatch does not fail a build, it fails a first run, on whatever
     /// machine the binary was installed on.
+    #[test]
+    fn the_shipped_setlists_parse_and_name_only_shipped_songs() {
+        let songs: super::SongLib = facet_styx::from_str(super::DEFAULT_SONGS).expect("songs.styx parses");
+        let sets: super::SetlistLib = facet_styx::from_str(super::DEFAULT_SETLISTS).expect("setlists.styx parses");
+        for set in &sets.setlists {
+            for e in &set.entries {
+                assert!(
+                    songs.songs.iter().any(|s| s.name == e.song),
+                    "{}: {} is not in the shipped songs",
+                    set.name,
+                    e.song
+                );
+            }
+        }
+        let hsm = sets.setlists.iter().find(|s| s.name == "HSM 10-6-26 Worship Night").expect("the HSM set ships");
+        assert_eq!(hsm.entries.len(), 8);
+        assert!(sets.setlists.iter().any(|s| s.name == "Kids Ministry 10-7-26 Worship Night"));
+    }
+
     #[test]
     fn the_shipped_profile_parses_and_carries_its_provenance() {
         let profile: super::ProfileDef =

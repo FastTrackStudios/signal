@@ -2228,9 +2228,9 @@ impl GuitarRig {
     /// Live phones-bus levels (headphone volume + self-mix) — forwarded to
     /// the duplex engine's lock-free bus for routed interfaces.
     pub fn set_phones_levels(volume: f32, self_mix: f32) {
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
         daw::standalone::audio_engine::PhonesBus::shared().set(volume, self_mix);
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
         let _ = (volume, self_mix); // cpal fallback: no routed phones bus yet
     }
 
@@ -2238,18 +2238,18 @@ impl GuitarRig {
     /// itself — off while the separate headphone mixer (`signal-phones`)
     /// plays the mix.
     pub fn set_phones_blend(on: bool) {
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
         daw::standalone::audio_engine::PhonesBus::shared().set_blend_mix(on);
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
         let _ = on;
     }
 
     /// Mute the main output pair only (routed interfaces): the phones keep
     /// the signal.
     pub fn set_main_pair_mute(on: bool) {
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
         daw::standalone::audio_engine::PhonesBus::shared().set_main_mute(on);
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
         let _ = on;
     }
 

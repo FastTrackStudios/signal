@@ -78,6 +78,11 @@ fn tab_list(log: bool) -> Vec<(Tab, &'static str)> {
     tabs
 }
 
+/// A tab's label colour: dark on the filled chip.
+fn chip_ink(on: bool) -> &'static str {
+    if on { "#0a0b0d" } else { TEXT }
+}
+
 /// A tab's chip: the one up filled.
 fn chip(on: bool) -> String {
     if on {
@@ -100,10 +105,13 @@ pub(crate) fn AudioTabBar() -> Element {
             for (t, label) in tabs {
                 {
                     let look = chip(tab() == t);
+                    let ink = chip_ink(tab() == t);
                     rsx! {
                         div { key: "{label}", style: "flex: 1 1 0%; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; {look}",
                             onclick: move |_| tab.set(t),
-                            "{label}"
+                            // Its own colour: Blitz kept the inherited one
+                            // when the chip's style changed (white on white).
+                            span { style: "color: {ink};", "{label}" }
                         }
                     }
                 }
@@ -321,10 +329,11 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
                     for (t, label) in tabs.iter().copied() {
                         {
                             let look = chip(tab() == t);
+                            let ink = chip_ink(tab() == t);
                             rsx! {
                                 div { key: "{label}", style: "flex: 1 1 0%; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; {look}",
                                     onclick: move |_| tab.set(t),
-                                    "{label}"
+                                    span { style: "color: {ink};", "{label}" }
                                 }
                             }
                         }
