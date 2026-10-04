@@ -252,6 +252,7 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
                 }
             };
             report("start");
+            crate::log_ring::restore_previous();
             let mut tick: u32 = 0;
             let mut stuck_logged = false;
             loop {
@@ -270,6 +271,19 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
                     stuck_logged = false;
                 }
                 if tick % 5 == 0 {
+                    // The app's memory, as the system counts it against its
+                    // limit (a run killed for memory shows it climbing).
+                    let mem_mb = {
+                        let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
+                        // SAFETY: a plain query of this process into a
+                        // struct of the flavour's size.
+                        let ok = unsafe {
+                            libc::proc_pid_rusage(libc::getpid(), libc::RUSAGE_INFO_V4, (&raw mut info).cast())
+                        } == 0;
+                        if ok { info.ri_phys_footprint / (1024 * 1024) } else { 0 }
+                    };
+                    tracing::info!(mem.footprint_mb = mem_mb, "memory");
+                    crate::log_ring::persist();
                     tracing::info!(
                         ui.fps = ui.fps,
                         ui.mean_ms = ui.mean_ms,
