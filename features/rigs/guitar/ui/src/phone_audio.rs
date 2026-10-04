@@ -39,6 +39,11 @@ const ROW_H: u32 = 56;
 /// The buffer sizes offered: iOS's audio unit takes 256 frames and up.
 const BUFFERS: &[u32] = if cfg!(target_os = "ios") { &[256, 512, 1024] } else { &[64, 128, 256, 512] };
 
+/// The sample rates offered: Automatic (0 — whatever the interface runs at,
+/// asked for nothing) and the two an interface commonly runs. An interface
+/// that cannot run the one asked for runs its own, and the rig follows it.
+const RATES: &[(u32, &str)] = &[(0, "Auto"), (44_100, "44.1 kHz"), (48_000, "48 kHz")];
+
 /// The page's tabs.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tab {
@@ -420,12 +425,35 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
                                             let mut apply = apply.clone();
                                             let p = p.clone();
                                             let look = chip(p.buffer_size == frames);
+                                            let ink = chip_ink(p.buffer_size == frames);
                                             let ms = f64::from(frames) * 1000.0 / f64::from(rate);
                                             rsx! {
                                                 div { key: "{frames}", style: "min-width: 76px; height: 44px; padding: 0 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; {look}",
                                                     onclick: move |_| apply(AudioPrefs { buffer_size: frames, ..p.clone() }),
-                                                    span { style: "font-size: 15px; font-weight: 800;", "{frames}" }
-                                                    span { style: "font-size: 11px; font-weight: 600; opacity: 0.7;", "{ms:.1} ms" }
+                                                    span { style: "font-size: 15px; font-weight: 800; color: {ink};", "{frames}" }
+                                                    span { style: "font-size: 11px; font-weight: 600; opacity: 0.7; color: {ink};", "{ms:.1} ms" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            // The sample rate: Auto follows the interface; a
+                            // rate asked for that the interface cannot run
+                            // leaves it on its own (the status line says which).
+                            div { style: "{row} padding-top: 8px; padding-bottom: 8px;",
+                                span { style: "flex: 0 0 120px; font-size: 14px; color: {DIM};", "Sample rate" }
+                                div { style: "flex: 1 1 0%; display: flex; flex-direction: row; gap: 8px;",
+                                    for &(hz, label) in RATES {
+                                        {
+                                            let mut apply = apply.clone();
+                                            let p = p.clone();
+                                            let look = chip(p.sample_rate == hz);
+                                            let ink = chip_ink(p.sample_rate == hz);
+                                            rsx! {
+                                                div { key: "{hz}", style: "min-width: 76px; height: 44px; padding: 0 10px; display: flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; {look}",
+                                                    onclick: move |_| apply(AudioPrefs { sample_rate: hz, ..p.clone() }),
+                                                    span { style: "font-size: 15px; font-weight: 800; color: {ink};", "{label}" }
                                                 }
                                             }
                                         }

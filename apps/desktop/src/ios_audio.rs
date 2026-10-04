@@ -152,8 +152,9 @@ pub fn configure() {
         if set.is_err() {
             tracing::warn!("AVAudioSession setCategory(playAndRecord, measurement) failed");
         }
-        let _: Result<(), Retained<NSObject>> =
-            msg_send![&*session, setPreferredSampleRate: 48_000.0f64, error: _];
+        // No preferred rate here: the engine asks for the player's (Audio ›
+        // Interface › Sample rate) when it opens, and builds for what the
+        // device grants — an interface that only runs at 44.1 kHz included.
         let _: Result<(), Retained<NSObject>> = msg_send![
             &*session, setPreferredIOBufferDuration: (128.0f64 / 48_000.0), error: _
         ];
