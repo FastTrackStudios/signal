@@ -302,6 +302,9 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
                     });
                 } else if perm && !granted && now {
                     tracing::info!("record permission granted — restarting the rig");
+                    // Inputs appear once access is given: set the session
+                    // up again (interface pinned, route waited for) first.
+                    crate::ios_audio::configure();
                     let rig = rig.clone();
                     handle.spawn(async move {
                         let _ = rig.restart().await;

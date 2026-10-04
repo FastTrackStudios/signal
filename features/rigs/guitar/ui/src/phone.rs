@@ -568,7 +568,7 @@ pub fn PhoneControl(
             onpointerup: move |_| swipe.set(None),
             // ── The status, along the top: what plays (tap for every profile
             // and patch), the page, and the page's module presets ──
-            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 6px; box-sizing: border-box; padding: 0 {status_right}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
+            div { style: "position: relative; z-index: 3; flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 6px; box-sizing: border-box; padding: 0 {status_right}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
                 // The way back, over the rail and as wide as it: the corner
                 // the two make reads as one column.
                 div { style: "flex: 0 0 {RAIL_W + lead}px; align-self: stretch; box-sizing: border-box; padding-left: {back_left}px; display: flex; align-items: center; justify-content: center; border-right: 1px solid {RULE}; cursor: pointer;",
@@ -605,7 +605,12 @@ pub fn PhoneControl(
                 // ── The rail ──
                 // Bottom-aligned, the most used lowest, under the thumb:
                 // Audio, Switch, Profile/Setlist, Control.
-                div { style: "flex: 0 0 {RAIL_W + lead}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding: 0 0 {rail_foot}px {lead}px; background: {BAR_BG}; border-right: 1px solid {RULE};",
+                // Over the page (z-index): a page wider than its box — the
+                // Amps row of three — runs on under the rail, clipped from
+                // sight but not from taps (Blitz hit-tests clipped content),
+                // and drawn after the rail it took the rail's taps: on some
+                // pages, held one way round, the rail looked frozen.
+                div { style: "position: relative; z-index: 3; flex: 0 0 {RAIL_W + lead}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding: 0 0 {rail_foot}px {lead}px; background: {BAR_BG}; border-right: 1px solid {RULE};",
                     // Audio, with how it is: a dot on its speaker, and its
                     // name saying Off or Error when it is not running.
                     AudioRailButton { on: mode() == Mode::Audio, running: (state.running)(), error: (state.audio_error)(),
@@ -642,7 +647,7 @@ pub fn PhoneControl(
                                     }
                                 }
                             } else {
-                                div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
+                                div { style: "position: relative; z-index: 2; flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
                                     for p in Page::ALL {
                                         {segment(p, false)}
                                     }

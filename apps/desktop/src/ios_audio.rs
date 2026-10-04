@@ -67,6 +67,34 @@ unsafe fn external_input_port() -> *mut AnyObject {
     std::ptr::null_mut()
 }
 
+/// Whether the current route's input is an external interface — the one
+/// `setPreferredInput` asked for, once the route has switched to it. Polls
+/// until `within` has passed.
+fn wait_for_route_input(within: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + within;
+    loop {
+        let routed = unsafe {
+            let session: *mut AnyObject = msg_send![class!(AVAudioSession), sharedInstance];
+            let route: *mut AnyObject = msg_send![session, currentRoute];
+            let inputs: *mut AnyObject = if route.is_null() { std::ptr::null_mut() } else { msg_send![route, inputs] };
+            let count: usize = if inputs.is_null() { 0 } else { msg_send![inputs, count] };
+            (0..count).any(|i| {
+                let port: *mut AnyObject = msg_send![inputs, objectAtIndex: i];
+                let ptype: *mut AnyObject = msg_send![port, portType];
+                EXTERNAL_INPUT_PORTS.iter().any(|name| {
+                    let candidate = nsstring(name);
+                    let eq: bool = msg_send![ptype, isEqualToString: candidate];
+                    eq
+                })
+            })
+        };
+        if routed || std::time::Instant::now() >= deadline {
+            return routed;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
 /// Whether a real external audio interface is currently connected.
 pub fn has_external_input() -> bool {
     unsafe { !external_input_port().is_null() }
@@ -105,19 +133,35 @@ pub fn configure() {
     unsafe {
         let session: Retained<AnyObject> = msg_send![class!(AVAudioSession), sharedInstance];
 
+        // The order Apple's docs require and JUCE (juce_Audio_ios.cpp) and
+        // aurioTouch follow: category and mode, the preferred rate and
+        // buffer, activate — and only then the preferred input and its
+        // channel count ("set a preferred input port only after setting the
+        // audio session's category and mode and activating the session").
+        // Picking the interface before activating left the route to switch
+        // to it later, after the rig's streams were built on the old one.
+        //
+        // Mode Measurement: the least system processing on the input (no
+        // voice AGC / EQ) — an instrument, not a call.
         let category = nsstring("AVAudioSessionCategoryPlayAndRecord");
+        let mode = nsstring("AVAudioSessionModeMeasurement");
         // DefaultToSpeaker | AllowBluetoothA2DP.
         let options: usize = 0x8 | 0x20;
         let set: Result<(), Retained<NSObject>> =
-            msg_send![&*session, setCategory: category, withOptions: options, error: _];
+            msg_send![&*session, setCategory: category, mode: mode, options: options, error: _];
         if set.is_err() {
-            tracing::warn!("AVAudioSession setCategory(playAndRecord) failed");
+            tracing::warn!("AVAudioSession setCategory(playAndRecord, measurement) failed");
         }
         let _: Result<(), Retained<NSObject>> =
             msg_send![&*session, setPreferredSampleRate: 48_000.0f64, error: _];
         let _: Result<(), Retained<NSObject>> = msg_send![
             &*session, setPreferredIOBufferDuration: (128.0f64 / 48_000.0), error: _
         ];
+
+        let active: Result<(), Retained<NSObject>> = msg_send![&*session, setActive: true, error: _];
+        if active.is_err() {
+            tracing::warn!("AVAudioSession activation failed");
+        }
 
         let ext = external_input_port();
         if !ext.is_null() {
@@ -126,18 +170,17 @@ pub fn configure() {
             if set_in.is_err() {
                 tracing::warn!("AVAudioSession setPreferredInput failed");
             }
-            tracing::info!("AVAudioSession: external interface present — input pinned");
+            // The route switches to it asynchronously: wait (up to a second)
+            // until it is the route's input, so what is built next — the
+            // channel count, the rig's streams — is built on it.
+            let routed = wait_for_route_input(std::time::Duration::from_secs(1));
+            tracing::info!(audio.routed = routed, "AVAudioSession: external interface present — input pinned");
         } else {
             // Clear any preferred input; the rig won't read the built-in mic.
             let _: Result<(), Retained<NSObject>> = msg_send![
                 &*session, setPreferredInput: std::ptr::null_mut::<AnyObject>(), error: _
             ];
             tracing::info!("AVAudioSession: no interface — rig input stays closed (no mic)");
-        }
-
-        let active: Result<(), Retained<NSObject>> = msg_send![&*session, setActive: true, error: _];
-        if active.is_err() {
-            tracing::warn!("AVAudioSession activation failed");
         }
         // Every channel the route has, not the two a session gets by
         // default: a four-in interface's inputs 3-4 (and outputs 3-4) are

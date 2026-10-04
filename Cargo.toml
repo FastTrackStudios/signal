@@ -17,6 +17,7 @@ members = [
     "libs/vendor/dioxus-native-dom",
     "libs/vendor/dioxus-native",
     "libs/vendor/anyrender_vello_hybrid",
+    "libs/vendor/winit-uikit",
     "apps/web",
     "apps/cli",
     "apps/fts-convert",
@@ -862,6 +863,10 @@ anyrender_vello = { path = "../blitz/vendor/anyrender_vello" }
 # that rotates before the renderer is up otherwise keeps the portrait
 # surface. See libs/vendor/anyrender_vello_hybrid/UPSTREAM.md.
 anyrender_vello_hybrid = { path = "libs/vendor/anyrender_vello_hybrid" }
+# A tap that came while a frame was drawn is handled at once, not when the
+# next touch arrives (the proxy wake-up never drained winit's event queue).
+# See libs/vendor/winit-uikit/UPSTREAM.md.
+winit-uikit = { path = "libs/vendor/winit-uikit" }
 # Vendored one-line fix: quote scalars containing `<`/`>` — upstream
 # (facet-rs/facet) styx-format emits them bare but styx-parse rejects
 # them, so serialized keybind configs (`keys "<C-s>"`) could not be
