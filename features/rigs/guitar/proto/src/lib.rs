@@ -1066,6 +1066,30 @@ pub struct MacroSave {
     pub name: String,
 }
 
+/// Whether a pick took — what the browser shows on the row picked: Loaded,
+/// or Didn't load and why. A refusal the rig used to only log (no such
+/// preset, no patch playing, a block that has gone) comes back as `message`.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct Applied {
+    pub ok: bool,
+    /// Why not, when it did not take. Empty when it did.
+    pub message: String,
+}
+
+impl Applied {
+    /// It took.
+    #[must_use]
+    pub fn done() -> Self {
+        Self { ok: true, message: String::new() }
+    }
+
+    /// It did not, and why.
+    #[must_use]
+    pub fn refused(message: impl Into<String>) -> Self {
+        Self { ok: false, message: message.into() }
+    }
+}
+
 /// What a macro call did — shown in the panel's header.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct MacroResult {
@@ -1140,7 +1164,7 @@ pub mod rig {
 
     use super::{
         Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode,
-        MacroKnobView, MacroResult, MacroSave, MacroTune, PartOverride, PatchInfo,
+        Applied, MacroKnobView, MacroResult, MacroSave, MacroTune, PartOverride, PatchInfo,
         PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
     };
 
@@ -1220,7 +1244,7 @@ pub mod rig {
         fn hold_switch(&self, switch: u32);
         /// Step through the song: parts (`sections` false) or sections,
         /// forward (`dir` > 0) or back.
-        fn step_part(&self, dir: i32, sections: bool);
+        fn step_part(&self, dir: i32, sections: bool) -> Applied;
         /// Put `part` in section `section` (empty = its own).
         fn set_part_section(&self, part: String, section: String);
         /// Whether `part` plays the profile's own switches.
@@ -1250,16 +1274,16 @@ pub mod rig {
         /// Jump to the previous song in the setlist.
         fn prev_song(&self);
         /// Jump straight to setlist entry `index`.
-        fn select_song(&self, index: u32);
+        fn select_song(&self, index: u32) -> Applied;
         /// Jump to section `index` of the current song.
-        fn select_part(&self, index: u32);
+        fn select_part(&self, index: u32) -> Applied;
         /// Move setlist entry `from` to position `to` (reorder).
         fn move_song(&self, from: u32, to: u32);
         /// Every patch in the loaded profile (the preset browser).
         fn patches(&self) -> Vec<PatchInfo>;
         /// Activate patch `index` directly (browser click), bypassing the
         /// footswitch stacks.
-        fn select_patch(&self, index: u32);
+        fn select_patch(&self, index: u32) -> Applied;
         /// The preset pool (what patches point at).
         fn presets(&self) -> Vec<PresetInfo>;
         /// Cover art for a pool preset, by name. Every field empty when the
@@ -1311,14 +1335,14 @@ pub mod rig {
         /// formatted for the monitor.
         fn midi_recent(&self) -> Vec<String>;
         /// Switch the active setlist (recalls its first song).
-        fn select_setlist(&self, index: u32);
+        fn select_setlist(&self, index: u32) -> Applied;
         /// Select a block preset's NAM option (e.g. a pedal's gain capture).
         /// Rebuilds the chains — an edit-time operation.
         ///
         /// Superseded by [`select_preset`](Self::select_preset), which
         /// addresses the same choice by node and variant id rather than by
         /// block name and list position.
-        fn set_block_option(&self, id: String, option: u32);
+        fn set_block_option(&self, id: String, option: u32) -> Applied;
         /// The live rig as nodes — every block **and every container**, in
         /// tree order, each with the presets it can be recalled as.
         ///
@@ -1479,7 +1503,7 @@ pub mod rig {
         /// not toggle, semantics).
         fn set_block_bypass(&self, id: String, bypassed: bool);
         /// Set a block's primary param.
-        fn set_block_param(&self, id: String, param: String, value: f32);
+        fn set_block_param(&self, id: String, param: String, value: f32) -> Applied;
         /// Set a NAM amp or pedal's Output Level (dB). `commit = false` moves
         /// the live block only (a drag in progress); `commit = true` saves it
         /// with the gear (amp module snapshot / drive option) and rebuilds,
@@ -1495,10 +1519,10 @@ pub mod rig {
         /// Play `module`'s preset `preset` (at `snapshot`; empty = its
         /// first) on the active patch — saved as the patch's own pick, over
         /// whatever its preset snapshot chose.
-        fn choose_module(&self, module: String, preset: String, snapshot: String);
+        fn choose_module(&self, module: String, preset: String, snapshot: String) -> Applied;
         /// Put block preset `preset` on the active patch's block `block`
         /// (`DLY 1`, `VERB 2`, …) — the patch's own pick, saved and rebuilt.
-        fn choose_block(&self, block: String, preset: String);
+        fn choose_block(&self, block: String, preset: String) -> Applied;
         /// Play Core snapshot `preset` · `snapshot` frozen (its NAM
         /// captures) or live (its settings). Both are kept; saved and
         /// rebuilt.
@@ -1515,19 +1539,19 @@ pub mod rig {
         /// Step the active patch's `module` pick through its preset's
         /// snapshots (`delta` −1 / +1, wrapping). With no pick yet, takes
         /// the module's first preset.
-        fn step_module(&self, module: String, delta: i32);
+        fn step_module(&self, module: String, delta: i32) -> Applied;
         /// Point the active patch at a preset snapshot.
         fn choose_preset(&self, preset: String, snapshot: String);
         /// Step the active patch through its preset's snapshots.
         fn step_preset_snapshot(&self, delta: i32);
         /// Play a different profile. Rebuilds the rig from it (an audio gap,
         /// like any rebuild) and remembers it across restarts.
-        fn select_profile(&self, name: String);
+        fn select_profile(&self, name: String) -> Applied;
         /// Put pedal `pedal` (a drive preset's name) in drive slot `slot`
         /// (`Drive 1`, `Boost`), on its first capture. On a patch that plays
         /// modules it is the patch's own pick over the module's — an
         /// override, reverted with the module — else the profile's board.
-        fn set_drive_pedal(&self, slot: String, pedal: String);
+        fn set_drive_pedal(&self, slot: String, pedal: String) -> Applied;
         /// Create a profile. With `from` naming a profile, a copy of it;
         /// empty, a starter holding the active profile's presets and drive
         /// slots with one stack and one patch, so it plays from the start.

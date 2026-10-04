@@ -105,12 +105,37 @@ struct Column {
 }
 
 /// How a pick that plays is going.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 enum Phase {
     Loading,
     Loaded,
-    Failed,
+    /// The rig refused it, and why (or it never answered).
+    Failed(String),
 }
+
+impl Phase {
+    /// What the rig answered.
+    fn of(answer: Result<signal_guitar_proto::Applied, impl std::fmt::Debug>) -> Self {
+        match answer {
+            Ok(a) if a.ok => Self::Loaded,
+            Ok(a) => Self::Failed(a.message),
+            Err(_) => Self::Failed("The rig did not answer".into()),
+        }
+    }
+
+    /// The line it shows, and its colour.
+    fn note(&self) -> (String, &'static str) {
+        match self {
+            Self::Loading => ("Loading…".into(), EDITED),
+            Self::Loaded => ("Loaded".into(), LOADED),
+            Self::Failed(why) if why.is_empty() => ("Didn't load".into(), FAILED),
+            Self::Failed(why) => (format!("Didn't load — {why}"), FAILED),
+        }
+    }
+}
+
+/// Where a status shows: a row (column, key), or the header's ‹ › step.
+const HEADER: usize = usize::MAX;
 
 const LOADED: &str = "#22c55e";
 const FAILED: &str = "#ef4444";
@@ -118,8 +143,10 @@ const FAILED: &str = "#ef4444";
 /// Mark the pick at `at` as `phase`, and clear it a moment later — unless
 /// another pick has taken its place meanwhile.
 async fn settle(mut status: Signal<Option<(usize, String, Phase)>>, at: (usize, String), phase: Phase) {
-    status.set(Some((at.0, at.1.clone(), phase)));
-    architect::platform::sleep(std::time::Duration::from_millis(1500)).await;
+    // A refusal stays up long enough to read.
+    let hold = if matches!(phase, Phase::Failed(_)) { 4000 } else { 1500 };
+    status.set(Some((at.0, at.1.clone(), phase.clone())));
+    architect::platform::sleep(std::time::Duration::from_millis(hold)).await;
     if status.peek().as_ref().is_some_and(|(c, k, p)| *c == at.0 && *k == at.1 && *p == phase) {
         status.set(None);
     }
@@ -131,12 +158,7 @@ async fn settle(mut status: Signal<Option<(usize, String, Phase)>>, at: (usize, 
 fn ListRow(row: Row, open: bool, phase: Option<Phase>, onpick: EventHandler<()>) -> Element {
     let bg = if open || phase.is_some() { RAISED } else { "transparent" };
     // How the pick on this row went, under its name in place of its detail.
-    let (note, note_color) = match phase {
-        Some(Phase::Loading) => ("Loading…", EDITED),
-        Some(Phase::Loaded) => ("Loaded", LOADED),
-        Some(Phase::Failed) => ("Didn't load", FAILED),
-        None => ("", DIM),
-    };
+    let (note, note_color) = phase.as_ref().map_or((String::new(), DIM), Phase::note);
     let name_color = if row.live { ACCENT } else { TEXT };
     rsx! {
         div { style: "min-height: 48px; flex: 0 0 auto; box-sizing: border-box; padding: 6px 10px 6px 12px; border-radius: 10px; display: flex; flex-direction: row; align-items: center; gap: 8px; cursor: pointer; background: {bg};",
@@ -154,7 +176,7 @@ fn ListRow(row: Row, open: bool, phase: Option<Phase>, onpick: EventHandler<()>)
                     span { style: "font-size: 11px; font-weight: 600; color: {DIM}; white-space: nowrap; overflow: hidden;", "{row.sub}" }
                 }
             }
-            if phase == Some(Phase::Loading) {
+            if matches!(phase, Some(Phase::Loading)) {
                 // Drawn: a ring with a gap, the pick on its way.
                 svg { width: "18", height: "18", view_box: "0 0 24 24", fill: "none", stroke: EDITED, stroke_width: "3", stroke_linecap: "round",
                     path { d: "M12 3a9 9 0 1 0 9 9" }
@@ -214,15 +236,7 @@ pub fn PhoneBrowser(
     // The last pick that plays something, and how it went: shown on its row
     // until a moment after it lands.
     let mut status = use_signal(|| None::<(usize, String, Phase)>);
-    macro_rules! fire {
-        ($r:ident => $body:expr) => {{
-            if let Some($r) = client.peek().clone() {
-                spawn(async move {
-                    let _ = $body.await;
-                });
-            }
-        }};
-    }
+
 
     // A pick that plays: its row says Loading… until the rig answers, then
     // Loaded (or Didn't load), and clears a moment later.
@@ -232,7 +246,7 @@ pub fn PhoneBrowser(
                 let at = ($col, $key.clone());
                 status.set(Some((at.0, at.1.clone(), Phase::Loading)));
                 spawn(async move {
-                    let phase = if $body.await.is_ok() { Phase::Loaded } else { Phase::Failed };
+                    let phase = Phase::of($body.await);
                     settle(status, at, phase).await;
                 });
             }
@@ -496,8 +510,17 @@ pub fn PhoneBrowser(
                     });
                 }
             }
-            // A module's preset opens; a variation plays.
-            (BrowseTab::Module(_), 0) => open1.set(Some(key)),
+            // A module's preset plays (its first variation) as it opens —
+            // unless it is the one playing, which only opens; a variation
+            // plays.
+            (BrowseTab::Module(m), 0) => {
+                let playing = comp.active_modules.iter().any(|p| p.module.eq_ignore_ascii_case(m) && p.preset == key);
+                if !playing {
+                    let (m, preset) = ((*m).to_string(), key.clone());
+                    play!(col, key, r => r.choose_module(m, preset, String::new()));
+                }
+                open1.set(Some(key));
+            }
             (BrowseTab::Module(m), _) => {
                 let preset = open1
                     .peek()
@@ -513,9 +536,8 @@ pub fn PhoneBrowser(
                 if open1.peek().as_deref() == Some(ALGORITHM) {
                     if let (Some(b), Ok(i)) = (blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)), key.parse::<usize>()) {
                         let param = if b.block_type == BlockType::Reverb { "algorithm" } else { "style" };
-                        crate::control::send_param(&client.peek(), &b.id, param, i as f32);
-                        // A parameter, sent without an answer: it lands as sent.
-                        spawn(settle(status, (col, key.clone()), Phase::Loaded));
+                        let id = b.id.clone();
+                        play!(col, key, r => r.set_block_param(id, param.to_string(), i as f32));
                     }
                 } else {
                     let block = name.clone();
@@ -543,29 +565,29 @@ pub fn PhoneBrowser(
     };
 
     // ── ‹ › through the path's last step ──
-    let step = {
+    let mut step = {
         let (kind, patches, comp, blocks) = (kind.clone(), patches.clone(), comp.clone(), blocks.clone());
         move |d: i32| {
             let wrap = |at: Option<usize>, n: usize| -> Option<usize> {
                 (n > 0).then(|| at.map_or(0, |i| (i as i64 + i64::from(d)).rem_euclid(n as i64) as usize))
             };
             match &kind {
-                BrowseTab::Setlists => fire!(r => r.step_part(d, false)),
+                BrowseTab::Setlists => play!(HEADER, String::new(), r => r.step_part(d, false)),
                 BrowseTab::Profiles => {
                     if let Some(i) = wrap(patches.iter().position(|p| p.active), patches.len()) {
-                        fire!(r => r.select_patch(i as u32));
+                        play!(HEADER, String::new(), r => r.select_patch(i as u32));
                     }
                 }
                 BrowseTab::Module(m) => {
                     let m = (*m).to_string();
-                    fire!(r => r.step_module(m, d));
+                    play!(HEADER, String::new(), r => r.step_module(m, d));
                 }
                 BrowseTab::Block { name, block_type } => {
                     let names: Vec<String> = comp.block_presets.iter().filter(|p| p.block_type.eq_ignore_ascii_case(block_type)).map(|p| p.name.clone()).collect();
                     let playing = comp.active_blocks.iter().find(|b| b.block.eq_ignore_ascii_case(name)).map(|b| b.preset.clone());
                     if let Some(i) = wrap(playing.and_then(|p| names.iter().position(|n| *n == p)), names.len()) {
                         let (block, preset) = (name.clone(), names[i].clone());
-                        fire!(r => r.choose_block(block, preset));
+                        play!(HEADER, String::new(), r => r.choose_block(block, preset));
                     }
                 }
                 BrowseTab::Pedal { name } => {
@@ -573,7 +595,7 @@ pub fn PhoneBrowser(
                         && let Some(i) = wrap(Some(b.option as usize), b.options.len())
                     {
                         let id = b.id.clone();
-                        fire!(r => r.set_block_option(id, i as u32));
+                        play!(HEADER, String::new(), r => r.set_block_option(id, i as u32));
                     }
                 }
                 _ => {}
@@ -594,12 +616,16 @@ pub fn PhoneBrowser(
     let before = crumbs[..crumbs.len().saturating_sub(1)].join("  ›  ");
     let heading = if before.is_empty() { title } else { format!("{title}  ·  {before}") };
     let arrow = format!("flex: 0 0 56px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: {RAISED}; border: 1px solid {RULE}; color: {TEXT}; font-size: 24px; font-weight: 700; cursor: pointer;");
-    let back = step.clone();
+    let mut back = step.clone();
     // A swipe down from the head closes it (where a sheet's grabber is).
     let mut drag = use_signal(|| None::<f64>);
     let cols = columns.len();
     let open_keys = [open1(), open2()];
     let now = status();
+    let (step_note, step_color) = now
+        .as_ref()
+        .filter(|(c, _, _)| *c == HEADER)
+        .map_or((String::new(), DIM), |(_, _, p)| p.note());
 
     rsx! {
         div { style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: column; box-sizing: border-box; padding: 0 {trail}px 0 {lead}px; background: {BG}; color: {TEXT};",
@@ -617,6 +643,10 @@ pub fn PhoneBrowser(
                 div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; align-items: center;",
                     span { style: "font-size: 12px; font-weight: 700; color: {DIM}; white-space: nowrap; overflow: hidden;", "{heading}" }
                     span { style: "font-size: 19px; font-weight: 800; color: #f4f4f5; white-space: nowrap; overflow: hidden;", "{last}" }
+                    // How a ‹ › step went, under what plays — its line always
+                    // there, so a note coming and going does not move the
+                    // columns.
+                    span { style: "height: 14px; font-size: 11px; font-weight: 700; color: {step_color}; white-space: nowrap; overflow: hidden;", "{step_note}" }
                 }
                 div { style: "{arrow}", onclick: move |_| step(1), "›" }
                 div { style: "flex: 0 0 auto; height: 44px; display: flex; align-items: center; padding: 0 18px; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; color: {ACCENT};",
@@ -645,7 +675,7 @@ pub fn PhoneBrowser(
                                     for row in col.rows {
                                         {
                                             let open = !last_col && open_key.as_deref() == Some(row.key.as_str());
-                                            let phase = now.as_ref().filter(|(c, k, _)| *c == i && *k == row.key).map(|(_, _, p)| *p);
+                                            let phase = now.as_ref().filter(|(c, k, _)| *c == i && *k == row.key).map(|(_, _, p)| p.clone());
                                             let key = row.key.clone();
                                             let mut pick = pick.clone();
                                             rsx! {

@@ -30,6 +30,55 @@ use crate::library::RigLibrary;
 use crate::nodes::profile_from_library;
 use crate::profiles::{DriveImport, DrivePresetDef, ProfileDef, SetlistDef, SongDef};
 
+// ── Whether a pick took ──
+//
+// A pick (a preset, a patch, a pedal…) can be refused deep inside the rig:
+// a preset that is not in the library, no patch playing to put it on, a
+// block id from a chain that has since been rebuilt. Each place that
+// refuses says why with `refuse`, where it always logged; the RPC around it
+// runs in `attempt` and answers with the first refusal, so the browser can
+// say Didn't load instead of Loaded. Picks that call other picks (a Core
+// step is a Core pick) share the outermost attempt.
+
+thread_local! {
+    /// How deep in `attempt` this thread is, and the first refusal in it.
+    static ATTEMPT: std::cell::RefCell<(u32, Option<String>)> = const { std::cell::RefCell::new((0, None)) };
+}
+
+/// Run a pick, answering whether it took.
+fn attempt(pick: impl FnOnce()) -> signal_guitar_proto::Applied {
+    ATTEMPT.with(|a| {
+        let mut a = a.borrow_mut();
+        if a.0 == 0 {
+            a.1 = None;
+        }
+        a.0 += 1;
+    });
+    pick();
+    let refusal = ATTEMPT.with(|a| {
+        let mut a = a.borrow_mut();
+        a.0 -= 1;
+        if a.0 == 0 { a.1.take() } else { None }
+    });
+    match refusal {
+        Some(why) => signal_guitar_proto::Applied::refused(why),
+        None => signal_guitar_proto::Applied::done(),
+    }
+}
+
+/// The pick under way does not take, and why — logged as one warning, and
+/// the answer of the `attempt` it is in (the first refusal wins).
+fn refuse(why: impl Into<String>) {
+    let why = why.into();
+    tracing::warn!(reason = %why, "a pick was refused");
+    ATTEMPT.with(|a| {
+        let mut a = a.borrow_mut();
+        if a.0 > 0 && a.1.is_none() {
+            a.1 = Some(why);
+        }
+    });
+}
+
 /// Rig whose audio prefs the settings service reads/writes (persisted to
 /// `<config>/signal/rigs/guitar-rig.styx` by `RigManager`).
 pub(crate) const AUDIO_RIG_NAME: &str = "Guitar Rig";
@@ -1975,7 +2024,7 @@ impl GuitarRigBackend {
     /// at either end rather than leaving the song.
     fn step_part_impl(&self, dir: i32, sections: bool) {
         let Some(song) = self.current_song_def() else {
-            tracing::info!("part step: no song is up (Setlist mode only)");
+            refuse("No song is up");
             return;
         };
         let n = song.parts.len();
@@ -2711,7 +2760,7 @@ impl GuitarRigBackend {
     fn choose_core(&self, preset: String, snapshot: String) {
         let comp = RigLibrary::load_compositions();
         let Some(found) = comp.preset(&preset) else {
-            tracing::warn!(%preset, "choose_core: no such Core preset");
+            refuse(format!("No Core preset named {preset}"));
             return;
         };
         let snapshot = if snapshot.is_empty() { found.snapshots.first().map(|s| s.name.clone()).unwrap_or_default() } else { snapshot };
@@ -2723,6 +2772,7 @@ impl GuitarRigBackend {
     /// Change the live patch's definition, save it, and rebuild so it is heard.
     fn edit_live_patch(&self, edit: impl FnOnce(&mut crate::profiles::PatchDef)) {
         let Some(name) = self.live_patch_name() else {
+            refuse("No patch is playing");
             return;
         };
         if let Some(undo) = self.browse_undo.lock_ok().as_mut() {
@@ -2746,6 +2796,7 @@ impl GuitarRigBackend {
                 .iter_mut()
                 .find(|p| p.name.eq_ignore_ascii_case(&name))
             else {
+                refuse(format!("The patch playing, {name}, is not in the profile"));
                 return;
             };
             edit(patch);
@@ -5145,7 +5196,10 @@ impl GuitarRigBackend {
                     .map_or_else(|| flat.drives.clone(), |p| crate::compose::drives_for(&flat, p));
                 drives.into_iter().find(|d| d.block.eq_ignore_ascii_case(slot))
             };
-            let Some(mut edited) = current else { return false };
+            let Some(mut edited) = current else {
+                refuse(format!("No drive slot {slot} here"));
+                return false;
+            };
             f(&mut edited);
             let slots = match composed {
                 Some(i) => &mut def.patches[i].drives,
@@ -5855,8 +5909,10 @@ impl Rig for GuitarRigBackend {
         self.switch_hold(switch as usize);
     }
 
-    fn step_part(&self, dir: i32, sections: bool) {
-        self.step_part_impl(dir, sections);
+    fn step_part(&self, dir: i32, sections: bool) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            self.step_part_impl(dir, sections);
+        })
     }
 
     fn set_part_section(&self, part: String, section: String) {
@@ -5945,175 +6001,177 @@ impl Rig for GuitarRigBackend {
         self.recall_song(idx);
     }
 
-    fn select_song(&self, index: u32) {
-        let last = self.resolved_setlist().len().saturating_sub(1);
-        let idx = (index as usize).min(last);
-        *self.song_index.lock_ok() = idx;
-        self.recall_song(idx);
+    fn select_song(&self, index: u32) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            let last = self.resolved_setlist().len().saturating_sub(1);
+            let idx = (index as usize).min(last);
+            *self.song_index.lock_ok() = idx;
+            self.recall_song(idx);
+        })
     }
 
-    fn select_part(&self, index: u32) {
-        let (song_idx, last) = {
-            let i = *self.song_index.lock_ok();
-            let last = self
-                .resolved_setlist()
-                .get(i)
-                .map_or(0, |(_, _, _, _, parts)| parts.len().saturating_sub(1));
-            (i, last)
-        };
-        let idx = (index as usize).min(last);
-        *self.part_index.lock_ok() = idx;
-        self.mark_state_dirty();
+    fn select_part(&self, index: u32) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            let (song_idx, last) = {
+                let i = *self.song_index.lock_ok();
+                let last = self
+                    .resolved_setlist()
+                    .get(i)
+                    .map_or(0, |(_, _, _, _, parts)| parts.len().saturating_sub(1));
+                (i, last)
+            };
+            let idx = (index as usize).min(last);
+            *self.part_index.lock_ok() = idx;
+            self.mark_state_dirty();
 
-        // A section recalls a patch, when it has been given one. That is what
-        // makes a section part of the performance rather than a label on it:
-        // stepping through a song's sections switches the rig with it.
-        let section = self
-            .resolved_setlist()
-            .get(song_idx)
-            .and_then(|(_, _, _, _, parts)| parts.get(idx).cloned());
-        // What this section changes on top of its patch, from the library
-        // rather than the perf model — the model carries what a remote needs
-        // to DISPLAY, and these are what the rig has to APPLY.
-        let overrides = {
-            let song_name = self
+            // A section recalls a patch, when it has been given one. That is what
+            // makes a section part of the performance rather than a label on it:
+            // stepping through a song's sections switches the rig with it.
+            let section = self
                 .resolved_setlist()
                 .get(song_idx)
-                .map(|(name, ..)| name.clone())
-                .unwrap_or_default();
-            match (&section, song_name.is_empty()) {
-                (Some(part), false) => {
-                    let songs = self.songs_lib.lock_ok();
-                    songs
-                        .iter()
-                        .find(|s| s.name.eq_ignore_ascii_case(&song_name))
-                        .and_then(|s| s.part_recall(&part.name).map(|r| r.overrides.clone()))
-                        .unwrap_or_default()
+                .and_then(|(_, _, _, _, parts)| parts.get(idx).cloned());
+            // What this section changes on top of its patch, from the library
+            // rather than the perf model — the model carries what a remote needs
+            // to DISPLAY, and these are what the rig has to APPLY.
+            let overrides = {
+                let song_name = self
+                    .resolved_setlist()
+                    .get(song_idx)
+                    .map(|(name, ..)| name.clone())
+                    .unwrap_or_default();
+                match (&section, song_name.is_empty()) {
+                    (Some(part), false) => {
+                        let songs = self.songs_lib.lock_ok();
+                        songs
+                            .iter()
+                            .find(|s| s.name.eq_ignore_ascii_case(&song_name))
+                            .and_then(|s| s.part_recall(&part.name).map(|r| r.overrides.clone()))
+                            .unwrap_or_default()
+                    }
+                    _ => Vec::new(),
                 }
-                _ => Vec::new(),
-            }
-        };
+            };
 
-        // A part is a base profile first — its own, else the song's — then a
-        // patch in it, then changes on top.
-        let song_profile = {
-            let song_name = self
-                .resolved_setlist()
-                .get(song_idx)
-                .map(|(name, ..)| name.clone())
-                .unwrap_or_default();
-            self.songs_lib
-                .lock_ok()
-                .iter()
-                .find(|s| s.name.eq_ignore_ascii_case(&song_name))
-                .map(|s| s.profile.clone())
-                .unwrap_or_default()
-        };
-        let want_profile = section
-            .as_ref()
-            .map(|p| p.profile.clone())
-            .filter(|p| !p.is_empty())
-            .unwrap_or(song_profile);
-        let switched_profile = self.ensure_profile(&want_profile);
-        // The part's switch tuning, and every stack back at its landing patch
-        // — the switches are dialed for the part before its patch plays.
-        let tuned = self.apply_song_stacks();
-        {
-            let mut guard = self.rig.lock_ok();
-            if let Some(prig) = guard.as_mut() {
-                prig.reset_stack_positions();
-                for d in tuned.iter().filter(|d| !d.patch.is_empty()) {
-                    prig.point_stack_at(&d.stack, &d.patch);
-                }
-            }
-        }
-
-        let recall = section.filter(|part| !part.patch.is_empty());
-        if let Some(part) = recall {
-            tracing::info!(part = %part.name, patch = %part.patch, "part → patch");
-            let switched = {
+            // A part is a base profile first — its own, else the song's — then a
+            // patch in it, then changes on top.
+            let song_profile = {
+                let song_name = self
+                    .resolved_setlist()
+                    .get(song_idx)
+                    .map(|(name, ..)| name.clone())
+                    .unwrap_or_default();
+                self.songs_lib
+                    .lock_ok()
+                    .iter()
+                    .find(|s| s.name.eq_ignore_ascii_case(&song_name))
+                    .map(|s| s.profile.clone())
+                    .unwrap_or_default()
+            };
+            let want_profile = section
+                .as_ref()
+                .map(|p| p.profile.clone())
+                .filter(|p| !p.is_empty())
+                .unwrap_or(song_profile);
+            let switched_profile = self.ensure_profile(&want_profile);
+            // The part's switch tuning, and every stack back at its landing patch
+            // — the switches are dialed for the part before its patch plays.
+            let tuned = self.apply_song_stacks();
+            {
                 let mut guard = self.rig.lock_ok();
-                match guard.as_mut() {
-                    Some(prig) => activate_patch_by_name(prig, &part.patch),
-                    // Design mode: the section still recalls its patch.
-                    None => {
-                        drop(guard);
-                        let known = {
-                            let def = self.profile_def.lock_ok();
-                            def.patches
-                                .iter()
-                                .any(|p| p.name.eq_ignore_ascii_case(&part.patch))
-                        };
-                        if known {
-                            *self.design_patch.lock_ok() = part.patch.clone();
-                        }
-                        known
+                if let Some(prig) = guard.as_mut() {
+                    prig.reset_stack_positions();
+                    for d in tuned.iter().filter(|d| !d.patch.is_empty()) {
+                        prig.point_stack_at(&d.stack, &d.patch);
                     }
                 }
-            };
-            if switched {
-                // The same follow-up a footswitch press does, measured the
-                // same way — a section recall is a switch a player feels.
-                self.sync_after_switch(std::time::Duration::ZERO, "section");
-            } else {
-                tracing::warn!(
-                    part = %part.name,
-                    patch = %part.patch,
-                    "guitar: section names a patch the profile does not have"
-                );
             }
-        } else if !overrides.is_empty() {
-            // A section with overrides and no patch of its own still needs a
-            // baseline, or it inherits whatever the previous section left
-            // behind. Re-establishing the current patch is what makes a
-            // section the same sound every time it comes round.
-            let current = {
-                let guard = self.rig.lock_ok();
-                guard
-                    .as_ref()
-                    .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
-                    .unwrap_or_else(|| self.design_patch.lock_ok().clone())
-            };
-            if !current.is_empty() {
-                let reset = {
+
+            let recall = section.filter(|part| !part.patch.is_empty());
+            if let Some(part) = recall {
+                tracing::info!(part = %part.name, patch = %part.patch, "part → patch");
+                let switched = {
                     let mut guard = self.rig.lock_ok();
                     match guard.as_mut() {
-                        Some(prig) => activate_patch_by_name(prig, &current),
-                        None => true,
+                        Some(prig) => activate_patch_by_name(prig, &part.patch),
+                        // Design mode: the section still recalls its patch.
+                        None => {
+                            drop(guard);
+                            let known = {
+                                let def = self.profile_def.lock_ok();
+                                def.patches
+                                    .iter()
+                                    .any(|p| p.name.eq_ignore_ascii_case(&part.patch))
+                            };
+                            if known {
+                                *self.design_patch.lock_ok() = part.patch.clone();
+                            }
+                            known
+                        }
                     }
                 };
-                if reset {
+                if switched {
+                    // The same follow-up a footswitch press does, measured the
+                    // same way — a section recall is a switch a player feels.
                     self.sync_after_switch(std::time::Duration::ZERO, "section");
+                } else {
+                    refuse(format!("This part plays {}, which the profile does not have", part.patch));
                 }
+            } else if !overrides.is_empty() {
+                // A section with overrides and no patch of its own still needs a
+                // baseline, or it inherits whatever the previous section left
+                // behind. Re-establishing the current patch is what makes a
+                // section the same sound every time it comes round.
+                let current = {
+                    let guard = self.rig.lock_ok();
+                    guard
+                        .as_ref()
+                        .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+                        .unwrap_or_else(|| self.design_patch.lock_ok().clone())
+                };
+                if !current.is_empty() {
+                    let reset = {
+                        let mut guard = self.rig.lock_ok();
+                        match guard.as_mut() {
+                            Some(prig) => activate_patch_by_name(prig, &current),
+                            None => true,
+                        }
+                    };
+                    if reset {
+                        self.sync_after_switch(std::time::Duration::ZERO, "section");
+                    }
+                }
+            } else if switched_profile {
+                // A part that only changes the profile lands on its default.
+                tracing::info!("part → {idx} (song {song_idx}) on '{want_profile}'");
+            } else {
+                tracing::info!("part → {idx} (song {song_idx})");
             }
-        } else if switched_profile {
-            // A part that only changes the profile lands on its default.
-            tracing::info!("part → {idx} (song {song_idx}) on '{want_profile}'");
-        } else {
-            tracing::info!("part → {idx} (song {song_idx})");
-        }
 
-        self.apply_section_overrides(&overrides);
-        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+            self.apply_section_overrides(&overrides);
+            self.events.publish(RigEvent::Perf(Rig::perf(self)));
+        })
     }
 
-    fn select_setlist(&self, index: u32) {
-        // setlists.styx is user-edited — it may be empty. Guard, don't index.
-        let name = {
-            let sets = self.setlists.lock_ok();
-            if sets.is_empty() {
-                tracing::warn!("select_setlist: no setlists in the library");
-                return;
-            }
-            let idx = (index as usize).min(sets.len() - 1);
-            *self.setlist_index.lock_ok() = idx;
-            sets[idx].name.clone()
-        };
-        *self.song_index.lock_ok() = 0;
-        tracing::info!("setlist switched → {name}");
-        self.recall_song(0);
-        self.publish_state();
-        self.mark_state_dirty();
+    fn select_setlist(&self, index: u32) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            // setlists.styx is user-edited — it may be empty. Guard, don't index.
+            let name = {
+                let sets = self.setlists.lock_ok();
+                if sets.is_empty() {
+                    refuse("There are no setlists in the library");
+                    return;
+                }
+                let idx = (index as usize).min(sets.len() - 1);
+                *self.setlist_index.lock_ok() = idx;
+                sets[idx].name.clone()
+            };
+            *self.song_index.lock_ok() = 0;
+            tracing::info!("setlist switched → {name}");
+            self.recall_song(0);
+            self.publish_state();
+            self.mark_state_dirty();
+        })
     }
 
     fn move_song(&self, from: u32, to: u32) {
@@ -6165,31 +6223,37 @@ impl Rig for GuitarRigBackend {
         })
     }
 
-    fn select_patch(&self, index: u32) {
-        self.end_audition();
-        {
-            let mut guard = self.rig.lock_ok();
-            if let Some(prig) = guard.as_mut() {
-                if let Some(name) = prig.patches().get(index as usize).map(|p| p.name.clone()) {
-                    activate_patch_by_name(prig, &name);
-                }
-            } else {
-                drop(guard);
-                // No engine: the same indices as `patches()` above;
-                // `resync_blocks` below rebuilds the chain from
-                // `design_patch`, and the device opens on it.
-                if let Some(p) = self.design_profile().patches.get(index as usize) {
-                    *self.design_patch.lock_ok() = p.name.clone();
+    fn select_patch(&self, index: u32) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            self.end_audition();
+            {
+                let mut guard = self.rig.lock_ok();
+                if let Some(prig) = guard.as_mut() {
+                    match prig.patches().get(index as usize).map(|p| p.name.clone()) {
+                        Some(name) => {
+                            activate_patch_by_name(prig, &name);
+                        }
+                        None => return refuse("That patch is no longer in the profile"),
+                    }
+                } else {
+                    drop(guard);
+                    // No engine: the same indices as `patches()` above;
+                    // `resync_blocks` below rebuilds the chain from
+                    // `design_patch`, and the device opens on it.
+                    match self.design_profile().patches.get(index as usize) {
+                        Some(p) => *self.design_patch.lock_ok() = p.name.clone(),
+                        None => return refuse("That patch is no longer in the profile"),
+                    }
                 }
             }
-        }
-        self.resync_blocks();
-        self.apply_tempo_to_delays();
-        self.recall_patch_boost();
-        self.apply_boost_to_block();
-        self.apply_all_drives();
-        self.publish_state();
-        self.mark_state_dirty();
+            self.resync_blocks();
+            self.apply_tempo_to_delays();
+            self.recall_patch_boost();
+            self.apply_boost_to_block();
+            self.apply_all_drives();
+            self.publish_state();
+            self.mark_state_dirty();
+        })
     }
 
     fn presets(&self) -> Vec<PresetInfo> {
@@ -6367,69 +6431,75 @@ impl Rig for GuitarRigBackend {
         self.reload_rebuilt(rebuilt);
     }
 
-    fn set_block_option(&self, id: String, option: u32) {
-        // The id addresses a live block; resolve its name, flip the option
-        // in the definition, rebuild + reload (edit-time gap, patches stay
-        // preinstalled for gapless switching afterward).
-        let block_name = self
-            .blocks
-            .lock_ok()
-            .iter()
-            .find(|b| b.id == id)
-            .map(|b| b.name.clone());
-        let Some(block_name) = block_name else { return };
-
-        // An amp block has no option list of its own — its alternatives are
-        // the preset pool, and choosing one means repointing the patch. Same
-        // operation the preset browser performs, so it goes to the same place
-        // rather than growing a second way to load an amp.
-        if block_name.eq_ignore_ascii_case("Amp L") || block_name.eq_ignore_ascii_case("Amp R") {
-            let patch = {
-                let Some(active) = self
-                    .rig
-                    .lock_ok()
-                    .as_ref()
-                    .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
-                else {
-                    return;
-                };
-                let def = self.profile_def.lock_ok();
-                def.patches
-                    .iter()
-                    .position(|p| p.name.eq_ignore_ascii_case(&active))
+    fn set_block_option(&self, id: String, option: u32) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            // The id addresses a live block; resolve its name, flip the option
+            // in the definition, rebuild + reload (edit-time gap, patches stay
+            // preinstalled for gapless switching afterward).
+            let block_name = self
+                .blocks
+                .lock_ok()
+                .iter()
+                .find(|b| b.id == id)
+                .map(|b| b.name.clone());
+            let Some(block_name) = block_name else {
+                refuse("That block is no longer in the chain");
+                return;
             };
-            // A composed patch: the chunk's options are its Amp module's
-            // snapshots, so choosing one is a module pick.
-            let comp = RigLibrary::load_compositions();
-            if let Some(pick) = self.live_pick(&comp, "Amp") {
-                if let Some(snap) = comp
-                    .module("Amp", &pick.preset)
-                    .and_then(|m| m.snapshots.get(option as usize))
-                    .map(|s| s.name.clone())
-                {
-                    self.choose_module("Amp".into(), pick.preset, snap);
-                    return;
-                }
-            }
-            if let Some(patch) = patch {
-                if block_name.eq_ignore_ascii_case("Amp R") {
-                    self.set_patch_preset2(patch as u32, option);
-                } else {
-                    self.set_patch_preset(patch as u32, option);
-                }
-            }
-            return;
-        }
 
-        // A drive slot: its capture, where the slot plays from (the
-        // patch's own pick over a module's, else the profile's board).
-        let dps = self.drive_presets.lock_ok().clone();
-        self.edit_drive_slot(&block_name, |slot| {
-            let n = dps.iter().find(|p| p.name.eq_ignore_ascii_case(&slot.preset)).map_or(0, |p| p.options.len());
-            if n > 0 {
-                slot.option = (option as usize).min(n - 1);
+            // An amp block has no option list of its own — its alternatives are
+            // the preset pool, and choosing one means repointing the patch. Same
+            // operation the preset browser performs, so it goes to the same place
+            // rather than growing a second way to load an amp.
+            if block_name.eq_ignore_ascii_case("Amp L") || block_name.eq_ignore_ascii_case("Amp R") {
+                let patch = {
+                    let Some(active) = self
+                        .rig
+                        .lock_ok()
+                        .as_ref()
+                        .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+                    else {
+                        refuse("No patch is playing");
+                        return;
+                    };
+                    let def = self.profile_def.lock_ok();
+                    def.patches
+                        .iter()
+                        .position(|p| p.name.eq_ignore_ascii_case(&active))
+                };
+                // A composed patch: the chunk's options are its Amp module's
+                // snapshots, so choosing one is a module pick.
+                let comp = RigLibrary::load_compositions();
+                if let Some(pick) = self.live_pick(&comp, "Amp") {
+                    if let Some(snap) = comp
+                        .module("Amp", &pick.preset)
+                        .and_then(|m| m.snapshots.get(option as usize))
+                        .map(|s| s.name.clone())
+                    {
+                        self.choose_module("Amp".into(), pick.preset, snap);
+                        return;
+                    }
+                }
+                if let Some(patch) = patch {
+                    if block_name.eq_ignore_ascii_case("Amp R") {
+                        self.set_patch_preset2(patch as u32, option);
+                    } else {
+                        self.set_patch_preset(patch as u32, option);
+                    }
+                }
+                return;
             }
-        });
+
+            // A drive slot: its capture, where the slot plays from (the
+            // patch's own pick over a module's, else the profile's board).
+            let dps = self.drive_presets.lock_ok().clone();
+            self.edit_drive_slot(&block_name, |slot| {
+                let n = dps.iter().find(|p| p.name.eq_ignore_ascii_case(&slot.preset)).map_or(0, |p| p.options.len());
+                if n > 0 {
+                    slot.option = (option as usize).min(n - 1);
+                }
+            });
+        })
     }
 
     fn add_preset(&self, name: String, nam_path: String) {
@@ -7556,33 +7626,35 @@ impl Rig for GuitarRigBackend {
         tracing::info!(%preset, %snapshot, frozen, "Core {} — {report}", if frozen { "frozen" } else { "live" });
     }
 
-    fn choose_block(&self, block: String, preset: String) {
-        let comp = RigLibrary::load_compositions();
-        let Some(found) = comp.block_preset(&preset) else {
-            tracing::warn!(%block, %preset, "choose_block: no such block preset");
-            return;
-        };
-        let choice = crate::compose::BlockChoiceDef {
-            block,
-            preset: found.name.clone(),
-        };
-        self.edit_live_patch(move |patch| {
-            // Loading a preset onto a block replaces what was dialled on it
-            // by hand: the patch's own overrides of that block go, or they
-            // would keep winning over the preset just picked (an old
-            // tap-division edit kept a "Dotted Eighth" playing eighths).
-            patch
-                .overrides
-                .retain(|o| !o.block.eq_ignore_ascii_case(&choice.block));
-            match patch
-                .blocks
-                .iter_mut()
-                .find(|b| b.block.eq_ignore_ascii_case(&choice.block))
-            {
-                Some(b) => *b = choice,
-                None => patch.blocks.push(choice),
-            }
-        });
+    fn choose_block(&self, block: String, preset: String) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            let comp = RigLibrary::load_compositions();
+            let Some(found) = comp.block_preset(&preset) else {
+                refuse(format!("No block preset named {preset}"));
+                return;
+            };
+            let choice = crate::compose::BlockChoiceDef {
+                block,
+                preset: found.name.clone(),
+            };
+            self.edit_live_patch(move |patch| {
+                // Loading a preset onto a block replaces what was dialled on it
+                // by hand: the patch's own overrides of that block go, or they
+                // would keep winning over the preset just picked (an old
+                // tap-division edit kept a "Dotted Eighth" playing eighths).
+                patch
+                    .overrides
+                    .retain(|o| !o.block.eq_ignore_ascii_case(&choice.block));
+                match patch
+                    .blocks
+                    .iter_mut()
+                    .find(|b| b.block.eq_ignore_ascii_case(&choice.block))
+                {
+                    Some(b) => *b = choice,
+                    None => patch.blocks.push(choice),
+                }
+            });
+        })
     }
 
     fn browse_audition_begin(&self) {
@@ -7609,111 +7681,115 @@ impl Rig for GuitarRigBackend {
         self.reload_for_song();
     }
 
-    fn choose_module(&self, module: String, preset: String, snapshot: String) {
-        if module.eq_ignore_ascii_case(crate::profiles::CORE) {
-            self.choose_core(preset, snapshot);
-            return;
-        }
-        let comp = RigLibrary::load_compositions();
-        let Some(found) = comp.module(&module, &preset) else {
-            tracing::warn!(%module, %preset, "choose_module: no such module preset");
-            return;
-        };
-        let snapshot = if snapshot.is_empty() {
-            found
-                .snapshots
-                .first()
-                .map(|s| s.name.clone())
-                .unwrap_or_default()
-        } else {
-            snapshot
-        };
-        // The modules this snapshot plays (a Time snapshot's Delay and
-        // Reverb): the patch's own picks of those go, so the pick takes.
-        let subs: Vec<String> = found
-            .snapshots
-            .iter()
-            .find(|s| s.name.eq_ignore_ascii_case(&snapshot))
-            .map(|s| s.modules.iter().map(|m| m.module.clone()).collect())
-            .unwrap_or_default();
-        // Every block it sets (through the modules it references too): the
-        // patch's own block presets and hand edits on those blocks go, or
-        // they would keep winning over the module just picked — a delay's
-        // old time edit kept playing through every Time preset.
-        let blocks = crate::compose::blocks_set_by(&comp, &found.module, &found.name, &snapshot);
-        let choice = crate::profiles::ModuleChoiceDef {
-            module: found.module.clone(),
-            preset: found.name.clone(),
-            snapshot,
-        };
-        self.edit_live_patch(move |patch| {
-            let set_here = |b: &str| blocks.iter().any(|x| x.eq_ignore_ascii_case(b));
-            patch.overrides.retain(|o| !set_here(&o.block));
-            patch.blocks.retain(|c| !set_here(&c.block));
-            patch
-                .modules
-                .retain(|m| !subs.iter().any(|s| s.eq_ignore_ascii_case(&m.module)));
-            match patch
-                .modules
-                .iter_mut()
-                .find(|m| m.module.eq_ignore_ascii_case(&choice.module))
-            {
-                Some(m) => *m = choice,
-                None => patch.modules.push(choice),
+    fn choose_module(&self, module: String, preset: String, snapshot: String) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            if module.eq_ignore_ascii_case(crate::profiles::CORE) {
+                self.choose_core(preset, snapshot);
+                return;
             }
-        });
+            let comp = RigLibrary::load_compositions();
+            let Some(found) = comp.module(&module, &preset) else {
+                refuse(format!("No {module} preset named {preset}"));
+                return;
+            };
+            let snapshot = if snapshot.is_empty() {
+                found
+                    .snapshots
+                    .first()
+                    .map(|s| s.name.clone())
+                    .unwrap_or_default()
+            } else {
+                snapshot
+            };
+            // The modules this snapshot plays (a Time snapshot's Delay and
+            // Reverb): the patch's own picks of those go, so the pick takes.
+            let subs: Vec<String> = found
+                .snapshots
+                .iter()
+                .find(|s| s.name.eq_ignore_ascii_case(&snapshot))
+                .map(|s| s.modules.iter().map(|m| m.module.clone()).collect())
+                .unwrap_or_default();
+            // Every block it sets (through the modules it references too): the
+            // patch's own block presets and hand edits on those blocks go, or
+            // they would keep winning over the module just picked — a delay's
+            // old time edit kept playing through every Time preset.
+            let blocks = crate::compose::blocks_set_by(&comp, &found.module, &found.name, &snapshot);
+            let choice = crate::profiles::ModuleChoiceDef {
+                module: found.module.clone(),
+                preset: found.name.clone(),
+                snapshot,
+            };
+            self.edit_live_patch(move |patch| {
+                let set_here = |b: &str| blocks.iter().any(|x| x.eq_ignore_ascii_case(b));
+                patch.overrides.retain(|o| !set_here(&o.block));
+                patch.blocks.retain(|c| !set_here(&c.block));
+                patch
+                    .modules
+                    .retain(|m| !subs.iter().any(|s| s.eq_ignore_ascii_case(&m.module)));
+                match patch
+                    .modules
+                    .iter_mut()
+                    .find(|m| m.module.eq_ignore_ascii_case(&choice.module))
+                {
+                    Some(m) => *m = choice,
+                    None => patch.modules.push(choice),
+                }
+            });
+        })
     }
 
-    fn step_module(&self, module: String, delta: i32) {
-        let comp = RigLibrary::load_compositions();
-        if module.eq_ignore_ascii_case(crate::profiles::CORE) {
-            // The live patch's Core: its next (or previous) snapshot, or
-            // the library's first Core with none.
-            let live = self.live_patch_name().and_then(|name| {
-                let def = self.profile_def.lock_ok();
-                def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&name)).map(|p| (p.rig_preset.clone(), p.snapshot.clone()))
-            });
-            let (preset, snapshot) = match live.as_ref().and_then(|(p, s)| comp.preset(p).map(|found| (found, s))) {
-                Some((found, s)) => {
-                    let n = found.snapshots.len().max(1) as i32;
-                    let at = found.snapshots.iter().position(|x| x.name.eq_ignore_ascii_case(s)).unwrap_or(0) as i32;
+    fn step_module(&self, module: String, delta: i32) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            let comp = RigLibrary::load_compositions();
+            if module.eq_ignore_ascii_case(crate::profiles::CORE) {
+                // The live patch's Core: its next (or previous) snapshot, or
+                // the library's first Core with none.
+                let live = self.live_patch_name().and_then(|name| {
+                    let def = self.profile_def.lock_ok();
+                    def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&name)).map(|p| (p.rig_preset.clone(), p.snapshot.clone()))
+                });
+                let (preset, snapshot) = match live.as_ref().and_then(|(p, s)| comp.preset(p).map(|found| (found, s))) {
+                    Some((found, s)) => {
+                        let n = found.snapshots.len().max(1) as i32;
+                        let at = found.snapshots.iter().position(|x| x.name.eq_ignore_ascii_case(s)).unwrap_or(0) as i32;
+                        let next = (at + delta).rem_euclid(n) as usize;
+                        (found.name.clone(), found.snapshots.get(next).map(|x| x.name.clone()).unwrap_or_default())
+                    }
+                    None => match comp.presets.first() {
+                        Some(p) => (p.name.clone(), String::new()),
+                        None => return refuse("There are no Core presets"),
+                    },
+                };
+                self.choose_core(preset, snapshot);
+                return;
+            }
+            let current = self
+                .live_pick(&comp, &module)
+                .and_then(|c| comp.module(&c.module, &c.preset).map(|m| (m, c)));
+            let (preset, snapshot) = match current {
+                Some((m, c)) => {
+                    let n = m.snapshots.len().max(1) as i32;
+                    let at = m
+                        .snapshots
+                        .iter()
+                        .position(|s| s.name.eq_ignore_ascii_case(&c.snapshot))
+                        .unwrap_or(0) as i32;
                     let next = (at + delta).rem_euclid(n) as usize;
-                    (found.name.clone(), found.snapshots.get(next).map(|x| x.name.clone()).unwrap_or_default())
+                    (
+                        m.name.clone(),
+                        m.snapshots
+                            .get(next)
+                            .map(|s| s.name.clone())
+                            .unwrap_or_default(),
+                    )
                 }
-                None => match comp.presets.first() {
-                    Some(p) => (p.name.clone(), String::new()),
-                    None => return,
+                None => match comp.modules_of(&module).next() {
+                    Some(m) => (m.name.clone(), String::new()),
+                    None => return refuse(format!("There are no {module} presets")),
                 },
             };
-            self.choose_core(preset, snapshot);
-            return;
-        }
-        let current = self
-            .live_pick(&comp, &module)
-            .and_then(|c| comp.module(&c.module, &c.preset).map(|m| (m, c)));
-        let (preset, snapshot) = match current {
-            Some((m, c)) => {
-                let n = m.snapshots.len().max(1) as i32;
-                let at = m
-                    .snapshots
-                    .iter()
-                    .position(|s| s.name.eq_ignore_ascii_case(&c.snapshot))
-                    .unwrap_or(0) as i32;
-                let next = (at + delta).rem_euclid(n) as usize;
-                (
-                    m.name.clone(),
-                    m.snapshots
-                        .get(next)
-                        .map(|s| s.name.clone())
-                        .unwrap_or_default(),
-                )
-            }
-            None => match comp.modules_of(&module).next() {
-                Some(m) => (m.name.clone(), String::new()),
-                None => return,
-            },
-        };
-        self.choose_module(module, preset, snapshot);
+            self.choose_module(module, preset, snapshot);
+        })
     }
 
     fn choose_preset(&self, preset: String, snapshot: String) {
@@ -7894,35 +7970,39 @@ impl Rig for GuitarRigBackend {
         }
     }
 
-    fn set_drive_pedal(&self, slot: String, pedal: String) {
-        let known = self.drive_presets.lock_ok().iter().any(|p| p.name.eq_ignore_ascii_case(&pedal));
-        if !known {
-            tracing::warn!(slot = %slot, pedal = %pedal, "set_drive_pedal: no such pedal");
-            return;
-        }
-        self.edit_drive_slot(&slot, |d| {
-            if !d.preset.eq_ignore_ascii_case(&pedal) {
-                d.preset = pedal;
-                // A different pedal has its own captures.
-                d.option = 0;
+    fn set_drive_pedal(&self, slot: String, pedal: String) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            let known = self.drive_presets.lock_ok().iter().any(|p| p.name.eq_ignore_ascii_case(&pedal));
+            if !known {
+                refuse(format!("No pedal named {pedal}"));
+                return;
             }
-        });
+            self.edit_drive_slot(&slot, |d| {
+                if !d.preset.eq_ignore_ascii_case(&pedal) {
+                    d.preset = pedal;
+                    // A different pedal has its own captures.
+                    d.option = 0;
+                }
+            });
+        })
     }
 
-    fn select_profile(&self, name: String) {
-        if self.profile_def.lock_ok().name.eq_ignore_ascii_case(&name) {
-            return;
-        }
-        let def = self
-            .other_profiles
-            .lock_ok()
-            .iter()
-            .find(|p| p.name.eq_ignore_ascii_case(&name))
-            .cloned();
-        match def {
-            Some(def) => self.switch_profile(def),
-            None => tracing::warn!("select_profile: no profile named '{name}'"),
-        }
+    fn select_profile(&self, name: String) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            if self.profile_def.lock_ok().name.eq_ignore_ascii_case(&name) {
+                return;
+            }
+            let def = self
+                .other_profiles
+                .lock_ok()
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&name))
+                .cloned();
+            match def {
+                Some(def) => self.switch_profile(def),
+                None => refuse(format!("No profile named {name}")),
+            }
+        })
     }
 
     fn add_profile(&self, name: String, from: String) {
@@ -8532,44 +8612,49 @@ impl Rig for GuitarRigBackend {
         self.mark_state_dirty();
     }
 
-    fn set_block_param(&self, id: String, param: String, value: f32) {
-        // A delay or reverb runs fully wet: a `mix` from an older surface
-        // is its `level` (see `profiles::PARALLEL_FX`).
-        let (param, value) = {
-            let blocks = self.blocks.lock_ok();
-            match blocks.iter().find(|b| b.id == id) {
-                Some(b)
-                    if param == "mix"
-                        && matches!(b.block_type, BlockType::Delay | BlockType::Reverb)
-                        && crate::profiles::is_parallel_fx(&b.name) =>
-                {
-                    ("level".to_string(), crate::profiles::mix_to_level_db(value))
-                }
-                _ => (param, value),
+    fn set_block_param(&self, id: String, param: String, value: f32) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            if !self.blocks.lock_ok().iter().any(|b| b.id == id) {
+                return refuse("That block is no longer in the chain");
             }
-        };
-        // The value stays as dialled; what the patch records is the baseline
-        // under it at the macros' current offsets (see `crate::macros`).
-        let baseline = self.macros.lock_ok().direct_edit(&id, &param, value);
-        self.record_patch_override(&id, Some(&param), baseline);
-        self.write_live_param(&id, &param, value);
-        // A new delay machine or reverb algorithm can bring a macro knob in
-        // (Pitch, for the Ice machine) or change its rest (Width, a pan).
-        if matches!(
-            param.as_str(),
-            "style" | "algorithm" | "engine" | "pan" | "pan_a" | "width"
-        ) {
-            let blocks = self.blocks.lock_ok().clone();
-            self.macros.lock_ok().refresh(&blocks);
-        }
-        // A reverb locked to the tempo keeps its beats through a new
-        // algorithm (another decay law) or a new length.
-        if matches!(param.as_str(), "algorithm" | "variant" | "sync_div") {
-            self.retime_synced_reverbs(Some(&id));
-        }
-        // Chain state only — param drags shouldn't re-publish the perf model.
-        self.events.publish(RigEvent::Chain(Rig::chain(self)));
-        self.events.publish(RigEvent::Macros(Rig::macros(self)));
+            // A delay or reverb runs fully wet: a `mix` from an older surface
+            // is its `level` (see `profiles::PARALLEL_FX`).
+            let (param, value) = {
+                let blocks = self.blocks.lock_ok();
+                match blocks.iter().find(|b| b.id == id) {
+                    Some(b)
+                        if param == "mix"
+                            && matches!(b.block_type, BlockType::Delay | BlockType::Reverb)
+                            && crate::profiles::is_parallel_fx(&b.name) =>
+                    {
+                        ("level".to_string(), crate::profiles::mix_to_level_db(value))
+                    }
+                    _ => (param, value),
+                }
+            };
+            // The value stays as dialled; what the patch records is the baseline
+            // under it at the macros' current offsets (see `crate::macros`).
+            let baseline = self.macros.lock_ok().direct_edit(&id, &param, value);
+            self.record_patch_override(&id, Some(&param), baseline);
+            self.write_live_param(&id, &param, value);
+            // A new delay machine or reverb algorithm can bring a macro knob in
+            // (Pitch, for the Ice machine) or change its rest (Width, a pan).
+            if matches!(
+                param.as_str(),
+                "style" | "algorithm" | "engine" | "pan" | "pan_a" | "width"
+            ) {
+                let blocks = self.blocks.lock_ok().clone();
+                self.macros.lock_ok().refresh(&blocks);
+            }
+            // A reverb locked to the tempo keeps its beats through a new
+            // algorithm (another decay law) or a new length.
+            if matches!(param.as_str(), "algorithm" | "variant" | "sync_div") {
+                self.retime_synced_reverbs(Some(&id));
+            }
+            // Chain state only — param drags shouldn't re-publish the perf model.
+            self.events.publish(RigEvent::Chain(Rig::chain(self)));
+            self.events.publish(RigEvent::Macros(Rig::macros(self)));
+        })
     }
 
     fn macros(&self) -> Vec<signal_guitar_proto::MacroKnobView> {
