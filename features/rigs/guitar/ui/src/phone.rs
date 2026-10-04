@@ -567,9 +567,8 @@ pub fn PhoneControl(
             },
             onpointerup: move |_| swipe.set(None),
             // ── The status, along the top: what plays (tap for every profile
-            // and patch), the page's module presets — the top-level module,
-            // then the page's own — and the audio ──
-            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {status_right}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
+            // and patch), the page, and the page's module presets ──
+            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 6px; box-sizing: border-box; padding: 0 {status_right}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
                 // The way back, over the rail and as wide as it: the corner
                 // the two make reads as one column.
                 div { style: "flex: 0 0 {RAIL_W + lead}px; align-self: stretch; box-sizing: border-box; padding-left: {back_left}px; display: flex; align-items: center; justify-content: center; border-right: 1px solid {RULE}; cursor: pointer;",
@@ -582,33 +581,33 @@ pub fn PhoneControl(
                         RailIcon { name: "Rigs", color: TEXT }
                     }
                 }
-                // Left: what plays, and the page that is up (its button
-                // drops the chain down — in Control; elsewhere it goes there).
-                div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 8px;",
-                    StatusName { label: playing, name: patch_name.clone(),
-                        on_open: move |()| browse.set(Some(if song { crate::phone_browser::BrowseTab::Songs } else { crate::phone_browser::BrowseTab::Patches })),
-                    }
-                    ChainButton { title: page().short(), color: page().color(), open: chain_tall(),
-                        on_toggle: move |()| {
-                            if mode() == Mode::Control {
-                                chain_tall.toggle();
-                            } else {
-                                mode.set(Mode::Control);
-                                chain_tall.set(true);
-                            }
-                        },
-                    }
+                // Four slots, each where it always is, whatever the page: what
+                // plays, the page (its button drops the chain), then the
+                // page's two modules — the top-level one (Core, Time) and
+                // the page's own. A slot a page has no module for stays,
+                // dimmed, so nothing slides into its place; a long name is
+                // cut inside its slot rather than pushing the others.
+                TopSlot { grow: 4, label: playing, name: patch_name.clone(),
+                    on_open: move |()| browse.set(Some(if song { crate::phone_browser::BrowseTab::Songs } else { crate::phone_browser::BrowseTab::Patches })),
                 }
-                // Right: the page's modules — the top-level one (the Core,
-                // Time), then the page's own — and the audio.
-                div { style: "flex: 0 1 auto; min-width: 0; display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px;",
-                    if let Some(module) = top_module {
-                        StatusName { label: module.to_string(), name: name_of(module), modified: module_edited(module), on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)) }
+                PageSlot { title: page().short(), color: page().color(), open: chain_tall() && mode() == Mode::Control,
+                    on_toggle: move |()| {
+                        if mode() == Mode::Control {
+                            chain_tall.toggle();
+                        } else {
+                            mode.set(Mode::Control);
+                            chain_tall.set(true);
+                        }
+                    },
+                }
+                for (slot, module) in [(0, top_module), (1, page_module)] {
+                    if let Some(module) = module {
+                        TopSlot { key: "{slot}", grow: 3, label: module.to_string(), name: name_of(module), modified: module_edited(module),
+                            on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)),
+                        }
+                    } else {
+                        TopSlot { key: "{slot}", grow: 3, label: "Module".to_string(), name: String::new() }
                     }
-                    if let Some(module) = page_module {
-                        StatusName { label: module.to_string(), name: name_of(module), modified: module_edited(module), on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)) }
-                    }
-                    AudioBadge { running: (state.running)(), error: (state.audio_error)() }
                 }
             }
             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;",
@@ -616,7 +615,9 @@ pub fn PhoneControl(
                 // Bottom-aligned, the most used lowest, under the thumb:
                 // Audio, Switch, Profile/Setlist, Control.
                 div { style: "flex: 0 0 {RAIL_W + lead}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding: 0 0 {rail_foot}px {lead}px; background: {BAR_BG}; border-right: 1px solid {RULE};",
-                    RailButton { on: mode() == Mode::Audio, label: "Audio", icon: "Audio",
+                    // Audio, with how it is: a dot on its speaker, and its
+                    // name saying Off or Error when it is not running.
+                    AudioRailButton { on: mode() == Mode::Audio, running: (state.running)(), error: (state.audio_error)(),
                         onclick: move |()| {
                             chain_tall.set(false);
                             mode.set(Mode::Audio);
@@ -704,30 +705,6 @@ pub fn PhoneControl(
     }
 }
 
-/// Whether the audio is running, small, in the bottom line: the surface works
-/// without it (a phone with no interface plugged in plays nothing, but every
-/// patch and page is there to edit). Tap for Audio settings.
-#[component]
-fn AudioBadge(running: bool, error: String) -> Element {
-    let (dot, label, color) = if running {
-        ("#22c55e", "", DIM)
-    } else if !error.is_empty() && error != "Audio stopped" {
-        ("#ef4444", "Audio error", "#fca5a5")
-    } else {
-        ("#f59e0b", "No audio", "#fcd34d")
-    };
-    rsx! {
-        div { style: "flex: 0 0 auto; height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 13px; background: {RAISED}; cursor: pointer;",
-            title: if error.is_empty() { "Audio" } else { "{error}" },
-            onclick: move |_| crate::settings::open_audio_settings(),
-            span { style: "width: 7px; height: 7px; border-radius: 4px; background: {dot};" }
-            if !label.is_empty() {
-                span { style: "font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: {color}; white-space: nowrap;", "{label}" }
-            }
-        }
-    }
-}
-
 /// A rail button: its icon, its name small under it; the one picked
 /// raised.
 #[component]
@@ -771,51 +748,106 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
     }
 }
 
-/// One name on the status line: its kind small over it ("BLUES" over the
-/// patch, "CORE" over the Core's preset), a chevron for the browser it
-/// opens — where the steppers are; the line keeps only the names. 40
-/// points tall, in a 48-point line (a full-size target).
+/// The audio's state, as the rail's Audio button shows it: the dot on its
+/// speaker, and its name (Audio while it runs, else why not).
+fn audio_state(running: bool, error: &str) -> (&'static str, &'static str, &'static str) {
+    if running {
+        ("#22c55e", "Audio", "")
+    } else if !error.is_empty() && error != "Audio stopped" {
+        ("#ef4444", "Error", "#fca5a5")
+    } else {
+        ("#f59e0b", "Off", "#fcd34d")
+    }
+}
+
+/// The rail's Audio button: a rail button whose speaker carries the audio's
+/// state as a dot, and whose name says Off or Error when it is not running.
 #[component]
-fn StatusName(
+fn AudioRailButton(on: bool, running: bool, error: String, onclick: EventHandler<()>) -> Element {
+    let (fg, bg) = if on { (TEXT, RAISED) } else { (DIM, "transparent") };
+    let (dot, label, warn) = audio_state(running, &error);
+    let label_color = if warn.is_empty() { fg } else { warn };
+    rsx! {
+        div { style: "height: 48px; margin: 0 4px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: {bg}; cursor: pointer;",
+            onclick: move |_| onclick.call(()),
+            div { style: "position: relative; width: 20px; height: 20px;",
+                RailIcon { name: "Audio", color: fg }
+                span { style: "position: absolute; top: -2px; right: -4px; width: 8px; height: 8px; border-radius: 4px; background: {dot}; border: 2px solid {BAR_BG};" }
+            }
+            span { style: "font-size: 11px; font-weight: 600; color: {label_color};", "{label}" }
+        }
+    }
+}
+
+/// The slots' shared box: 40 points tall in the 48-point line (a full-size
+/// target), its kind small over its name.
+const SLOT: &str = "height: 40px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 0 10px 0 12px; border-radius: 10px; overflow: hidden;";
+
+/// A slot on the status line, `grow` shares of the line wide whatever it
+/// holds: its kind over its name, a chevron for the browser it opens. With
+/// no name it is a placeholder — dimmed, a dash, not a button — so a page
+/// with fewer modules keeps the same slots.
+#[component]
+fn TopSlot(
+    grow: u32,
     label: String,
     name: String,
     /// Changed from how it was saved: a `*` after the name.
     #[props(default)]
     modified: bool,
-    on_open: EventHandler<()>,
+    #[props(default)]
+    on_open: Option<EventHandler<()>>,
 ) -> Element {
+    let empty = name.is_empty();
+    let (bg, cursor, name_color, label_color) =
+        if empty { ("transparent", "default", DIM, "#4b5058") } else { (RAISED, "pointer", "#f4f4f5", DIM) };
+    let shown = if empty { "—".to_string() } else { name };
     rsx! {
-        div { style: "flex: 0 1 auto; min-width: 0; max-width: 240px; height: 40px; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 0 10px 0 12px; border-radius: 10px; background: {RAISED}; cursor: pointer; overflow: hidden;",
-            onclick: move |_| on_open.call(()),
-            div { style: "flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center;",
-                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: {DIM}; white-space: nowrap; overflow: hidden;", "{label}" }
-                span { style: "font-size: 14px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;",
-                    "{name}"
+        div { style: "flex: {grow} 1 0%; {SLOT} background: {bg}; border: 1px solid {RAISED}; cursor: {cursor};",
+            onclick: move |_| {
+                if let Some(open) = on_open {
+                    open.call(());
+                }
+            },
+            div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; justify-content: center;",
+                span { style: "font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {label_color}; white-space: nowrap; overflow: hidden;", "{label}" }
+                span { style: "font-size: 14px; font-weight: 700; color: {name_color}; white-space: nowrap; overflow: hidden;",
+                    "{shown}"
                     if modified {
                         span { style: "color: #f59e0b;", " *" }
                     }
                 }
             }
-            svg { width: "12", height: "12", view_box: "0 0 24 24", fill: "none", stroke: DIM, stroke_width: "2.5", stroke_linecap: "round", stroke_linejoin: "round",
-                path { d: "M6 9l6 6 6-6" }
+            if !empty {
+                svg { width: "12", height: "12", view_box: "0 0 24 24", fill: "none", stroke: DIM, stroke_width: "2.5", stroke_linecap: "round", stroke_linejoin: "round",
+                    path { d: "M6 9l6 6 6-6" }
+                }
             }
         }
     }
 }
 
-/// The chain's button on the status line: the page that is up, in its
-/// colour, and the arrow that drops the chain down from under the line
-/// (pointing up while it is down).
+/// The page's slot: a fixed width, the page's name by a dot of its colour,
+/// and the arrow that drops the chain down from under the line. While the
+/// chain is down the slot fills with the page's colour, its arrow up.
 #[component]
-fn ChainButton(title: &'static str, color: &'static str, open: bool, on_toggle: EventHandler<()>) -> Element {
-    let (bg, arrow) = if open { (format!("background: {color}; color: #0a0b0d;"), "M6 15l6-6 6 6") } else { (format!("background: {RAISED}; color: {color};"), "M6 9l6 6 6-6") };
-    let ink = if open { "#0a0b0d" } else { color };
+fn PageSlot(title: &'static str, color: &'static str, open: bool, on_toggle: EventHandler<()>) -> Element {
+    let (bg, ink, label_color, arrow) = if open {
+        (color, "#0a0b0d", "#0a0b0d", "M6 15l6-6 6 6")
+    } else {
+        (RAISED, "#f4f4f5", DIM, "M6 9l6 6 6-6")
+    };
     rsx! {
-        div { style: "flex: 0 0 auto; height: 40px; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 0 12px; border-radius: 10px; cursor: pointer; {bg}",
+        div { style: "flex: 0 0 118px; {SLOT} background: {bg}; border: 1px solid {RAISED}; cursor: pointer;",
             onclick: move |_| on_toggle.call(()),
-            div { style: "display: flex; flex-direction: column; justify-content: center;",
-                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.7;", "Page" }
-                span { style: "font-size: 14px; font-weight: 800; white-space: nowrap;", "{title}" }
+            div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; justify-content: center;",
+                span { style: "font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {label_color};", "Page" }
+                div { style: "display: flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0;",
+                    if !open {
+                        span { style: "flex: 0 0 8px; width: 8px; height: 8px; border-radius: 4px; background: {color};" }
+                    }
+                    span { style: "font-size: 14px; font-weight: 800; color: {ink}; white-space: nowrap; overflow: hidden;", "{title}" }
+                }
             }
             svg { width: "14", height: "14", view_box: "0 0 24 24", fill: "none", stroke: ink, stroke_width: "2.8", stroke_linecap: "round", stroke_linejoin: "round",
                 path { d: arrow }
