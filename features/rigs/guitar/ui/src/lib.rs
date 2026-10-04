@@ -55,6 +55,7 @@ pub use chain::ChainStrip;
 pub use comp_surface::CompSurface;
 pub use control::{ControlView, FormFactor, MidiIndicator, WindowAspect, WindowSize, ZoomPanel};
 pub use phone::{IslandLeft, PhoneHost, ScreenCorners};
+pub use phone_audio::LogFeed;
 pub use grid::RigGraph;
 pub use icons::module_icon;
 pub use library::{Kind as LibraryKind, LibraryPicker};

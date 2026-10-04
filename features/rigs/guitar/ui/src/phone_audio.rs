@@ -45,6 +45,23 @@ enum Tab {
     Status,
     Interface,
     Di,
+    Log,
+}
+
+/// The app's log, for the Audio mode's Log tab: its recent lines (oldest
+/// first) and a way to put text on the clipboard. Provided by the app shell,
+/// which owns the log ring; without it there is no Log tab.
+#[derive(Clone, Copy)]
+pub struct LogFeed {
+    pub lines: fn() -> Vec<String>,
+    pub copy: fn(&str),
+}
+
+/// One feed per app, set once: as a prop it never changes.
+impl PartialEq for LogFeed {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
 }
 
 /// Which list is open over the page.
@@ -69,6 +86,7 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
         match std::env::var("FTS_PHONE_AUDIO_TAB").as_deref() {
             Ok("interface") => return Tab::Interface,
             Ok("di") => return Tab::Di,
+            Ok("log") => return Tab::Log,
             _ => {}
         }
         Tab::Status
@@ -239,11 +257,17 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     };
 
     let card = format!("display: flex; flex-direction: column; border-radius: 14px; background: {CARD}; border: 1px solid {RULE};");
+    // The Log tab, where the shell gives the app's log.
+    let feed = try_use_context::<LogFeed>();
+    let mut tabs = vec![(Tab::Status, "Status"), (Tab::Interface, "Interface"), (Tab::Di, "DI player")];
+    if feed.is_some() {
+        tabs.push((Tab::Log, "Log"));
+    }
     rsx! {
         div { style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; background: {BG}; color: {TEXT};",
             // ── The tabs ──
             div { style: "flex: 0 0 auto; display: flex; flex-direction: row; gap: 6px; padding: 8px 12px; border-bottom: 1px solid {RULE};",
-                for (t, label) in [(Tab::Status, "Status"), (Tab::Interface, "Interface"), (Tab::Di, "DI player")] {
+                for (t, label) in tabs.iter().copied() {
                     {
                         let look = chip(tab() == t);
                         rsx! {
@@ -350,6 +374,11 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
                         }
                     },
                     // ── The DI player ──
+                    Tab::Log => rsx! {
+                        if let Some(feed) = feed {
+                            LogView { feed }
+                        }
+                    },
                     Tab::Di => rsx! {
                         div { style: "{card} gap: 12px; padding: 16px;",
                             span { style: "font-size: 13px; color: {DIM};",
@@ -448,6 +477,37 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// The app's log, newest at the top, read again every second, with a
+/// button that copies all of it — to paste into a message when the audio
+/// does something it should not.
+#[component]
+fn LogView(feed: LogFeed) -> Element {
+    let mut lines = use_signal(|| (feed.lines)());
+    use_future(move || async move {
+        loop {
+            architect::platform::sleep(std::time::Duration::from_secs(1)).await;
+            lines.set((feed.lines)());
+        }
+    });
+    let mut copied = use_signal(|| false);
+    rsx! {
+        div { style: "display: flex; flex-direction: column; gap: 10px; min-height: 0; flex: 1 1 0%;",
+            div { style: "height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: {CARD}; border: 1px solid {RULE}; color: {GREEN}; font-size: 15px; font-weight: 800; cursor: pointer;",
+                onclick: move |_| {
+                    (feed.copy)(&lines().join("\n"));
+                    copied.set(true);
+                },
+                if copied() { "Copied — paste it in a message" } else { "Copy the whole log" }
+            }
+            div { style: "display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px; background: #0a0a0c; border: 1px solid {RULE};",
+                for (i, line) in lines().iter().rev().enumerate() {
+                    span { key: "{i}", style: "font-family: ui-monospace, monospace; font-size: 10px; color: #a1a1aa; white-space: pre-wrap; word-break: break-all;", "{line}" }
                 }
             }
         }

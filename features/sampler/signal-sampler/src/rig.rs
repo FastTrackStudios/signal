@@ -2174,6 +2174,13 @@ impl GuitarRig {
         self.take_output_capture()
     }
 
+    /// What the audio session says about input, on one line — `None` where
+    /// there is no session (everywhere but iOS).
+    #[must_use]
+    pub fn session_report() -> Option<String> {
+        daw_audio_io::session_report()
+    }
+
     /// Whether the app may read inputs at all — on iOS, the microphone
     /// access the player gave: `"granted"`, `"denied"` or `"undetermined"`.
     #[must_use]

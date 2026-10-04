@@ -3889,6 +3889,19 @@ impl GuitarRigBackend {
                         &mgr.audio.output_device
                     },
                 );
+                // What the session (iOS) opened on, beside it: the route's
+                // ports, their channel counts, the access — the device's own
+                // view of the input the line above names.
+                if let Some(session) = GuitarRig::session_report() {
+                    tracing::info!(
+                        audio.input_device = %mgr.audio.input_device,
+                        audio.input_channel = mgr.audio.input_channel + 1,
+                        audio.output_only = output_only,
+                        audio.input_silenced = silenced,
+                        audio.session = %session,
+                        "rig live: session"
+                    );
+                }
                 let mut prig = ProfileRig::new(g);
                 // One loudness authority: the per-block drive calibration
                 // (unity-loudness blocks). The old patch-level match would

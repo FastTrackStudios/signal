@@ -2815,8 +2815,13 @@ impl FormFactor {
         if std::env::var("FTS_FORM_FACTOR").is_ok_and(|v| v.eq_ignore_ascii_case("phone")) {
             return Self::Phone;
         }
-        let (w, h) = size;
-        if h > 0.0 && h <= 500.0 && w > h { Self::Phone } else { Self::Desktop }
+        // By the short side, not by which way up it is: a phone is a phone
+        // held either way, and for a moment it is held "portrait" whatever
+        // the lock says (a system alert, the microphone prompt) — deciding
+        // on `w > h` dropped it into the desktop layout, chain at the
+        // bottom, and left it there.
+        let short = size.0.min(size.1);
+        if short > 0.0 && short <= 500.0 { Self::Phone } else { Self::Desktop }
     }
 }
 

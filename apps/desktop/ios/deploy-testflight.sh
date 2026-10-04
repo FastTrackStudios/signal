@@ -14,6 +14,22 @@
 # the current unix time (passed in, since dx/nix can't read the clock).
 set -euo pipefail
 
+# Telemetry for a build made here, by hand: CI bakes TASK_OTLP_ENDPOINT /
+# TASK_OTLP_TOKEN / TASK_SENTRY_DSN from the org's secrets
+# (architect-telemetry reads them with option_env!), and a local build has
+# no CI to do it. Keep them in this file (chmod 600, never committed) and
+# every build made here ships its traces and logs like a CI one.
+TELEMETRY_ENV="${FTS_TELEMETRY_ENV:-$HOME/.config/fts/telemetry.env}"
+if [ -f "$TELEMETRY_ENV" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$TELEMETRY_ENV"
+    set +a
+    echo "telemetry: baked from $TELEMETRY_ENV"
+else
+    echo "telemetry: none ($TELEMETRY_ENV absent) — the build logs only on the phone"
+fi
+
 # Derive paths from the script's own location, not git — a build box may hold
 # an rsync'd source copy that isn't a git checkout.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

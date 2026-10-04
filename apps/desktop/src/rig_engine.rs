@@ -243,10 +243,47 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         std::thread::spawn(move || {
             let mut had = crate::ios_audio::has_external_input();
             let mut granted = crate::ios_audio::record_permission_granted();
+            // What the session says, at the start and whenever the route or
+            // the access changes: the one event that answers "why is the
+            // guitar not heard" (see `daw_audio_io::session_report`).
+            let report = |why: &str| {
+                if let Some(session) = signal_sampler::rig::GuitarRig::session_report() {
+                    tracing::info!(audio.session = %session, audio.why = why, "audio session");
+                }
+            };
+            report("start");
+            let mut tick: u32 = 0;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(1000));
+                tick = tick.wrapping_add(1);
+                // Every five seconds, how the audio is: running, the levels
+                // in and out, the rate and buffer — a guitar that is not
+                // reaching the rig reads as an input level at the floor.
+                if tick % 5 == 0 {
+                    let rig = rig.clone();
+                    handle.spawn(async move {
+                        if let Ok(s) = rig.status().await {
+                            let db = |p: f32| if p > 0.0 { (20.0 * p.log10()).max(-90.0) } else { -90.0 };
+                            tracing::info!(
+                                audio.running = s.running,
+                                audio.in_db = db(s.input_peak),
+                                audio.in_l_db = db(s.input_peak_l),
+                                audio.in_r_db = db(s.input_peak_r),
+                                audio.out_db = db(s.output_peak),
+                                audio.rate = s.perf.sample_rate,
+                                audio.frames = s.perf.block_frames,
+                                audio.di = s.di_playing,
+                                audio.error = %s.audio_error,
+                                "audio heartbeat"
+                            );
+                        }
+                    });
+                }
                 let now = crate::ios_audio::has_external_input();
                 let perm = crate::ios_audio::record_permission_granted();
+                if now != had || perm != granted {
+                    report(if now != had { "route" } else { "access" });
+                }
                 if now != had {
                     had = now;
                     tracing::info!(external = now, "audio route changed");

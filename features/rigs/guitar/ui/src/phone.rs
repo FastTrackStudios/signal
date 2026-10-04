@@ -725,8 +725,7 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
         "Rigs" => &["M14 6l-6 6 6 6"],
         // A speaker.
         "Audio" => &["M4 9h3l4-3.5v13L7 15H4z", "M15 9.5a4 4 0 0 1 0 5", "M17.5 7a7.5 7.5 0 0 1 0 10"],
-        // The chain: a row of segments, raised.
-        "Chain" => &["M3 4h4v5H3z", "M10 4h4v5h-4z", "M17 4h4v5h-4z", "M8 15l4 4 4-4"],
+
         // A note.
         _ => &["M9 18V5l11-2v13", "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z", "M20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"],
     };

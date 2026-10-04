@@ -87,6 +87,9 @@ pub fn MobileApp() -> Element {
     // largest — a smaller one only leaves a little to spare) or an iPad's.
     // UIKit does not publish it.
     let mut corners = use_context_provider(|| ScreenCorners(Signal::new(PHONE_CORNER_RADIUS)));
+    // The log ring, for the Audio mode's Log tab (copied for pasting into a
+    // message when the audio misbehaves).
+    use_context_provider(|| signal_guitar_ui::LogFeed { lines: crate::log_ring::snapshot, copy: copy_log });
     use_future(move || {
         let window = window.clone();
         async move {
@@ -210,4 +213,13 @@ fn GuitarPage(on_home: EventHandler<()>) -> Element {
             GuitarRigRemote {}
         }
     }
+}
+
+/// Put the copied log on the clipboard (the phone's; elsewhere there is no
+/// shell clipboard to reach from here).
+fn copy_log(text: &str) {
+    #[cfg(target_os = "ios")]
+    crate::ios_orientation::set_clipboard(text);
+    #[cfg(not(target_os = "ios"))]
+    let _ = text;
 }
