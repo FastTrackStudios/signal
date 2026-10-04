@@ -18,6 +18,7 @@ members = [
     "libs/vendor/dioxus-native",
     "libs/vendor/anyrender_vello_hybrid",
     "libs/vendor/winit-uikit",
+    "libs/vendor/wgpu-hal",
     "apps/web",
     "apps/cli",
     "apps/fts-convert",
@@ -867,6 +868,10 @@ anyrender_vello_hybrid = { path = "libs/vendor/anyrender_vello_hybrid" }
 # next touch arrives (the proxy wake-up never drained winit's event queue).
 # See libs/vendor/winit-uikit/UPSTREAM.md.
 winit-uikit = { path = "libs/vendor/winit-uikit" }
+# The iOS Simulator with indirect dispatch (its Metal runs on the Mac's GPU),
+# so it draws with full Vello, as the phone does. See
+# libs/vendor/wgpu-hal/UPSTREAM.md.
+wgpu-hal = { path = "libs/vendor/wgpu-hal" }
 # Vendored one-line fix: quote scalars containing `<`/`>` — upstream
 # (facet-rs/facet) styx-format emits them bare but styx-parse rejects
 # them, so serialized keybind configs (`keys "<C-s>"`) could not be

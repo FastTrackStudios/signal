@@ -47,6 +47,11 @@ impl MobileScreen {
     /// the menu rather than opening a blank one — the menu already marks it
     /// as not-yet, so nothing needs saying twice.
     fn for_rig(rig: Rig) -> MobileScreen {
+        // A rig the phone does not offer (greyed out on the menu) — the
+        // last one played may be one — opens the menu.
+        if !crate::rigs::available(rig) {
+            return MobileScreen::Menu;
+        }
         match rig {
             Rig::Guitar => MobileScreen::Rig,
             #[cfg(feature = "signal-keys-rig")]
