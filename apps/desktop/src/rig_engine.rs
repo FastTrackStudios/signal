@@ -253,9 +253,35 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             };
             report("start");
             let mut tick: u32 = 0;
+            let mut stuck_logged = false;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(1000));
                 tick = tick.wrapping_add(1);
+                // The screen's frames, from off the main thread: a frame that
+                // has run for over a second and a half is a frozen screen,
+                // said while it is frozen (once per freeze).
+                let ui = blitz_shell::frame_stats::snapshot();
+                if ui.in_frame_ms > 1500 {
+                    if !stuck_logged {
+                        tracing::warn!(ui.in_frame_ms = ui.in_frame_ms, ui.layers = ui.layers, "ui frame stuck");
+                        stuck_logged = true;
+                    }
+                } else {
+                    stuck_logged = false;
+                }
+                if tick % 5 == 0 {
+                    tracing::info!(
+                        ui.fps = ui.fps,
+                        ui.mean_ms = ui.mean_ms,
+                        ui.worst_ms = ui.worst_ms,
+                        ui.update_worst_ms = ui.update_worst_ms,
+                        ui.layers = ui.layers,
+                        ui.again_unsettled = ui.again_unsettled,
+                        ui.again_animating = ui.again_animating,
+                        ui.again_widgets = ui.again_widgets,
+                        "ui frames"
+                    );
+                }
                 // Every five seconds, how the audio is: running, the levels
                 // in and out, the rate and buffer — a guitar that is not
                 // reaching the rig reads as an input level at the floor.

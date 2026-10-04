@@ -211,7 +211,7 @@ mod native {
         // The block's values, whenever they differ from what was last
         // given (a param being dragged keeps the hand's).
         let mut applied: Signal<Vec<(String, f64)>> = use_signal(Vec::new);
-        if *applied.peek() != values {
+        if !crate::frame_surface::same_values(&applied.peek(), &values) {
             if let Ok(s) = live.borrow_mut().as_mut() {
                 for l in s.each_mut() {
                     l.apply_real(values.clone());
@@ -428,3 +428,16 @@ mod native {
         }
     }
 }
+
+/// Whether two value lists are the same — NaN counting as itself. `!=` on
+/// floats calls a NaN different from every NaN, so a face carrying one (an
+/// amp's unset level) re-applied its values every render, and the re-apply
+/// asked for the next render: the Amp page redrew at the frame rate for as
+/// long as it was up, and the phone's main thread had no turn for taps.
+fn same_values(a: &[(String, f64)], b: &[(String, f64)]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|((na, va), (nb, vb))| {
+            na == nb && (va == vb || (va.is_nan() && vb.is_nan()))
+        })
+}
+

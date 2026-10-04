@@ -5295,15 +5295,25 @@ impl GuitarRigBackend {
 
 impl Rig for GuitarRigBackend {
     fn start(&self) {
-        // A plain start plays the instrument: the input opens again.
+        // A plain start plays the instrument: the input opens again, and the
+        // DI player stops — left on, it plays on through the reopen in the
+        // guitar's place, and an interface just plugged in is not heard.
         self.output_only
             .store(false, std::sync::atomic::Ordering::Relaxed);
+        if self.di_wanted.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            tracing::info!("di player off: the instrument plays");
+        }
         self.start_inner();
     }
 
     fn restart(&self) {
         // Drop what is open (and its "unchanged prefs" no-op with it), then
-        // open as before — output only stays output only.
+        // open as before — output only only while the DI player is what
+        // plays (a new input picked is the instrument's).
+        if !self.di_wanted.load(std::sync::atomic::Ordering::Relaxed) {
+            self.output_only
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+        }
         *self.rig.lock_ok() = None;
         *self.open_prefs.lock_ok() = None;
         tracing::info!("rig restart");

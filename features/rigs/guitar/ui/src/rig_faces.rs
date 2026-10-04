@@ -921,6 +921,13 @@ pub fn AmpRow(
     /// for those).
     #[props(default)]
     amps_only: bool,
+    /// The box the amps must fit (the phone's page: the screen less the
+    /// rail, the housing's clearance and the bars). At full height three
+    /// amp heads are wider than a phone, and ran on under the rail and off
+    /// the screen; given this, every amp shrinks by the same factor until
+    /// the row fits, centred.
+    #[props(default)]
+    fit: Option<(f64, f64)>,
 ) -> Element {
     let faces = use_faces();
     // Each amp at the window's tier (upright on a phone).
@@ -937,6 +944,30 @@ pub fn AmpRow(
     let eq = blocks.iter().find(|b| b.block_type == BlockType::Eq && b.name.eq_ignore_ascii_case("Amp EQ")).cloned();
     let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned().filter(|_| !amps_only);
     let one = amps.len() == 1 && !amps_only;
+    // Fitted: each amp's box, in points — its face's proportion at the
+    // page's height, scaled down together until the row is no wider than
+    // the page.
+    if let Some((fw, fh)) = fit {
+        let face_of = |b: &LiveBlock| faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).map(|f| f.at(tier));
+        let aspect = |b: &LiveBlock| face_of(b).map_or(AMP.0 / AMP.1, |f| f.size.0 / f.size.1.max(1.0));
+        let total: f64 = amps.iter().map(|b| fh * aspect(b)).sum();
+        let scale = if total > fw && total > 0.0 { fw / total } else { 1.0 };
+        let h = (fh * scale).floor();
+        return rsx! {
+            div { style: "display: flex; flex-direction: row; align-items: center; justify-content: center; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden;",
+                for b in amps {
+                    {
+                        let w = (h * aspect(&b)).floor();
+                        rsx! {
+                            div { key: "{b.id}", style: "flex: 0 0 {w}px; width: {w}px; height: {h}px; display: flex; min-width: 0; min-height: 0;",
+                                BlockPanel { face: face_of(&b), block: b.clone(), card: AMP }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
     rsx! {
         Row {
             for b in amps {

@@ -873,7 +873,14 @@ fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: 
             let page_h = h - f64::from(LINE_H) - f64::from(CHAIN_H) - 24.0;
             rsx! { crate::rig_faces::DrivesRow { blocks, fit_width: Some(w - f64::from(RAIL_W + HOUSING)), fit_height: Some(page_h) } }
         }
-        Page::Amps => rsx! { crate::rig_faces::AmpRow { blocks, amps_only: true } },
+        Page::Amps => {
+            // The amps fitted to the page (the screen less the rail, the
+            // housing's clearance and the bars), as the drives are.
+            let (w, h) = try_use_context::<crate::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
+            let page_h = h - f64::from(LINE_H) - f64::from(CHAIN_H) - 4.0;
+            let page_w = w - f64::from(RAIL_W + HOUSING) - f64::from(CORNER);
+            rsx! { crate::rig_faces::AmpRow { blocks, amps_only: true, fit: Some((page_w, page_h)) } }
+        }
         Page::Eq => {
             let eq = find_block(&blocks, BlockType::Eq, "Amp EQ");
             rsx! {
