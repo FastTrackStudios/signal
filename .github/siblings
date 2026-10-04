@@ -5,7 +5,7 @@
 # sibling commit; the commit must be pushed.
 #
 # dir                    repo                                    commit
-daw                      FastTrackStudios/daw                    f867e66c
+daw                      FastTrackStudios/daw                    3abe2486
 processor                FastTrackStudios/processor              9d2dfc8d
 blitz                    FastTrackStudios/blitz                  8658353a
 neural-amp-modeler-rs    FastTrackStudios/neural-amp-modeler-rs  28035789
