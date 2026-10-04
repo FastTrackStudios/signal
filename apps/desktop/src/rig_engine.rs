@@ -247,7 +247,7 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             // the access changes: the one event that answers "why is the
             // guitar not heard" (see `daw_audio_io::session_report`).
             let report = |why: &str| {
-                if let Some(session) = signal_sampler::rig::GuitarRig::session_report() {
+                if let Some(session) = signal_guitar::audio_session_report() {
                     tracing::info!(audio.session = %session, audio.why = why, "audio session");
                 }
             };
