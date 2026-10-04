@@ -2174,6 +2174,17 @@ impl GuitarRig {
         self.take_output_capture()
     }
 
+    /// Whether the app may read inputs at all — on iOS, the microphone
+    /// access the player gave: `"granted"`, `"denied"` or `"undetermined"`.
+    #[must_use]
+    pub fn input_access() -> &'static str {
+        match daw_audio_io::input_access() {
+            daw_audio_io::InputAccess::Granted => "granted",
+            daw_audio_io::InputAccess::Denied => "denied",
+            daw_audio_io::InputAccess::Undetermined => "undetermined",
+        }
+    }
+
     /// List available input devices (name + channel count + native rate).
     #[must_use]
     pub fn input_devices() -> Vec<DeviceInfo> {

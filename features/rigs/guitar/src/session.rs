@@ -9165,6 +9165,7 @@ impl AudioSettings for GuitarRigBackend {
                 .into_iter()
                 .map(map_device)
                 .collect(),
+            input_access: GuitarRig::input_access().to_string(),
         }
     }
 

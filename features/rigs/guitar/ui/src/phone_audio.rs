@@ -189,6 +189,22 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     } else {
         "Start it — or play the DI player".to_string()
     };
+    // Why the guitar may not be heard, when it is something the player can
+    // fix: the phone's microphone access (an interface's input is a
+    // recording to iOS, silent without it), or an interface iOS does not
+    // offer. And what iOS does offer, so a missing one shows.
+    let access_note = match d.input_access.as_str() {
+        "denied" => Some((RED, "Microphone access is off, so every input is silent. Turn it on in Settings › Signal › Microphone, then come back.".to_string())),
+        "undetermined" => Some((AMBER, "Signal has not been allowed to hear inputs yet. Allow the microphone prompt — or close and reopen the app to see it again.".to_string())),
+        _ if d.inputs.is_empty() => Some((AMBER, "iOS offers no inputs. Unplug the interface and plug it back in; one that needs more power than the phone gives needs a powered hub.".to_string())),
+        _ => None,
+    };
+    let offered = if d.inputs.is_empty() {
+        String::new()
+    } else {
+        let names: Vec<String> = d.inputs.iter().map(|i| format!("{} ({} in)", i.name, i.channels)).collect();
+        format!("Inputs iOS offers: {}", names.join(", "))
+    };
     // The guitar input's choices: the chosen input's channels.
     let channels = d
         .inputs
@@ -250,6 +266,12 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
                                     span { style: "font-size: 20px; font-weight: 800;", "{headline}" }
                                     span { style: "font-size: 13px; color: {DIM};", "{detail}" }
                                 }
+                            }
+                            if let Some((color, note)) = access_note.clone() {
+                                span { style: "font-size: 13px; font-weight: 700; color: {color};", "{note}" }
+                            }
+                            if !offered.is_empty() {
+                                span { style: "font-size: 12px; color: {DIM};", "{offered}" }
                             }
                             div { style: "display: flex; flex-direction: row; align-items: center; gap: 10px;",
                                 span { style: "flex: 0 0 34px; font-size: 11px; font-weight: 800; color: {DIM};", "IN" }

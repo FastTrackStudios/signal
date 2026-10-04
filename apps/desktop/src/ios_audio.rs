@@ -161,29 +161,52 @@ pub fn configure() {
 const RECORD_GRANTED: usize = 0x6772_6e74; // 'grnt'
 const RECORD_UNDETERMINED: usize = 0x756e_6474; // 'undt'
 
+/// The record permission's state. iOS 17 moved it to `AVAudioApplication`
+/// (the session's `recordPermission` is deprecated there); the session's
+/// before it. Both answer with the same four-char codes.
+fn record_permission() -> usize {
+    unsafe {
+        match objc2::runtime::AnyClass::get(c"AVAudioApplication") {
+            Some(app) => {
+                let shared: *mut AnyObject = msg_send![app, sharedInstance];
+                msg_send![shared, recordPermission]
+            }
+            None => {
+                let session: *mut AnyObject = msg_send![class!(AVAudioSession), sharedInstance];
+                msg_send![session, recordPermission]
+            }
+        }
+    }
+}
+
 /// Whether the player has let the app record (an interface's input is a
 /// recording, as far as iOS is concerned).
 pub fn record_permission_granted() -> bool {
-    unsafe {
-        let session: *mut AnyObject = msg_send![class!(AVAudioSession), sharedInstance];
-        let p: usize = msg_send![session, recordPermission];
-        p == RECORD_GRANTED
-    }
+    record_permission() == RECORD_GRANTED
 }
 
 /// Ask for the record permission if it has never been asked: without it an
 /// interface's input is silent. The answer arrives later; the route watcher
 /// (`rig_engine`) restarts the rig when it turns to granted.
 pub fn request_record_permission() {
+    let p = record_permission();
+    tracing::info!(state = format!("{:#x}", p), "ios: record permission");
+    if p != RECORD_UNDETERMINED {
+        return;
+    }
     unsafe {
-        let session: *mut AnyObject = msg_send![class!(AVAudioSession), sharedInstance];
-        let p: usize = msg_send![session, recordPermission];
-        if p != RECORD_UNDETERMINED {
-            return;
-        }
         let done = block2::RcBlock::new(|granted: objc2::runtime::Bool| {
             tracing::info!(granted = granted.as_bool(), "ios: record permission answered");
         });
-        let _: () = msg_send![session, requestRecordPermission: &*done];
+        match objc2::runtime::AnyClass::get(c"AVAudioApplication") {
+            // A class method from iOS 17.
+            Some(app) => {
+                let _: () = msg_send![app, requestRecordPermissionWithCompletionHandler: &*done];
+            }
+            None => {
+                let session: *mut AnyObject = msg_send![class!(AVAudioSession), sharedInstance];
+                let _: () = msg_send![session, requestRecordPermission: &*done];
+            }
+        }
     }
 }

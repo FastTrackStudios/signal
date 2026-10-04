@@ -36,6 +36,11 @@ pub const DI_CLIPS: &[&str] = &["Chords", "Palm-mute picking", "Riff"];
 pub struct AudioDevices {
     pub inputs: Vec<AudioDevice>,
     pub outputs: Vec<AudioDevice>,
+    /// Whether the app may read inputs: `granted`, `denied` (iOS
+    /// microphone access turned off — every input is silent) or
+    /// `undetermined` (never asked). Empty from an older engine.
+    #[facet(default)]
+    pub input_access: String,
 }
 
 /// Audio I/O preferences. Empty-string / `0` mean "use the system/backend
