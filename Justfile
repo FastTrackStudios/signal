@@ -145,6 +145,13 @@ mac-app size="":
     [ "$size" = macbook ] && size=1512x945
     SIGNAL_WINDOW_SIZE="$size" scripts/mac-app.sh --install
 
+# Publish the Mac app + this Mac's whole rig config as a GitHub release the
+# laptop installs without building (see scripts/mac-release.sh; the repo is
+# public, and so is the release).
+#   just mac-release signal-mac-2026.10.06
+mac-release tag:
+    scripts/mac-release.sh {{tag}}
+
 # No watcher and no rebuild-on-change, and the app needs no dx asset pipeline
 # (every sheet is include_str!'d, per the inline-styles rule).
 #
