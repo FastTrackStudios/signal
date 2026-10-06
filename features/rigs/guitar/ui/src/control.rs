@@ -3758,14 +3758,20 @@ fn LiveStereoMeter(label: &'static str, state: RigViewState, output: bool, muted
 
 /// A compressor surface with its block's live trace and gain reduction.
 #[component]
-pub(crate) fn LiveComp(block: LiveBlock, state: RigViewState) -> Element {
+pub(crate) fn LiveComp(
+    block: LiveBlock,
+    state: RigViewState,
+    /// Its box, where the host knows it (see `CompSurface::fit`).
+    #[props(default)]
+    fit: Option<(f64, f64)>,
+) -> Element {
     let in_db = state.in_peak_db.cloned();
     let (wave, gr_db) = state.comp_wave.read().get(&block.name).map_or_else(
         || ((Vec::new(), Vec::new()), 0.0),
         |(i, g, gr)| ((i.clone(), g.clone()), *gr),
     );
     rsx! {
-        crate::comp_surface::CompSurface { block, wave, in_db, gr_db }
+        crate::comp_surface::CompSurface { block, wave, in_db, gr_db, fit }
     }
 }
 

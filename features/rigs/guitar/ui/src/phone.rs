@@ -1201,6 +1201,7 @@ fn PageView(
         Page::PreDelayVerb => rsx! { crate::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Lanes } },
         Page::PreComp => {
             let comp = find_block(&blocks, BlockType::Compressor, "Pre Comp");
+            let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
             let rig = use_hook(try_consume_context::<RigClient>);
             let id = comp.as_ref().map(|c| c.id.clone());
             rsx! {
@@ -1213,7 +1214,8 @@ fn PageView(
                             }
                         });
                     })),
-                    if let Some(c) = comp { LiveComp { block: c, state } }
+                    // The panel's title bar off the box's height.
+                    if let Some(c) = comp { LiveComp { block: c, state, fit: desk.then_some((pane.0, pane.1 - 22.0)) } }
                 }
             }
         }
