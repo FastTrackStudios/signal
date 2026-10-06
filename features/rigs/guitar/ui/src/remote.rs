@@ -512,6 +512,34 @@ pub fn GuitarRigRemote() -> Element {
                             }
                         }
                     }
+                    // The right sidebar's module presets — choose, dial in,
+                    // save — opened on the group's main module.
+                    {
+                        let mut sel = selected_module;
+                        let open = sel().is_some();
+                        let first = match groups.picked.read().last().copied().unwrap_or(crate::control::Group::Amp) {
+                            crate::control::Group::Post => "Time",
+                            _ => "Core",
+                        };
+                        rsx! {
+                            button {
+                                title: "Module presets",
+                                class: if open {
+                                    "rounded-md px-2 py-1 text-xs font-semibold bg-accent text-accent-foreground ml-1"
+                                } else {
+                                    "rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground border border-border ml-1"
+                                },
+                                onclick: move |_| {
+                                    if open {
+                                        sel.set(None);
+                                    } else {
+                                        sel.set(Some(crate::module_sidebar::Selection::Module(first.to_string())));
+                                    }
+                                },
+                                "Modules"
+                            }
+                        }
+                    }
                 }
 
                 // The footswitch grid and the macros: full, a compact strip,

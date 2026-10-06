@@ -874,23 +874,24 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
     let mut mounted = use_signal(|| None::<std::rc::Rc<MountedData>>);
     let window = try_use_context::<crate::control::WindowSize>();
     use_effect(move || {
-        // Again whenever the window changes size.
-        let _ = window.map(|w| (w.0)());
         let Some(el) = mounted() else { return };
+        // Kept measured: the box changes with the window and with what
+        // opens beside it (the sidebars), and a stale size fits the pedals
+        // and the amp to room the pane no longer has. Quick until the first
+        // layout lands, then a light poll; only a change re-renders.
         spawn(async move {
-            // The first layout may not have landed yet: ask until it has.
-            for _ in 0..40 {
+            loop {
+                let known = size.peek().0 > 0.0;
                 if let Ok(r) = el.get_client_rect().await
                     && r.width() > 0.0
                     && r.height() > 0.0
                 {
-                    let got = (r.width(), r.height());
+                    let got = (r.width().round(), r.height().round());
                     if *size.peek() != got {
                         size.set(got);
                     }
-                    return;
                 }
-                architect::platform::sleep(std::time::Duration::from_millis(50)).await;
+                architect::platform::sleep(std::time::Duration::from_millis(if known { 400 } else { 50 })).await;
             }
         });
     });

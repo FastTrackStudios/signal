@@ -8478,6 +8478,18 @@ impl Rig for GuitarRigBackend {
         });
     }
 
+    fn save_core_snapshot(&self, preset: String, snapshot: String) {
+        // The profile's amp presets and board, for a patch that plays them
+        // rather than Amp and Drive modules.
+        let (amps, board) = {
+            let def = self.profile_def.lock_ok();
+            (def.presets.clone(), def.drives.clone())
+        };
+        self.edit_live_library("save_core_snapshot", true, |comp, patch| {
+            crate::manage::save_core_snapshot(comp, patch, &amps, &board, &preset, &snapshot)
+        });
+    }
+
     fn revert_module(&self, module: String) {
         let chain = self.live_chain();
         self.edit_live_library("revert_module", false, |comp, patch| {

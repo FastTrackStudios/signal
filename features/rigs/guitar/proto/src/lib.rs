@@ -1597,6 +1597,14 @@ pub mod rig {
         /// patch's own edits on the module's blocks move into the snapshot
         /// and the patch plays it.
         fn save_module_snapshot(&self, module: String, preset: String, snapshot: String);
+        /// Save the live patch's core tone — its Drive and Amp, and its
+        /// edits on the core's blocks — as snapshot `snapshot` of Core
+        /// preset `preset` (each created when new; an existing snapshot is
+        /// replaced), and play it on the patch. A patch whose amp is a
+        /// profile preset, or that plays the profile's board, gets Amp and
+        /// Drive module presets made from them, so the Core carries the
+        /// whole tone.
+        fn save_core_snapshot(&self, preset: String, snapshot: String);
         /// Drop the live patch's own edits on `module`'s blocks: back to the
         /// module snapshot as saved.
         fn revert_module(&self, module: String);

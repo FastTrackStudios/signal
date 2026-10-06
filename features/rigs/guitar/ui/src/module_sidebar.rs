@@ -187,6 +187,22 @@ pub fn preset_items(
     items
 }
 
+/// The modules the sidebar's tabs offer, in signal order.
+const SIDEBAR_MODULES: [&str; 6] = ["Core", "Drive", "Amp", "Time", "Delay", "Reverb"];
+
+/// Whether `module` is the Core (its presets are the rig presets).
+fn is_core(module: &str) -> bool {
+    module.eq_ignore_ascii_case("Core")
+}
+
+/// The preset a module's menu acts on: the one the patch plays — or, for
+/// a patch that plays no Core, the Core its tone would be saved into.
+fn menu_target(module: &str, pick: Option<&ModulePick>, presets: &[ModulePresetEntry]) -> String {
+    pick.map(|p| p.preset.clone())
+        .or_else(|| is_core(module).then(|| presets.last().map(|p| p.name.clone())).flatten())
+        .unwrap_or_default()
+}
+
 /// The menu for what `module` plays: keep the live edits (save over the
 /// snapshot, as a new snapshot, as a new preset), drop them, then manage the
 /// preset and snapshot that play.
@@ -207,7 +223,22 @@ pub fn module_menu(
         .map(|p| played_snapshot(p, presets))
         .unwrap_or_default();
     let no_edits = (!modified).then(|| "No edits on this patch".to_string());
+    let core = is_core(module);
     let mut items = vec![MenuItem::head(format!("{module} on this patch"))];
+    // A patch that plays no Core yet can still add its tone to one — the
+    // Core presets are built a patch at a time.
+    if core
+        && entry.is_none()
+        && let Some(target) = presets.last()
+    {
+        items.push(MenuItem::name(
+            "save_snapshot",
+            format!("Save into “{}” as…", target.name),
+            "Save",
+            next_name("Snapshot", &target.snapshots),
+            target.snapshots.clone(),
+        ));
+    }
     match entry {
         Some(e) => {
             items.push(MenuItem::run("save", format!("Save to “{snap}”")).unless(no_edits.clone()));
@@ -231,7 +262,8 @@ pub fn module_menu(
     items.push(MenuItem::run("revert", "Revert edits").unless(no_edits));
     if let Some(e) = entry {
         items.push(MenuItem::sep());
-        items.extend(preset_items(e, &names, Some(&snap)));
+        // A Core's snapshots are renamed and deleted in the library.
+        items.extend(preset_items(e, &names, (!core).then_some(snap.as_str())));
     }
     items.push(MenuItem::sep());
     items.push(MenuItem::run(
@@ -259,6 +291,33 @@ pub fn module_act(
         snapshot.to_string(),
         p.text,
     );
+    // The Core's presets are the rig presets, not a module's: their own
+    // calls. (Revert and the library work as for any module; a Core's
+    // snapshots have no rename or delete call yet.)
+    if is_core(module) && !matches!(p.id, "revert" | "manage") {
+        match p.id {
+            "save" => send(rig, move |r| async move {
+                let _ = r.save_core_snapshot(pr, sn).await;
+            }),
+            "save_snapshot" => send(rig, move |r| async move {
+                let _ = r.save_core_snapshot(pr, text).await;
+            }),
+            "save_preset" => send(rig, move |r| async move {
+                let _ = r.save_core_snapshot(text, "Main".to_string()).await;
+            }),
+            "rename_preset" => send(rig, move |r| async move {
+                let _ = r.rename_rig_preset(pr, text).await;
+            }),
+            "duplicate_preset" => send(rig, move |r| async move {
+                let _ = r.duplicate_rig_preset(pr, text).await;
+            }),
+            "delete_preset" => send(rig, move |r| async move {
+                let _ = r.delete_rig_preset(pr).await;
+            }),
+            _ => {}
+        }
+        return;
+    }
     match p.id {
         "save" => send(rig, move |r| async move {
             let _ = r.save_module_snapshot(m, pr, sn).await;
@@ -571,7 +630,7 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             on_menu: {
                 let rig = rig.clone();
                 let module = module.clone();
-                let preset = pick.as_ref().map(|p| p.preset.clone()).unwrap_or_default();
+                let preset = menu_target(&module, pick.as_ref(), &presets);
                 let played = played.clone();
                 move |p: Picked| module_act(&rig, library, &module, &preset, &played, p)
             },
@@ -592,6 +651,25 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             width: INSPECTOR_W,
             right: true,
             on_close: move |()| selected.set(None),
+            // Every module with presets, one tap apart.
+            div { style: "display: flex; flex-wrap: wrap; gap: 3px; padding: 4px 0 6px;",
+                for m in SIDEBAR_MODULES {
+                    {
+                        let on = module.eq_ignore_ascii_case(m);
+                        rsx! {
+                            button { key: "{m}",
+                                style: if on {
+                                    "padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 700; background: #e4e4e7; color: #0a0b0d; border: 1px solid #e4e4e7;"
+                                } else {
+                                    "padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 600; background: transparent; color: #a1a1aa; border: 1px solid #3f3f46;"
+                                },
+                                onclick: move |_| selected.set(Some(Selection::Module(m.to_string()))),
+                                "{m}"
+                            }
+                        }
+                    }
+                }
+            }
             // What the module plays, and every way to change or keep it.
             PresetBar {
                 label: module.clone(),
@@ -627,7 +705,7 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
                 on_menu: {
                     let rig = rig.clone();
                     let module = module.clone();
-                    let preset = pick.as_ref().map(|p| p.preset.clone()).unwrap_or_default();
+                    let preset = menu_target(&module, pick.as_ref(), &presets);
                     let played = played.clone();
                     move |p: Picked| module_act(&rig, library, &module, &preset, &played, p)
                 },
