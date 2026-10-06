@@ -1150,7 +1150,15 @@ fn PatchTrimPanel(block: LiveBlock) -> Element {
 /// stacked (1 top, 2 bottom) — click a lane to select it — with the
 /// selected delay's controls in a strip beneath.
 #[component]
-pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
+pub(crate) fn DelayPanel(
+    blocks: Vec<LiveBlock>,
+    tempo_bpm: u32,
+    #[props(default)] pre: bool,
+    /// One lane's box (points), where the host knows it (a desktop pane):
+    /// each face the version that fits it, not the window's tier's.
+    #[props(default)]
+    lane: Option<(f64, f64)>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let pick_block = try_use_context::<crate::module_sidebar::SelectedModule>();
     let mut sel = use_signal(|| 0usize);
@@ -1172,7 +1180,7 @@ pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default
     let faces = crate::rig_faces::use_faces();
     // Drawn at the window's tier (a phone draws each face's phone layout).
     let tier = use_tier();
-    let face_of = |b: &LiveBlock| faces.time(false, DELAY_ALGOS.get(param_v(b, "style", 1.0) as usize).copied().unwrap_or("")).map(|f| f.at(tier));
+    let face_of = |b: &LiveBlock| faces.time(false, DELAY_ALGOS.get(param_v(b, "style", 1.0) as usize).copied().unwrap_or("")).map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h)));
     let all_faces = delays.iter().all(|b| face_of(b).is_some());
 
     rsx! {
@@ -1351,7 +1359,15 @@ pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default
 /// stacked — click a lane to select — with the selected reverb's controls
 /// beneath.
 #[component]
-pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
+pub(crate) fn ReverbPanel(
+    blocks: Vec<LiveBlock>,
+    tempo_bpm: u32,
+    #[props(default)] pre: bool,
+    /// One lane's box (points), where the host knows it (a desktop pane):
+    /// each face the version that fits it, not the window's tier's.
+    #[props(default)]
+    lane: Option<(f64, f64)>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let pick_block = try_use_context::<crate::module_sidebar::SelectedModule>();
     let mut sel = use_signal(|| 0usize);
@@ -1370,7 +1386,7 @@ pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(defaul
     let faces = crate::rig_faces::use_faces();
     // Drawn at the window's tier (a phone draws each face's phone layout).
     let tier = use_tier();
-    let face_of = |b: &LiveBlock| faces.time(true, VERB_ALGOS.get(param_v(b, "algorithm", 1.0) as usize).copied().unwrap_or("")).map(|f| f.at(tier));
+    let face_of = |b: &LiveBlock| faces.time(true, VERB_ALGOS.get(param_v(b, "algorithm", 1.0) as usize).copied().unwrap_or("")).map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h)));
     let all_faces = verbs.iter().all(|b| face_of(b).is_some());
     // On a phone the lane's bar is its preset and algorithm: the face shows
     // the time itself.

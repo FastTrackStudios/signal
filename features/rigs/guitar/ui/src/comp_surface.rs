@@ -501,8 +501,10 @@ pub fn CompSurface(
             if !phone {
             div {
                 class: "absolute bottom-0 left-0 right-0 flex items-end px-2 py-1",
-                style: "background: linear-gradient(to top, rgba(8,8,8,0.9), transparent);",
-                div { class: "flex flex-col",
+                // Narrow (at the head of a drive board), the knobs wrap under
+                // the readout rather than run over it.
+                style: "background: linear-gradient(to top, rgba(8,8,8,0.9), transparent); flex-wrap: wrap; row-gap: 4px;",
+                div { class: "flex flex-col", style: "flex-shrink: 0; margin-right: 8px;",
                     span { style: "font-size:8px; color:#8a8a92; text-transform:uppercase;", "Thr · Ratio" }
                     span { style: "font-family:ui-monospace,monospace; font-size:11px; color:#e8e8ec;",
                         "{thr:.1} dB · {ratio:.1}:1"
@@ -512,7 +514,7 @@ pub fn CompSurface(
                 // the display itself; the rest are knobs, because a block
                 // with controls the surface does not offer is a block you
                 // have to leave the rig to set.
-                div { class: "ml-auto flex items-end gap-2",
+                div { class: "ml-auto flex items-end gap-2", style: "flex-wrap: wrap; justify-content: flex-end; row-gap: 4px;",
                     {knob("attack", "Atk", KnobSize::Small, Some(fmt_ms))}
                     {knob("release", "Rel", KnobSize::Small, Some(fmt_ms))}
                     {knob("knee", "Knee", KnobSize::Small, Some(fmt_db))}
