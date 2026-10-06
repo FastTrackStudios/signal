@@ -799,13 +799,18 @@ pub fn PhoneControl(
 }
 
 /// The desktop's Control page: the chain a page at a time, as the phone
-/// shows it, two pages stacked when the box is tall enough — each picked on
-/// its own chain — in place of every panel at once. The desktop keeps its
-/// sidebar and switches around it.
+/// shows it — four pages in a grid when the box has room (Drives and Amp
+/// over Delay and Verb), two stacked, or one — each picked on its own chain,
+/// in place of every panel at once. The desktop keeps its sidebar and
+/// switches around it.
 #[component]
 pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32) -> Element {
-    let upper = use_signal(|| Page::Amps);
-    let lower = use_signal(|| Page::Delays);
+    let pages = [
+        use_signal(|| Page::Drives),
+        use_signal(|| Page::Amps),
+        use_signal(|| Page::Delays),
+        use_signal(|| Page::Reverbs),
+    ];
     // The box this has, measured: the pages fitted to it (amps, drives) need
     // it, and here it is not the window.
     let mut size = use_signal(|| (0.0f64, 0.0f64));
@@ -842,9 +847,20 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
         }),
     };
     let chain = f64::from(CHAIN_H);
-    let two = h >= 2.0 * chain + 2.0 * DESKTOP_PANE_MIN_H;
-    let pane = (w, if two { (h - 2.0 * chain) / 2.0 - 4.0 } else { h - chain - 4.0 });
-    let panes: Vec<(Signal<Page>, &'static str)> = if two { vec![(upper, "upper"), (lower, "lower")] } else { vec![(upper, "upper")] };
+    let tall = h >= 2.0 * chain + 2.0 * DESKTOP_PANE_MIN_H;
+    let wide = w >= 2.0 * DESKTOP_PANE_MIN_W;
+    // Which of the four show, as rows of panes.
+    let rows: Vec<Vec<usize>> = match (tall, wide) {
+        (true, true) => vec![vec![0, 1], vec![2, 3]],
+        (true, false) => vec![vec![1], vec![2]],
+        (false, true) => vec![vec![1, 2]],
+        (false, false) => vec![vec![1]],
+    };
+    let (n_rows, n_cols) = (rows.len() as f64, rows[0].len() as f64);
+    let pane = (
+        w / n_cols - GRID_GAP,
+        (h - n_rows * chain) / n_rows - 4.0 - GRID_GAP,
+    );
     let tile = move |target: Signal<Page>, p: Page| {
         let mut target = target;
         let on = target() == p;
@@ -852,25 +868,29 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
         let look = if on { format!("background: {color}; color: #0a0b0d;") } else { format!("background: {RAISED}; color: {color};") };
         rsx! {
             div { key: "{p.short()}",
-                style: "flex: 1 1 0%; min-width: 0; display: flex; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 3px; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; overflow: hidden; {look}",
+                style: "flex: 1 1 0%; min-width: 0; display: flex; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 3px; font-size: 11px; font-weight: 800; letter-spacing: 0.02em; white-space: nowrap; cursor: pointer; overflow: hidden; {look}",
                 onclick: move |_| target.set(p),
                 span { "{p.short()}" }
             }
         }
     };
     rsx! {
-        div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden;",
+        div { style: "display: flex; flex-direction: column; gap: {GRID_GAP}px; width: 100%; height: 100%; min-height: 0; overflow: hidden;",
             onmounted: move |e: MountedEvent| mounted.set(Some(e.data())),
-            if !panes.is_empty() {
-                for (target, key) in panes {
-                    div { key: "{key}-chain", style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
-                        for p in Page::ALL {
-                            {tile(target, p)}
-                        }
-                    }
-                    div { key: "{key}-page", style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden;",
-                        div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;",
-                            PageView { page: target(), blocks: blocks.clone(), state, tempo_bpm, pane }
+            for (r, row) in rows.into_iter().enumerate() {
+                div { key: "row-{r}", style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row; gap: {GRID_GAP}px;",
+                    for i in row {
+                        div { key: "pane-{i}", style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid {RULE}; border-radius: 6px; overflow: hidden;",
+                            div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
+                                for p in Page::ALL {
+                                    {tile(pages[i], p)}
+                                }
+                            }
+                            div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden;",
+                                div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;",
+                                    PageView { page: pages[i](), blocks: blocks.clone(), state, tempo_bpm, pane }
+                                }
+                            }
                         }
                     }
                 }
@@ -879,12 +899,14 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
     }
 }
 
-/// The least height (points) a desktop page gets before the Control page
-/// shows one page rather than two.
+/// The least height and width (points) a desktop page gets before the
+/// Control page shows fewer of them.
 const DESKTOP_PANE_MIN_H: f64 = 170.0;
+const DESKTOP_PANE_MIN_W: f64 = 420.0;
+/// Between the panes of the desktop's grid.
+const GRID_GAP: f64 = 6.0;
 
 /// A rail button: its icon, its name small under it; the one picked
-/// raised./// A rail button: its icon, its name small under it; the one picked
 /// raised.
 #[component]
 fn RailButton(on: bool, label: &'static str, icon: &'static str, onclick: EventHandler<()>) -> Element {
