@@ -380,6 +380,31 @@ impl PatchDef {
     /// The unique module names this patch overrides (for the UI's
     /// override badges).
     #[must_use]
+    /// What a footswitch says the patch plays: its Core (`preset ·
+    /// snapshot`) — the amp it plays, for a patch on no Core yet — and its
+    /// Time module, when it picks one (`Worship · Clean + Dream Delay`).
+    #[must_use]
+    pub fn tone_label(&self) -> String {
+        let core = if self.rig_preset.is_empty() {
+            // On no Core yet: the amp it plays.
+            self.preset.clone()
+        } else if self.snapshot.is_empty() || self.snapshot.eq_ignore_ascii_case(&self.rig_preset) {
+            self.rig_preset.clone()
+        } else {
+            format!("{} · {}", self.rig_preset, self.snapshot)
+        };
+        let time = self
+            .modules
+            .iter()
+            .find(|m| m.module.eq_ignore_ascii_case("Time") && !m.preset.is_empty())
+            .map(|m| m.preset.clone());
+        match time {
+            Some(t) if !core.is_empty() => format!("{core} + {t}"),
+            Some(t) => t,
+            None => core,
+        }
+    }
+
     pub fn override_modules(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for ov in &self.overrides {
@@ -2802,5 +2827,41 @@ mod module_of_block_tests {
         assert_eq!(module_of_block("Chorus", BlockType::Chorus), None);
         assert_eq!(module_of_block("Tremolo", BlockType::Trem), None);
         assert_eq!(module_of_block("Pitch", BlockType::Pitch), None);
+    }
+}
+
+#[cfg(test)]
+mod tone_label_tests {
+    use super::{ModuleChoiceDef, PatchDef};
+
+    fn patch() -> PatchDef {
+        PatchDef {
+            song: String::new(),
+            name: "Clean Verb".into(),
+            preset: "Fender Clean".into(),
+            preset2: String::new(),
+            rig_preset: String::new(),
+            snapshot: String::new(),
+            modules: Vec::new(),
+            blocks: Vec::new(),
+            drives: Vec::new(),
+            trim_db: 0.0,
+            level_db: 0.0,
+            boost_db: 0.0,
+            overrides: Vec::new(),
+            macros: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_switch_names_the_core_and_the_time_module() {
+        let mut p = patch();
+        // On no Core yet: the amp.
+        assert_eq!(p.tone_label(), "Fender Clean");
+        p.rig_preset = "Worship".into();
+        p.snapshot = "Clean".into();
+        assert_eq!(p.tone_label(), "Worship · Clean");
+        p.modules.push(ModuleChoiceDef { module: "Time".into(), preset: "Dream Delay".into(), snapshot: String::new() });
+        assert_eq!(p.tone_label(), "Worship · Clean + Dream Delay");
     }
 }

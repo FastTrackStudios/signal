@@ -276,7 +276,8 @@ pub struct PerfStack {
     pub available: bool,
     /// Whether this stack holds the currently-active patch.
     pub is_active: bool,
-    /// The preset the current patch points at.
+    /// What the current patch plays: its Core (`preset · snapshot`), and
+    /// its Time module when it picks one — the amp, for a patch on no Core.
     pub preset: String,
     /// Module names the current patch overrides (badge icons).
     pub override_modules: Vec<String>,

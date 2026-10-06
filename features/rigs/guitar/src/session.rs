@@ -4955,7 +4955,7 @@ fn build_perf_model_static(def: &ProfileDef, live: &str) -> PerformanceModel {
                 patch_count: st.patches.len() as u32,
                 available: at.is_some(),
                 is_active: at.is_some(),
-                preset: patch_def.map(|p| p.preset.clone()).unwrap_or_default(),
+                preset: patch_def.map(super::profiles::PatchDef::tone_label).unwrap_or_default(),
                 override_modules: patch_def
                     .map(super::profiles::PatchDef::override_modules)
                     .unwrap_or_default(),
@@ -5002,7 +5002,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
                 patch_count: st.patches.len() as u32,
                 available,
                 is_active: active_stack == Some(si),
-                preset: patch_def.map(|p| p.preset.clone()).unwrap_or_default(),
+                preset: patch_def.map(super::profiles::PatchDef::tone_label).unwrap_or_default(),
                 override_modules: patch_def
                     .map(super::profiles::PatchDef::override_modules)
                     .unwrap_or_default(),
