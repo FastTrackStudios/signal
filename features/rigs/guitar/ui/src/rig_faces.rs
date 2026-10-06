@@ -1135,7 +1135,18 @@ pub fn PreFxRow(
     // By its preset, else by the block itself (Pre Mod's unit for any).
     // Each at the window's tier.
     let tier = crate::control::use_tier();
-    let picked: Vec<(LiveBlock, Option<FaceEntry>)> = pre.iter().map(|b| (b.clone(), faces.pre(&b.preset).or_else(|| faces.pre(&b.name)).map(|f| f.at(tier)))).collect();
+    // A pre tremolo with no preset of its own (Pre Motion, empty): the
+    // Gravity Tank, as any pre modulation is the Pre Mod unit.
+    let picked: Vec<(LiveBlock, Option<FaceEntry>)> = pre
+        .iter()
+        .map(|b| {
+            let face = faces
+                .pre(&b.preset)
+                .or_else(|| faces.pre(&b.name))
+                .or_else(|| (b.block_type == BlockType::Trem).then(|| faces.pre("gravity tank trem")).flatten());
+            (b.clone(), face.map(|f| f.at(tier)))
+        })
+        .collect();
     let absorbed: Vec<String> = picked
         .iter()
         .filter_map(|(_, f)| f.as_ref())

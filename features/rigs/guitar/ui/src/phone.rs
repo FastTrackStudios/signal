@@ -806,8 +806,8 @@ enum DeskPane {
     Units(&'static [&'static str]),
     /// The pre modulation (and the pre tremolo, when it plays).
     PreUnits,
-    /// The pre compressor over the gate.
-    CompGate,
+    /// The gate alone.
+    Gate,
     /// The pre delay over the pre reverb.
     PreLanes,
     /// The post compressor alone.
@@ -823,7 +823,7 @@ impl DeskPane {
             Self::Page(p) => p.short().to_string(),
             Self::Units(k) => k.join("+"),
             Self::PreUnits => "pre-units".into(),
-            Self::CompGate => "comp-gate".into(),
+            Self::Gate => "gate".into(),
             Self::PreLanes => "pre-lanes".into(),
             Self::PostComp => "post-comp".into(),
             Self::Empty => "empty".into(),
@@ -837,22 +837,26 @@ impl DeskPane {
 fn desk_columns(g: crate::control::Group) -> [Vec<(DeskPane, f64)>; 2] {
     use crate::control::Group;
     match g {
-        // The pedals (wah, dive, volume) are not here: they are played,
-        // not set.
-        // The pre delay and reverb stacked, two rows tall.
+        // A row each, in pairs: transpose and doubler beside pitch and
+        // harmonizer; the pedals (wah, dive bomb, volume) beside the Q-Tron;
+        // pre modulation and motion beside the pre delay and reverb.
         Group::Pre => [
             vec![
                 (DeskPane::Units(&["transpose", "doubler"]), 1.0),
-                (DeskPane::Units(&["filter"]), 1.0),
+                (DeskPane::Units(&["wah", "dive", "volume"]), 1.0),
                 (DeskPane::PreUnits, 1.0),
             ],
-            vec![(DeskPane::Units(&["pitch", "harmony"]), 1.0), (DeskPane::PreLanes, 2.0)],
+            vec![
+                (DeskPane::Units(&["pitch", "harmony"]), 1.0),
+                (DeskPane::Units(&["filter"]), 1.0),
+                (DeskPane::PreLanes, 1.0),
+            ],
         ],
-        // The pre compressor over the gate; the post compressor and the EQ
-        // each a box of their own, the EQ two rows tall.
+        // In signal order, a row each: the pre compressor and the gate,
+        // the drives and the amp, the post compressor and the EQ.
         Group::Amp => [
-            vec![(DeskPane::Page(Page::Drives), 1.0), (DeskPane::CompGate, 1.0), (DeskPane::PostComp, 1.0)],
-            vec![(DeskPane::Page(Page::Amps), 1.0), (DeskPane::Page(Page::Eq), 2.0)],
+            vec![(DeskPane::Page(Page::PreComp), 1.0), (DeskPane::Page(Page::Drives), 1.0), (DeskPane::PostComp, 1.0)],
+            vec![(DeskPane::Gate, 1.0), (DeskPane::Page(Page::Amps), 1.0), (DeskPane::Page(Page::Eq), 1.0)],
         ],
         // Three doubles — modulation over motion, the delays, the reverbs —
         // half the height each, the top right left open.
@@ -968,20 +972,14 @@ fn DeskPaneView(pane_kind: DeskPane, blocks: Vec<LiveBlock>, state: RigViewState
         DeskPane::PreLanes => rsx! {
             crate::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Lanes, fit: Some(pane) }
         },
-        DeskPane::CompGate => {
-            let lane = (pane.0, pane.1 / 2.0);
+        DeskPane::Gate => {
             let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
             rsx! {
-                div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
-                    div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column;",
-                        PageView { page: Page::PreComp, blocks: blocks.clone(), state, tempo_bpm, pane: lane }
-                    }
-                    if let (Some(g), Some(f)) = (gate, faces.gate.clone().map(|f| f.at_box(lane.0, lane.1))) {
-                        // The gate's lane near its own proportions, centred.
-                        div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; border-top: 1px solid {RULE};",
-                            div { style: crate::control::lane_fit(Some(lane), f.size),
-                                crate::rig_faces::GateFace { block: g, face: f.clone(), level: state.in_peak_db, fill: true }
-                            }
+                if let (Some(g), Some(f)) = (gate, faces.gate.clone().map(|f| f.at_box(pane.0, pane.1))) {
+                    // Its lane near its own proportions, centred.
+                    div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex;",
+                        div { style: crate::control::lane_fit(Some(pane), f.size),
+                            crate::rig_faces::GateFace { block: g, face: f.clone(), level: state.in_peak_db, fill: true }
                         }
                     }
                 }
