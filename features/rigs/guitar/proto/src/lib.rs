@@ -1665,6 +1665,10 @@ pub mod rig {
         /// A new preset `name` from what plays now (the patch untouched),
         /// up on the bench.
         fn new_tone(&self, name: String) -> Applied;
+        /// A preset from each patch of the playing profile that has none —
+        /// named after the patch, holding the sound it plays. The patches
+        /// are left as they are (a library to choose from, not a change).
+        fn presets_from_patches(&self);
         /// Copy a song — sections, recalls, tuning — as `new_name`. Its own
         /// patches are copied under names of their own.
         fn duplicate_song(&self, name: String, new_name: String);

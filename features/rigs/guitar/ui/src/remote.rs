@@ -286,6 +286,8 @@ pub fn GuitarRigRemote() -> Element {
                     // a phone has no room beside it.
                     // (Audio is a rail mode of `PhoneControl`'s on a phone.)
                     signal_widgets::PopupLayer {}
+                    // The states inline styles cannot carry (hover).
+                    document::Style { {crate::theme::CSS} }
                 }
             }
         };
@@ -388,6 +390,8 @@ pub fn GuitarRigRemote() -> Element {
             // Where menus draw (see `PopupHost`): above everything via its
             // z-index, so first among the children is fine.
             signal_widgets::PopupLayer {}
+            // The states inline styles cannot carry (hover).
+            document::Style { {crate::theme::CSS} }
             // The bar — the app's and the rig's in one: crumbs, the rig's own
             // controls, the window's drag space and controls.
             header {
@@ -406,7 +410,7 @@ pub fn GuitarRigRemote() -> Element {
                         "flex items-center justify-center w-7 h-7 text-muted-foreground hover:text-foreground text-sm"
                     },
                     style: bar_item(left_open()),
-                    title: "Preset sidebar",
+                    title: "Left sidebar",
                     onclick: move |_| left_open.toggle(),
                     fts_chrome::Glyph { icon: fts_chrome::Icon::RailLeft, size: 15 }
                 }
@@ -423,14 +427,14 @@ pub fn GuitarRigRemote() -> Element {
                 // edits the presets themselves, each up on the bench.
                 div { class: "flex items-center gap-0.5",
                     for (pm, label, icon) in [
-                        (0u32, "Presets", fts_chrome::Icon::Browser),
+                        (0u32, "Presets", fts_chrome::Icon::Preset),
                         (1, "Profile", fts_chrome::Icon::Profile),
                         (2, "Setlist", fts_chrome::Icon::Setlist),
                     ] {
                         button {
                             key: "{label}",
-                            title: if perf_now.perform_mode == pm { format!("{label} — click to browse") } else { label.to_string() },
-                            style: "display: flex; align-items: center; gap: 5px; {bar_item(perf_now.perform_mode == pm)}",
+                            title: format!("Play from {label} — every remote and the footswitches follow"),
+                            style: "display: flex; align-items: center; gap: 5px; {bar_item_live(perf_now.perform_mode == pm)}",
                             // The play mode is always one of the three —
                             // highlight it regardless of which work view is
                             // up (brighter when the grid itself is showing).
@@ -439,18 +443,16 @@ pub fn GuitarRigRemote() -> Element {
                             } else {
                                 "px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
                             },
-                            // A second click on the mode you are in opens the
-                            // picker for it: the mode names what you play
-                            // from, the picker is where you choose it.
+                            // The mode names what you play from; choosing
+                            // within it is the Library's (⌘L).
                             onclick: {
                                 let rig = rig.clone();
                                 let current = perf_now.perform_mode;
-                                let mut library_open = library_open;
                                 move |_| {
-                                    if current == pm {
-                                        library_open.set(Some(crate::library::Kind::for_perform_mode(pm)));
-                                    } else if let Some(r) = rig.clone() {
-                                        spawn(async move { let _ = r.set_perform_mode(pm).await; });
+                                    if current != pm {
+                                        if let Some(r) = rig.clone() {
+                                            spawn(async move { let _ = r.set_perform_mode(pm).await; });
+                                        }
                                     }
                                 }
                             },
@@ -474,6 +476,7 @@ pub fn GuitarRigRemote() -> Element {
                         move |_| library_open.set(if library_open().is_some() { None } else { Some(at) })
                     },
                     fts_chrome::Glyph { icon: fts_chrome::Icon::Browser, size: 13 }
+                    "Library"
                 }
                 // The bar's slack moves the window (and double-click maximises).
                 fts_chrome::DragSpace {}
@@ -543,15 +546,15 @@ pub fn GuitarRigRemote() -> Element {
                 // Global switch states — visible in every mode.
                 if perf_now.fx_bypass {
                     span {
-                        class: "text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5",
-                        style: "background-color: #ec4899; color: #ffffff;",
+                        style: "flex-shrink: 0; padding: 3px 9px; border-radius: {crate::theme::R_SM}; font-size: {crate::theme::T_BODY}; \
+                                font-weight: 700; white-space: nowrap; background: #ec4899; color: #1a0410;",
                         "FX off"
                     }
                 }
                 if perf_now.boost_db != 0.0 {
                     span {
-                        class: "text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5",
-                        style: "background-color: #fafafa; color: #0a0a0a;",
+                        style: "flex-shrink: 0; padding: 3px 9px; border-radius: {crate::theme::R_SM}; font-size: {crate::theme::T_BODY}; \
+                                font-weight: 700; white-space: nowrap; background: #fafafa; color: #0a0a0a;",
                         if perf_now.boost_db < 0.0 {
                             "Cut −{-perf_now.boost_db as i32} dB"
                         } else {
@@ -576,57 +579,11 @@ pub fn GuitarRigRemote() -> Element {
                     fts_chrome::Glyph { icon: fts_chrome::Icon::Command, size: 13 }
                 }
 
-                // Reload the styx rig library (external edits: text
-                // editor, LLM, git pull).
-                button {
-                    class: "flex items-center justify-center w-7 h-7 text-muted-foreground hover:text-foreground",
-                    style: bar_item(false),
-                    title: "Reload the rig library (styx files)",
-                    onclick: {
-                        let rig = rig.clone();
-                        move |_| {
-                            if let Some(r) = rig.clone() {
-                                spawn(async move { let _ = r.reload_library().await; });
-                            }
-                        }
-                    },
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::Refresh, size: 14 }
-                }
-
                 BarRule {}
                 // Indicators, not buttons: MIDI and audio at a glance, their
-                // options behind a right-click or double-click.
-                // The buffer size, changeable live: a larger buffer is the
-                // quick way out of dropouts on a busy machine (the device
-                // reopens — a short gap). Latency shown for 48 kHz.
-                {
-                    let current = prefs().buffer_size;
-                    let sizes = crate::settings::BUFFER_SIZES;
-                    let options: Vec<String> = sizes
-                        .iter()
-                        .map(|b| format!("{b} · {:.1} ms", f64::from(*b) / 48.0))
-                        .collect();
-                    let selected = sizes.iter().position(|b| *b == current).map_or(u32::MAX, |i| i as u32);
-                    rsx! {
-                        div { style: "display: flex; align-items: center; gap: 6px; flex-shrink: 0;",
-                            title: "Audio buffer (frames) — changing it reopens the device",
-                            span { style: "font-size: 10px; font-weight: 600; letter-spacing: 0.04em; color: #71717a;", "BUF" }
-                            signal_widgets::Picker {
-                                options,
-                                selected,
-                                placeholder: format!("{current}"),
-                                size: signal_widgets::PickerSize::Tiny,
-                                on_select: move |i: u32| {
-                                    if let Some(b) = sizes.get(i as usize).copied() {
-                                        if b != prefs().buffer_size {
-                                            apply.call(AudioPrefs { buffer_size: b, ..prefs() });
-                                        }
-                                    }
-                                },
-                            }
-                        }
-                    }
-                }
+                // options a click away. What could stop the show mid-song —
+                // the buffer (reopens the device), reloading the library —
+                // lives in the Audio menu, not loose in the bar.
                 // The whole app's CPU, as a share of the machine.
                 LiveCpu { state }
                 crate::control::MidiIndicator {
@@ -635,48 +592,86 @@ pub fn GuitarRigRemote() -> Element {
                 {
                     let is_running = (state.running)();
                     let rig_toggle = rig.clone();
+                    let rig_start = rig.clone();
                     let rig_di = rig.clone();
+                    let rig_reload = rig.clone();
+                    // The buffer, changeable live: a larger one is the quick
+                    // way out of dropouts on a busy machine (the device
+                    // reopens — a short gap). Latency shown for 48 kHz.
+                    let current = prefs().buffer_size;
+                    let mut items = vec![
+                        crate::indicators::IndicatorItem::new(
+                            "Audio settings…",
+                            cbs.cb(move |()| audio_open.set(true)),
+                        ),
+                        crate::indicators::IndicatorItem::new(
+                            if is_running { "Stop audio" } else { "Start audio" },
+                            cbs.cb(move |()| {
+                                if let Some(r) = rig_toggle.clone() {
+                                    spawn(async move {
+                                        let _ = if is_running { r.stop().await } else { r.start().await };
+                                    });
+                                }
+                            }),
+                        ),
+                        // Play for ~15 s after choosing it; the library
+                        // re-measures loudness against it.
+                        crate::indicators::IndicatorItem::new(
+                            "Record DI reference (15 s)",
+                            cbs.cb(move |()| {
+                                if let Some(r) = rig_di.clone() {
+                                    spawn(async move { let _ = r.capture_di_reference(15).await; });
+                                }
+                            }),
+                        ),
+                        // The styx files, after an external edit (text
+                        // editor, LLM, git pull).
+                        crate::indicators::IndicatorItem::new(
+                            "Reload rig library",
+                            cbs.cb(move |()| {
+                                if let Some(r) = rig_reload.clone() {
+                                    spawn(async move { let _ = r.reload_library().await; });
+                                }
+                            }),
+                        ),
+                        crate::indicators::IndicatorItem::head("Buffer — reopens the device"),
+                    ];
+                    for (i, b) in crate::settings::BUFFER_SIZES.iter().copied().enumerate() {
+                        items.push(
+                            crate::indicators::IndicatorItem::new(
+                                format!("{b} · {:.1} ms", f64::from(b) / 48.0),
+                                cbs.keyed(i, move |()| {
+                                    if b != prefs().buffer_size {
+                                        apply.call(AudioPrefs { buffer_size: b, ..prefs() });
+                                    }
+                                }),
+                            )
+                            .checked(b == current),
+                        );
+                    }
                     rsx! {
                         crate::indicators::Indicator {
                             label: "Audio".to_string(),
                             dot: if is_running { "#22c55e".to_string() } else { "#ef4444".to_string() },
                             title: if is_running { "Audio running".to_string() } else { "Audio stopped".to_string() },
-                            // Off: the dot blinks rather than a banner
-                            // pushing the page down.
+                            // Off: a red pill whose click starts it again —
+                            // the worst moment of a gig gets the one loud
+                            // thing in the bar, and the fix is the click.
                             flash: !is_running,
+                            alarm: (!is_running).then(|| "Audio stopped · Start".to_string()),
+                            on_alarm: cbs.cb(move |()| {
+                                if let Some(r) = rig_start.clone() {
+                                    spawn(async move { let _ = r.start().await; });
+                                }
+                            }),
                             // What the rig spends of its realtime budget,
                             // measured on the chain actually playing.
                             extra: rsx! {
-                                div { style: "padding: 6px 8px 2px; border-top: 1px solid #1c1c21; margin-top: 4px;",
+                                div { style: "padding: 6px 8px 2px; border-top: 1px solid {crate::theme::LINE}; margin-top: 4px;",
                                     LiveDsp { state }
                                 }
                             },
-                            items: vec![
-                                crate::indicators::IndicatorItem::new(
-                                    "Audio settings…",
-                                    cbs.cb(move |()| audio_open.set(true)),
-                                ),
-                                crate::indicators::IndicatorItem::new(
-                                    if is_running { "Stop audio" } else { "Start audio" },
-                                    cbs.cb(move |()| {
-                                        if let Some(r) = rig_toggle.clone() {
-                                            spawn(async move {
-                                                let _ = if is_running { r.stop().await } else { r.start().await };
-                                            });
-                                        }
-                                    }),
-                                ),
-                                // Play for ~15 s after choosing it; the
-                                // library re-measures loudness against it.
-                                crate::indicators::IndicatorItem::new(
-                                    "Record DI reference (15 s)",
-                                    cbs.cb(move |()| {
-                                        if let Some(r) = rig_di.clone() {
-                                            spawn(async move { let _ = r.capture_di_reference(15).await; });
-                                        }
-                                    }),
-                                ),
-                            ],
+                            items,
                         }
                     }
                 }
@@ -959,13 +954,16 @@ pub fn GuitarRigRemote() -> Element {
 /// The bar's item style: the one in use is pressed into the bar (a recess,
 /// not a box on it); the rest are bare. Groups are told apart by
 /// [`BarRule`]s, never by borders.
-pub(crate) fn bar_item(on: bool) -> &'static str {
-    if on {
-        "border-radius: 5px; background: rgba(0,0,0,0.5); color: #fafafa; \
-         box-shadow: inset 0 1px 2px rgba(0,0,0,0.75), inset 0 -1px 0 rgba(255,255,255,0.05);"
-    } else {
-        "border-radius: 5px;"
-    }
+pub(crate) fn bar_item(on: bool) -> String {
+    let pressed = if on { crate::theme::PRESSED } else { "" };
+    format!("border-radius: {}; {pressed}", crate::theme::R_SM)
+}
+
+/// [`bar_item`] for the play mode: rig state, not a view — every remote and
+/// the footswitches follow it — so the pick carries the live green.
+fn bar_item_live(on: bool) -> String {
+    let pressed = if on { crate::theme::PRESSED_LIVE } else { "" };
+    format!("border-radius: {}; {pressed}", crate::theme::R_SM)
 }
 
 /// A hairline between the bar's groups.

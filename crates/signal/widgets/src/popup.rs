@@ -18,6 +18,10 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 
+/// The widest a menu or list panel grows (`MenuPanel` 320px, `PickList`
+/// 360px) — what placing one keeps room for.
+const PANEL_MAX_W: f64 = 360.0;
+
 type Render = Rc<dyn Fn() -> Element>;
 type Wake = Arc<dyn Fn() + Send + Sync>;
 
@@ -228,8 +232,15 @@ pub fn PopupLayer() -> Element {
         Some(p) => {
             // Keep the menu on screen — only against a width actually
             // measured (clamping to an unmeasured zero pinned it left).
+            // A panel grows past its minimum with long rows (a menu to
+            // 320px, a list to 360px), so the room kept is the widest a
+            // panel gets, not the narrowest: a row menu at the right edge
+            // used to run out of the window.
             let mut left = (p.x - ox).max(0.0);
-            if ow > p.min_width {
+            let room = p.min_width.max(PANEL_MAX_W) + 8.0;
+            if ow > room {
+                left = left.min(ow - room);
+            } else if ow > p.min_width {
                 left = left.min(ow - p.min_width);
             }
             let at = (p.y - oy).max(0.0);

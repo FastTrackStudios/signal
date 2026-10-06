@@ -1036,6 +1036,27 @@ pub fn tone_from(comp: &Compositions, patch: &PatchDef, name: &str) -> crate::co
     }
 }
 
+/// Presets from patches: one per patch that plays none, named after it and
+/// holding the sound it plays — skipping a name a preset already has. The
+/// patches are not changed. Returns the names made.
+pub fn tones_from_patches(comp: &mut Compositions, patches: &[PatchDef]) -> Vec<String> {
+    let mut made = Vec::new();
+    for p in patches {
+        let name = p.name.trim();
+        if name.is_empty()
+            || p.name == crate::profiles::PRESET_BENCH
+            || !p.tone.is_empty()
+            || comp.tone(name).is_some()
+        {
+            continue;
+        }
+        let t = tone_from(comp, p, name);
+        made.push(t.name.clone());
+        comp.tones.push(t);
+    }
+    made
+}
+
 /// The patches playing preset `name`, by label.
 fn tone_users(profiles: &[&ProfileDef], name: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -1324,6 +1345,24 @@ mod tests {
         assert!(other.modules.is_empty(), "its own Time gives way");
         let picks = crate::compose::module_picks(&comp, &other);
         assert!(picks.iter().any(|m| m.module == "Time" && m.preset == "Flute"));
+    }
+
+    #[test]
+    fn presets_made_from_patches_hold_their_sound_and_leave_them_be() {
+        let mut comp = comp();
+        let mut washed = patch("Ambient Delay Flute");
+        washed.preset = "Fender Clean".into();
+        washed.modules = vec![choice("Time", "Ambience", "Delay Flute")];
+        let mut taken = patch("Wash");
+        taken.preset = "Fender Clean".into();
+        save_tone(&mut comp, &mut taken, "Wash").unwrap();
+        let before = washed.clone();
+        let made = tones_from_patches(&mut comp, &[washed.clone(), taken.clone()]);
+        assert_eq!(made, vec!["Ambient Delay Flute".to_string()], "one per patch with no preset yet");
+        assert_eq!(format!("{washed:?}"), format!("{before:?}"), "the patch is untouched");
+        let t = comp.tone("Ambient Delay Flute").unwrap();
+        assert!(t.modules.iter().any(|m| m.module == "Time" && m.snapshot == "Delay Flute"));
+        assert!(tones_from_patches(&mut comp, &[washed]).is_empty(), "a second pass makes nothing");
     }
 
     #[test]

@@ -28,12 +28,12 @@ use signal_widgets::PopupHost;
 // The menus, prompts and small pieces live in `signal_widgets::kit`, shared
 // with the keys rig; the rig's own names for them stay.
 pub use signal_widgets::kit::{
-    ActionMenu, Button, Chips, DeleteButton, Dot, MenuItem, NamePrompt, Picked, SectionHeader,
+    ActionMenu, Button, Chips, DeleteButton, Dot, MenuItem, NamePrompt, Picked,
     context_menu, context_menu_at, origin_of,
 };
 
 use crate::theme::{
-    DANGER, DIM, FAINT, FIELD, FOCUS_BG, FOCUS_FG, LINE, LINE_STRONG, LIVE_BG, MENU, MUTED, R_MD,
+    DANGER, DIM, EYEBROW, FAINT, FIELD, FOCUS_BG, FOCUS_FG, LINE, LINE_STRONG, LIVE_BG, MENU, MUTED, R_MD,
     R_SM, T_BODY, T_META, T_SMALL, TEXT,
 };
 
@@ -72,6 +72,7 @@ pub fn IconButton(
     let cursor = if disabled { "default" } else { "pointer" };
     rsx! {
         button {
+            class: if disabled || active { "" } else { "sg-hover" },
             style: "display: flex; align-items: center; justify-content: center; width: {size}px; \
                     height: {size}px; flex-shrink: 0; padding: 0; border-radius: {R_SM}; \
                     border: 1px solid {LINE}; background: {bg}; color: {colour}; \
@@ -139,11 +140,12 @@ pub fn ListRow(
     let weight = if small { 500 } else { 600 };
     let host = PopupHost::try_use();
     let has_menu = !menu.is_empty() && on_menu.is_some();
+    let sub_ink = if selected { FOCUS_FG } else { FAINT };
     // The glyph takes the row's state colour: grey at rest.
     let glyph_colour = if live || selected { fg } else { FAINT };
     rsx! {
         div {
-            class: if selected || live { "group" } else { "group hover:bg-accent/30" },
+            class: if selected || live { "sg-row" } else { "sg-row sg-hover" },
             style: "display: flex; align-items: center; gap: 8px; min-width: 0; margin-left: {indent}px; \
                     padding: {pad}; border-radius: {R_SM}; cursor: pointer; background: {bg}; color: {fg};",
             onclick: move |_| onclick.call(()),
@@ -176,7 +178,7 @@ pub fn ListRow(
                     "{title}"
                 }
                 if !sub.is_empty() {
-                    span { style: "font-size: {T_META}; color: {FAINT}; white-space: nowrap; overflow: hidden;", "{sub}" }
+                    span { style: "font-size: {T_META}; color: {sub_ink}; white-space: nowrap; overflow: hidden;", "{sub}" }
                 }
             }
             if !note.is_empty() {
@@ -187,7 +189,7 @@ pub fn ListRow(
             {children}
             if let (true, Some(h)) = (has_menu, on_menu) {
                 div {
-                    class: if selected || live { "" } else { signal_widgets::reveal("opacity-40 group-hover:opacity-100") },
+                    class: if selected || live { "" } else { signal_widgets::reveal("sg-reveal") },
                     style: "display: flex; flex-shrink: 0;",
                     ActionMenu { items: menu.clone(), on_pick: h, size: 20, bare: true, title: "Actions" }
                 }
@@ -281,19 +283,18 @@ pub fn PickList(
                             div { key: "{i}", style: "display: contents;",
                             if new_group {
                                 div {
-                                    style: "padding: 6px 9px 2px; font-size: 9px; letter-spacing: 0.12em; \
-                                            text-transform: uppercase; color: #71717a; white-space: nowrap; overflow: hidden;",
+                                    style: "padding: 6px 9px 2px; overflow: hidden; {EYEBROW}",
                                     "{o.group}"
                                 }
                             }
                             div {
-                                class: if o.live { "" } else { "hover:bg-accent/40" },
+                                class: if o.live { "" } else { "sg-hover" },
                                 style: format!(
                                     "display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: {R_SM}; \
                                      font-size: {T_BODY}; cursor: pointer; white-space: nowrap; overflow: hidden; \
                                      background: {}; color: {}; {}",
                                     if o.live { LIVE_BG } else { "transparent" },
-                                    if o.live { TEXT } else { "#d4d4d8" },
+                                    if o.live { TEXT } else { MUTED },
                                     if o.group.is_empty() { "" } else { "padding-left: 16px;" },
                                 ),
                                 onclick: move |e: MouseEvent| {
@@ -368,9 +369,9 @@ pub fn PresetBar(
     let (eyebrow, title) = if compact {
         ("8px", "10px")
     } else if large {
-        ("9px", "17px")
+        ("10px", "17px")
     } else {
-        ("9px", "13px")
+        ("10px", "13px")
     };
     // The box, and the hairlines between its parts: none on a heading.
     let (frame, sep) = if large {
@@ -547,7 +548,7 @@ pub fn PresetBar(
             }
             // The name: what plays, and whether it is edited.
             div {
-                class: "hover:bg-accent/30",
+                class: "sg-hover",
                 style: "flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: center; \
                         gap: 1px; padding: 0 {name_pad}; cursor: pointer; line-height: 1.1;",
                 title: if modified { format!("{label}: {name} — edited, not saved") } else { format!("{label}: {name}") },

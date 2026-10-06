@@ -249,7 +249,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                             rsx! {
                                 div { key: "{i}-{song.name}", style: "display: flex; flex-direction: column;",
                                     div {
-                                        class: if state == Node::Now { "group" } else { "group hover:bg-accent/30" },
+                                        class: if state == Node::Now { "sg-row" } else { "sg-row sg-hover" },
                                         style: format!(
                                             "display: flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 6px 7px 0; \
                                              border-radius: 6px; cursor: pointer; opacity: {};",
@@ -274,7 +274,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                             }
                                         },
                                         TimelineNode { state, accent: false }
-                                        span { style: "width: 14px; flex-shrink: 0; font-size: 10px; font-family: monospace; color: {FAINT};",
+                                        span { style: "width: 14px; flex-shrink: 0; font-size: 11px; font-family: monospace; color: {FAINT};",
                                             "{i + 1}"
                                         }
                                         span {
@@ -287,16 +287,17 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                             "{song.name}"
                                         }
                                         if i == current + 1 {
-                                            span { style: "flex-shrink: 0; font-size: 8px; font-weight: 700; letter-spacing: 0.12em; color: {FAINT};",
+                                            span { style: "flex-shrink: 0; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.07); \
+                                                            font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: {MUTED};",
                                                 "NEXT"
                                             }
                                         }
                                         KeyChip { key_name: song.key.clone() }
-                                        span { style: "width: 26px; flex-shrink: 0; text-align: right; font-size: 10px; font-family: monospace; color: {FAINT};",
+                                        span { style: "width: 26px; flex-shrink: 0; text-align: right; font-size: 11px; font-family: monospace; color: {FAINT};",
                                             "{song.bpm}"
                                         }
                                         if state == Node::Now {
-                                            div { class: if editing_song() { "" } else { signal_widgets::reveal("opacity-40 group-hover:opacity-100") }, style: "display: flex; flex-shrink: 0;",
+                                            div { class: if editing_song() { "" } else { signal_widgets::reveal("sg-reveal") }, style: "display: flex; flex-shrink: 0;",
                                                 Tool {
                                                     icon: fts_chrome::Icon::Pencil,
                                                     title: "Key, tempo and place in this set",
@@ -357,7 +358,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                 .collect();
                                             rsx! {
                                                 div { style: "display: flex; flex-direction: column; gap: 1px; margin: 0 0 8px 28px;",
-                                                    span { style: "padding: 0 0 6px; font-size: 10px; color: {FAINT}; white-space: nowrap; overflow: hidden;",
+                                                    span { style: "padding: 0 0 6px; font-size: 11px; color: {FAINT}; white-space: nowrap; overflow: hidden;",
                                                         "on {on}{starts}"
                                                     }
                                                     if let Some(chip) = start_chip {
@@ -398,7 +399,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                 rsx! {
                                                                     div { key: "sec-{si}-{sec_name}", style: "display: flex; flex-direction: column;",
                                                                         div {
-                                                                            class: if live { "" } else { "hover:bg-accent/30" },
+                                                                            class: if live { "" } else { "sg-hover" },
                                                                             style: format!(
                                                                                 "display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 6px 6px 0; \
                                                                                  border-radius: 0 6px 6px 0; cursor: pointer; background: {}; opacity: {};",
@@ -428,7 +429,8 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                                 "{sec_name}"
                                                                             }
                                                                             if is_next {
-                                                                                span { style: "flex-shrink: 0; font-size: 8px; font-weight: 700; letter-spacing: 0.12em; color: {FAINT};",
+                                                                                span { style: "flex-shrink: 0; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.07); \
+                                                            font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: {MUTED};",
                                                                                     "NEXT"
                                                                                 }
                                                                             }
@@ -436,7 +438,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                                 PartMarks { part: lead.clone() }
                                                                                 PatchChip { label: chip.0.clone(), colour: chip.1, lit: live }
                                                                             } else {
-                                                                                span { style: "flex-shrink: 0; font-size: 10px; font-family: monospace; color: {DIM};",
+                                                                                span { style: "flex-shrink: 0; font-size: 11px; font-family: monospace; color: {FAINT};",
                                                                                     "{idx.len()} parts"
                                                                                 }
                                                                             }
@@ -452,7 +454,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                                     rsx! {
                                                                                         div {
                                                                                             key: "{pi}-{part.name}",
-                                                                                            class: if part_on { "" } else { "hover:bg-accent/30" },
+                                                                                            class: if part_on { "" } else { "sg-hover" },
                                                                                             style: format!(
                                                                                                 "display: flex; align-items: center; gap: 6px; min-width: 0; margin-left: 28px; \
                                                                                                  padding: 3px 6px 3px 0; border-radius: 5px; cursor: pointer; color: {};",
@@ -548,7 +550,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                     });
                                                                     rsx! {
                                                                         div { key: "sw-{st.name}",
-                                                                            class: "hover:bg-accent/30",
+                                                                            class: "sg-hover",
                                                                             style: "display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 4px 2px 0; border-radius: 4px; cursor: context-menu;",
                                                                             title: "Right-click: make this switch's patch a part, or rename it",
                                                                             oncontextmenu: move |e: MouseEvent| open_row_menu.call(e),
@@ -560,12 +562,12 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                             },
                                                                             span { style: "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; background: {colour};" }
                                                                             span { style: "flex-shrink: 0; font-size: 11px; font-weight: 600; color: {TEXT};", "{st.name}" }
-                                                                            span { style: "flex: 1 1 auto; min-width: 0; font-size: 10px; color: {MUTED}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+                                                                            span { style: "flex: 1 1 auto; min-width: 0; font-size: 11px; color: {MUTED}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
                                                                                 title: "{rotation}",
                                                                                 "{rotation}"
                                                                             }
                                                                             if !tags.is_empty() {
-                                                                                span { style: "flex-shrink: 0; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; color: {FAINT};", "{tags}" }
+                                                                                span { style: "flex-shrink: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: {FAINT};", "{tags}" }
                                                                             }
                                                                         }
                                                                     }
@@ -599,7 +601,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                     });
                                                                     rsx! {
                                                                         div { key: "chg-{patch}",
-                                                                            class: "hover:bg-accent/30",
+                                                                            class: "sg-hover",
                                                                             style: "display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 4px 2px 0; border-radius: 4px; cursor: context-menu;",
                                                                             title: "Right-click: save back to the profile, or discard",
                                                                             oncontextmenu: move |e: MouseEvent| open_row_menu.call(e),
@@ -611,7 +613,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                                             },
                                                                             PatchChip { label: chip.0.clone(), colour: chip.1, lit: false }
                                                                             span { style: "flex: 1;" }
-                                                                            span { style: "flex-shrink: 0; font-size: 10px; font-family: monospace; color: {FAINT};", "±{n}" }
+                                                                            span { style: "flex-shrink: 0; font-size: 11px; font-family: monospace; color: {FAINT};", "±{n}" }
                                                                         }
                                                                     }
                                                                 }
@@ -632,7 +634,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                                         }
                                                     }
                                                     if count > 0 {
-                                                        span { style: "padding: 2px 0; font-size: 10px; color: {DIM};",
+                                                        span { style: "padding: 2px 0; font-size: 11px; color: {FAINT};",
                                                             "Switch 5: next {unit} · hold: back"
                                                         }
                                                     }
@@ -701,7 +703,7 @@ fn KeyChip(key_name: String) -> Element {
         span {
             style: "flex-shrink: 0; min-width: 18px; height: 16px; padding: 0 3px; border-radius: 4px; \
                     border: 1px solid {LINE_STRONG}; display: flex; align-items: center; justify-content: center; \
-                    font-size: 10px; font-weight: 600; color: {MUTED};",
+                    font-size: 11px; font-weight: 600; color: {MUTED};",
             "{key_name}"
         }
     }
@@ -713,11 +715,13 @@ fn PatchChip(label: String, colour: &'static str, lit: bool) -> Element {
     let ink = if lit { TEXT } else { MUTED };
     rsx! {
         span {
-            style: "flex-shrink: 1; min-width: 0; max-width: 118px; display: flex; align-items: center; gap: 4px; \
-                    padding: 1px 6px 1px 4px; border-radius: 4px; background: {colour}22; \
-                    border-left: 2px solid {colour}; font-size: 10px; color: {ink}; white-space: nowrap; overflow: hidden;",
+            style: "flex-shrink: 1; min-width: 0; max-width: 118px; display: flex; align-items: center; gap: 5px; \
+                    padding: 1px 6px 1px 5px; border-radius: 4px; background: {colour}22; \
+                    font-size: 11px; color: {ink}; white-space: nowrap; overflow: hidden;",
             title: "{label}",
-            "{label}"
+            // The stack's colour as a swatch, not an edge.
+            span { style: "width: 6px; height: 6px; border-radius: 2px; flex-shrink: 0; background: {colour};" }
+            span { style: "min-width: 0; overflow: hidden;", "{label}" }
         }
     }
 }
@@ -730,7 +734,7 @@ fn PartMarks(part: signal_guitar_proto::PerfPart) -> Element {
         // A repeat: linked to the part it repeats (same sound, edited
         // together).
         if !part.repeat_of.is_empty() {
-            span { style: "flex-shrink: 0; font-size: 10px; color: {MUTED}; white-space: nowrap;",
+            span { style: "flex-shrink: 0; font-size: 11px; color: {MUTED}; white-space: nowrap;",
                 title: "Repeats {part.repeat_of} — the same sound; editing one edits both",
                 "↻ {part.repeat_of}"
             }
@@ -742,7 +746,7 @@ fn PartMarks(part: signal_guitar_proto::PerfPart) -> Element {
         }
         if part.switch_count > 0 {
             // The font has no ⇄: the switches glyph and the count.
-            span { style: "flex-shrink: 0; display: flex; align-items: center; gap: 2px; font-size: 10px; \
+            span { style: "flex-shrink: 0; display: flex; align-items: center; gap: 2px; font-size: 11px; \
                            font-family: monospace; color: {FAINT};",
                 title: "Tunes {part.switch_count} switches",
                 fts_chrome::Glyph { icon: fts_chrome::Icon::Perform, size: 10 }
@@ -750,12 +754,12 @@ fn PartMarks(part: signal_guitar_proto::PerfPart) -> Element {
             }
         }
         if !part.overrides.is_empty() {
-            span { style: "flex-shrink: 0; font-size: 10px; font-family: monospace; color: {FAINT};",
+            span { style: "flex-shrink: 0; font-size: 11px; font-family: monospace; color: {FAINT};",
                 title: "Changes {part.overrides.len()} settings", "±{part.overrides.len()}"
             }
         }
         if !part.profile.is_empty() {
-            span { style: "flex-shrink: 0; font-size: 10px; color: {FAINT};", title: "Played on {part.profile}", "{part.profile}" }
+            span { style: "flex-shrink: 0; font-size: 11px; color: {FAINT};", title: "Played on {part.profile}", "{part.profile}" }
         }
     }
 }
@@ -917,7 +921,7 @@ fn SongEntryEditor(
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 6px; margin: 4px 0 4px 24px; padding: 8px; \
                       border-radius: 8px; border: 1px solid {LINE};",
-            span { style: "font-size: 10px; color: {FAINT};", "Played on" }
+            span { style: "font-size: 11px; color: {FAINT};", "Played on" }
             // Index 0 is "nothing chosen": the song keeps whatever is loaded.
             Picker {
                 options: std::iter::once("— whatever is loaded —".to_string()).chain(profiles.iter().cloned()).collect::<Vec<_>>(),
@@ -932,7 +936,7 @@ fn SongEntryEditor(
                     }
                 },
             }
-            span { style: "font-size: 10px; color: {FAINT};", "Starts on" }
+            span { style: "font-size: 11px; color: {FAINT};", "Starts on" }
             Picker {
                 options: std::iter::once("— the profile's default —".to_string()).chain(parts.iter().cloned()).collect::<Vec<_>>(),
                 selected: parts.iter().position(|p| p.eq_ignore_ascii_case(&start_part)).map_or(0, |p| p as u32 + 1),
@@ -946,7 +950,7 @@ fn SongEntryEditor(
                     }
                 },
             }
-            span { style: "font-size: 10px; color: {FAINT};", "In this set" }
+            span { style: "font-size: 11px; color: {FAINT};", "In this set" }
             div { style: "display: flex; gap: 6px; align-items: center;",
                 Field {
                     value: key(),
@@ -1039,7 +1043,7 @@ fn PartEditor(
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 6px; margin: 2px 0 6px; padding: 8px; \
                       border-radius: 8px; border: 1px solid {LINE};",
-            span { style: "font-size: 10px; color: {FAINT};", "Repeats — linked: the same sound, edited together" }
+            span { style: "font-size: 11px; color: {FAINT};", "Repeats — linked: the same sound, edited together" }
             Picker {
                 options: std::iter::once("— its own sound —".to_string()).chain(others.iter().cloned()).collect::<Vec<_>>(),
                 selected: others.iter().position(|p| p.eq_ignore_ascii_case(&repeat_of)).map_or(0, |p| p as u32 + 1),
@@ -1053,7 +1057,7 @@ fn PartEditor(
                     }
                 },
             }
-            span { style: "font-size: 10px; color: {FAINT};", "Profile" }
+            span { style: "font-size: 11px; color: {FAINT};", "Profile" }
             Picker {
                 options: std::iter::once(format!("— the song's ({song_profile}) —")).chain(profiles.iter().cloned()).collect::<Vec<_>>(),
                 selected: profiles.iter().position(|p| p.eq_ignore_ascii_case(&profile)).map_or(0, |p| p as u32 + 1),
@@ -1067,7 +1071,7 @@ fn PartEditor(
                     }
                 },
             }
-            span { style: "font-size: 10px; color: {FAINT};", "Recalls" }
+            span { style: "font-size: 11px; color: {FAINT};", "Recalls" }
             div { style: "display: flex; gap: 6px; align-items: center;",
                 Picker {
                     options: labels.clone(),
@@ -1098,7 +1102,7 @@ fn PartEditor(
                     }
                 }
             }
-            span { style: "font-size: 10px; color: {FAINT};", "Section — parts in a row with the same section are one" }
+            span { style: "font-size: 11px; color: {FAINT};", "Section — parts in a row with the same section are one" }
             Field {
                 value: section_name(),
                 placeholder: "its own section".to_string(),
@@ -1127,7 +1131,7 @@ fn PartEditor(
                 span { style: "width: 12px; color: #22c55e;", if profile_switches { "✓" } else { "○" } }
                 "Plays the profile's switches"
             }
-            span { style: "font-size: 10px; color: {FAINT};", "Name" }
+            span { style: "font-size: 11px; color: {FAINT};", "Name" }
             div { style: "display: flex; gap: 6px; align-items: center;",
                 Field {
                     value: rename(),

@@ -1,10 +1,10 @@
 //! The workbench sidebars.
 //!
-//! Left: the preset browser (every patch in the loaded profile, grouped by
-//! stack color, click to load) over the profile list. Right: the current
-//! song's sections on top, setlist management (jump + reorder) beneath.
-//! Both consume the `RigClient` from context and render from the pushed
-//! [`PerformanceModel`], so they work identically on desktop and web.
+//! Profile mode's left sidebar: the profile under the same heading as the
+//! set's and the preset's (▾ ‹ › to change it, ⋯ to grow it), its stacks and
+//! patches as kit rows beneath. It consumes the `RigClient` from context and
+//! renders from the pushed [`PerformanceModel`], so it works identically on
+//! desktop and web.
 
 use dioxus::prelude::*;
 use signal_widgets::Picker;
@@ -12,51 +12,11 @@ use signal_widgets::Picker;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{PatchInfo, PerformanceModel, PresetInfo};
 
-use crate::kit::{ListRow, MenuItem, Picked};
+use crate::kit::{Button, ListRow, MenuItem, PickOption, Picked, PresetBar};
 use crate::perform::folder_color;
-use crate::theme::LINE;
-
-/// Section eyebrow shared by every sidebar group.
-
-// Profile-list row layout, as inline styles Blitz honours (see the
-// `blitz-design` skill): the name takes the slack and clips; the preset and
-// its variation are a fixed right-aligned cell that clips (no
-// `text-overflow` in Blitz).
-const PATCH_ROW: &str = "display: flex; align-items: center; gap: 8px; min-width: 0; \
-                         margin-left: 16px; padding: 4px 8px; text-align: left; cursor: pointer;";
-const NAME_CELL: &str =
-    "flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-align: left;";
-// Preset over its variation, right-aligned: two short lines instead of one
-// "Preset · Variation" that the cell clipped before the variation began.
-const PRESET_STACK: &str = "flex-shrink: 0; width: 96px; display: flex; flex-direction: column; \
-                            align-items: flex-end; overflow: hidden; line-height: 1.15;";
-const PRESET_LINE: &str = "max-width: 96px; overflow: hidden; white-space: nowrap;";
-
-/// A patch's preset and the variation of it that it plays.
-#[component]
-fn PresetCell(preset: String, variation: String) -> Element {
-    rsx! {
-        div { style: "{PRESET_STACK}",
-            span { class: "text-[9px] font-mono opacity-50", style: "{PRESET_LINE}", "{preset}" }
-            if !variation.is_empty() {
-                span { class: "text-[9px] font-mono opacity-80", style: "{PRESET_LINE}", "{variation}" }
-            }
-        }
-    }
-}
-
-#[component]
-fn PanelLabel(
-    label: &'static str,
-    #[props(default)] count: String,
-    #[props(default)] children: Element,
-) -> Element {
-    rsx! {
-        div { style: "padding: 8px 12px; flex: 1 1 0; min-width: 0;",
-            crate::kit::SectionHeader { label: label.to_string(), count, {children} }
-        }
-    }
-}
+use crate::theme::{
+    EYEBROW, FAINT, FIELD, LINE, LINE_STRONG, MODIFIED, R_SM, SIDEBAR, SIDEBAR_W, T_BODY, T_META, TEXT,
+};
 
 /// Fire a rig call without waiting — the next `Perf` event redraws.
 fn send<F, Fut>(rig: &Option<RigClient>, call: F)
@@ -171,20 +131,15 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
 
     // The patch picked in the tree.
     let mut selected_patch = use_signal(|| None::<usize>);
-    // Creation forms (toggled by the + buttons) + inline rename state.
-    let mut adding_stack = use_signal(|| false);
+    // The new-patch form (a name, its stack, its preset), from the header's ⋯.
     let mut adding_patch = use_signal(|| false);
     let mut new_name = use_signal(String::new);
     let mut new_stack_sel = use_signal(String::new);
     let mut new_preset_sel = use_signal(String::new);
-    // (kind, original) — kind: "patch" | "preset"; the row shows an input.
-    let mut renaming = use_signal(|| None::<(String, String)>);
-    let mut rename_text = use_signal(String::new);
 
     let patch_names: Vec<String> = patch_list.iter().map(|p| p.name.clone()).collect();
     let stack_names: Vec<String> = model.stacks.iter().map(|s| s.name.clone()).collect();
     let profile_names: Vec<String> = profiles.iter().map(|p| p.name.clone()).collect();
-    let mut adding_profile = use_signal(|| false);
     // Group patches by stack, in the stacks' own order.
     let mut groups: Vec<(String, Vec<(usize, PatchInfo)>)> = model
         .stacks
@@ -205,65 +160,114 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
         groups.push(("Unassigned".to_string(), loose));
     }
 
+    // The header's menu: grow the profile, then manage it.
+    let current = profiles.iter().find(|p| p.active).cloned();
+    let mut header_menu = vec![
+        MenuItem::name("new_stack", "New stack…", "Create", "", stack_names.clone()),
+        MenuItem::run("new_patch", "New patch…"),
+        MenuItem::name("new_profile", "New profile…", "Create", "", profile_names.clone()),
+    ];
+    if let Some(p) = &current {
+        header_menu.push(MenuItem::sep());
+        header_menu.extend(profile_items(p, &profile_names));
+    }
+    let field = format!(
+        "min-width: 0; font-size: {T_BODY}; color: {TEXT}; background: {FIELD}; border: 1px solid {LINE_STRONG}; \
+         border-radius: {R_SM}; padding: 6px 8px; outline: none;"
+    );
+
     rsx! {
-        aside { class: "w-64 flex-shrink-0 flex flex-col border-r border-border bg-card min-h-0",
-            // ── The profile tree: Profile → Stacks → Patches ──
-            div { class: "flex items-center pr-2",
-                PanelLabel { label: "Profile" }
-                button {
-                    class: "ml-auto text-[10px] px-1 rounded border border-border text-muted-foreground hover:text-foreground",
-                    title: "New stack",
-                    onclick: move |_| { adding_stack.toggle(); adding_patch.set(false); new_name.set(String::new()); },
-                    "+ stack"
-                }
-                button {
-                    class: "ml-1 text-[10px] px-1 rounded border border-border text-muted-foreground hover:text-foreground",
-                    title: "New patch",
-                    onclick: move |_| { adding_patch.toggle(); adding_stack.set(false); new_name.set(String::new()); },
-                    "+ patch"
-                }
-            }
-            if adding_stack() {
-                div { class: "flex items-center gap-1 px-2 py-1 flex-shrink-0",
-                    input {
-                        class: "flex-1 min-w-0 bg-background border border-border rounded px-1.5 py-0.5 text-xs",
-                        placeholder: "Stack name",
-                        value: "{new_name}",
-                        oninput: move |e| new_name.set(e.value()),
-                    }
-                    button {
-                        class: "text-xs px-1.5 rounded border border-border hover:bg-accent/40",
-                        onclick: {
-                            let rig = rig.clone();
-                            move |_| {
-                                let name = new_name.peek().clone();
-                                if let (Some(r), false) = (rig.clone(), name.trim().is_empty()) {
-                                    spawn(async move { let _ = r.add_stack(name).await; });
-                                    adding_stack.set(false);
-                                }
+        aside {
+            style: "width: {SIDEBAR_W}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
+                    border-right: 1px solid {LINE}; background: {SIDEBAR}; color: {TEXT};",
+            // ── The profile: the same heading as the set's — name large,
+            // ▾ / ‹ › to change profile, ⋯ to grow and manage it ──
+            div { style: "display: flex; flex-direction: column; padding: 10px 12px 10px 14px; \
+                          border-bottom: 1px solid {LINE}; flex-shrink: 0;",
+                PresetBar {
+                    label: "Profile",
+                    name: model.profile_name.clone(),
+                    placeholder: "No profile",
+                    sub: format!(
+                        "{} · {}",
+                        plural(model.stacks.len(), "stack"),
+                        plural(patch_list.len(), "patch"),
+                    ),
+                    large: true,
+                    options: profiles
+                        .iter()
+                        .map(|p| PickOption { label: p.name.clone(), note: format!("{}", p.patches), live: p.active, ..Default::default() })
+                        .collect::<Vec<_>>(),
+                    on_pick: {
+                        let rig = rig.clone();
+                        let names = profile_names.clone();
+                        move |i: usize| {
+                            if let Some(n) = names.get(i).cloned() {
+                                send(&rig, move |r| async move { let _ = r.select_profile(n).await; });
                             }
-                        },
-                        "add"
-                    }
+                        }
+                    },
+                    on_step: {
+                        let rig = rig.clone();
+                        let names = profile_names.clone();
+                        let at = profiles.iter().position(|p| p.active);
+                        move |d: i32| {
+                            let n = names.len() as i32;
+                            if n == 0 {
+                                return;
+                            }
+                            let to = at.map_or(0, |a| (a as i32 + d).rem_euclid(n)) as usize;
+                            let name = names[to].clone();
+                            send(&rig, move |r| async move { let _ = r.select_profile(name).await; });
+                        }
+                    },
+                    menu: header_menu,
+                    on_menu: {
+                        let rig = rig.clone();
+                        let name = model.profile_name.clone();
+                        move |x: Picked| {
+                            let (old, text) = (name.clone(), x.text.trim().to_string());
+                            match x.id {
+                                "new_stack" if !text.is_empty() => send(&rig, move |r| async move { let _ = r.add_stack(text).await; }),
+                                "new_patch" => {
+                                    new_name.set(String::new());
+                                    adding_patch.set(true);
+                                }
+                                "new_profile" if !text.is_empty() => send(&rig, move |r| async move { let _ = r.add_profile(text, old).await; }),
+                                "rename" if !text.is_empty() => send(&rig, move |r| async move { let _ = r.rename_profile(old, text).await; }),
+                                "duplicate" if !text.is_empty() => send(&rig, move |r| async move { let _ = r.add_profile(text, old).await; }),
+                                "delete" => send(&rig, move |r| async move { let _ = r.delete_profile(old).await; }),
+                                _ => {}
+                            }
+                        }
+                    },
                 }
             }
+            // ── A new patch: its name, the stack it joins, the preset it plays ──
             if adding_patch() {
-                div { class: "flex flex-col gap-1 px-2 py-1 flex-shrink-0",
+                div { style: "display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-bottom: 1px solid {LINE}; flex-shrink: 0;",
+                    span { style: "{EYEBROW}", "New patch" }
                     input {
-                        class: "bg-background border border-border rounded px-1.5 py-0.5 text-xs",
+                        style: "{field}",
                         placeholder: "Patch name",
                         value: "{new_name}",
+                        autofocus: true,
                         oninput: move |e| new_name.set(e.value()),
+                        onkeydown: move |e: KeyboardEvent| {
+                            if e.key() == Key::Escape {
+                                adding_patch.set(false);
+                            }
+                        },
                     }
-                    div { class: "flex gap-1",
-                        div { class: "flex-1 min-w-0",
+                    div { style: "display: flex; gap: 6px;",
+                        div { style: "flex: 1 1 0; min-width: 0;",
                             Picker {
-                                options: model.stacks.iter().map(|st| st.name.clone()).collect::<Vec<String>>(),
-                                selected: name_index(&model.stacks.iter().map(|st| st.name.clone()).collect::<Vec<String>>(), &new_stack_sel()),
-                                placeholder: "stack…".to_string(),
+                                options: stack_names.clone(),
+                                selected: name_index(&stack_names, &new_stack_sel()),
+                                placeholder: "Stack…".to_string(),
                                 width: "100%".to_string(),
                                 on_select: {
-                                    let names: Vec<String> = model.stacks.iter().map(|st| st.name.clone()).collect();
+                                    let names = stack_names.clone();
                                     move |i: u32| {
                                         if let Some(n) = names.get(i as usize) {
                                             new_stack_sel.set(n.clone());
@@ -272,11 +276,11 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                 },
                             }
                         }
-                        div { class: "flex-1 min-w-0",
+                        div { style: "flex: 1 1 0; min-width: 0;",
                             Picker {
                                 options: preset_list.iter().map(|p| p.name.clone()).collect::<Vec<String>>(),
                                 selected: name_index(&preset_list.iter().map(|p| p.name.clone()).collect::<Vec<String>>(), &new_preset_sel()),
-                                placeholder: "preset…".to_string(),
+                                placeholder: "Amp…".to_string(),
                                 width: "100%".to_string(),
                                 on_select: {
                                     let names: Vec<String> = preset_list.iter().map(|p| p.name.clone()).collect();
@@ -288,310 +292,153 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                 },
                             }
                         }
-                        button {
-                            class: "text-xs px-1.5 rounded border border-border hover:bg-accent/40",
+                    }
+                    div { style: "display: flex; gap: 6px; justify-content: flex-end;",
+                        Button { label: "Cancel", small: true, onclick: move |()| adding_patch.set(false) }
+                        Button {
+                            label: "Create",
+                            small: true,
+                            primary: true,
+                            disabled: new_name().trim().is_empty() || new_preset_sel().is_empty(),
                             onclick: {
                                 let rig = rig.clone();
-                                move |_| {
+                                move |()| {
                                     let (name, st, pr) = (
-                                        new_name.peek().clone(),
+                                        new_name.peek().trim().to_string(),
                                         new_stack_sel.peek().clone(),
                                         new_preset_sel.peek().clone(),
                                     );
-                                    if let (Some(r), false, false) =
-                                        (rig.clone(), name.trim().is_empty(), pr.is_empty())
-                                    {
-                                        spawn(async move { let _ = r.add_patch(name, st, pr).await; });
+                                    if !name.is_empty() && !pr.is_empty() {
+                                        send(&rig, move |r| async move { let _ = r.add_patch(name, st, pr).await; });
                                         adding_patch.set(false);
                                     }
                                 }
                             },
-                            "add"
                         }
                     }
                 }
             }
+            // ── The tree: each stack is its main patch, its variations under it ──
             div {
-                class: "flex-1 min-h-0 p-2 flex flex-col gap-0.5",
                 // Blitz: `overflow-y: scroll` scrolls; `auto` is dropped.
-                style: "overflow-y: scroll; scrollbar-width: thin;",
-                div { class: "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-bold",
-                    span { class: "w-2 h-2 rounded-full bg-current opacity-60" }
-                    if model.profile_name.is_empty() { "— no profile —" } else { "{model.profile_name}" }
-                }
+                style: "flex: 1 1 0; min-height: 0; overflow-y: scroll; scrollbar-width: thin; padding: 6px; \
+                        display: flex; flex-direction: column; gap: 1px;",
                 for (stack_name, patches) in groups.iter() {
                     {
                         let (dot, _) = folder_color(stack_name);
                         let stack_label = stack_name.clone();
+                        // The folder IS the stack's main patch — clickable,
+                        // the default, no "Clean Clean" names.
+                        let main = patches.first().cloned();
+                        let main_active = main.as_ref().is_some_and(|(_, p)| p.active);
+                        let main_idx = main.as_ref().map(|(i, _)| *i);
+                        let main_sound = main.as_ref().map(|(_, p)| sound_of(p)).unwrap_or_default();
                         rsx! {
-                            {
-                                // The folder IS the stack's main patch —
-                                // clickable, default, no "Clean Clean" names.
-                                let main = patches.first().cloned();
-                                let main_active = main.as_ref().is_some_and(|(_, p)| p.active);
-                                let main_idx = main.as_ref().map(|(i, _)| *i);
-                                let main_preset = main.as_ref().map(|(_, p)| p.rig_preset.clone()).unwrap_or_default();
-                                let main_variation = main.as_ref().map(|(_, p)| p.variation.clone()).unwrap_or_default();
-                                rsx! {
-                            div {
-                                class: if main_active {
-                                    "group flex items-center gap-2 pl-2 pr-2 pt-2 pb-0.5 rounded-md bg-accent text-accent-foreground cursor-pointer"
-                                } else {
-                                    "group flex items-center gap-2 pl-2 pr-2 pt-2 pb-0.5 rounded-md cursor-pointer hover:bg-accent/30"
-                                },
-                                onclick: {
-                                    let rig = rig.clone();
-                                    move |_| {
-                                        if let (Some(r), Some(i)) = (rig.clone(), main_idx) {
-                                            selected_patch.set(Some(i));
-                                            spawn(async move { let _ = r.select_patch(i as u32).await; });
-                                        }
-                                    }
-                                },
-                                span { class: "w-2 h-2 rounded-full flex-shrink-0", style: "background-color: {dot};" }
-                                span {
-                                    class: "text-xs font-bold uppercase tracking-wider",
-                                    style: "{NAME_CELL}",
-                                    "{stack_label}"
-                                }
-                                PresetCell { preset: main_preset.clone(), variation: main_variation.clone() }
-                                div {
-                                    class: signal_widgets::reveal("opacity-0 group-hover:opacity-100"),
-                                    style: "display: flex; flex-shrink: 0;",
-                                    crate::kit::ActionMenu {
-                                        items: stack_items(&stack_label, &stack_names),
-                                        size: 18,
-                                        bare: true,
-                                        title: "Stack actions",
-                                        on_pick: {
-                                            let rig = rig.clone();
-                                            let name = stack_label.clone();
-                                            move |p: Picked| {
-                                                let (old, text) = (name.clone(), p.text);
-                                                match p.id {
-                                                    "rename" => send(&rig, move |r| async move { let _ = r.rename_stack(old, text).await; }),
-                                                    "delete" => send(&rig, move |r| async move { let _ = r.delete_stack(old).await; }),
-                                                    _ => {}
-                                                }
+                            div { key: "{stack_label}", style: "display: flex; flex-direction: column; gap: 1px; margin-top: 4px;",
+                                ListRow {
+                                    title: stack_label.clone(),
+                                    sub: main_sound.clone(),
+                                    swatch: dot.to_string(),
+                                    live: main_active,
+                                    selected: !main_active && main_idx.is_some() && selected_patch() == main_idx,
+                                    onclick: {
+                                        let rig = rig.clone();
+                                        move |()| {
+                                            if let Some(i) = main_idx {
+                                                selected_patch.set(Some(i));
+                                                send(&rig, move |r| async move { let _ = r.select_patch(i as u32).await; });
                                             }
-                                        },
-                                    }
-                                }
-                            }
-                                }
-                            }
-                            if patches.is_empty() {
-                                span { class: "ml-6 text-[10px] italic text-muted-foreground/50", "empty — + patch" }
-                            }
-                            // Variations: everything after the main, shown
-                            // without the stack-name prefix.
-                            for (i, p) in patches.iter().skip(1) {
-                                {
-                                    let i = *i;
-                                    let name = p.name.clone();
-                                    let display = {
-                                        let lower = p.name.to_lowercase();
-                                        let sl = stack_name.to_lowercase();
-                                        if lower.starts_with(&sl) && p.name.len() > stack_name.len() {
-                                            p.name[stack_name.len()..].trim().to_string()
-                                        } else {
-                                            p.name.clone()
                                         }
-                                    };
-                                    let preset = p.rig_preset.clone();
-                                    let variation = p.variation.clone();
-                                    let is_default = p.default_in_stack;
-                                    let is_sel = selected_patch() == Some(i);
-                                    rsx! {
-                                        // A div, not a <button>: Blitz gives a
-                                        // button centred content, which set every
-                                        // name at a different offset.
-                                        div {
-                                            key: "{i}",
-                                            style: "{PATCH_ROW}",
-                                            class: if p.active {
-                                                "group rounded-md text-sm font-bold bg-accent text-accent-foreground"
-                                            } else if is_sel {
-                                                "group rounded-md text-sm ring-1 ring-ring text-foreground"
+                                    },
+                                    menu: stack_items(&stack_label, &stack_names),
+                                    on_menu: {
+                                        let rig = rig.clone();
+                                        let name = stack_label.clone();
+                                        move |p: Picked| {
+                                            let (old, text) = (name.clone(), p.text);
+                                            match p.id {
+                                                "rename" => send(&rig, move |r| async move { let _ = r.rename_stack(old, text).await; }),
+                                                "delete" => send(&rig, move |r| async move { let _ = r.delete_stack(old).await; }),
+                                                _ => {}
+                                            }
+                                        }
+                                    },
+                                }
+                                if patches.is_empty() {
+                                    span { style: "padding: 2px 8px 4px 30px; font-size: {T_META}; color: {FAINT};", "No patches yet" }
+                                }
+                                // Variations: everything after the main, shown
+                                // without the stack-name prefix, and with their
+                                // sound only where it differs from the main's.
+                                for (i, p) in patches.iter().skip(1) {
+                                    {
+                                        let i = *i;
+                                        let name = p.name.clone();
+                                        let display = {
+                                            let lower = p.name.to_lowercase();
+                                            let sl = stack_name.to_lowercase();
+                                            if lower.starts_with(&sl) && p.name.len() > stack_name.len() {
+                                                p.name[stack_name.len()..].trim().to_string()
                                             } else {
-                                                "group rounded-md text-sm text-foreground hover:bg-accent/40"
-                                            },
-                                            onclick: {
-                                                let rig = rig.clone();
-                                                move |_| {
-                                                    selected_patch.set(Some(i));
-                                                    if let Some(r) = rig.clone() {
-                                                        spawn(async move { let _ = r.select_patch(i as u32).await; });
+                                                p.name.clone()
+                                            }
+                                        };
+                                        let sound = sound_of(p);
+                                        let sub = if sound == main_sound { String::new() } else { sound };
+                                        let is_default = p.default_in_stack;
+                                        let overrides = p.override_modules.clone();
+                                        let available = p.available;
+                                        rsx! {
+                                            ListRow {
+                                                key: "{i}",
+                                                title: display,
+                                                sub,
+                                                small: true,
+                                                indent: 14,
+                                                live: p.active,
+                                                selected: !p.active && selected_patch() == Some(i),
+                                                onclick: {
+                                                    let rig = rig.clone();
+                                                    move |()| {
+                                                        selected_patch.set(Some(i));
+                                                        send(&rig, move |r| async move { let _ = r.select_patch(i as u32).await; });
                                                     }
-                                                }
-                                            },
-                                            if renaming() == Some(("patch".to_string(), name.clone())) {
-                                                input {
-                                                    class: "flex-1 min-w-0 bg-background border border-border rounded px-1 text-xs",
-                                                    value: "{rename_text}",
-                                                    autofocus: true,
-                                                    oninput: move |e| rename_text.set(e.value()),
-                                                    onclick: move |e: MouseEvent| e.stop_propagation(),
-                                                    onkeydown: {
-                                                        let rig = rig.clone();
-                                                        let old_name = name.clone();
-                                                        move |e: KeyboardEvent| {
-                                                            if e.key() == Key::Enter {
-                                                                let (old_name, new_n) = (old_name.clone(), rename_text.peek().clone());
-                                                                if let Some(r) = rig.clone() {
-                                                                    spawn(async move { let _ = r.rename_patch(old_name, new_n).await; });
-                                                                }
-                                                                renaming.set(None);
-                                                            } else if e.key() == Key::Escape {
-                                                                renaming.set(None);
-                                                            }
-                                                        }
-                                                    },
-                                                }
-                                            } else {
-                                                span {
-                                                    style: "{NAME_CELL}",
-                                                    ondoubleclick: {
-                                                        let name = name.clone();
-                                                        move |e: MouseEvent| {
-                                                            e.stop_propagation();
-                                                            rename_text.set(name.clone());
-                                                            renaming.set(Some(("patch".to_string(), name.clone())));
-                                                        }
-                                                    },
-                                                    "{display}"
-                                                }
-                                            }
-                                            // The stack's default — where the
-                                            // footswitch lands after a reset.
-                                            if is_default {
-                                                span { class: "text-[9px] opacity-60 flex-shrink-0",
-                                                    title: "stack default",
-                                                    fts_chrome::Glyph { icon: fts_chrome::Icon::Star, size: 10 }
-                                                }
-                                            }
-                                            if !p.override_modules.is_empty() {
-                                                span {
-                                                    class: "opacity-70",
-                                                    style: "display: flex; gap: 3px; flex-shrink: 0;",
-                                                    title: "overrides: {p.override_modules.join(\", \")}",
-                                                    for m in p.override_modules.iter() {
-                                                        crate::icons::ModuleGlyph { key: "{m}", module: m.clone(), size: 10 }
-                                                    }
-                                                }
-                                            }
-                                            if !p.available {
-                                                span { class: "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                                                    style: "background-color: #fde047;" }
-                                            }
-                                            // Preset last (fixed, right-aligned) so it lines
-                                            // up down the list; icons sit to its left.
-                                            PresetCell { preset: preset.clone(), variation: variation.clone() }
-                                            div {
-                                                class: signal_widgets::reveal("opacity-0 group-hover:opacity-100"),
-                                                style: "display: flex; flex-shrink: 0;",
-                                                crate::kit::ActionMenu {
-                                                    items: patch_items(&name, &patch_names),
-                                                    size: 18,
-                                                    bare: true,
-                                                    title: "Patch actions",
-                                                    on_pick: {
-                                                        let rig = rig.clone();
-                                                        let name = name.clone();
-                                                        move |p: Picked| {
-                                                            let (old, text) = (name.clone(), p.text);
-                                                            match p.id {
-                                                                "rename" => send(&rig, move |r| async move { let _ = r.rename_patch(old, text).await; }),
-                                                                "delete" => send(&rig, move |r| async move { let _ = r.delete_patch(old).await; }),
-                                                                _ => {}
-                                                            }
-                                                        }
-                                                    },
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Every profile — the other rigs a set can move to (Blues,
-            // Rock, Metal…). The same list switches 1 + 2 / 4 + 5 step
-            // through in Profile mode. Each row has the kit's menu: load,
-            // rename, duplicate, delete. ──
-            if !profiles.is_empty() {
-                div { style: "flex-shrink: 0; border-top: 1px solid {LINE}; display: flex; flex-direction: column;",
-                    div { style: "display: flex; align-items: center;",
-                        PanelLabel { label: "Profiles", count: format!("{}", profiles.len()),
-                            crate::kit::Button {
-                                label: "+ New",
-                                small: true,
-                                title: "A new profile — a copy of the one playing",
-                                onclick: move |()| adding_profile.toggle(),
-                            }
-                        }
-                    }
-                    if adding_profile() {
-                        div { style: "padding: 0 8px 8px;",
-                            crate::kit::NamePrompt {
-                                label: "Create",
-                                initial: String::new(),
-                                placeholder: "New profile name",
-                                taken: profile_names.clone(),
-                                on_done: {
-                                    let rig = rig.clone();
-                                    let from = model.profile_name.clone();
-                                    move |n: Option<String>| {
-                                        adding_profile.set(false);
-                                        if let Some(n) = n {
-                                            let from = from.clone();
-                                            send(&rig, move |r| async move { let _ = r.add_profile(n, from).await; });
-                                        }
-                                    }
-                                },
-                            }
-                        }
-                    }
-                    div { style: "display: flex; flex-direction: column; gap: 1px; padding: 0 8px 8px;",
-                        for p in profiles.iter() {
-                            {
-                                let name = p.name.clone();
-                                let active = p.active;
-                                rsx! {
-                                    ListRow {
-                                        key: "{p.name}",
-                                        title: p.name.clone(),
-                                        note: format!("{}", p.patches),
-                                        live: active,
-                                        small: true,
-                                        onclick: {
-                                            let rig = rig.clone();
-                                            let name = name.clone();
-                                            move |()| {
-                                                if !active {
+                                                },
+                                                menu: patch_items(&name, &patch_names),
+                                                on_menu: {
+                                                    let rig = rig.clone();
                                                     let name = name.clone();
-                                                    send(&rig, move |r| async move { let _ = r.select_profile(name).await; });
+                                                    move |p: Picked| {
+                                                        let (old, text) = (name.clone(), p.text);
+                                                        match p.id {
+                                                            "rename" => send(&rig, move |r| async move { let _ = r.rename_patch(old, text).await; }),
+                                                            "delete" => send(&rig, move |r| async move { let _ = r.delete_patch(old).await; }),
+                                                            _ => {}
+                                                        }
+                                                    }
+                                                },
+                                                // The stack's default — where the footswitch
+                                                // lands after a reset.
+                                                if is_default {
+                                                    span { style: "display: flex; flex-shrink: 0; color: {FAINT};", title: "Stack default",
+                                                        fts_chrome::Glyph { icon: fts_chrome::Icon::Star, size: 11 }
+                                                    }
+                                                }
+                                                if !overrides.is_empty() {
+                                                    span {
+                                                        style: "display: flex; gap: 3px; flex-shrink: 0; color: {FAINT};",
+                                                        title: "Overrides: {overrides.join(\", \")}",
+                                                        for m in overrides.iter() {
+                                                            crate::icons::ModuleGlyph { key: "{m}", module: m.clone(), size: 11 }
+                                                        }
+                                                    }
+                                                }
+                                                if !available {
+                                                    span { style: "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; background: {MODIFIED};",
+                                                        title: "Its amp or capture is missing on this machine" }
                                                 }
                                             }
-                                        },
-                                        menu: profile_items(p, &profile_names),
-                                        on_menu: {
-                                            let rig = rig.clone();
-                                            let name = name.clone();
-                                            move |x: Picked| {
-                                                let (old, text) = (name.clone(), x.text);
-                                                match x.id {
-                                                    "load" => send(&rig, move |r| async move { let _ = r.select_profile(old).await; }),
-                                                    "rename" => send(&rig, move |r| async move { let _ = r.rename_profile(old, text).await; }),
-                                                    "duplicate" => send(&rig, move |r| async move { let _ = r.add_profile(text, old).await; }),
-                                                    "delete" => send(&rig, move |r| async move { let _ = r.delete_profile(old).await; }),
-                                                    _ => {}
-                                                }
-                                            }
-                                        },
+                                        }
                                     }
                                 }
                             }
@@ -600,6 +447,24 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                 }
             }
         }
+    }
+}
+
+/// "1 stack", "3 patches".
+fn plural(n: usize, one: &str) -> String {
+    match (n, one) {
+        (1, _) => format!("1 {one}"),
+        (_, "patch") => format!("{n} patches"),
+        _ => format!("{n} {one}s"),
+    }
+}
+
+/// What a patch plays, in a line: its amp preset · the variation of it.
+fn sound_of(p: &PatchInfo) -> String {
+    match (p.rig_preset.is_empty(), p.variation.is_empty()) {
+        (true, _) => String::new(),
+        (false, true) => p.rig_preset.clone(),
+        (false, false) => format!("{} · {}", p.rig_preset, p.variation),
     }
 }
 

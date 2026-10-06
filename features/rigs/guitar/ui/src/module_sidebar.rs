@@ -187,12 +187,24 @@ pub fn preset_items(
     items
 }
 
-/// The sidebar's width: narrower than the shared inspector's, so the rig's
-/// grid keeps the room (it stays open most of the time).
-const SIDEBAR_W: &str = "232px";
+/// The sidebar's width — the theme's inspector width, kept narrow so the
+/// rig's grid keeps the room (it stays open most of the time).
+const SIDEBAR_W: &str = crate::theme::INSPECTOR_W;
 
-/// The modules the sidebar's tabs offer, in signal order.
-const SIDEBAR_MODULES: [&str; 7] = ["Preset", "Core", "Drive", "Amp", "Time", "Delay", "Reverb"];
+/// The sidebar's tabs, two levels deep: the three things a sound is made
+/// of, then the blocks a module holds ("All" is the module itself).
+const FAMILIES: [(&str, &[&str]); 3] = [
+    ("Preset", &[]),
+    ("Core", &["Drive", "Amp"]),
+    ("Time", &["Delay", "Reverb"]),
+];
+
+/// The family a module's tab sits under.
+fn family_of(module: &str) -> Option<(&'static str, &'static [&'static str])> {
+    FAMILIES.iter().copied().find(|(f, subs)| {
+        f.eq_ignore_ascii_case(module) || subs.iter().any(|m| m.eq_ignore_ascii_case(module))
+    })
+}
 
 /// Whether `module` is the Core (its presets are the rig presets).
 fn is_core(module: &str) -> bool {
@@ -678,7 +690,7 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             art: art_of(arts),
             empty: if presets.is_empty() {
                 if is_tone(&module) {
-                    "No presets yet — dial a sound in and use ⋯ › Save as new preset: its Core, Time and blocks, for any patch.".to_string()
+                    "No presets yet. In Presets mode, ⋯ › Make presets from this profile's patches turns each patch's sound into one.".to_string()
                 } else {
                     format!("No {module} presets yet — dial one in and use ⋯ › Save as new preset.")
                 }
@@ -688,20 +700,54 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             width: SIDEBAR_W,
             right: true,
             on_close: move |()| selected.set(None),
-            // Every module with presets, one tap apart.
-            div { style: "display: flex; flex-wrap: wrap; gap: 3px; padding: 4px 0 6px;",
-                for m in SIDEBAR_MODULES {
-                    {
-                        let on = module.eq_ignore_ascii_case(m);
-                        rsx! {
-                            button { key: "{m}",
-                                style: if on {
-                                    "padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 700; background: #e4e4e7; color: #0a0b0d; border: 1px solid #e4e4e7;"
-                                } else {
-                                    "padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 600; background: transparent; color: #a1a1aa; border: 1px solid #3f3f46;"
-                                },
-                                onclick: move |_| selected.set(Some(Selection::Module(m.to_string()))),
-                                "{m}"
+            // Preset · Core · Time, then the blocks of the one picked —
+            // the pick pressed in, as in the bar.
+            {
+                let family = family_of(&module);
+                let subs: &[&str] = family.map_or(&[], |(_, subs)| subs);
+                rsx! {
+                    div { style: "display: flex; gap: 2px; padding: 4px 0 2px;",
+                        for (f, _) in FAMILIES {
+                            {
+                                let on = family.is_some_and(|(x, _)| x == f);
+                                rsx! {
+                                    button { key: "{f}",
+                                        class: if on { "" } else { "sg-hover" },
+                                        style: format!(
+                                            "flex: 1 1 0; min-width: 0; padding: 5px 0; border: none; border-radius: {}; font-size: {}; \
+                                             font-weight: 600; cursor: pointer; {}",
+                                            crate::theme::R_SM,
+                                            crate::theme::T_BODY,
+                                            if on { crate::theme::PRESSED.to_string() } else { format!("background: transparent; color: {MUTED};") },
+                                        ),
+                                        onclick: move |_| selected.set(Some(Selection::Module(f.to_string()))),
+                                        "{f}"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let Some((f, _)) = family.filter(|_| !subs.is_empty()) {
+                        div { style: "display: flex; gap: 2px; padding: 2px 0 6px;",
+                            for (label, target) in std::iter::once(("All", f)).chain(subs.iter().map(|m| (*m, *m))) {
+                                {
+                                    let on = module.eq_ignore_ascii_case(target);
+                                    rsx! {
+                                        button { key: "{label}",
+                                            class: if on { "" } else { "sg-ink" },
+                                            style: format!(
+                                                "padding: 2px 9px; border: none; border-radius: {}; font-size: {}; font-weight: 600; \
+                                                 cursor: pointer; {}",
+                                                crate::theme::R_SM,
+                                                crate::theme::T_SMALL,
+                                                if on { crate::theme::PRESSED } else { "background: transparent;" },
+                                            ),
+                                            title: if label == "All" { format!("The {f} module") } else { label.to_string() },
+                                            onclick: move |_| selected.set(Some(Selection::Module(target.to_string()))),
+                                            "{label}"
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -714,7 +760,9 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
                 sub: played.clone(),
                 modified,
                 live: pick.is_some(),
-                placeholder: "Nothing picked",
+                // A patch on no preset plays its own sound — say so,
+                // rather than "nothing", which reads as silence.
+                placeholder: if module.eq_ignore_ascii_case("Preset") { "Its own sound" } else { "Nothing picked" },
                 options,
                 on_pick: {
                     let choose = choose.clone();
@@ -820,7 +868,7 @@ fn SubPick(module: String, look: Look, lit: bool) -> Element {
         return rsx! {
             span { style: "{slot}", title: "{module}: off",
                 span { style: "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; border: 1px solid {crate::theme::DIM};" }
-                span { style: "font-size: 10px; color: {crate::theme::DIM};", "off" }
+                span { style: "font-size: {crate::theme::T_META}; color: {crate::theme::FAINT};", "off" }
             }
         };
     }
@@ -829,7 +877,7 @@ fn SubPick(module: String, look: Look, lit: bool) -> Element {
     rsx! {
         span { style: "{slot}", title: "{module}: {look.engine} {look.value}",
             span { style: "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; background: {dot};" }
-            span { style: "font-size: 10px; font-family: monospace; color: {ink}; white-space: nowrap;", "{look.value}" }
+            span { style: "font-size: {crate::theme::T_META}; font-family: monospace; color: {ink}; white-space: nowrap;", "{look.value}" }
         }
     }
 }
@@ -905,10 +953,10 @@ fn PickPicture(look: Look) -> Element {
     }
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0;",
-            crate::preset_look::ShapeView { shape: look.shape.clone(), w: 268, h: 28, lit: true }
+            crate::preset_look::ShapeView { shape: look.shape.clone(), w: 370, h: 28, lit: true }
             div { style: "display: flex; align-items: center; gap: 6px;",
                 crate::preset_look::EngineChip { engine: look.engine.clone(), default: look.engine_default }
-                span { style: "font-size: 10px; color: {FAINT};", "{look.group}" }
+                span { style: "font-size: {crate::theme::T_META}; color: {FAINT};", "{look.group}" }
                 div { style: "flex: 1 1 0;" }
                 crate::preset_look::ValueChip { value: look.value.clone(), lit: true }
             }

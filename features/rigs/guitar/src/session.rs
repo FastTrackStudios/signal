@@ -8776,6 +8776,19 @@ impl Rig for GuitarRigBackend {
         self.edit_library("duplicate_tone", |comp, _| crate::manage::duplicate_tone(comp, &name, &new_name).map(|()| Vec::new()));
     }
 
+    fn presets_from_patches(&self) {
+        self.edit_library("presets_from_patches", |comp, all| {
+            let Some(active) = all.first() else {
+                return Err("no profile".to_string());
+            };
+            let made = crate::manage::tones_from_patches(comp, &active.patches);
+            if made.is_empty() {
+                return Err("every patch already has a preset".to_string());
+            }
+            Ok(Vec::new())
+        });
+    }
+
     fn delete_tone(&self, name: String) {
         self.edit_library("delete_tone", |comp, all| {
             let all: Vec<&ProfileDef> = all.iter().map(|p| &**p).collect();
