@@ -798,68 +798,73 @@ pub fn PhoneControl(
     }
 }
 
-/// One pane of the desktop's grid: a page of the chain, or half of one
-/// (the phone's Mod/Motion page is two panes here).
+/// One pane of the desktop's grid: a page of the chain, or a unit of one.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DeskPane {
     Page(Page),
-    /// Nothing: the room a group of three leaves.
-    Empty,
     /// Input units, fitted to the pane (`InputRow`'s keys).
     Units(&'static [&'static str]),
-    /// The envelope filter over the pre modulation.
-    FilterPreMod,
+    /// The pre modulation (and the pre tremolo, when it plays).
+    PreUnits,
+    /// The pre compressor over the gate.
+    CompGate,
+    /// The pre delay over the pre reverb.
+    PreLanes,
+    /// The post compressor alone.
+    PostComp,
+    /// Nothing: the room a group of three doubles leaves.
+    Empty,
 }
 
 impl DeskPane {
-    fn title(self) -> &'static str {
+    /// Its key in the grid.
+    fn key(self) -> String {
         match self {
-            Self::Page(Page::Drives) => "Drives",
-            Self::Page(Page::Amps) => "Amp",
-            Self::Page(Page::GatePostComp) => "Post Comp · Gate",
-            Self::Page(Page::Eq) => "EQ",
-            Self::Page(Page::Filter) => "Filter",
-            Self::Page(Page::PreModTrem) => "Pre Mod",
-            Self::Page(Page::PreDelayVerb) => "Pre Delay · Verb",
-            Self::Page(Page::Delays) => "Delay",
-            Self::Page(Page::Reverbs) => "Reverb",
-            Self::Page(Page::ModMotion) => "Mod · Motion",
-            Self::Page(p) => p.short(),
-            Self::Empty => "",
-            Self::Units(k) => k.first().copied().unwrap_or("units"),
-            Self::FilterPreMod => "Filter · Pre Mod",
+            Self::Page(p) => p.short().to_string(),
+            Self::Units(k) => k.join("+"),
+            Self::PreUnits => "pre-units".into(),
+            Self::CompGate => "comp-gate".into(),
+            Self::PreLanes => "pre-lanes".into(),
+            Self::PostComp => "post-comp".into(),
+            Self::Empty => "empty".into(),
         }
     }
 }
 
-/// The four panes a top-bar group shows, top left first: PRE the input
-/// side, CORE the tone (drives, amp, post comp + gate, EQ), POST the
-/// effects after the amp.
-fn desk_panes(g: crate::control::Group) -> [DeskPane; 4] {
+/// A top-bar group's panes, as two columns of (pane, rows it spans): PRE
+/// the input side, CORE the tone, POST the effects after the amp. Three
+/// rows, six things at once.
+fn desk_columns(g: crate::control::Group) -> [Vec<(DeskPane, f64)>; 2] {
     use crate::control::Group;
     match g {
         // The pedals (wah, dive, volume) are not here: they are played,
         // not set.
+        // The pre delay and reverb stacked, two rows tall.
         Group::Pre => [
-            DeskPane::Units(&["transpose", "doubler"]),
-            DeskPane::Units(&["pitch", "harmony"]),
-            DeskPane::FilterPreMod,
-            DeskPane::Page(Page::PreDelayVerb),
+            vec![
+                (DeskPane::Units(&["transpose", "doubler"]), 1.0),
+                (DeskPane::Units(&["filter"]), 1.0),
+                (DeskPane::PreUnits, 1.0),
+            ],
+            vec![(DeskPane::Units(&["pitch", "harmony"]), 1.0), (DeskPane::PreLanes, 2.0)],
         ],
+        // The pre compressor over the gate; the post compressor and the EQ
+        // each a box of their own, the EQ two rows tall.
         Group::Amp => [
-            DeskPane::Page(Page::Drives),
-            DeskPane::Page(Page::Amps),
-            DeskPane::Page(Page::GatePostComp),
-            DeskPane::Page(Page::Eq),
+            vec![(DeskPane::Page(Page::Drives), 1.0), (DeskPane::CompGate, 1.0), (DeskPane::PostComp, 1.0)],
+            vec![(DeskPane::Page(Page::Amps), 1.0), (DeskPane::Page(Page::Eq), 2.0)],
         ],
-        // Modulation over Motion in one pane, stacked as the two delays
-        // and the two reverbs are; the top right left open.
-        Group::Post => [DeskPane::Page(Page::ModMotion), DeskPane::Empty, DeskPane::Page(Page::Delays), DeskPane::Page(Page::Reverbs)],
+        // Three doubles — modulation over motion, the delays, the reverbs —
+        // half the height each, the top right left open.
+        Group::Post => [
+            vec![(DeskPane::Page(Page::ModMotion), 1.5), (DeskPane::Page(Page::Delays), 1.5)],
+            vec![(DeskPane::Empty, 1.5), (DeskPane::Page(Page::Reverbs), 1.5)],
+        ],
     }
 }
 
 /// The desktop's Control page: the top bar's group (PRE / CORE / POST) as
-/// a two-by-two grid — fewer panes when the window is small.
+/// two columns of three rows — one column when the window is narrow.
 #[component]
 pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32) -> Element {
     // The group the top bar picked last (CORE until one is).
@@ -867,7 +872,6 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
     let group = groups
         .and_then(|g| (g.picked)().last().copied())
         .unwrap_or(crate::control::Group::Amp);
-    let panes = desk_panes(group);
     // The box this has, measured: the pages fitted to it (amps, drives) need
     // it, and here it is not the window.
     let mut size = use_signal(|| (0.0f64, 0.0f64));
@@ -904,66 +908,33 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
             ((ww - 540.0).max(320.0), (wh * 0.5).max(240.0))
         }),
     };
-    let tall = h >= 2.0 * DESKTOP_PANE_MIN_H;
-    let wide = w >= 2.0 * DESKTOP_PANE_MIN_W;
-    // Which of the four show, as rows of panes.
-    let rows: Vec<Vec<usize>> = match (tall, wide) {
-        (true, true) => vec![vec![0, 1], vec![2, 3]],
-        (true, false) => vec![vec![0], vec![1]],
-        (false, true) => vec![vec![0, 1]],
-        (false, false) => vec![vec![0]],
-    };
-    let n_rows = rows.len() as f64;
-    // Two rows: the top one taller. The bottom row is mostly lanes (gate
-    // and compressor, the delays and reverbs, the pre effects), which read
-    // best near their own long, low proportions; the top is units that use
-    // the height (pedals, amp, the pitch voices).
-    let row_weight = |r: usize| if n_rows > 1.0 { if r == 0 { TOP_ROW } else { 2.0 - TOP_ROW } } else { 1.0 };
+    let [left, right] = desk_columns(group);
+    // Two columns — with the module sidebar open too; one only when even
+    // half the width is too little for a pane.
+    let columns: Vec<Vec<(DeskPane, f64)>> = if w >= 2.0 * DESKTOP_PANE_MIN_W { vec![left, right] } else { vec![left] };
+    let col_w = w / columns.len() as f64 - GRID_GAP;
     rsx! {
-        div { style: "display: flex; flex-direction: column; gap: {GRID_GAP}px; width: 100%; height: 100%; min-height: 0; overflow: hidden;",
+        div { style: "display: flex; flex-direction: row; gap: {GRID_GAP}px; width: 100%; height: 100%; min-height: 0; overflow: hidden;",
             onmounted: move |e: MountedEvent| mounted.set(Some(e.data())),
-            for (r, row) in rows.into_iter().enumerate() {
-                div { key: "row-{r}", style: "flex: {row_weight(r)} 1 0%; min-height: 0; display: flex; flex-direction: row; gap: {GRID_GAP}px;",
-                    for i in row.clone() {
-                        {
-                            // Every pane an even share of its row.
-                            let p = panes[i];
-                            let title = p.title();
-                            let wt = 1;
-                            let pane_h = (h - GRID_GAP * (n_rows - 1.0)) * row_weight(r) / n_rows - 4.0;
-                            let pane = (w / row.len() as f64 - GRID_GAP, pane_h);
-                            rsx! {
-                                div { key: "pane-{i}-{title}", style: if p == DeskPane::Empty {
-                                        format!("flex: {wt} 1 0%; min-width: 0; min-height: 0;")
-                                    } else {
-                                        format!("flex: {wt} 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid {RULE}; border-radius: 6px; overflow: hidden;")
-                                    },
-                                    div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden;",
-                                        div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
-                                            match p {
-                                                DeskPane::Page(page) => rsx! { PageView { page, blocks: blocks.clone(), state, tempo_bpm, pane } },
-                                                DeskPane::Empty => rsx! {},
-                                                DeskPane::Units(keys) => rsx! {
-                                                    crate::rig_faces::InputRow {
-                                                        blocks: blocks.clone(),
-                                                        only: keys.iter().map(|k| (*k).to_string()).collect::<Vec<_>>(),
-                                                        fit: Some(pane),
-                                                    }
-                                                },
-                                                DeskPane::FilterPreMod => rsx! {
-                                                    div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
-                                                        div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column;",
-                                                            crate::rig_faces::InputRow {
-                                                                blocks: blocks.clone(),
-                                                                only: vec!["filter".to_string()],
-                                                                fit: Some((pane.0, pane.1 / 2.0)),
-                                                            }
-                                                        }
-                                                        div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid {RULE};",
-                                                            crate::rig_faces::PreFxRow { blocks: blocks.clone(), tempo_bpm, part: PrePart::Units, fit: Some((pane.0, pane.1 / 2.0)) }
-                                                        }
-                                                    }
-                                                },
+            for (c, col) in columns.into_iter().enumerate() {
+                div { key: "col-{c}", style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: {GRID_GAP}px;",
+                    {
+                        let rows: f64 = col.iter().map(|(_, r)| r).sum();
+                        let gaps = GRID_GAP * (col.len().saturating_sub(1)) as f64;
+                        rsx! {
+                            for (p, span) in col {
+                                {
+                                    let pane = (col_w, (h - gaps) * span / rows - 2.0);
+                                    rsx! {
+                                        div { key: "{p.key()}", style: if p == DeskPane::Empty {
+                                                format!("flex: {span} 1 0%; min-width: 0; min-height: 0;")
+                                            } else {
+                                                format!("flex: {span} 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid {RULE}; border-radius: 6px; overflow: hidden;")
+                                            },
+                                            div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden;",
+                                                div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+                                                    DeskPaneView { pane_kind: p, blocks: blocks.clone(), state, tempo_bpm, pane }
+                                                }
                                             }
                                         }
                                     }
@@ -977,12 +948,65 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
     }
 }
 
+/// One pane of the desktop's grid, drawn for its box (`pane`, points).
+#[component]
+fn DeskPaneView(pane_kind: DeskPane, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32, pane: (f64, f64)) -> Element {
+    let faces = crate::rig_faces::use_faces();
+    let tier = crate::control::use_tier();
+    match pane_kind {
+        DeskPane::Page(page) => rsx! { PageView { page, blocks, state, tempo_bpm, pane } },
+        DeskPane::Units(keys) => rsx! {
+            crate::rig_faces::InputRow {
+                blocks,
+                only: keys.iter().map(|k| (*k).to_string()).collect::<Vec<_>>(),
+                fit: Some(pane),
+            }
+        },
+        DeskPane::PreUnits => rsx! {
+            crate::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Units, fit: Some(pane) }
+        },
+        DeskPane::PreLanes => rsx! {
+            crate::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Lanes, fit: Some(pane) }
+        },
+        DeskPane::CompGate => {
+            let lane = (pane.0, pane.1 / 2.0);
+            let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
+            rsx! {
+                div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
+                    div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column;",
+                        PageView { page: Page::PreComp, blocks: blocks.clone(), state, tempo_bpm, pane: lane }
+                    }
+                    if let (Some(g), Some(f)) = (gate, faces.gate.clone().map(|f| f.at_box(lane.0, lane.1))) {
+                        // The gate's lane near its own proportions, centred.
+                        div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; border-top: 1px solid {RULE};",
+                            div { style: crate::control::lane_fit(Some(lane), f.size),
+                                crate::rig_faces::GateFace { block: g, face: f.clone(), level: state.in_peak_db, fill: true }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        DeskPane::PostComp => {
+            let post = find_block(&blocks, BlockType::Compressor, "Post Comp");
+            rsx! {
+                div { style: "flex: 1 1 0%; min-height: 0; display: flex; position: relative;",
+                    if let (Some(c), Some(f)) = (post.clone(), faces.post_comp.clone()) {
+                        crate::rig_faces::BlockFace { block: c, face: f.at(tier), fill: true, preset_type: Some("compressor".to_string()) }
+                    } else if let Some(c) = post {
+                        LiveComp { block: c, state }
+                    }
+                }
+            }
+        }
+        DeskPane::Empty => rsx! {},
+    }
+}
+
 /// The least height and width (points) a desktop page gets before the
 /// Control page shows fewer of them.
 const DESKTOP_PANE_MIN_H: f64 = 170.0;
-const DESKTOP_PANE_MIN_W: f64 = 420.0;
-/// The top row's share of two (the bottom row has the rest).
-const TOP_ROW: f64 = 1.18;
+const DESKTOP_PANE_MIN_W: f64 = 300.0;
 /// Between the panes of the desktop's grid.
 const GRID_GAP: f64 = 6.0;
 
@@ -1131,20 +1155,29 @@ fn PageView(
         Page::PreDelayVerb => rsx! { crate::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Lanes } },
         Page::PreComp => {
             let comp = find_block(&blocks, BlockType::Compressor, "Pre Comp");
+            let rig = use_hook(try_consume_context::<RigClient>);
+            let id = comp.as_ref().map(|c| c.id.clone());
             rsx! {
-                ZoomPanel { title: "Compressor".to_string(), left_power_on: comp.as_ref().map(|b| !b.bypassed),
+                ZoomPanel { title: "Pre Comp".to_string(), left_power_on: comp.as_ref().map(|b| !b.bypassed),
+                    on_left_power: id.map(|id| Callback::new(move |()| {
+                        let (rig, id) = (rig.clone(), id.clone());
+                        spawn(async move {
+                            if let Some(r) = rig {
+                                let _ = r.toggle_block_bypass(id).await;
+                            }
+                        });
+                    })),
                     if let Some(c) = comp { LiveComp { block: c, state } }
                 }
             }
         }
         Page::Drives => {
-            // Every pedal across the page's box, less the board's rails — on
-            // the desktop, the pre compressor's visualiser at its head.
+            // Every pedal across the page's box, less the board's rails. On
+            // the desktop the pre compressor has a pane of its own, and the
+            // board shows only the pedals it plays (no native boost, no
+            // empty slots).
             let (w, h) = pane;
             let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
-            let rig = use_hook(try_consume_context::<RigClient>);
-            let comp = find_block(&blocks, BlockType::Compressor, "Pre Comp").filter(|_| desk);
-            let lead_w = (w * 0.4).clamp(230.0, 320.0);
             rsx! {
                 crate::rig_faces::DrivesRow {
                     blocks: blocks.clone(),
@@ -1152,25 +1185,7 @@ fn PageView(
                     // a desktop pane is its border's inside, no more.
                     fit_width: Some(if desk { w - 4.0 } else { w + f64::from(CORNER) }),
                     fit_height: Some(h - 20.0),
-                    leading_width: comp.as_ref().map(|_| lead_w),
-                    leading: comp.map(|c| {
-                        let id = c.id.clone();
-                        rsx! {
-                            ZoomPanel {
-                                title: "Pre Comp".to_string(),
-                                left_power_on: Some(!c.bypassed),
-                                on_left_power: Some(Callback::new(move |()| {
-                                    let (rig, id) = (rig.clone(), id.clone());
-                                    spawn(async move {
-                                        if let Some(r) = rig {
-                                            let _ = r.toggle_block_bypass(id).await;
-                                        }
-                                    });
-                                })),
-                                LiveComp { block: c, state }
-                            }
-                        }
-                    }),
+                    pedals_only: desk,
                 }
             }
         }

@@ -830,6 +830,10 @@ pub fn DrivesRow(
     /// …and no taller than this (points).
     #[props(default)]
     fit_height: Option<f64>,
+    /// Only the pedals the board plays: no native boost, no empty slots
+    /// (the desktop's grid, where room is the pedals').
+    #[props(default)]
+    pedals_only: bool,
     /// The `leading` unit's width (points), fixed — where the board fits
     /// its pedals to a width, the rest is theirs. It takes the native
     /// boost's slot.
@@ -847,9 +851,9 @@ pub fn DrivesRow(
             // A sized leading unit takes the native boost's slot: no pedal
             // there to draw, and the room is the pedals'. (A captured boost
             // is a Drive block, and stays.)
-            .filter(|b| !(leading_width.is_some() && leading.is_some() && b.block_type == BlockType::Boost))
+            .filter(|b| !((pedals_only || (leading_width.is_some() && leading.is_some())) && b.block_type == BlockType::Boost))
             // …and the board's empty slots: room for the pedals there are.
-            .filter(|b| !(leading_width.is_some() && leading.is_some() && b.empty))
+            .filter(|b| !((pedals_only || (leading_width.is_some() && leading.is_some())) && b.empty))
             .map(|b| (b.clone(), (!b.empty).then(|| faces.drive(&b.preset).map(|f| f.at(tier))).flatten())),
     );
     let last = slots.len().saturating_sub(1);
@@ -1118,6 +1122,9 @@ pub fn PreFxRow(
     /// the phone's, each face the version that fits a lane of it.
     #[props(default)]
     fit: Option<(f64, f64)>,
+    /// Only the lane of this type (the pre delay, or the pre reverb).
+    #[props(default)]
+    only: Option<BlockType>,
 ) -> Element {
     let faces = use_faces();
     let pre: Vec<LiveBlock> = blocks
@@ -1157,7 +1164,12 @@ pub fn PreFxRow(
     // A delay or reverb is a lane with a face or without (an empty slot is
     // still the Delay/Verb page's, not the units').
     let laned = |(b, _, _): &(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)| matches!(b.block_type, BlockType::Delay | BlockType::Reverb);
-    let lanes: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = items.iter().filter(|i| laned(i)).cloned().collect();
+    let lanes: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = items
+        .iter()
+        .filter(|i| laned(i) && only.is_none_or(|t| i.0.block_type == t))
+        .cloned()
+        .map(|(b, f, e)| (b, f.map(|f| fit.map_or(f.clone(), |(w, h)| f.at_box(w, h / if only.is_some() { 1.0 } else { 2.0 }))), e))
+        .collect();
     let items: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = if part == PrePart::Lanes { Vec::new() } else { items.into_iter().filter(|i| !laned(i)).collect() };
     let lanes = if part == PrePart::Units { Vec::new() } else { lanes };
     // The lanes on their own page take the width; in the row, one Time
@@ -1178,10 +1190,13 @@ pub fn PreFxRow(
                 div { style: "display: flex; flex-direction: column; justify-content: center; width: 100%; height: 100%; min-height: 0;",
                     for (b, f, _) in items.iter().cloned() {
                         if let Some(f) = f.map(|f| fit.map_or(f.clone(), |(w, h)| f.at_box(w, h / faced.max(1) as f64))) {
-                            // In a fitted box the units share it; on the
-                            // phone's page each takes at most half.
-                            div { key: "{b.id}", style: if fit.is_some() { "flex: 1 1 0%; min-height: 0; display: flex;" } else { "flex: 0 1 50%; min-height: 0; display: flex;" },
-                                BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some(b.block_type.as_str().to_string()), tempo_bpm: Some(tempo_bpm), algos: unit_algos(&b) }
+                            // In a fitted box the units share it, each near
+                            // its own proportions; on the phone's page each
+                            // takes at most half.
+                            div { key: "{b.id}", style: if fit.is_some() { "position: relative; flex: 1 1 0%; min-height: 0; display: flex;" } else { "flex: 0 1 50%; min-height: 0; display: flex;" },
+                                div { style: if fit.is_some() { crate::control::lane_fit(fit.map(|(w, h)| (w, h / faced.max(1) as f64)), f.size) } else { "display: flex; flex: 1 1 0%; min-width: 0; min-height: 0;".to_string() },
+                                BlockFace { block: b.clone(), face: f.clone(), fill: true, preset_type: Some(b.block_type.as_str().to_string()), tempo_bpm: Some(tempo_bpm), algos: unit_algos(&b) }
+                                }
                             }
                         }
                     }
@@ -1223,7 +1238,8 @@ pub fn PreFxRow(
                 // the units above).
                 div { style: "flex: {lane_flex}; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: center; border-left: 1px solid #1d1f24;",
                     for (b, f, extra) in lanes {
-                        div { key: "{b.id}", style: "flex: 0 1 50%; min-height: 0; display: flex;",
+                        // One lane alone in a fitted pane fills it.
+                        div { key: "{b.id}", style: if only.is_some() && fit.is_some() { "flex: 1 1 0%; min-height: 0; display: flex;" } else { "flex: 0 1 50%; min-height: 0; display: flex;" },
                             if let Some(f) = f {
                                 BlockFace { block: b.clone(), face: f, extra, fill: true, stepper: true, preset_type: Some(b.block_type.as_str().to_string()), tempo_bpm: Some(tempo_bpm) }
                             } else {
