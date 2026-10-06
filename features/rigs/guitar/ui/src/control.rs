@@ -1620,6 +1620,10 @@ pub(crate) fn ModGroupPanel(
     /// Show the Pre FX module's blocks (in front of the amp) instead.
     #[props(default)]
     pre: bool,
+    /// Its box (points), where the host knows it (a desktop pane's lane):
+    /// the face the version that fits it, not the window's tier's.
+    #[props(default)]
+    lane: Option<(f64, f64)>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let members: Vec<LiveBlock> = kinds
@@ -1715,7 +1719,10 @@ pub(crate) fn ModGroupPanel(
     // knobs, in place of the trace and the loose knobs.
     // At the window's tier (a phone's own layout).
     let tier = use_tier();
-    let mod_face = crate::rig_faces::use_faces().modulation(cur.block_type.as_str()).map(|f| f.at(tier));
+    // In a known lane, less the members' tabs over the face.
+    let mod_face = crate::rig_faces::use_faces()
+        .modulation(cur.block_type.as_str())
+        .map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h - 26.0)));
     // The face's nameplate opens the member's engines (or modes).
     let algos: Option<(&'static str, Vec<&'static str>)> = match cur.block_type {
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => Some(("engine", MOD_ENGINES.to_vec())),

@@ -803,12 +803,12 @@ pub fn PhoneControl(
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DeskPane {
     Page(Page),
-    /// The Modulation module's effect.
-    Modulation,
-    /// The Motion module's effect.
-    Motion,
-    /// Every input unit but the filter: transpose, pitch, wah, dive…
-    Input,
+    /// Nothing: the room a group of three leaves.
+    Empty,
+    /// Input units, fitted to the pane (`InputRow`'s keys).
+    Units(&'static [&'static str]),
+    /// The envelope filter over the pre modulation.
+    FilterPreMod,
 }
 
 impl DeskPane {
@@ -823,10 +823,11 @@ impl DeskPane {
             Self::Page(Page::PreDelayVerb) => "Pre Delay · Verb",
             Self::Page(Page::Delays) => "Delay",
             Self::Page(Page::Reverbs) => "Reverb",
+            Self::Page(Page::ModMotion) => "Mod · Motion",
             Self::Page(p) => p.short(),
-            Self::Modulation => "Modulation",
-            Self::Motion => "Motion",
-            Self::Input => "Input",
+            Self::Empty => "",
+            Self::Units(k) => k.first().copied().unwrap_or("units"),
+            Self::FilterPreMod => "Filter · Pre Mod",
         }
     }
 }
@@ -837,10 +838,12 @@ impl DeskPane {
 fn desk_panes(g: crate::control::Group) -> [DeskPane; 4] {
     use crate::control::Group;
     match g {
+        // The pedals (wah, dive, volume) are not here: they are played,
+        // not set.
         Group::Pre => [
-            DeskPane::Input,
-            DeskPane::Page(Page::Filter),
-            DeskPane::Page(Page::PreModTrem),
+            DeskPane::Units(&["transpose", "doubler"]),
+            DeskPane::Units(&["pitch", "harmony"]),
+            DeskPane::FilterPreMod,
             DeskPane::Page(Page::PreDelayVerb),
         ],
         Group::Amp => [
@@ -849,7 +852,9 @@ fn desk_panes(g: crate::control::Group) -> [DeskPane; 4] {
             DeskPane::Page(Page::GatePostComp),
             DeskPane::Page(Page::Eq),
         ],
-        Group::Post => [DeskPane::Modulation, DeskPane::Motion, DeskPane::Page(Page::Delays), DeskPane::Page(Page::Reverbs)],
+        // Modulation over Motion in one pane, stacked as the two delays
+        // and the two reverbs are; the top right left open.
+        Group::Post => [DeskPane::Page(Page::ModMotion), DeskPane::Empty, DeskPane::Page(Page::Delays), DeskPane::Page(Page::Reverbs)],
     }
 }
 
@@ -930,18 +935,35 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
                             let wt = weight(i);
                             let pane = (w * wt / total - GRID_GAP, pane_h);
                             rsx! {
-                                div { key: "pane-{i}-{title}", style: "flex: {wt} 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid {RULE}; border-radius: 6px; overflow: hidden;",
+                                div { key: "pane-{i}-{title}", style: if p == DeskPane::Empty {
+                                        format!("flex: {wt} 1 0%; min-width: 0; min-height: 0;")
+                                    } else {
+                                        format!("flex: {wt} 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid {RULE}; border-radius: 6px; overflow: hidden;")
+                                    },
                                     div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden;",
                                         div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
                                             match p {
                                                 DeskPane::Page(page) => rsx! { PageView { page, blocks: blocks.clone(), state, tempo_bpm, pane } },
-                                                DeskPane::Modulation => rsx! { ModGroupPanel { title: "Mod", kinds: MOD_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm } },
-                                                DeskPane::Motion => rsx! { ModGroupPanel { title: "Motion", kinds: MOTION_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm, tempo_divisions: true } },
-                                                DeskPane::Input => rsx! {
+                                                DeskPane::Empty => rsx! {},
+                                                DeskPane::Units(keys) => rsx! {
                                                     crate::rig_faces::InputRow {
                                                         blocks: blocks.clone(),
-                                                        only: ["transpose", "pitch", "harmony", "wah", "dive", "volume"].map(String::from).to_vec(),
+                                                        only: keys.iter().map(|k| (*k).to_string()).collect::<Vec<_>>(),
                                                         fit: Some(pane),
+                                                    }
+                                                },
+                                                DeskPane::FilterPreMod => rsx! {
+                                                    div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
+                                                        div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column;",
+                                                            crate::rig_faces::InputRow {
+                                                                blocks: blocks.clone(),
+                                                                only: vec!["filter".to_string()],
+                                                                fit: Some((pane.0, pane.1 / 2.0)),
+                                                            }
+                                                        }
+                                                        div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid {RULE};",
+                                                            crate::rig_faces::PreFxRow { blocks: blocks.clone(), tempo_bpm, part: PrePart::Units, fit: Some((pane.0, pane.1 / 2.0)) }
+                                                        }
                                                     }
                                                 },
                                             }
@@ -1169,10 +1191,13 @@ fn PageView(
         }
         Page::GatePostComp => {
             // Stacked, as the time pages: the gate over the post
-            // compressor, each the version of its face that fits a lane
+            // compressor — the gate the version of its face that fits a lane
             // half the page tall (the phone's lane; on a desktop too, where
             // the upright gate unit stood tiny in a wide strip).
             let lane = |f: crate::rig_faces::FaceEntry| f.at_box(pane.0, pane.1 / 2.0);
+            // The Distressor keeps the window's version: its lane cut its
+            // nameplate off at a desktop pane's width.
+            let tier = crate::control::use_tier();
             let faces = crate::rig_faces::use_faces();
             let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
             let post = find_block(&blocks, BlockType::Compressor, "Post Comp");
@@ -1185,7 +1210,7 @@ fn PageView(
                     }
                     div { style: "flex: 1 1 0%; min-height: 0; display: flex; position: relative;",
                         if let (Some(c), Some(f)) = (post.clone(), faces.post_comp.clone()) {
-                            crate::rig_faces::BlockFace { block: c, face: lane(f), fill: true, preset_type: Some("compressor".to_string()) }
+                            crate::rig_faces::BlockFace { block: c, face: f.at(tier), fill: true, preset_type: Some("compressor".to_string()) }
                         } else if let Some(c) = post {
                             LiveComp { block: c, state }
                         }
@@ -1193,18 +1218,23 @@ fn PageView(
                 }
             }
         }
-        Page::ModMotion => rsx! {
+        Page::ModMotion => {
             // Stacked, as the delays and reverbs: Modulation over Motion,
-            // each its face's lane (no panel chrome over the nameplate).
+            // each its face's lane (no panel chrome over the nameplate) — on
+            // a desktop pane, the version of the face that fits the lane.
+            let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
+            let lane = desk.then_some((pane.0, pane.1 / 2.0));
+            rsx! {
             div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
                 div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column;",
-                    ModGroupPanel { title: "Mod", kinds: MOD_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm }
+                    ModGroupPanel { title: "Mod", kinds: MOD_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm, lane }
                 }
                 div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column;",
-                    ModGroupPanel { title: "Motion", kinds: MOTION_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm, tempo_divisions: true }
+                    ModGroupPanel { title: "Motion", kinds: MOTION_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm, tempo_divisions: true, lane }
                 }
             }
-        },
+            }
+        }
         Page::Delays => {
             let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
             rsx! {

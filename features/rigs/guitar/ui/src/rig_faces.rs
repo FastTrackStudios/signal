@@ -1200,6 +1200,8 @@ pub fn PreFxRow(
     let lane_flex = if part == PrePart::Lanes { "1 1 0%" } else { "0 0 50.93%" };
     // Pre modulation takes what the tremolo and the lanes leave.
     let is_mod = |b: &LiveBlock| b.block_type == BlockType::Chorus;
+    // The units with a face: the lanes a fitted box is shared between.
+    let faced = items.iter().filter(|(_, f, _)| f.is_some()).count();
     rsx! {
         Row {
             // On a phone the units are lanes, stacked (as the Mod / Motion
@@ -1210,8 +1212,10 @@ pub fn PreFxRow(
                 // its size and ran off both sides), centred when alone.
                 div { style: "display: flex; flex-direction: column; justify-content: center; width: 100%; height: 100%; min-height: 0;",
                     for (b, f, _) in items.iter().cloned() {
-                        if let Some(f) = f.map(|f| fit.map_or(f.clone(), |(w, h)| f.at_box(w, h / 2.0))) {
-                            div { key: "{b.id}", style: "flex: 0 1 50%; min-height: 0; display: flex;",
+                        if let Some(f) = f.map(|f| fit.map_or(f.clone(), |(w, h)| f.at_box(w, h / faced.max(1) as f64))) {
+                            // In a fitted box the units share it; on the
+                            // phone's page each takes at most half.
+                            div { key: "{b.id}", style: if fit.is_some() { "flex: 1 1 0%; min-height: 0; display: flex;" } else { "flex: 0 1 50%; min-height: 0; display: flex;" },
                                 BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some(b.block_type.as_str().to_string()), tempo_bpm: Some(tempo_bpm), algos: unit_algos(&b) }
                             }
                         }
@@ -1390,7 +1394,7 @@ pub fn InputRow(
         if let Some((room_w, room_h)) = fit {
             let lanes: Vec<(String, Option<LiveBlock>, FaceEntry)> = lanes.into_iter().filter_map(|(k, b, f)| f.map(|f| (k, b, f))).collect();
             let sizes: Vec<(f64, f64)> = lanes.iter().map(|(_, _, f)| f.size).collect();
-            let (rows, k) = fit_rows(&sizes, (room_w - 16.0, room_h - 16.0), FIT_GAP);
+            let (rows, k) = fit_rows(&sizes, (room_w - 24.0, room_h - 32.0), FIT_GAP);
             let mut lanes = lanes.into_iter();
             let rows: Vec<Vec<(String, Option<LiveBlock>, FaceEntry)>> = rows.iter().map(|&n| lanes.by_ref().take(n).collect()).collect();
             return rsx! {
