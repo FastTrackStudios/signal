@@ -944,7 +944,15 @@ impl RigLibrary {
             return;
         }
         let comp = Self::load_compositions();
-        let (split, split_profiles) = crate::compose::split_core(&comp, profiles);
+        // The songs' own patches play Core snapshots too: they are carried
+        // over with the profiles' (before, they lost what moved out — a
+        // WASHED verse's spring reverb).
+        let songs_path = store.dir().join("songs.styx");
+        let songs = match config_watch::read_quiet::<SongLib>(&songs_path) {
+            Read::Ok(l) => Some(l.songs),
+            _ => None,
+        };
+        let (split, split_profiles, split_songs) = crate::compose::split_core_with_songs(&comp, profiles, songs.as_deref().unwrap_or_default());
         let changed = format!("{:?}", split.presets) != format!("{:?}", comp.presets);
         if !changed {
             return;
@@ -962,9 +970,17 @@ impl RigLibrary {
         for p in split_profiles.iter() {
             keep(profiles_store().dir().join(profile_file(&p.name)));
         }
+        if songs.is_some() {
+            keep(songs_path.clone());
+        }
         Self::save_compositions(&split);
         for p in &split_profiles {
             save_profile_file(store, p.clone());
+        }
+        // Written whole: `save_songs` keeps the file's own song patches,
+        // which are what this rewrites.
+        if songs.is_some() {
+            config_watch::write_guarded(&songs_path, &SongLib { songs: split_songs });
         }
         tracing::info!("rig library: presets are the Core module now — time effects, pre effects, chorus and tremolo moved out (old files kept as *.styx.migrated)");
         *profiles = split_profiles;

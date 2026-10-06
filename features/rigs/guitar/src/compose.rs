@@ -710,8 +710,19 @@ fn block_type_of(block: &str) -> Option<&'static str> {
 /// Idempotent: a split library has nothing left to move.
 #[must_use]
 pub fn split_core(comp: &Compositions, profiles: &[ProfileDef]) -> (Compositions, Vec<ProfileDef>) {
+    let (comp, profiles, _) = split_core_with_songs(comp, profiles, &[]);
+    (comp, profiles)
+}
+
+/// [`split_core`], and the songs' own patches with it — the patches a song
+/// carries (`patches`) and its versions of the profile's (`patch_versions`)
+/// play Core snapshots too, and lost what moved out of them when only the
+/// profiles were carried over (a WASHED verse's spring reverb).
+#[must_use]
+pub fn split_core_with_songs(comp: &Compositions, profiles: &[ProfileDef], songs: &[crate::profiles::SongDef]) -> (Compositions, Vec<ProfileDef>, Vec<crate::profiles::SongDef>) {
     let mut comp = comp.clone();
     let mut profiles = profiles.to_vec();
+    let mut songs = songs.to_vec();
     let mut new_blocks: Vec<BlockPresetDef> = Vec::new();
     let mut new_modules: Vec<ModulePresetDef> = Vec::new();
     let add_module = |mods: &mut Vec<ModulePresetDef>, module: &str, preset: &str, snap: ModuleSnapshotDef| -> String {
@@ -811,33 +822,13 @@ pub fn split_core(comp: &Compositions, profiles: &[ProfileDef]) -> (Compositions
             // Every patch playing this snapshot takes what moved out of it.
             // A patch naming no snapshot plays the first.
             let first = index == 0;
-            for profile in &mut profiles {
-                for patch in &mut profile.patches {
-                    let on = patch.rig_preset.eq_ignore_ascii_case(&core_name)
-                        && (patch.snapshot.eq_ignore_ascii_case(&snap.name) || (patch.snapshot.is_empty() && first));
-                    if !on {
-                        continue;
-                    }
-                    let picks_time = patch.modules.iter().any(|m| ["Time", "Delay", "Reverb"].iter().any(|t| m.module.eq_ignore_ascii_case(t)));
-                    let mut blocks: Vec<BlockChoiceDef> = Vec::new();
-                    let mut overrides: Vec<OverrideDef> = Vec::new();
-                    if let Some(t) = &time_pick {
-                        if picks_time {
-                            // It picks its own Time: the old content stays its
-                            // own, over its pick, as it always played.
-                            blocks.extend(delay.blocks.iter().chain(&reverb.blocks).cloned());
-                            overrides.extend(delay.overrides.iter().chain(&reverb.overrides).cloned());
-                        } else {
-                            patch.modules.push(t.clone());
-                        }
-                    }
-                    blocks.extend(patch_blocks.iter().filter(|c| !patch.blocks.iter().any(|x| x.block.eq_ignore_ascii_case(&c.block))).cloned());
-                    overrides.extend(loose.iter().cloned());
-                    // Ahead of the patch's own, so its own still win.
-                    blocks.append(&mut patch.blocks);
-                    patch.blocks = blocks;
-                    overrides.append(&mut patch.overrides);
-                    patch.overrides = overrides;
+            let moved = Moved { core: &core_name, snapshot: &snap.name, first, time: time_pick.as_ref(), delay: &delay, reverb: &reverb, blocks: &patch_blocks, loose: &loose };
+            for patch in profiles.iter_mut().flat_map(|p| p.patches.iter_mut()) {
+                moved.take_into(patch);
+            }
+            for song in &mut songs {
+                for patch in song.patches.iter_mut().chain(song.patch_versions.iter_mut().map(|v| &mut v.patch)) {
+                    moved.take_into(patch);
                 }
             }
         }
@@ -852,7 +843,53 @@ pub fn split_core(comp: &Compositions, profiles: &[ProfileDef]) -> (Compositions
             comp.blocks.push(b);
         }
     }
-    (comp, profiles)
+    (comp, profiles, songs)
+}
+
+/// What one Core snapshot gave up in the split: its time effects (as a Time
+/// pick, or the blocks themselves for a patch picking its own Time), the
+/// block presets and overrides that are a patch's now.
+struct Moved<'a> {
+    core: &'a str,
+    snapshot: &'a str,
+    /// The preset's first snapshot: what a patch naming none plays.
+    first: bool,
+    time: Option<&'a ModuleChoiceDef>,
+    delay: &'a ModuleSnapshotDef,
+    reverb: &'a ModuleSnapshotDef,
+    blocks: &'a [BlockChoiceDef],
+    loose: &'a [OverrideDef],
+}
+
+impl Moved<'_> {
+    /// Give `patch` what moved out of its Core snapshot, if it plays it.
+    fn take_into(&self, patch: &mut PatchDef) {
+        let on = patch.rig_preset.eq_ignore_ascii_case(self.core)
+            && (patch.snapshot.eq_ignore_ascii_case(self.snapshot) || (patch.snapshot.is_empty() && self.first));
+        if !on {
+            return;
+        }
+        let picks_time = patch.modules.iter().any(|m| ["Time", "Delay", "Reverb"].iter().any(|t| m.module.eq_ignore_ascii_case(t)));
+        let mut blocks: Vec<BlockChoiceDef> = Vec::new();
+        let mut overrides: Vec<OverrideDef> = Vec::new();
+        if let Some(t) = self.time {
+            if picks_time {
+                // It picks its own Time: the old content stays its own, over
+                // its pick, as it always played.
+                blocks.extend(self.delay.blocks.iter().chain(&self.reverb.blocks).cloned());
+                overrides.extend(self.delay.overrides.iter().chain(&self.reverb.overrides).cloned());
+            } else {
+                patch.modules.push(t.clone());
+            }
+        }
+        blocks.extend(self.blocks.iter().filter(|c| !patch.blocks.iter().any(|x| x.block.eq_ignore_ascii_case(&c.block))).cloned());
+        overrides.extend(self.loose.iter().cloned());
+        // Ahead of the patch's own, so its own still win.
+        blocks.append(&mut patch.blocks);
+        patch.blocks = blocks;
+        overrides.append(&mut patch.overrides);
+        patch.overrides = overrides;
+    }
 }
 
 /// A patch's drive slots: the profile's, with the patch's own over them.
@@ -2112,6 +2149,46 @@ pub(crate) mod golden {
             assert_eq!(a, b, "line {} changed by the split", i + 1);
         }
         assert_eq!(recorded.lines().count(), now.lines().count());
+    }
+
+    /// A song's own patch on a Core snapshot takes what moved out of it,
+    /// as a profile's patch does — a song's verse keeps its pre reverb.
+    #[test]
+    fn a_songs_patch_keeps_what_moved_out_of_its_core() {
+        let (def, mut comp, _) = shipped();
+        // A Core snapshot carrying a pre reverb (a patch's block now).
+        let core = comp.presets.iter_mut().find(|p| p.name == "John Mayer").expect("the Core preset");
+        let snap = core.snapshots[0].name.clone();
+        core.snapshots[0].blocks.push(BlockChoiceDef { block: "Pre Verb".into(), preset: "Fender Spring".into() });
+        let mut verse = def.patches[0].clone();
+        verse.name = "Verse Clean".into();
+        verse.rig_preset = "John Mayer".into();
+        verse.snapshot = snap.clone();
+        verse.blocks.clear();
+        let mut version = verse.clone();
+        version.name = "Clean".into();
+        let song = crate::profiles::SongDef {
+            name: "WASHED".into(),
+            key: "F".into(),
+            bpm: 139,
+            stack: 0,
+            parts: Vec::new(),
+            stack_defaults: Vec::new(),
+            part_recalls: Vec::new(),
+            profile: String::new(),
+            start_part: String::new(),
+            start_patch: String::new(),
+            patches: vec![verse],
+            switch_actions: Vec::new(),
+            patch_overrides: Vec::new(),
+            patch_versions: vec![crate::profiles::SongPatchVersionDef { profile: def.name.clone(), patch: version }],
+        };
+        let (comp2, _, songs) = split_core_with_songs(&comp, std::slice::from_ref(&def), &[song]);
+        let has_spring = |p: &PatchDef| p.blocks.iter().any(|b| b.block == "Pre Verb" && b.preset == "Fender Spring");
+        assert!(has_spring(&songs[0].patches[0]), "the song's own patch keeps the spring");
+        assert!(has_spring(&songs[0].patch_versions[0].patch), "the song's version keeps the spring");
+        let kept = comp2.preset("John Mayer").expect("the Core preset");
+        assert!(!kept.snapshots[0].blocks.iter().any(|b| b.block == "Pre Verb"), "the Core no longer carries it");
     }
 
     /// A split library has nothing left to move.
