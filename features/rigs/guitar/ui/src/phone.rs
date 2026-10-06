@@ -811,11 +811,16 @@ pub fn PhoneControl(
 /// switches around it.
 #[component]
 pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32) -> Element {
+    // Where the panes were left (`desktop-panes`), else Drives and Amp over
+    // Delay and Verb.
+    let start = use_hook(|| {
+        load_desktop_panes().unwrap_or([Page::Drives, Page::Amps, Page::Delays, Page::Reverbs])
+    });
     let pages = [
-        use_signal(|| Page::Drives),
-        use_signal(|| Page::Amps),
-        use_signal(|| Page::Delays),
-        use_signal(|| Page::Reverbs),
+        use_signal(|| start[0]),
+        use_signal(|| start[1]),
+        use_signal(|| start[2]),
+        use_signal(|| start[3]),
     ];
     // The box this has, measured: the pages fitted to it (amps, drives) need
     // it, and here it is not the window.
@@ -875,7 +880,10 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
         rsx! {
             div { key: "{p.short()}",
                 style: "flex: 1 1 0%; min-width: 0; display: flex; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 3px; font-size: 11px; font-weight: 800; letter-spacing: 0.02em; white-space: nowrap; cursor: pointer; overflow: hidden; {look}",
-                onclick: move |_| target.set(p),
+                onclick: move |_| {
+                    target.set(p);
+                    save_desktop_panes([pages[0](), pages[1](), pages[2](), pages[3]()]);
+                },
                 span { "{p.short()}" }
             }
         }
@@ -902,6 +910,52 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
                 }
             }
         }
+    }
+}
+
+/// Where the desktop grid's panes are remembered: `signal/desktop-panes` in
+/// the config directory (the rig's own), the four pages' slugs on one line.
+#[cfg(not(target_arch = "wasm32"))]
+fn desktop_panes_file() -> std::path::PathBuf {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("signal")
+        .join("desktop-panes")
+}
+
+/// The panes as they were left, if they were and still name pages.
+fn load_desktop_panes() -> Option<[Page; 4]> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let text = std::fs::read_to_string(desktop_panes_file()).ok()?;
+        let find = |slug: &str| Page::ALL.into_iter().chain([Page::Time]).find(|p| p.slug() == slug);
+        let pages: Vec<Page> = text.split_whitespace().filter_map(find).collect();
+        <[Page; 4]>::try_from(pages).ok()
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        None
+    }
+}
+
+/// Remember the panes (best effort: a read-only config just forgets them).
+fn save_desktop_panes(pages: [Page; 4]) {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let file = desktop_panes_file();
+        if let Some(dir) = file.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let line = pages.map(Page::slug).join(" ");
+        if let Err(e) = std::fs::write(&file, line + "\n") {
+            tracing::warn!(error = %e, "desktop panes: not remembered");
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = pages;
     }
 }
 
