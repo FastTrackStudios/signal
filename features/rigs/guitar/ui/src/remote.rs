@@ -95,6 +95,12 @@ pub fn GuitarRigRemote() -> Element {
     // included) instead of stacking under it. No-op outside the app.
     fts_chrome::use_bar_claim();
     let mut left_open = use_signal(|| true);
+    // Each sidebar is minimal or full (a phone's width); the bar's toggles
+    // step closed → minimal → full. The left opens minimal (the names and
+    // the state), the right full (it is where a sound is dialled in).
+    let mut left_full = use_signal(|| false);
+    let mut right_full = use_signal(|| true);
+    use_context_provider(|| crate::module_sidebar::RightFull(right_full));
     let palette_open = use_signal(|| false);
     // The library picker, open on a kind — or closed.
     let library_open = use_signal(|| None::<crate::library::Kind>);
@@ -410,8 +416,19 @@ pub fn GuitarRigRemote() -> Element {
                         "flex items-center justify-center w-7 h-7 text-muted-foreground hover:text-foreground text-sm"
                     },
                     style: bar_item(left_open()),
-                    title: "Left sidebar",
-                    onclick: move |_| left_open.toggle(),
+                    title: match (left_open(), left_full()) {
+                        (false, _) => "Left sidebar — click for the minimal one",
+                        (true, false) => "Left sidebar (minimal) — click for the full one",
+                        (true, true) => "Left sidebar (full) — click to close",
+                    },
+                    onclick: move |_| match (left_open(), left_full()) {
+                        (false, _) => {
+                            left_full.set(false);
+                            left_open.set(true);
+                        }
+                        (true, false) => left_full.set(true),
+                        (true, true) => left_open.set(false),
+                    },
                     fts_chrome::Glyph { icon: fts_chrome::Icon::RailLeft, size: 15 }
                 }
 
@@ -695,13 +712,18 @@ pub fn GuitarRigRemote() -> Element {
                                 "flex items-center justify-center w-7 h-7 text-muted-foreground hover:text-foreground text-sm"
                             },
                             style: bar_item(open),
-                            title: "Module sidebar",
-                            onclick: move |_| {
-                                if open {
-                                    sel.set(None);
-                                } else {
+                            title: match (open, right_full()) {
+                                (false, _) => "Module sidebar — click for the minimal one",
+                                (true, false) => "Module sidebar (minimal) — click for the full one",
+                                (true, true) => "Module sidebar (full) — click to close",
+                            },
+                            onclick: move |_| match (open, right_full()) {
+                                (false, _) => {
+                                    right_full.set(false);
                                     sel.set(Some(crate::module_sidebar::Selection::Module(first.to_string())));
                                 }
+                                (true, false) => right_full.set(true),
+                                (true, true) => sel.set(None),
                             },
                             fts_chrome::Glyph { icon: fts_chrome::Icon::RailRight, size: 15 }
                         }
@@ -729,17 +751,18 @@ pub fn GuitarRigRemote() -> Element {
                 // Setlist.
                 if left_open() {
                     if perf_now.perform_mode == 0 {
-                        crate::preset_bar::PresetSidebar { revision: perf_now.revision }
+                        crate::preset_bar::PresetSidebar { revision: perf_now.revision, full: left_full() }
                     } else if perf_now.perform_mode == 2 {
                         crate::setlist_bar::SetlistSidebar {
                             model: perf_now.clone(),
+                            full: left_full(),
                             on_browse: move |k: crate::library::Kind| {
                                 let mut library_open = library_open;
                                 library_open.set(Some(k));
                             },
                         }
                     } else {
-                        crate::sidebars::LeftSidebar { model: perf_now.clone() }
+                        crate::sidebars::LeftSidebar { model: perf_now.clone(), full: left_full() }
                     }
                 }
                 div { class: "flex-1 min-w-0 min-h-0 overflow-hidden", style: if view == Mode::Control && !control_collage() { "padding: 0;" } else { "padding: 0 10px 10px;" },

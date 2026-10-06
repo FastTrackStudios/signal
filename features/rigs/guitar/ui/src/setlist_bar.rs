@@ -32,14 +32,14 @@
 use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::RigClient;
-use signal_guitar_proto::{LibraryModel, PerformanceModel, ProfileEntry};
+use signal_guitar_proto::{LibraryModel, PerformanceModel};
 use signal_widgets::{Picker, PickerSize};
 
 use crate::library::Kind;
 
 use crate::kit::{MenuItem, PickOption, Picked, PresetBar};
 use crate::theme::{
-    DIM, FAINT, FIELD, LINE, LINE_STRONG, LIVE, LIVE_BG, MUTED, SIDEBAR, SIDEBAR_W, TEXT,
+    DIM, FAINT, FIELD, LINE, LINE_STRONG, LIVE, MUTED, SIDEBAR, TEXT,
 };
 
 /// The set's menu: rename, duplicate, a new set, move it in the list,
@@ -88,7 +88,14 @@ where
 }
 
 #[component]
-pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) -> Element {
+pub fn SetlistSidebar(
+    model: PerformanceModel,
+    on_browse: EventHandler<Kind>,
+    /// The full sidebar (a phone's width): tempo beside the key. Minimal
+    /// keeps the song, its key and what it starts on.
+    #[props(default)]
+    full: bool,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let popup_host = signal_widgets::PopupHost::try_use();
 
@@ -112,36 +119,6 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
         }
     });
     let lib: LibraryModel = patches.read().clone().unwrap_or_default();
-    let profile_names: Vec<String> = lib.profiles.iter().map(|p| p.name.clone()).collect();
-    let loaded = model.profile_name.clone();
-    // A profile's patches as a part's recall list: "Stack · Patch".
-    let patches_of = |name: &str| -> (Vec<String>, Vec<String>) {
-        lib.profiles
-            .iter()
-            .find(|p| p.name.eq_ignore_ascii_case(name))
-            .map(|p: &ProfileEntry| {
-                (
-                    p.patch_list.iter().map(|x| x.name.clone()).collect(),
-                    p.patch_list
-                        .iter()
-                        .map(|x| {
-                            if x.stack.is_empty() {
-                                x.name.clone()
-                            } else {
-                                format!("{} · {}", x.stack, x.name)
-                            }
-                        })
-                        .collect(),
-                )
-            })
-            .unwrap_or_default()
-    };
-
-    // One editor open at a time: the current song's entry, or a part.
-    let mut editing_song = use_signal(|| false);
-    let mut editing_part = use_signal(|| None::<usize>);
-    let mut adding_part = use_signal(|| false);
-
     let set_name = model
         .setlists
         .get(model.setlist_index as usize)
@@ -175,7 +152,7 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
 
     rsx! {
         aside {
-            style: "width: {SIDEBAR_W}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
+            style: "width: {crate::theme::sidebar_w(full)}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
                     border-right: 1px solid {LINE}; background: {SIDEBAR}; color: {TEXT};",
 
             // ── The set: its name large, ‹ › to the next set, ⋯ to manage ──
@@ -229,8 +206,9 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                 }
             }
 
-            // ── The songs in set order, on one timeline edge; the song that
-            // is up opens into its map ──
+            // ── The songs in set order, on one timeline edge, each with the
+            // patch it starts on. What a song does beyond that (its parts,
+            // its switches) is the song's own page, not the set's list. ──
             div { style: "flex: 1 1 0; min-height: 0; overflow-y: scroll; padding: 8px 8px 12px 6px;",
                 if model.songs.is_empty() {
                     div { style: "padding: 10px 8px; font-size: 12px; color: {FAINT}; line-height: 1.5;",
@@ -277,368 +255,41 @@ pub fn SetlistSidebar(model: PerformanceModel, on_browse: EventHandler<Kind>) ->
                                         span { style: "width: 14px; flex-shrink: 0; font-size: 11px; font-family: monospace; color: {FAINT};",
                                             "{i + 1}"
                                         }
-                                        span {
-                                            style: format!(
-                                                "flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; font-size: 13px; \
-                                                 font-weight: {}; color: {};",
-                                                if state == Node::Now { 700 } else { 500 },
-                                                if state == Node::Now { TEXT } else { MUTED },
-                                            ),
-                                            "{song.name}"
-                                        }
-                                        if i == current + 1 {
-                                            span { style: "flex-shrink: 0; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.07); \
-                                                            font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: {MUTED};",
-                                                "NEXT"
+                                        // The song, and under it the patch it starts on —
+                                        // what you need before counting in.
+                                        div { style: "flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
+                                            div { style: "display: flex; align-items: center; gap: 6px; min-width: 0;",
+                                                span {
+                                                    style: format!(
+                                                        "flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; font-size: 13px; \
+                                                         font-weight: {}; color: {};",
+                                                        if state == Node::Now { 700 } else { 500 },
+                                                        if state == Node::Now { TEXT } else { MUTED },
+                                                    ),
+                                                    "{song.name}"
+                                                }
+                                                if i == current + 1 {
+                                                    span { style: "flex-shrink: 0; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.07); \
+                                                                    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: {MUTED};",
+                                                        "NEXT"
+                                                    }
+                                                }
+                                            }
+                                            if !song.start.is_empty() {
+                                                {
+                                                    let (label, colour) = patch_chip(&song.start);
+                                                    rsx! {
+                                                        div { style: "display: flex; min-width: 0;",
+                                                            PatchChip { label, colour, lit: state == Node::Now }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                         KeyChip { key_name: song.key.clone() }
-                                        span { style: "width: 26px; flex-shrink: 0; text-align: right; font-size: 11px; font-family: monospace; color: {FAINT};",
-                                            "{song.bpm}"
-                                        }
-                                        if state == Node::Now {
-                                            div { class: if editing_song() { "" } else { signal_widgets::reveal("sg-reveal") }, style: "display: flex; flex-shrink: 0;",
-                                                Tool {
-                                                    icon: fts_chrome::Icon::Pencil,
-                                                    title: "Key, tempo and place in this set",
-                                                    onclick: move |()| {
-                                                        editing_song.toggle();
-                                                        editing_part.set(None);
-                                                    },
-                                                }
-                                            }
-                                        }
-                                    }
-                                    if state == Node::Now && editing_song() {
-                                        div { style: "margin-left: 28px;",
-                                            SongEntryEditor {
-                                                key: "{song.name}-{song.key}-{song.bpm}-{model.song_profile}-{model.start_part}",
-                                                song: song.name.clone(),
-                                                profile: model.song_profile.clone(),
-                                                start_part: model.start_part.clone(),
-                                                profiles: profile_names.clone(),
-                                                parts: model.parts.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
-                                                index: i,
-                                                count: model.songs.len(),
-                                                setlist: model.setlist_index,
-                                                song_key: song.key.clone(),
-                                                bpm: song.bpm,
-                                                on_done: move |()| editing_song.set(false),
-                                            }
-                                        }
-                                    }
-                                    if state == Node::Now {
-                                        {
-                                            // Sections: runs of parts with one section name.
-                                            let mut sections: Vec<(String, Vec<usize>)> = Vec::new();
-                                            for (pi, p) in model.parts.iter().enumerate() {
-                                                match sections.last_mut() {
-                                                    Some((name, idx)) if name.eq_ignore_ascii_case(&p.section) => idx.push(pi),
-                                                    _ => sections.push((p.section.clone(), vec![pi])),
-                                                }
-                                            }
-                                            let at = model.part_index as usize;
-                                            let cur_sec = sections.iter().position(|(_, idx)| idx.contains(&at)).unwrap_or(0);
-                                            let count = sections.len();
-                                            let on = if model.song_profile.is_empty() { loaded.clone() } else { model.song_profile.clone() };
-                                            let starts = if model.start_part.is_empty() { String::new() } else { format!(" · starts {}", model.start_part) };
-                                            // Sections only when parts have been grouped into them;
-                                            // otherwise the song is its parts.
-                                            let grouped = model.parts.iter().any(|p| !p.section.eq_ignore_ascii_case(&p.name));
-                                            let unit = if grouped { "section" } else { "part" };
-                                            // Where a song with no start part opens.
-                                            let start_chip = (model.start_part.is_empty() && !model.start_patch.is_empty())
-                                                .then(|| patch_chip(&model.start_patch));
-                                            // The switches the song (or the part up) tunes.
-                                            let tuned: Vec<signal_guitar_proto::PerfStack> = model
-                                                .stacks
-                                                .iter()
-                                                .filter(|st| st.song_tuned || st.part_tuned)
-                                                .cloned()
-                                                .collect();
-                                            rsx! {
-                                                div { style: "display: flex; flex-direction: column; gap: 1px; margin: 0 0 8px 28px;",
-                                                    span { style: "padding: 0 0 6px; font-size: 11px; color: {FAINT}; white-space: nowrap; overflow: hidden;",
-                                                        "on {on}{starts}"
-                                                    }
-                                                    if let Some(chip) = start_chip {
-                                                        div { style: "display: flex; align-items: center; gap: 8px; padding: 0 6px 6px 0;",
-                                                            span { style: "{crate::theme::EYEBROW}", "Starts" }
-                                                            div { style: "flex: 1;" }
-                                                            PatchChip { label: chip.0.clone(), colour: chip.1, lit: true }
-                                                        }
-                                                    }
-                                                    if count > 0 {
-                                                        div { style: "display: flex; gap: 2px; padding: 0 6px 6px 0;",
-                                                            for k in 0..count {
-                                                                span {
-                                                                    key: "{k}",
-                                                                    style: format!(
-                                                                        "flex: 1; height: 3px; border-radius: 2px; background: {};",
-                                                                        if k < cur_sec { "#3f5a3a" } else if k == cur_sec { LIVE } else { "#27272a" },
-                                                                    ),
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    div { style: "position: relative; display: flex; flex-direction: column; gap: 1px;",
-                                                        if count > 0 {
-                                                            div { style: "position: absolute; left: 13px; top: 12px; bottom: 12px; width: 1px; background: {LINE}; z-index: 0;" }
-                                                        }
-                                                        for (si, (sec_name, idx)) in sections.iter().cloned().enumerate() {
-                                                            {
-                                                                let first = idx[0];
-                                                                let single = idx.len() == 1
-                                                                    && model.parts[first].name.eq_ignore_ascii_case(&sec_name);
-                                                                let live = si == cur_sec;
-                                                                let state = if si < cur_sec { Node::Done } else if live { Node::Now } else { Node::Ahead };
-                                                                let is_next = si == cur_sec + 1;
-                                                                let lead = model.parts[first].clone();
-                                                                let rig_sec = rig.clone();
-                                                                let chip = patch_chip(&lead.patch);
-                                                                rsx! {
-                                                                    div { key: "sec-{si}-{sec_name}", style: "display: flex; flex-direction: column;",
-                                                                        div {
-                                                                            class: if live { "" } else { "sg-hover" },
-                                                                            style: format!(
-                                                                                "display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 6px 6px 0; \
-                                                                                 border-radius: 0 6px 6px 0; cursor: pointer; background: {}; opacity: {};",
-                                                                                if live { LIVE_BG } else { "transparent" },
-                                                                                if state == Node::Done { "0.5" } else { "1" },
-                                                                            ),
-                                                                            title: if live && single { "Edit this section" } else { "Play this section" },
-                                                                            onclick: move |_| {
-                                                                                if live && single {
-                                                                                    editing_part.set(if editing_part() == Some(first) { None } else { Some(first) });
-                                                                                    editing_song.set(false);
-                                                                                } else {
-                                                                                    editing_part.set(None);
-                                                                                    send(&rig_sec, move |r| async move {
-                                                                                        let _ = r.select_part(first as u32).await;
-                                                                                    });
-                                                                                }
-                                                                            },
-                                                                            TimelineNode { state, accent: true }
-                                                                            span {
-                                                                                style: format!(
-                                                                                    "flex: 1 1 0; min-width: 0; font-size: 12px; white-space: nowrap; overflow: hidden; \
-                                                                                     font-weight: {}; color: {};",
-                                                                                    if live { 700 } else { 500 },
-                                                                                    if live { TEXT } else { MUTED },
-                                                                                ),
-                                                                                "{sec_name}"
-                                                                            }
-                                                                            if is_next {
-                                                                                span { style: "flex-shrink: 0; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.07); \
-                                                            font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: {MUTED};",
-                                                                                    "NEXT"
-                                                                                }
-                                                                            }
-                                                                            if single {
-                                                                                PartMarks { part: lead.clone() }
-                                                                                PatchChip { label: chip.0.clone(), colour: chip.1, lit: live }
-                                                                            } else {
-                                                                                span { style: "flex-shrink: 0; font-size: 11px; font-family: monospace; color: {FAINT};",
-                                                                                    "{idx.len()} parts"
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                        // A section of several parts: its parts as sublines.
-                                                                        if !single {
-                                                                            for &pi in idx.iter() {
-                                                                                {
-                                                                                    let part = model.parts[pi].clone();
-                                                                                    let part_on = pi == at;
-                                                                                    let rig = rig.clone();
-                                                                                    let chip = patch_chip(&part.patch);
-                                                                                    rsx! {
-                                                                                        div {
-                                                                                            key: "{pi}-{part.name}",
-                                                                                            class: if part_on { "" } else { "sg-hover" },
-                                                                                            style: format!(
-                                                                                                "display: flex; align-items: center; gap: 6px; min-width: 0; margin-left: 28px; \
-                                                                                                 padding: 3px 6px 3px 0; border-radius: 5px; cursor: pointer; color: {};",
-                                                                                                if part_on { TEXT } else { FAINT },
-                                                                                            ),
-                                                                                            onclick: move |_| {
-                                                                                                if part_on {
-                                                                                                    editing_part.set(if editing_part() == Some(pi) { None } else { Some(pi) });
-                                                                                                    editing_song.set(false);
-                                                                                                } else {
-                                                                                                    editing_part.set(None);
-                                                                                                    send(&rig, move |r| async move { let _ = r.select_part(pi as u32).await; });
-                                                                                                }
-                                                                                            },
-                                                                                            span { style: "flex: 1 1 0; min-width: 0; font-size: 11px; white-space: nowrap; overflow: hidden;",
-                                                                                                "{part.name}"
-                                                                                            }
-                                                                                            PartMarks { part: part.clone() }
-                                                                                            PatchChip { label: chip.0.clone(), colour: chip.1, lit: part_on }
-                                                                                        }
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                        // The editor of a part of this section, when open.
-                                                                        for &pi in idx.iter().filter(|&&pi| editing_part() == Some(pi)) {
-                                                                            {
-                                                                                let part = model.parts[pi].clone();
-                                                                                let grouped = !part.section.eq_ignore_ascii_case(&part.name);
-                                                                                let base = if !part.profile.is_empty() {
-                                                                                    part.profile.clone()
-                                                                                } else if !model.song_profile.is_empty() {
-                                                                                    model.song_profile.clone()
-                                                                                } else {
-                                                                                    loaded.clone()
-                                                                                };
-                                                                                let (names, labels) = patches_of(&base);
-                                                                                rsx! {
-                                                                                    div { key: "ed-{pi}", style: "padding: 2px 0 6px 28px;",
-                                                                                        PartEditor {
-                                                                                            key: "{pi}-{part.name}-{part.profile}-editor",
-                                                                                            index: pi,
-                                                                                            count: model.parts.len(),
-                                                                                            name: part.name.clone(),
-                                                                                            patch: part.patch.clone(),
-                                                                                            section: if grouped { part.section.clone() } else { String::new() },
-                                                                                            profile_switches: part.profile_switches,
-                                                                                            repeat_of: part.repeat_of.clone(),
-                                                                                            others: model.parts.iter().filter(|p| p.name != part.name).map(|p| p.name.clone()).collect::<Vec<_>>(),
-                                                                                            profile: part.profile.clone(),
-                                                                                            song_profile: if model.song_profile.is_empty() { loaded.clone() } else { model.song_profile.clone() },
-                                                                                            profiles: profile_names.clone(),
-                                                                                            patches: names,
-                                                                                            labels,
-                                                                                            on_done: move |()| editing_part.set(None),
-                                                                                        }
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    // The song's switch setup: each switch it tunes, with its
-                                                    // rotation, in the switch's colour.
-                                                    if !tuned.is_empty() {
-                                                        div { style: "display: flex; flex-direction: column; gap: 2px; padding: 8px 6px 4px 0;",
-                                                            span { style: "{crate::theme::EYEBROW}", "Switches" }
-                                                            for st in tuned.iter() {
-                                                                {
-                                                                    let (colour, _) = crate::perform::folder_color(&st.name);
-                                                                    let rotation = st.patches.join(" · ");
-                                                                    let mut tags: Vec<&str> = Vec::new();
-                                                                    if st.part_tuned { tags.push("PART"); }
-                                                                    if st.momentary { tags.push("HOLD"); }
-                                                                    if st.no_rotate { tags.push("NO ROTATE"); }
-                                                                    let tags = tags.join(" · ");
-                                                                    let open_row_menu = EventHandler::new({
-                                                                        let parts = crate::part_menu::parts_of(&model);
-                                                                        let changes = crate::part_menu::changes_of(&model);
-                                                                        let patch = crate::part_menu::stack_patch(st);
-                                                                        let rig = rig.clone();
-                                                                        move |e: MouseEvent| {
-                                                                            e.prevent_default();
-                                                                            let items = crate::part_menu::items_with_changes(&parts, &changes, &patch);
-                                                                            let (rig, parts, patch) = (rig.clone(), parts.clone(), patch.clone());
-                                                                            crate::kit::context_menu(popup_host, &e, items, EventHandler::new(move |p: crate::kit::Picked| {
-                                                                                crate::part_menu::act(&rig, &parts, &patch, p);
-                                                                            }));
-                                                                        }
-                                                                    });
-                                                                    rsx! {
-                                                                        div { key: "sw-{st.name}",
-                                                                            class: "sg-hover",
-                                                                            style: "display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 4px 2px 0; border-radius: 4px; cursor: context-menu;",
-                                                                            title: "Right-click: make this switch's patch a part, or rename it",
-                                                                            oncontextmenu: move |e: MouseEvent| open_row_menu.call(e),
-                                                                            // Touch has no right-click: a tap opens the same menu.
-                                                                            onclick: move |e: MouseEvent| {
-                                                                                if signal_widgets::is_touch() {
-                                                                                    open_row_menu.call(e);
-                                                                                }
-                                                                            },
-                                                                            span { style: "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; background: {colour};" }
-                                                                            span { style: "flex-shrink: 0; font-size: 11px; font-weight: 600; color: {TEXT};", "{st.name}" }
-                                                                            span { style: "flex: 1 1 auto; min-width: 0; font-size: 11px; color: {MUTED}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
-                                                                                title: "{rotation}",
-                                                                                "{rotation}"
-                                                                            }
-                                                                            if !tags.is_empty() {
-                                                                                span { style: "flex-shrink: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: {FAINT};", "{tags}" }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    // The song's changes to the profile's patches — kept by
-                                                    // the song; right-click to save one back to the profile
-                                                    // or drop it.
-                                                    if !model.song_changes.is_empty() {
-                                                        div { style: "display: flex; flex-direction: column; gap: 2px; padding: 8px 6px 4px 0;",
-                                                            span { style: "{crate::theme::EYEBROW}", "Song changes" }
-                                                            for ch in model.song_changes.iter() {
-                                                                {
-                                                                    let patch = ch.patch.clone();
-                                                                    let n = ch.count;
-                                                                    let chip = patch_chip(&patch);
-                                                                    let changes = crate::part_menu::changes_of(&model);
-                                                                    let rig = rig.clone();
-                                                                    let open_row_menu = EventHandler::new({
-                                                                        let patch = patch.clone();
-                                                                        move |e: MouseEvent| {
-                                                                            e.prevent_default();
-                                                                            let items = crate::part_menu::change_items(&changes, &patch);
-                                                                            let (rig, patch) = (rig.clone(), patch.clone());
-                                                                            crate::kit::context_menu(popup_host, &e, items, EventHandler::new(move |p: crate::kit::Picked| {
-                                                                                crate::part_menu::act(&rig, &[], &patch, p);
-                                                                            }));
-                                                                        }
-                                                                    });
-                                                                    rsx! {
-                                                                        div { key: "chg-{patch}",
-                                                                            class: "sg-hover",
-                                                                            style: "display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 4px 2px 0; border-radius: 4px; cursor: context-menu;",
-                                                                            title: "Right-click: save back to the profile, or discard",
-                                                                            oncontextmenu: move |e: MouseEvent| open_row_menu.call(e),
-                                                                            // Touch has no right-click: a tap opens the same menu.
-                                                                            onclick: move |e: MouseEvent| {
-                                                                                if signal_widgets::is_touch() {
-                                                                                    open_row_menu.call(e);
-                                                                                }
-                                                                            },
-                                                                            PatchChip { label: chip.0.clone(), colour: chip.1, lit: false }
-                                                                            span { style: "flex: 1;" }
-                                                                            span { style: "flex-shrink: 0; font-size: 11px; font-family: monospace; color: {FAINT};", "±{n}" }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    if adding_part() {
-                                                        NewPart { on_done: move |()| adding_part.set(false) }
-                                                    } else {
-                                                        button {
-                                                            style: "align-self: flex-start; margin-top: 2px; padding: 4px 0; border: none; background: transparent; \
-                                                                    cursor: pointer; font-size: 11px; font-weight: 600; color: {FAINT};",
-                                                            onclick: move |_| {
-                                                                adding_part.set(true);
-                                                                editing_part.set(None);
-                                                            },
-                                                            if grouped { "+ section" } else { "+ part" }
-                                                        }
-                                                    }
-                                                    if count > 0 {
-                                                        span { style: "padding: 2px 0; font-size: 11px; color: {FAINT};",
-                                                            "Switch 5: next {unit} · hold: back"
-                                                        }
-                                                    }
-                                                }
+                                        if full {
+                                            span { style: "width: 26px; flex-shrink: 0; text-align: right; font-size: 11px; font-family: monospace; color: {FAINT};",
+                                                "{song.bpm}"
                                             }
                                         }
                                     }

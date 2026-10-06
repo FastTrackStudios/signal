@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 
 use crate::kit::{Button, ListRow, MenuItem, NamePrompt, PickOption, Picked, PresetBar};
-use crate::theme::{FAINT, LINE, MUTED, SIDEBAR, SIDEBAR_W, T_BODY, TEXT};
+use crate::theme::{FAINT, LINE, MUTED, SIDEBAR, T_BODY, TEXT};
 
 /// Fire a rig call without waiting.
 fn send<F, Fut>(rig: &Option<RigClient>, call: F)
@@ -68,7 +68,12 @@ fn tone_act(rig: &Option<RigClient>, name: &str, p: Picked) {
 }
 
 #[component]
-pub fn PresetSidebar(revision: u64) -> Element {
+pub fn PresetSidebar(
+    revision: u64,
+    /// Full: a phone's width. Minimal keeps the names and the state.
+    #[props(default)]
+    full: bool,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut rev = use_signal(|| revision);
     if *rev.peek() != revision {
@@ -128,7 +133,7 @@ pub fn PresetSidebar(revision: u64) -> Element {
 
     rsx! {
         aside {
-            style: "width: {SIDEBAR_W}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
+            style: "width: {crate::theme::sidebar_w(full)}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
                     border-right: 1px solid {LINE}; background: {SIDEBAR}; color: {TEXT};",
             // ── The preset on the bench: the same heading as the set's and
             // the profile's — name large, ‹ › to step, ⋯ to manage ──

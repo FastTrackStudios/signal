@@ -453,6 +453,9 @@ pub struct SongSlot {
     pub key: String,
     /// Tempo for this set.
     pub bpm: u32,
+    /// The patch it starts on — the setlist's badge. Empty: it keeps the
+    /// profile's default.
+    pub start: String,
 }
 
 /// [`LiveBlock::engine`] values.

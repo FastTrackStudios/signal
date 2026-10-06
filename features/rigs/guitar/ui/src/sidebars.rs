@@ -15,7 +15,7 @@ use signal_guitar_proto::{PatchInfo, PerformanceModel, PresetInfo};
 use crate::kit::{Button, ListRow, MenuItem, PickOption, Picked, PresetBar};
 use crate::perform::folder_color;
 use crate::theme::{
-    EYEBROW, FAINT, FIELD, LINE, LINE_STRONG, MODIFIED, R_SM, SIDEBAR, SIDEBAR_W, T_BODY, T_META, TEXT,
+    EYEBROW, FAINT, FIELD, LINE, LINE_STRONG, MODIFIED, R_SM, SIDEBAR, T_BODY, T_META, TEXT,
 };
 
 /// Fire a rig call without waiting — the next `Perf` event redraws.
@@ -95,7 +95,12 @@ fn profile_items(p: &signal_guitar_proto::ProfileEntry, all: &[String]) -> Vec<M
 /// pool patches point at. Select a patch in the tree, then click a preset
 /// to point the patch at it (the core rebuilds that patch's chain).
 #[component]
-pub fn LeftSidebar(model: PerformanceModel) -> Element {
+pub fn LeftSidebar(
+    model: PerformanceModel,
+    /// Full: a phone's width. Minimal keeps the names and the state.
+    #[props(default)]
+    full: bool,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
 
     // Re-fetch patches + presets whenever the performance model changes
@@ -178,7 +183,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
 
     rsx! {
         aside {
-            style: "width: {SIDEBAR_W}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
+            style: "width: {crate::theme::sidebar_w(full)}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
                     border-right: 1px solid {LINE}; background: {SIDEBAR}; color: {TEXT};",
             // ── The profile: the same heading as the set's — name large,
             // ▾ / ‹ › to change profile, ⋯ to grow and manage it ──

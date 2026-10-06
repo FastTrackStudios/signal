@@ -73,10 +73,20 @@ pub const R_MD: &str = "8px";
 /// the whole screen on a phone held upright (landscape phone layouts are
 /// their own).
 pub const PHONE_W: &str = "402px";
-/// A left sidebar's width — a phone's (see [`PHONE_W`]).
+/// A sidebar's minimal width: the names and the state, beside a rig that
+/// keeps the room.
+pub const SIDEBAR_MIN_W: &str = "232px";
+/// A left sidebar's full width — a phone's (see [`PHONE_W`]).
 pub const SIDEBAR_W: &str = PHONE_W;
-/// The right (module) sidebar's width — a phone's (see [`PHONE_W`]).
+/// The right (module) sidebar's full width — a phone's (see [`PHONE_W`]).
 pub const INSPECTOR_W: &str = PHONE_W;
+
+/// A sidebar's width: full (a phone's) or minimal. Every sidebar has both;
+/// the bar's toggle steps closed → minimal → full.
+#[must_use]
+pub fn sidebar_w(full: bool) -> &'static str {
+    if full { PHONE_W } else { SIDEBAR_MIN_W }
+}
 
 // ── Fragments ──────────────────────────────────────────────────────────────
 

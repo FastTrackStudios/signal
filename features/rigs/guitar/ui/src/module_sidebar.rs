@@ -187,9 +187,15 @@ pub fn preset_items(
     items
 }
 
-/// The sidebar's width — the theme's inspector width, kept narrow so the
-/// rig's grid keeps the room (it stays open most of the time).
-const SIDEBAR_W: &str = crate::theme::INSPECTOR_W;
+/// Whether the right sidebar is full (a phone's width) or minimal — the
+/// bar's toggle steps it; provided at the rig's root.
+#[derive(Clone, Copy)]
+pub struct RightFull(pub Signal<bool>);
+
+/// The sidebar's width now: a phone's when full, else the minimal width.
+fn sidebar_w() -> &'static str {
+    crate::theme::sidebar_w(try_consume_context::<RightFull>().is_some_and(|f| (f.0)()))
+}
 
 /// The sidebar's tabs, two levels deep: the three things a sound is made
 /// of, then the blocks a module holds ("All" is the module itself).
@@ -697,7 +703,7 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             } else {
                 "No preset matches.".to_string()
             },
-            width: SIDEBAR_W,
+            width: sidebar_w(),
             right: true,
             on_close: move |()| selected.set(None),
             // Preset · Core · Time, then the blocks of the one picked —
@@ -1155,7 +1161,7 @@ fn BlockPresets(
             } else {
                 "No preset matches.".to_string()
             },
-            width: SIDEBAR_W,
+            width: sidebar_w(),
             right: true,
             on_close: move |()| on_close.call(()),
             PresetBar {

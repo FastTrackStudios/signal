@@ -5486,12 +5486,19 @@ impl Rig for GuitarRigBackend {
         {
             let resolved = self.resolved_setlist();
             let song_idx = *self.song_index.lock_ok();
+            // Cloned out, not held: the calls below take it again.
+            let lib = self.songs_lib.lock_ok().clone();
             m.songs = resolved
                 .iter()
-                .map(|(name, key, bpm, _, _)| signal_guitar_proto::SongSlot {
+                .map(|(name, key, bpm, _, parts)| signal_guitar_proto::SongSlot {
                     name: name.clone(),
                     key: key.clone(),
                     bpm: *bpm,
+                    start: lib
+                        .iter()
+                        .find(|s| s.name.eq_ignore_ascii_case(name))
+                        .map(|s| song_start(s, parts))
+                        .unwrap_or_default(),
                 })
                 .collect();
             m.song_index = song_idx as u32;
@@ -5525,6 +5532,7 @@ impl Rig for GuitarRigBackend {
                     name: s.name.clone(),
                     key: s.key.clone(),
                     bpm: s.bpm,
+                    start: String::new(),
                 })
                 .collect();
         }
@@ -8113,6 +8121,7 @@ impl Rig for GuitarRigBackend {
                             } else {
                                 e.bpm
                             },
+                            start: String::new(),
                         }
                     })
                     .collect(),
@@ -10045,6 +10054,23 @@ impl GuitarRigBackend {
         self.reload_rebuilt(rebuilt);
         Ok(())
     }
+}
+
+/// The patch a song starts on, for the setlist's badge: its own start
+/// patch, else the patch its start part recalls; empty when it keeps the
+/// profile's default.
+fn song_start(def: &SongDef, parts: &[PerfPart]) -> String {
+    if !def.start_patch.is_empty() {
+        return def.start_patch.clone();
+    }
+    if def.start_part.is_empty() {
+        return String::new();
+    }
+    parts
+        .iter()
+        .find(|p| p.name.eq_ignore_ascii_case(&def.start_part))
+        .map(|p| p.patch.clone())
+        .unwrap_or_default()
 }
 
 /// The headphone mixer's shared file, opened once per rig.
