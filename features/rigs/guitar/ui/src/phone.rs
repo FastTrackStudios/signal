@@ -806,14 +806,14 @@ enum DeskPane {
     Units(&'static [&'static str]),
     /// The pre modulation (and the pre tremolo, when it plays).
     PreUnits,
-    /// The gate alone.
+    /// The gate, with the patch's level and pan beside it.
     Gate,
+    /// The Master module: its EQ and the limiter.
+    Master,
     /// The pre delay over the pre reverb.
     PreLanes,
     /// The post compressor alone.
     PostComp,
-    /// Nothing: the room a group of three doubles leaves.
-    Empty,
 }
 
 impl DeskPane {
@@ -824,9 +824,9 @@ impl DeskPane {
             Self::Units(k) => k.join("+"),
             Self::PreUnits => "pre-units".into(),
             Self::Gate => "gate".into(),
+            Self::Master => "master".into(),
             Self::PreLanes => "pre-lanes".into(),
             Self::PostComp => "post-comp".into(),
-            Self::Empty => "empty".into(),
         }
     }
 }
@@ -858,11 +858,11 @@ fn desk_columns(g: crate::control::Group) -> [Vec<(DeskPane, f64)>; 2] {
             vec![(DeskPane::Page(Page::PreComp), 1.0), (DeskPane::Page(Page::Drives), 1.0), (DeskPane::PostComp, 1.0)],
             vec![(DeskPane::Gate, 1.0), (DeskPane::Page(Page::Amps), 1.0), (DeskPane::Page(Page::Eq), 1.0)],
         ],
-        // Three doubles — modulation over motion, the delays, the reverbs —
-        // half the height each, the top right left open.
+        // Two rows: modulation over motion beside the Master module (its
+        // EQ and the limiter); the delays beside the reverbs.
         Group::Post => [
-            vec![(DeskPane::Page(Page::ModMotion), 1.5), (DeskPane::Page(Page::Delays), 1.5)],
-            vec![(DeskPane::Empty, 1.5), (DeskPane::Page(Page::Reverbs), 1.5)],
+            vec![(DeskPane::Page(Page::ModMotion), 1.0), (DeskPane::Page(Page::Delays), 1.0)],
+            vec![(DeskPane::Master, 1.0), (DeskPane::Page(Page::Reverbs), 1.0)],
         ],
     }
 }
@@ -918,7 +918,9 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
     let columns: Vec<Vec<(DeskPane, f64)>> = if w >= 2.0 * DESKTOP_PANE_MIN_W { vec![left, right] } else { vec![left] };
     let col_w = w / columns.len() as f64 - GRID_GAP;
     rsx! {
-        div { style: "display: flex; flex-direction: row; gap: {GRID_GAP}px; width: 100%; height: 100%; min-height: 0; overflow: hidden;",
+        // Edge to edge: a hairline between the panes (the rule showing
+        // through the gap), no padding, no rounding.
+        div { style: "display: flex; flex-direction: row; gap: {GRID_GAP}px; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: {RULE};",
             onmounted: move |e: MountedEvent| mounted.set(Some(e.data())),
             for (c, col) in columns.into_iter().enumerate() {
                 div { key: "col-{c}", style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: {GRID_GAP}px;",
@@ -930,11 +932,7 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
                                 {
                                     let pane = (col_w, (h - gaps) * span / rows - 2.0);
                                     rsx! {
-                                        div { key: "{p.key()}", style: if p == DeskPane::Empty {
-                                                format!("flex: {span} 1 0%; min-width: 0; min-height: 0;")
-                                            } else {
-                                                format!("flex: {span} 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid {RULE}; border-radius: 6px; overflow: hidden;")
-                                            },
+                                        div { key: "{p.key()}", style: "flex: {span} 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: #0b0c0f;",
                                             div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden;",
                                                 div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
                                                     DeskPaneView { pane_kind: p, blocks: blocks.clone(), state, tempo_bpm, pane }
@@ -974,12 +972,28 @@ fn DeskPaneView(pane_kind: DeskPane, blocks: Vec<LiveBlock>, state: RigViewState
         },
         DeskPane::Gate => {
             let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
+            let trim = find_block(&blocks, BlockType::Volume, "Patch Trim");
+            // The patch's level and pan: a slim strip at the gate's right,
+            // its face as tall as the pane.
+            let trim_w = 76.0;
+            let lane = (pane.0 - trim_w, pane.1);
             rsx! {
-                if let (Some(g), Some(f)) = (gate, faces.gate.clone().map(|f| f.at_box(pane.0, pane.1))) {
-                    // Its lane near its own proportions, centred.
-                    div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex;",
-                        div { style: crate::control::lane_fit(Some(pane), f.size),
-                            crate::rig_faces::GateFace { block: g, face: f.clone(), level: state.in_peak_db, fill: true }
+                div { style: "display: flex; flex-direction: row; width: 100%; height: 100%; min-height: 0; min-width: 0;",
+                    if let (Some(g), Some(f)) = (gate, faces.gate.clone().map(|f| f.at_box(lane.0, lane.1))) {
+                        // Its lane near its own proportions, centred.
+                        div { style: "position: relative; flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;",
+                            div { style: crate::control::lane_fit(Some(lane), f.size),
+                                crate::rig_faces::GateFace { block: g, face: f.clone(), level: state.in_peak_db, fill: true }
+                            }
+                        }
+                    }
+                    if let Some(t) = trim {
+                        div { style: "flex: 0 0 {trim_w}px; width: {trim_w}px; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid {RULE};",
+                            if let Some(f) = faces.trim.clone() {
+                                crate::rig_faces::BlockFace { block: t, face: f, fill: true }
+                            } else {
+                                crate::control::PatchTrimPanel { block: t }
+                            }
                         }
                     }
                 }
@@ -997,7 +1011,41 @@ fn DeskPaneView(pane_kind: DeskPane, blocks: Vec<LiveBlock>, state: RigViewState
                 }
             }
         }
-        DeskPane::Empty => rsx! {},
+        DeskPane::Master => {
+            let rig = use_hook(try_consume_context::<RigClient>);
+            let power = |b: &Option<LiveBlock>| {
+                b.as_ref().map(|b| {
+                    let (rig, id) = (rig.clone(), b.id.clone());
+                    Callback::new(move |()| {
+                        let (rig, id) = (rig.clone(), id.clone());
+                        spawn(async move {
+                            if let Some(r) = rig {
+                                let _ = r.toggle_block_bypass(id).await;
+                            }
+                        });
+                    })
+                })
+            };
+            let eq = find_block(&blocks, BlockType::Eq, "Master EQ");
+            let limiter = find_block(&blocks, BlockType::Compressor, "Limiter");
+            // The limiter square, the EQ the rest — as the Control view had
+            // them.
+            let lim_w = pane.1.min(pane.0 * 0.5).floor();
+            rsx! {
+                div { style: "display: flex; flex-direction: row; width: 100%; height: 100%; min-height: 0; min-width: 0;",
+                    div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+                        ZoomPanel { title: "Master EQ".to_string(), left_power_on: eq.as_ref().map(|b| !b.bypassed), on_left_power: power(&eq),
+                            if let Some(e) = eq.clone() { LiveEq { block: e, state } }
+                        }
+                    }
+                    div { style: "flex: 0 0 {lim_w}px; width: {lim_w}px; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid {RULE};",
+                        ZoomPanel { title: "Limiter".to_string(), left_power_on: limiter.as_ref().map(|b| !b.bypassed), on_left_power: power(&limiter),
+                            if let Some(l) = limiter.clone() { LiveComp { block: l, state } }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1006,7 +1054,7 @@ fn DeskPaneView(pane_kind: DeskPane, blocks: Vec<LiveBlock>, state: RigViewState
 const DESKTOP_PANE_MIN_H: f64 = 170.0;
 const DESKTOP_PANE_MIN_W: f64 = 300.0;
 /// Between the panes of the desktop's grid.
-const GRID_GAP: f64 = 6.0;
+const GRID_GAP: f64 = 1.0;
 
 /// A rail button: its icon, its name small under it; the one picked
 /// raised.

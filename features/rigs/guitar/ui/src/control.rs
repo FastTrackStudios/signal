@@ -1091,7 +1091,7 @@ fn PKnob(
 /// version of it), the last thing before the delays and reverbs, so the
 /// whole dry sound moves and the tails take it from there.
 #[component]
-fn PatchTrimPanel(block: LiveBlock) -> Element {
+pub(crate) fn PatchTrimPanel(block: LiveBlock) -> Element {
     let param = |name: &str, lo: f32, hi: f32| {
         block
             .params
@@ -1738,7 +1738,7 @@ pub(crate) fn ModGroupPanel(
     // In a known lane, less the members' tabs over the face.
     let mod_face = crate::rig_faces::use_faces()
         .modulation(cur.block_type.as_str())
-        .map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h - 26.0)));
+        .map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h)));
     // The face's nameplate opens the member's engines (or modes).
     let algos: Option<(&'static str, Vec<&'static str>)> = match cur.block_type {
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => Some(("engine", MOD_ENGINES.to_vec())),
@@ -1770,7 +1770,10 @@ pub(crate) fn ModGroupPanel(
             // With a face: the members as tabs over it (a press engages that
             // one), Motion's speed beside them; the face's own nameplate has
             // its preset, its engine and its On.
-            if mod_face.is_some() && tier > Tier::Phone {
+            // (Not in a known lane — a desktop pane: there the face's own
+            // nameplate picks the member, as on the phone, and the room is
+            // the face's.)
+            if mod_face.is_some() && tier > Tier::Phone && lane.is_none() {
                 div { style: "flex: 0 0 {tab_h}px; display: flex; align-items: stretch; gap: 2px; padding: 3px 6px; background: #0b0c0f; border-bottom: 1px solid #1d1f24;",
                     for (i, m) in members.iter().enumerate() {
                         {
@@ -1885,10 +1888,10 @@ pub(crate) fn ModGroupPanel(
                 div { class: "relative flex-1 min-h-0 flex",
                     // In a known lane, the face's box near its own
                     // proportions (as a delay lane's).
-                    div { style: lane_fit(lane.map(|(w, h)| (w, h - 26.0)), f.size),
+                    div { style: lane_fit(lane, f.size),
                     crate::rig_faces::BlockFace { block: cur.clone(), face: f.clone(), fill: true, preset_type: Some(cur.block_type.as_str().to_string()), algos: algos.clone(), tempo_bpm: Some(tempo_bpm),
                         // On a phone the members are picked from its name.
-                        members: if tier <= Tier::Phone { members.iter().map(|m| (m.name.clone(), m.id.clone())).collect() } else { Vec::new() },
+                        members: if tier <= Tier::Phone || lane.is_some() { members.iter().map(|m| (m.name.clone(), m.id.clone())).collect() } else { Vec::new() },
                     }
                     }
                 }

@@ -100,8 +100,12 @@ pub fn GuitarRigRemote() -> Element {
     let library_open = use_signal(|| None::<crate::library::Kind>);
     use_context_provider(|| crate::library::OpenLibrary(library_open));
     // The module the right sidebar lists presets for (None: closed).
+    // On the Mac it opens on the Core: dialling a tone in is what the
+    // desktop is for, so the sidebar is mostly open.
     let selected_module = use_signal(|| {
-        try_consume_context::<crate::module_sidebar::InitialSelection>().and_then(|i| i.0)
+        try_consume_context::<crate::module_sidebar::InitialSelection>()
+            .and_then(|i| i.0)
+            .or_else(|| cfg!(target_os = "macos").then(|| crate::module_sidebar::Selection::Module("Core".to_string())))
     });
     use_context_provider(|| crate::module_sidebar::SelectedModule(selected_module));
     // The view actions the palette and the keymap can ask for.
@@ -719,7 +723,7 @@ pub fn GuitarRigRemote() -> Element {
                         crate::sidebars::LeftSidebar { model: perf_now.clone() }
                     }
                 }
-                div { class: "flex-1 min-w-0 min-h-0 overflow-hidden", style: "padding: 0 10px 10px;",
+                div { class: "flex-1 min-w-0 min-h-0 overflow-hidden", style: if mode() == Mode::Control && !control_collage() { "padding: 0;" } else { "padding: 0 10px 10px;" },
                 if let Some((on_press, on_toggle_fx, on_toggle_boost, on_cycle_boost, on_tap_tempo, on_prev_song, on_next_song, on_select_song)) = controls {
                         // Routing / Control / Session share the layout: the
                         // page on top (~2/3), the switch grid docked beneath.
@@ -804,7 +808,7 @@ pub fn GuitarRigRemote() -> Element {
                                     // Between the input meter and the
                                     // output / phones rail, as the
                                     // collage had them.
-                                    div { style: "display: flex; flex-direction: row; gap: 6px; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden;",
+                                    div { style: "display: flex; flex-direction: row; gap: 1px; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden;",
                                         crate::control::InputRail { state }
                                         div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; height: 100%; display: flex;",
                                             crate::phone::DesktopPages {

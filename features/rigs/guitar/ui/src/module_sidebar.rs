@@ -24,7 +24,7 @@ use signal_widgets::{BrowseChip, BrowseEntry, BrowseScope, SoundBrowser};
 
 use crate::kit::{Button, MenuItem, PickOption, Picked, PresetBar};
 use crate::preset_look::Look;
-use crate::theme::{FAINT, INSPECTOR_W, MUTED, TEXT};
+use crate::theme::{FAINT, MUTED, TEXT};
 
 /// What the right sidebar shows presets for.
 #[derive(Clone, PartialEq, Debug)]
@@ -186,6 +186,10 @@ pub fn preset_items(
     ));
     items
 }
+
+/// The sidebar's width: narrower than the shared inspector's, so the rig's
+/// grid keeps the room (it stays open most of the time).
+const SIDEBAR_W: &str = "232px";
 
 /// The modules the sidebar's tabs offer, in signal order.
 const SIDEBAR_MODULES: [&str; 6] = ["Core", "Drive", "Amp", "Time", "Delay", "Reverb"];
@@ -648,7 +652,7 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             } else {
                 "No preset matches.".to_string()
             },
-            width: INSPECTOR_W,
+            width: SIDEBAR_W,
             right: true,
             on_close: move |()| selected.set(None),
             // Every module with presets, one tap apart.
@@ -1070,7 +1074,7 @@ fn BlockPresets(
             } else {
                 "No preset matches.".to_string()
             },
-            width: INSPECTOR_W,
+            width: SIDEBAR_W,
             right: true,
             on_close: move |()| on_close.call(()),
             PresetBar {
