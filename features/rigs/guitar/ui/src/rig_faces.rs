@@ -1393,6 +1393,20 @@ pub fn InputRow(
             .collect();
         if let Some((room_w, room_h)) = fit {
             let lanes: Vec<(String, Option<LiveBlock>, FaceEntry)> = lanes.into_iter().filter_map(|(k, b, f)| f.map(|f| (k, b, f))).collect();
+            // One unit alone fills the box: a face lays itself out for its
+            // room (the Q-Tron goes wide, its filter screen beside it).
+            if let [(k_, b, f)] = lanes.as_slice() {
+                let (k_, b, f) = (k_.clone(), b.clone(), f.clone());
+                return rsx! {
+                    div { key: "{k_}", style: "display: flex; width: 100%; height: 100%; min-height: 0; min-width: 0; overflow: hidden;",
+                        if let Some(b) = b {
+                            BlockFace { block: b.clone(), face: f, fill: true, stepper: true, preset_type: Some(b.block_type.as_str().to_string()) }
+                        } else {
+                            UnboundFace { face: f, fill: true }
+                        }
+                    }
+                };
+            }
             let sizes: Vec<(f64, f64)> = lanes.iter().map(|(_, _, f)| f.size).collect();
             let (rows, k) = fit_rows(&sizes, (room_w - 24.0, room_h - 32.0), FIT_GAP);
             let mut lanes = lanes.into_iter();
