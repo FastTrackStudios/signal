@@ -2732,7 +2732,8 @@ const FRAME_ROWS: bool = true;
 pub enum Group {
     /// Before the amp: compression, pitch, EQ, and the pre effects.
     Pre,
-    /// The drives, then the amps (with the Amp EQ and the gate).
+    /// The Core: the drives, then the amps (with the Amp EQ, the post
+    /// compressor and the gate). Labelled CORE.
     Amp,
     /// After the amp: modulation, motion and the Time module.
     Post,
@@ -2745,7 +2746,7 @@ impl Group {
     pub fn label(self) -> &'static str {
         match self {
             Self::Pre => "PRE",
-            Self::Amp => "AMP",
+            Self::Amp => "CORE",
             Self::Post => "POST",
         }
     }
@@ -3013,7 +3014,6 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
 
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
 
-    let hp = model.headphone.clone();
     // The groups the top bar picked (AMP alone by default; AMP over POST
     // with the switches hidden).
     let groups = try_use_context::<ShownGroups>().unwrap_or_default();
@@ -3037,7 +3037,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
         div { class: "flex gap-0 h-full min-h-0 overflow-hidden",
             style: "width: 100%; height: 100%; display: flex; min-height: 0; overflow: hidden;",
             // ── Input meter rail ──
-            div { class: "w-6 flex-shrink-0", LiveStereoMeter { label: "In", state, output: false, muted: false } }
+            InputRail { state }
 
             // ── Center surface ──
             div { class: "flex flex-col gap-1 flex-1 min-w-0 min-h-0",
@@ -3569,46 +3569,69 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                 // level with the meters either side.)
             }
 
-            // ── Output rail: mute on top, then FOH trim + out meter,
-            // then the phones group — mix fader | phones meter | guitar
-            // (self) fader.
-            div {
-                style: "width: 86px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 0; padding: 0 2px;",
-                button {
-                    class: if hp.main_mute {
-                        "w-9 rounded px-0.5 py-0.5 text-[8px] font-bold uppercase ring-2 ring-red-500"
-                    } else {
-                        "w-9 rounded px-0.5 py-0.5 text-[8px] font-bold uppercase border border-border text-muted-foreground hover:text-foreground"
-                    },
-                    style: if hp.main_mute { "background-color: #ef4444; color: #fff;" } else { "" },
-                    onclick: {
-                        let rig = rig;
-                        move |_| {
+            // ── Output rail ──
+            OutputRail { model: model.clone(), state }
+        }
+    }
+}
+
+/// The input's meter, down the left of the Control surface.
+#[component]
+pub fn InputRail(state: RigViewState) -> Element {
+    rsx! {
+        div { class: "w-6 flex-shrink-0", style: "width: 24px; flex-shrink: 0;",
+            LiveStereoMeter { label: "In", state, output: false, muted: false }
+        }
+    }
+}
+
+/// Down the right of the Control surface: the main mute, the FOH trim and
+/// output meter, then the phones (mix | meter | guitar).
+#[component]
+pub fn OutputRail(model: PerformanceModel, state: RigViewState) -> Element {
+    let cbs = crate::stable::use_stable();
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let hp = model.headphone.clone();
+    rsx! {
+        // ── Output rail: mute on top, then FOH trim + out meter,
+        // then the phones group — mix fader | phones meter | guitar
+        // (self) fader.
+        div {
+            style: "width: 86px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 0; padding: 0 2px;",
+            button {
+                class: if hp.main_mute {
+                    "w-9 rounded px-0.5 py-0.5 text-[8px] font-bold uppercase ring-2 ring-red-500"
+                } else {
+                    "w-9 rounded px-0.5 py-0.5 text-[8px] font-bold uppercase border border-border text-muted-foreground hover:text-foreground"
+                },
+                style: if hp.main_mute { "background-color: #ef4444; color: #fff;" } else { "" },
+                onclick: {
+                    let rig = rig;
+                    move |_| {
+                        if let Some(r) = rig.clone() {
+                            spawn(async move { let _ = r.toggle_main_mute().await; });
+                        }
+                    }
+                },
+                if hp.main_mute { "Muted" } else { "Mute" }
+            }
+            div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; justify-content: center; gap: 3px;",
+                VFader {
+                    label: "Trim",
+                    value: (model.master_trim_db + 24.0) / 36.0,
+                    readout: format!("{:+.0}dB", model.master_trim_db),
+                    on_change: cbs.cb({
+                        let rig = rig.clone();
+                        move |v: f32| {
                             if let Some(r) = rig.clone() {
-                                spawn(async move { let _ = r.toggle_main_mute().await; });
+                                spawn(async move { let _ = r.set_master_trim(v.mul_add(36.0, -24.0)).await; });
                             }
                         }
-                    },
-                    if hp.main_mute { "Muted" } else { "Mute" }
+                    }),
                 }
-                div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; justify-content: center; gap: 3px;",
-                    VFader {
-                        label: "Trim",
-                        value: (model.master_trim_db + 24.0) / 36.0,
-                        readout: format!("{:+.0}dB", model.master_trim_db),
-                        on_change: cbs.cb({
-                            let rig = rig.clone();
-                            move |v: f32| {
-                                if let Some(r) = rig.clone() {
-                                    spawn(async move { let _ = r.set_master_trim(v.mul_add(36.0, -24.0)).await; });
-                                }
-                            }
-                        }),
-                    }
-                    LiveStereoMeter { label: "Out", state, output: true, muted: hp.main_mute }
-                }
-                PhonesStrip { hp: hp.clone(), state }
+                LiveStereoMeter { label: "Out", state, output: true, muted: hp.main_mute }
             }
+            PhonesStrip { hp: hp.clone(), state }
         }
     }
 }

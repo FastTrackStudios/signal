@@ -1511,7 +1511,7 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
     let needle = 50.0 + r.cents.clamp(-50.0, 50.0);
     rsx! {
         button {
-            class: "relative flex items-center gap-2 rounded-lg px-2 text-left min-h-0 overflow-hidden",
+            class: "relative flex flex-col justify-center gap-1 rounded-lg h-full px-2 pt-3 pb-1.5 text-left min-h-0 overflow-hidden",
             style: if in_tune {
                 "background-color: #14532d; border: 1px solid #22c55e;"
             } else {
@@ -1520,12 +1520,19 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
             onclick: move |_| onclick.call(()),
             span { class: "absolute top-0.5 left-1.5 text-[10px] font-mono opacity-40", "{switch_no}" }
             span { class: "absolute top-0.5 right-1.5 text-[8px] font-mono opacity-40", title: "Hold switches 3 and 4 together", "3+4" }
-            span {
-                class: "text-base font-bold w-7 text-center leading-none flex-shrink-0",
-                style: if in_tune { "color: #22c55e;" } else if r.active { "color: #e4e4e7;" } else { "color: #4b5563;" },
-                if r.active { "{r.note}" } else { fts_chrome::Glyph { icon: fts_chrome::Icon::Note, size: 16 } }
+            // Note and cents on one line, the needle under them — nothing
+            // shares a corner with the switch number or the 3+4 hint.
+            div { class: "flex items-baseline justify-center gap-2 min-w-0",
+                span {
+                    class: "text-sm font-bold leading-none",
+                    style: if in_tune { "color: #22c55e; white-space: nowrap;" } else if r.active { "color: #e4e4e7; white-space: nowrap;" } else { "color: #6b7280; white-space: nowrap;" },
+                    if r.active { "{r.note}" } else { "Tuner" }
+                }
+                if r.active {
+                    span { class: "text-[10px] font-mono opacity-70", style: NOWRAP, {format!("{:+.0}", r.cents)} }
+                }
             }
-            div { class: "relative flex-1 h-3 min-w-0",
+            div { class: "relative h-2 w-full min-w-0",
                 div { class: "absolute inset-x-0 top-1/2 h-px bg-white/20" }
                 div { class: "absolute left-1/2 top-0 bottom-0 w-px bg-white/40" }
                 if r.active {
@@ -1534,9 +1541,6 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
                         style: if in_tune { "left: {needle}%; background-color: #22c55e;" } else { "left: {needle}%; background-color: #eab308;" },
                     }
                 }
-            }
-            if r.active {
-                span { class: "text-[9px] font-mono opacity-70 flex-shrink-0", {format!("{:+.0}", r.cents)} }
             }
         }
     }

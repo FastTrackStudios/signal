@@ -79,11 +79,15 @@ pub struct FaceTier {
 impl FaceEntry {
     /// This face laid out for `tier`: its version for that room, or the
     /// nearest smaller one it has (a phone's in a strip's room), else
-    /// itself.
+    /// itself. The face itself IS the desktop design: a desktop room never
+    /// borrows a smaller tier's version (the Mac drew every amp as the
+    /// phone's upright combo).
     #[must_use]
     pub fn at(&self, tier: crate::control::Tier) -> Self {
-        let best = self.tiers.iter().filter(|(t, _)| *t >= tier && *t < crate::control::Tier::Desktop).min_by_key(|(t, _)| *t);
-        let best = best.or_else(|| self.tiers.iter().filter(|(t, _)| *t <= tier).max_by_key(|(t, _)| *t));
+        use crate::control::Tier;
+        let best = self.tiers.iter().filter(|(t, _)| *t >= tier && *t < Tier::Desktop).min_by_key(|(t, _)| *t);
+        let floor = if tier >= Tier::Desktop { Tier::Desktop } else { Tier::Strip };
+        let best = best.or_else(|| self.tiers.iter().filter(|(t, _)| *t <= tier && *t >= floor).max_by_key(|(t, _)| *t));
         let mut f = self.clone();
         if let Some((_, t)) = best {
             f.face.clone_from(&t.face);
@@ -793,11 +797,21 @@ pub fn DrivesRow(
     /// …and no taller than this (points).
     #[props(default)]
     fit_height: Option<f64>,
+    /// Stand the pre compressor left of the board, as wide as a pedal (its
+    /// compressor-pedal face). Only drawn here: in the chain it stays at
+    /// the head, before the pitch blocks.
+    #[props(default)]
+    pre_comp: bool,
 ) -> Element {
     let faces = use_faces();
     // Each pedal at the window's tier (on a phone, its narrow version).
     let tier = crate::control::use_tier();
     let mut slots: Vec<(LiveBlock, Option<FaceEntry>)> = Vec::new();
+    if pre_comp
+        && let Some(c) = blocks.iter().find(|b| b.block_type == BlockType::Compressor && b.name.eq_ignore_ascii_case("Pre Comp"))
+    {
+        slots.push((c.clone(), faces.pre_comp_pedal.clone().map(|f| f.at(tier))));
+    }
     slots.extend(
         blocks
             .iter()

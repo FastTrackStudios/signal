@@ -132,6 +132,19 @@ app_bin := "./target/release-fast/signal-desktop"
 app:
     {{app_build}}
 
+# The app as a macOS bundle — target/Signal.app, installed to
+# ~/Applications (Finder, Dock, Spotlight; log in ~/Library/Logs/Signal).
+#   just mac-app                maximized, as the laptop opens it
+#   just mac-app macbook        a MacBook Pro 14"'s window (1512x945)
+#   just mac-app 1280x800       any size
+mac-app size="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{app_build}}
+    size="{{size}}"
+    [ "$size" = macbook ] && size=1512x945
+    SIGNAL_WINDOW_SIZE="$size" scripts/mac-app.sh --install
+
 # No watcher and no rebuild-on-change, and the app needs no dx asset pipeline
 # (every sheet is include_str!'d, per the inline-styles rule).
 #

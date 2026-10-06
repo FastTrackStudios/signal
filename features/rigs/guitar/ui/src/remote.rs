@@ -773,10 +773,19 @@ pub fn GuitarRigRemote() -> Element {
                                     // stacked when there is room), not every
                                     // panel at once. `FTS_CONTROL=collage`
                                     // brings back the old view.
-                                    crate::phone::DesktopPages {
-                                        blocks: blocks(),
-                                        state,
-                                        tempo_bpm: perf_now.tempo_bpm,
+                                    // Between the input meter and the
+                                    // output / phones rail, as the
+                                    // collage had them.
+                                    div { style: "display: flex; flex-direction: row; gap: 6px; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden;",
+                                        crate::control::InputRail { state }
+                                        div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; height: 100%; display: flex;",
+                                            crate::phone::DesktopPages {
+                                                blocks: blocks(),
+                                                state,
+                                                tempo_bpm: perf_now.tempo_bpm,
+                                            }
+                                        }
+                                        crate::control::OutputRail { model: perf_now.clone(), state }
                                     }
                                 }
                             }

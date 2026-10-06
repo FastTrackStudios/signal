@@ -798,24 +798,71 @@ pub fn PhoneControl(
     }
 }
 
-/// The desktop's Control page: the chain a page at a time, as the phone
-/// shows it — four pages in a grid when the box has room (Drives and Amp
-/// over Delay and Verb), two stacked, or one — each picked on its own chain,
-/// in place of every panel at once. The desktop keeps its sidebar and
-/// switches around it.
+/// One pane of the desktop's grid: a page of the chain, or half of one
+/// (the phone's Mod/Motion page is two panes here).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DeskPane {
+    Page(Page),
+    /// The Modulation module's effect.
+    Modulation,
+    /// The Motion module's effect.
+    Motion,
+    /// Every input unit but the filter: transpose, pitch, wah, dive…
+    Input,
+}
+
+impl DeskPane {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Page(Page::Drives) => "Drives",
+            Self::Page(Page::Amps) => "Amp",
+            Self::Page(Page::GatePostComp) => "Post Comp · Gate",
+            Self::Page(Page::Eq) => "EQ",
+            Self::Page(Page::Filter) => "Filter",
+            Self::Page(Page::PreModTrem) => "Pre Mod",
+            Self::Page(Page::PreDelayVerb) => "Pre Delay · Verb",
+            Self::Page(Page::Delays) => "Delay",
+            Self::Page(Page::Reverbs) => "Reverb",
+            Self::Page(p) => p.short(),
+            Self::Modulation => "Modulation",
+            Self::Motion => "Motion",
+            Self::Input => "Input",
+        }
+    }
+}
+
+/// The four panes a top-bar group shows, top left first: PRE the input
+/// side, CORE the tone (drives, amp, post comp + gate, EQ), POST the
+/// effects after the amp.
+fn desk_panes(g: crate::control::Group) -> [DeskPane; 4] {
+    use crate::control::Group;
+    match g {
+        Group::Pre => [
+            DeskPane::Input,
+            DeskPane::Page(Page::Filter),
+            DeskPane::Page(Page::PreModTrem),
+            DeskPane::Page(Page::PreDelayVerb),
+        ],
+        Group::Amp => [
+            DeskPane::Page(Page::Drives),
+            DeskPane::Page(Page::Amps),
+            DeskPane::Page(Page::GatePostComp),
+            DeskPane::Page(Page::Eq),
+        ],
+        Group::Post => [DeskPane::Modulation, DeskPane::Motion, DeskPane::Page(Page::Delays), DeskPane::Page(Page::Reverbs)],
+    }
+}
+
+/// The desktop's Control page: the top bar's group (PRE / CORE / POST) as
+/// a two-by-two grid — fewer panes when the window is small.
 #[component]
 pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32) -> Element {
-    // Where the panes were left (`desktop-panes`), else Drives and Amp over
-    // Delay and Verb.
-    let start = use_hook(|| {
-        load_desktop_panes().unwrap_or([Page::Drives, Page::Amps, Page::Delays, Page::Reverbs])
-    });
-    let pages = [
-        use_signal(|| start[0]),
-        use_signal(|| start[1]),
-        use_signal(|| start[2]),
-        use_signal(|| start[3]),
-    ];
+    // The group the top bar picked last (CORE until one is).
+    let groups = try_use_context::<crate::control::ShownGroups>();
+    let group = groups
+        .and_then(|g| (g.picked)().last().copied())
+        .unwrap_or(crate::control::Group::Amp);
+    let panes = desk_panes(group);
     // The box this has, measured: the pages fitted to it (amps, drives) need
     // it, and here it is not the window.
     let mut size = use_signal(|| (0.0f64, 0.0f64));
@@ -843,60 +890,54 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
         });
     });
     // Until measured, an estimate from the window (less the sidebar, the
-    // bars and the switches) — never a blank page.
+    // rails, the bars and the switches) — never a blank page.
     let (w, h) = match size() {
         (w, h) if w > 0.0 && h > 0.0 => (w, h),
         _ => window.map_or((900.0, 420.0), |s| {
             let (ww, wh) = (s.0)();
-            ((ww - 420.0).max(320.0), (wh * 0.5).max(240.0))
+            ((ww - 540.0).max(320.0), (wh * 0.5).max(240.0))
         }),
     };
-    let chain = f64::from(CHAIN_H);
-    let tall = h >= 2.0 * chain + 2.0 * DESKTOP_PANE_MIN_H;
+    let tall = h >= 2.0 * DESKTOP_PANE_MIN_H;
     let wide = w >= 2.0 * DESKTOP_PANE_MIN_W;
     // Which of the four show, as rows of panes.
     let rows: Vec<Vec<usize>> = match (tall, wide) {
         (true, true) => vec![vec![0, 1], vec![2, 3]],
-        (true, false) => vec![vec![1], vec![2]],
-        (false, true) => vec![vec![1, 2]],
-        (false, false) => vec![vec![1]],
+        (true, false) => vec![vec![0], vec![1]],
+        (false, true) => vec![vec![0, 1]],
+        (false, false) => vec![vec![0]],
     };
     let (n_rows, n_cols) = (rows.len() as f64, rows[0].len() as f64);
     let pane = (
         w / n_cols - GRID_GAP,
-        (h - n_rows * chain) / n_rows - 4.0 - GRID_GAP,
+        h / n_rows - 4.0 - GRID_GAP,
     );
-    let tile = move |target: Signal<Page>, p: Page| {
-        let mut target = target;
-        let on = target() == p;
-        let color = p.color();
-        let look = if on { format!("background: {color}; color: #0a0b0d;") } else { format!("background: {RAISED}; color: {color};") };
-        rsx! {
-            div { key: "{p.short()}",
-                style: "flex: 1 1 0%; min-width: 0; display: flex; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 3px; font-size: 11px; font-weight: 800; letter-spacing: 0.02em; white-space: nowrap; cursor: pointer; overflow: hidden; {look}",
-                onclick: move |_| {
-                    target.set(p);
-                    save_desktop_panes([pages[0](), pages[1](), pages[2](), pages[3]()]);
-                },
-                span { "{p.short()}" }
-            }
-        }
-    };
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: {GRID_GAP}px; width: 100%; height: 100%; min-height: 0; overflow: hidden;",
             onmounted: move |e: MountedEvent| mounted.set(Some(e.data())),
             for (r, row) in rows.into_iter().enumerate() {
                 div { key: "row-{r}", style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row; gap: {GRID_GAP}px;",
                     for i in row {
-                        div { key: "pane-{i}", style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid {RULE}; border-radius: 6px; overflow: hidden;",
-                            div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
-                                for p in Page::ALL {
-                                    {tile(pages[i], p)}
-                                }
-                            }
-                            div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden;",
-                                div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;",
-                                    PageView { page: pages[i](), blocks: blocks.clone(), state, tempo_bpm, pane }
+                        {
+                            let p = panes[i];
+                            let title = p.title();
+                            rsx! {
+                                div { key: "pane-{i}-{title}", style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid {RULE}; border-radius: 6px; overflow: hidden;",
+                                    div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden;",
+                                        div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+                                            match p {
+                                                DeskPane::Page(page) => rsx! { PageView { page, blocks: blocks.clone(), state, tempo_bpm, pane } },
+                                                DeskPane::Modulation => rsx! { ModGroupPanel { title: "Mod", kinds: MOD_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm } },
+                                                DeskPane::Motion => rsx! { ModGroupPanel { title: "Motion", kinds: MOTION_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm, tempo_divisions: true } },
+                                                DeskPane::Input => rsx! {
+                                                    crate::rig_faces::InputRow {
+                                                        blocks: blocks.clone(),
+                                                        only: ["transpose", "pitch", "harmony", "wah", "dive", "volume"].map(String::from).to_vec(),
+                                                    }
+                                                },
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -904,52 +945,6 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
                 }
             }
         }
-    }
-}
-
-/// Where the desktop grid's panes are remembered: `signal/desktop-panes` in
-/// the config directory (the rig's own), the four pages' slugs on one line.
-#[cfg(not(target_arch = "wasm32"))]
-fn desktop_panes_file() -> std::path::PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(std::path::PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("signal")
-        .join("desktop-panes")
-}
-
-/// The panes as they were left, if they were and still name pages.
-fn load_desktop_panes() -> Option<[Page; 4]> {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let text = std::fs::read_to_string(desktop_panes_file()).ok()?;
-        let find = |slug: &str| Page::ALL.into_iter().find(|p| p.slug() == slug);
-        let pages: Vec<Page> = text.split_whitespace().filter_map(find).collect();
-        <[Page; 4]>::try_from(pages).ok()
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        None
-    }
-}
-
-/// Remember the panes (best effort: a read-only config just forgets them).
-fn save_desktop_panes(pages: [Page; 4]) {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let file = desktop_panes_file();
-        if let Some(dir) = file.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        let line = pages.map(Page::slug).join(" ");
-        if let Err(e) = std::fs::write(&file, line + "\n") {
-            tracing::warn!(error = %e, "desktop panes: not remembered");
-        }
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        let _ = pages;
     }
 }
 
@@ -1109,9 +1104,11 @@ fn PageView(
             }
         }
         Page::Drives => {
-            // Every pedal across the page's box, less the board's rails.
+            // Every pedal across the page's box, less the board's rails —
+            // on the desktop's CORE grid, the pre compressor first.
             let (w, h) = pane;
-            rsx! { crate::rig_faces::DrivesRow { blocks, fit_width: Some(w + f64::from(CORNER)), fit_height: Some(h - 20.0) } }
+            let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
+            rsx! { crate::rig_faces::DrivesRow { blocks, fit_width: Some(w + f64::from(CORNER)), fit_height: Some(h - 20.0), pre_comp: desk } }
         }
         Page::Amps => {
             // The amps fitted to the page's box, as the drives are.
