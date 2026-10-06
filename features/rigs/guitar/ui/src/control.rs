@@ -1883,9 +1883,13 @@ pub(crate) fn ModGroupPanel(
             }
             if let Some(f) = mod_face.clone() {
                 div { class: "relative flex-1 min-h-0 flex",
-                    crate::rig_faces::BlockFace { block: cur.clone(), face: f, fill: true, preset_type: Some(cur.block_type.as_str().to_string()), algos: algos.clone(), tempo_bpm: Some(tempo_bpm),
+                    // In a known lane, the face's box near its own
+                    // proportions (as a delay lane's).
+                    div { style: lane_fit(lane.map(|(w, h)| (w, h - 26.0)), f.size),
+                    crate::rig_faces::BlockFace { block: cur.clone(), face: f.clone(), fill: true, preset_type: Some(cur.block_type.as_str().to_string()), algos: algos.clone(), tempo_bpm: Some(tempo_bpm),
                         // On a phone the members are picked from its name.
                         members: if tier <= Tier::Phone { members.iter().map(|m| (m.name.clone(), m.id.clone())).collect() } else { Vec::new() },
+                    }
                     }
                 }
             } else {

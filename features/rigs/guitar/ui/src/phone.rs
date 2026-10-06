@@ -913,18 +913,23 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
         (false, false) => vec![vec![0]],
     };
     let n_rows = rows.len() as f64;
-    let pane_h = h / n_rows - 4.0 - GRID_GAP;
+    // Two rows: the top one taller. The bottom row is mostly lanes (gate
+    // and compressor, the delays and reverbs, the pre effects), which read
+    // best near their own long, low proportions; the top is units that use
+    // the height (pedals, amp, the pitch voices).
+    let row_weight = |r: usize| if n_rows > 1.0 { if r == 0 { TOP_ROW } else { 2.0 - TOP_ROW } } else { 1.0 };
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: {GRID_GAP}px; width: 100%; height: 100%; min-height: 0; overflow: hidden;",
             onmounted: move |e: MountedEvent| mounted.set(Some(e.data())),
             for (r, row) in rows.into_iter().enumerate() {
-                div { key: "row-{r}", style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row; gap: {GRID_GAP}px;",
+                div { key: "row-{r}", style: "flex: {row_weight(r)} 1 0%; min-height: 0; display: flex; flex-direction: row; gap: {GRID_GAP}px;",
                     for i in row.clone() {
                         {
                             // Every pane an even share of its row.
                             let p = panes[i];
                             let title = p.title();
                             let wt = 1;
+                            let pane_h = (h - GRID_GAP * (n_rows - 1.0)) * row_weight(r) / n_rows - 4.0;
                             let pane = (w / row.len() as f64 - GRID_GAP, pane_h);
                             rsx! {
                                 div { key: "pane-{i}-{title}", style: if p == DeskPane::Empty {
@@ -975,6 +980,8 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
 /// Control page shows fewer of them.
 const DESKTOP_PANE_MIN_H: f64 = 170.0;
 const DESKTOP_PANE_MIN_W: f64 = 420.0;
+/// The top row's share of two (the bottom row has the rest).
+const TOP_ROW: f64 = 1.18;
 /// Between the panes of the desktop's grid.
 const GRID_GAP: f64 = 6.0;
 
