@@ -2428,7 +2428,7 @@ impl GuitarRigBackend {
     /// the first tap; after that, taps own the delay time — including across
     /// patch switches.
     fn apply_tempo_to_delays(&self) {
-        let Some(bpm) = *self.tempo.lock_ok() else {
+        let Some(bpm) = self.tempo.lock_ok().filter(|b| *b > 0.0) else {
             return;
         };
         let quarter_ms = 60_000.0 / bpm;
@@ -2461,7 +2461,7 @@ impl GuitarRigBackend {
     /// of its own for a reverb, so the rig does it on a tempo change, a
     /// patch load and an algorithm change.
     fn retime_synced_reverbs(&self, only: Option<&str>) {
-        let Some(bpm) = *self.tempo.lock_ok() else { return };
+        let Some(bpm) = self.tempo.lock_ok().filter(|b| *b > 0.0) else { return };
         let writes: Vec<(String, f32)> = self
             .blocks
             .lock_ok()
@@ -3750,8 +3750,13 @@ impl GuitarRigBackend {
             return;
         };
         *self.part_index.lock_ok() = 0;
-        *self.tempo.lock_ok() = Some(bpm as f32);
-        signal_rig_host::tempo::set(bpm as f32);
+        // A song with no tempo of its own (0) keeps the one playing — tap it
+        // in. Set to 0, the delays' times and synced reverbs' decays were
+        // worked out from 60 000 ms ÷ 0.
+        if bpm > 0 {
+            *self.tempo.lock_ok() = Some(bpm as f32);
+            signal_rig_host::tempo::set(bpm as f32);
+        }
         self.mark_state_dirty();
         let (profile, start_part, defaults, start_patch) = self
             .songs_lib
