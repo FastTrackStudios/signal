@@ -744,6 +744,11 @@ pub fn split_core_with_songs(comp: &Compositions, profiles: &[ProfileDef], songs
     for preset in &mut comp.presets {
         let core_name = preset.name.clone();
         for (index, snap) in preset.snapshots.iter_mut().enumerate() {
+            // The Core is its Drive and its Amp: a Time (Delay, Reverb) pick
+            // it still carries goes to the patches playing it too.
+            let is_time = |m: &ModuleChoiceDef| ["Time", "Delay", "Reverb"].iter().any(|t| m.module.eq_ignore_ascii_case(t));
+            let time_picks: Vec<ModuleChoiceDef> = snap.modules.iter().filter(|m| is_time(m)).cloned().collect();
+            snap.modules.retain(|m| !is_time(m));
             let (mut delay, mut reverb) = (ModuleSnapshotDef::default(), ModuleSnapshotDef::default());
             let mut patch_blocks: Vec<BlockChoiceDef> = Vec::new();
             let mut patch_overrides: Vec<OverrideDef> = Vec::new();
@@ -816,13 +821,13 @@ pub fn split_core_with_songs(comp: &Compositions, profiles: &[ProfileDef], songs
                 let s = add_module(&mut new_modules, "Time", &core_name, time);
                 ModuleChoiceDef { module: "Time".into(), preset: core_name.clone(), snapshot: s }
             });
-            if !has_time && patch_blocks.is_empty() && loose.is_empty() {
+            if !has_time && patch_blocks.is_empty() && loose.is_empty() && time_picks.is_empty() {
                 continue;
             }
             // Every patch playing this snapshot takes what moved out of it.
             // A patch naming no snapshot plays the first.
             let first = index == 0;
-            let moved = Moved { core: &core_name, snapshot: &snap.name, first, time: time_pick.as_ref(), delay: &delay, reverb: &reverb, blocks: &patch_blocks, loose: &loose };
+            let moved = Moved { core: &core_name, snapshot: &snap.name, first, time: time_pick.as_ref(), picks: &time_picks, delay: &delay, reverb: &reverb, blocks: &patch_blocks, loose: &loose };
             for patch in profiles.iter_mut().flat_map(|p| p.patches.iter_mut()) {
                 moved.take_into(patch);
             }
@@ -855,6 +860,8 @@ struct Moved<'a> {
     /// The preset's first snapshot: what a patch naming none plays.
     first: bool,
     time: Option<&'a ModuleChoiceDef>,
+    /// The Time / Delay / Reverb picks the snapshot itself carried.
+    picks: &'a [ModuleChoiceDef],
     delay: &'a ModuleSnapshotDef,
     reverb: &'a ModuleSnapshotDef,
     blocks: &'a [BlockChoiceDef],
@@ -870,6 +877,15 @@ impl Moved<'_> {
             return;
         }
         let picks_time = patch.modules.iter().any(|m| ["Time", "Delay", "Reverb"].iter().any(|t| m.module.eq_ignore_ascii_case(t)));
+        // The snapshot's own Time picks, under the patch's: first, so a pick
+        // of the patch's own still replaces them module by module (as the
+        // Core's picks were overlaid by the patch's).
+        let inherited: Vec<ModuleChoiceDef> = self.picks.iter().filter(|c| !patch.modules.iter().any(|m| m.module.eq_ignore_ascii_case(&c.module))).cloned().collect();
+        if !inherited.is_empty() {
+            let mut modules = inherited;
+            modules.append(&mut patch.modules);
+            patch.modules = modules;
+        }
         let mut blocks: Vec<BlockChoiceDef> = Vec::new();
         let mut overrides: Vec<OverrideDef> = Vec::new();
         if let Some(t) = self.time {
@@ -2189,6 +2205,35 @@ pub(crate) mod golden {
         assert!(has_spring(&songs[0].patch_versions[0].patch), "the song's version keeps the spring");
         let kept = comp2.preset("John Mayer").expect("the Core preset");
         assert!(!kept.snapshots[0].blocks.iter().any(|b| b.block == "Pre Verb"), "the Core no longer carries it");
+    }
+
+    /// A Core snapshot's own Time pick goes to the patches playing it —
+    /// the Core keeps only its Drive and Amp — and every patch plays the
+    /// same modules as before: one with its own Time keeps it.
+    #[test]
+    fn a_cores_time_pick_moves_to_its_patches() {
+        let (mut def, mut comp, _) = shipped();
+        let core = comp.presets.iter_mut().find(|p| p.name == "John Mayer").expect("the Core preset");
+        let snap = core.snapshots[0].name.clone();
+        core.snapshots[0].modules.push(ModuleChoiceDef { module: "Time".into(), preset: "John Mayer".into(), snapshot: "Main".into() });
+        let mut plain = def.patches[0].clone();
+        plain.name = "Plain".into();
+        plain.rig_preset = "John Mayer".into();
+        plain.snapshot = snap.clone();
+        plain.modules.retain(|m| m.module != "Time" && m.module != "Delay" && m.module != "Reverb");
+        let mut own = plain.clone();
+        own.name = "Own".into();
+        own.modules.push(ModuleChoiceDef { module: "Time".into(), preset: "U2 Edge".into(), snapshot: "Main".into() });
+        def.patches = vec![plain, own];
+        let before: Vec<String> = def.patches.iter().map(|p| format!("{:?}", module_picks(&comp, p))).collect();
+        let (comp2, profiles) = split_core(&comp, std::slice::from_ref(&def));
+        let after: Vec<String> = profiles[0].patches.iter().map(|p| format!("{:?}", module_picks(&comp2, p))).collect();
+        assert_eq!(before, after, "every patch plays the same modules");
+        let core = comp2.preset("John Mayer").expect("the Core preset");
+        assert!(core.snapshots.iter().all(|s| s.modules.iter().all(|m| m.module == "Drive" || m.module == "Amp")), "the Core holds only Drive and Amp");
+        assert!(profiles[0].patches[0].modules.iter().any(|m| m.module == "Time" && m.preset == "John Mayer"));
+        assert!(profiles[0].patches[1].modules.iter().any(|m| m.module == "Time" && m.preset == "U2 Edge"));
+        assert!(!profiles[0].patches[1].modules.iter().any(|m| m.module == "Time" && m.preset == "John Mayer"));
     }
 
     /// A split library has nothing left to move.

@@ -908,18 +908,20 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 ),
                 "Amp",
             ))
-            // The amp EQ ships with the electric-guitar "magic frequencies"
-            // preset (eq-ui cheatsheet zones): low cut at 80 Hz, then flat
-            // named bells on body / character / honk / presence.
+            // The amp EQ is on and flat: bells at 0 dB on the electric
+            // guitar's "magic frequencies" (eq-ui cheatsheet zones) — low end,
+            // body, character, honk, presence — ready to be dialled, no low
+            // cut until one is wanted. Flat, it is the sound as it was
+            // bypassed.
             .with_block(in_module(
-                off_fx(
+                on_fx(
                     BlockType::Eq,
                     "Amp EQ",
                     &[
                         ("b1_used", "1"),
                         ("b1_on", "1"),
                         ("b1_freq", "80"),
-                        ("b1_shape", "3"),
+                        ("b1_shape", "0"),
                         ("b2_used", "1"),
                         ("b2_on", "1"),
                         ("b2_freq", "212"),
@@ -1102,6 +1104,14 @@ pub fn assign_meters(patch: &mut RigPatch) {
         }
     }
 }
+/// The Cloud reverb's index in the Reverb block's `algorithm` list.
+pub const CLOUD_ALGORITHM: usize = 4;
+
+/// Where a reverb switched to Cloud lands: 8 seconds. Cloud maps `decay`
+/// (0..1) onto 1–120 s logarithmically (reverb-dsp's `CLOUD_T60`), so
+/// 8 s is ln 8 / ln 120.
+pub const CLOUD_DEFAULT_DECAY: f32 = 0.434_35;
+
 /// The pedal-style compressor at the head of the chain.
 pub const PRE_COMP: &str = "Pre Comp";
 /// The studio-style compressor after the amp, in the Amp module.
@@ -2863,5 +2873,16 @@ mod tone_label_tests {
         assert_eq!(p.tone_label(), "Worship · Clean");
         p.modules.push(ModuleChoiceDef { module: "Time".into(), preset: "Dream Delay".into(), snapshot: String::new() });
         assert_eq!(p.tone_label(), "Worship · Clean + Dream Delay");
+    }
+}
+
+#[cfg(test)]
+mod cloud_default_tests {
+    /// Cloud's law (reverb-dsp `decay_to_t60` over `CLOUD_T60` = 1–120 s)
+    /// puts the default at 8 seconds.
+    #[test]
+    fn a_cloud_lands_at_eight_seconds() {
+        let t60 = 1.0_f64 * (120.0_f64 / 1.0).powf(f64::from(super::CLOUD_DEFAULT_DECAY));
+        assert!((t60 - 8.0).abs() < 0.01, "{t60}");
     }
 }

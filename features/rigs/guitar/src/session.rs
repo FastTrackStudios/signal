@@ -8740,11 +8740,26 @@ impl Rig for GuitarRigBackend {
                     _ => (param, value),
                 }
             };
+            // A reverb switched to Cloud from another algorithm lands at its
+            // own default length (`CLOUD_DEFAULT_DECAY`), not the last one's.
+            let to_cloud = param == "algorithm" && value.round() as usize == crate::profiles::CLOUD_ALGORITHM && {
+                let blocks = self.blocks.lock_ok();
+                blocks.iter().find(|b| b.id == id).is_some_and(|b| {
+                    b.block_type == BlockType::Reverb
+                        && b.params.iter().find(|p| p.name == "algorithm").is_none_or(|p| p.value.round() as usize != crate::profiles::CLOUD_ALGORITHM)
+                })
+            };
             // The value stays as dialled; what the patch records is the baseline
             // under it at the macros' current offsets (see `crate::macros`).
             let baseline = self.macros.lock_ok().direct_edit(&id, &param, value);
             self.record_patch_override(&id, Some(&param), baseline);
             self.write_live_param(&id, &param, value);
+            if to_cloud {
+                let decay = crate::profiles::CLOUD_DEFAULT_DECAY;
+                let baseline = self.macros.lock_ok().direct_edit(&id, "decay", decay);
+                self.record_patch_override(&id, Some("decay"), baseline);
+                self.write_live_param(&id, "decay", decay);
+            }
             // A new delay machine or reverb algorithm can bring a macro knob in
             // (Pitch, for the Ice machine) or change its rest (Width, a pan).
             if matches!(

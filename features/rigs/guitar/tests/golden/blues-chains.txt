@@ -19,7 +19,7 @@ Amp R | nam= | ir= | bypassed=true |
 Cab R | nam= | ir= | bypassed=true | 
 Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
 Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
-Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
 Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
 Vibrato | nam= | ir= | bypassed=true | 
@@ -55,7 +55,7 @@ Amp R | nam=models/Dumble Steel SS Clean.nam | ir= | bypassed=false |
 Cab R | nam= | ir= | bypassed=false | 
 Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
 Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
-Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
 Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
 Vibrato | nam= | ir= | bypassed=true | 
@@ -91,7 +91,7 @@ Amp R | nam=models/Dumble Steel SS Drive 1.nam | ir= | bypassed=false |
 Cab R | nam= | ir= | bypassed=false | 
 Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
 Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
-Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
 Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
 Vibrato | nam= | ir= | bypassed=true | 
@@ -127,7 +127,7 @@ Amp R | nam= | ir= | bypassed=true |
 Cab R | nam= | ir= | bypassed=true | 
 Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
 Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
-Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
 Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
 Vibrato | nam= | ir= | bypassed=true | 
@@ -163,7 +163,7 @@ Amp R | nam= | ir= | bypassed=true |
 Cab R | nam= | ir= | bypassed=true | 
 Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
 Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
-Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
 Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
 Vibrato | nam= | ir= | bypassed=true | 
@@ -199,7 +199,7 @@ Amp R | nam= | ir= | bypassed=true |
 Cab R | nam= | ir= | bypassed=true | 
 Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
 Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
-Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
 Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
 Vibrato | nam= | ir= | bypassed=true | 
@@ -235,7 +235,7 @@ Amp R | nam= | ir= | bypassed=true |
 Cab R | nam= | ir= | bypassed=true | 
 Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
 Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
-Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
 Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
 Vibrato | nam= | ir= | bypassed=true | 
@@ -271,7 +271,7 @@ Amp R | nam= | ir= | bypassed=true |
 Cab R | nam= | ir= | bypassed=true | 
 Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
 Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
-Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=3 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
 Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
 Vibrato | nam= | ir= | bypassed=true | 

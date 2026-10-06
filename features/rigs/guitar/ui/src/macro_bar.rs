@@ -600,9 +600,10 @@ fn MacroCell(
                         "{knob.label}"
                     }
                     if has_panel {
-                        span {
-                            style: format!("font-size: 8px; color: {};", if open { "#a1a1aa" } else { "#52525b" }),
-                            "\u{25BE}"
+                        // Drawn, not a glyph: the app's font has no ▾, and
+                        // it came out an empty box.
+                        svg { width: "8", height: "8", view_box: "0 0 8 8", style: "flex-shrink: 0;",
+                            path { d: "M1.5 2.75 L4 5.25 L6.5 2.75", fill: "none", stroke: if open { "#a1a1aa" } else { "#52525b" }, stroke_width: "1.4", stroke_linecap: "round", stroke_linejoin: "round" }
                         }
                     }
                 }
