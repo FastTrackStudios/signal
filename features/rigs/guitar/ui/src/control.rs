@@ -1147,13 +1147,13 @@ fn PatchTrimPanel(block: LiveBlock) -> Element {
 }
 
 /// A face's box inside a lane of known size (`lane`, a whole pane's lane):
-/// no taller than ~1.2× its own proportions allow, centred — a face laid out
+/// no taller than ~1.05× its own proportions allow, centred — a face laid out
 /// for a box much squarer than it was drawn for crowds itself (the digital
 /// delay's readout ran into its Time knob). Unknown lanes: the whole lane.
 fn lane_fit(lane: Option<(f64, f64)>, size: (f64, f64)) -> String {
     let full = "position: absolute; inset: 0; display: flex;".to_string();
     let Some((w, h)) = lane else { return full };
-    let tallest = w / (size.0 / size.1.max(1.0) * 0.82);
+    let tallest = w / (size.0 / size.1.max(1.0) * 0.95);
     if tallest >= h {
         return full;
     }

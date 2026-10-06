@@ -913,14 +913,6 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
         (false, false) => vec![vec![0]],
     };
     let n_rows = rows.len() as f64;
-    // A pane's share of its row: CORE's drives take more than the amp,
-    // which is sized by its height anyway; POST's delay more than the
-    // reverb (the digital delay's face crowds itself under ~580 points).
-    let weight = |i: usize| match (group, i) {
-        (crate::control::Group::Amp, 0) => 1.35,
-        (crate::control::Group::Post, 2) => 1.3,
-        _ => 1.0,
-    };
     let pane_h = h / n_rows - 4.0 - GRID_GAP;
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: {GRID_GAP}px; width: 100%; height: 100%; min-height: 0; overflow: hidden;",
@@ -929,11 +921,11 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
                 div { key: "row-{r}", style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row; gap: {GRID_GAP}px;",
                     for i in row.clone() {
                         {
-                            let total: f64 = row.iter().map(|&j| weight(j)).sum();
+                            // Every pane an even share of its row.
                             let p = panes[i];
                             let title = p.title();
-                            let wt = weight(i);
-                            let pane = (w * wt / total - GRID_GAP, pane_h);
+                            let wt = 1;
+                            let pane = (w / row.len() as f64 - GRID_GAP, pane_h);
                             rsx! {
                                 div { key: "pane-{i}-{title}", style: if p == DeskPane::Empty {
                                         format!("flex: {wt} 1 0%; min-width: 0; min-height: 0;")
