@@ -3998,7 +3998,6 @@ source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b
 [[package]]
 name = "dioxus-core"
 version = "0.8.0-alpha.0"
-source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
  "anyhow",
  "const_format",
@@ -4591,6 +4590,29 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.118",
+]
+
+[[package]]
+name = "dioxus-test"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.24#e9566a9a023ca5b6d29956c4de374dcc2ef268d9"
+dependencies = [
+ "anyrender 0.11.1",
+ "anyrender_vello_cpu",
+ "blitz-dom",
+ "blitz-html",
+ "blitz-paint",
+ "blitz-traits",
+ "dioxus-core",
+ "dioxus-html",
+ "dioxus-native-dom",
+ "keyboard-types 0.7.0",
+ "peniko 0.6.1",
+ "png 0.17.16",
+ "smol_str 0.3.2",
+ "test-that",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -15233,7 +15255,9 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "dioxus",
+ "dioxus-test",
  "signal-proto",
+ "tokio",
 ]
 
 [[package]]
@@ -16884,6 +16908,16 @@ dependencies = [
  "wezterm-dynamic",
  "wezterm-input-types",
  "winapi",
+]
+
+[[package]]
+name = "test-that"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "291f228058142bae421e0b4b014a7b18edd6137629550cc15da37feed66a7db6"
+dependencies = [
+ "num-traits",
+ "regex",
 ]
 
 [[package]]

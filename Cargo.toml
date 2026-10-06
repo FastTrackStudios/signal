@@ -16,6 +16,7 @@ members = [
     # `[patch]` for DioxusLabs/dioxus below.
     "libs/vendor/dioxus-native-dom",
     "libs/vendor/dioxus-native",
+    "libs/vendor/dioxus-core",
     "libs/vendor/anyrender_vello_hybrid",
     "libs/vendor/winit-uikit",
     "libs/vendor/wgpu-hal",
@@ -1211,6 +1212,10 @@ codegen-units = 256
 [patch."https://github.com/DioxusLabs/dioxus"]
 dioxus-native-dom = { path = "libs/vendor/dioxus-native-dom" }
 dioxus-native = { path = "libs/vendor/dioxus-native" }
+# A component re-rendered after the scope owning one of its handlers dropped
+# panicked the app (`Callback::__point_to` unwrapped `Dropped`); the vendored
+# core takes the new handler instead. See libs/vendor/dioxus-core/UPSTREAM.md.
+dioxus-core = { path = "libs/vendor/dioxus-core" }
 
 # Local neural-amp-modeler-rs checkout (../neural-amp-modeler-rs): the pure
 # engine's wasm speed-up (5x, bit-identical) lives there until it is tagged.
