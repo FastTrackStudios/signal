@@ -1721,7 +1721,31 @@ pub struct SetlistEntryDef {
 #[derive(Clone, Debug, Facet)]
 pub struct SetlistDef {
     pub name: String,
+    /// The day it is played (`YYYY-MM-DD`): on that day the rig opens on it.
+    /// Empty: the date in the name, if there is one ("HSM 10-6-26").
+    #[facet(default)]
+    pub date: String,
     pub entries: Vec<SetlistEntryDef>,
+}
+
+impl SetlistDef {
+    /// The day this set is played: `date`, else a `M-D-YY` (or `M/D/YYYY`)
+    /// in its name.
+    #[must_use]
+    pub fn day(&self) -> Option<chrono::NaiveDate> {
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(self.date.trim(), "%Y-%m-%d") {
+            return Some(d);
+        }
+        self.name.split_whitespace().find_map(|word| {
+            let parts: Vec<u32> = word
+                .split(['-', '/'])
+                .map(|p| p.parse().ok())
+                .collect::<Option<_>>()?;
+            let [m, d, y] = parts[..] else { return None };
+            let year = if y < 100 { 2000 + y } else { y };
+            chrono::NaiveDate::from_ymd_opt(i32::try_from(year).ok()?, m, d)
+        })
+    }
 }
 
 /// The song library — defaults live here; sets override per entry.
@@ -1772,6 +1796,7 @@ pub fn default_setlists() -> Vec<SetlistDef> {
     vec![
         SetlistDef {
             name: "XR Wednesday 7-8-26".to_string(),
+            date: String::new(),
             entries: vec![
                 entry("What a God"),
                 entry("No Other Name"),
@@ -1780,6 +1805,7 @@ pub fn default_setlists() -> Vec<SetlistDef> {
         },
         SetlistDef {
             name: "CYA 7-9-26".to_string(),
+            date: String::new(),
             entries: vec![
                 entry("WASHED"),
                 entry("Who Else"),
@@ -1949,6 +1975,28 @@ pub fn import_drive_capture(
     DriveImport::Slot {
         preset: group.to_string(),
         block: (*block).to_string(),
+    }
+}
+
+#[cfg(test)]
+mod setlist_day_tests {
+    use super::SetlistDef;
+
+    fn set(name: &str, date: &str) -> SetlistDef {
+        SetlistDef { name: name.into(), date: date.into(), entries: Vec::new() }
+    }
+
+    #[test]
+    fn a_setlist_is_dated_by_its_date_or_the_date_in_its_name() {
+        let day = |y, m, d| chrono::NaiveDate::from_ymd_opt(y, m, d);
+        assert_eq!(set("HSM 10-6-26 Worship Night", "").day(), day(2026, 10, 6));
+        assert_eq!(set("Kids Ministry 10-7-26 Worship Night", "").day(), day(2026, 10, 7));
+        assert_eq!(set("XR Wednesday 7-8-26", "").day(), day(2026, 7, 8));
+        assert_eq!(set("Easter 4/5/2026", "").day(), day(2026, 4, 5));
+        // The date field wins over the name's.
+        assert_eq!(set("HSM 10-6-26", "2026-11-01").day(), day(2026, 11, 1));
+        assert_eq!(set("Sunday Set", "").day(), None);
+        assert_eq!(set("Set 13-40-26", "").day(), None, "no such day");
     }
 }
 

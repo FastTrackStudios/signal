@@ -72,8 +72,10 @@ fn a_config_file_edited_under_the_running_rig_applies_live_and_sticks() {
         "nothing to reload: every config file is as the rig has it"
     );
 
-    // On the second song of the first set, at its third part.
+    // On the second song of the first set, at its third part (picked, not
+    // assumed: a set dated today opens with the rig).
     Rig::set_perform_mode(&rig, 2);
+    Rig::select_setlist(&rig, 0);
     Rig::select_song(&rig, 1);
     Rig::select_part(&rig, 2);
     let perf = Rig::perf(&rig);

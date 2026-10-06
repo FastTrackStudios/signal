@@ -2382,6 +2382,30 @@ impl GuitarRigBackend {
         );
     }
 
+    /// A setlist dated today ([`SetlistDef::day`]) opens on its own:
+    /// Setlist mode, its first song. Not when it is already the one up — a
+    /// restart mid-service keeps its place.
+    fn open_todays_setlist(&self) {
+        let today = chrono::Local::now().date_naive();
+        let Some(idx) = self
+            .setlists
+            .lock_ok()
+            .iter()
+            .position(|s| s.day() == Some(today))
+        else {
+            return;
+        };
+        if *self.perform_mode.lock_ok() == 2 && *self.setlist_index.lock_ok() == idx {
+            return;
+        }
+        *self.perform_mode.lock_ok() = 2;
+        *self.setlist_index.lock_ok() = idx;
+        *self.song_index.lock_ok() = 0;
+        self.recall_song(0);
+        let name = self.setlists.lock_ok().get(idx).map(|s| s.name.clone()).unwrap_or_default();
+        tracing::info!(setlist.name = %name, "today's setlist opened");
+    }
+
     /// Re-apply the main-output fader: master trim + mute. (The patch's own
     /// level is applied in the rig's output stage, where a switch crossfades
     /// it and the outgoing patch's tail keeps its own.)
@@ -3095,6 +3119,7 @@ impl GuitarRigBackend {
         *self.rig.lock_ok() = None;
         *self.open_prefs.lock_ok() = None;
         self.restore_last_state();
+        self.open_todays_setlist();
         self.resync_blocks();
         self.publish_state();
     }
@@ -3973,8 +3998,10 @@ impl GuitarRigBackend {
             self.headphone.lock_ok().main_mute = true;
             tracing::info!("silent run — main output muted, chain still processing");
         }
-        // Land back where the last set was (crash-restart recovery).
+        // Land back where the last set was (crash-restart recovery) — or on
+        // the set dated today.
         self.restore_last_state();
+        self.open_todays_setlist();
         // The main fader (its saved trim, −6 dB by default) on the new rig.
         self.apply_main_mute();
         // The song that is up tunes the switches.
@@ -6887,6 +6914,7 @@ impl Rig for GuitarRigBackend {
             }
             sets.push(SetlistDef {
                 name: name.clone(),
+                date: String::new(),
                 entries: Vec::new(),
             });
             RigLibrary::save_setlists(&sets);
