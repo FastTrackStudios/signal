@@ -896,45 +896,8 @@ pub fn DrivesRow(
     }
 }
 
-/// Between the units of a fitted row, and between its rows (points).
+/// Between the units of a fitted pane (points).
 const FIT_GAP: f64 = 10.0;
-
-/// Units of `sizes` (in order) in rows across `room`, all at one scale: the
-/// row count (one to three) that lets the scale be largest, as how many
-/// units each row takes, and that scale.
-fn fit_rows(sizes: &[(f64, f64)], room: (f64, f64), gap: f64) -> (Vec<usize>, f64) {
-    let total: f64 = sizes.iter().map(|s| s.0).sum();
-    let mut best: (Vec<usize>, f64) = (vec![sizes.len()], 0.0);
-    for n in 1..=3.min(sizes.len().max(1)) {
-        // In order, a row closing once it holds its share of the width.
-        let target = total / n as f64;
-        let mut rows: Vec<Vec<(f64, f64)>> = vec![Vec::new()];
-        let mut acc = 0.0;
-        for (i, s) in sizes.iter().enumerate() {
-            let left = sizes.len() - i;
-            let rows_left = n - rows.len();
-            if !rows.last().is_some_and(Vec::is_empty) && rows_left > 0 && (acc + s.0 / 2.0 > target || left <= rows_left) {
-                rows.push(Vec::new());
-                acc = 0.0;
-            }
-            acc += s.0;
-            if let Some(r) = rows.last_mut() {
-                r.push(*s);
-            }
-        }
-        let by_w = rows
-            .iter()
-            .map(|r| (room.0 - gap * r.len().saturating_sub(1) as f64) / r.iter().map(|s| s.0).sum::<f64>().max(1.0))
-            .fold(f64::MAX, f64::min);
-        let tall: f64 = rows.iter().map(|r| r.iter().map(|s| s.1).fold(0.0, f64::max)).sum();
-        let by_h = (room.1 - gap * rows.len().saturating_sub(1) as f64) / tall.max(1.0);
-        let k = by_w.min(by_h);
-        if k > best.1 {
-            best = (rows.iter().map(Vec::len).collect(), k);
-        }
-    }
-    best
-}
 
 /// The board under the pedals: dark anodised rails across it, barely lit
 /// along their top edges (the board stays behind the pedals; the black
@@ -1391,7 +1354,7 @@ pub fn InputRow(
                 (k.clone(), b, f.map(|f| f.at(tier)))
             })
             .collect();
-        if let Some((room_w, room_h)) = fit {
+        if fit.is_some() {
             let lanes: Vec<(String, Option<LiveBlock>, FaceEntry)> = lanes.into_iter().filter_map(|(k, b, f)| f.map(|f| (k, b, f))).collect();
             // One unit alone fills the box: a face lays itself out for its
             // room (the Q-Tron goes wide, its filter screen beside it).
@@ -1407,22 +1370,22 @@ pub fn InputRow(
                     }
                 };
             }
-            let sizes: Vec<(f64, f64)> = lanes.iter().map(|(_, _, f)| f.size).collect();
-            let (rows, k) = fit_rows(&sizes, (room_w - 24.0, room_h - 32.0), FIT_GAP);
-            let mut lanes = lanes.into_iter();
-            let rows: Vec<Vec<(String, Option<LiveBlock>, FaceEntry)>> = rows.iter().map(|&n| lanes.by_ref().take(n).collect()).collect();
+            // Several: side by side at the pane's height, each the version
+            // of its face that fits an even share of the pane (the octaver
+            // beside the harmonizer, not the four-voice ladder), then each
+            // its share of the width by that version's proportions, laid
+            // out for its box.
+            let (fw, fh) = fit.unwrap_or_default();
+            let share = fw / lanes.len().max(1) as f64;
+            let lanes: Vec<(String, Option<LiveBlock>, FaceEntry)> = lanes.into_iter().map(|(k, b, f)| (k, b, f.at_box(share, fh))).collect();
             return rsx! {
-                div { style: "display: flex; flex-direction: column; align-items: center; justify-content: center; gap: {FIT_GAP}px; width: 100%; height: 100%; min-height: 0; min-width: 0; overflow: hidden; background: linear-gradient(180deg, #121316, #0b0c0e);",
-                    for (r, row) in rows.into_iter().enumerate() {
-                        div { key: "fit-row-{r}", style: "display: flex; flex-direction: row; align-items: center; justify-content: center; gap: {FIT_GAP}px; flex: 0 0 auto;",
-                            for (k_, b, f) in row {
-                                div { key: "{k_}", style: "flex: 0 0 auto; width: {(f.size.0 * k).floor()}px; height: {(f.size.1 * k).floor()}px; display: flex; filter: drop-shadow(0 6px 8px rgba(0,0,0,0.6));",
-                                    if let Some(b) = b {
-                                        BlockFace { block: b.clone(), face: f.clone(), fill: true, preset_type: Some(b.block_type.as_str().to_string()) }
-                                    } else {
-                                        UnboundFace { face: f.clone(), fill: true }
-                                    }
-                                }
+                div { style: "display: flex; flex-direction: row; gap: {FIT_GAP}px; width: 100%; height: 100%; min-height: 0; min-width: 0; overflow: hidden; box-sizing: border-box; padding: 6px;",
+                    for (k_, b, f) in lanes {
+                        div { key: "{k_}", style: "flex: {f.size.0 / f.size.1.max(1.0):.3} 1 0%; min-width: 0; min-height: 0; height: 100%; display: flex;",
+                            if let Some(b) = b {
+                                BlockFace { block: b.clone(), face: f.clone(), fill: true, preset_type: Some(b.block_type.as_str().to_string()) }
+                            } else {
+                                UnboundFace { face: f.clone(), fill: true }
                             }
                         }
                     }
@@ -1542,30 +1505,4 @@ fn cab_of(blocks: &[LiveBlock], amp: &LiveBlock) -> Option<LiveBlock> {
         .iter()
         .find(|b| b.block_type == BlockType::Cabinet && b.name.eq_ignore_ascii_case(&format!("Cab {side}")) && !b.preset.is_empty())
         .cloned()
-}
-
-#[cfg(test)]
-mod fit_rows_tests {
-    use super::fit_rows;
-
-    #[test]
-    fn a_wide_box_keeps_one_row() {
-        let (rows, k) = fit_rows(&[(100.0, 100.0), (100.0, 100.0)], (1000.0, 100.0), 10.0);
-        assert_eq!(rows, vec![2]);
-        assert!((k - 1.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn a_squarer_box_wraps_for_a_larger_scale() {
-        // Six units, 200 × 286 each, in a 600 × 400 pane: one row would be
-        // 131 tall; two rows of three, 195.
-        let units = [(200.0, 286.0); 6];
-        let (rows, k) = fit_rows(&units, (600.0, 400.0), 10.0);
-        assert_eq!(rows, vec![3, 3]);
-        assert!(k * 286.0 > 190.0, "{k}");
-        assert!(k * 286.0 * 2.0 + 10.0 <= 400.0 + 1e-6);
-        // …and in a short pane one row is the larger.
-        let (rows, _) = fit_rows(&units, (600.0, 245.0), 10.0);
-        assert_eq!(rows, vec![6]);
-    }
 }
