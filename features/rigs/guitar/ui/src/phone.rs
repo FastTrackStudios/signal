@@ -49,6 +49,9 @@ pub enum Page {
     ModMotion,
     Delays,
     Reverbs,
+    /// The delays and reverbs side by side — the desktop's, where a page has
+    /// room for both (not on the phone's chain).
+    Time,
 }
 
 /// Where a page sits: the colour of its segment, and the module presets
@@ -96,6 +99,7 @@ impl Page {
             Self::ModMotion => "mod-motion",
             Self::Delays => "delays",
             Self::Reverbs => "reverbs",
+            Self::Time => "time",
         }
     }
 
@@ -116,6 +120,7 @@ impl Page {
             Self::ModMotion => "Mod",
             Self::Delays => "Delay",
             Self::Reverbs => "Verb",
+            Self::Time => "Time",
         }
     }
 
@@ -124,7 +129,7 @@ impl Page {
             Self::Input | Self::Pedals | Self::Pitch | Self::Filter | Self::PreModTrem | Self::PreDelayVerb => Home::Front,
             Self::PreComp | Self::Drives | Self::Amps | Self::Eq | Self::GatePostComp => Home::Core,
             Self::ModMotion => Home::Post,
-            Self::Delays | Self::Reverbs => Home::Time,
+            Self::Delays | Self::Reverbs | Self::Time => Home::Time,
         }
     }
 
@@ -180,7 +185,7 @@ impl Page {
                 "M21 12h.01",
             ],
             // A room ringing out.
-            Self::Reverbs => &["M12 12h.01", "M8.5 8.5a5 5 0 0 0 0 7", "M15.5 8.5a5 5 0 0 1 0 7", "M5.5 5.5a9 9 0 0 0 0 13", "M18.5 5.5a9 9 0 0 1 0 13"],
+            Self::Reverbs | Self::Time => &["M12 12h.01", "M8.5 8.5a5 5 0 0 0 0 7", "M15.5 8.5a5 5 0 0 1 0 7", "M5.5 5.5a9 9 0 0 0 0 13", "M18.5 5.5a9 9 0 0 1 0 13"],
         }
     }
 }
@@ -800,7 +805,8 @@ pub fn PhoneControl(
 
 /// The desktop's Control page: the chain a page at a time, as the phone
 /// shows it — four pages in a grid when the box has room (Drives and Amp
-/// over Delay and Verb), two stacked, or one — each picked on its own chain,
+/// over Delay and Verb), two stacked, or one — each picked on its own chain
+/// (where Time, the delays and reverbs together, is a page too),
 /// in place of every panel at once. The desktop keeps its sidebar and
 /// switches around it.
 #[component]
@@ -882,7 +888,7 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
                     for i in row {
                         div { key: "pane-{i}", style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid {RULE}; border-radius: 6px; overflow: hidden;",
                             div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
-                                for p in Page::ALL {
+                                for p in Page::ALL.into_iter().chain([Page::Time]) {
                                     {tile(pages[i], p)}
                                 }
                             }
@@ -1062,6 +1068,24 @@ fn PageView(
         Page::Amps => {
             // The amps fitted to the page's box, as the drives are.
             rsx! { crate::rig_faces::AmpRow { blocks, amps_only: true, fit: Some(pane) } }
+        }
+        Page::Time => {
+            // The delays and the reverbs side by side — the delays wider:
+            // their faces carry more (a tape's reels, a display), and at half
+            // the box the tape's was cut off.
+            const DELAY_SHARE: f64 = 0.64;
+            let delays = (pane.0 * DELAY_SHARE - 3.0, pane.1);
+            let reverbs = (pane.0 * (1.0 - DELAY_SHARE) - 3.0, pane.1);
+            rsx! {
+                div { style: "display: flex; flex-direction: row; gap: 6px; width: 100%; height: 100%; min-height: 0;",
+                    div { style: "flex: {DELAY_SHARE} 1 0%; min-width: 0; min-height: 0; display: flex;",
+                        PageView { page: Page::Delays, blocks: blocks.clone(), state, tempo_bpm, pane: delays }
+                    }
+                    div { style: "flex: {1.0 - DELAY_SHARE} 1 0%; min-width: 0; min-height: 0; display: flex;",
+                        PageView { page: Page::Reverbs, blocks, state, tempo_bpm, pane: reverbs }
+                    }
+                }
+            }
         }
         Page::Eq => {
             let eq = find_block(&blocks, BlockType::Eq, "Amp EQ");

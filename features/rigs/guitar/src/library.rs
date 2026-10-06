@@ -231,7 +231,12 @@ const DEFAULT_PROFILES: &[(&str, &str)] = &[
 
 /// The profile a rig plays when nothing has chosen one (and the one a
 /// library that newly gains it switches to, once).
+#[cfg(target_os = "ios")]
 pub const DEFAULT_PROFILE_NAME: &str = "Blues";
+/// The profile a library opens on: on a laptop at a service, the worship rig
+/// (the phone keeps Blues).
+#[cfg(not(target_os = "ios"))]
+pub const DEFAULT_PROFILE_NAME: &str = "Worship";
 
 /// The shipped Cores frozen into NAM captures (rig-dir-relative
 /// `frozen/<name>`, see `crate::freeze`): with them a shipped profile plays
