@@ -389,6 +389,8 @@ pub fn CompSurface(
                     let rig = rig.clone();
                     let id = block.id.clone();
                     move |e: PointerEvent| {
+                        // The press is the knob's to drag: no panning under it (Blitz).
+                        e.prevent_default();
                         let Some(y) = graph_y(&metrics, e.element_coordinates().y) else {
                             return;
                         };

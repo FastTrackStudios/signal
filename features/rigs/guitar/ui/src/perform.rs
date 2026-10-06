@@ -598,6 +598,42 @@ fn ChordMarks(chords: Vec<ChordMark>, #[props(default)] compact: bool) -> Elemen
     }
 }
 
+/// A switch's menu, by touch. On the phone it is rig edit's: nothing on the
+/// switches being played (no ⋯ to catch a foot or a thumb), and in rig edit
+/// the whole switch, a tap opening the menu instead of pressing it. Off the
+/// phone, the ⋯ in the corner.
+#[component]
+fn SwitchMenuCover(onclick: EventHandler<MouseEvent>) -> Element {
+    let Some(edit) = try_use_context::<crate::phone::RigEdit>() else {
+        return rsx! { signal_widgets::TouchMenuButton { onclick, title: "Switch menu" } };
+    };
+    if !(edit.0)() {
+        return rsx! {};
+    }
+    rsx! {
+        div {
+            style: "position: absolute; inset: 0; z-index: 5; box-sizing: border-box; border: 2px dashed rgba(255,255,255,0.55); \
+                    border-radius: 12px; display: flex; align-items: flex-start; justify-content: flex-end; padding: 6px; cursor: pointer;",
+            title: "Switch menu",
+            onpointerdown: move |e: PointerEvent| e.stop_propagation(),
+            onpointerup: move |e: PointerEvent| e.stop_propagation(),
+            onclick: move |e: MouseEvent| {
+                e.stop_propagation();
+                onclick.call(e);
+            },
+            span {
+                style: "display: flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; \
+                        background: rgba(0,0,0,0.55); color: #e5e7eb; font-size: 10px; font-weight: 700; letter-spacing: 0.06em;",
+                svg { width: "11", height: "11", view_box: "0 0 24 24", fill: "none", stroke: "#e5e7eb", stroke_width: "2.2",
+                    stroke_linecap: "round", stroke_linejoin: "round", style: "display: block;",
+                    path { d: "M4 20h4L19 9l-4-4L4 16z" }
+                }
+                "EDIT"
+            }
+        }
+    }
+}
+
 /// One colored footswitch folder tile. Tap = press the stack; hold (row 1)
 /// = the row-2 function beneath it.
 #[component]
@@ -792,7 +828,7 @@ fn StackTile(
                 }
                 }
             }
-            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
+            SwitchMenuCover { onclick: move |e: MouseEvent| open_switch_menu.call(e) }
         }
     }
 }
@@ -904,7 +940,7 @@ fn ActionTile(
                     }
                 }
             }
-            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
+            SwitchMenuCover { onclick: move |e: MouseEvent| open_switch_menu.call(e) }
         }
     }
 }
@@ -1242,7 +1278,7 @@ fn Learnable(target: String, title: String, learn: SwitchLearn, children: Elemen
                     }
                 }
             }
-            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
+            SwitchMenuCover { onclick: move |e: MouseEvent| open_switch_menu.call(e) }
         }
     }
 }
@@ -1431,7 +1467,7 @@ fn TapTempoTile(
                     }
                 }
             }
-            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
+            SwitchMenuCover { onclick: move |e: MouseEvent| open_switch_menu.call(e) }
         }
     }
 }

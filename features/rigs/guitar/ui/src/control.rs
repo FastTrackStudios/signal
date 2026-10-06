@@ -631,6 +631,8 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
                 onpointerdown: {
                     let set_thr = set_thr;
                     move |e: PointerEvent| {
+                        // The press is the knob's to drag: no panning under it (Blitz).
+                        e.prevent_default();
                         let y = e.client_coordinates().y;
                         let el = el();
                         let set_thr = set_thr.clone();
@@ -754,6 +756,8 @@ fn VFader(
                 class: "relative flex-1 w-2 bg-black/60 border border-border min-h-0 cursor-ns-resize touch-none",
                 onmounted: move |e| el.set(Some(e.data())),
                 onpointerdown: move |e: PointerEvent| {
+                    // The press is the knob's to drag: no panning under it (Blitz).
+                    e.prevent_default();
                     let y = e.client_coordinates().y;
                     let el = el();
                     let bus = signal_widgets::DragBus::try_use();
@@ -2285,6 +2289,8 @@ fn OutputLevel(block_id: String, level_db: f32) -> Element {
             style: "height: 18px; min-width: 52px; padding: 0 4px; background: rgba(0,0,0,0.35); font-size: 9px; font-family: ui-monospace, monospace;",
             title: "Output Level — drag up/down; saved with the amp or pedal",
             onpointerdown: move |e: PointerEvent| {
+                // The press is the knob's to drag: no panning under it (Blitz).
+                e.prevent_default();
                 // Not the row's fader underneath.
                 e.stop_propagation();
                 let (Some(bus), Some(r)) = (bus, rig.clone()) else { return };
@@ -2406,6 +2412,8 @@ fn DriveChunk(
                 let rig = rig.clone();
                 let block_id = block_id.clone();
                 move |e: PointerEvent| {
+                    // The press is the knob's to drag: no panning under it (Blitz).
+                    e.prevent_default();
                     if empty {
                         return;
                     }

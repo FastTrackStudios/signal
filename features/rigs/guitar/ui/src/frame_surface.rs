@@ -21,6 +21,13 @@
 
 use dioxus::prelude::*;
 
+/// Whether the rig is playing — the faces' lamps, tape and wavefronts are
+/// the unit at work, so with it stopped they hold still and the window
+/// stops redrawing them (a phone sat idle at ~35 animated widgets, 30 times
+/// a second). Absent, faces animate as before.
+#[derive(Clone, Copy)]
+pub struct FacesMove(pub Signal<bool>);
+
 /// frame's generated faces in the frame checkout, unless
 /// `SIGNAL_FRAME_DIR` says otherwise.
 #[cfg(not(target_arch = "wasm32"))]
@@ -234,9 +241,11 @@ mod native {
         // still when its effect is off (`param(<ns>/on)`). Only a face-less
         // visualiser waits for audio (`fts_audio_ui::animate`). A face is a
         // layer of its own, so moving costs one texture, not the page.
+        // Still while the rig is stopped (`FacesMove`).
+        let moving = try_use_context::<super::FacesMove>().is_none_or(|m| (m.0)());
         if let Ok(s) = live.borrow_mut().as_mut() {
             for l in s.each_mut() {
-                l.set_animate(true);
+                l.set_animate(moving);
             }
         }
         let attr = use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(FrameWidget { live: Rc::clone(&live), edits: Rc::clone(&edits), update: update.clone(), target: None }));

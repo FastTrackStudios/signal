@@ -185,12 +185,30 @@ impl Page {
     }
 }
 
-/// What the rail picks: the chain's pages, the footswitches, or audio.
+/// What the rail picks: the chain's pages, the footswitches (to play, or to
+/// set up), or audio.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Mode {
     Control,
     Switch,
+    /// Rig edit: the footswitches, a tap opening a switch's menu instead of
+    /// pressing it — so the menus need no ⋯ on the switches that are
+    /// played, and setting one up never fires it.
+    Edit,
     Audio,
+}
+
+/// Rig edit is up (the rail's Edit): the switches open their menus, the
+/// macros their tuning. Provided by the phone; absent elsewhere.
+#[derive(Clone, Copy)]
+pub struct RigEdit(pub Signal<bool>);
+
+impl RigEdit {
+    /// Whether the phone is in rig edit — `None` off the phone.
+    #[must_use]
+    pub fn editing() -> Option<bool> {
+        try_consume_context::<Self>().map(|e| *e.0.peek())
+    }
 }
 
 /// The bars' colours (the Sessions app's, so the two read as one family).
@@ -303,6 +321,14 @@ pub fn PhoneControl(
         Page::Amps
     });
     let mut mode = use_signal(|| Mode::Control);
+    let rig_edit = use_context_provider(|| RigEdit(Signal::new(false)));
+    use_effect(move || {
+        let on = mode() == Mode::Edit;
+        let mut edit = rig_edit.0;
+        if *edit.peek() != on {
+            edit.set(on);
+        }
+    });
     // The Audio tab up, shared by the top bar (where the tabs are, in Audio)
     // and the page.
     use_context_provider(|| crate::phone_audio::AudioTab(Signal::new(crate::phone_audio::AudioTab::initial())));
@@ -311,6 +337,7 @@ pub fn PhoneControl(
     use_hook(|| match std::env::var("FTS_PHONE_OPEN").as_deref() {
         Ok("audio") => crate::settings::open_audio_settings(),
         Ok("switch") => mode.set(Mode::Switch),
+        Ok("edit") => mode.set(Mode::Edit),
         _ => {}
     });
     // Whatever asks for the audio settings (the badge, a banner, the shot
@@ -546,7 +573,7 @@ pub fn PhoneControl(
 
     // The bar's items: centred in the line, but stretched in Switch so the
     // macro bar's own height (taller than the line) is the bar's.
-    let bar_align = if mode() == Mode::Switch { "stretch" } else { "center" };
+    let bar_align = if matches!(mode(), Mode::Switch | Mode::Edit) { "stretch" } else { "center" };
 
     rsx! {
         // The whole screen: the view runs under the camera housing on
@@ -597,7 +624,7 @@ pub fn PhoneControl(
                         crate::phone_audio::AudioTabBar {}
                     }
                 },
-                Mode::Switch => rsx! {
+                Mode::Switch | Mode::Edit => rsx! {
                     div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; justify-content: center;",
                         crate::macro_bar::MacroBar { macros: state.macros }
                     }
@@ -635,6 +662,13 @@ pub fn PhoneControl(
                 // and drawn after the rail it took the rail's taps: on some
                 // pages, held one way round, the rail looked frozen.
                 div { style: "position: relative; z-index: 3; flex: 0 0 {RAIL_W + lead}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding: 0 0 {rail_foot}px {lead}px; background: {BAR_BG}; border-right: 1px solid {RULE};",
+                    // Rig edit, least used, furthest from the thumb.
+                    RailButton { on: mode() == Mode::Edit, label: "Edit", icon: "Edit",
+                        onclick: move |()| {
+                            chain_tall.set(false);
+                            mode.set(if mode() == Mode::Edit { Mode::Switch } else { Mode::Edit });
+                        },
+                    }
                     // Audio, with how it is: a dot on its speaker, and its
                     // name saying Off or Error when it is not running.
                     AudioRailButton { on: mode() == Mode::Audio, running: (state.running)(), error: (state.audio_error)(),
@@ -708,7 +742,7 @@ pub fn PhoneControl(
                                 crate::phone_audio::PhoneAudio { state }
                             }
                         },
-                        Mode::Switch => rsx! {
+                        Mode::Switch | Mode::Edit => rsx! {
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; box-sizing: border-box; padding: 6px {trail}px 6px 6px;",
                                 {switches}
                             }
@@ -752,6 +786,7 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
         "Profile" => &["M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M4 21c1-4 4-6 8-6s7 2 8 6"],
         // Back to the instrument menu.
         "Rigs" => &["M14 6l-6 6 6 6"],
+        "Edit" => &["M4 20h4L19 9l-4-4L4 16z", "M13.5 6.5l4 4"],
         // A speaker.
         "Audio" => &["M4 9h3l4-3.5v13L7 15H4z", "M15 9.5a4 4 0 0 1 0 5", "M17.5 7a7.5 7.5 0 0 1 0 10"],
 

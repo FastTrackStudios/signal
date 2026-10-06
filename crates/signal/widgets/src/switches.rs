@@ -74,6 +74,10 @@ pub fn HoldButton(
     let mut hold_fired = use_signal(|| false);
     let mut hold_task = use_signal(|| None::<Task>);
     let mut held = use_signal(|| false);
+    // The press began on this switch and has not left it: only then is a
+    // release a tap. A finger dragging a knob and let go over a switch
+    // never pressed it.
+    let mut pressed = use_signal(|| false);
     let secondary = |e: &PointerEvent| {
         matches!(
             e.trigger_button(),
@@ -94,6 +98,7 @@ pub fn HoldButton(
                     return;
                 }
                 hold_fired.set(false);
+                pressed.set(true);
                 if let Some(hold) = on_hold {
                     let task = spawn(async move {
                         architect::platform::sleep(Duration::from_millis(HOLD_MS)).await;
@@ -119,9 +124,10 @@ pub fn HoldButton(
                 if let Some(task) = hold_task.take() {
                     task.cancel();
                 }
-                if !hold_fired() {
+                if pressed() && !hold_fired() {
                     on_tap.call(());
                 }
+                pressed.set(false);
             },
             // The system took the touch back (a gesture, an alert): nothing
             // fires, and a held momentary lets go.
@@ -135,6 +141,7 @@ pub fn HoldButton(
                 if let Some(task) = hold_task.take() {
                     task.cancel();
                 }
+                pressed.set(false);
             },
             onpointerleave: move |_| {
                 // A held momentary lets go when the pointer leaves.
@@ -148,6 +155,7 @@ pub fn HoldButton(
                 if let Some(task) = hold_task.take() {
                     task.cancel();
                 }
+                pressed.set(false);
             },
             {children}
         }

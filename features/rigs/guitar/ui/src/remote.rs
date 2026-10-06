@@ -66,6 +66,8 @@ pub fn GuitarRigRemote() -> Element {
     crate::param_writer::use_param_writer(rig.clone());
     let settings = use_hook(try_consume_context::<AudioSettingsClient>);
     let state = use_rig_state();
+    // Faces animate only while the rig plays (see `frame_surface::FacesMove`).
+    use_context_provider(|| crate::frame_surface::FacesMove(state.running));
 
     // Control is home; Routing is where the wiring lives; Perform is the
     // stage view; Setlist manages the set (toggle away if unused).
