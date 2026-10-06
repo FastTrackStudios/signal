@@ -1091,6 +1091,26 @@ impl GuitarRigBackend {
 
     /// Activate a patch of the playing profile by name, in the engine or,
     /// with none, in design mode. `false` if the profile has no such patch.
+    /// Put Preset mode's bench away, if it is out: the profile's default
+    /// patch plays again.
+    fn clear_bench(&self) {
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let before = def.patches.len();
+            def.patches.retain(|p| p.name != crate::profiles::PRESET_BENCH);
+            if def.patches.len() == before {
+                return;
+            }
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&self.effective_def(&def), &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+        let default = self.default_patch_name();
+        if self.activate_named(&default) {
+            self.sync_after_switch(std::time::Duration::ZERO, "mode");
+        }
+    }
+
     fn activate_named(&self, name: &str) -> bool {
         let mut guard = self.rig.lock_ok();
         match guard.as_mut() {
@@ -7086,9 +7106,12 @@ impl Rig for GuitarRigBackend {
     }
 
     fn set_perform_mode(&self, mode: u32) {
-        // No Preset mode any more (presets are the Core, picked under a
-        // patch): an old remote asking for it plays Profile.
-        let mode = if mode == 0 { 1 } else { mode.min(2) };
+        // Preset mode (0) edits the presets on the bench; leaving it puts
+        // the bench away.
+        let mode = mode.min(2);
+        if mode != 0 {
+            self.clear_bench();
+        }
         *self.perform_mode.lock_ok() = mode;
         self.mark_state_dirty();
         tracing::info!(
@@ -8671,6 +8694,65 @@ impl Rig for GuitarRigBackend {
             let all: Vec<&ProfileDef> = all.iter().map(|p| &**p).collect();
             crate::manage::delete_rig_preset(comp, &all, &name).map(|()| Vec::new())
         });
+    }
+
+    fn edit_tone(&self, name: String) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            let comp = RigLibrary::load_compositions();
+            let Some(t) = comp.tone(&name) else {
+                refuse(format!("No preset named {name}"));
+                return;
+            };
+            let tone = t.name.clone();
+            self.end_audition();
+            let rebuilt = {
+                let mut def = self.profile_def.lock_ok();
+                def.patches.retain(|p| p.name != crate::profiles::PRESET_BENCH);
+                def.patches.push(crate::profiles::PatchDef {
+                    name: crate::profiles::PRESET_BENCH.to_string(),
+                    song: String::new(),
+                    preset: String::new(),
+                    preset2: String::new(),
+                    rig_preset: String::new(),
+                    snapshot: String::new(),
+                    tone,
+                    modules: Vec::new(),
+                    blocks: Vec::new(),
+                    drives: Vec::new(),
+                    trim_db: 0.0,
+                    level_db: 0.0,
+                    boost_db: 0.0,
+                    overrides: Vec::new(),
+                    macros: Vec::new(),
+                });
+                let dps = self.drive_presets.lock_ok();
+                profile_from_library(&self.effective_def(&def), &dps)
+            };
+            self.reload_rebuilt(rebuilt);
+            if self.activate_named(crate::profiles::PRESET_BENCH) {
+                self.sync_after_switch(std::time::Duration::ZERO, "preset");
+            }
+            self.publish_state();
+        })
+    }
+
+    fn new_tone(&self, name: String) -> signal_guitar_proto::Applied {
+        let made = self.try_edit_live_library("new_tone", true, |comp, patch| {
+            let name = name.trim();
+            if name.is_empty() {
+                return Err("a blank name".to_string());
+            }
+            if comp.tone(name).is_some() {
+                return Err(format!("There is a preset named {name}"));
+            }
+            let t = crate::manage::tone_from(comp, patch, name);
+            comp.tones.push(t);
+            Ok(())
+        });
+        match made {
+            Ok(()) => self.edit_tone(name),
+            Err(why) => attempt(|| refuse(why)),
+        }
     }
 
     fn choose_tone(&self, name: String) -> signal_guitar_proto::Applied {

@@ -202,12 +202,18 @@ pub fn SwitchesToggle(mode: Signal<SwitchesMode>, children: Element) -> Element 
     let now = mode();
     rsx! {
         button {
+            // Bare when hidden, pressed in when up: no box on the bar.
             class: if now == SwitchesMode::Hidden {
-                "flex items-center h-7 px-2 rounded-md border border-border text-muted-foreground hover:text-foreground text-xs"
+                "flex items-center h-7 px-2 text-muted-foreground hover:text-foreground text-xs"
             } else {
-                "flex items-center h-7 px-2 rounded-md bg-accent text-accent-foreground text-xs"
+                "flex items-center h-7 px-2 text-xs"
             },
-            style: "display: flex; align-items: center; gap: 5px;",
+            style: if now == SwitchesMode::Hidden {
+                "display: flex; align-items: center; gap: 5px; border-radius: 5px;"
+            } else {
+                "display: flex; align-items: center; gap: 5px; border-radius: 5px; background: rgba(0,0,0,0.5); color: #fafafa; \
+                 box-shadow: inset 0 1px 2px rgba(0,0,0,0.75), inset 0 -1px 0 rgba(255,255,255,0.05);"
+            },
             title: "Switches: {now.label()} — click for {now.next().label()}",
             onclick: move |_| mode.set(now.next()),
             {children}

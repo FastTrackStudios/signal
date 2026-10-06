@@ -53,4 +53,30 @@ fn a_preset_is_saved_from_one_patch_and_played_on_another() {
     Rig::rename_tone(&rig, "Ambient Delay Flute".into(), "Flute Wash".into());
     assert_eq!(live_tone(&rig).as_deref(), Some("Flute Wash"));
     assert!(!Rig::choose_tone(&rig, "No Such Preset".into()).ok);
+
+    // Preset mode: the preset up on the bench, edited there, saved back —
+    // and the bench never in the profile's file.
+    Rig::set_perform_mode(&rig, 0);
+    let a = Rig::edit_tone(&rig, "Flute Wash".into());
+    assert!(a.ok, "{}", a.message);
+    assert_eq!(Rig::status(&rig).active_patch.as_deref(), Some("\u{25C6} Preset"), "the bench is up");
+    assert_eq!(live_tone(&rig).as_deref(), Some("Flute Wash"));
+    // An edit on the bench (a block preset picked there — knob edits are
+    // recorded only with a running engine, which a design-mode rig has not).
+    let chorus = Rig::compositions(&rig).block_presets.into_iter().find(|b| b.block_type == "chorus").expect("a shipped chorus preset");
+    let a = Rig::choose_block(&rig, "Chorus".into(), chorus.name.clone());
+    assert!(a.ok, "{}", a.message);
+    Rig::save_tone(&rig, "Flute Wash".into());
+    let tones = std::fs::read_to_string(root.join("rig").join("tones.styx")).unwrap();
+    assert!(tones.contains(&chorus.name), "the bench's edit went to the preset: {tones}");
+    let a = Rig::new_tone(&rig, "Flute Wash Copy".into());
+    assert!(a.ok, "{}", a.message);
+    assert_eq!(live_tone(&rig).as_deref(), Some("Flute Wash Copy"));
+    Rig::set_perform_mode(&rig, 1);
+    assert_ne!(live_tone(&rig).as_deref(), Some("Flute Wash Copy"), "the bench is put away");
+    let profiles = std::fs::read_dir(root.join("rig").join("profiles")).unwrap();
+    for f in profiles.flatten() {
+        let text = std::fs::read_to_string(f.path()).unwrap_or_default();
+        assert!(!text.contains("\u{25C6} Preset"), "the bench is never saved: {}", f.path().display());
+    }
 }

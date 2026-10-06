@@ -1658,6 +1658,13 @@ pub mod rig {
         fn duplicate_tone(&self, name: String, new_name: String);
         /// Delete a preset — refused while a patch plays it.
         fn delete_tone(&self, name: String);
+        /// Preset mode: play preset `name` on the bench (a patch of the
+        /// session's, never saved), to hear and edit it — the bench's edits
+        /// go back to the preset with `save_tone`.
+        fn edit_tone(&self, name: String) -> Applied;
+        /// A new preset `name` from what plays now (the patch untouched),
+        /// up on the bench.
+        fn new_tone(&self, name: String) -> Applied;
         /// Copy a song — sections, recalls, tuning — as `new_name`. Its own
         /// patches are copied under names of their own.
         fn duplicate_song(&self, name: String, new_name: String);

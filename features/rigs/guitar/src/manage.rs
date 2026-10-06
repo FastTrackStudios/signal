@@ -992,20 +992,7 @@ pub fn save_tone(comp: &mut Compositions, patch: &mut PatchDef, name: &str) -> R
     if name.is_empty() {
         return Err("a blank name".to_string());
     }
-    let p = crate::compose::with_tone(comp, patch);
-    let tone = crate::compose::ToneDef {
-        name: comp.tone(name).map_or_else(|| name.to_string(), |t| t.name.clone()),
-        rig_preset: p.rig_preset.clone(),
-        snapshot: p.snapshot.clone(),
-        preset: if p.rig_preset.is_empty() { p.preset.clone() } else { String::new() },
-        preset2: if p.rig_preset.is_empty() { p.preset2.clone() } else { String::new() },
-        modules: p.modules.clone(),
-        blocks: p.blocks.clone(),
-        drives: p.drives.clone(),
-        overrides: p.overrides.clone(),
-        level_db: p.level_db,
-        macros: p.macros.clone(),
-    };
+    let tone = tone_from(comp, patch, name);
     let tone_name = tone.name.clone();
     match comp.tones.iter_mut().find(|t| eq(&t.name, &tone_name)) {
         Some(t) => *t = tone,
@@ -1026,6 +1013,27 @@ pub fn save_tone(comp: &mut Compositions, patch: &mut PatchDef, name: &str) -> R
     patch.level_db = 0.0;
     patch.macros.clear();
     Ok(())
+}
+
+/// What `patch` plays, as preset `name` (the patch untouched): its Core or
+/// amp, module picks, block presets, drive slots, edits, level and macro
+/// positions, with any preset it plays under them.
+#[must_use]
+pub fn tone_from(comp: &Compositions, patch: &PatchDef, name: &str) -> crate::compose::ToneDef {
+    let p = crate::compose::with_tone(comp, patch);
+    crate::compose::ToneDef {
+        name: comp.tone(name).map_or_else(|| name.trim().to_string(), |t| t.name.clone()),
+        rig_preset: p.rig_preset.clone(),
+        snapshot: p.snapshot.clone(),
+        preset: if p.rig_preset.is_empty() { p.preset.clone() } else { String::new() },
+        preset2: if p.rig_preset.is_empty() { p.preset2.clone() } else { String::new() },
+        modules: p.modules.clone(),
+        blocks: p.blocks.clone(),
+        drives: p.drives.clone(),
+        overrides: p.overrides.clone(),
+        level_db: p.level_db,
+        macros: p.macros.clone(),
+    }
 }
 
 /// The patches playing preset `name`, by label.

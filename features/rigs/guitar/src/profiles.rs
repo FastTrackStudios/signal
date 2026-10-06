@@ -1119,6 +1119,9 @@ pub fn assign_meters(patch: &mut RigPatch) {
 /// "Preset" tab), and the one snapshot each shows.
 pub const TONE_MODULE: &str = "Preset";
 pub const TONE_SNAPSHOT: &str = "Main";
+/// The patch Preset mode edits a preset on: the active profile's while a
+/// preset is up, never saved with it.
+pub const PRESET_BENCH: &str = "\u{25C6} Preset";
 
 /// The Cloud reverb's index in the Reverb block's `algorithm` list.
 pub const CLOUD_ALGORITHM: usize = 4;

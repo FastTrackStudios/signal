@@ -1074,6 +1074,8 @@ impl RigLibrary {
             return;
         };
         let mut profile = profile.clone();
+        // Preset mode's bench is the session's, never the profile's.
+        profile.patches.retain(|p| p.name != crate::profiles::PRESET_BENCH);
         let (song_patches, own): (
             Vec<crate::profiles::PatchDef>,
             Vec<crate::profiles::PatchDef>,
