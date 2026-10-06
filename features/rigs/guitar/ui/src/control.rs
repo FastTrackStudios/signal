@@ -1146,6 +1146,20 @@ fn PatchTrimPanel(block: LiveBlock) -> Element {
     }
 }
 
+/// A face's box inside a lane of known size (`lane`, a whole pane's lane):
+/// no taller than ~1.2× its own proportions allow, centred — a face laid out
+/// for a box much squarer than it was drawn for crowds itself (the digital
+/// delay's readout ran into its Time knob). Unknown lanes: the whole lane.
+fn lane_fit(lane: Option<(f64, f64)>, size: (f64, f64)) -> String {
+    let full = "position: absolute; inset: 0; display: flex;".to_string();
+    let Some((w, h)) = lane else { return full };
+    let tallest = w / (size.0 / size.1.max(1.0) * 0.82);
+    if tallest >= h {
+        return full;
+    }
+    format!("position: absolute; left: 0; right: 0; top: 50%; height: {tallest:.0}px; margin-top: -{:.0}px; display: flex;", tallest / 2.0)
+}
+
 /// The stereo delay module, wide: one full-width visualizer per delay
 /// stacked (1 top, 2 bottom) — click a lane to select it — with the
 /// selected delay's controls in a strip beneath.
@@ -1235,7 +1249,9 @@ pub(crate) fn DelayPanel(
                             },
                             if let Some(f) = lane_face.clone() {
                                 div { class: "absolute inset-0 flex justify-center", style: "background: #0b0c0f;",
-                                    crate::rig_faces::BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some("delay".to_string()), algos: Some(("style", DELAY_ALGOS.to_vec())), tempo_bpm: Some(tempo_bpm) }
+                                    div { style: lane_fit(lane, f.size),
+                                        crate::rig_faces::BlockFace { block: b.clone(), face: f.clone(), fill: true, preset_type: Some("delay".to_string()), algos: Some(("style", DELAY_ALGOS.to_vec())), tempo_bpm: Some(tempo_bpm) }
+                                    }
                                 }
                             } else {
                                 {delay_lane(taps.clone(), win_ms, !dim, color, W, quarter, div_label(b),

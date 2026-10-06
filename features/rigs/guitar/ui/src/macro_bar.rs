@@ -393,7 +393,7 @@ pub fn MacroBar(
             // As wide as its box and no wider — the knobs share it: a row
             // wider than the screen (a 6.3" phone, sixteen knobs) ran off
             // its edge and panned under a finger instead of turning.
-            style: "flex-shrink: 0; width: 100%; min-width: 0; box-sizing: border-box; padding: 8px 12px; position: relative; z-index: 40; \
+            style: "flex-shrink: 0; width: 100%; min-width: 0; box-sizing: border-box; padding: 3px 12px; position: relative; z-index: 40; \
                     border-bottom: 1px solid rgba(39,39,42,0.5); background: rgba(9,9,11,0.3);",
             div { style: "display: flex; align-items: flex-start; width: 100%; min-width: 0;",
                 for (i, k) in knobs.iter().enumerate() {

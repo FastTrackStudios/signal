@@ -848,6 +848,8 @@ pub fn DrivesRow(
             // there to draw, and the room is the pedals'. (A captured boost
             // is a Drive block, and stays.)
             .filter(|b| !(leading_width.is_some() && leading.is_some() && b.block_type == BlockType::Boost))
+            // …and the board's empty slots: room for the pedals there are.
+            .filter(|b| !(leading_width.is_some() && leading.is_some() && b.empty))
             .map(|b| (b.clone(), (!b.empty).then(|| faces.drive(&b.preset).map(|f| f.at(tier))).flatten())),
     );
     let last = slots.len().saturating_sub(1);
@@ -897,7 +899,7 @@ pub fn DrivesRow(
 }
 
 /// Between the units of a fitted pane (points).
-const FIT_GAP: f64 = 10.0;
+const FIT_GAP: f64 = 4.0;
 
 /// The board under the pedals: dark anodised rails across it, barely lit
 /// along their top edges (the board stays behind the pedals; the black
@@ -1379,7 +1381,7 @@ pub fn InputRow(
             let share = fw / lanes.len().max(1) as f64;
             let lanes: Vec<(String, Option<LiveBlock>, FaceEntry)> = lanes.into_iter().map(|(k, b, f)| (k, b, f.at_box(share, fh))).collect();
             return rsx! {
-                div { style: "display: flex; flex-direction: row; gap: {FIT_GAP}px; width: 100%; height: 100%; min-height: 0; min-width: 0; overflow: hidden; box-sizing: border-box; padding: 6px;",
+                div { style: "display: flex; flex-direction: row; gap: {FIT_GAP}px; width: 100%; height: 100%; min-height: 0; min-width: 0; overflow: hidden; box-sizing: border-box; padding: 2px;",
                     for (k_, b, f) in lanes {
                         div { key: "{k_}", style: "flex: {f.size.0 / f.size.1.max(1.0):.3} 1 0%; min-width: 0; min-height: 0; height: 100%; display: flex;",
                             if let Some(b) = b {

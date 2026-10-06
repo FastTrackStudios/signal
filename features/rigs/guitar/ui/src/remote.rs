@@ -695,7 +695,7 @@ pub fn GuitarRigRemote() -> Element {
                 if let Some((on_press, on_toggle_fx, on_toggle_boost, on_cycle_boost, on_tap_tempo, on_prev_song, on_next_song, on_select_song)) = controls {
                         // Routing / Control / Session share the layout: the
                         // page on top (~2/3), the switch grid docked beneath.
-                        div { class: "flex flex-col gap-3 h-full min-h-0 overflow-hidden",
+                        div { class: "flex flex-col h-full min-h-0 overflow-hidden", style: "gap: 4px;",
                             div {
                                 class: "min-h-0 flex flex-col overflow-hidden",
                                 style: "flex: 3 1 0%; min-height: 0; display: flex; flex-direction: column; overflow: hidden;",
@@ -806,7 +806,7 @@ pub fn GuitarRigRemote() -> Element {
                                     (true, true) => "display: flex; flex-direction: row; align-items: stretch; flex: 0 0 116px; min-height: 0;",
                                     (true, false) => "display: flex; flex-direction: row; align-items: stretch; flex: 1 1 0%; min-height: 0;",
                                     (false, true) => "display: flex; flex-direction: column; flex: 0 0 116px; min-height: 0;",
-                                    (false, false) => "display: flex; flex-direction: column; flex: 1.2 1 0%; min-height: 0;",
+                                    (false, false) => "display: flex; flex-direction: column; flex: 1 1 0%; min-height: 0;",
                                 },
                             div {
                                 // A whisker of padding so tile rings render

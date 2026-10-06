@@ -1148,7 +1148,9 @@ fn PageView(
             rsx! {
                 crate::rig_faces::DrivesRow {
                     blocks: blocks.clone(),
-                    fit_width: Some(w + f64::from(CORNER)),
+                    // The phone's page reaches under its housing's corner;
+                    // a desktop pane is its border's inside, no more.
+                    fit_width: Some(if desk { w - 4.0 } else { w + f64::from(CORNER) }),
                     fit_height: Some(h - 20.0),
                     leading_width: comp.as_ref().map(|_| lead_w),
                     leading: comp.map(|c| {

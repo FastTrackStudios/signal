@@ -289,10 +289,13 @@ pub fn PerformGrid(
         .map(|s| s.name.clone())
         .unwrap_or_default();
     let song_pos = format!("{}/{}", model.song_index + 1, model.songs.len().max(1));
+    let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
 
     rsx! {
         div { class: "flex flex-col h-full min-h-0 gap-2",
-        if mode == 2 {
+        // The song and part line — on the desktop the setlist sidebar and
+        // the Song switch already say it, and the room is the switches'.
+        if mode == 2 && !desk {
             div { class: "flex items-center gap-2 flex-shrink-0",
                 span { class: "text-xs text-muted-foreground truncate", "{current_song} · {song_pos}" }
                 // The part that is up, and what it lays over the profile.
@@ -321,7 +324,7 @@ pub fn PerformGrid(
     // drawn across the gaps between the pair.
     div { style: "position: relative; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;",
         div {
-            class: "grid grid-cols-5 gap-3 flex-1 min-h-0",
+            class: "grid grid-cols-5 gap-2 flex-1 min-h-0",
             style: if compact {
                 "grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);"
             } else {
