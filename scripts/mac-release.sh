@@ -10,8 +10,7 @@
 # repo is public — so is everything in the release.
 #
 # On the laptop:
-#   gh release download <tag> -R FastTrackStudios/signal -p mac-install.sh -D /tmp
-#   bash /tmp/mac-install.sh <tag>
+#   curl -fsSL https://github.com/FastTrackStudios/signal/releases/download/<tag>/mac-install.sh | bash -s <tag>
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -41,10 +40,10 @@ gh release create "$tag" -R "$repo" --target "$sha" \
     --title "Signal for Mac — $tag" \
     --notes "Signal (guitar rig) for Apple-silicon Macs, with the rig's full config: profiles, presets, songs and setlists.
 
-Install on a Mac (needs \`gh\` signed in):
+Install on a Mac (Terminal):
 
 \`\`\`sh
-gh release download $tag -R $repo -p mac-install.sh -D /tmp && bash /tmp/mac-install.sh $tag
+curl -fsSL https://github.com/$repo/releases/download/$tag/mac-install.sh | bash -s $tag
 \`\`\`
 
 The installer quits Signal, backs up \`~/.config/signal\` (keeping the machine's own identity), installs this config and the app in \`~/Applications\`, and opens it.
@@ -54,8 +53,13 @@ Built from $(git rev-parse --short HEAD)." \
 
 # Publishing fires release-binaries.yml (cargo-rail's platform builds), which
 # is for the v* workspace releases, not this one: cancel what it queued.
-sleep 5
-gh run list -R "$repo" --workflow release-binaries.yml --limit 3 --json databaseId,status,headBranch \
-    -q '.[] | select(.status != "completed") | .databaseId' |
-    while read -r id; do gh run cancel "$id" -R "$repo" >/dev/null 2>&1 || true; done
+# The run appears a few seconds after the release: look for it a while.
+for _ in 1 2 3 4 5 6; do
+    sleep 5
+    ids=$(gh run list -R "$repo" --workflow release-binaries.yml --limit 3 --json databaseId,status \
+        -q '.[] | select(.status != "completed") | .databaseId')
+    [ -n "$ids" ] || continue
+    for id in $ids; do gh run cancel "$id" -R "$repo" >/dev/null 2>&1 || true; done
+    break
+done
 echo "released $tag"

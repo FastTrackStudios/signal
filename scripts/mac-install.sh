@@ -8,14 +8,17 @@
 # machine's identity (its iroh key) carries over into the new one.
 set -euo pipefail
 
+# The repo is public: plain HTTPS, no gh sign-in needed.
 repo=FastTrackStudios/signal
-tag="${1:-$(gh release list -R "$repo" --limit 30 --json tagName \
-    -q '[.[] | select(.tagName | startswith("signal-mac-"))][0].tagName')}"
+tag="${1:-$(curl -fsSL "https://api.github.com/repos/$repo/releases?per_page=30" |
+    grep -o '"tag_name": *"signal-mac-[^"]*"' | head -1 | sed 's/.*"\(signal-mac-[^"]*\)"/\1/')}"
 [ -n "$tag" ] || { echo "no signal-mac-* release found" >&2; exit 1; }
 echo "installing $tag"
 
 work=$(mktemp -d)
-gh release download "$tag" -R "$repo" -p 'Signal-macos-arm64.zip' -p 'signal-config.zip' -D "$work"
+for asset in Signal-macos-arm64.zip signal-config.zip; do
+    curl -fL --progress-bar -o "$work/$asset" "https://github.com/$repo/releases/download/$tag/$asset"
+done
 
 # Quit the rig (ours — the bundle id, not the Signal messenger).
 osascript -e 'quit app id "app.fasttrackstudio.signal.mac"' >/dev/null 2>&1 || true
