@@ -634,6 +634,11 @@ fn SwitchMenuCover(onclick: EventHandler<MouseEvent>) -> Element {
     }
 }
 
+/// A switch's label: one line, cut with an ellipsis if it ever does not
+/// fit. Blitz kept a label broken into lines at a width it no longer had
+/// (an idle page: "Two-" over "Rock", "Tap" over "Tempo" over its BPM).
+const NOWRAP: &str = "white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;";
+
 /// One colored footswitch folder tile. Tap = press the stack; hold (row 1)
 /// = the row-2 function beneath it.
 #[component]
@@ -764,6 +769,7 @@ fn StackTile(
             }
             span {
                 class: if compact { "text-sm font-bold tracking-wide" } else { "text-2xl font-bold tracking-wide" },
+                style: NOWRAP,
                 "{stack.name}"
             }
             // Folder-as-main: the stack name IS the main sound — only
@@ -771,6 +777,7 @@ fn StackTile(
             if stack.current_patch != "Default" && !stack.current_patch.eq_ignore_ascii_case(&stack.name) {
                 span {
                     class: if compact { "text-[10px] font-semibold opacity-80" } else { "text-sm font-semibold opacity-90" },
+                    style: NOWRAP,
                     "{stack.current_patch}"
                 }
             }
@@ -917,12 +924,14 @@ fn ActionTile(
                     }
                     if !back.is_empty() {
                         span { class: if compact { "text-[9px] opacity-60 truncate max-w-full" } else { "text-[11px] opacity-60 truncate max-w-full" },
+                        style: NOWRAP,
                             "hold: ‹ {back}"
                         }
                     }
                 } else {
                     span {
                         class: if compact { "text-sm font-bold tracking-wide" } else { "text-xl font-bold tracking-wide" },
+                        style: NOWRAP,
                         "{job_title(&job)}"
                     }
                 }
@@ -1315,11 +1324,13 @@ fn FnTile(
             SwitchNo { no: switch_no }
             span {
                 class: if compact { "text-sm font-bold tracking-wide" } else { "text-xl font-bold tracking-wide" },
+                style: NOWRAP,
                 "{title}"
             }
             if !subtitle.is_empty() {
                 span {
                     class: if compact { "text-[10px] opacity-80" } else { "text-xs opacity-80" },
+                    style: NOWRAP,
                     "{subtitle}"
                 }
             }
@@ -1356,8 +1367,8 @@ fn BoostTile(
             on_tap: on_toggle,
             on_hold: Some(on_cycle),
             SwitchNo { no: switch_no }
-            span { class: "text-sm font-bold tracking-wide", "Boost" }
-            span { class: "text-[10px] opacity-80", "{subtitle}" }
+            span { class: "text-sm font-bold tracking-wide", style: NOWRAP, "Boost" }
+            span { class: "text-[10px] opacity-80", style: NOWRAP, "{subtitle}" }
         }
     }
 }
@@ -1445,10 +1456,12 @@ fn TapTempoTile(
             SwitchNo { no: 5 }
             span {
                 class: if compact { "text-sm font-bold tracking-wide" } else { "text-lg font-bold tracking-wide" },
+                style: NOWRAP,
                 "Tap Tempo"
             }
             span {
                 class: if compact { "text-[10px] text-zinc-500" } else { "text-[11px] text-zinc-500" },
+                style: NOWRAP,
                 "{tempo_bpm} BPM"
             }
         }

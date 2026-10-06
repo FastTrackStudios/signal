@@ -35,9 +35,15 @@ pub(crate) fn design_dir() -> std::path::PathBuf {
     if let Some(dir) = std::env::var_os("SIGNAL_FRAME_DIR") {
         return dir.into();
     }
+    // The frame checkout beside the repo: the nearest ancestor of this crate
+    // with `frame/examples/plugins` in it (features/rigs/guitar/ui → the repo
+    // root → its parent). A fixed count of `..` went one level too far and
+    // every face on the desktop drew as its plain fallback.
     let here = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    // features/rigs/guitar/ui → the repo root → its parent → frame.
-    here.join("../../../../../../frame/examples/plugins")
+    here.ancestors()
+        .map(|a| a.join("frame/examples/plugins"))
+        .find(|d| d.is_dir())
+        .unwrap_or_else(|| here.join("../../../../../frame/examples/plugins"))
 }
 
 /// One frame face, `name` (its path under the faces directory without

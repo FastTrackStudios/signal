@@ -763,10 +763,20 @@ pub fn GuitarRigRemote() -> Element {
                                             }
                                         }
                                     }
-                                } else {
+                                } else if control_collage() {
                                     crate::control::ControlView {
                                         model: perf_now.clone(),
                                         state,
+                                    }
+                                } else {
+                                    // The chain a page at a time (two
+                                    // stacked when there is room), not every
+                                    // panel at once. `FTS_CONTROL=collage`
+                                    // brings back the old view.
+                                    crate::phone::DesktopPages {
+                                        blocks: blocks(),
+                                        state,
+                                        tempo_bpm: perf_now.tempo_bpm,
                                     }
                                 }
                             }
@@ -890,4 +900,17 @@ fn LiveCpu(state: crate::state::RigViewState) -> Element {
 #[component]
 fn LiveDsp(state: crate::state::RigViewState) -> Element {
     rsx! { crate::meters::DspReadout { perf: (state.dsp)() } }
+}
+
+/// `FTS_CONTROL=collage`: the desktop Control view as every panel at once,
+/// as it was before the paged view.
+fn control_collage() -> bool {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::env::var("FTS_CONTROL").is_ok_and(|v| v.eq_ignore_ascii_case("collage"))
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        false
+    }
 }

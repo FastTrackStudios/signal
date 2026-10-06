@@ -211,6 +211,10 @@ impl RigEdit {
     }
 }
 
+/// The window height (points) from which the Control view shows two pages
+/// at once: a laptop's window, not a phone held sideways (402).
+const TWO_PANES_MIN_H: f64 = 560.0;
+
 /// The bars' colours (the Sessions app's, so the two read as one family).
 const BAR_BG: &str = "#17181b";
 const RULE: &str = "#2a2c31";
@@ -320,6 +324,9 @@ pub fn PhoneControl(
         }
         Page::Amps
     });
+    // A window tall enough (a laptop's, not a phone's) shows two pages at
+    // once, each picked on its own chain: this is the lower one's.
+    let page2 = use_signal(|| Page::Delays);
     let mut mode = use_signal(|| Mode::Control);
     let rig_edit = use_context_provider(|| RigEdit(Signal::new(false)));
     use_effect(move || {
@@ -538,8 +545,9 @@ pub fn PhoneControl(
     // The page with the chain down: dimmed, its presses its parent's.
     let page_veil = if chain_tall() { "opacity: 0.4; pointer-events: none;" } else { "" };
     // One chain segment: thin under the status line, a tall tile dropped down.
-    let segment = move |p: Page, tall: bool| {
-        let on = page() == p;
+    let segment = move |target: Signal<Page>, p: Page, tall: bool| {
+        let mut target = target;
+        let on = target() == p;
         let color = p.color();
         let look = if on { format!("background: {color}; color: #0a0b0d;") } else { format!("background: {RAISED}; color: {color};") };
         // Raised, the names sit along the tiles' tops, level with each other.
@@ -554,7 +562,7 @@ pub fn PhoneControl(
             div { key: "{p.short()}",
                 style: "min-width: 0; display: flex; box-sizing: border-box; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; overflow: hidden; {size} {look}",
                 onclick: move |_| {
-                    page.set(p);
+                    target.set(p);
                     chain_tall.set(false);
                 },
                 span { "{p.short()}" }
@@ -569,6 +577,20 @@ pub fn PhoneControl(
                 }
             }
         }
+    };
+
+    // Two pages at once in a window tall enough for both (not a phone's),
+    // and the box each page is fitted to.
+    let (win_w, win_h) = try_use_context::<crate::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
+    let two_panes = win_h >= TWO_PANES_MIN_H && !chain_tall();
+    let pane_box = {
+        let w = win_w - f64::from(RAIL_W + HOUSING) - f64::from(CORNER);
+        let h = if two_panes {
+            (win_h - f64::from(LINE_H) - 2.0 * f64::from(CHAIN_H)) / 2.0 - 4.0
+        } else {
+            win_h - f64::from(LINE_H) - f64::from(CHAIN_H) - 4.0
+        };
+        (w, h)
     };
 
     // The bar's items: centred in the line, but stretched in Switch so the
@@ -701,13 +723,28 @@ pub fn PhoneControl(
                             if chain_tall() {
                                 div { style: "flex: 0 0 {CHAIN_TALL}; display: flex; flex-direction: row; gap: 4px; box-sizing: border-box; padding: 8px {CORNER}px 8px 8px; overflow-x: auto; overflow-y: hidden; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
                                     for p in Page::ALL {
-                                        {segment(p, true)}
+                                        {segment(page, p, true)}
+                                    }
+                                }
+                            } else if two_panes {
+                                // Two pages, one over the other, each with its
+                                // own chain to pick it.
+                                for (target, key) in [(page, "upper"), (page2, "lower")] {
+                                    div { key: "{key}-chain", style: "position: relative; z-index: 2; flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
+                                        for p in Page::ALL {
+                                            {segment(target, p, false)}
+                                        }
+                                    }
+                                    div { key: "{key}-page", style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
+                                        div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;",
+                                            PageView { page: target(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm, pane: pane_box }
+                                        }
                                     }
                                 }
                             } else {
                                 div { style: "position: relative; z-index: 2; flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
                                     for p in Page::ALL {
-                                        {segment(p, false)}
+                                        {segment(page, p, false)}
                                     }
                                 }
                             }
@@ -716,6 +753,7 @@ pub fn PhoneControl(
                             // back up — no layer over it: an absolute layer here
                             // was laid out against the whole view, over the
                             // chain's tiles, and took their presses.
+                            if !two_panes {
                             div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
                                 onclick: move |_| {
                                     if chain_tall() {
@@ -723,7 +761,7 @@ pub fn PhoneControl(
                                     }
                                 },
                                 div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; {page_veil}",
-                                    PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm }
+                                    PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm, pane: pane_box }
                                 }
                                 // Swipe in from the right edge for the next
                                 // page, from the left for the one before.
@@ -735,6 +773,7 @@ pub fn PhoneControl(
                                         onpointerdown: move |e: PointerEvent| swipe.set(Some((e.client_coordinates().x, 1))),
                                     }
                                 }
+                            }
                             }
                         },
                         Mode::Audio => rsx! {
@@ -759,7 +798,93 @@ pub fn PhoneControl(
     }
 }
 
+/// The desktop's Control page: the chain a page at a time, as the phone
+/// shows it, two pages stacked when the box is tall enough — each picked on
+/// its own chain — in place of every panel at once. The desktop keeps its
+/// sidebar and switches around it.
+#[component]
+pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32) -> Element {
+    let upper = use_signal(|| Page::Amps);
+    let lower = use_signal(|| Page::Delays);
+    // The box this has, measured: the pages fitted to it (amps, drives) need
+    // it, and here it is not the window.
+    let mut size = use_signal(|| (0.0f64, 0.0f64));
+    let mut mounted = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    let window = try_use_context::<crate::control::WindowSize>();
+    use_effect(move || {
+        // Again whenever the window changes size.
+        let _ = window.map(|w| (w.0)());
+        let Some(el) = mounted() else { return };
+        spawn(async move {
+            // The first layout may not have landed yet: ask until it has.
+            for _ in 0..40 {
+                if let Ok(r) = el.get_client_rect().await
+                    && r.width() > 0.0
+                    && r.height() > 0.0
+                {
+                    let got = (r.width(), r.height());
+                    if *size.peek() != got {
+                        size.set(got);
+                    }
+                    return;
+                }
+                architect::platform::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        });
+    });
+    // Until measured, an estimate from the window (less the sidebar, the
+    // bars and the switches) — never a blank page.
+    let (w, h) = match size() {
+        (w, h) if w > 0.0 && h > 0.0 => (w, h),
+        _ => window.map_or((900.0, 420.0), |s| {
+            let (ww, wh) = (s.0)();
+            ((ww - 420.0).max(320.0), (wh * 0.5).max(240.0))
+        }),
+    };
+    let chain = f64::from(CHAIN_H);
+    let two = h >= 2.0 * chain + 2.0 * DESKTOP_PANE_MIN_H;
+    let pane = (w, if two { (h - 2.0 * chain) / 2.0 - 4.0 } else { h - chain - 4.0 });
+    let panes: Vec<(Signal<Page>, &'static str)> = if two { vec![(upper, "upper"), (lower, "lower")] } else { vec![(upper, "upper")] };
+    let tile = move |target: Signal<Page>, p: Page| {
+        let mut target = target;
+        let on = target() == p;
+        let color = p.color();
+        let look = if on { format!("background: {color}; color: #0a0b0d;") } else { format!("background: {RAISED}; color: {color};") };
+        rsx! {
+            div { key: "{p.short()}",
+                style: "flex: 1 1 0%; min-width: 0; display: flex; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 3px; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; overflow: hidden; {look}",
+                onclick: move |_| target.set(p),
+                span { "{p.short()}" }
+            }
+        }
+    };
+    rsx! {
+        div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden;",
+            onmounted: move |e: MountedEvent| mounted.set(Some(e.data())),
+            if !panes.is_empty() {
+                for (target, key) in panes {
+                    div { key: "{key}-chain", style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
+                        for p in Page::ALL {
+                            {tile(target, p)}
+                        }
+                    }
+                    div { key: "{key}-page", style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden;",
+                        div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;",
+                            PageView { page: target(), blocks: blocks.clone(), state, tempo_bpm, pane }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The least height (points) a desktop page gets before the Control page
+/// shows one page rather than two.
+const DESKTOP_PANE_MIN_H: f64 = 170.0;
+
 /// A rail button: its icon, its name small under it; the one picked
+/// raised./// A rail button: its icon, its name small under it; the one picked
 /// raised.
 #[component]
 fn RailButton(on: bool, label: &'static str, icon: &'static str, onclick: EventHandler<()>) -> Element {
@@ -883,7 +1008,14 @@ fn TopSlot(
 
 /// One page of the chain, filling its box.
 #[component]
-fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32) -> Element {
+fn PageView(
+    page: Page,
+    blocks: Vec<LiveBlock>,
+    state: RigViewState,
+    tempo_bpm: u32,
+    /// The box the page has (width, height), for the pages fitted to it.
+    pane: (f64, f64),
+) -> Element {
     let only = |kinds: &[&str]| kinds.iter().map(|k| (*k).to_string()).collect::<Vec<_>>();
     match page {
         Page::Input => rsx! { crate::rig_faces::InputRow { blocks, only: only(&["transpose", "doubler"]) } },
@@ -901,20 +1033,13 @@ fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: 
             }
         }
         Page::Drives => {
-            // Every pedal across the page's width (the screen less the rail
-            // and the housing's clearance).
-            let (w, h) = try_use_context::<crate::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
-            // The page's height less the bars and the board's rails.
-            let page_h = h - f64::from(LINE_H) - f64::from(CHAIN_H) - 24.0;
-            rsx! { crate::rig_faces::DrivesRow { blocks, fit_width: Some(w - f64::from(RAIL_W + HOUSING)), fit_height: Some(page_h) } }
+            // Every pedal across the page's box, less the board's rails.
+            let (w, h) = pane;
+            rsx! { crate::rig_faces::DrivesRow { blocks, fit_width: Some(w + f64::from(CORNER)), fit_height: Some(h - 20.0) } }
         }
         Page::Amps => {
-            // The amps fitted to the page (the screen less the rail, the
-            // housing's clearance and the bars), as the drives are.
-            let (w, h) = try_use_context::<crate::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
-            let page_h = h - f64::from(LINE_H) - f64::from(CHAIN_H) - 4.0;
-            let page_w = w - f64::from(RAIL_W + HOUSING) - f64::from(CORNER);
-            rsx! { crate::rig_faces::AmpRow { blocks, amps_only: true, fit: Some((page_w, page_h)) } }
+            // The amps fitted to the page's box, as the drives are.
+            rsx! { crate::rig_faces::AmpRow { blocks, amps_only: true, fit: Some(pane) } }
         }
         Page::Eq => {
             let eq = find_block(&blocks, BlockType::Eq, "Amp EQ");
