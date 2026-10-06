@@ -39,7 +39,7 @@ use crate::library::Kind;
 
 use crate::kit::{MenuItem, PickOption, Picked, PresetBar};
 use crate::theme::{
-    DIM, FAINT, FIELD, LINE, LINE_STRONG, LIVE, MUTED, SIDEBAR, TEXT,
+    DIM, FAINT, FIELD, LINE, LINE_STRONG, LIVE, LIVE_BG, MUTED, SIDEBAR, TEXT,
 };
 
 /// The set's menu: rename, duplicate, a new set, move it in the list,
@@ -91,8 +91,9 @@ where
 pub fn SetlistSidebar(
     model: PerformanceModel,
     on_browse: EventHandler<Kind>,
-    /// The full sidebar (a phone's width): tempo beside the key. Minimal
-    /// keeps the song, its key and what it starts on.
+    /// The full sidebar (a phone's width): each section's patch and marks
+    /// beside it. Minimal keeps the song, its key, tempo and what it starts
+    /// on, and the playing section's patch.
     #[props(default)]
     full: bool,
 ) -> Element {
@@ -255,41 +256,158 @@ pub fn SetlistSidebar(
                                         span { style: "width: 14px; flex-shrink: 0; font-size: 11px; font-family: monospace; color: {FAINT};",
                                             "{i + 1}"
                                         }
-                                        // The song, and under it the patch it starts on —
-                                        // what you need before counting in.
+                                        // The song, and under it the patch it starts on (and
+                                        // NEXT) — what you need before counting in. The name
+                                        // has its line to itself, so it wraps, never clips.
                                         div { style: "flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
-                                            div { style: "display: flex; align-items: center; gap: 6px; min-width: 0;",
-                                                span {
-                                                    style: format!(
-                                                        "flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; font-size: 13px; \
-                                                         font-weight: {}; color: {};",
-                                                        if state == Node::Now { 700 } else { 500 },
-                                                        if state == Node::Now { TEXT } else { MUTED },
-                                                    ),
-                                                    "{song.name}"
-                                                }
-                                                if i == current + 1 {
-                                                    span { style: "flex-shrink: 0; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.07); \
-                                                                    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: {MUTED};",
-                                                        "NEXT"
-                                                    }
-                                                }
+                                            span {
+                                                style: format!(
+                                                    "min-width: 0; white-space: normal; line-height: 1.25; font-size: 13px; \
+                                                     font-weight: {}; color: {};",
+                                                    if state == Node::Now { 700 } else { 500 },
+                                                    if state == Node::Now { TEXT } else { MUTED },
+                                                ),
+                                                "{song.name}"
                                             }
-                                            if !song.start.is_empty() {
-                                                {
-                                                    let (label, colour) = patch_chip(&song.start);
-                                                    rsx! {
-                                                        div { style: "display: flex; min-width: 0;",
-                                                            PatchChip { label, colour, lit: state == Node::Now }
+                                            if !song.start.is_empty() || i == current + 1 {
+                                                div { style: "display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0;",
+                                                    if !song.start.is_empty() {
+                                                        {
+                                                            let (label, colour) = patch_chip(&song.start);
+                                                            rsx! { PatchChip { label, colour, lit: state == Node::Now } }
+                                                        }
+                                                    }
+                                                    if i == current + 1 {
+                                                        span { style: "flex-shrink: 0; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.07); \
+                                                                        font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: {MUTED};",
+                                                            "NEXT"
                                                         }
                                                     }
                                                 }
                                             }
                                         }
                                         KeyChip { key_name: song.key.clone() }
-                                        if full {
-                                            span { style: "width: 26px; flex-shrink: 0; text-align: right; font-size: 11px; font-family: monospace; color: {FAINT};",
+                                        // The tempo, small: what the count-in will be.
+                                        if song.bpm > 0 {
+                                            span { style: "width: 24px; flex-shrink: 0; text-align: right; font-size: 11px; font-family: monospace; color: {FAINT};",
+                                                title: "{song.bpm} BPM",
                                                 "{song.bpm}"
+                                            }
+                                        }
+                                    }
+                                    // The song up: its sections, to see where the song is
+                                    // and play any of them (the footswitches step them).
+                                    if state == Node::Now && !model.parts.is_empty() {
+                                        {
+                                            let mut sections: Vec<(String, Vec<usize>)> = Vec::new();
+                                            for (pi, p) in model.parts.iter().enumerate() {
+                                                match sections.last_mut() {
+                                                    Some((name, idx)) if name.eq_ignore_ascii_case(&p.section) => idx.push(pi),
+                                                    _ => sections.push((p.section.clone(), vec![pi])),
+                                                }
+                                            }
+                                            let at = model.part_index as usize;
+                                            let cur_sec = sections.iter().position(|(_, idx)| idx.contains(&at)).unwrap_or(0);
+                                            rsx! {
+                                                div { style: "position: relative; display: flex; flex-direction: column; gap: 1px; margin: 0 0 8px 28px;",
+                                                    div { style: "position: absolute; left: 13px; top: 12px; bottom: 12px; width: 1px; background: {LINE}; z-index: 0;" }
+                                                        for (si, (sec_name, idx)) in sections.iter().cloned().enumerate() {
+                                                            {
+                                                                let first = idx[0];
+                                                                let single = idx.len() == 1
+                                                                    && model.parts[first].name.eq_ignore_ascii_case(&sec_name);
+                                                                let live = si == cur_sec;
+                                                                let state = if si < cur_sec { Node::Done } else if live { Node::Now } else { Node::Ahead };
+                                                                let is_next = si == cur_sec + 1;
+                                                                let lead = model.parts[first].clone();
+                                                                let rig_sec = rig.clone();
+                                                                let chip = patch_chip(&lead.patch);
+                                                                rsx! {
+                                                                    div { key: "sec-{si}-{sec_name}", style: "display: flex; flex-direction: column;",
+                                                                        div {
+                                                                            class: if live { "" } else { "sg-hover" },
+                                                                            style: format!(
+                                                                                "display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 6px 6px 0; \
+                                                                                 border-radius: 0 6px 6px 0; cursor: pointer; background: {}; opacity: {};",
+                                                                                if live { LIVE_BG } else { "transparent" },
+                                                                                if state == Node::Done { "0.5" } else { "1" },
+                                                                            ),
+                                                                            title: "Play this section",
+                                                                            onclick: move |_| {
+                                                                                send(&rig_sec, move |r| async move {
+                                                                                    let _ = r.select_part(first as u32).await;
+                                                                                });
+                                                                            },
+                                                                            TimelineNode { state, accent: true }
+                                                                            span {
+                                                                                style: format!(
+                                                                                    "flex: 1 1 0; min-width: 56px; font-size: 12px; white-space: normal; line-height: 1.25; \
+                                                                                     font-weight: {}; color: {};",
+                                                                                    if live { 700 } else { 500 },
+                                                                                    if live { TEXT } else { MUTED },
+                                                                                ),
+                                                                                "{sec_name}"
+                                                                            }
+                                                                            if is_next {
+                                                                                span { style: "flex-shrink: 0; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.07); \
+                                                            font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: {MUTED};",
+                                                                                    "NEXT"
+                                                                                }
+                                                                            }
+                                                                            // Full: the patch beside the name. Minimal has
+                                                                            // no room for both — the playing one's patch
+                                                                            // goes on a line of its own, below.
+                                                                            if single && full {
+                                                                                PartMarks { part: lead.clone() }
+                                                                                PatchChip { label: chip.0.clone(), colour: chip.1, lit: live }
+                                                                            } else if !single {
+                                                                                span { style: "flex-shrink: 0; font-size: 11px; font-family: monospace; color: {FAINT};",
+                                                                                    "{idx.len()} parts"
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                        if single && !full && live {
+                                                                            div { style: "display: flex; min-width: 0; padding: 0 6px 4px 28px;",
+                                                                                PatchChip { label: chip.0.clone(), colour: chip.1, lit: true }
+                                                                            }
+                                                                        }
+                                                                        // A section of several parts: its parts as sublines.
+                                                                        if !single {
+                                                                            for &pi in idx.iter() {
+                                                                                {
+                                                                                    let part = model.parts[pi].clone();
+                                                                                    let part_on = pi == at;
+                                                                                    let rig = rig.clone();
+                                                                                    let chip = patch_chip(&part.patch);
+                                                                                    rsx! {
+                                                                                        div {
+                                                                                            key: "{pi}-{part.name}",
+                                                                                            class: if part_on { "" } else { "sg-hover" },
+                                                                                            style: format!(
+                                                                                                "display: flex; align-items: center; gap: 6px; min-width: 0; margin-left: 28px; \
+                                                                                                 padding: 3px 6px 3px 0; border-radius: 5px; cursor: pointer; color: {};",
+                                                                                                if part_on { TEXT } else { FAINT },
+                                                                                            ),
+                                                                                            onclick: move |_| {
+                                                                                                send(&rig, move |r| async move { let _ = r.select_part(pi as u32).await; });
+                                                                                            },
+                                                                                            span { style: "flex: 1 1 0; min-width: 48px; font-size: 11px; white-space: normal; line-height: 1.25;",
+                                                                                                "{part.name}"
+                                                                                            }
+                                                                                            if full { PartMarks { part: part.clone() } }
+                                                                                            if full {
+                                                                                                PatchChip { label: chip.0.clone(), colour: chip.1, lit: part_on }
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                }
                                             }
                                         }
                                     }
@@ -366,13 +484,14 @@ fn PatchChip(label: String, colour: &'static str, lit: bool) -> Element {
     let ink = if lit { TEXT } else { MUTED };
     rsx! {
         span {
-            style: "flex-shrink: 1; min-width: 0; max-width: 118px; display: flex; align-items: center; gap: 5px; \
+            style: "flex-shrink: 1; min-width: 0; max-width: 100%; display: flex; align-items: center; gap: 5px; \
                     padding: 1px 6px 1px 5px; border-radius: 4px; background: {colour}22; \
-                    font-size: 11px; color: {ink}; white-space: nowrap; overflow: hidden;",
+                    font-size: 11px; line-height: 1.25; color: {ink};",
             title: "{label}",
             // The stack's colour as a swatch, not an edge.
             span { style: "width: 6px; height: 6px; border-radius: 2px; flex-shrink: 0; background: {colour};" }
-            span { style: "min-width: 0; overflow: hidden;", "{label}" }
+            // Wraps rather than clips: a long patch name in a narrow sidebar.
+            span { style: "min-width: 0; white-space: normal;", "{label}" }
         }
     }
 }

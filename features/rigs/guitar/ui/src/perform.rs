@@ -725,7 +725,9 @@ fn StackTile(
     });
     rsx! {
         div {
-            style: "position: relative; height: 100%; display: flex; flex-direction: column;",
+            // Its own text stays inside it: a long sound line used to run
+            // across the neighbouring switches.
+            style: "position: relative; height: 100%; display: flex; flex-direction: column; min-width: 0; overflow: hidden;",
             // Right-click: how this switch behaves, for the song that is up.
             oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
             onmouseleave: move |_| menu.set(false),
@@ -735,7 +737,7 @@ fn StackTile(
             }
         HoldButton {
             class: format!("{layout_cls} h-full {state_cls}"),
-            style: format!("background-color: {bg}; color: {text}; {state_style}"),
+            style: format!("background-color: {bg}; color: {text}; min-width: 0; overflow: hidden; padding: 0 8px; {state_style}"),
             on_tap: cbs.cb(move |(): ()| on_press.call(index)),
             on_hold,
             on_down: momentary.then(|| cbs.cb(move |(): ()| on_press.call(index))),
@@ -786,14 +788,27 @@ fn StackTile(
             }
             // The preset this patch points at + which modules it overrides.
             if !compact {
-                div { class: "flex items-center gap-1.5",
-                    span { class: "text-[10px] font-mono opacity-60", "{stack.preset}" }
-                    for m in stack.override_modules.iter() {
-                        span {
-                            key: "{m}",
-                            class: "opacity-80",
-                            title: "overrides {m}",
-                            crate::icons::ModuleGlyph { module: m.clone(), size: 11 }
+                // The sound, a line per part ("Deluxe + AC30" over "Clean +
+                // Ambience"): lines that never wrap size to themselves, so the
+                // switch's button centres them, and the tile clips what is
+                // left. (Wrapped text in the button collapsed a word wide.)
+                for (n, line) in stack.preset.split(" · ").enumerate() {
+                    div {
+                        key: "{n}",
+                        style: "max-width: 100%; white-space: nowrap; overflow: hidden; font-size: 11px; \
+                                line-height: 1.25; opacity: 0.7;",
+                        "{line}"
+                    }
+                }
+                if !stack.override_modules.is_empty() {
+                    div { style: "display: flex; justify-content: center; gap: 6px;",
+                        for m in stack.override_modules.iter() {
+                            span {
+                                key: "{m}",
+                                class: "opacity-80",
+                                title: "overrides {m}",
+                                crate::icons::ModuleGlyph { module: m.clone(), size: 11 }
+                            }
                         }
                     }
                 }

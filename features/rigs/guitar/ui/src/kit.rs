@@ -361,7 +361,8 @@ pub fn PresetBar(
     let (h, height): (u32, &str) = if compact {
         (30, "100%")
     } else if large {
-        (52, "52px")
+        // A heading grows with its name, which wraps rather than clips.
+        (52, "auto")
     } else {
         (54, "54px")
     };
@@ -393,6 +394,13 @@ pub fn PresetBar(
         ("8px", "9px", "3px")
     };
     let drop_bg = if open() { FOCUS_BG } else { "transparent" };
+    // A heading's name wraps (a set's full name, in a narrow sidebar);
+    // a bar's clips to its one line.
+    let title_flow = if large {
+        "white-space: normal; line-height: 1.15;"
+    } else {
+        "white-space: nowrap; overflow: hidden;"
+    };
     let empty = if placeholder.is_empty() {
         "—".to_string()
     } else {
@@ -571,7 +579,7 @@ pub fn PresetBar(
                     if modified || live {
                         Dot { live, modified, size: if compact { 5 } else { 6 } }
                     }
-                    span { style: "font-size: {title}; font-weight: 700; color: {TEXT}; white-space: nowrap; overflow: hidden; min-width: 0;",
+                    span { style: "font-size: {title}; font-weight: 700; color: {TEXT}; min-width: 0; {title_flow}",
                         if name.is_empty() { "{empty}" } else { "{name}" }
                         // Compact: one line, the snapshot after the name.
                         if compact && !sub.is_empty() {
