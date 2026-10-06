@@ -409,6 +409,16 @@ pub struct GuitarRigBackend {
     /// Monotonic state version, bumped on every mutation (see
     /// `PerformanceModel::revision`).
     revision: Arc<Mutex<u64>>,
+    /// Who uses each module, preset and block, across every profile — the
+    /// costly part of `compositions` (most of its 30 ms), and asked for on
+    /// every change. Kept with the profiles' fingerprint and the library's
+    /// generation it was worked out from.
+    usage_cache: Arc<Mutex<Option<(u64, Usage)>>>,
+    /// Design mode's profile (no rig yet — a phone before Start audio): built
+    /// from the whole library for every `patches`, `compositions` and
+    /// patch-name question, 20–30 ms each, several per change. Kept briefly,
+    /// keyed by what it is built from.
+    design_cache: Arc<Mutex<Option<(u64, std::time::Instant, signal_sampler::rig_profile::RigProfile)>>>,
     /// The `#[subscribe]` fan-out hub: every mutation publishes full-state
     /// [`RigEvent`]s here; the meter pump publishes `Status` at meter rate.
     events: PubSub<RigEvent>,
@@ -540,6 +550,8 @@ impl GuitarRigBackend {
             live_view_patch: Arc::default(),
             midi_log: Arc::new(Mutex::new(Vec::new())),
             revision: Arc::new(Mutex::new(0)),
+            usage_cache: Arc::default(),
+            design_cache: Arc::default(),
             events: architect::rig::events_hub(),
             pump_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             cpu: Arc::new(Mutex::new(CpuMeter::default())),
@@ -2709,9 +2721,23 @@ impl GuitarRigBackend {
     /// The profile as the live rig would load it — pure data, no engine.
     /// Design mode's source for patches, stacks and chains.
     fn design_profile(&self) -> signal_sampler::rig_profile::RigProfile {
+        /// Long enough for one change's questions to share a build; short
+        /// enough that what the key cannot see (saved node presets on disk)
+        /// shows within it.
+        const KEEP: std::time::Duration = std::time::Duration::from_secs(2);
         let def = self.profile_def.lock_ok();
         let dps = self.drive_presets.lock_ok();
-        profile_from_library(&self.effective_def(&def), &dps)
+        let effective = self.effective_def(&def);
+        let key = design_key(&effective, &dps);
+        if let Some((k, at, profile)) = self.design_cache.lock_ok().as_ref()
+            && *k == key
+            && at.elapsed() < KEEP
+        {
+            return profile.clone();
+        }
+        let profile = profile_from_library(&effective, &dps);
+        *self.design_cache.lock_ok() = Some((key, std::time::Instant::now(), profile.clone()));
+        profile
     }
 
     /// The profile with every composed patch resolved — what actually plays.
@@ -7448,11 +7474,22 @@ impl Rig for GuitarRigBackend {
             ..pick(c)
         };
         // Who refers to what, across every profile — why a delete is refused.
+        // Worked out again only when a profile or the library has changed.
         let (module_users, preset_users, block_users) = {
             let active = self.profile_def.lock_ok();
             let others = self.other_profiles.lock_ok();
             let all: Vec<&ProfileDef> = std::iter::once(&*active).chain(others.iter()).collect();
-            (
+            let key = usage_key(&all);
+            let cached = self
+                .usage_cache
+                .lock_ok()
+                .as_ref()
+                .filter(|(k, _)| *k == key)
+                .map(|(_, u)| u.clone());
+            if let Some(usage) = cached {
+                usage
+            } else {
+            let usage: Usage = (
                 comp.modules
                     .iter()
                     .map(|m| {
@@ -7482,7 +7519,10 @@ impl Rig for GuitarRigBackend {
                     .iter()
                     .map(|b| crate::manage::block_users(&comp, &all, &b.name))
                     .collect::<Vec<_>>(),
-            )
+            );
+            *self.usage_cache.lock_ok() = Some((key, usage.clone()));
+            usage
+            }
         };
         // An audition is what is playing, so it is what the preset tab marks.
         let auditioning = self
@@ -8702,8 +8742,10 @@ impl Rig for GuitarRigBackend {
         };
         // A Type or Interval knob is a choice made on the patch itself.
         if let Some((block, param, v)) = choice {
-            self.record_patch_override(&block, Some(&param), v);
-            self.write_live_param(&block, &param, v);
+            for param in crate::macros::choice_params(&param) {
+                self.record_patch_override(&block, Some(param), v);
+                self.write_live_param(&block, param, v);
+            }
             let blocks = self.blocks.lock_ok().clone();
             self.macros.lock_ok().refresh(&blocks);
         }
@@ -9801,4 +9843,44 @@ fn audio_error_words(err: &str) -> String {
         out = c.to_uppercase() + &out[1..];
     }
     out
+}
+
+/// Who uses what (`compositions`): per module its users and its snapshots';
+/// per rig preset; per block.
+type Usage = (Vec<(Vec<String>, Vec<String>)>, Vec<Vec<String>>, Vec<Vec<String>>);
+
+/// What [`Usage`] is worked out from: every profile as defined, and the
+/// library's generation — hashed as they print, streamed (no string built).
+fn usage_key(profiles: &[&ProfileDef]) -> u64 {
+    use std::fmt::Write as _;
+    use std::hash::Hasher as _;
+    struct Feed(std::collections::hash_map::DefaultHasher);
+    impl std::fmt::Write for Feed {
+        fn write_str(&mut self, s: &str) -> std::fmt::Result {
+            self.0.write(s.as_bytes());
+            Ok(())
+        }
+    }
+    let mut feed = Feed(std::collections::hash_map::DefaultHasher::new());
+    let _ = write!(feed, "{profiles:?}");
+    feed.0.write_u64(crate::library::RigLibrary::compositions_generation());
+    feed.0.finish()
+}
+
+/// What design mode's profile is built from: the profile as it plays, the
+/// drive presets, and the library's generation.
+fn design_key(def: &ProfileDef, drives: &[crate::profiles::DrivePresetDef]) -> u64 {
+    use std::fmt::Write as _;
+    use std::hash::Hasher as _;
+    struct Feed(std::collections::hash_map::DefaultHasher);
+    impl std::fmt::Write for Feed {
+        fn write_str(&mut self, s: &str) -> std::fmt::Result {
+            self.0.write(s.as_bytes());
+            Ok(())
+        }
+    }
+    let mut feed = Feed(std::collections::hash_map::DefaultHasher::new());
+    let _ = write!(feed, "{def:?}{drives:?}");
+    feed.0.write_u64(crate::library::RigLibrary::compositions_generation());
+    feed.0.finish()
 }

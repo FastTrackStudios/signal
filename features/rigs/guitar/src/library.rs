@@ -736,6 +736,8 @@ fn save_profile_file(store: &StyxDir, mut profile: ProfileDef) {
     );
 }
 
+static COMPOSITIONS_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 impl RigLibrary {
     /// Load the library, bootstrapping any missing file (and the NAM
     /// models the defaults reference) from the embedded in-repo default
@@ -848,10 +850,19 @@ impl RigLibrary {
                 .map(|(_, _, comp)| comp.clone())
         });
         let comp = Self::read_compositions(last_good.as_ref());
+        COMPOSITIONS_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if let Ok(mut cache) = CACHE.lock() {
             *cache = Some((dir, stamp, comp.clone()));
         }
         comp
+    }
+
+    /// Bumped whenever [`load_compositions`](Self::load_compositions) reads
+    /// the files again (a save here, or an edit by hand): what a cache of
+    /// anything derived from them is keyed by.
+    #[must_use]
+    pub fn compositions_generation() -> u64 {
+        COMPOSITIONS_GENERATION.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Read the three composition files. One that does not parse keeps what

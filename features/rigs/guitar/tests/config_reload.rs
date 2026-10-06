@@ -90,7 +90,10 @@ fn a_config_file_edited_under_the_running_rig_applies_live_and_sticks() {
     song.bpm = 91;
     song.parts.push("Tag".into());
     write(&songs_path, &lib);
-    logged(&log, "songs.styx: 10 songs; on No Other Name / Chorus");
+    logged(
+        &log,
+        &format!("songs.styx: {} songs; on No Other Name / Chorus", lib.songs.len()),
+    );
     let perf = Rig::perf(&rig);
     assert_eq!(library_bpm(&rig, "No Other Name"), Some(91));
     assert_eq!(
@@ -217,8 +220,9 @@ fn a_config_file_edited_under_the_running_rig_applies_live_and_sticks() {
     sets.setlists[0].entries.rotate_left(1);
     write(&sets_path, &sets);
     let report = Rig::reload_config(&rig);
+    let n_sets = sets.setlists.len();
     assert!(
-        report.contains("setlists.styx: 2 setlists; on No Other Name / Chorus"),
+        report.contains(&format!("setlists.styx: {n_sets} setlists; on No Other Name / Chorus")),
         "{report}"
     );
     let perf = Rig::perf(&rig);
@@ -230,24 +234,28 @@ fn a_config_file_edited_under_the_running_rig_applies_live_and_sticks() {
     assert_eq!(perf.songs[0].name, "No Other Name");
 
     // ── the playing profile edited: its patches reload ──
-    let worship = dir.join("profiles").join("worship.styx");
-    let mut def: ProfileDef = read(&worship);
+    let playing = Rig::perf(&rig).profile_name;
+    let file = format!("{}.styx", playing.to_lowercase());
+    let profile_path = dir.join("profiles").join(&file);
+    let mut def: ProfileDef = read(&profile_path);
+    let first = def.patches[0].name.clone();
     let mut extra = def.patches[0].clone();
     extra.name = "Hot Reloaded".into();
     def.patches.push(extra);
-    write(&worship, &def);
-    logged(&log, "profiles/worship.styx: profile Worship:");
+    write(&profile_path, &def);
+    logged(&log, &format!("profiles/{file}: profile {playing}:"));
     assert!(Rig::patches(&rig).iter().any(|p| p.name == "Hot Reloaded"));
     // The rig's next save of the profile writes on top of the hand edit.
-    Rig::rename_patch(&rig, "Clean Dry".into(), "Clean Dry 2".into());
+    let renamed = format!("{first} 2");
+    Rig::rename_patch(&rig, first.clone(), renamed.clone());
     std::thread::sleep(Duration::from_millis(1500));
-    let def: ProfileDef = read(&worship);
+    let def: ProfileDef = read(&profile_path);
     assert!(
         def.patches.iter().any(|p| p.name == "Hot Reloaded"),
         "the hand edit kept"
     );
     assert!(
-        def.patches.iter().any(|p| p.name == "Clean Dry 2"),
+        def.patches.iter().any(|p| p.name == renamed),
         "the rig's edit saved"
     );
 
@@ -266,7 +274,7 @@ fn a_config_file_edited_under_the_running_rig_applies_live_and_sticks() {
     });
     let logged = std::fs::read_to_string(&log).unwrap();
     assert!(
-        logged.contains("[req-42] setlists.styx: 2 setlists"),
+        logged.contains(&format!("[req-42] setlists.styx: {} setlists", sets.setlists.len())),
         "{logged}"
     );
     assert!(
