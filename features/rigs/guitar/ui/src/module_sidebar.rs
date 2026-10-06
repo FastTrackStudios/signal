@@ -192,11 +192,17 @@ pub fn preset_items(
 const SIDEBAR_W: &str = "232px";
 
 /// The modules the sidebar's tabs offer, in signal order.
-const SIDEBAR_MODULES: [&str; 6] = ["Core", "Drive", "Amp", "Time", "Delay", "Reverb"];
+const SIDEBAR_MODULES: [&str; 7] = ["Preset", "Core", "Drive", "Amp", "Time", "Delay", "Reverb"];
 
 /// Whether `module` is the Core (its presets are the rig presets).
 fn is_core(module: &str) -> bool {
     module.eq_ignore_ascii_case("Core")
+}
+
+/// Whether `module` is the presets' (`tones.styx`): sounds made of a Core,
+/// a Time, block presets — shared by every patch naming one.
+fn is_tone(module: &str) -> bool {
+    module.eq_ignore_ascii_case("Preset")
 }
 
 /// The preset a module's menu acts on: the one the patch plays — or, for
@@ -226,12 +232,13 @@ pub fn module_menu(
     let snap = pick
         .map(|p| played_snapshot(p, presets))
         .unwrap_or_default();
-    let no_edits = (!modified).then(|| "No edits on this patch".to_string());
-    let core = is_core(module);
+    // A preset is the whole patch: saving it always takes what plays.
+    let no_edits = (!modified && !is_tone(module)).then(|| "No edits on this patch".to_string());
+    let core = is_core(module) || is_tone(module);
     let mut items = vec![MenuItem::head(format!("{module} on this patch"))];
     // A patch that plays no Core yet can still add its tone to one — the
     // Core presets are built a patch at a time.
-    if core
+    if is_core(module)
         && entry.is_none()
         && let Some(target) = presets.last()
     {
@@ -245,7 +252,7 @@ pub fn module_menu(
     }
     match entry {
         Some(e) => {
-            items.push(MenuItem::run("save", format!("Save to “{snap}”")).unless(no_edits.clone()));
+            items.push(MenuItem::run("save", if is_tone(module) { format!("Save to “{}”", e.name) } else { format!("Save to “{snap}”") }).unless(no_edits.clone()));
             items.push(MenuItem::name(
                 "save_snapshot",
                 "Save as new snapshot…",
@@ -295,6 +302,28 @@ pub fn module_act(
         snapshot.to_string(),
         p.text,
     );
+    // The presets (`tones.styx`): their own calls.
+    if is_tone(module) {
+        match p.id {
+            "save" => send(rig, move |r| async move {
+                let _ = r.save_tone(pr).await;
+            }),
+            "save_preset" | "save_snapshot" => send(rig, move |r| async move {
+                let _ = r.save_tone(text).await;
+            }),
+            "rename_preset" => send(rig, move |r| async move {
+                let _ = r.rename_tone(pr, text).await;
+            }),
+            "duplicate_preset" => send(rig, move |r| async move {
+                let _ = r.duplicate_tone(pr, text).await;
+            }),
+            "delete_preset" => send(rig, move |r| async move {
+                let _ = r.delete_tone(pr).await;
+            }),
+            _ => {}
+        }
+        return;
+    }
     // The Core's presets are the rig presets, not a module's: their own
     // calls. (Revert and the library work as for any module; a Core's
     // snapshots have no rename or delete call yet.)
@@ -601,7 +630,7 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
         SoundBrowser {
             scopes: vec![BrowseScope {
                 id: "module".into(),
-                label: format!("{module} presets"),
+                label: if is_tone(&module) { "Presets".to_string() } else { format!("{module} presets") },
                 target: format!("→ {module} on this patch"),
             }],
             scope: "module",
@@ -648,7 +677,11 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             },
             art: art_of(arts),
             empty: if presets.is_empty() {
-                format!("No {module} presets yet — dial one in and use ⋯ › Save as new preset.")
+                if is_tone(&module) {
+                    "No presets yet — dial a sound in and use ⋯ › Save as new preset: its Core, Time and blocks, for any patch.".to_string()
+                } else {
+                    format!("No {module} presets yet — dial one in and use ⋯ › Save as new preset.")
+                }
             } else {
                 "No preset matches.".to_string()
             },

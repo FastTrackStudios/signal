@@ -215,6 +215,11 @@ pub struct PatchDef {
     pub snapshot: String,
     /// This patch's own module picks, replacing the preset snapshot's for
     /// those modules — what choosing on the board saves.
+    /// The preset this patch plays (`tones.styx`): a sound made of picks
+    /// — a Core, a Time, block presets, a few edits — shared by every patch
+    /// naming it. The patch's own picks and edits go on top. Empty: none.
+    #[facet(default)]
+    pub tone: String,
     #[facet(default)]
     pub modules: Vec<ModuleChoiceDef>,
     /// This patch's own block presets — a single delay, a reverb — over
@@ -380,11 +385,16 @@ impl PatchDef {
     /// The unique module names this patch overrides (for the UI's
     /// override badges).
     #[must_use]
-    /// What a footswitch says the patch plays: its Core (`preset ·
+    /// What a footswitch says the patch plays: its preset's name, where it
+    /// plays one; else its Core (`preset ·
     /// snapshot`) — the amp it plays, for a patch on no Core yet — and its
     /// Time module, when it picks one (`Worship · Clean + Dream Delay`).
     #[must_use]
     pub fn tone_label(&self) -> String {
+        // A patch playing a preset is that sound.
+        if !self.tone.is_empty() {
+            return self.tone.clone();
+        }
         let core = if self.rig_preset.is_empty() {
             // On no Core yet: the amp it plays.
             self.preset.clone()
@@ -488,6 +498,7 @@ pub fn worship_def() -> ProfileDef {
         preset2: String::new(),
         rig_preset: String::new(),
         snapshot: String::new(),
+        tone: String::new(),
         modules: Vec::new(),
         blocks: Vec::new(),
         drives: Vec::new(),
@@ -1104,6 +1115,11 @@ pub fn assign_meters(patch: &mut RigPatch) {
         }
     }
 }
+/// The presets' module name in the composition model (the sidebar's
+/// "Preset" tab), and the one snapshot each shows.
+pub const TONE_MODULE: &str = "Preset";
+pub const TONE_SNAPSHOT: &str = "Main";
+
 /// The Cloud reverb's index in the Reverb block's `algorithm` list.
 pub const CLOUD_ALGORITHM: usize = 4;
 
@@ -2852,6 +2868,7 @@ mod tone_label_tests {
             preset2: String::new(),
             rig_preset: String::new(),
             snapshot: String::new(),
+            tone: String::new(),
             modules: Vec::new(),
             blocks: Vec::new(),
             drives: Vec::new(),

@@ -1643,6 +1643,21 @@ pub mod rig {
         fn duplicate_rig_preset(&self, name: String, new_name: String);
         /// Delete a preset — refused while a patch plays it.
         fn delete_rig_preset(&self, name: String);
+        /// Play preset `name` (`tones.styx`: a sound made of a Core, a Time,
+        /// block presets and edits, shared by every patch naming it) on the
+        /// live patch: the patch names it and gives up its own picks and
+        /// edits on what the preset covers.
+        fn choose_tone(&self, name: String) -> Applied;
+        /// Save what the live patch plays as preset `name` — new, or
+        /// replacing it — and play it there (patches naming it hear the
+        /// update).
+        fn save_tone(&self, name: String);
+        /// Rename a preset; the patches naming it follow.
+        fn rename_tone(&self, old: String, new_name: String);
+        /// Copy a preset as `new_name`.
+        fn duplicate_tone(&self, name: String, new_name: String);
+        /// Delete a preset — refused while a patch plays it.
+        fn delete_tone(&self, name: String);
         /// Copy a song — sections, recalls, tuning — as `new_name`. Its own
         /// patches are copied under names of their own.
         fn duplicate_song(&self, name: String, new_name: String);

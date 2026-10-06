@@ -4072,6 +4072,7 @@ mod tests {
             preset2: String::new(),
             rig_preset: String::new(),
             snapshot: String::new(),
+            tone: String::new(),
             modules: Vec::new(),
             blocks: Vec::new(),
             drives: Vec::new(),

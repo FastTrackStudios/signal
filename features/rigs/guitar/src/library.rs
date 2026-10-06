@@ -834,6 +834,7 @@ impl RigLibrary {
             crate::compose::MODULES_FILE,
             crate::compose::PRESETS_FILE,
             crate::compose::BLOCKS_FILE,
+            crate::compose::TONES_FILE,
         ]
         .iter()
         .map(|f| {
@@ -926,10 +927,21 @@ impl RigLibrary {
         let blocks = one::<crate::compose::BlockLib>(crate::compose::BLOCKS_FILE, DEFAULT_BLOCKS)
             .map(|l| l.presets)
             .unwrap_or_else(|()| last_good.map(|c| c.blocks.clone()).unwrap_or_default());
+        // The presets: none until one is saved (nothing is seeded).
+        let tones_path = rig_dir().join(crate::compose::TONES_FILE);
+        let tones = match config_watch::read_tracked::<crate::compose::ToneLib>(&tones_path) {
+            Read::Ok(l) => l.tones,
+            Read::Missing => Vec::new(),
+            Read::Bad(e) => {
+                report_bad(&tones_path, &e);
+                last_good.map(|c| c.tones.clone()).unwrap_or_default()
+            }
+        };
         crate::compose::Compositions {
             modules,
             presets,
             blocks,
+            tones,
         }
     }
 
@@ -1010,6 +1022,11 @@ impl RigLibrary {
             &dir.join(crate::compose::MODULES_FILE),
             &crate::compose::ModuleLib { presets: modules },
         );
+        // The presets, once there are any (or the file is there to update).
+        let tones_path = dir.join(crate::compose::TONES_FILE);
+        if !comp.tones.is_empty() || tones_path.exists() {
+            config_watch::write_guarded(&tones_path, &crate::compose::ToneLib { tones: comp.tones.clone() });
+        }
         config_watch::write_guarded(
             &dir.join(crate::compose::PRESETS_FILE),
             &crate::compose::PresetLib { presets },

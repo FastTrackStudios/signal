@@ -6661,6 +6661,7 @@ impl Rig for GuitarRigBackend {
                 preset2: String::new(),
                 rig_preset: String::new(),
                 snapshot: String::new(),
+                tone: String::new(),
                 modules: Vec::new(),
                 blocks: Vec::new(),
                 drives: Vec::new(),
@@ -7589,6 +7590,8 @@ impl Rig for GuitarRigBackend {
                         .find(|p| p.name.eq_ignore_ascii_case(&name))
                         .map(|p| {
                             let picks = crate::compose::module_picks(&comp, p);
+                            // Its Core as it plays: the preset's, where it names none.
+                            let p = crate::compose::with_tone(&comp, p);
                             (
                                 p.rig_preset.clone(),
                                 p.snapshot.clone(),
@@ -7646,8 +7649,48 @@ impl Rig for GuitarRigBackend {
             let core_blocks: Vec<String> = chain.iter().filter(|(n, _)| crate::compose::is_core_block(n)).map(|(n, _)| n.clone()).collect();
             active_modules.insert(0, ModulePick { module: crate::profiles::CORE.to_string(), preset: active_preset.clone(), snapshot: active_snapshot.clone(), blocks: core_blocks });
         }
+        // The presets (`tones.styx`), as the "Preset" module's: one
+        // snapshot each, who plays it; the live patch's ahead of the Core.
+        let tone_entries: Vec<ModulePresetEntry> = {
+            let active = self.profile_def.lock_ok();
+            let others = self.other_profiles.lock_ok();
+            let all: Vec<&ProfileDef> = std::iter::once(&*active).chain(others.iter()).collect();
+            comp.tones
+                .iter()
+                .map(|t| {
+                    let users: Vec<String> = all.iter().flat_map(|prof| prof.patches.iter()).filter(|x| x.tone.eq_ignore_ascii_case(&t.name)).map(|x| x.name.clone()).collect();
+                    let mut modules: Vec<ModulePick> = Vec::new();
+                    if !t.rig_preset.is_empty() {
+                        modules.push(ModulePick { module: crate::profiles::CORE.to_string(), preset: t.rig_preset.clone(), snapshot: t.snapshot.clone(), blocks: Vec::new() });
+                    }
+                    modules.extend(t.modules.iter().map(pick));
+                    ModulePresetEntry {
+                        module: crate::profiles::TONE_MODULE.to_string(),
+                        name: t.name.clone(),
+                        snapshots: vec![crate::profiles::TONE_SNAPSHOT.to_string()],
+                        used_by: users.clone(),
+                        snapshot_used_by: vec![users.join(", ")],
+                        snapshot_info: vec![signal_guitar_proto::ModuleSnapshotInfo {
+                            modules,
+                            blocks: t.blocks.iter().map(|c| signal_guitar_proto::BlockPick { block: c.block.clone(), preset: c.preset.clone() }).collect(),
+                            captures: Vec::new(),
+                            macros: Vec::new(),
+                            frozen_available: false,
+                            frozen: false,
+                        }],
+                    }
+                })
+                .collect()
+        };
+        let live_tone = self.live_patch_name().and_then(|name| {
+            let def = self.profile_def.lock_ok();
+            def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&name)).map(|p| p.tone.clone()).filter(|t| !t.is_empty())
+        });
+        if let Some(t) = live_tone {
+            active_modules.insert(0, ModulePick { module: crate::profiles::TONE_MODULE.to_string(), preset: t, snapshot: crate::profiles::TONE_SNAPSHOT.to_string(), blocks: Vec::new() });
+        }
         CompositionModel {
-            modules: core_entries.into_iter().chain(comp
+            modules: tone_entries.into_iter().chain(core_entries).chain(comp
                 .modules
                 .iter()
                 .zip(module_users)
@@ -7781,6 +7824,14 @@ impl Rig for GuitarRigBackend {
         attempt(|| {
             if module.eq_ignore_ascii_case(crate::profiles::CORE) {
                 self.choose_core(preset, snapshot);
+                return;
+            }
+            // A preset (`tones.styx`): the sidebar's Preset tab plays it here.
+            if module.eq_ignore_ascii_case(crate::profiles::TONE_MODULE) {
+                self.end_audition();
+                if let Err(why) = self.try_edit_live_library("choose_tone", false, |comp, patch| crate::manage::put_tone(comp, patch, &preset)) {
+                    refuse(why);
+                }
                 return;
             }
             let comp = RigLibrary::load_compositions();
@@ -8127,6 +8178,7 @@ impl Rig for GuitarRigBackend {
                     preset2: String::new(),
                     rig_preset: String::new(),
                     snapshot: String::new(),
+                    tone: String::new(),
                     modules: Vec::new(),
                     blocks: Vec::new(),
                     drives: Vec::new(),
@@ -8618,6 +8670,34 @@ impl Rig for GuitarRigBackend {
         self.edit_library("delete_rig_preset", |comp, all| {
             let all: Vec<&ProfileDef> = all.iter().map(|p| &**p).collect();
             crate::manage::delete_rig_preset(comp, &all, &name).map(|()| Vec::new())
+        });
+    }
+
+    fn choose_tone(&self, name: String) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            self.end_audition();
+            if let Err(why) = self.try_edit_live_library("choose_tone", false, |comp, patch| crate::manage::put_tone(comp, patch, &name)) {
+                refuse(why);
+            }
+        })
+    }
+
+    fn save_tone(&self, name: String) {
+        self.edit_live_library("save_tone", true, |comp, patch| crate::manage::save_tone(comp, patch, &name));
+    }
+
+    fn rename_tone(&self, old: String, new_name: String) {
+        self.edit_library("rename_tone", |comp, all| crate::manage::rename_tone(comp, all, &old, &new_name));
+    }
+
+    fn duplicate_tone(&self, name: String, new_name: String) {
+        self.edit_library("duplicate_tone", |comp, _| crate::manage::duplicate_tone(comp, &name, &new_name).map(|()| Vec::new()));
+    }
+
+    fn delete_tone(&self, name: String) {
+        self.edit_library("delete_tone", |comp, all| {
+            let all: Vec<&ProfileDef> = all.iter().map(|p| &**p).collect();
+            crate::manage::delete_tone(comp, &all, &name).map(|()| Vec::new())
         });
     }
 
@@ -9562,6 +9642,7 @@ mod tests {
             preset2: String::new(),
             rig_preset: String::new(),
             snapshot: String::new(),
+            tone: String::new(),
             modules: Vec::new(),
             blocks: Vec::new(),
             drives: Vec::new(),

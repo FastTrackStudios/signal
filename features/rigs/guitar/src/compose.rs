@@ -30,6 +30,8 @@ pub const BLOCKS_FILE: &str = "blocks.styx";
 pub const MODULES_FILE: &str = "modules.styx";
 /// The preset library's file.
 pub const PRESETS_FILE: &str = "presets.styx";
+/// The presets' file (shown as "Presets"; `presets.styx` holds the Core).
+pub const TONES_FILE: &str = "tones.styx";
 
 /// The modules a preset composes, in signal order.
 pub const MODULES: [&str; 7] = [
@@ -268,15 +270,64 @@ pub struct PresetLib {
     pub presets: Vec<RigPresetDef>,
 }
 
+/// A preset: a sound made of picks, shared by every patch naming it
+/// (`PatchDef::tone`) — in any profile, any song. It points at the
+/// libraries rather than copying them: a Core snapshot (or, for a patch
+/// on no Core, an amp preset), module picks (its Time), block presets (a
+/// chorus, a pitch, a pre effect), and the few edits that make it this
+/// sound. A patch naming it plays it with its own picks and edits on top.
+#[derive(Clone, Debug, Default, Facet)]
+pub struct ToneDef {
+    pub name: String,
+    /// The Core it plays (empty: the patch's own).
+    #[facet(default)]
+    pub rig_preset: String,
+    #[facet(default)]
+    pub snapshot: String,
+    /// The amp presets it plays where it names no Core.
+    #[facet(default)]
+    pub preset: String,
+    #[facet(default)]
+    pub preset2: String,
+    #[facet(default)]
+    pub modules: Vec<ModuleChoiceDef>,
+    #[facet(default)]
+    pub blocks: Vec<BlockChoiceDef>,
+    #[facet(default)]
+    pub drives: Vec<DriveSlotDef>,
+    #[facet(default)]
+    pub overrides: Vec<OverrideDef>,
+    /// Its level, dB, under the patch's own.
+    #[facet(default)]
+    pub level_db: f32,
+    #[facet(default)]
+    pub macros: Vec<crate::profiles::MacroValueDef>,
+}
+
+/// `tones.styx`.
+#[derive(Clone, Debug, Default, Facet)]
+pub struct ToneLib {
+    #[facet(default)]
+    pub tones: Vec<ToneDef>,
+}
+
 /// Both libraries, as one value to resolve against.
 #[derive(Clone, Debug, Default)]
 pub struct Compositions {
     pub modules: Vec<ModulePresetDef>,
     pub presets: Vec<RigPresetDef>,
     pub blocks: Vec<BlockPresetDef>,
+    /// The presets (`tones.styx`).
+    pub tones: Vec<ToneDef>,
 }
 
 impl Compositions {
+    /// The preset named `name`.
+    #[must_use]
+    pub fn tone(&self, name: &str) -> Option<&ToneDef> {
+        self.tones.iter().find(|t| !name.is_empty() && t.name.eq_ignore_ascii_case(name))
+    }
+
     #[must_use]
     pub fn module(&self, module: &str, preset: &str) -> Option<&ModulePresetDef> {
         self.modules
@@ -336,10 +387,56 @@ fn snapshot<'a, T>(list: &'a [T], name: &str, name_of: impl Fn(&T) -> &str) -> O
         .or_else(|| list.first())
 }
 
+/// `patch` with its preset laid under it: the preset's Core (or amp) where
+/// the patch names none, its module picks, block presets, drive slots and
+/// edits ahead of the patch's own (so the patch's still win), its level
+/// added. A patch naming no preset (or an unknown one) is itself.
+#[must_use]
+pub fn with_tone(comp: &Compositions, patch: &PatchDef) -> PatchDef {
+    let mut p = patch.clone();
+    let Some(t) = comp.tone(&patch.tone) else {
+        if !patch.tone.is_empty() {
+            tracing::warn!(patch = %patch.name, preset = %patch.tone, "compose: no such preset");
+        }
+        return p;
+    };
+    if p.rig_preset.is_empty() && !t.rig_preset.is_empty() {
+        p.rig_preset.clone_from(&t.rig_preset);
+        p.snapshot.clone_from(&t.snapshot);
+    }
+    if p.preset.is_empty() {
+        p.preset.clone_from(&t.preset);
+    }
+    if p.preset2.is_empty() {
+        p.preset2.clone_from(&t.preset2);
+    }
+    fn under<T: Clone>(tone: &[T], own: &mut Vec<T>) {
+        let mut v = tone.to_vec();
+        v.append(own);
+        *own = v;
+    }
+    under(&t.modules, &mut p.modules);
+    under(&t.blocks, &mut p.blocks);
+    under(&t.overrides, &mut p.overrides);
+    for d in &t.drives {
+        if !p.drives.iter().any(|x| x.block.eq_ignore_ascii_case(&d.block)) {
+            p.drives.push(d.clone());
+        }
+    }
+    for m in &t.macros {
+        if !p.macros.iter().any(|x| x.id.eq_ignore_ascii_case(&m.id)) {
+            p.macros.push(m.clone());
+        }
+    }
+    p.level_db += t.level_db;
+    p
+}
+
 /// The module picks a patch ends up with: its preset snapshot's, with the
 /// patch's own picks replacing them module by module.
 #[must_use]
 pub fn module_picks(comp: &Compositions, patch: &PatchDef) -> Vec<ModuleChoiceDef> {
+    let patch = &with_tone(comp, patch);
     let mut picks: Vec<ModuleChoiceDef> = expand_picks(
         comp,
         comp.preset(&patch.rig_preset)
@@ -570,6 +667,10 @@ pub fn flatten(def: &ProfileDef, comp: &Compositions) -> ProfileDef {
     let mut out = def.clone();
     let mut synthesised: Vec<PresetDef> = Vec::new();
     for patch in &mut out.patches {
+        // Its preset under it first: from here a patch is its own picks.
+        if !patch.tone.is_empty() {
+            *patch = with_tone(comp, patch);
+        }
         patch
             .overrides
             .iter_mut()
@@ -653,6 +754,13 @@ fn home_of(block: &str) -> Home {
     } else {
         Home::Patch
     }
+}
+
+/// Whether the chain block `name` is the Time module's (a delay or reverb
+/// lane: `DLY 1`, `VERB 2`).
+#[must_use]
+pub fn is_time_block(name: &str) -> bool {
+    matches!(home_of(name), Home::Delay | Home::Reverb)
 }
 
 /// Whether the chain block `name` is the Core's (its compressor, drives,
@@ -939,6 +1047,7 @@ mod tests {
 
     fn comp() -> Compositions {
         Compositions {
+            tones: Vec::new(),
             blocks: Vec::new(),
             modules: vec![
                 ModulePresetDef {
@@ -1454,6 +1563,7 @@ mod migration_tests {
             modules: m.modules.clone(),
             presets: m.presets.clone(),
             blocks: Vec::new(),
+            tones: Vec::new(),
         };
         let before = build_profile(&def, &drive_presets());
         let after = build_profile(&flatten(&m.profile, &comp), &drive_presets());
@@ -2114,6 +2224,7 @@ pub(crate) mod golden {
     pub(crate) fn shipped() -> (ProfileDef, Compositions, Vec<crate::profiles::DrivePresetDef>) {
         let profile: ProfileDef = parse("profiles/blues.styx", include_str!("../default-config/profiles/blues.styx"));
         let comp = Compositions {
+            tones: Vec::new(),
             modules: parse::<ModuleLib>("modules.styx", include_str!("../default-config/modules.styx")).presets,
             presets: parse::<PresetLib>("presets.styx", include_str!("../default-config/presets.styx")).presets,
             blocks: parse::<BlockLib>("blocks.styx", include_str!("../default-config/blocks.styx")).presets,
