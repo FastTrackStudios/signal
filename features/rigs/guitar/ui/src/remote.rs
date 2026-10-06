@@ -533,6 +533,31 @@ pub fn GuitarRigRemote() -> Element {
                     }
                 }
 
+                // Undo the last sound choice (a section's patch, a preset, a
+                // module or block pick) — for trying a sound and backing out.
+                {
+                    let depth = perf_now.undo_depth;
+                    let rig = rig.clone();
+                    rsx! {
+                        button {
+                            class: if depth > 0 { "px-2.5 py-1 text-xs font-semibold sg-hover" } else { "px-2.5 py-1 text-xs" },
+                            style: format!(
+                                "display: flex; align-items: center; gap: 5px; {} color: {};",
+                                bar_item(false),
+                                if depth > 0 { crate::theme::TEXT } else { crate::theme::DIM },
+                            ),
+                            disabled: depth == 0,
+                            title: if depth > 0 { format!("Undo the last sound choice ({depth} to go back through)") } else { "Nothing to undo".to_string() },
+                            onclick: move |_| {
+                                if let Some(r) = rig.clone() {
+                                    spawn(async move { let _ = r.undo_sound().await; });
+                                }
+                            },
+                            "Undo"
+                        }
+                    }
+                }
+
                 // The Control view's groups: which show (one with the
                 // switches up, two without), stacked in signal order.
                 if view == Mode::Control {
@@ -1029,10 +1054,16 @@ fn PlayPanes(
             sel.set(Some(crate::module_sidebar::Selection::Module("Preset".to_string())));
         }
     });
+    // Half each, as a 50% basis: Blitz lays wrapping text out at the flex
+    // basis, so a 0 basis wrapped every heading a word wide.
     let pane = format!(
-        "flex: 1 1 0; min-width: 0; min-height: 0; display: flex; background: {};",
+        "flex: 1 1 50%; min-width: 0; min-height: 0; display: flex; background: {};",
         crate::theme::SIDEBAR
     );
+    // Setlist: the right pane is the playing section's patch, or the
+    // sound itself (presets, Core, Time).
+    let setlist = model.perform_mode == 2;
+    let mut tab = use_signal(|| 0u8);
     rsx! {
         div { style: "display: flex; flex-direction: row; width: 100%; height: 100%; min-height: 0; gap: 1px; background: {crate::theme::LINE};",
             div { style: "{pane}",
@@ -1044,8 +1075,32 @@ fn PlayPanes(
                     crate::sidebars::LeftSidebar { model: model.clone(), full: true }
                 }
             }
-            div { style: "{pane}",
-                crate::module_sidebar::ModuleSidebar { revision: model.revision, chain }
+            div { style: "{pane} flex-direction: column;",
+                if setlist {
+                    div { style: "display: flex; gap: 2px; padding: 6px 8px; flex-shrink: 0; border-bottom: 1px solid {crate::theme::LINE};",
+                        for (i, label) in [(0u8, "Section"), (1, "Sound")] {
+                            button {
+                                key: "{label}",
+                                class: if tab() == i { "" } else { "sg-hover" },
+                                style: format!(
+                                    "flex: 1 1 0; padding: 5px 0; border: none; border-radius: {}; font-size: {}; font-weight: 600; cursor: pointer; {}",
+                                    crate::theme::R_SM,
+                                    crate::theme::T_BODY,
+                                    if tab() == i { crate::theme::PRESSED.to_string() } else { format!("background: transparent; color: {};", crate::theme::MUTED) },
+                                ),
+                                onclick: move |_| tab.set(i),
+                                "{label}"
+                            }
+                        }
+                    }
+                }
+                div { style: "flex: 1 1 0; min-height: 0; display: flex;",
+                    if setlist && tab() == 0 {
+                        crate::setlist_bar::SectionPicker { model: model.clone() }
+                    } else {
+                        crate::module_sidebar::ModuleSidebar { revision: model.revision, chain }
+                    }
+                }
             }
         }
     }

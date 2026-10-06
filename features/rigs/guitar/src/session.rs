@@ -283,6 +283,10 @@ pub struct GuitarRigBackend {
     /// it began, and whether a pick has changed them since
     /// (`browse_audition_end` puts them back).
     browse_undo: Arc<Mutex<Option<(ProfileDef, Vec<SongDef>, bool)>>>,
+    /// Undo for sound choices (a section's patch, a preset, a module or
+    /// block pick): the profile and songs as they were before each, newest
+    /// last. `undo_sound` puts the last one back.
+    sound_undo: Arc<Mutex<Vec<(ProfileDef, Vec<SongDef>)>>>,
     /// Boost engaged (tap toggles; the level is remembered separately).
     boost_on: Arc<Mutex<bool>>,
     /// Boost pedal level in dB (hold rotates through [`BOOST_LEVELS`]).
@@ -502,6 +506,7 @@ impl GuitarRigBackend {
             rig: Arc::new(Mutex::new(None)),
             audition: Arc::new(Mutex::new(None)),
             browse_undo: Arc::new(Mutex::new(None)),
+            sound_undo: Arc::new(Mutex::new(Vec::new())),
             boost_on: Arc::new(Mutex::new(false)),
             boost_level: Arc::new(Mutex::new(BOOST_LEVELS[0])),
             blocks: Arc::new(Mutex::new(Vec::new())),
@@ -2839,6 +2844,18 @@ impl GuitarRigBackend {
         self.edit_live_patch(move |patch| crate::compose::put_core(patch, &name, &snapshot));
     }
 
+    /// Remember the profile and songs before a sound choice, for
+    /// `undo_sound` — the last [`SOUND_UNDO_DEPTH`] choices.
+    fn remember_sound(&self) {
+        let def = self.profile_def.lock_ok().clone();
+        let songs = self.songs_lib.lock_ok().clone();
+        let mut undo = self.sound_undo.lock_ok();
+        undo.push((def, songs));
+        if undo.len() > SOUND_UNDO_DEPTH {
+            undo.remove(0);
+        }
+    }
+
     /// Change the live patch's definition, save it, and rebuild so it is heard.
     fn edit_live_patch(&self, edit: impl FnOnce(&mut crate::profiles::PatchDef)) {
         let Some(name) = self.live_patch_name() else {
@@ -5047,6 +5064,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         setlist_index: 0,
         library_songs: Vec::new(),
         tuner_visible: false,
+        undo_depth: 0,
         perform_mode: 1,
         key_bindings: Vec::new(),
         parts: Vec::new(),
@@ -5514,6 +5532,7 @@ impl Rig for GuitarRigBackend {
                 .collect();
             m.setlist_index = *self.setlist_index.lock_ok() as u32;
             m.tuner_visible = *self.tuner_visible.lock_ok();
+            m.undo_depth = self.sound_undo.lock_ok().len() as u32;
             m.perform_mode = *self.perform_mode.lock_ok();
             m.key_bindings = self
                 .keymap
@@ -5653,6 +5672,7 @@ impl Rig for GuitarRigBackend {
     }
 
     fn set_part_patch(&self, part: String, patch: String) {
+        self.remember_sound();
         let song_name = {
             let idx = *self.song_index.lock_ok();
             self.resolved_setlist()
@@ -7797,6 +7817,7 @@ impl Rig for GuitarRigBackend {
     }
 
     fn choose_block(&self, block: String, preset: String) -> signal_guitar_proto::Applied {
+        self.remember_sound();
         attempt(|| {
             let comp = RigLibrary::load_compositions();
             let Some(found) = comp.block_preset(&preset) else {
@@ -7836,6 +7857,19 @@ impl Rig for GuitarRigBackend {
         }
     }
 
+    fn undo_sound(&self) {
+        let Some((def, songs)) = self.sound_undo.lock_ok().pop() else {
+            return;
+        };
+        self.end_audition();
+        RigLibrary::save_profile(&def);
+        RigLibrary::save_songs(&songs);
+        *self.profile_def.lock_ok() = def;
+        *self.songs_lib.lock_ok() = songs;
+        tracing::info!("sound choice undone");
+        self.reload_for_song();
+    }
+
     fn browse_audition_end(&self, keep: bool) {
         let Some((def, songs, dirty)) = self.browse_undo.lock_ok().take() else {
             return;
@@ -7852,6 +7886,7 @@ impl Rig for GuitarRigBackend {
     }
 
     fn choose_module(&self, module: String, preset: String, snapshot: String) -> signal_guitar_proto::Applied {
+        self.remember_sound();
         attempt(|| {
             if module.eq_ignore_ascii_case(crate::profiles::CORE) {
                 self.choose_core(preset, snapshot);
@@ -7971,6 +8006,7 @@ impl Rig for GuitarRigBackend {
     }
 
     fn choose_preset(&self, preset: String, snapshot: String) {
+        self.remember_sound();
         let comp = RigLibrary::load_compositions();
         let Some(found) = comp.preset(&preset) else {
             tracing::warn!(%preset, "choose_preset: no such preset");
@@ -10059,6 +10095,9 @@ impl GuitarRigBackend {
 /// The patch a song starts on, for the setlist's badge: its own start
 /// patch, else the patch its start part recalls; empty when it keeps the
 /// profile's default.
+/// How many sound choices `undo_sound` can take back.
+const SOUND_UNDO_DEPTH: usize = 32;
+
 fn song_start(def: &SongDef, parts: &[PerfPart]) -> String {
     if !def.start_patch.is_empty() {
         return def.start_patch.clone();

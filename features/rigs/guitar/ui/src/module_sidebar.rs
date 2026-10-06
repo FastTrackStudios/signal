@@ -763,6 +763,28 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
                     }
                 }
             }
+            // No presets yet: the one way to start, as a button, not a
+            // recipe — each patch's sound as a preset (the patches unchanged).
+            if is_tone(&module) && total == 0 {
+                div { style: "display: flex; flex-direction: column; gap: 6px; padding: 6px 0 10px;",
+                    crate::kit::Button {
+                        label: "Make presets from this profile's patches",
+                        primary: true,
+                        onclick: {
+                            let rig = rig.clone();
+                            let mut refresh = refresh;
+                            move |()| {
+                                if let Some(r) = rig.clone() {
+                                    spawn(async move {
+                                        let _ = r.presets_from_patches().await;
+                                        refresh += 1;
+                                    });
+                                }
+                            }
+                        },
+                    }
+                }
+            }
             // What the module plays, and every way to change or keep it.
             PresetBar {
                 label: module.clone(),

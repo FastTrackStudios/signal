@@ -986,3 +986,84 @@ fn NewPart(on_done: EventHandler<()>) -> Element {
         }
     }
 }
+
+/// Play's section picker (Setlist mode): what the playing section recalls,
+/// chosen from the profile's patches stack by stack. A click plays it there
+/// and keeps it for the song; the bar's Undo takes it back.
+#[component]
+pub fn SectionPicker(model: PerformanceModel) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let part = model.parts.get(model.part_index as usize).cloned();
+    let song = model
+        .songs
+        .get(model.song_index as usize)
+        .map(|s| s.name.clone())
+        .unwrap_or_default();
+    let (title, sub) = match &part {
+        Some(p) => (
+            if p.section.is_empty() { p.name.clone() } else { p.section.clone() },
+            if p.patch.is_empty() {
+                format!("{song} · keeps what plays")
+            } else {
+                format!("{song} · plays {}", p.patch)
+            },
+        ),
+        None => ("No section".to_string(), song.clone()),
+    };
+    rsx! {
+        div {
+            style: "flex: 1 1 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; \
+                    background: {SIDEBAR}; color: {TEXT};",
+            div { style: "display: flex; flex-direction: column; gap: 2px; padding: 10px 12px 10px 14px; \
+                          border-bottom: 1px solid {LINE}; flex-shrink: 0;",
+                span { style: "{crate::theme::EYEBROW}", "Section" }
+                span { style: "font-size: 17px; font-weight: 700; line-height: 1.15; white-space: normal;", "{title}" }
+                span { style: "font-size: 11px; color: {MUTED}; white-space: normal;", "{sub}" }
+            }
+            if let Some(part) = part {
+                div { style: "flex: 1 1 0; min-height: 0; overflow-y: scroll; padding: 6px; display: flex; flex-direction: column; gap: 1px;",
+                    for st in model.stacks.iter().filter(|st| !st.patches.is_empty()) {
+                        {
+                            let (colour, _) = crate::perform::folder_color(&st.name);
+                            rsx! {
+                                div { key: "{st.name}", style: "display: flex; flex-direction: column; gap: 1px;",
+                                    div { style: "display: flex; align-items: center; gap: 6px; padding: 10px 8px 4px;",
+                                        span { style: "width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; background: {colour};" }
+                                        span { style: "{crate::theme::EYEBROW}", "{st.name}" }
+                                    }
+                                    for patch in st.patches.iter() {
+                                        {
+                                            let patch = patch.clone();
+                                            let on = patch.eq_ignore_ascii_case(&part.patch);
+                                            let part_name = part.name.clone();
+                                            let rig = rig.clone();
+                                            rsx! {
+                                                crate::kit::ListRow {
+                                                    key: "{patch}",
+                                                    title: patch.clone(),
+                                                    small: true,
+                                                    indent: 8,
+                                                    live: on,
+                                                    onclick: move |()| {
+                                                        if !on {
+                                                            let (part, patch) = (part_name.clone(), patch.clone());
+                                                            send(&rig, move |r| async move { let _ = r.set_part_patch(part, patch).await; });
+                                                        }
+                                                    },
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                div { style: "padding: 14px; font-size: 12px; color: {FAINT};",
+                    "Pick a section of the song on the left."
+                }
+            }
+        }
+    }
+}

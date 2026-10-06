@@ -323,6 +323,9 @@ pub struct PerformanceModel {
     /// Fullscreen tuner overlay — model-driven so the footswitch (hold
     /// tap-tempo) and every remote stay in sync.
     pub tuner_visible: bool,
+    /// How many sound choices (a section's patch, a preset, a module or
+    /// block pick) `undo_sound` can take back — 0 greys the Undo.
+    pub undo_depth: u32,
     /// Perform-grid mode: 0 Preset (browse the pool), 1 Profile (stacks),
     /// 2 Setlist (song-adaptive: parts + stacks).
     pub perform_mode: u32,
@@ -1387,6 +1390,10 @@ pub mod rig {
         /// Set what a section of the **current song** recalls. An empty
         /// `patch` clears it, making the section a label again.
         fn set_part_patch(&self, part: String, patch: String);
+        /// Take back the last sound choice — a section's patch, a preset, a
+        /// module or block pick — putting the profile and songs back as
+        /// they were before it (saved, and rebuilt to be heard).
+        fn undo_sound(&self);
         /// Undo the active patch's override of one parameter, returning it
         /// to what the chain builds it as.
         fn clear_block_param(&self, id: String, param: String);
