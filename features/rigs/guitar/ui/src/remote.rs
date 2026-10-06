@@ -22,15 +22,13 @@ use crate::state::use_rig_state;
 enum Mode {
     /// Wire the rig: the zoomable module/wire graph.
     Routing,
-    /// Play & shape it: the control surface (default).
+    /// Shape it: the control surface, a group at a time (PRE / CORE /
+    /// POST).
     Control,
-    /// Full-screen footswitch grid (Preset/Profile/Setlist select this
-    /// view AND the grid's perform mode).
-    #[expect(
-        dead_code,
-        reason = "not yet wired to a page switch — reserved for the Preset/Profile/Setlist full-screen perform view"
-    )]
-    Perform,
+    /// Play (the default): the switches across the bottom, and above them
+    /// the list the mode plays from beside the preset picker — choosing a
+    /// sound without the Control view.
+    Play,
     /// The TONE3000 catalog: find a capture, download it, load it as a
     /// preset. Lives beside the rig rather than behind a file dialog
     /// because picking an amp is a playing decision, not a filing one.
@@ -71,7 +69,7 @@ pub fn GuitarRigRemote() -> Element {
 
     // Control is home; Routing is where the wiring lives; Perform is the
     // stage view; Setlist manages the set (toggle away if unused).
-    let mut mode = use_signal(|| Mode::Control);
+    let mut mode = use_signal(|| Mode::Play);
     let mut switches = use_signal(|| Switches::Full);
     // The Control view's groups (PRE / AMP / POST): picked in the bar; two
     // fit when the switches and macros are hidden.
@@ -189,10 +187,16 @@ pub fn GuitarRigRemote() -> Element {
     let blocks = state.blocks;
     let _connected = rig.is_some();
     let perf_now = perf();
-    // The page on show. Routing and Tones are preset work, so they exist
-    // only in Preset mode; playing (Profile / Setlist) is always the
-    // Control view. The pick made in Preset mode is kept for going back.
-    let view = if perf_now.perform_mode == 0 { mode() } else { Mode::Control };
+    // The page on show: Play or Control in every mode; Routing and Tones
+    // are preset work, so they exist only in Preset mode (elsewhere they
+    // fall back to Play). The pick made in Preset mode is kept for going
+    // back.
+    let view = match mode() {
+        Mode::Routing | Mode::Tones | Mode::Presets if perf_now.perform_mode != 0 => Mode::Play,
+        m => m,
+    };
+    // Play's switches take the whole bottom, whatever the toggle says.
+    let sw = if view == Mode::Play { Switches::Full } else { switches() };
 
     // The five rig controls, shared by the standalone Perform view and the
     // Edit view's bottom dock.
@@ -408,7 +412,9 @@ pub fn GuitarRigRemote() -> Element {
                 // window's own title bar would put them.
                 fts_chrome::TrafficLights {}
 
-                // Sidebar toggles bookend the bar: presets left, songs right.
+                // Sidebar toggles bookend the bar (not in Play, whose panes
+                // are the sidebars).
+                if view != Mode::Play {
                 button {
                     class: if left_open() {
                         "flex items-center justify-center w-7 h-7 text-sm"
@@ -430,6 +436,7 @@ pub fn GuitarRigRemote() -> Element {
                         (true, true) => left_open.set(false),
                     },
                     fts_chrome::Glyph { icon: fts_chrome::Icon::RailLeft, size: 15 }
+                }
                 }
 
                 // Where you are, and the way back (Signal ▾ ▸ Rigs ▸ Guitar ▾).
@@ -498,25 +505,23 @@ pub fn GuitarRigRemote() -> Element {
                 // The bar's slack moves the window (and double-click maximises).
                 fts_chrome::DragSpace {}
 
-                // Work views, on the right — Preset mode only (see `view`).
-                if perf_now.perform_mode == 0 {
+                // Work views, on the right (see `view`): Play and Control
+                // always, Routing and Tones in Preset mode.
                 div { class: "flex items-center gap-0.5",
-                    // Presets and Tones choose the sound, so they only exist
-                    // in Preset mode; Routing and Control are always there.
                     for (m, label, icon) in [
-                        (Mode::Routing, "Routing", fts_chrome::Icon::Routing),
+                        (Mode::Play, "Play", fts_chrome::Icon::Perform),
                         (Mode::Control, "Control", fts_chrome::Icon::Control),
-                        // (The block-preset tree is the right sidebar's now; "Presets"
-                        // is the play mode on the left.)
+                        (Mode::Routing, "Routing", fts_chrome::Icon::Routing),
                         (Mode::Tones, "Tones", fts_chrome::Icon::Tones),
                     ]
                     .into_iter()
+                    .filter(|(m, ..)| perf_now.perform_mode == 0 || matches!(m, Mode::Play | Mode::Control))
                     {
                         button {
                             key: "{label}",
                             title: "{label}",
-                            style: "display: flex; align-items: center; gap: 5px; {bar_item(mode() == m)}",
-                            class: if mode() == m {
+                            style: "display: flex; align-items: center; gap: 5px; {bar_item(view == m)}",
+                            class: if view == m {
                                 "px-2.5 py-1 text-xs font-semibold"
                             } else {
                                 "px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
@@ -527,8 +532,6 @@ pub fn GuitarRigRemote() -> Element {
                         }
                     }
                 }
-                }
-
 
                 // The Control view's groups: which show (one with the
                 // switches up, two without), stacked in signal order.
@@ -555,9 +558,11 @@ pub fn GuitarRigRemote() -> Element {
                 // The footswitch grid and the macros: full, a compact strip,
                 // or hidden — click to cycle. Hidden gives the page all the
                 // height.
+                if view != Mode::Play {
                 BarRule {}
                 SwitchesToggle { mode: switches,
                     fts_chrome::Glyph { icon: fts_chrome::Icon::Perform, size: 13 }
+                }
                 }
 
                 // Global switch states — visible in every mode.
@@ -696,6 +701,7 @@ pub fn GuitarRigRemote() -> Element {
                 // The right sidebar, mirroring the left toggle: the presets
                 // of what the page shows — the Core's on PRE / CORE, the Time
                 // module's on POST. (Picking a block on the page re-aims it.)
+                if view != Mode::Play {
                 {
                     let mut sel = selected_module;
                     let open = sel().is_some();
@@ -729,6 +735,7 @@ pub fn GuitarRigRemote() -> Element {
                         }
                     }
                 }
+                }
                 // Settings + minimise / maximise / close.
                 fts_chrome::WindowCluster {}
             }
@@ -749,7 +756,7 @@ pub fn GuitarRigRemote() -> Element {
                 // The left sidebar follows the mode: the pool for Preset,
                 // the profile tree for Profile, the set and its songs for
                 // Setlist.
-                if left_open() {
+                if left_open() && view != Mode::Play {
                     if perf_now.perform_mode == 0 {
                         crate::preset_bar::PresetSidebar { revision: perf_now.revision, full: left_full() }
                     } else if perf_now.perform_mode == 2 {
@@ -765,15 +772,30 @@ pub fn GuitarRigRemote() -> Element {
                         crate::sidebars::LeftSidebar { model: perf_now.clone(), full: left_full() }
                     }
                 }
-                div { class: "flex-1 min-w-0 min-h-0 overflow-hidden", style: if view == Mode::Control && !control_collage() { "padding: 0;" } else { "padding: 0 10px 10px;" },
+                div { class: "flex-1 min-w-0 min-h-0 overflow-hidden", style: if (view == Mode::Control && !control_collage()) || view == Mode::Play { "padding: 0;" } else { "padding: 0 10px 10px;" },
                 if let Some((on_press, on_toggle_fx, on_toggle_boost, on_cycle_boost, on_tap_tempo, on_prev_song, on_next_song, on_select_song)) = controls {
                         // Routing / Control / Session share the layout: the
                         // page on top (~2/3), the switch grid docked beneath.
                         div { class: "flex flex-col h-full min-h-0 overflow-hidden", style: "gap: 4px;",
                             div {
                                 class: "min-h-0 flex flex-col overflow-hidden",
+                                // The page keeps ~3/4; the switches stay the
+                                // height they are in every view.
                                 style: "flex: 3 1 0%; min-height: 0; display: flex; flex-direction: column; overflow: hidden;",
-                                if view == Mode::Routing {
+                                if view == Mode::Play {
+                                    PlayPanes {
+                                        model: perf_now.clone(),
+                                        chain: blocks
+                                            .read()
+                                            .iter()
+                                            .map(|b| (b.name.clone(), b.id.clone(), b.overridden))
+                                            .collect::<Vec<_>>(),
+                                        on_browse: move |k: crate::library::Kind| {
+                                            let mut library_open = library_open;
+                                            library_open.set(Some(k));
+                                        },
+                                    }
+                                } else if view == Mode::Routing {
                                     crate::grid::RigGraph {
                                         blocks: blocks(),
                                         nodes: state.nodes.read().clone(),
@@ -867,16 +889,16 @@ pub fn GuitarRigRemote() -> Element {
                             // directly above the switches, in Profile and
                             // Setlist modes. Its panels drop over the grid,
                             // or rise over the page when the grid is short.
-                            if !wide() && perf_now.perform_mode != 0 && switches() != Switches::Hidden {
+                            if !wide() && perf_now.perform_mode != 0 && sw != Switches::Hidden {
                                 crate::macro_bar::MacroBar {
                                     macros: state.macros,
-                                    drop_up: switches() != Switches::Full,
+                                    drop_up: sw != Switches::Full,
                                 }
                             }
-                            if switches() != Switches::Hidden {
+                            if sw != Switches::Hidden {
                             // Wide: the switches, the macros beside them.
                             div {
-                                style: match (wide(), switches() == Switches::Compact) {
+                                style: match (wide(), sw == Switches::Compact) {
                                     (true, true) => "display: flex; flex-direction: row; align-items: stretch; flex: 0 0 116px; min-height: 0;",
                                     (true, false) => "display: flex; flex-direction: row; align-items: stretch; flex: 1 1 0%; min-height: 0;",
                                     (false, true) => "display: flex; flex-direction: column; flex: 0 0 116px; min-height: 0;",
@@ -889,7 +911,7 @@ pub fn GuitarRigRemote() -> Element {
                                 class: "min-h-0 p-1",
                                 style: if wide() { "flex: 1.4 1 0%; min-width: 0;" } else { "flex: 1 1 0%;" },
                                 PerformGrid {
-                                    compact: switches() == Switches::Compact,
+                                    compact: sw == Switches::Compact,
                                     model: perf(),
                                     on_press,
                                     on_toggle_fx,
@@ -987,6 +1009,46 @@ pub(crate) fn bar_item(on: bool) -> String {
 fn bar_item_live(on: bool) -> String {
     let pressed = if on { crate::theme::PRESSED_LIVE } else { "" };
     format!("border-radius: {}; {pressed}", crate::theme::R_SM)
+}
+
+/// Play: the list the mode plays from (the set, the profile, the
+/// presets) beside the preset picker, each a full sidebar filling half the
+/// width over the switches — choosing a sound without the Control view.
+#[component]
+fn PlayPanes(
+    model: signal_guitar_proto::PerformanceModel,
+    chain: Vec<crate::module_sidebar::ChainRef>,
+    on_browse: EventHandler<crate::library::Kind>,
+) -> Element {
+    // The sidebars inside fill their pane instead of their own width.
+    use_context_provider(|| crate::kit::FillPane);
+    // The picker opens on the presets.
+    let picker = try_use_context::<crate::module_sidebar::SelectedModule>();
+    use_effect(move || {
+        if let Some(crate::module_sidebar::SelectedModule(mut sel)) = picker {
+            sel.set(Some(crate::module_sidebar::Selection::Module("Preset".to_string())));
+        }
+    });
+    let pane = format!(
+        "flex: 1 1 0; min-width: 0; min-height: 0; display: flex; background: {};",
+        crate::theme::SIDEBAR
+    );
+    rsx! {
+        div { style: "display: flex; flex-direction: row; width: 100%; height: 100%; min-height: 0; gap: 1px; background: {crate::theme::LINE};",
+            div { style: "{pane}",
+                if model.perform_mode == 0 {
+                    crate::preset_bar::PresetSidebar { revision: model.revision, full: true }
+                } else if model.perform_mode == 2 {
+                    crate::setlist_bar::SetlistSidebar { model: model.clone(), full: true, on_browse }
+                } else {
+                    crate::sidebars::LeftSidebar { model: model.clone(), full: true }
+                }
+            }
+            div { style: "{pane}",
+                crate::module_sidebar::ModuleSidebar { revision: model.revision, chain }
+            }
+        }
+    }
 }
 
 /// A hairline between the bar's groups.

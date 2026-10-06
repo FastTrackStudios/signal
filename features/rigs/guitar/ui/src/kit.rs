@@ -37,6 +37,22 @@ use crate::theme::{
     R_SM, T_BODY, T_META, T_SMALL, TEXT,
 };
 
+/// Provided by a pane that holds a sidebar (Play's split): the sidebar
+/// fills the pane instead of keeping its own width.
+#[derive(Clone, Copy)]
+pub struct FillPane;
+
+/// A sidebar's width: its own (full or minimal), or the whole pane it sits
+/// in under a [`FillPane`].
+#[must_use]
+pub fn pane_w(full: bool) -> &'static str {
+    if try_consume_context::<FillPane>().is_some() {
+        "100%"
+    } else {
+        crate::theme::sidebar_w(full)
+    }
+}
+
 /// A square icon button.
 #[component]
 pub fn IconButton(

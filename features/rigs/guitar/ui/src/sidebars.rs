@@ -183,7 +183,7 @@ pub fn LeftSidebar(
 
     rsx! {
         aside {
-            style: "width: {crate::theme::sidebar_w(full)}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
+            style: "width: {crate::kit::pane_w(full)}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
                     border-right: 1px solid {LINE}; background: {SIDEBAR}; color: {TEXT};",
             // ── The profile: the same heading as the set's — name large,
             // ▾ / ‹ › to change profile, ⋯ to grow and manage it ──

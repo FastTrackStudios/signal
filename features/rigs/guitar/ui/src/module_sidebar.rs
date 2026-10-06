@@ -194,7 +194,7 @@ pub struct RightFull(pub Signal<bool>);
 
 /// The sidebar's width now: a phone's when full, else the minimal width.
 fn sidebar_w() -> &'static str {
-    crate::theme::sidebar_w(try_consume_context::<RightFull>().is_some_and(|f| (f.0)()))
+    crate::kit::pane_w(try_consume_context::<RightFull>().is_some_and(|f| (f.0)()))
 }
 
 /// The sidebar's tabs, two levels deep: the three things a sound is made
@@ -520,7 +520,11 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             }
         }
     });
-    let Some(selection) = selected() else {
+    // Closed — except in a pane (Play's), which is never empty: there it
+    // falls back to the presets.
+    let Some(selection) = selected().or_else(|| {
+        try_consume_context::<crate::kit::FillPane>().map(|_| Selection::Module("Preset".to_string()))
+    }) else {
         return rsx! {};
     };
     let comp = comp.read().clone().flatten();

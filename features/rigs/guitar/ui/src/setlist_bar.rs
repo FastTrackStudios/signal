@@ -153,7 +153,7 @@ pub fn SetlistSidebar(
 
     rsx! {
         aside {
-            style: "width: {crate::theme::sidebar_w(full)}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
+            style: "width: {crate::kit::pane_w(full)}; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; \
                     border-right: 1px solid {LINE}; background: {SIDEBAR}; color: {TEXT};",
 
             // ── The set: its name large, ‹ › to the next set, ⋯ to manage ──
@@ -259,10 +259,12 @@ pub fn SetlistSidebar(
                                         // The song, and under it the patch it starts on (and
                                         // NEXT) — what you need before counting in. The name
                                         // has its line to itself, so it wraps, never clips.
-                                        div { style: "flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
+                                        // (Basis `auto`, not 0: Blitz lays wrapping text out at
+                                        // the flex basis, so a 0 basis wrapped it a word wide.)
+                                        div { style: "flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
                                             span {
                                                 style: format!(
-                                                    "min-width: 0; white-space: normal; line-height: 1.25; font-size: 13px; \
+                                                    "align-self: stretch; min-width: 0; white-space: normal; line-height: 1.25; font-size: 13px; \
                                                      font-weight: {}; color: {};",
                                                     if state == Node::Now { 700 } else { 500 },
                                                     if state == Node::Now { TEXT } else { MUTED },
@@ -341,7 +343,7 @@ pub fn SetlistSidebar(
                                                                             TimelineNode { state, accent: true }
                                                                             span {
                                                                                 style: format!(
-                                                                                    "flex: 1 1 0; min-width: 56px; font-size: 12px; white-space: normal; line-height: 1.25; \
+                                                                                    "flex: 1 1 auto; min-width: 56px; font-size: 12px; white-space: normal; line-height: 1.25; \
                                                                                      font-weight: {}; color: {};",
                                                                                     if live { 700 } else { 500 },
                                                                                     if live { TEXT } else { MUTED },
@@ -391,7 +393,7 @@ pub fn SetlistSidebar(
                                                                                             onclick: move |_| {
                                                                                                 send(&rig, move |r| async move { let _ = r.select_part(pi as u32).await; });
                                                                                             },
-                                                                                            span { style: "flex: 1 1 0; min-width: 48px; font-size: 11px; white-space: normal; line-height: 1.25;",
+                                                                                            span { style: "flex: 1 1 auto; min-width: 48px; font-size: 11px; white-space: normal; line-height: 1.25;",
                                                                                                 "{part.name}"
                                                                                             }
                                                                                             if full { PartMarks { part: part.clone() } }
@@ -504,9 +506,10 @@ fn PartMarks(part: signal_guitar_proto::PerfPart) -> Element {
         // A repeat: linked to the part it repeats (same sound, edited
         // together).
         if !part.repeat_of.is_empty() {
-            span { style: "flex-shrink: 0; font-size: 11px; color: {MUTED}; white-space: nowrap;",
+            span { style: "flex-shrink: 0; display: flex; align-items: center; gap: 3px; font-size: 11px; color: {MUTED}; white-space: nowrap;",
                 title: "Repeats {part.repeat_of} — the same sound; editing one edits both",
-                "↻ {part.repeat_of}"
+                fts_chrome::Glyph { icon: fts_chrome::Icon::Refresh, size: 10 }
+                "{part.repeat_of}"
             }
         }
         if part.profile_switches {
