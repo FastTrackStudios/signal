@@ -1009,7 +1009,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     // Its algorithm stored (Hall, the engine's default) so
                     // a preset or snapshot can switch it: an override only
                     // sets a param the block has.
-                    &[("mix", "1"), ("level", "-20"), ("algorithm", "1"), ("decay", "0.85"), ("size", "0.92")],
+                    &[("mix", "1"), ("level", "-20"), ("algorithm", "1"), ("decay", "0.85"), ("size", "0.5")],
                 ),
                 "Time",
             ))
