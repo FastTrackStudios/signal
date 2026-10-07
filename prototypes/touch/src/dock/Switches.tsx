@@ -14,7 +14,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { borrowedOf, currentSong, playing, profileOf, tapStack, useStore } from "../store";
 import { findPatch, stacksFor, type SongStack } from "../setlist/stacks";
-import { songColour } from "../setlist/colors";
+import { MacroBar } from "./MacroBar";
 
 /** perform::folder_color: a stack's tile and its text. */
 const FOLDER: Record<string, [string, string]> = {
@@ -48,7 +48,7 @@ export function Switches() {
   const lit = (i: number) => at?.stack === i;
   return (
     <div style={{ display: "flex", flexDirection: "column", background: "#0a0a0c" }}>
-      <MacroBar colour={song ? songColour(song, s.songColours) : "#94a3b8"} />
+      <MacroBar />
       {/* One grid, two rows of five, the same columns: the hold layer slim
           above (a foot's hold lives "up" from the toe), the switches under
           the feet tall below — Signal's minmax(44px, 1fr) / 7fr. */}
@@ -196,106 +196,6 @@ function TapTempo({ bpm }: { bpm: number }) {
 
 function SwitchNo({ no }: { no: number }) {
   return <span style={{ position: "absolute", top: 5, left: 9, fontSize: 10, fontFamily: "ui-monospace, monospace", opacity: 0.45 }}>{no}</span>;
-}
-
-// ── The macro bar ────────────────────────────────────────────────────
-//
-// Made for a finger, not a mouse: no little knobs to grab. Each macro is a
-// whole cell, flush with its neighbours, and the cell IS the control — its
-// value is a fill across it in the macro's colour, with a bright edge where
-// the value sits. Slide sideways anywhere on it to turn it (relative, so a
-// touch never jumps the value; a full sweep is 2.5 cells wide, for fine
-// control); double-tap puts it back. While it moves, the cell lifts and the
-// number grows so the finger never hides what it is doing.
-
-const MACROS: { label: string; colour: string; value: number }[] = [
-  { label: "Gain", colour: "#f97316", value: 0.55 },
-  { label: "Bass", colour: "#94a3b8", value: 0.5 },
-  { label: "Mid", colour: "#94a3b8", value: 0.6 },
-  { label: "Treble", colour: "#94a3b8", value: 0.45 },
-  { label: "Delay", colour: "#a78bfa", value: 0.3 },
-  { label: "Reverb", colour: "#22d3ee", value: 0.35 },
-  { label: "Mod", colour: "#e879f9", value: 0.2 },
-  { label: "Volume", colour: "#e4e4e7", value: 0.72 },
-];
-
-function MacroBar(_: { colour: string }) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${MACROS.length}, minmax(0, 1fr))`, gap: 1, background: "#000" }}>
-      {MACROS.map((m) => (
-        <MacroCell key={m.label} {...m} />
-      ))}
-    </div>
-  );
-}
-
-function MacroCell({ label, colour, value: initial }: { label: string; colour: string; value: number }) {
-  const [v, setV] = useState(initial);
-  const [active, setActive] = useState(false);
-  const from = useRef<{ x: number; v: number; w: number } | null>(null);
-  const lastTap = useRef(0);
-  const pct = Math.round(v * 100);
-  return (
-    <div
-      role="slider"
-      aria-label={label}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={pct}
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "ArrowRight" || e.key === "ArrowUp") setV(Math.min(1, v + 0.01));
-        if (e.key === "ArrowLeft" || e.key === "ArrowDown") setV(Math.max(0, v - 0.01));
-      }}
-      onPointerDown={(e) => {
-        const now = performance.now();
-        if (now - lastTap.current < 300) {
-          setV(initial);
-          lastTap.current = 0;
-          return;
-        }
-        lastTap.current = now;
-        from.current = { x: e.clientX, v, w: (e.currentTarget as HTMLElement).clientWidth * 2.5 };
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-        setActive(true);
-      }}
-      onPointerMove={(e) => {
-        const f = from.current;
-        if (f) setV(Math.max(0, Math.min(1, f.v + (e.clientX - f.x) / f.w)));
-      }}
-      onPointerUp={() => {
-        from.current = null;
-        setActive(false);
-      }}
-      onPointerCancel={() => {
-        from.current = null;
-        setActive(false);
-      }}
-      title={`${label} — slide sideways; double-tap to reset`}
-      style={{
-        position: "relative",
-        height: 52,
-        overflow: "hidden",
-        background: active ? "#1a1a1f" : "#111114",
-        touchAction: "none",
-        userSelect: "none",
-        cursor: "ew-resize",
-        outline: "none",
-      }}
-    >
-      {/* The value, as a fill and a bright edge. */}
-      <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${v * 100}%`, background: `color-mix(in oklab, ${colour} ${active ? 30 : 20}%, transparent)` }} />
-      <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${v * 100}% - 1px)`, width: 2, background: colour, opacity: v > 0.003 ? 1 : 0.4 }} />
-      <span style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, padding: "0 10px" }}>
-        <span className="t-label" style={{ fontSize: 10.5, letterSpacing: "0.08em", color: colour === "#e4e4e7" || colour === "#94a3b8" ? "var(--ink-2)" : colour }}>
-          {label}
-        </span>
-        <span className="num" style={{ fontSize: active ? 20 : 16, fontWeight: 700, color: "var(--ink)", lineHeight: 1, transition: "font-size 120ms var(--ease)" }}>
-          {pct}
-        </span>
-      </span>
-    </div>
-  );
 }
 
 export function AudioControls(): ReactNode {
