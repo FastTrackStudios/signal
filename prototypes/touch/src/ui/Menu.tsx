@@ -4,6 +4,8 @@
 // long-press, anchored where it was asked for and kept on screen.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useStage } from "./stage";
 
 export type MenuItem =
   | { kind: "head"; label: string }
@@ -39,7 +41,14 @@ export function Menu({
   const first = startNaming !== undefined ? items[startNaming] : undefined;
   const [text, setText] = useState(first && first.kind === "name" ? first.initial : "");
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState(at);
+  // `at` is in the window's pixels; the menu draws in the stage's.
+  const stage = useStage();
+  const local = (() => {
+    const r = stage.el?.getBoundingClientRect();
+    return r ? { x: (at.x - r.left) / stage.scale, y: (at.y - r.top) / stage.scale } : at;
+  })();
+  const bounds = { w: stage.el ? stage.el.offsetWidth : window.innerWidth, h: stage.el ? stage.el.offsetHeight : window.innerHeight };
+  const [pos, setPos] = useState(local);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -51,8 +60,9 @@ export function Menu({
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const x = at.x + W > window.innerWidth - 8 ? Math.max(8, at.x - W) : at.x;
-    const y = at.y + r.height > window.innerHeight - 8 ? Math.max(8, window.innerHeight - 8 - r.height) : at.y;
+    const h = r.height / stage.scale;
+    const x = local.x + W > bounds.w - 8 ? Math.max(8, local.x - W) : local.x;
+    const y = local.y + h > bounds.h - 8 ? Math.max(8, bounds.h - 8 - h) : local.y;
     setPos({ x, y });
   }, [at, naming]);
 
@@ -155,8 +165,8 @@ export function Menu({
     });
   }
 
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 60 }} onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+  const layer = (
+    <div style={{ position: stage.el ? "absolute" : "fixed", inset: 0, zIndex: 60 }} onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={ref}
         role="menu"
@@ -165,7 +175,7 @@ export function Menu({
           left: pos.x,
           top: pos.y,
           width: W,
-          maxHeight: "calc(100vh - 16px)",
+          maxHeight: bounds.h - 16,
           overflowY: "auto",
           padding: 4,
           background: "#0d0d10",
@@ -178,6 +188,7 @@ export function Menu({
       </div>
     </div>
   );
+  return stage.el ? createPortal(layer, stage.el) : layer;
 }
 
 /** A ⋯ button that opens a menu under itself; a long-press on `target`

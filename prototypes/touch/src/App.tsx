@@ -15,6 +15,7 @@
 // pressed into the bar (theme::PRESSED), green when it is live rig state.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { StageCtx } from "./ui/stage";
 import { Setlist } from "./setlist/Setlist";
 import { AudioControls, Switches } from "./dock/Switches";
 import { setPerformMode, toggleHouseMute, useStore, type PerformMode } from "./store";
@@ -28,24 +29,126 @@ const FOOT = 56;
 type View = "play" | "control" | "routing" | "tones";
 type Dock = "switches" | "audio" | null;
 
+// ── The stage: the iPad at its real size ─────────────────────────────
+//
+// 1194 × 834 points is the 11" iPad Pro / Air's screen in landscape: 2388
+// pixels at 264 per inch, so 9.045 × 6.318 inches of glass. Shown at that
+// size, a real iPad held against the monitor covers it exactly. A browser
+// can't know its monitor's pixels per inch, so it starts from a Mac
+// laptop's (~127 CSS px per inch) and a slider matches it to the iPad in
+// your hand; the match is remembered.
+
+const GLASS_IN = 2388 / 264;
+type Size = "actual" | "fit" | "points";
+
+function readNumber(key: string, fallback: number): number {
+  try {
+    const v = Number(localStorage.getItem(key));
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function save(key: string, v: string) {
+  try {
+    localStorage.setItem(key, v);
+  } catch {
+    /* private window: not remembered */
+  }
+}
+
 export function App() {
+  const [size, setSize] = useState<Size>(() => {
+    try {
+      return (localStorage.getItem("stage.size") as Size) || "actual";
+    } catch {
+      return "actual";
+    }
+  });
+  const [ppi, setPpi] = useState(() => readNumber("stage.ppi", 127));
+  const [calibrating, setCalibrating] = useState(false);
+  const [win, setWin] = useState({ w: window.innerWidth, h: window.innerHeight });
+  useEffect(() => {
+    const on = () => setWin({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  const fit = Math.min((win.w - 32) / W, (win.h - 96) / H);
+  const scale = size === "points" ? 1 : size === "fit" ? fit : (GLASS_IN * ppi) / W;
+  const pick = (v: Size) => {
+    setSize(v);
+    save("stage.size", v);
+  };
+  return (
+    <div style={{ minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "12px 16px 24px", overflow: "auto" }}>
+      <StageBar size={size} onSize={pick} scale={scale} ppi={ppi} calibrating={calibrating} onCalibrate={() => { setCalibrating(!calibrating); pick("actual"); }} onPpi={(v) => { setPpi(v); save("stage.ppi", String(v)); }} />
+      <div style={{ width: W * scale, height: H * scale, flexShrink: 0 }}>
+        <Device scale={scale} />
+      </div>
+    </div>
+  );
+}
+
+function StageBar({ size, onSize, scale, ppi, calibrating, onCalibrate, onPpi }: { size: Size; onSize: (s: Size) => void; scale: number; ppi: number; calibrating: boolean; onCalibrate: () => void; onPpi: (v: number) => void }) {
+  const opt = (v: Size, label: string) => (
+    <button
+      key={v}
+      onClick={() => onSize(v)}
+      aria-pressed={size === v}
+      className={size === v ? "" : "pressable"}
+      style={{ height: 30, padding: "0 12px", borderRadius: "var(--r)", fontSize: 13, fontWeight: size === v ? 700 : 560, color: size === v ? "var(--ink)" : "var(--ink-3)", background: size === v ? "var(--pressed-bg)" : "transparent", boxShadow: size === v ? "var(--pressed-shadow)" : undefined }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "var(--ink-3)" }}>
+        <span style={{ marginRight: 6 }}>iPad Pro 11″ · 1194 × 834</span>
+        {opt("actual", "Actual size")}
+        {opt("fit", "Fit")}
+        {opt("points", "1 : 1")}
+        <span style={{ width: 1, height: 18, background: "var(--rule)", margin: "0 6px" }} />
+        <button className="pressable" onClick={onCalibrate} aria-pressed={calibrating} style={{ height: 30, padding: "0 12px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 600, color: calibrating ? "var(--ink)" : "var(--ink-3)" }}>
+          {calibrating ? "Done matching" : "Match my iPad…"}
+        </button>
+        <span className="num" style={{ marginLeft: 6, fontSize: 12 }}>
+          {Math.round(scale * 100)}%
+        </span>
+      </div>
+      {calibrating && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "var(--ink-2)" }}>
+          <span>Hold your iPad against the screen, then slide until the frame matches its glass edge to edge</span>
+          <input type="range" min={70} max={240} step={0.25} value={ppi} onChange={(e) => onPpi(Number(e.target.value))} style={{ width: 240 }} aria-label="Pixels per inch" />
+          <span className="num" style={{ width: 80, color: "var(--ink-3)" }}>{ppi.toFixed(1)} px/in</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Device({ scale }: { scale: number }) {
   const s = useStore();
   const [chosen, setView] = useState<View>("play");
   // Routing and Tones edit a preset: outside Preset mode, Play shows instead.
   const view: View = s.performMode !== "preset" && (chosen === "routing" || chosen === "tones") ? "play" : chosen;
   const [dock, setDock] = useState<Dock>("switches");
   const [sidebar, setSidebar] = useState(true);
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
   return (
-    <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, overflow: "auto" }}>
+    <StageCtx.Provider value={{ el, scale }}>
       <div
+        ref={setEl}
         style={{
+          position: "relative",
           width: W,
           height: H,
-          flexShrink: 0,
+          transform: scale === 1 ? undefined : `scale(${scale})`,
+          transformOrigin: "0 0",
           display: "flex",
           flexDirection: "column",
           background: "var(--desk)",
-          border: "1px solid var(--rule-strong)",
+          outline: "1px solid var(--rule-strong)",
           borderRadius: 18,
           overflow: "hidden",
           boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
@@ -58,7 +161,7 @@ export function App() {
         </div>
         <BottomBar view={view} onView={setView} dock={dock} onDock={(d) => setDock(dock === d ? null : d)} />
       </div>
-    </div>
+    </StageCtx.Provider>
   );
 }
 
