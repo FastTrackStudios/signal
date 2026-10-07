@@ -125,6 +125,22 @@ export function Setlist() {
   const listRef = useRef<HTMLDivElement>(null);
   const rows = useRef<(HTMLDivElement | null)[]>([]);
   const rootRef = useRef<HTMLElement>(null);
+  // Whether the song up is scrolled out of the list, and which way.
+  const [away, setAway] = useState<"above" | "below" | null>(null);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const row = rows.current[s.songIndex];
+    if (!list || !row) return;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) return setAway(null);
+        setAway(e.boundingClientRect.top < (e.rootBounds?.top ?? 0) ? "above" : "below");
+      },
+      { root: list, threshold: 0 },
+    );
+    io.observe(row);
+    return () => io.disconnect();
+  }, [s.songIndex, set.songs.length]);
   const [fit, setFit] = useState<Fit>("sidebar");
   useLayoutEffect(() => {
     const el = rootRef.current;
@@ -183,7 +199,9 @@ export function Setlist() {
       }}
     >
       <SetHeader onPanel={setPanel} reordering={reordering} onReorder={setReordering} />
-      <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }}>
+      <div ref={listRef} style={{ position: "relative", flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }}>
+        {/* Scrolled away from the song up: where it is, and a way back. */}
+        {away === "above" && <NowBar where="above" onBack={() => rows.current[s.songIndex]?.scrollIntoView({ block: "start", behavior: "smooth" })} />}
         {set.songs.map((song, i) => (
           <div key={`${i}-${song.name}`} ref={(el) => { rows.current[i] = el; }}>
             <SongRow
@@ -222,6 +240,7 @@ export function Setlist() {
             </Button>
           </div>
         )}
+        {away === "below" && <NowBar where="below" onBack={() => rows.current[s.songIndex]?.scrollIntoView({ block: "start", behavior: "smooth" })} />}
       </div>
       {panel && <PanelView panel={panel} onClose={() => setPanel(null)} />}
     </section>
@@ -330,6 +349,53 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
   );
 }
 
+/** The song row's height: the section playing sticks just under it. */
+const SONG_ROW_H = 64;
+
+/** Pinned over the list while the song up is scrolled out of it: the song
+ *  and the section playing, and a tap back to them. */
+function NowBar({ where, onBack }: { where: "above" | "below"; onBack: () => void }) {
+  const s = useStore();
+  const song = currentSong(s);
+  if (!song) return null;
+  const sec = sectionsOf(s, song.name)[s.partIndex];
+  const colour = songColour(song.name, s.songColours);
+  return (
+    <button
+      onClick={onBack}
+      className="pressable"
+      style={{
+        position: "sticky",
+        [where === "above" ? "top" : "bottom"]: 0,
+        zIndex: 5,
+        width: "100%",
+        height: 44,
+        marginBottom: where === "above" ? -44 : 0,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "0 14px",
+        textAlign: "left",
+        background: tint(colour, 16),
+        boxShadow: where === "above" ? "0 6px 16px rgba(0,0,0,0.45)" : "0 -6px 16px rgba(0,0,0,0.45)",
+      }}
+    >
+      <span className="num" style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 750, background: colour, color: "#0b0b0e" }}>
+        {s.songIndex + 1}
+      </span>
+      <span style={{ fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{song.name}</span>
+      {sec && <span style={{ fontSize: 14, fontWeight: 650, color: sectionColour(sec.name), whiteSpace: "nowrap" }}>{sec.name}</span>}
+      <span style={{ flex: 1 }} />
+      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, color: "var(--ink-2)", whiteSpace: "nowrap" }}>
+        <svg width="10" height="12" viewBox="0 0 10 12" aria-hidden style={{ transform: where === "below" ? "rotate(180deg)" : undefined }}>
+          <path d="M5 11V1.5M1 5.5 5 1.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Now
+      </span>
+    </button>
+  );
+}
+
 /** A recurring event, as a chip in its colour (its name's, like a song). */
 function EventChip({ event, big }: { event: string; big?: boolean }) {
   const c = nameColour(event);
@@ -418,10 +484,13 @@ function SongRow({
     <div
       {...(reordering ? {} : menu.longPress())}
       style={{
-        position: "relative",
+        // The song up stays at the top while you scroll through it.
+        position: up && !reordering ? "sticky" : "relative",
+        top: 0,
+        zIndex: up ? 3 : undefined,
         display: "flex",
         alignItems: "stretch",
-        minHeight: 64,
+        minHeight: SONG_ROW_H,
         background: lifted ? "var(--sheet-2)" : open ? tint(colour, up ? 7 : 4) : undefined,
         borderTop: dropAbove ? "3px solid var(--focus-fg)" : "1px solid var(--rule)",
       }}
@@ -663,7 +732,20 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
   );
   return (
     <>
-      <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 50, background: state === "now" && !several ? tint(songColour(song, s.songColours), 18) : undefined }}>
+      <div
+        {...menu.longPress()}
+        style={{
+          // The section playing stays under the song while you scroll its stacks.
+          position: state === "now" ? "sticky" : "relative",
+          top: SONG_ROW_H,
+          zIndex: state === "now" ? 2 : undefined,
+          display: "flex",
+          alignItems: "center",
+          minHeight: 50,
+          background: state === "now" ? tint(songColour(song, s.songColours), several ? 10 : 18) : undefined,
+          boxShadow: state === "now" ? "0 1px 0 var(--rule)" : undefined,
+        }}
+      >
         {/* The grip: drag to move the section; it wears the section's colour. */}
         <span
           role="button"
