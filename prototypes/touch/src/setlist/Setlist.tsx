@@ -192,14 +192,24 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
     if (p.id === "reorder") onReorder(true);
     if (p.id === "delete") deleteSet(s.setIndex);
   };
-  const step = (d: number) => chooseSet((s.setIndex + d + s.setlists.length) % s.setlists.length);
   const minutes = Math.round(set.songs.length * 4.5);
   const when = whenLabel(set.date);
   return (
     <header style={{ flexShrink: 0, padding: "14px 6px 12px 18px", borderBottom: "1px solid var(--rule)", display: "flex", alignItems: "flex-start", gap: 2 }}>
-      <button onClick={() => onPanel({ kind: "details", mode: "edit" })} style={{ flex: 1, minWidth: 0, textAlign: "left", paddingTop: 2 }} title="Edit the set's event, date and title">
-        <h1 className="t-marker" style={{ margin: 0, fontSize: fit === "narrow" ? 18 : 24, lineHeight: 1.12 }}>
-          {setHeading(set)}
+      <button
+        className="pressable"
+        onClick={() => onPanel({ kind: "sets" })}
+        style={{ flex: 1, minWidth: 0, textAlign: "left", padding: "2px 8px 4px", margin: "-2px 0 0 -8px", borderRadius: "var(--r-md)" }}
+        title="Sets — choose another or make a new one"
+        aria-haspopup="dialog"
+      >
+        <h1 className="t-marker" style={{ margin: 0, fontSize: fit === "narrow" ? 18 : 24, lineHeight: 1.12, display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ minWidth: 0 }}>{setHeading(set)}</span>
+          <span aria-hidden style={{ flexShrink: 0, display: "flex", width: 22, height: 22, borderRadius: 999, alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.07)", color: "var(--ink-2)" }}>
+            <svg width="10" height="6" viewBox="0 0 10 6">
+              <path d="M1 1 L5 5 L9 1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
         </h1>
         <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "4px 8px", marginTop: 6 }}>
           {set.title && set.event && <EventChip event={set.event} />}
@@ -216,16 +226,7 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
         <Button primary onClick={() => onReorder(false)} style={{ alignSelf: "center", marginRight: 6 }}>
           Done
         </Button>
-      ) : fit !== "narrow" && (
-        <>
-          <IconBtn label="Previous set" onClick={() => step(-1)}>
-            <Chevron dir="left" />
-          </IconBtn>
-          <IconBtn label="Next set" onClick={() => step(1)}>
-            <Chevron dir="right" />
-          </IconBtn>
-        </>
-      )}
+      ) : null}
       {!reordering && <MoreButton label="Set actions" onClick={menu.fromButton} />}
       {menu.open && <Menu at={menu.open.at} items={items} onPick={onPick} onClose={menu.close} />}
     </header>
@@ -738,23 +739,27 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
       break;
     }
   }
+  // The sets switcher drops from the title it opened from; the pickers
+  // rise from the bottom, under the thumb.
+  const top = panel.kind === "sets";
   return (
-    <div style={{ position: "absolute", inset: 0, zIndex: 20, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+    <div style={{ position: "absolute", inset: 0, zIndex: 20, display: "flex", flexDirection: "column", justifyContent: top ? "flex-start" : "flex-end" }}>
       <button aria-label="Close" onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", cursor: "default" }} />
       <div
         style={{
           position: "relative",
-          maxHeight: "86%",
+          maxHeight: top ? "92%" : "86%",
           display: "flex",
           flexDirection: "column",
           background: "var(--sheet-2)",
-          borderTop: "1px solid var(--rule-strong)",
-          borderRadius: "12px 12px 0 0",
-          boxShadow: "0 -16px 40px rgba(0,0,0,0.5)",
-          animation: "panel-up 220ms var(--ease) both",
+          borderTop: top ? undefined : "1px solid var(--rule-strong)",
+          borderBottom: top ? "1px solid var(--rule-strong)" : undefined,
+          borderRadius: top ? "0 0 14px 14px" : "12px 12px 0 0",
+          boxShadow: top ? "0 16px 40px rgba(0,0,0,0.55)" : "0 -16px 40px rgba(0,0,0,0.5)",
+          animation: `${top ? "panel-down" : "panel-up"} 220ms var(--ease) both`,
         }}
       >
-        <span aria-hidden style={{ alignSelf: "center", width: 36, height: 4, borderRadius: 2, background: "var(--dim)", marginTop: 8 }} />
+        {!top && <span aria-hidden style={{ alignSelf: "center", width: 36, height: 4, borderRadius: 2, background: "var(--dim)", marginTop: 8 }} />}
         <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px 10px 18px", borderBottom: "1px solid var(--rule)" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 18, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
@@ -766,7 +771,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
         </header>
         <div style={{ overflowY: "auto", minHeight: 0 }}>{body}</div>
       </div>
-      <style>{`@keyframes panel-up { from { transform: translateY(24px); opacity: 0 } to { transform: none; opacity: 1 } }`}</style>
+      <style>{`@keyframes panel-up { from { transform: translateY(24px); opacity: 0 } to { transform: none; opacity: 1 } } @keyframes panel-down { from { transform: translateY(-24px); opacity: 0 } to { transform: none; opacity: 1 } }`}</style>
     </div>
   );
 }
@@ -1143,22 +1148,6 @@ function KeyGrid({ value, onPick }: { value: string; onPick: (k: string) => void
 }
 
 // ── Small things ─────────────────────────────────────────────────────
-
-function IconBtn({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
-  return (
-    <button className="pressable" aria-label={label} title={label} onClick={onClick} style={{ width: 40, height: 48, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--r)", color: "var(--ink-2)", flexShrink: 0 }}>
-      {children}
-    </button>
-  );
-}
-
-function Chevron({ dir }: { dir: "left" | "right" }) {
-  return (
-    <svg width="9" height="14" viewBox="0 0 9 14" aria-hidden>
-      <path d={dir === "left" ? "M7 1.5 L1.5 7 L7 12.5" : "M2 1.5 L7.5 7 L2 12.5"} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 /** The next section a song's form suggests (Intro → Verse 1 → Chorus 1 …). */
 function suggestSection(names: string[]): string {
