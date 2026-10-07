@@ -224,16 +224,12 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
       </button>
       <ModeButton />
       <span style={{ flex: 1 }} />
-      <span style={{ display: "flex", alignItems: "center" }}>
-        <PanicButton size={30} />
-      </span>
+      <PanicButton size={30} />
       <Indicator kind="midi" compact />
       <Indicator kind="audio" compact />
       {safe.landscape && <Cpu />}
       <Meters width={safe.landscape ? 120 : 86} />
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        <MuteButton size={32} />
-      </div>
+      <MuteButton size={32} />
     </header>
   );
 }
@@ -251,15 +247,13 @@ function Rail({ onMenu, children }: { onMenu: () => void; children: ReactNode })
           <path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
         </svg>
       </button>
-      <div style={{ display: "flex", justifyContent: "center", paddingBottom: 4 }}>
-        <PanicButton size={30} />
-      </div>
+      <PanicButton size={34} rail />
       <div className="rail" style={{ display: "flex", flexDirection: "column" }}>{children}</div>
       <span style={{ flex: 1 }} />
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "6px 0 8px" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, paddingTop: 4 }}>
         <Meters width={58} />
-        <MuteButton size={34} />
       </div>
+      <MuteButton size={40} rail />
       <style>{`.rail > span > button { margin: 1px 4px !important; min-width: 0 !important; flex: 1; padding: 0 !important } .rail > span[aria-hidden] { width: 36px !important; height: 1px !important; align-self: center; margin: 4px 0 }`}</style>
     </nav>
   );

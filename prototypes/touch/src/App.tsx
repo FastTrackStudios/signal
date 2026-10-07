@@ -308,18 +308,15 @@ function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => voi
       {/* Health and safety: always in view. */}
       <Rule />
       {/* Panic sits with the health it fixes — far from Mute. */}
-      <div style={{ display: "flex", alignItems: "center", padding: "0 4px 0 8px" }}>
-        <PanicButton />
-      </div>
+      <PanicButton />
+      <Rule />
       <Indicator kind="midi" />
       <Indicator kind="audio" />
       <Cpu />
       <Rule />
       <Meters width={128} />
       <Rule />
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 8px 0 6px" }}>
-        <MuteButton />
-      </div>
+      <MuteButton />
     </header>
   );
 }

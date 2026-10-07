@@ -19,32 +19,27 @@ export function Indicator({ kind, ok = true, compact }: { kind: Kind; ok?: boole
   const label = kind === "midi" ? "MIDI" : "Audio";
   return (
     <>
-      {/* A button that looks like one: raised, outlined, its icon and name,
-          the light in its corner — green while the link is up. */}
+      {/* Part of the bar: full height, flat, its icon and name and the
+          link's light — a press opens its settings. */}
       <button
         className="pressable"
         onClick={() => setOpen(true)}
         title={`${label}: ${DETAIL[kind]} — settings`}
         aria-label={`${label} ${ok ? "connected" : "down"} — open ${label} settings`}
         style={{
-          position: "relative",
-          alignSelf: "center",
-          height: compact ? 30 : 34,
-          padding: compact ? "0 9px" : "0 12px 0 10px",
+          alignSelf: "stretch",
+          padding: compact ? "0 8px" : "0 12px",
           display: "flex",
           alignItems: "center",
           gap: 7,
           fontSize: 12.5,
           fontWeight: 700,
-          color: "var(--ink-2)",
-          borderRadius: "var(--r)",
-          background: "#1a1a1f",
-          boxShadow: `inset 0 0 0 1px ${ok ? "var(--rule-strong)" : "var(--void)"}, 0 1px 0 rgba(255,255,255,0.04) inset`,
+          color: ok ? "var(--ink-2)" : "var(--void)",
         }}
       >
+        <span style={{ width: 7, height: 7, borderRadius: 999, flexShrink: 0, background: ok ? "var(--live)" : "var(--void)", boxShadow: ok ? "0 0 4px var(--live)" : undefined }} />
         <KindIcon kind={kind} />
         {!compact && label}
-        <span style={{ position: "absolute", top: 4, right: 4, width: 6, height: 6, borderRadius: 999, background: ok ? "var(--live)" : "var(--void)", boxShadow: ok ? "0 0 4px var(--live)" : undefined }} />
       </button>
       {open && <SettingsSheet kind={kind} onClose={() => setOpen(false)} />}
     </>

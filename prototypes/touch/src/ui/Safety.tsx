@@ -16,7 +16,7 @@ import { Menu, useMenu, type MenuItem, type Picked } from "./Menu";
 
 const HOLD_MS = 500;
 
-export function MuteButton({ size = 36, label }: { size?: number; label?: boolean }) {
+export function MuteButton({ size = 36, label, rail }: { size?: number; label?: boolean; rail?: boolean }) {
   const s = useStore();
   const menu = useMenu();
   const held = useRef<{ t: number; fired: boolean } | null>(null);
@@ -65,22 +65,18 @@ export function MuteButton({ size = 36, label }: { size?: number; label?: boolea
           menu.setOpen({ at: { x: rect.left, y: rect.bottom + 4 } });
         }}
         style={{
-          flex: label ? 1 : undefined,
-          height: size,
-          minWidth: size,
-          padding: label ? "0 12px" : 0,
+          ...itemShape(size, label, rail),
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          borderRadius: "var(--r)",
           fontSize: 12,
           fontWeight: 750,
           letterSpacing: "0.05em",
           whiteSpace: "nowrap",
           color: any ? "#1a0505" : "var(--ink-2)",
           background: any ? "var(--void)" : "transparent",
-          boxShadow: any ? undefined : "inset 0 0 0 1px var(--rule-strong)",
+          boxShadow: label && !any ? "inset 0 0 0 1px var(--rule-strong)" : undefined,
           animation: any ? "mute-pulse 1.6s ease-in-out infinite" : undefined,
           touchAction: "none",
         }}
@@ -111,7 +107,7 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
   );
 }
 
-export function PanicButton({ size = 36, label }: { size?: number; label?: boolean }) {
+export function PanicButton({ size = 36, label, rail }: { size?: number; label?: boolean; rail?: boolean }) {
   const s = useStore();
   const busy = s.panicAt !== null;
   return (
@@ -122,21 +118,18 @@ export function PanicButton({ size = 36, label }: { size?: number; label?: boole
       aria-busy={busy}
       className={busy ? "" : "pressable"}
       style={{
-        height: size,
-        minWidth: size,
-        padding: label ? "0 12px" : 0,
+        ...itemShape(size, label, rail),
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         gap: 8,
-        borderRadius: "var(--r)",
         fontSize: 12,
         fontWeight: 750,
         letterSpacing: "0.05em",
         whiteSpace: "nowrap",
         color: busy ? "#1a1205" : "#fbbf24",
         background: busy ? "#fbbf24" : "transparent",
-        boxShadow: busy ? undefined : "inset 0 0 0 1px color-mix(in srgb, #fbbf24 45%, var(--rule-strong))",
+        boxShadow: label && !busy ? "inset 0 0 0 1px color-mix(in srgb, #fbbf24 45%, var(--rule-strong))" : undefined,
       }}
     >
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden style={{ animation: busy ? "panic-spin 0.8s linear infinite" : undefined }}>
@@ -154,4 +147,13 @@ export function PanicButton({ size = 36, label }: { size?: number; label?: boole
       <style>{`@keyframes panic-spin { to { transform: rotate(360deg) } }`}</style>
     </button>
   );
+}
+
+/** In a bar the buttons are part of it — full height, flat, a fill only
+ *  when they are on; in a rail, full width; with a label (the side menu),
+ *  a button of their own. */
+function itemShape(size: number, label?: boolean, rail?: boolean): React.CSSProperties {
+  if (label) return { flex: 1, height: size, padding: "0 12px", borderRadius: "var(--r)" };
+  if (rail) return { alignSelf: "stretch", height: size, padding: 0, borderRadius: 0 };
+  return { alignSelf: "stretch", minWidth: size + 12, padding: "0 12px", borderRadius: 0 };
 }
