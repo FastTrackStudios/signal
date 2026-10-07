@@ -15,7 +15,7 @@
 // gives the song that profile. With nothing picked it just browses.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { blockPresetsByType, modulesOf, rig, stackOf } from "../data/rig";
+import { blockPresetsByType, chain, modulesOf, rig, stackOf } from "../data/rig";
 import {
   addSong,
   addStackPatch,
@@ -149,6 +149,22 @@ function partOf(s: State, t: Target | null) {
  *  Amp and Drive; the Time its Delay and Reverb. Followed down, first
  *  choice wins, each tagged with who chose it. */
 function inheritedPicks(s: State, bt: BuildTarget): Record<string, { preset: string; variation: string; from: string }> {
+  return inherited(s, bt).modules;
+}
+
+/** The block a chain block name is (its type, lower-case), from the rig's
+ *  chain: "Pre Comp" → compressor, "Amp EQ" → eq, "DLY 1" → delay. */
+function blockTypeOf(block: string): string | undefined {
+  return chain().find((b) => b.node.name === block)?.node.block_type?.toLowerCase() ?? undefined;
+}
+
+/** What a part inherits: module variations, and block presets — each
+ *  picked by a preset higher up (the patch, its Core, its Time…), with the
+ *  block it sits in. */
+function inherited(s: State, bt: BuildTarget): {
+  modules: Record<string, { preset: string; variation: string; from: string }>;
+  blocks: Record<string, { preset: string; block: string; from: string }[]>;
+} {
   let preset: string | undefined;
   let variation: string | undefined;
   if (bt?.kind === "part") {
@@ -161,9 +177,19 @@ function inheritedPicks(s: State, bt: BuildTarget): Record<string, { preset: str
     variation = bt.variation;
   }
   const out: Record<string, { preset: string; variation: string; from: string }> = {};
+  const blocks: Record<string, { preset: string; block: string; from: string }[]> = {};
+  const addBlocks = (list: { block: string; preset: string }[], from: string) => {
+    for (const b of list) {
+      const type = blockTypeOf(b.block);
+      if (!type) continue;
+      const have = (blocks[type] ??= []);
+      if (!have.some((x) => x.block === b.block)) have.push({ preset: b.preset, block: b.block, from });
+    }
+  };
   const root = preset ? modulesOf("Preset").find((m) => m.name === preset) : undefined;
-  if (!root) return out;
+  if (!root) return { modules: out, blocks };
   const at = Math.max(0, variation ? root.snapshots.indexOf(variation) : 0);
+  addBlocks(root.snapshot_info[at]?.blocks ?? [], root.name);
   const queue = (root.snapshot_info[at]?.modules ?? []).map((m) => ({ ...m, from: root.name }));
   while (queue.length) {
     const pick = queue.shift()!;
@@ -171,9 +197,13 @@ function inheritedPicks(s: State, bt: BuildTarget): Record<string, { preset: str
     out[pick.module] = { preset: pick.preset, variation: pick.snapshot, from: pick.from };
     const comp = modulesOf(pick.module).find((m) => m.name === pick.preset);
     const k = comp ? comp.snapshots.indexOf(pick.snapshot) : -1;
-    if (comp && k >= 0) for (const sub of comp.snapshot_info[k]?.modules ?? []) queue.push({ ...sub, from: pick.module });
+    if (comp && k >= 0) {
+      // The module's own block picks (Core: its gate, its comps, its EQ).
+      addBlocks(comp.snapshot_info[k]?.blocks ?? [], pick.module);
+      for (const sub of comp.snapshot_info[k]?.modules ?? []) queue.push({ ...sub, from: pick.module });
+    }
   }
-  return out;
+  return { modules: out, blocks };
 }
 
 /** Every patch the rig knows, once: each profile's, and the songs' own. */
@@ -350,6 +380,9 @@ const KINDS: Kind[] = [
       group: "Blocks",
       colour: BLOCK_COLOUR[type] ?? "#a1a1aa",
       items: (s, bt) => {
+        // What a preset higher up picked for this kind of block (each block
+        // of it: a Pre Comp and a Post Comp are both compressors).
+        const from = inherited(s, bt).blocks[type] ?? [];
         const pickedPart = bt?.kind === "part" ? overrideOf(s, bt.t).edits[`block:${type}`] : undefined;
         const pickedPreset = bt?.kind === "preset" ? s.presetPicks[`${bt.preset}/${bt.variation}/block:${type}`] : undefined;
         return list.map((b, i) => ({
@@ -359,6 +392,7 @@ const KINDS: Kind[] = [
           from: b.bypass ? "off" : [ALGOS[`block:${type}/${b.name}`] as string | undefined, b.used_by.length ? `in ${plural(b.used_by.length, "preset")}` : ""].filter(Boolean).join(" · ") || undefined,
           colour: BLOCK_COLOUR[type] ?? "#a1a1aa",
           state: pickedPart === i || pickedPreset === b.name ? ("swapped" as const) : undefined,
+          inherited: from.filter((f) => f.preset === b.name).map((f) => `${f.from} · ${f.block}`).join(", ") || undefined,
         }));
       },
       apply: (_, bt) => {
@@ -540,7 +574,7 @@ export function Browser({ onClose }: { onClose?: () => void }) {
                       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                         <span style={{ fontSize: 15, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)" }}>{k.label}</span>
                         {label && (
-                          <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, fontSize: 12, fontWeight: 600, color: swapped ? `color-mix(in oklab, ${k.colour} 70%, white)` : "var(--ink-3)" }}>
+                          <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, fontSize: 12, fontWeight: 600, color: swapped ? `color-mix(in oklab, ${k.colour} 45%, var(--ink-3))` : "var(--ink-3)" }}>
                             {swapped && <OverrideMark colour={k.colour} />}
                             {inheritedOnly && <InheritIcon colour="var(--ink-3)" size={11} />}
                             <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
@@ -818,6 +852,12 @@ function Row({ item, sub, onPick }: { item: Item; sub?: string; onPick?: () => v
         <span style={{ fontSize: nested ? 15 : 16, fontWeight: on ? 700 : nested ? 520 : 560, color: nested && !on ? "var(--ink-2)" : "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</span>
         {sub && <span style={{ fontSize: 13, color: "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>}
       </span>
+      {!item.state && item.inherited && (
+        <span title={`Chosen by ${item.inherited}`} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 650, color: "var(--ink-2)", maxWidth: "45%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <InheritIcon colour="var(--ink-2)" size={11} />
+          From {item.inherited}
+        </span>
+      )}
       {item.state && (
         <span style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, color: item.state === "swapped" ? `color-mix(in oklab, ${item.colour} 70%, white)` : "var(--live)" }}>
           {item.state === "swapped" && <OverrideMark colour={item.colour} />}
