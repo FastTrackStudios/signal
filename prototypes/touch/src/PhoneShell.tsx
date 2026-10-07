@@ -182,7 +182,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
               {page === "edit" && <EditView routing={false} fill />}
               </>}
             </div>
-            <footer style={{ flexShrink: 0, display: "flex", alignItems: "stretch", height: 54 + safe.bottom, padding: `0 2px ${safe.bottom}px`, borderTop: "1px solid var(--rule)", background: "var(--sheet)" }}>
+            <footer style={{ flexShrink: 0, display: "flex", alignItems: "stretch", height: 56 + safe.bottom, padding: `0 2px ${safe.bottom}px`, borderTop: "1px solid var(--rule)", background: "var(--sheet)" }}>
               {(
                 [
                   ["setlist", "Setlist"],
@@ -216,7 +216,7 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
     <header
       style={{
         flexShrink: 0,
-        height: 44 + safe.top,
+        height: 45 + safe.top,
         padding: `${safe.top}px ${8 + safe.right}px 0 ${4 + safe.left}px`,
         display: "flex",
         alignItems: "stretch",
@@ -225,7 +225,7 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
         background: "var(--sheet)",
       }}
     >
-      <button aria-label="Menu" onClick={onMenu} className="pressable" style={{ width: 44, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)" }}>
+      <button aria-label="Menu" onClick={onMenu} className="pressable" style={{ width: 44, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)" }}>
         <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
           <path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
         </svg>
@@ -250,17 +250,18 @@ function Rail({ onMenu, children }: { onMenu: () => void; children: ReactNode })
   const safe = useSafe();
   return (
     <nav style={{ flexShrink: 0, width: 74, paddingLeft: 8, paddingTop: 14, paddingBottom: safe.bottom, display: "flex", flexDirection: "column", alignItems: "stretch", borderRight: "1px solid var(--rule)", background: "var(--sheet)" }}>
-      <button aria-label="Menu" onClick={onMenu} className="pressable" style={{ height: 38, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)" }}>
+      <button aria-label="Menu" onClick={onMenu} className="pressable" style={{ height: 44, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)" }}>
         <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
           <path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
         </svg>
       </button>
       <div className="rail" style={{ display: "flex", flexDirection: "column" }}>{children}</div>
       <span style={{ flex: 1 }} />
-      <div style={{ height: 52, display: "flex", justifyContent: "center" }}>
+      {/* The meters give way first when the rail is short; the mute never does. */}
+      <div style={{ height: 52, minHeight: 34, flexShrink: 1, display: "flex", justifyContent: "center", overflow: "hidden" }}>
         <Meters />
       </div>
-      <MuteButton size={40} rail />
+      <MuteButton size={44} rail />
       <style>{`.rail > span > button { margin: 1px 4px !important; min-width: 0 !important; flex: 1; padding: 0 !important } .rail > span[aria-hidden] { width: 36px !important; height: 1px !important; align-self: center; margin: 4px 0 }`}</style>
     </nav>
   );
@@ -352,7 +353,7 @@ function SideMenu({ offset, view, onView, onClose, docks }: { offset: number; vi
               style={{ ...row, minHeight: 46, textTransform: "capitalize", color: off ? "var(--dim)" : "var(--ink)", background: on ? "var(--pressed-bg)" : undefined, boxShadow: on ? "var(--pressed-shadow)" : undefined }}
             >
               <span style={{ flex: 1 }}>{v}</span>
-              {off && <span style={{ fontSize: 12, color: "var(--dim)", textTransform: "none" }}>Preset mode</span>}
+              {off && <span style={{ fontSize: 12, color: "var(--ink-3)", textTransform: "none" }}>Preset mode</span>}
             </button>
           );
         })}
@@ -438,7 +439,7 @@ function Tab({ landscape, children, ...rest }: { landscape?: boolean; label: str
   // In the rail: a stack, each button the rail's width; in the foot: shares
   // the bar evenly.
   return (
-    <span style={{ display: "flex", flex: landscape ? undefined : "1 1 0", minWidth: 0, height: landscape ? 44 : undefined }}>
+    <span style={{ display: "flex", flex: landscape ? undefined : "1 1 0", minWidth: 0, height: landscape ? 46 : undefined }}>
       <FootButton {...rest}>{children}</FootButton>
     </span>
   );

@@ -25,6 +25,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useSignal, type Signal } from "../ui/signal";
 
+/** An effect's colour as text: lifted toward white so the darker ones
+ *  (Time's indigo, Reverb's violet) still read at 4.5:1 on the bar. */
+const lift = (c: string) => `color-mix(in oklab, ${c} 78%, white)`;
+
 /** How a macro answers the signal, subtly: a glow behind it while its
  *  effect is doing something (each delay echo, the reverb's tail, the
  *  drive pushed, the modulation's cycle), and for the gate a little meter
@@ -200,11 +204,11 @@ function Panel({ knob, values, set, up, onClose }: { knob: Knob; values: Values;
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10, height: 36, padding: "0 6px 0 12px" }}>
-        <span className="t-label" style={{ color: knob.colour }}>
+        <span className="t-label" style={{ color: lift(knob.colour) }}>
           {knob.label}
         </span>
         <span style={{ flex: 1 }} />
-        <button className="pressable" aria-label={`Close ${knob.label}`} onClick={onClose} style={{ width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", borderRadius: "var(--r)" }}>
+        <button className="pressable" aria-label={`Close ${knob.label}`} onClick={onClose} style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", borderRadius: "var(--r)" }}>
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
             <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
@@ -335,7 +339,7 @@ function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44
       )}
       {!quiet && <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${v * 100}% - 1px)`, width: 2, background: colour }} />}
       <span style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, padding: "0 8px" }}>
-        <span className="t-label" style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 3, fontSize: 11, letterSpacing: "0.06em", color: grey ? "var(--ink-2)" : colour, whiteSpace: "nowrap", overflow: "hidden" }}>
+        <span className="t-label" style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 3, fontSize: 11, letterSpacing: "0.06em", color: grey ? "var(--ink-2)" : lift(colour), whiteSpace: "nowrap", overflow: "hidden" }}>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
           {more && (
             <svg width="8" height="5" viewBox="0 0 8 5" aria-hidden style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : undefined, opacity: 0.8 }}>
@@ -343,7 +347,7 @@ function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44
             </svg>
           )}
         </span>
-        <span className="num" style={{ fontSize: active ? 16 : 13, lineHeight: 1, fontWeight: 700, color: quiet ? "var(--ink-3)" : scale === "wet" && v > 0.5 ? colour : "var(--ink)", transition: "font-size 120ms var(--ease)" }}>
+        <span className="num" style={{ fontSize: active ? 16 : 13, lineHeight: 1, fontWeight: 700, color: quiet ? "var(--ink-3)" : scale === "wet" && v > 0.5 ? lift(colour) : "var(--ink)" }}>
           {readout}
         </span>
       </span>

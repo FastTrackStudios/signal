@@ -154,6 +154,6 @@ export function PanicButton({ size = 36, label, rail }: { size?: number; label?:
  *  a button of their own. */
 function itemShape(size: number, label?: boolean, rail?: boolean): React.CSSProperties {
   if (label) return { flex: 1, height: size, padding: "0 12px", borderRadius: "var(--r)" };
-  if (rail) return { alignSelf: "stretch", height: size, padding: 0, borderRadius: 0 };
-  return { alignSelf: "stretch", minWidth: size + 12, padding: "0 12px", borderRadius: 0 };
+  if (rail) return { alignSelf: "stretch", height: size, flexShrink: 0, padding: 0, borderRadius: 0 };
+  return { alignSelf: "stretch", minWidth: Math.max(44, size + 12), flexShrink: 0, padding: "0 12px", borderRadius: 0 };
 }

@@ -145,8 +145,8 @@ function FxRow({ name, module, fill }: { name: string; module: string; fill?: bo
           {module}
         </span>
         <span style={{ flex: 1 }} />
-        <span className="t-label" style={{ color: "var(--dim)" }}>
-          FX row · Frame goes here
+        <span className="t-label" style={{ color: "var(--ink-3)" }}>
+          FX row
         </span>
       </div>
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `repeat(${PARAMS.length}, minmax(0, 1fr))`, gap: 1, background: "#000", margin: "0 0 0 0" }}>
@@ -166,8 +166,9 @@ function FxRow({ name, module, fill }: { name: string; module: string; fill?: bo
                 step={0.01}
                 value={v}
                 disabled={!t}
+                aria-label={p}
                 onChange={(e) => t && editParam(t, key, Number(e.target.value))}
-                style={{ writingMode: "vertical-lr", direction: "rtl", height: fill ? 120 : 180, accentColor: changed ? "#f59e0b" : "#a1a1aa" }}
+                style={{ writingMode: "vertical-lr", direction: "rtl", width: 44, margin: 0, height: fill ? 120 : 180, accentColor: changed ? "#f59e0b" : "#a1a1aa" }}
               />
               <span className="num" style={{ fontSize: 14, fontWeight: 700, color: changed ? "var(--ink)" : "var(--ink-3)" }}>
                 {Math.round(v * 100)}

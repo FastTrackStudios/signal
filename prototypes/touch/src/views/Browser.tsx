@@ -476,7 +476,7 @@ export function Browser({ onClose }: { onClose?: () => void }) {
       <div style={{ flexShrink: 0, height: MACRO_BAR_H, display: "flex", flexDirection: "column", justifyContent: "center", borderBottom: "1px solid var(--rule)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, height: 42, padding: "0 4px 0 14px" }}>
           {!wide && opened && !q && (
-            <button className="pressable" onClick={() => setOpened(false)} aria-label="All kinds" style={{ width: 36, height: 44, marginLeft: -8, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", borderRadius: "var(--r)" }}>
+            <button className="pressable" onClick={() => setOpened(false)} aria-label="All kinds" style={{ width: 44, height: 44, marginLeft: -12, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", borderRadius: "var(--r)" }}>
               <svg width="9" height="15" viewBox="0 0 9 15" aria-hidden>
                 <path d="M7.5 1.5 1.5 7.5l6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -494,7 +494,7 @@ export function Browser({ onClose }: { onClose?: () => void }) {
               <>
                 <span style={{ fontSize: 13, color: "var(--ink-3)" }}>Filling</span>
                 <span style={{ fontSize: 15, fontWeight: 650, color: nameColour(bt.profile) }}>{bt.profile}</span>
-                <span style={{ fontSize: 15, fontWeight: 750, color: tapeFor(bt.stack) === "var(--tape-gaffer)" ? "var(--ink)" : tapeFor(bt.stack) }}>{bt.stack}</span>
+                <span style={{ fontSize: 15, fontWeight: 750, color: tapeFor(bt.stack) === "var(--tape-gaffer)" ? "var(--ink)" : `color-mix(in oklab, ${tapeFor(bt.stack)} 78%, white)` }}>{bt.stack}</span>
               </>
             ) : bt?.kind === "preset" ? (
               <>
@@ -657,12 +657,10 @@ function groupsOf(kinds: Kind[]): [string, Kind[]][] {
   return out;
 }
 
-/** What to do to build with this kind, when nothing is being built into. */
-function hintFor(s: State, bt: BuildTarget, kind: Kind): string | null {
-  if (kind.apply(s, bt)) return null;
-  if (s.performMode === "setlist") return "Pick a section's patch in the setlist to choose for it.";
-  if (s.performMode === "profile") return kind.id === "patches" ? "Open a stack in the profile to fill it." : "Stacks hold patches — open one, then pick from Patches.";
-  return "Play a preset's variation to shape it.";
+/** No instructions in the list: with nothing to build into, its rows sit
+ *  disabled and the header says what they would fill. */
+function hintFor(_s: State, _bt: BuildTarget, _kind: Kind): string | null {
+  return null;
 }
 
 function KindList({ kind, items, apply, hint }: { kind: Kind; items: Item[]; apply: ((item: Item) => void) | null; hint: string | null }) {
@@ -1080,7 +1078,7 @@ function Facet({ label, value, options, onPick }: { label: string; value: string
   const menu = useMenu();
   const on = value !== null;
   return (
-    <span style={{ display: "flex", alignItems: "center", borderRadius: "var(--r)", background: on ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)" }}>
+    <span style={{ display: "flex", alignItems: "center", borderRadius: "var(--r)", background: on ? "var(--fill-on)" : "var(--fill)" }}>
       <button
         className="pressable"
         onClick={menu.fromButton}

@@ -362,13 +362,9 @@ function LeftSwitch({ value, onChange }: { value: "browser" | "sidebar"; onChang
   );
 }
 
-/** The main area with nothing in it yet. */
+/** The main area with nothing in it yet: quiet, no instructions. */
 function Quiet() {
-  return (
-    <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <span style={{ fontSize: 13, color: "var(--dim)", textAlign: "center", maxWidth: 280, lineHeight: 1.4 }}>Tap a section's patch in the setlist, or open the Browser.</span>
-    </div>
-  );
+  return <div style={{ height: "100%" }} />;
 }
 
 // ── Top: the rig ─────────────────────────────────────────────────────
@@ -523,10 +519,10 @@ function Sidebar() {
 export function Placeholder({ title, note }: { title: string; note: string }) {
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
-      <span className="t-label" style={{ color: "var(--dim)" }}>
+      <span className="t-label" style={{ color: "var(--ink-3)" }}>
         {title}
       </span>
-      <span style={{ fontSize: 13, color: "var(--dim)" }}>{note}</span>
+      <span style={{ fontSize: 13, color: "var(--ink-3)" }}>{note}</span>
     </div>
   );
 }

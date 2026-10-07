@@ -111,7 +111,7 @@ export function SetlistStrip(_: { fill?: boolean } = {}) {
 
       {/* MAP — the song's sections across the width. */}
       {sections.length > 0 && (
-        <div style={{ display: "flex", gap: 2, height: 28, padding: "0 6px 6px" }}>
+        <div style={{ display: "flex", gap: 2, height: 44, padding: "0 6px" }}>
           {sections.map((x, j) => {
             const state = j < s.partIndex ? "done" : j === s.partIndex ? "now" : "ahead";
             const c = sectionColour(x.name);
@@ -124,6 +124,19 @@ export function SetlistStrip(_: { fill?: boolean } = {}) {
                 style={{
                   flex: "1 1 0",
                   minWidth: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "6px 0 10px",
+                  background: "transparent",
+                }}
+              >
+                <span
+                  style={{
+                  flex: 1,
+                  minWidth: 0,
+                  height: "100%",
+                  display: "flex",
+                  alignItems: "center",
                   borderRadius: 4,
                   padding: "0 6px",
                   fontSize: 11,
@@ -134,9 +147,10 @@ export function SetlistStrip(_: { fill?: boolean } = {}) {
                   color: state === "now" ? "#0b0b0e" : state === "done" ? "var(--ink-3)" : "var(--ink-2)",
                   background: state === "now" ? c : `color-mix(in oklab, ${c} ${state === "done" ? 12 : 26}%, #0b0b0e)`,
                   boxShadow: state === "now" ? "0 0 0 1.5px rgba(255,255,255,0.85)" : undefined,
-                }}
-              >
-                {x.name}
+                  }}
+                >
+                  {x.name}
+                </span>
               </button>
             );
           })}

@@ -177,11 +177,14 @@ export function Setlist() {
       const to = at(ev.clientY);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
       setDrag(null);
       if (to !== i) moveSong(i, to);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    // A touch the system takes back ends the drag where it is.
+    window.addEventListener("pointercancel", onUp);
   };
 
   return (
@@ -319,10 +322,13 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
             className="pressable"
             onClick={() => onPanel({ kind: "profile" })}
             title={prof.from === "set" ? `Every song plays on ${prof.name} unless it has its own — tap to change` : `No default set: the rig's ${prof.name} — tap to choose one`}
-            style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, height: 24, padding: "0 8px 0 6px", margin: "0 0 0 -6px", borderRadius: 4, fontSize: 12.5, fontWeight: 650, color: prof.from === "set" ? "var(--ink)" : "var(--ink-3)", background: "rgba(255,255,255,0.05)" }}
+            style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", height: 44, margin: "-10px 0 -10px -6px", padding: 0, background: "transparent" }}
           >
-            <ProfileIcon name={prof.name} colour={prof.from === "set" ? nameColour(prof.name) : "var(--ink-3)"} size={13} />
-            {prof.name}
+            {/* The chip as drawn; the button around it is the 44pt target. */}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 24, padding: "0 8px 0 6px", borderRadius: 4, fontSize: 12.5, fontWeight: 650, color: prof.from === "set" ? "var(--ink)" : "var(--ink-3)", background: "rgba(255,255,255,0.05)" }}>
+              <ProfileIcon name={prof.name} colour={prof.from === "set" ? nameColour(prof.name) : "var(--ink-3)"} size={13} />
+              {prof.name}
+            </span>
           </button>
           {/* The set at a glance: a tick per song in its colour, played ones
               faded, the one up taller — and where you are in it. */}
@@ -662,11 +668,14 @@ function Sections({ songIndex, onPanel }: { songIndex: number; onPanel: (p: Pane
       const to = at(ev.clientY);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
       setDrag(null);
       if (to !== j) moveSection(song.name, j, to);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    // A touch the system takes back ends the drag where it is.
+    window.addEventListener("pointercancel", onUp);
   };
   return (
     <div style={{ position: "relative", padding: "2px 0 10px", background: tint(colour, up ? 7 : 4) }}>
@@ -1057,11 +1066,14 @@ export function Stacks({ left, profile: only, reorder }: { left: number; profile
       const to = atY(ev.clientY);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
       setDrag(null);
       if (to !== i) moveStack(profile, i, to);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    // A touch the system takes back ends the drag where it is.
+    window.addEventListener("pointercancel", onUp);
   };
   return (
     <div style={{ position: "relative", padding: `2px 8px 8px ${left}px` }}>
@@ -1370,7 +1382,7 @@ function StackRow({ stack, index: i, count, profile, on, home, where, pos, songC
                     height: 5,
                     borderRadius: 999,
                     flexShrink: 0,
-                    transition: "width 160ms var(--ease)",
+                    
                     background: song ? colour : p.from === "other" ? nameColour(p.profile!) : lit ? "var(--ink-2)" : "transparent",
                     boxShadow: song || p.from === "other" ? undefined : `inset 0 0 0 1.25px ${lit ? "var(--ink-2)" : "var(--ink-3)"}`,
                     opacity: song && !lit ? 0.55 : 1,

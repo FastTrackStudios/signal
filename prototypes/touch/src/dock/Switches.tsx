@@ -19,9 +19,10 @@ import { findPatch, type SongStack } from "../setlist/stacks";
 const FOLDER: Record<string, [string, string]> = {
   clean: ["#38bdf8", "#082f49"],
   crunch: ["#2563eb", "#ffffff"],
-  drive: ["#f97316", "#ffffff"],
-  rhythm: ["#f97316", "#ffffff"],
-  lead: ["#ef4444", "#ffffff"],
+  // Dark on the bright tiles: white on orange or red reads at under 4:1.
+  drive: ["#f97316", "#1c0d02"],
+  rhythm: ["#f97316", "#1c0d02"],
+  lead: ["#ef4444", "#1f0606"],
   ambient: ["#06b6d4", "#04222a"],
 };
 const folder = (name: string): [string, string] => FOLDER[name.toLowerCase()] ?? ["#3f3f46", "#e4e4e7"];
@@ -51,7 +52,7 @@ export function Switches({ vertical, fill }: { vertical?: boolean; fill?: boolea
     ) : (
       <Empty key="h6" no={6} />
     ),
-    <FnTile key="h7" no={7} title="FX Toggle" subtitle={fx ? "Time FX on" : "Time FX off"} bg="#ec4899" text="#ffffff" lit={fx} stacked={vertical} onTap={() => setFx(!fx)} />,
+    <FnTile key="h7" no={7} title="FX Toggle" subtitle={fx ? "Time FX on" : "Time FX off"} bg="#ec4899" text="#22050f" lit={fx} stacked={vertical} onTap={() => setFx(!fx)} />,
     <FnTile key="h8" no={8} title="Song" subtitle={song ?? "—"} bg="#a78bfa" text="#1e1b4b" lit={s.performMode === "setlist"} stacked={vertical} />,
     <FnTile key="h9" no={9} title="Boost" subtitle={boost ? "+3 dB" : "+3 dB · off"} bg="#fafafa" text="#0a0a0a" lit={boost} stacked={vertical} onTap={() => setBoost(!boost)} />,
     <FnTile key="h10" no={10} title="Tuner" subtitle="A 440" bg="#3f3f46" text="#e4e4e7" lit={false} stacked={vertical} />,
@@ -216,10 +217,9 @@ function SwitchNo({ no }: { no: number }) {
 export function AudioControls(): ReactNode {
   return (
     <div style={{ height: 200, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, background: "#0a0a0c" }}>
-      <span className="t-label" style={{ color: "var(--dim)" }}>
+      <span className="t-label" style={{ color: "var(--ink-3)" }}>
         Audio controls
       </span>
-      <span style={{ fontSize: 13, color: "var(--dim)" }}>The block being played — where Frame goes</span>
     </div>
   );
 }

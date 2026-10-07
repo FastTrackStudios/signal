@@ -29,7 +29,7 @@ export function Indicator({ kind, health = "ok" }: { kind: Kind; health?: Health
         onClick={() => openSetup(kind)}
         title={`${label} ${SAYS[health]}: ${linkDetail(s, kind)}`}
         aria-label={`${label} ${SAYS[health]} — open ${label} in Setup`}
-        style={{ alignSelf: "stretch", padding: "0 7px", display: "flex", alignItems: "center", color: TONE[health] }}
+        style={{ alignSelf: "stretch", minWidth: 44, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: TONE[health] }}
       >
         <KindIcon kind={kind} />
     </button>

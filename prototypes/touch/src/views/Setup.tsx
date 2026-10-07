@@ -60,7 +60,7 @@ import { MACRO_BAR_H } from "../dock/MacroBar";
 
 const GATE_NAME: Record<GateLevel, string> = { off: "Off", subtle: "Subtle", default: "Default", tight: "Tight", ultra: "Ultra" };
 /** A rig's override of the guitar, in the rig's colour. */
-const RIG_COLOUR = "#38BDF8";
+const RIG_COLOUR = "var(--rig)";
 const TONE_NAME: Record<ToneKey, string> = { trimDb: "Trim", gates: "Gate", noisy: "Noisy input", eq: "EQ" };
 
 /** The guitar's level in dBFS, after the trim (the simulation's 0–1 onto
@@ -481,7 +481,7 @@ function Select<T extends string | number>({ label, value, options, show = Strin
         onClick={menu.fromButton}
         aria-label={`${label}: ${show(value)}`}
         aria-haspopup="menu"
-        style={{ width, minWidth: 0, height: 44, padding: "0 12px 0 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: "var(--r)", background: "rgba(255,255,255,0.06)", textAlign: "left" }}
+        style={{ width, minWidth: 0, height: 44, padding: "0 12px 0 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: "var(--r)", background: "var(--fill)", textAlign: "left" }}
       >
         <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 650, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{show(value)}</span>
         <svg width="11" height="7" viewBox="0 0 11 7" aria-hidden style={{ flexShrink: 0, color: "var(--ink-3)" }}>
@@ -517,8 +517,8 @@ function Cell({ label, children, foot }: { label: string; children: ReactNode; f
 function Toggle({ on, onFlip, label }: { on: boolean; onFlip: () => void; label: string }) {
   return (
     <button role="switch" aria-checked={on} aria-label={label} onClick={onFlip} className="pressable" style={{ width: 52, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-      <span aria-hidden style={{ width: 46, height: 28, borderRadius: 999, padding: 3, background: on ? "var(--live)" : "#2b2b31", display: "flex", justifyContent: on ? "flex-end" : "flex-start" }}>
-        <span style={{ width: 22, height: 22, borderRadius: 999, background: "#f4f4f5" }} />
+      <span aria-hidden style={{ width: 46, height: 28, borderRadius: 999, padding: 3, background: on ? "var(--live)" : "var(--rule-strong)", display: "flex", justifyContent: on ? "flex-end" : "flex-start" }}>
+        <span style={{ width: 22, height: 22, borderRadius: 999, background: "var(--thumb)" }} />
       </span>
     </button>
   );
@@ -529,7 +529,7 @@ function AudioTab({ r }: { r: Rig }) {
   const dev = interfaceOf(r);
   const set = <K extends keyof Rig["audio"]>(label: string, k: K, v: Rig["audio"][K]) => editRig(label, (y) => ({ ...y, audio: { ...y.audio, [k]: v } }));
   const lat = latencyMs(r);
-  const latColour = lat < 8 ? "var(--live)" : lat < 14 ? "#eab308" : "#f87171";
+  const latColour = lat < 8 ? "var(--live)" : lat < 14 ? "var(--warn)" : "var(--void)";
   return (
     <>
       {/* The interface: the device, and the three numbers that decide feel. */}
@@ -629,8 +629,8 @@ function Inputs({ r }: { r: Rig }) {
           >
             {on && <span aria-hidden style={{ position: "absolute", left: 0, right: 0, top: 0, height: 3, background: "var(--live)" }} />}
             {/* Its level, upright. */}
-            <span aria-hidden style={{ position: "relative", width: 6, height: 40, borderRadius: 2, background: "#08080a", overflow: "hidden", flexShrink: 0 }}>
-              <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: `${Math.min(100, lvl * 100)}%`, background: lvl > 0.9 ? "#f87171" : "var(--live)" }} />
+            <span aria-hidden style={{ position: "relative", width: 6, height: 40, borderRadius: 2, background: "var(--well)", overflow: "hidden", flexShrink: 0 }}>
+              <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: `${Math.min(100, lvl * 100)}%`, background: lvl > 0.9 ? "var(--void)" : "var(--live)" }} />
             </span>
             <span style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
               <span style={{ fontSize: 15, fontWeight: on ? 750 : 600 }}>{inp.name}</span>
@@ -687,7 +687,7 @@ function OutputStrip({ kind, r }: { kind: "house" | "phones"; r: Rig }) {
           className={check ? "" : "pressable"}
           disabled={!!check}
           onClick={() => setCheck({ start: performance.now() })}
-          style={{ flexShrink: 0, whiteSpace: "nowrap", height: 44, padding: "0 16px", display: "flex", alignItems: "center", gap: 8, borderRadius: "var(--r)", fontSize: 14, fontWeight: 700, color: check ? "#04210f" : "var(--ink)", background: check ? "var(--live)" : "transparent", boxShadow: check ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
+          style={{ flexShrink: 0, whiteSpace: "nowrap", height: 44, padding: "0 16px", display: "flex", alignItems: "center", gap: 8, borderRadius: "var(--r)", fontSize: 14, fontWeight: 700, color: check ? "var(--on-live)" : "var(--ink)", background: check ? "var(--live)" : "transparent", boxShadow: check ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
         >
           {check ? (side === "L" ? "Left…" : side === "R" ? "Right…" : "Both…") : kind === "house" ? "Check speakers" : "Check phones"}
         </button>
@@ -697,27 +697,60 @@ function OutputStrip({ kind, r }: { kind: "house" | "phones"; r: Rig }) {
 }
 
 /** A wide touch fader: its value written in it, the signal moving along
- *  its foot; the whole strip is the target. */
+ *  its foot. The whole strip follows the finger (pointer events — a native
+ *  range under iPad Safari only drags by its own thumb); arrows step it,
+ *  Shift for ten steps, Home and End for its ends. */
 function Fader({ value, min, max, step, label, level, hot, show, onChange }: { value: number; min: number; max: number; step: number; label: string; level?: number; hot?: boolean; show: (v: number) => string; onChange: (v: number) => void }) {
   const fill = (value - min) / (max - min);
+  const drag = useRef(false);
+  const clamp = (v: number) => Math.max(min, Math.min(max, Math.round(v / step) * step));
+  const at = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return clamp(min + ((e.clientX - r.left) / r.width) * (max - min));
+  };
+  const end = () => (drag.current = false);
   return (
-    <div style={{ position: "relative", flex: 1, minWidth: 0, height: 52, borderRadius: 6, background: "#0b0b0e", overflow: "hidden" }}>
+    <div
+      role="slider"
+      tabIndex={0}
+      aria-label={label}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={value}
+      aria-valuetext={show(value)}
+      onPointerDown={(e) => {
+        drag.current = true;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        onChange(at(e));
+      }}
+      onPointerMove={(e) => drag.current && onChange(at(e))}
+      onPointerUp={end}
+      onPointerCancel={end}
+      onLostPointerCapture={end}
+      onKeyDown={(e) => {
+        const big = e.shiftKey ? 10 : 1;
+        const next = e.key === "ArrowRight" || e.key === "ArrowUp" ? value + step * big : e.key === "ArrowLeft" || e.key === "ArrowDown" ? value - step * big : e.key === "Home" ? min : e.key === "End" ? max : null;
+        if (next === null) return;
+        e.preventDefault();
+        onChange(clamp(next));
+      }}
+      style={{ position: "relative", flex: 1, minWidth: 0, height: 52, borderRadius: 6, background: "var(--well)", overflow: "hidden", touchAction: "none", cursor: "ew-resize" }}
+    >
       <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${fill * 100}%`, background: "linear-gradient(90deg, #1e1e24, #2a2a31)" }} />
-      {level !== undefined && <span aria-hidden style={{ position: "absolute", left: 0, bottom: 0, height: 4, width: `${Math.max(0, Math.min(1, level)) * 100}%`, background: hot ? "#f87171" : "var(--live)" }} />}
-      <span aria-hidden style={{ position: "absolute", top: 8, bottom: 8, left: `calc(${fill * 100}% - 2px)`, width: 4, borderRadius: 2, background: "#f4f4f5" }} />
+      {level !== undefined && <span aria-hidden style={{ position: "absolute", left: 0, bottom: 0, height: 4, width: `${Math.max(0, Math.min(1, level)) * 100}%`, background: hot ? "var(--void)" : "var(--live)" }} />}
+      <span aria-hidden style={{ position: "absolute", top: 8, bottom: 8, left: `calc(${fill * 100}% - 2px)`, width: 4, borderRadius: 2, background: "var(--thumb)" }} />
       <span className="num" style={{ position: "absolute", left: 14, top: 0, bottom: 0, display: "flex", alignItems: "center", fontSize: 18, fontWeight: 800, pointerEvents: "none" }}>
         {show(value)}
       </span>
-      <input type="range" min={min} max={max} step={step} value={value} aria-label={label} onChange={(e) => onChange(Number(e.target.value))} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "ew-resize", margin: 0 }} />
     </div>
   );
 }
 
 function PhonesGlyph({ side }: { side: "L" | "R" | "LR" | null }) {
-  const lit = (s: "L" | "R") => (side === s || side === "LR" ? "var(--live)" : "#3f3f46");
+  const lit = (s: "L" | "R") => (side === s || side === "LR" ? "var(--live)" : "var(--dim)");
   return (
     <svg width="30" height="26" viewBox="0 0 30 26" aria-hidden style={{ flexShrink: 0 }}>
-      <path d="M4 16v-3a11 11 0 0 1 22 0v3" fill="none" stroke="#71717a" strokeWidth="2" strokeLinecap="round" />
+      <path d="M4 16v-3a11 11 0 0 1 22 0v3" fill="none" stroke="var(--ink-3)" strokeWidth="2" strokeLinecap="round" />
       <rect x="2" y="15" width="7" height="10" rx="2.5" fill={lit("L")} />
       <rect x="21" y="15" width="7" height="10" rx="2.5" fill={lit("R")} />
     </svg>
@@ -725,7 +758,7 @@ function PhonesGlyph({ side }: { side: "L" | "R" | "LR" | null }) {
 }
 
 function SpeakersGlyph({ side }: { side: "L" | "R" | "LR" | null }) {
-  const lit = (s: "L" | "R") => (side === s || side === "LR" ? "var(--live)" : "#3f3f46");
+  const lit = (s: "L" | "R") => (side === s || side === "LR" ? "var(--live)" : "var(--dim)");
   return (
     <svg width="30" height="26" viewBox="0 0 30 26" aria-hidden style={{ flexShrink: 0 }}>
       {(["L", "R"] as const).map((s, i) => (
@@ -790,8 +823,8 @@ function MidiTab({ c }: { c: Controller }) {
               const on = pressed === i;
               return (
                 <button key={i} onClick={() => press(i)} aria-label={`Switch ${i + 1}`} className="pressable" style={{ position: "relative", minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "14px 0 12px", borderLeft: i ? "1px solid var(--rule)" : undefined, background: on ? "rgba(34,197,94,0.1)" : undefined }}>
-                  <span aria-hidden style={{ width: 10, height: 10, borderRadius: 999, background: on ? "var(--live)" : "#2b2b31", boxShadow: on ? "0 0 10px var(--live)" : undefined }} />
-                  <span aria-hidden style={{ width: 40, height: 40, borderRadius: 999, background: on ? "#3a3a42" : "#26262b", boxShadow: "inset 0 -3px 0 rgba(0,0,0,0.45)" }} />
+                  <span aria-hidden style={{ width: 10, height: 10, borderRadius: 999, background: on ? "var(--live)" : "var(--rule-strong)", boxShadow: on ? "0 0 10px var(--live)" : undefined }} />
+                  <span aria-hidden style={{ width: 40, height: 40, borderRadius: 999, background: on ? "#3a3a42" : "var(--up)", boxShadow: "inset 0 -3px 0 rgba(0,0,0,0.45)" }} />
                   <span className="num" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-3)" }}>{i + 1}</span>
                 </button>
               );
@@ -822,7 +855,7 @@ function MidiTab({ c }: { c: Controller }) {
  *  right in a light wash. */
 function ListRow({ inUse, shown, onPick, lead, title, sub, menu }: { inUse: boolean; shown: boolean; onPick: () => void; lead: ReactNode; title: string; sub?: ReactNode; menu: ReactNode }) {
   return (
-    <div style={{ position: "relative", display: "flex", alignItems: "center", borderTop: "1px solid var(--rule)", background: shown ? "rgba(255,255,255,0.06)" : undefined }}>
+    <div style={{ position: "relative", display: "flex", alignItems: "center", borderTop: "1px solid var(--rule)", background: shown ? "var(--fill)" : undefined }}>
       {inUse && <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: "var(--live)" }} />}
       <button className="pressable" onClick={onPick} aria-current={inUse ? "true" : undefined} style={{ flex: 1, minWidth: 0, minHeight: 68, display: "flex", alignItems: "center", gap: 12, padding: "8px 4px 8px 14px", textAlign: "left" }}>
         {lead}
@@ -883,7 +916,7 @@ function Text({ value, onCommit, placeholder }: { value: string; onCommit: (v: s
       onChange={(e) => setV(e.target.value)}
       onBlur={() => v.trim() && v !== value && onCommit(v.trim())}
       onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-      style={{ flex: 1, minWidth: 0, height: 40, padding: "0 12px", borderRadius: "var(--r)", border: "1px solid var(--rule-strong)", fontSize: 15 }}
+      style={{ width: "100%", minWidth: 0, height: 40, flexShrink: 0, padding: "0 12px", borderRadius: "var(--r)", border: "1px solid var(--rule-strong)", fontSize: 15 }}
     />
   );
 }
@@ -908,15 +941,15 @@ function GuitarEq({ tone, scope }: { tone: Tone; scope: ToneScope }) {
   const path = `M0 ${H - 4} C ${cut * 0.6} ${H - 4}, ${cut} ${y(eq.bass)}, ${cut + 30} ${y(eq.bass)} S ${W * 0.45} ${y(eq.mid)}, ${W * 0.55} ${y(eq.mid)} S ${W * 0.85} ${y(eq.treble)}, ${W} ${y(eq.treble)}`;
   return (
     <div style={{ display: "flex", gap: 16, alignItems: "stretch", flexWrap: "wrap" }}>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ flex: "1 1 260px", height: 110, borderRadius: 6, background: "#0b0b0e" }} aria-label="The input EQ's curve">
-        <line x1="0" x2={W} y1={H / 2} y2={H / 2} stroke="#2b2b31" strokeDasharray="3 4" />
-        <path d={path} fill="none" stroke="#22C55E" strokeWidth="2.2" vectorEffect="non-scaling-stroke" />
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ flex: "1 1 260px", height: 110, borderRadius: 6, background: "var(--well)" }} aria-label="The input EQ's curve">
+        <line x1="0" x2={W} y1={H / 2} y2={H / 2} stroke="var(--rule-strong)" strokeDasharray="3 4" />
+        <path d={path} fill="none" stroke="var(--live)" strokeWidth="2.2" vectorEffect="non-scaling-stroke" />
       </svg>
       <div style={{ flex: "1 1 260px", display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
         {bands.map((b, i) => (
           <label key={b.k} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "4px 0", borderLeft: i ? "1px solid var(--rule)" : undefined }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-3)" }}>{b.label}</span>
-            <input type="range" min={b.min} max={b.max} step={b.k === "lowCut" ? 5 : 0.5} value={eq[b.k]} onChange={(e) => set(b.k, Number(e.target.value))} style={{ writingMode: "vertical-lr", direction: "rtl", height: 70, accentColor: "#22C55E" }} />
+            <input type="range" min={b.min} max={b.max} step={b.k === "lowCut" ? 5 : 0.5} value={eq[b.k]} aria-label={b.label} onChange={(e) => set(b.k, Number(e.target.value))} style={{ writingMode: "vertical-lr", direction: "rtl", width: 44, height: 70, margin: 0, accentColor: "var(--live)" }} />
             <span className="num" style={{ fontSize: 13, fontWeight: 700 }}>
               {b.k !== "lowCut" && eq[b.k] > 0 ? "+" : ""}
               {eq[b.k]} {b.unit}
@@ -935,10 +968,13 @@ function LevelMatch({ tone, scope, rig }: { tone: Tone; scope: ToneScope; rig: R
   const sig = useSignal();
   const target = rig.audio.targetDb;
   const now = levelDb(sig.input, tone.trimDb);
-  const [peak, setPeak] = useState(-90);
+  // The peak hold decays with each frame the signal draws — kept in a ref,
+  // so it costs no render of its own.
+  const held = useRef(-90);
+  held.current = Math.max(now, held.current - 0.35);
+  const peak = held.current;
   const [matching, setMatching] = useState<{ until: number; max: number } | null>(null);
   useEffect(() => {
-    setPeak((p) => Math.max(now, p - 0.35));
     if (matching) {
       const max = Math.max(matching.max, now - tone.trimDb);
       if (performance.now() > matching.until) {
@@ -955,10 +991,10 @@ function LevelMatch({ tone, scope, rig }: { tone: Tone; scope: ToneScope; rig: R
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         {/* −60…0 dBFS: the band presets expect, the level, its peak. */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ position: "relative", height: 22, borderRadius: 5, background: "#08080a", overflow: "hidden" }}>
+          <div style={{ position: "relative", height: 22, borderRadius: 5, background: "var(--well)", overflow: "hidden" }}>
             <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: pos(target - 3), width: `${(6 / 60) * 100}%`, background: "rgba(34,197,94,0.14)", boxShadow: "inset 0 0 0 1px rgba(34,197,94,0.45)" }} />
             <span aria-hidden style={{ position: "absolute", top: 5, bottom: 5, left: 0, width: pos(Math.max(-60, now)), borderRadius: 3, background: "linear-gradient(90deg, #15803d, #22c55e 70%, #eab308 90%, #f87171)" }} />
-            <span aria-hidden style={{ position: "absolute", top: 2, bottom: 2, left: `calc(${pos(Math.max(-60, peak))} - 1px)`, width: 2, background: inBand ? "var(--live)" : "#f4f4f5" }} />
+            <span aria-hidden style={{ position: "absolute", top: 2, bottom: 2, left: `calc(${pos(Math.max(-60, peak))} - 1px)`, width: 2, background: inBand ? "var(--live)" : "var(--thumb)" }} />
           </div>
           <div className="num" style={{ position: "relative", height: 14, marginTop: 3, fontSize: 11, color: "var(--ink-3)" }}>
             {[-60, -45, -30, -15, 0].map((d) => (
@@ -979,7 +1015,7 @@ function LevelMatch({ tone, scope, rig }: { tone: Tone; scope: ToneScope; rig: R
           className={matching ? "" : "pressable"}
           disabled={!!matching}
           onClick={() => setMatching({ until: performance.now() + 4000, max: -90 })}
-          style={{ flexShrink: 0, height: 52, minWidth: 128, padding: "0 16px", borderRadius: 6, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", color: matching ? "#04210f" : "var(--ink)", background: matching ? "var(--live)" : "transparent", boxShadow: matching ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
+          style={{ flexShrink: 0, height: 52, minWidth: 128, padding: "0 16px", borderRadius: 6, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", color: matching ? "var(--on-live)" : "var(--ink)", background: matching ? "var(--live)" : "transparent", boxShadow: matching ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
         >
           {matching ? "Play…" : "Match level"}
         </button>
@@ -1045,15 +1081,15 @@ function Gates({ tone, scope }: { tone: Tone; scope: ToneScope }) {
         }}
         onPointerUp={() => (drag.current = null)}
         onPointerCancel={() => (drag.current = null)}
-        style={{ position: "relative", height: 64, borderRadius: 6, background: "#08080a", touchAction: "none", cursor: "ew-resize", overflow: "hidden" }}
+        style={{ position: "relative", height: 64, borderRadius: 6, background: "var(--well)", touchAction: "none", cursor: "ew-resize", overflow: "hidden" }}
       >
-        <span aria-hidden style={{ position: "absolute", left: 0, top: 26, bottom: 10, width: pct(now), borderRadius: "0 3px 3px 0", background: now >= tone.gates.default ? "rgba(34,197,94,0.55)" : "#3f3f46" }} />
+        <span aria-hidden style={{ position: "absolute", left: 0, top: 26, bottom: 10, width: pct(now), borderRadius: "0 3px 3px 0", background: now >= tone.gates.default ? "rgba(34,197,94,0.55)" : "var(--dim)" }} />
         {THRESHOLDS.map((t) => {
           const open = now >= tone.gates[t];
           return (
             <span key={t} aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: pct(tone.gates[t]), transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", pointerEvents: "none" }}>
-              <span style={{ marginTop: 5, width: 18, height: 16, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10.5, fontWeight: 800, color: open ? "#04210f" : "var(--ink)", background: open ? "var(--live)" : "#3a3a42" }}>{GATE_NAME[t][0]}</span>
-              <span style={{ flex: 1, width: 2, marginTop: 2, background: "#f4f4f5", opacity: 0.85 }} />
+              <span style={{ marginTop: 5, width: 20, height: 17, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: open ? "var(--on-live)" : "var(--ink)", background: open ? "var(--live)" : "#3a3a42" }}>{GATE_NAME[t][0]}</span>
+              <span style={{ flex: 1, width: 2, marginTop: 2, background: "var(--thumb)", opacity: 0.85 }} />
             </span>
           );
         })}
@@ -1067,7 +1103,7 @@ function Gates({ tone, scope }: { tone: Tone; scope: ToneScope }) {
               <span className="num" style={{ fontSize: 16, fontWeight: 800 }}>{tone.gates[t]}</span>
             </span>
             {[-1, 1].map((d) => (
-              <button key={d} className="pressable" aria-label={`${GATE_NAME[t]} ${d < 0 ? "lower" : "higher"}`} onClick={() => set(t, tone.gates[t] + d, true)} style={{ width: 36, height: 44, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", fontSize: 20, fontWeight: 600 }}>
+              <button key={d} className="pressable" aria-label={`${GATE_NAME[t]} ${d < 0 ? "lower" : "higher"}`} onClick={() => set(t, tone.gates[t] + d, true)} style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", fontSize: 20, fontWeight: 600 }}>
                 {d < 0 ? "−" : "+"}
               </button>
             ))}
@@ -1079,7 +1115,7 @@ function Gates({ tone, scope }: { tone: Tone; scope: ToneScope }) {
           className={measuring ? "" : "pressable"}
           disabled={!!measuring}
           onClick={() => setMeasuring({ until: performance.now() + 3000, floor: 0 })}
-          style={{ height: 44, padding: "0 16px", borderRadius: "var(--r)", fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", color: measuring ? "#04210f" : "var(--ink)", background: measuring ? "var(--live)" : "transparent", boxShadow: measuring ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
+          style={{ height: 44, padding: "0 16px", borderRadius: "var(--r)", fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", color: measuring ? "var(--on-live)" : "var(--ink)", background: measuring ? "var(--live)" : "transparent", boxShadow: measuring ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
         >
           {measuring ? "Hands off the strings…" : "Measure noise floor"}
         </button>

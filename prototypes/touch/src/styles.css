@@ -14,7 +14,8 @@
   --rule-strong: #2b2b31;
   --ink: #e4e4e7;
   --ink-2: #a1a1aa;
-  --ink-3: #80808a;
+  /* 4.6:1 on a lifted row (--up), 6:1 on the desk. */
+  --ink-3: #8e8e98;
   --dim: #3f3f46;
 
   /* Stack colours, as the perform grid paints them (perform::folder_color). */
@@ -36,6 +37,18 @@
   --primary: #3f3f46;
   --modified: #f59e0b;
   --void: #f87171;
+  --warn: #eab308;
+  /* Text on the playing green. */
+  --on-live: #04210f;
+
+  /* A rig's override of a guitar (Setup). */
+  --rig: #38bdf8;
+  /* The well a meter or fader sits in, and a fader's handle. */
+  --well: #08080a;
+  --thumb: #f4f4f5;
+  /* A control's plain fill, and its fill when set. */
+  --fill: rgba(255, 255, 255, 0.06);
+  --fill-on: rgba(255, 255, 255, 0.1);
 
   /* The live signal path in Routing: the playing green. */
   --path: #22c55e;
