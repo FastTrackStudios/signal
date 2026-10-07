@@ -329,15 +329,18 @@ function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => voi
 
       {/* Health and safety: always in view. */}
       <Rule />
+      {/* Panic sits with the health it fixes — far from Mute. */}
+      <div style={{ display: "flex", alignItems: "center", padding: "0 4px 0 8px" }}>
+        <PanicButton />
+      </div>
       <Status label="MIDI" ok detail="Morningstar MC8 · in" />
       <Status label="Audio" ok detail="voyager · 48 kHz · 128 samples" />
       <Cpu />
       <Rule />
-      <Meters muted={s.houseMute || s.panicAt !== null} />
+      <Meters />
       <Rule />
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 8px 0 6px" }}>
         <MuteButton />
-        <PanicButton />
       </div>
     </header>
   );
@@ -393,49 +396,64 @@ export function Cpu() {
 
 /** IN and OUT, small: enough to see signal and clipping at a glance (the
  *  views carry the big ones). Simulated here; the rig streams peaks. */
-export function Meters({ muted, width = 72 }: { muted: boolean; width?: number }) {
-  const [lv, setLv] = useState({ i: 0.4, o: 0.5, ih: 0.4, oh: 0.5 });
+/** IN, OUT and PHONES, small: enough to see signal and clipping at a
+ *  glance (the views carry the big ones). OUT is covered with MUTED while
+ *  the house is muted, PHONES while the phones are; both go flat while
+ *  Panic resets. Simulated here; the rig streams peaks. */
+export function Meters({ width = 72 }: { width?: number }) {
+  const s = useStore();
+  const [lv, setLv] = useState({ i: 0.4, o: 0.5, p: 0.45, ih: 0.4, oh: 0.5, ph: 0.45 });
   const raf = useRef(0);
   useEffect(() => {
     let t = 0;
-    let hold = { i: 0, o: 0, at: 0 };
+    let hold = { i: 0, o: 0, p: 0, at: 0 };
     const tick = () => {
       t += 1;
       const strum = Math.max(0, Math.sin(t / 22)) ** 3;
       const i = Math.min(1, 0.25 + 0.55 * strum + Math.random() * 0.08);
       const o = Math.min(1, 0.3 + 0.5 * strum + Math.random() * 0.06);
-      if (i > hold.i || o > hold.o || t - hold.at > 60) hold = { i: Math.max(i, t - hold.at > 60 ? 0 : hold.i), o: Math.max(o, t - hold.at > 60 ? 0 : hold.o), at: t };
-      setLv({ i, o, ih: hold.i, oh: hold.o });
+      const p = Math.min(1, 0.28 + 0.45 * strum + Math.random() * 0.06);
+      const stale = t - hold.at > 60;
+      if (i > hold.i || o > hold.o || p > hold.p || stale) hold = { i: Math.max(i, stale ? 0 : hold.i), o: Math.max(o, stale ? 0 : hold.o), p: Math.max(p, stale ? 0 : hold.p), at: t };
+      setLv({ i, o, p, ih: hold.i, oh: hold.o, ph: hold.p });
       raf.current = requestAnimationFrame(tick);
     };
     if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) raf.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf.current);
   }, []);
+  const reset = s.panicAt !== null;
   return (
-    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 5, padding: "0 12px" }}>
-      <MiniMeter label="IN" level={lv.i} hold={lv.ih} w={width} />
-      <MiniMeter label="OUT" level={muted ? 0 : lv.o} hold={muted ? 0 : lv.oh} dim={muted} w={width} />
+    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, padding: "0 10px" }}>
+      <MiniMeter label="IN" level={reset ? 0 : lv.i} hold={reset ? 0 : lv.ih} w={width} />
+      <MiniMeter label="OUT" level={reset ? 0 : lv.o} hold={reset ? 0 : lv.oh} muted={s.houseMute} w={width} />
+      <MiniMeter label="PH" level={reset ? 0 : lv.p} hold={reset ? 0 : lv.ph} muted={s.phonesMute} w={width} />
     </div>
   );
 }
 
-export function MiniMeter({ label, level, hold, dim, w = 72 }: { label: string; level: number; hold: number; dim?: boolean; w?: number }) {
+export function MiniMeter({ label, level, hold, muted, w = 72 }: { label: string; level: number; hold: number; muted?: boolean; w?: number }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <span className="t-label" style={{ width: 24, fontSize: 9, letterSpacing: "0.08em", color: dim ? "var(--void)" : "var(--ink-3)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 5, height: 9 }} title={muted ? `${label} muted` : label}>
+      <span className="t-label" style={{ width: 20, fontSize: 8.5, letterSpacing: "0.06em", color: muted ? "var(--void)" : "var(--ink-3)" }}>
         {label}
       </span>
-      <span style={{ position: "relative", width: w, height: 5, borderRadius: 2, background: "var(--field)", overflow: "hidden" }}>
-        <span
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: `${level * 100}%`,
-            background: "linear-gradient(90deg, var(--live) 0%, var(--live) 70%, #eab308 85%, var(--void) 100%)",
-            backgroundSize: `${w}px 100%`,
-          }}
-        />
-        {hold > 0.02 && <span style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${hold * 100}% - 1px)`, width: 2, background: hold > 0.92 ? "var(--void)" : "var(--ink-2)" }} />}
+      <span style={{ position: "relative", width: w, height: muted ? 9 : 4, borderRadius: 2, background: muted ? "var(--void)" : "var(--field)", overflow: "hidden" }}>
+        {muted ? (
+          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7.5, fontWeight: 800, letterSpacing: "0.12em", color: "#1a0505" }}>MUTED</span>
+        ) : (
+          <>
+            <span
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: `${level * 100}%`,
+                background: "linear-gradient(90deg, var(--live) 0%, var(--live) 70%, #eab308 85%, var(--void) 100%)",
+                backgroundSize: `${w}px 100%`,
+              }}
+            />
+            {hold > 0.02 && <span style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${hold * 100}% - 1px)`, width: 2, background: hold > 0.92 ? "var(--void)" : "var(--ink-2)" }} />}
+          </>
+        )}
       </span>
     </div>
   );

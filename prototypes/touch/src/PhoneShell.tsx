@@ -210,40 +210,43 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
         {mode.label}
       </button>
       <span style={{ flex: 1 }} />
+      <span style={{ display: "flex", alignItems: "center" }}>
+        <PanicButton size={30} />
+      </span>
       <span title="MIDI · Audio" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 650, color: "var(--ink-2)" }}>
         <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--live)" }} />
         {safe.landscape && "MIDI · Audio"}
       </span>
       {safe.landscape && <Cpu />}
-      <Meters muted={s.houseMute || s.panicAt !== null} width={safe.landscape ? 56 : 36} />
+      <Meters width={safe.landscape ? 56 : 34} />
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <MuteButton size={32} />
-        <PanicButton size={32} />
       </div>
     </header>
   );
 }
 
 /** Landscape's rail: the menu at the top, the views and docks, then the
- *  status at the foot — health, meters, the house mute. It hugs the left
+ *  status at the foot — meters and the mute; Panic up top, away from it. It hugs the left
  *  edge (the island is on the right; this side's inset is only the
  *  corners'), its ends kept in from the rounded corners. */
 function Rail({ onMenu, children }: { onMenu: () => void; children: ReactNode }) {
-  const s = useStore();
   const safe = useSafe();
   return (
     <nav style={{ flexShrink: 0, width: 74, paddingLeft: 8, paddingTop: 14, paddingBottom: safe.bottom, display: "flex", flexDirection: "column", alignItems: "stretch", borderRight: "1px solid var(--rule)", background: "var(--sheet)" }}>
-      <button aria-label="Menu" onClick={onMenu} className="pressable" style={{ height: 44, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)" }}>
+      <button aria-label="Menu" onClick={onMenu} className="pressable" style={{ height: 38, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)" }}>
         <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
           <path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
         </svg>
       </button>
+      <div style={{ display: "flex", justifyContent: "center", paddingBottom: 4 }}>
+        <PanicButton size={30} />
+      </div>
       <div className="rail" style={{ display: "flex", flexDirection: "column" }}>{children}</div>
       <span style={{ flex: 1 }} />
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "6px 0 8px" }}>
-        <Meters muted={s.houseMute || s.panicAt !== null} width={28} />
+        <Meters width={28} />
         <MuteButton size={34} />
-        <PanicButton size={34} />
       </div>
       <style>{`.rail > span > button { margin: 1px 4px !important; min-width: 0 !important; flex: 1; padding: 0 !important } .rail > span[aria-hidden] { width: 36px !important; height: 1px !important; align-self: center; margin: 4px 0 }`}</style>
     </nav>
@@ -350,11 +353,8 @@ function SideMenu({ offset, view, onView, onClose }: { offset: number; view: Vie
           </button>
         </div>
         <div style={{ padding: "8px 12px" }}>
-          <div style={{ display: "flex", gap: 8 }}>
-            <div style={{ flex: 1, display: "flex" }}>
-              <MuteButton size={48} label />
-            </div>
-            <PanicButton size={48} label />
+          <div style={{ display: "flex" }}>
+            <MuteButton size={48} label />
           </div>
         </div>
         <div style={{ height: 1, background: "var(--rule)", margin: "8px 0" }} />
@@ -376,6 +376,9 @@ function SideMenu({ offset, view, onView, onClose }: { offset: number; view: Vie
         <div style={{ ...row, minHeight: 40, fontSize: 14 }}>
           <Cpu />
         </div>
+        <div style={{ display: "flex", padding: "4px 12px 8px" }}>
+          <PanicButton size={44} label />
+        </div>
         <div style={{ height: 1, background: "var(--rule)", margin: "8px 0" }} />
         <button className="pressable" style={row} onClick={onClose}>
           Tuner
@@ -393,7 +396,7 @@ function Tab({ landscape, children, ...rest }: { landscape?: boolean; label: str
   // In the rail: a stack, each button the rail's width; in the foot: shares
   // the bar evenly.
   return (
-    <span style={{ display: "flex", flex: landscape ? undefined : "1 1 0", minWidth: 0, height: landscape ? 42 : undefined }}>
+    <span style={{ display: "flex", flex: landscape ? undefined : "1 1 0", minWidth: 0, height: landscape ? 36 : undefined }}>
       <FootButton {...rest}>{children}</FootButton>
     </span>
   );
