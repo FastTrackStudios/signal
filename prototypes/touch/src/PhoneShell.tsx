@@ -20,7 +20,8 @@ import { useRef, useState, type ReactNode } from "react";
 import { Setlist } from "./setlist/Setlist";
 import { MacroBar } from "./dock/MacroBar";
 import { AudioControls, Switches } from "./dock/Switches";
-import { redo, setPerformMode, toggleHouseMute, undo, useStore, useUndo } from "./store";
+import { redo, setPerformMode, undo, useStore, useUndo } from "./store";
+import { MuteButton, PanicButton } from "./ui/Safety";
 import { Cpu, FootButton, Meters, MODES, Placeholder, Rule, type Dock, type View } from "./App";
 import { useSafe } from "./Phone";
 import { useStage } from "./ui/stage";
@@ -214,19 +215,11 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
         {safe.landscape && "MIDI · Audio"}
       </span>
       {safe.landscape && <Cpu />}
-      <Meters muted={s.houseMute} width={safe.landscape ? 56 : 36} />
-      {/* The house mute's state; it is switched from the menu. Red when muted. */}
-      <button
-        onClick={toggleHouseMute}
-        aria-pressed={s.houseMute}
-        aria-label={s.houseMute ? "House muted — tap to unmute" : "Mute the house"}
-        style={{ alignSelf: "center", width: 36, height: 30, borderRadius: "var(--r)", display: "flex", alignItems: "center", justifyContent: "center", color: s.houseMute ? "#1a0505" : "var(--ink-3)", background: s.houseMute ? "var(--void)" : "transparent", boxShadow: s.houseMute ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-          <path d="M2 6h2.5L8 3v10L4.5 10H2Z" fill="currentColor" />
-          {s.houseMute ? <path d="M10.5 6l4 4M14.5 6l-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /> : <path d="M10.5 5.5a3.5 3.5 0 0 1 0 5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />}
-        </svg>
-      </button>
+      <Meters muted={s.houseMute || s.panicAt !== null} width={safe.landscape ? 56 : 36} />
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <MuteButton size={32} />
+        <PanicButton size={32} />
+      </div>
     </header>
   );
 }
@@ -248,18 +241,9 @@ function Rail({ onMenu, children }: { onMenu: () => void; children: ReactNode })
       <div className="rail" style={{ display: "flex", flexDirection: "column" }}>{children}</div>
       <span style={{ flex: 1 }} />
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "6px 0 8px" }}>
-        <Meters muted={s.houseMute} width={28} />
-        <button
-          onClick={toggleHouseMute}
-          aria-pressed={s.houseMute}
-          aria-label={s.houseMute ? "House muted — tap to unmute" : "Mute the house"}
-          style={{ width: 44, height: 32, borderRadius: "var(--r)", display: "flex", alignItems: "center", justifyContent: "center", color: s.houseMute ? "#1a0505" : "var(--ink-3)", background: s.houseMute ? "var(--void)" : "transparent", boxShadow: s.houseMute ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-            <path d="M2 6h2.5L8 3v10L4.5 10H2Z" fill="currentColor" />
-            {s.houseMute ? <path d="M10.5 6l4 4M14.5 6l-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /> : <path d="M10.5 5.5a3.5 3.5 0 0 1 0 5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />}
-          </svg>
-        </button>
+        <Meters muted={s.houseMute || s.panicAt !== null} width={28} />
+        <MuteButton size={34} />
+        <PanicButton size={34} />
       </div>
       <style>{`.rail > span > button { margin: 1px 4px !important; min-width: 0 !important; flex: 1; padding: 0 !important } .rail > span[aria-hidden] { width: 36px !important; height: 1px !important; align-self: center; margin: 4px 0 }`}</style>
     </nav>
@@ -366,13 +350,12 @@ function SideMenu({ offset, view, onView, onClose }: { offset: number; view: Vie
           </button>
         </div>
         <div style={{ padding: "8px 12px" }}>
-          <button
-            onClick={toggleHouseMute}
-            aria-pressed={s.houseMute}
-            style={{ width: "100%", height: 52, borderRadius: "var(--r-md)", fontSize: 15, fontWeight: 750, letterSpacing: "0.06em", color: s.houseMute ? "#1a0505" : "var(--ink)", background: s.houseMute ? "var(--void)" : "transparent", boxShadow: s.houseMute ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
-          >
-            {s.houseMute ? "HOUSE MUTED — UNMUTE" : "MUTE HOUSE"}
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1, display: "flex" }}>
+              <MuteButton size={48} label />
+            </div>
+            <PanicButton size={48} label />
+          </div>
         </div>
         <div style={{ height: 1, background: "var(--rule)", margin: "8px 0" }} />
         <div className="t-label" style={{ padding: "8px 16px 6px", color: "var(--ink-3)" }}>

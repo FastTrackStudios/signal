@@ -16,12 +16,13 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { StageCtx } from "./ui/stage";
+import { MuteButton, PanicButton } from "./ui/Safety";
 import { Setlist } from "./setlist/Setlist";
 import { AudioControls, Switches } from "./dock/Switches";
 import { MacroBar } from "./dock/MacroBar";
 import { Phone } from "./Phone";
 import { PhoneShell } from "./PhoneShell";
-import { redo, undo, useUndo, setPerformMode, toggleHouseMute, useStore, type PerformMode } from "./store";
+import { redo, undo, useUndo, setPerformMode, useStore, type PerformMode } from "./store";
 
 const SIDEBAR = 402;
 const TOP = 48;
@@ -332,9 +333,12 @@ function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => voi
       <Status label="Audio" ok detail="voyager · 48 kHz · 128 samples" />
       <Cpu />
       <Rule />
-      <Meters muted={s.houseMute} />
+      <Meters muted={s.houseMute || s.panicAt !== null} />
       <Rule />
-      <HouseMute on={s.houseMute} />
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 8px 0 6px" }}>
+        <MuteButton />
+        <PanicButton />
+      </div>
     </header>
   );
 }
@@ -434,46 +438,6 @@ export function MiniMeter({ label, level, hold, dim, w = 72 }: { label: string; 
         {hold > 0.02 && <span style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${hold * 100}% - 1px)`, width: 2, background: hold > 0.92 ? "var(--void)" : "var(--ink-2)" }} />}
       </span>
     </div>
-  );
-}
-
-/** The house mute: the main outputs go silent, the phones keep playing —
- *  rehearse, tune, or fix something mid-set. Unmissable when on. */
-export function HouseMute({ on, compact }: { on: boolean; compact?: boolean }) {
-  return (
-    <button
-      onClick={toggleHouseMute}
-      aria-pressed={on}
-      title={on ? "The house is muted — phones still play. Tap to unmute." : "Mute the house; the phones keep playing"}
-      className={on ? "" : "pressable"}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        margin: compact ? "6px 6px 6px 4px" : 6,
-        padding: compact ? "0 9px" : "0 14px",
-        whiteSpace: "nowrap",
-        borderRadius: "var(--r)",
-        fontSize: 12,
-        fontWeight: 750,
-        letterSpacing: "0.06em",
-        color: on ? "#1a0505" : "var(--ink-2)",
-        background: on ? "var(--void)" : "transparent",
-        boxShadow: on ? undefined : "inset 0 0 0 1px var(--rule-strong)",
-        animation: on ? "house-pulse 1.6s ease-in-out infinite" : undefined,
-      }}
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-        <path d="M2 6h2.5L8 3v10L4.5 10H2Z" fill="currentColor" />
-        {on ? (
-          <path d="M10.5 6l4 4M14.5 6l-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        ) : (
-          <path d="M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.8a6 6 0 0 1 0 8.4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-        )}
-      </svg>
-      {compact ? null : on ? "HOUSE MUTED" : "MUTE HOUSE"}
-      <style>{`@keyframes house-pulse { 50% { filter: brightness(0.82) } } @media (prefers-reduced-motion: reduce) { [aria-pressed="true"] { animation: none !important } }`}</style>
-    </button>
   );
 }
 

@@ -83,6 +83,10 @@ export interface State {
   performMode: PerformMode;
   /** The house (main outputs) muted; the phones keep playing. */
   houseMute: boolean;
+  /** The phones (in-ear / headphone mix) muted too. */
+  phonesMute: boolean;
+  /** When Panic last reset the audio and MIDI (ms), while it runs. */
+  panicAt: number | null;
 }
 
 let seedAt = { section: 0, part: 0 };
@@ -145,6 +149,8 @@ function seed(): State {
     stackAt: {},
     performMode: "setlist",
     houseMute: false,
+    phonesMute: false,
+    panicAt: null,
   };
 }
 
@@ -658,4 +664,19 @@ export function setPerformMode(mode: PerformMode) {
 /** Mute the house, or bring it back. Not an edit: no undo. */
 export function toggleHouseMute() {
   move((s) => ({ ...s, houseMute: !s.houseMute }));
+}
+
+/** Mute or unmute the house, the phones, or both. Not edits: no undo. */
+export function setMutes(house: boolean, phones: boolean) {
+  move((s) => ({ ...s, houseMute: house, phonesMute: phones }));
+}
+
+/** Panic: stop everything stuck — every note off on every MIDI channel,
+ *  the audio engine stopped, its buffers and tails cleared, and started
+ *  again. Mutes are left as they were. (The rig does this; here it is a
+ *  second of "resetting".) */
+export function panic() {
+  const at = Date.now();
+  move((s) => ({ ...s, panicAt: at, live: null }));
+  window.setTimeout(() => move((s) => (s.panicAt === at ? { ...s, panicAt: null } : s)), 1200);
 }
