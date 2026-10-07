@@ -19,7 +19,7 @@ import { StageCtx } from "./ui/stage";
 import { Setlist } from "./setlist/Setlist";
 import { AudioControls, Switches } from "./dock/Switches";
 import { MacroBar } from "./dock/MacroBar";
-import { setPerformMode, toggleHouseMute, useStore, type PerformMode } from "./store";
+import { redo, undo, useUndo, setPerformMode, toggleHouseMute, useStore, type PerformMode } from "./store";
 
 const SIDEBAR = 402;
 const TOP = 48;
@@ -301,6 +301,8 @@ function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => voi
         </div>
       </div>
 
+      {/* Undo and Redo, for the whole app: every edit anywhere is one step. */}
+      <UndoRedo />
       <span style={{ flex: 1 }} />
 
       {/* Health and safety: always in view. */}
@@ -313,6 +315,31 @@ function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => voi
       <Rule />
       <HouseMute on={s.houseMute} />
     </header>
+  );
+}
+
+function UndoRedo() {
+  const { depth, label, redoDepth, redoLabel } = useUndo();
+  const btn = (on: boolean, title: string, onClick: () => void, flip: boolean) => (
+    <button
+      onClick={onClick}
+      disabled={!on}
+      aria-label={title}
+      title={title}
+      className={on ? "pressable" : ""}
+      style={{ width: 48, display: "flex", alignItems: "center", justifyContent: "center", color: on ? "var(--ink-2)" : "var(--dim)" }}
+    >
+      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden style={{ transform: flip ? "scaleX(-1)" : undefined }}>
+        <path d="M7 4.5 3.5 8 7 11.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M4 8h7.5a4.5 4.5 0 0 1 0 9H9" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      </svg>
+    </button>
+  );
+  return (
+    <div style={{ display: "flex", alignItems: "stretch", paddingLeft: 4 }}>
+      {btn(depth > 0, label ? `Undo ${label}` : "Nothing to undo", undo, false)}
+      {btn(redoDepth > 0, redoLabel ? `Redo ${redoLabel}` : "Nothing to redo", redo, true)}
+    </div>
   );
 }
 

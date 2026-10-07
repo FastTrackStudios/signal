@@ -48,9 +48,7 @@ import {
   setSongField,
   setSongColour,
   setStart,
-  undo,
   useStore,
-  useUndo,
   type Sound,
 } from "../store";
 import { SourceIcon, Strike, Tape, tapeFor } from "../ui/marks";
@@ -228,49 +226,73 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
     if (p.id === "reorder") onReorder(true);
     if (p.id === "delete") deleteSet(s.setIndex);
   };
-  const minutes = Math.round(set.songs.length * 4.5);
   const when = whenLabel(set.date);
+  const prof = profileOf(s, undefined);
   return (
     // Exactly the macro bar's height (two 44pt rows, a hairline between, its
     // rule under), so the two lines run straight across the screen.
-    <header style={{ flexShrink: 0, height: MACRO_BAR_H, padding: "0 6px 0 18px", borderBottom: "1px solid var(--rule)", display: "flex", alignItems: "center", gap: 2 }}>
-      <button
-        className="pressable"
-        onClick={() => onPanel({ kind: "sets" })}
-        style={{ flex: 1, minWidth: 0, textAlign: "left", padding: "2px 8px 4px", margin: "-2px 0 0 -8px", borderRadius: "var(--r-md)" }}
-        title="Sets — choose another or make a new one"
-        aria-haspopup="dialog"
-      >
-        <h1 className="t-marker" style={{ margin: 0, fontSize: fit === "narrow" ? 18 : 24, lineHeight: 1.12, display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ minWidth: 0 }}>{setHeading(set)}</span>
-          <span aria-hidden style={{ flexShrink: 0, display: "flex", width: 22, height: 22, borderRadius: 999, alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.07)", color: "var(--ink-2)" }}>
-            <svg width="10" height="6" viewBox="0 0 10 6">
+    <header style={{ flexShrink: 0, height: MACRO_BAR_H, padding: "8px 6px 8px 18px", borderBottom: "1px solid var(--rule)", display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 2, minHeight: 0 }}>
+        <button
+          className="pressable"
+          onClick={() => onPanel({ kind: "sets" })}
+          style={{ flex: 1, minWidth: 0, textAlign: "left", padding: "2px 8px", margin: "0 0 0 -8px", borderRadius: "var(--r-md)" }}
+          title="Sets — choose another or make a new one"
+          aria-haspopup="dialog"
+        >
+          <h1 className="t-marker" style={{ margin: 0, fontSize: fit === "narrow" ? 18 : 22, lineHeight: 1.1, display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{setHeading(set)}</span>
+            <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden style={{ flexShrink: 0, color: "var(--ink-3)" }}>
               <path d="M1 1 L5 5 L9 1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-          </span>
-        </h1>
-        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "4px 8px", marginTop: 6 }}>
-          {set.title && set.event && <EventChip event={set.event} />}
-          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)" }}>{dateLabel(set.date)}</span>
-          {when && <span style={{ fontSize: 13, fontWeight: 600, color: when === "Today" ? "var(--live)" : "var(--ink-3)" }}>{when}</span>}
-        </div>
-        {fit !== "narrow" && (
-          <div className="t-meta" style={{ marginTop: 3, fontSize: 13 }}>
-            {set.songs.length} songs · about {minutes} min
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginLeft: 8, verticalAlign: "-1px" }} title="The set's default profile">
-              <SourceIcon from="profile" profile={profileOf(s, undefined).name} colour="var(--ink-3)" size={11} />
-              {profileOf(s, undefined).name}
-            </span>
+          </h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, whiteSpace: "nowrap" }}>
+            {set.title && set.event && <EventChip event={set.event} />}
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)" }}>{dateLabel(set.date)}</span>
+            {when && <span style={{ fontSize: 13, fontWeight: 600, color: when === "Today" ? "var(--live)" : "var(--ink-3)" }}>{when}</span>}
           </div>
-        )}
-      </button>
-      {reordering ? (
-        <Button primary onClick={() => onReorder(false)} style={{ alignSelf: "center", marginRight: 6 }}>
-          Done
-        </Button>
-      ) : null}
-      {!reordering && <UndoButton />}
-      {!reordering && <MoreButton label="Set actions" onClick={menu.fromButton} />}
+        </button>
+        {reordering ? (
+          <Button primary onClick={() => onReorder(false)} style={{ alignSelf: "center", marginRight: 6 }}>
+            Done
+          </Button>
+        ) : null}
+        {!reordering && <MoreButton label="Set actions" onClick={menu.fromButton} />}
+      </div>
+      {fit !== "narrow" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, paddingRight: 12 }}>
+          {/* The set's default profile: its icon in its colour; a tap picks another. */}
+          <button
+            className="pressable"
+            onClick={() => onPanel({ kind: "profile" })}
+            title={prof.from === "set" ? `Every song plays on ${prof.name} unless it has its own — tap to change` : `No default set: the rig's ${prof.name} — tap to choose one`}
+            style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, height: 24, padding: "0 8px 0 6px", margin: "0 0 0 -6px", borderRadius: 4, fontSize: 12.5, fontWeight: 650, color: prof.from === "set" ? "var(--ink)" : "var(--ink-3)", background: "rgba(255,255,255,0.05)" }}
+          >
+            <ProfileIcon name={prof.name} colour={prof.from === "set" ? nameColour(prof.name) : "var(--ink-3)"} size={13} />
+            {prof.name}
+          </button>
+          {/* The set at a glance: a tick per song in its colour, played ones
+              faded, the one up taller — and where you are in it. */}
+          <span title={`${set.songs.length} songs`} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 3, height: 24 }}>
+            {set.songs.map((song, i) => (
+              <span
+                key={`${i}-${song.name}`}
+                style={{
+                  flex: "1 1 0",
+                  maxWidth: 22,
+                  height: i === s.songIndex ? 8 : 4,
+                  borderRadius: 2,
+                  background: songColour(song.name, s.songColours),
+                  opacity: i < s.songIndex ? 0.3 : i === s.songIndex ? 1 : 0.7,
+                }}
+              />
+            ))}
+          </span>
+          <span className="num" style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 650, color: "var(--ink-3)" }}>
+            {set.songs.length ? `${s.songIndex + 1} of ${set.songs.length}` : "No songs"}
+          </span>
+        </div>
+      )}
       {menu.open && <Menu at={menu.open.at} items={items} onPick={onPick} onClose={menu.close} />}
     </header>
   );
@@ -975,27 +997,6 @@ function StackRow({ stack, on, home, where, pos, songColour: colour }: { stack: 
       </span>
     </button>
     </>
-  );
-}
-
-/** Undo, as the header's own button: what it would undo, in its title. */
-function UndoButton() {
-  const { depth, label } = useUndo();
-  return (
-    <button
-      className={depth ? "pressable" : ""}
-      onClick={undo}
-      disabled={depth === 0}
-      aria-label={label ? `Undo ${label}` : "Nothing to undo"}
-      title={label ? `Undo ${label}` : "Nothing to undo"}
-      onPointerDown={(e) => e.stopPropagation()}
-      style={{ width: 48, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--r)", color: depth ? "var(--ink-2)" : "var(--dim)" }}
-    >
-      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
-        <path d="M7 4.5 3.5 8 7 11.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M4 8h7.5a4.5 4.5 0 0 1 0 9H9" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      </svg>
-    </button>
   );
 }
 

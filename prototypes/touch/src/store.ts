@@ -150,6 +150,8 @@ function seed(): State {
 
 let state: State = seed();
 const past: { label: string; state: State }[] = [];
+/** What Undo took back, for Redo; a new change forgets it. */
+const future: { label: string; state: State }[] = [];
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -160,6 +162,7 @@ function emit() {
 export function change(label: string, edit: (s: State) => State) {
   past.push({ label, state });
   if (past.length > 64) past.shift();
+  future.length = 0;
   state = edit(state);
   emit();
 }
@@ -173,7 +176,16 @@ export function move(edit: (s: State) => State) {
 export function undo() {
   const last = past.pop();
   if (!last) return;
+  future.push({ label: last.label, state });
   state = last.state;
+  emit();
+}
+
+export function redo() {
+  const next = future.pop();
+  if (!next) return;
+  past.push({ label: next.label, state });
+  state = next.state;
   emit();
 }
 
@@ -187,9 +199,14 @@ export function useStore(): State {
   );
 }
 
-export function useUndo(): { depth: number; label: string | null } {
+export function useUndo(): { depth: number; label: string | null; redoDepth: number; redoLabel: string | null } {
   useStore();
-  return { depth: past.length, label: past[past.length - 1]?.label ?? null };
+  return {
+    depth: past.length,
+    label: past[past.length - 1]?.label ?? null,
+    redoDepth: future.length,
+    redoLabel: future[future.length - 1]?.label ?? null,
+  };
 }
 
 // ── Edits ─────────────────────────────────────────────────────────────
