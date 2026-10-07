@@ -12,6 +12,7 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { rig, stackOf } from "../data/rig";
 import {
+  partPatch,
   addPart,
   addSection,
   backToPart,
@@ -777,10 +778,10 @@ function Stacks({ left }: { left: number }) {
   const s = useStore();
   const song = currentSong(s)?.name;
   const stacks = stacksFor(song, borrowedOf(s, song));
-  const profile = profileFor(song);
-  const others = [...new Set(stacks.flatMap((st) => st.patches).filter((p) => p.from === "other").map((p) => p.profile!))];
   const now = playing(s);
   const at = now ? findPatch(stacks, now) : null;
+  const own = partPatch(s);
+  const saved = own ? findPatch(stacks, own) : null;
   const colour = song ? songColour(song, s.songColours) : "var(--ink-3)";
   const where = (() => {
     const sec = song ? sectionsOf(s, song)[s.partIndex] : undefined;
@@ -789,61 +790,17 @@ function Stacks({ left }: { left: number }) {
   })();
   return (
     <div style={{ position: "relative", padding: `2px 8px 8px ${left}px` }}>
-      <div style={{ borderRadius: "var(--r-md)", background: "rgba(0,0,0,0.22)", overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 30, padding: "0 10px" }}>
-          <span className="t-label" style={{ fontSize: 10.5, color: "var(--ink-3)" }}>
-            Stacks
-          </span>
-          <span style={{ flex: 1 }} />
-          <span className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5 }}>
-            <SourceIcon from="song" colour={colour} size={11} />
-            Song
-          </span>
-          <span className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5 }}>
-            <SourceIcon from="profile" colour="var(--ink-3)" size={11} />
-            {profile.name}
-          </span>
-          {others.map((o) => (
-            <span key={o} className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, color: nameColour(o) }}>
-              <SourceIcon from="other" colour={nameColour(o)} size={11} />
-              {o}
-            </span>
-          ))}
-        </div>
+      <div style={{ borderRadius: "var(--r-md)", background: "rgba(0,0,0,0.22)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {stacks.map((st, i) => {
           const on = at?.stack === i;
-          const pos = on ? at!.index : (s.stackAt[st.name] ?? 0) % Math.max(1, st.patches.length);
-          return <StackRow key={st.name} stack={st} on={on} pos={pos} songColour={colour} />;
+          // The part's own patch, while something else plays by hand.
+          const home = s.live && saved && saved.stack === i ? saved.index : null;
+          const pos = on ? at!.index : home ?? (s.stackAt[st.name] ?? 0) % Math.max(1, st.patches.length);
+          return <StackRow key={st.name} stack={st} on={on} home={home !== null} where={where} pos={pos} songColour={colour} />;
         })}
-        {s.live && (
-          <div style={{ display: "flex", alignItems: "center", gap: 4, minHeight: 40, padding: "0 4px 0 10px", borderTop: "1px solid var(--rule)" }}>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--ink-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={`${where} plays ${partLabel(s)}`}>
-              <b style={{ color: "var(--modified)", fontWeight: 650 }}>By hand</b> · {where} has {partLabel(s)}
-            </span>
-            <button className="pressable" onClick={backToPart} style={{ minHeight: 34, padding: "0 10px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 650, color: "var(--ink-2)" }}>
-              Back
-            </button>
-            <button
-              className="pressable"
-              onClick={keepLive}
-              title={`${where} plays ${s.live} from now on`}
-              style={{ minHeight: 34, padding: "0 12px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 650, border: "1px solid var(--rule-strong)" }}
-            >
-              Keep
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
-}
-
-/** What the part up has saved, for the "by hand" note. */
-function partLabel(s: ReturnType<typeof useStore>): string {
-  const song = currentSong(s)?.name;
-  const sec = song ? sectionsOf(s, song)[s.partIndex] : undefined;
-  const saved = sec?.parts[s.subIndex]?.sound?.name;
-  return saved && saved !== s.live ? saved : "what came before";
 }
 
 /** Where a patch comes from, in words, for its tooltip. */
@@ -859,18 +816,39 @@ function markColour(p: StackPatch, songColour: string): string {
 /** One stack: its name, the patch a tap plays, its rotation as dots (the
  *  song's filled in the song's colour, the profile's open), and whose that
  *  patch is. */
-function StackRow({ stack, on, pos, songColour: colour }: { stack: ReturnType<typeof stacksFor>[number]; on: boolean; pos: number; songColour: string }) {
+function StackRow({ stack, on, home, where, pos, songColour: colour }: { stack: ReturnType<typeof stacksFor>[number]; on: boolean; home: boolean; where: string; pos: number; songColour: string }) {
+  const s = useStore();
+  const menu = useMenu();
+  const byHand = on && !!s.live;
+  const items: MenuItem[] = [
+    { kind: "head", label: `${stack.name} · ${stack.patches[pos]?.name}` },
+    ...stack.patches.map((p, k) => ({ kind: "run" as const, id: `p${k}`, label: p.name, detail: fromLabel(p), checked: k === pos && on })),
+    ...(byHand
+      ? [{ kind: "sep" as const }, { kind: "run" as const, id: "keep", label: `Keep for ${where}` }, { kind: "run" as const, id: "back", label: `Back to ${where}'s patch` }]
+      : []),
+  ];
+  const onPick = (p: Picked) => {
+    if (p.id === "keep") keepLive();
+    else if (p.id === "back") backToPart();
+    else if (p.id.startsWith("p")) {
+      const k = Number(p.id.slice(1));
+      tapStack(stack.name, stack.patches.map((x) => x.name), (k - 1 + stack.patches.length) % stack.patches.length);
+    }
+  };
   const tape = tapeFor(stack.name);
   const patch = stack.patches[pos];
   const many = stack.patches.length > 1;
   const next = many ? stack.patches[(pos + 1) % stack.patches.length] : undefined;
   const narrow = useFit() === "narrow";
   return (
+    <>
+    {menu.open && <Menu at={menu.open.at} items={items} onPick={onPick} onClose={menu.close} />}
     <button
       className="pressable"
-      onClick={() => tapStack(stack.name, stack.patches.map((p) => p.name), on ? pos : null)}
-      title={on && next ? `Tap again for ${next.name}` : `Play ${patch.name}`}
+      onClick={() => (home ? backToPart() : tapStack(stack.name, stack.patches.map((p) => p.name), on ? pos : null))}
+      title={on && next ? `Tap again for ${next.name}` : home ? `${where}'s patch — tap to go back to it` : `Play ${patch.name}`}
       aria-pressed={on}
+      {...menu.longPress()}
       style={{
         position: "relative",
         width: "100%",
@@ -884,7 +862,15 @@ function StackRow({ stack, on, pos, songColour: colour }: { stack: ReturnType<ty
         background: on ? `color-mix(in srgb, ${tape} 22%, transparent)` : undefined,
       }}
     >
-      {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 6, bottom: 6, width: 3, borderRadius: 2, background: "var(--live)" }} />}
+      {/* Green bar: what plays. Hollow: the part's own patch, while
+          something else plays by hand — tap it to go back. */}
+      {(on || home) && (
+        <span
+          aria-hidden
+          style={{ position: "absolute", left: 0, top: 6, bottom: 6, width: 3, borderRadius: 2, background: on ? (byHand ? "var(--modified)" : "var(--live)") : "transparent", boxShadow: home ? "inset 0 0 0 1.25px var(--live)" : undefined }}
+        />
+      )}
+
       <span style={{ width: narrow ? 58 : 70, flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: tape }} />
         <span className="t-label" style={{ fontSize: 10.5, letterSpacing: "0.08em", color: on ? "var(--ink)" : "var(--ink-3)" }}>
@@ -935,6 +921,7 @@ function StackRow({ stack, on, pos, songColour: colour }: { stack: ReturnType<ty
         )}
       </span>
     </button>
+    </>
   );
 }
 
