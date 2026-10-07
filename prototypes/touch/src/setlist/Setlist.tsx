@@ -31,6 +31,7 @@ import {
   sectionsOf,
   setSectionSound,
   setSongField,
+  setSongColour,
   setStart,
   undo,
   useStore,
@@ -39,6 +40,7 @@ import {
 import { Strike, Tape, tapeFor } from "../ui/marks";
 import { Button, KeyBox, Tabs } from "../ui/kit";
 import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
+import { nameColour, sectionColour, songColour, SONG_PALETTE } from "./colors";
 
 const KEYS = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
@@ -55,6 +57,7 @@ type Panel =
   | { kind: "key"; song: number }
   | { kind: "tempo"; song: number }
   | { kind: "start"; song: number }
+  | { kind: "colour"; song: number }
   | { kind: "patch"; song: string; section: number };
 
 export function Setlist() {
@@ -252,6 +255,7 @@ function SongRow({
   const sections = sectionsOf(s, song.name);
   const fit = useFit();
   const narrow = fit === "narrow";
+  const colour = songColour(song.name, s.songColours);
   const items: MenuItem[] = [
     { kind: "head", label: `${i + 1} · ${song.name}` },
     { kind: "run", id: "go", label: "Play from here", disabled: up ? "It's up now" : undefined },
@@ -259,6 +263,7 @@ function SongRow({
     { kind: "run", id: "key", label: "Key…", detail: song.key || "—" },
     { kind: "run", id: "tempo", label: "Tempo…", detail: song.bpm ? `${song.bpm} BPM` : "—" },
     { kind: "run", id: "start", label: "Starts on…", detail: song.start || "default" },
+    { kind: "run", id: "colour", label: "Colour…", detail: s.songColours[song.name] ? "set" : "from its name" },
     { kind: "sep" },
     { kind: "run", id: "up", label: "Move up", disabled: i === 0 ? "Already first" : undefined },
     { kind: "run", id: "down", label: "Move down", disabled: i === last ? "Already last" : undefined },
@@ -270,6 +275,7 @@ function SongRow({
     if (p.id === "key") onPanel({ kind: "key", song: i });
     if (p.id === "tempo") onPanel({ kind: "tempo", song: i });
     if (p.id === "start") onPanel({ kind: "start", song: i });
+    if (p.id === "colour") onPanel({ kind: "colour", song: i });
     if (p.id === "up") moveSong(i, i - 1);
     if (p.id === "down") moveSong(i, i + 1);
     if (p.id === "remove") removeSong(i);
@@ -282,7 +288,7 @@ function SongRow({
         display: "flex",
         alignItems: "stretch",
         minHeight: 64,
-        background: lifted ? "var(--sheet-2)" : up ? "var(--up)" : undefined,
+        background: lifted ? "var(--sheet-2)" : open ? `color-mix(in srgb, ${colour} ${up ? 13 : 8}%, var(--sheet))` : undefined,
         borderTop: dropAbove ? "3px solid var(--focus-fg)" : "1px solid var(--rule)",
       }}
     >
@@ -293,7 +299,23 @@ function SongRow({
         aria-expanded={open}
         style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, padding: "10px 2px 10px 14px", textAlign: "left" }}
       >
-        <span className="num" style={{ width: 22, textAlign: "right", fontSize: 15, fontWeight: 650, color: up ? "var(--ink)" : "var(--ink-3)", flexShrink: 0 }}>
+        {/* The song's number on its colour: the song, at a glance. */}
+        <span
+          className="num"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 7,
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 14,
+            fontWeight: 750,
+            background: played ? `color-mix(in srgb, ${colour} 35%, var(--sheet))` : colour,
+            color: "#0b0b0e",
+          }}
+        >
           {i + 1}
         </span>
         <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -362,8 +384,10 @@ function Sections({ songIndex, onPanel }: { songIndex: number; onPanel: (p: Pane
   const up = songIndex === s.songIndex;
   const add = useMenu();
   const fit = useFit();
+  const colour = songColour(song.name, s.songColours);
   return (
-    <div style={{ position: "relative", padding: "2px 0 10px", background: up ? "var(--up)" : "rgba(0,0,0,0.16)" }}>
+    <div style={{ position: "relative", padding: "2px 0 10px", background: `color-mix(in srgb, ${colour} ${up ? 13 : 8}%, var(--sheet))` }}>
+      {up && <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--live)" }} />}
       {/* The song's timeline: one line its sections sit on. */}
       {sections.length > 0 && (
         <span aria-hidden style={{ position: "absolute", left: fit === "narrow" ? 21 : 35, top: 18, bottom: 40, width: 1, background: "var(--rule-strong)" }} />
@@ -436,7 +460,7 @@ function SectionRow({ song, songIndex, index: j, count, onPanel }: { song: strin
         }}
         style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: narrow ? 8 : 12, minHeight: 50, padding: narrow ? "4px 2px 4px 14px" : "4px 4px 4px 28px", textAlign: "left" }}
       >
-        <Node state={state} />
+        <Node state={state} colour={sectionColour(sec.name)} />
         <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
         <span
           style={{
@@ -469,8 +493,8 @@ function SectionRow({ song, songIndex, index: j, count, onPanel }: { song: strin
 }
 
 /** Where a section sits in the song: played (a check), now (green), ahead. */
-function Node({ state }: { state: "done" | "now" | "ahead" }) {
-  const size = state === "now" ? 13 : 11;
+function Node({ state, colour }: { state: "done" | "now" | "ahead"; colour: string }) {
+  const size = state === "now" ? 14 : 12;
   return (
     <span style={{ position: "relative", zIndex: 1, width: 16, display: "flex", justifyContent: "center", flexShrink: 0 }}>
       <span
@@ -478,9 +502,11 @@ function Node({ state }: { state: "done" | "now" | "ahead" }) {
           width: size,
           height: size,
           borderRadius: 999,
-          background: state === "now" ? "var(--live)" : "var(--sheet)",
-          border: `2px solid ${state === "now" ? "var(--live)" : state === "done" ? "var(--ink-3)" : "var(--dim)"}`,
-          boxShadow: state === "now" ? "0 0 0 4px var(--live-bg)" : undefined,
+          // The section's type colour: filled while it plays, a ring ahead,
+          // faded once played.
+          background: state === "now" ? colour : "var(--sheet)",
+          border: `2px solid ${state === "done" ? `color-mix(in srgb, ${colour} 40%, var(--sheet))` : colour}`,
+          boxShadow: state === "now" ? `0 0 0 4px color-mix(in srgb, ${colour} 30%, transparent)` : undefined,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -488,7 +514,7 @@ function Node({ state }: { state: "done" | "now" | "ahead" }) {
       >
         {state === "done" && (
           <svg width="7" height="6" viewBox="0 0 7 6" aria-hidden>
-            <path d="M1 3 L3 5 L6 1" fill="none" stroke="var(--ink-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M1 3 L3 5 L6 1" fill="none" stroke={`color-mix(in srgb, ${colour} 60%, var(--ink-3))`} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
       </span>
@@ -617,6 +643,42 @@ function PanelView({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () 
       title = song.name;
       sub = "The patch it starts on";
       body = <PatchList song={song.name} current={song.start || null} defaultLabel="The profile's default" onPick={(p) => setStart(panel.song, p ?? "")} />;
+      break;
+    }
+    case "colour": {
+      const song = set.songs[panel.song];
+      const chosen = s.songColours[song.name];
+      const auto = nameColour(song.name);
+      title = song.name;
+      sub = "Its colour — every set and device shows it";
+      body = (
+        <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+          <button
+            className="pressable"
+            onClick={() => setSongColour(song.name, null)}
+            style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 56, padding: "0 14px", borderRadius: "var(--r)", border: !chosen ? "2px solid var(--focus-fg)" : "1px solid var(--rule-strong)", background: !chosen ? "var(--focus-bg)" : "var(--sheet)", textAlign: "left" }}
+          >
+            <span style={{ width: 28, height: 28, borderRadius: 7, background: auto, flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>
+              <span style={{ display: "block", fontSize: 15, fontWeight: 650 }}>From its name</span>
+              <span className="t-meta" style={{ fontSize: 13 }}>Always the same for “{song.name}”</span>
+            </span>
+          </button>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8 }}>
+            {SONG_PALETTE.map((c) => {
+              const on = chosen === c;
+              return (
+                <button
+                  key={c}
+                  aria-label={`Colour ${c}`}
+                  onClick={() => setSongColour(song.name, c)}
+                  style={{ aspectRatio: "1", minHeight: 44, borderRadius: 10, background: c, boxShadow: on ? "0 0 0 2px var(--sheet-2), 0 0 0 4px var(--focus-fg)" : undefined }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      );
       break;
     }
     case "patch": {
@@ -842,6 +904,7 @@ function AddBody() {
             onClick={() => addSong({ name: song.name, key: song.key, bpm: song.bpm, start: "" })}
             style={{ width: "100%", minHeight: 56, padding: "6px 14px 6px 18px", display: "flex", alignItems: "center", gap: 10, textAlign: "left", borderBottom: "1px solid var(--rule)", opacity: added ? 0.5 : 1 }}
           >
+            <span style={{ width: 10, height: 10, borderRadius: 3, flexShrink: 0, background: songColour(song.name, s.songColours) }} />
             <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{song.name}</span>
             <KeyBox k={song.key} />
             <span className="num" style={{ width: 30, textAlign: "right", color: "var(--ink-2)", fontSize: 14 }}>

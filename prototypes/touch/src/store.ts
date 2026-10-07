@@ -47,6 +47,8 @@ export interface State {
   side: Record<string, "L" | "R" | null>;
   /** Songs made in this session, beside the rig's library. */
   newSongs: SongEntry[];
+  /** Colours set by hand, by song name (the rest are their names'). */
+  songColours: Record<string, string>;
 }
 
 function seed(): State {
@@ -90,6 +92,7 @@ function seed(): State {
     order: {},
     side: {},
     newSongs: [],
+    songColours: {},
   };
 }
 
@@ -404,5 +407,15 @@ export function moveSection(song: string, from: number, to: number) {
     const [x] = list.splice(from, 1);
     list.splice(to, 0, x);
     return { ...s, sections: { ...s.sections, [song]: list } };
+  });
+}
+
+/** A song's colour by hand (null: back to its name's). */
+export function setSongColour(name: string, colour: string | null) {
+  change(`${name} colour → ${colour ?? "from its name"}`, (s) => {
+    const songColours = { ...s.songColours };
+    if (colour) songColours[name] = colour;
+    else delete songColours[name];
+    return { ...s, songColours };
   });
 }
