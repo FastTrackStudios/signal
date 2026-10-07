@@ -459,6 +459,9 @@ pub struct SongSlot {
     /// The patch it starts on — the setlist's badge. Empty: it keeps the
     /// profile's default.
     pub start: String,
+    /// Its colour (`#rrggbb`); empty: one picked from its name.
+    #[facet(default)]
+    pub colour: String,
 }
 
 /// [`LiveBlock::engine`] values.
@@ -489,6 +492,9 @@ pub struct HeadphoneState {
     pub mix_level: f32,
     /// Main output muted (rehearse silently; the phones keep playing).
     pub main_mute: bool,
+    /// The phones muted too — with the house, everything is silent.
+    #[facet(default)]
+    pub phones_mute: bool,
     /// The separate headphone-mixer process that plays the mix.
     #[facet(default)]
     pub mixer: PhonesMixer,
@@ -501,6 +507,7 @@ impl Default for HeadphoneState {
             self_mix: PHONES_UNITY,
             mix_level: PHONES_UNITY,
             main_mute: false,
+            phones_mute: false,
             mixer: PhonesMixer::default(),
         }
     }
@@ -746,6 +753,15 @@ pub struct SongEntry {
     pub profile: String,
     /// The part it starts on; empty = the profile's default patch.
     pub start_part: String,
+    /// Its colour (`#rrggbb`); empty: one picked from its name.
+    #[facet(default)]
+    pub colour: String,
+    /// Who it's by; empty when unknown.
+    #[facet(default)]
+    pub artist: String,
+    /// Its genre ("Worship", "Gospel", …); empty when unset.
+    #[facet(default)]
+    pub genre: String,
 }
 
 /// One setlist and its songs as the set plays them.
@@ -756,6 +772,19 @@ pub struct SetlistEntry {
     pub active: bool,
     /// Entries with the set's key/tempo already resolved.
     pub songs: Vec<SongSlot>,
+    /// The day it is played (`YYYY-MM-DD`); empty when it has none.
+    #[facet(default)]
+    pub date: String,
+    /// The recurring event it is for ("HSM"); empty for a one-off.
+    #[facet(default)]
+    pub event: String,
+    /// A title of its own ("Worship Night"); empty: named by event and day.
+    #[facet(default)]
+    pub title: String,
+    /// The profile every song plays on unless it has its own; empty keeps
+    /// whatever is loaded.
+    #[facet(default)]
+    pub profile: String,
 }
 
 /// One drive block preset (a pedal) and its captures.
@@ -1341,6 +1370,12 @@ pub mod rig {
         fn restart_phones_mixer(&self);
         /// Mute/unmute the main output (headphone cue survives).
         fn toggle_main_mute(&self);
+        /// Set both mutes at once: the house (main outputs), and the phones.
+        fn set_mutes(&self, house: bool, phones: bool);
+        /// Panic: everything silent at once — house and phones muted, the
+        /// test signal stopped — then the mutes as they were once the tails
+        /// have died away.
+        fn panic(&self);
         /// Master output trim in dB (how loud the rig is for FOH).
         fn set_master_trim(&self, db: f32);
         /// The most recent MIDI events seen by the core (newest last),
@@ -1588,6 +1623,14 @@ pub mod rig {
         fn delete_setlist(&self, index: u32);
         /// The profile a song is played on (empty: keep whatever is loaded).
         fn set_song_profile(&self, song: String, profile: String);
+        /// A song's colour (`#rrggbb`); empty goes back to the one picked
+        /// from its name.
+        fn set_song_colour(&self, song: String, colour: String);
+        /// Setlist `index`'s event, day (`YYYY-MM-DD`) and title.
+        fn set_setlist_details(&self, index: u32, event: String, date: String, title: String);
+        /// The profile every song of setlist `index` plays on unless it has
+        /// its own (empty: keep whatever is loaded).
+        fn set_setlist_profile(&self, index: u32, profile: String);
         /// The part a song starts on (empty: the profile's default patch).
         fn set_song_start_part(&self, song: String, part: String);
         /// The profile a part of the **current song** is played on (empty:

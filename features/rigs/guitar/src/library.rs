@@ -140,6 +140,63 @@ pub struct SongLib {
     pub songs: Vec<SongDef>,
 }
 
+/// What the library knows of its songs beyond `songs.styx`
+/// (`song-info.styx`): each song's colour, artist and genre, and the
+/// collections songs are gathered into ("Church"…). A file of its own so
+/// nothing that rewrites the song list can drop it, and a library from
+/// before it simply has none yet.
+#[derive(Clone, Debug, Default, Facet)]
+pub struct SongInfoLib {
+    #[facet(default)]
+    pub songs: Vec<SongInfoDef>,
+    #[facet(default)]
+    pub collections: Vec<CollectionDef>,
+}
+
+/// One song's details, by name.
+#[derive(Clone, Debug, Default, Facet)]
+pub struct SongInfoDef {
+    pub song: String,
+    /// `#rrggbb`; empty: one picked from its name.
+    #[facet(default)]
+    pub colour: String,
+    #[facet(default)]
+    pub artist: String,
+    #[facet(default)]
+    pub genre: String,
+}
+
+/// A named group of songs; a song can be in any number of them.
+#[derive(Clone, Debug, Default, Facet)]
+pub struct CollectionDef {
+    pub name: String,
+    /// `#rrggbb`.
+    #[facet(default)]
+    pub colour: String,
+    #[facet(default)]
+    pub songs: Vec<String>,
+}
+
+impl SongInfoLib {
+    /// A song's details (matched without regard to case).
+    #[must_use]
+    pub fn of(&self, song: &str) -> Option<&SongInfoDef> {
+        self.songs.iter().find(|s| s.song.eq_ignore_ascii_case(song))
+    }
+
+    /// A song's details to change, made when it has none.
+    pub fn of_mut(&mut self, song: &str) -> &mut SongInfoDef {
+        if let Some(i) = self.songs.iter().position(|s| s.song.eq_ignore_ascii_case(song)) {
+            return &mut self.songs[i];
+        }
+        self.songs.push(SongInfoDef {
+            song: song.to_string(),
+            ..SongInfoDef::default()
+        });
+        self.songs.last_mut().expect("just pushed")
+    }
+}
+
 #[derive(Clone, Debug, Facet)]
 pub struct SetlistLib {
     pub setlists: Vec<SetlistDef>,
@@ -203,6 +260,8 @@ pub struct RigLibrary {
     pub profiles: Vec<ProfileDef>,
     pub drive_presets: Vec<DrivePresetDef>,
     pub songs: Vec<SongDef>,
+    /// `song-info.styx`: song colours, artists, genres, collections.
+    pub song_info: SongInfoLib,
     pub setlists: Vec<SetlistDef>,
     pub midi_map: MidiMapDef,
     pub keymap: Vec<KeyBindingDef>,
@@ -805,11 +864,13 @@ impl RigLibrary {
                 store.resolve(&mut option.nam);
             }
         }
+        let song_info = store.read::<SongInfoLib>("song-info.styx").unwrap_or_default();
         Self {
             profile,
             profiles,
             drive_presets,
             songs,
+            song_info,
             setlists,
             midi_map,
             keymap,
@@ -1184,6 +1245,14 @@ impl RigLibrary {
                 setlists: setlists.to_vec(),
             },
         );
+    }
+
+    /// Write `song-info.styx` (refused over a file that does not parse).
+    pub fn save_song_info(info: &SongInfoLib) {
+        let Some(store) = writable_store() else {
+            return;
+        };
+        config_watch::write_guarded(&store.dir().join("song-info.styx"), info);
     }
 
     pub fn save_last_state(state: &LastState) {

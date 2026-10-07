@@ -26,7 +26,7 @@ use signal_sampler::{
     CommitStatus, DeviceInfo, GuitarRig, ProfileRig, ReloadMode, RigBlock, RigManager,
 };
 
-use crate::library::RigLibrary;
+use crate::library::{RigLibrary, SongInfoLib};
 use crate::nodes::profile_from_library;
 use crate::profiles::{DriveImport, DrivePresetDef, ProfileDef, SetlistDef, SongDef};
 
@@ -310,6 +310,8 @@ pub struct GuitarRigBackend {
     /// active setlist, and the current song/section position. Mutable until
     /// these become service-driven entities.
     songs_lib: Arc<Mutex<Vec<SongDef>>>,
+    /// `song-info.styx`: each song's colour, artist and genre; collections.
+    song_info: Arc<Mutex<SongInfoLib>>,
     setlists: Arc<Mutex<Vec<SetlistDef>>>,
     setlist_index: Arc<Mutex<usize>>,
     song_index: Arc<Mutex<usize>>,
@@ -515,6 +517,7 @@ impl GuitarRigBackend {
             profile_def: Arc::new(Mutex::new(lib.profile)),
             other_profiles: Arc::new(Mutex::new(others)),
             songs_lib: Arc::new(Mutex::new(lib.songs)),
+            song_info: Arc::new(Mutex::new(lib.song_info)),
             setlists: Arc::new(Mutex::new(lib.setlists)),
             setlist_index: Arc::new(Mutex::new(0)),
             song_index: Arc::new(Mutex::new(0)),
@@ -2220,12 +2223,14 @@ impl GuitarRigBackend {
     /// mix), each through the same fader law.
     fn push_phones_levels(&self) {
         let hp = self.headphone.lock_ok().clone();
+        // Muted, the phones play nothing — their faders stay where they are.
+        let volume = if hp.phones_mute { 0.0 } else { hp.volume };
         GuitarRig::set_phones_levels(
-            signal_phones::fader_gain(hp.volume),
+            signal_phones::fader_gain(volume),
             signal_phones::fader_gain(hp.self_mix),
         );
         if let Some(link) = &self.phones {
-            link.set_levels(hp.mix_level, hp.volume);
+            link.set_levels(hp.mix_level, volume);
         }
     }
 
@@ -3736,6 +3741,25 @@ impl GuitarRigBackend {
     /// The active setlist's entries, resolved against the song library:
     /// `(name, key, bpm, stack, sections)` per slot — per-set overrides win
     /// over the song's defaults.
+    /// The active set's default profile (empty: none).
+    fn set_profile(&self) -> String {
+        let active = *self.setlist_index.lock_ok();
+        self.setlists
+            .lock_ok()
+            .get(active)
+            .map(|s| s.profile.clone())
+            .unwrap_or_default()
+    }
+
+    /// A song's colour from `song-info.styx` (empty: from its name).
+    fn song_colour(&self, song: &str) -> String {
+        self.song_info
+            .lock_ok()
+            .of(song)
+            .map(|i| i.colour.clone())
+            .unwrap_or_default()
+    }
+
     fn resolved_setlist(&self) -> Vec<(String, String, u32, usize, Vec<PerfPart>)> {
         let lib = self.songs_lib.lock_ok();
         let setlists = self.setlists.lock_ok();
@@ -3834,6 +3858,8 @@ impl GuitarRigBackend {
                 )
             })
             .unwrap_or_default();
+        // No profile of its own: the set's default, when the set has one.
+        let profile = if profile.is_empty() { self.set_profile() } else { profile };
         tracing::info!(
             "setlist → {name} ({key} · {bpm} BPM, profile '{profile}', starts '{start_part}')"
         );
@@ -5517,6 +5543,7 @@ impl Rig for GuitarRigBackend {
                         .find(|s| s.name.eq_ignore_ascii_case(name))
                         .map(|s| song_start(s, parts))
                         .unwrap_or_default(),
+                    colour: self.song_colour(name),
                 })
                 .collect();
             m.song_index = song_idx as u32;
@@ -5552,6 +5579,7 @@ impl Rig for GuitarRigBackend {
                     key: s.key.clone(),
                     bpm: s.bpm,
                     start: String::new(),
+                    colour: self.song_colour(&s.name),
                 })
                 .collect();
         }
@@ -6195,7 +6223,8 @@ impl Rig for GuitarRigBackend {
                     .iter()
                     .find(|s| s.name.eq_ignore_ascii_case(&song_name))
                     .map(|s| s.profile.clone())
-                    .unwrap_or_default()
+                    .filter(|p| !p.is_empty())
+                    .unwrap_or_else(|| self.set_profile())
             };
             let want_profile = section
                 .as_ref()
@@ -6964,6 +6993,9 @@ impl Rig for GuitarRigBackend {
             sets.push(SetlistDef {
                 name: name.clone(),
                 date: String::new(),
+                event: String::new(),
+                title: String::new(),
+                profile: String::new(),
                 entries: Vec::new(),
             });
             RigLibrary::save_setlists(&sets);
@@ -7362,6 +7394,44 @@ impl Rig for GuitarRigBackend {
         }
         self.apply_main_mute();
         self.publish_state();
+    }
+
+    fn set_mutes(&self, house: bool, phones: bool) {
+        {
+            let mut hp = self.headphone.lock_ok();
+            hp.main_mute = house;
+            hp.phones_mute = phones;
+        }
+        tracing::info!(house, phones, "mutes");
+        self.mark_state_dirty();
+        self.apply_main_mute();
+        self.push_phones_levels();
+        self.publish_state();
+    }
+
+    fn panic(&self) {
+        let before = {
+            let hp = self.headphone.lock_ok();
+            (hp.main_mute, hp.phones_mute)
+        };
+        tracing::warn!("panic: everything silent");
+        if let Some(prig) = self.rig.lock_ok().as_ref() {
+            prig.rig().stop_test_signal();
+        }
+        Rig::set_mutes(self, true, true);
+        // The mutes as they were once the tails have died away — unless
+        // something changed them meanwhile.
+        let backend = self.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            let still = {
+                let hp = backend.headphone.lock_ok();
+                hp.main_mute && hp.phones_mute
+            };
+            if still {
+                Rig::set_mutes(&backend, before.0, before.1);
+            }
+        });
     }
 
     fn set_master_trim(&self, db: f32) {
@@ -8110,6 +8180,7 @@ impl Rig for GuitarRigBackend {
         profiles.sort_by_key(|p| p.name.to_lowercase());
 
         let songs_lib = self.songs_lib.lock_ok().clone();
+        let info = self.song_info.lock_ok().clone();
         let sets = self.setlists.lock_ok().clone();
         let active_set = *self.setlist_index.lock_ok();
         let songs = songs_lib
@@ -8130,6 +8201,9 @@ impl Rig for GuitarRigBackend {
                     .collect(),
                 profile: s.profile.clone(),
                 start_part: s.start_part.clone(),
+                colour: info.of(&s.name).map(|i| i.colour.clone()).unwrap_or_default(),
+                artist: info.of(&s.name).map(|i| i.artist.clone()).unwrap_or_default(),
+                genre: info.of(&s.name).map(|i| i.genre.clone()).unwrap_or_default(),
             })
             .collect();
         let setlists = sets
@@ -8138,6 +8212,10 @@ impl Rig for GuitarRigBackend {
             .map(|(i, set)| SetlistEntry {
                 name: set.name.clone(),
                 active: i == active_set,
+                date: set.date.clone(),
+                event: set.event.clone(),
+                title: set.title.clone(),
+                profile: set.profile.clone(),
                 songs: set
                     .entries
                     .iter()
@@ -8158,6 +8236,7 @@ impl Rig for GuitarRigBackend {
                                 e.bpm
                             },
                             start: String::new(),
+                            colour: info.of(&e.song).map(|i| i.colour.clone()).unwrap_or_default(),
                         }
                     })
                     .collect(),
@@ -8492,6 +8571,47 @@ impl Rig for GuitarRigBackend {
             .get(current)
             .is_some_and(|(name, ..)| name.eq_ignore_ascii_case(&song));
         if is_current {
+            self.recall_song(current);
+        }
+        self.publish_state();
+    }
+
+    fn set_song_colour(&self, song: String, colour: String) {
+        {
+            let mut info = self.song_info.lock_ok();
+            info.of_mut(&song).colour = colour.trim().to_string();
+            RigLibrary::save_song_info(&info);
+        }
+        self.publish_state();
+    }
+
+    fn set_setlist_details(&self, index: u32, event: String, date: String, title: String) {
+        {
+            let mut sets = self.setlists.lock_ok();
+            let Some(set) = sets.get_mut(index as usize) else {
+                return;
+            };
+            set.event = event.trim().to_string();
+            set.date = date.trim().to_string();
+            set.title = title.trim().to_string();
+            RigLibrary::save_setlists(&sets);
+        }
+        self.publish_state();
+    }
+
+    fn set_setlist_profile(&self, index: u32, profile: String) {
+        {
+            let mut sets = self.setlists.lock_ok();
+            let Some(set) = sets.get_mut(index as usize) else {
+                return;
+            };
+            set.profile = profile.trim().to_string();
+            RigLibrary::save_setlists(&sets);
+        }
+        tracing::info!("setlist {index} → profile '{profile}'");
+        // The song up hears it now, when it has no profile of its own.
+        if *self.setlist_index.lock_ok() == index as usize {
+            let current = *self.song_index.lock_ok();
             self.recall_song(current);
         }
         self.publish_state();

@@ -1779,6 +1779,16 @@ pub struct SetlistDef {
     /// Empty: the date in the name, if there is one ("HSM 10-6-26").
     #[facet(default)]
     pub date: String,
+    /// The recurring event it is for ("HSM"); empty for a one-off.
+    #[facet(default)]
+    pub event: String,
+    /// A title of its own ("Worship Night"); empty: named by event and day.
+    #[facet(default)]
+    pub title: String,
+    /// The profile every song plays on unless it has its own; empty keeps
+    /// whatever is loaded.
+    #[facet(default)]
+    pub profile: String,
     pub entries: Vec<SetlistEntryDef>,
 }
 
@@ -1851,6 +1861,9 @@ pub fn default_setlists() -> Vec<SetlistDef> {
         SetlistDef {
             name: "XR Wednesday 7-8-26".to_string(),
             date: String::new(),
+            event: String::new(),
+            title: String::new(),
+            profile: String::new(),
             entries: vec![
                 entry("What a God"),
                 entry("No Other Name"),
@@ -1860,6 +1873,9 @@ pub fn default_setlists() -> Vec<SetlistDef> {
         SetlistDef {
             name: "CYA 7-9-26".to_string(),
             date: String::new(),
+            event: String::new(),
+            title: String::new(),
+            profile: String::new(),
             entries: vec![
                 entry("WASHED"),
                 entry("Who Else"),
@@ -2037,7 +2053,7 @@ mod setlist_day_tests {
     use super::SetlistDef;
 
     fn set(name: &str, date: &str) -> SetlistDef {
-        SetlistDef { name: name.into(), date: date.into(), entries: Vec::new() }
+        SetlistDef { name: name.into(), date: date.into(), event: String::new(), title: String::new(), profile: String::new(), entries: Vec::new() }
     }
 
     #[test]
