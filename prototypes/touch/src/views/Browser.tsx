@@ -472,12 +472,38 @@ export function Browser({ onClose }: { onClose?: () => void }) {
   const showList = wide || opened || !!q;
   const listRef = useScrollToCurrent(`${kind.id}|${targetKey}|${q ? "q" : ""}|${opened}`);
 
+  // Building into something: its name holds the top row. Otherwise the top
+  // row is the filters (or the search, once opened) — no title.
+  const titled = !!(t && sec) || bt?.kind === "stack" || bt?.kind === "preset";
+  const searchOpen = searching || !!q;
+  const filters = kind.id === "songs" && (wide || opened);
+  const searchField = (
+    <>
+<label style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, height: 40, padding: "0 12px", borderRadius: "var(--r)", background: "var(--fill)" }}>
+              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden style={{ color: "var(--ink-3)", flexShrink: 0 }}>
+                <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M10.6 10.6 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search everything" aria-label="Search the browser" style={{ flex: 1, minWidth: 0, height: "100%", border: "none", outline: "none", background: "transparent", fontSize: 15 }} />
+            </label>
+            <button
+              className="pressable"
+              onClick={() => {
+                setQuery("");
+                setSearching(false);
+              }}
+              style={{ height: 44, padding: "0 10px", flexShrink: 0, fontSize: 14, fontWeight: 650, color: "var(--ink-2)" }}
+            >
+              Cancel
+            </button>
+    </>
+  );
   return (
     <div ref={ref} style={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column", background: "#0f0f12" }}>
       {/* What it's for, and the search. */}
       {/* The macro bar's / set header's height, so the lines run straight across. */}
       <div style={{ flexShrink: 0, height: MACRO_BAR_H, display: "flex", flexDirection: "column", justifyContent: "center", borderBottom: "1px solid var(--rule)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, height: 42, padding: "0 4px 0 14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, height: titled ? 42 : 48, padding: titled ? "0 4px 0 14px" : "0 4px 0 12px" }}>
           {!wide && opened && !q && (
             <button className="pressable" onClick={() => setOpened(false)} aria-label="All kinds" style={{ width: 44, height: 44, marginLeft: -12, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", borderRadius: "var(--r)" }}>
               <svg width="9" height="15" viewBox="0 0 9 15" aria-hidden>
@@ -485,6 +511,9 @@ export function Browser({ onClose }: { onClose?: () => void }) {
               </svg>
             </button>
           )}
+          {!titled && searchOpen && <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>{searchField}</span>}
+          {!titled && !searchOpen && filters && <SongFilters items={kind.items(s, bt)} f={songFilter} onF={setSongFilter} />}
+          {(titled || (!searchOpen && !filters)) && (
           <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 7, whiteSpace: "nowrap", overflow: "hidden" }}>
             {t && sec ? (
               <>
@@ -506,9 +535,10 @@ export function Browser({ onClose }: { onClose?: () => void }) {
                 <span style={{ fontSize: 14, fontWeight: 650, color: "var(--ink-2)" }}>{bt.variation}</span>
               </>
             ) : (
-              <span style={{ fontSize: 15, fontWeight: 700 }}>{!wide && opened ? kind.label : "Browser"}</span>
+              !wide && opened && <span style={{ fontSize: 15, fontWeight: 700 }}>{kind.label}</span>
             )}
           </span>
+          )}
           {/* Clear what the target carries of its own, in one go. */}
           <ClearOwn bt={bt} />
           {/* Step the target through the song's sections and parts — set a
@@ -535,31 +565,14 @@ export function Browser({ onClose }: { onClose?: () => void }) {
             </button>
           )}
         </div>
-        {searching || q ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 6px 4px 12px" }}>
-            <label style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, height: 40, padding: "0 12px", borderRadius: "var(--r)", background: "var(--fill)" }}>
-              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden style={{ color: "var(--ink-3)", flexShrink: 0 }}>
-                <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                <path d="M10.6 10.6 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-              <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search everything" aria-label="Search the browser" style={{ flex: 1, minWidth: 0, height: "100%", border: "none", outline: "none", background: "transparent", fontSize: 15 }} />
-            </label>
-            <button
-              className="pressable"
-              onClick={() => {
-                setQuery("");
-                setSearching(false);
-              }}
-              style={{ height: 44, padding: "0 10px", flexShrink: 0, fontSize: 14, fontWeight: 650, color: "var(--ink-2)" }}
-            >
-              Cancel
-            </button>
-          </div>
-        ) : kind.id === "songs" && (wide || opened) ? (
+        {/* With a target up top, the search or the filters get a row of their own. */}
+        {titled && (searchOpen ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 6px 4px 12px" }}>{searchField}</div>
+        ) : filters ? (
           <div style={{ display: "flex", alignItems: "center", padding: "0 6px 4px 12px" }}>
             <SongFilters items={kind.items(s, bt)} f={songFilter} onF={setSongFilter} />
           </div>
-        ) : null}
+        ) : null)}
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
