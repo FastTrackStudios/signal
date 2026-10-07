@@ -47,6 +47,7 @@ import { MODULE_COLOUR } from "../ui/moduleIcons";
 import { MACRO_BAR_H } from "../dock/MacroBar";
 import { ModuleIcon } from "../ui/moduleIcons";
 import nam from "../data/nam.json";
+import algos from "../data/algos.json";
 import { SourceIcon, tapeFor } from "../ui/marks";
 
 // ── What there is to browse, and what it's for ─────────────────────
@@ -60,6 +61,16 @@ interface NamModel {
   option?: string | null;
 }
 const NAM = nam as Record<string, NamModel[]>;
+
+/** The algorithm each block runs, exported with the models: a Delay /
+ *  Reverb / Time variation -> its blocks' algorithms; a block preset ->
+ *  its algorithm (delay style, reverb algorithm, modulation engine). */
+interface AlgoLine {
+  block: string;
+  preset: string;
+  algo: string;
+}
+const ALGOS = algos as unknown as Record<string, AlgoLine[] | string>;
 
 /** What the browser builds into, by the footswitch mode: a section's part
  *  (Setlist — picked in the setlist), the stack open in the Profile view
@@ -112,8 +123,10 @@ interface Item {
   groupColour?: string;
   /** A variation, under its preset: drawn as a child of the heading. */
   nested?: boolean;
-  /** The NAM models it loads (amps, drives, cabs). */
+  /** The NAM models it loads (amps, drives, cabs) — Amp and Drive. */
   models?: NamModel[];
+  /** The algorithm each of its blocks runs — Delay, Reverb, Time. */
+  algos?: AlgoLine[];
 }
 
 const BLOCK_COLOUR: Record<string, string> = { compressor: "#E5E7EB", gate: "#94A3B8", eq: "#22C55E", delay: "#3B82F6", reverb: "#8B5CF6", chorus: "#7DD3FC" };
@@ -253,7 +266,9 @@ const KINDS: Kind[] = [
                 group: m.name,
                 groupColour: MODULE_COLOUR[kind],
                 nested: true,
-                models: NAM[`${kind}/${m.name}/${v}`],
+                // An amp or drive says what it loads; a delay or reverb what it runs.
+                models: kind === "Amp" || kind === "Drive" ? NAM[`${kind}/${m.name}/${v}`] : undefined,
+                algos: kind === "Delay" || kind === "Reverb" || kind === "Time" ? (ALGOS[`${kind}/${m.name}/${v}`] as AlgoLine[] | undefined) : undefined,
                 from: n === 0 && m.used_by.length ? `in ${plural(m.used_by.length, "preset")}` : undefined,
                 colour: MODULE_COLOUR[kind],
                 state: swapped === id ? ("swapped" as const) : undefined,
@@ -281,7 +296,8 @@ const KINDS: Kind[] = [
         return list.map((b, i) => ({
           id: b.name,
           name: b.name,
-          from: b.bypass ? "off" : b.used_by.length ? `in ${plural(b.used_by.length, "preset")}` : undefined,
+          // A delay, reverb or modulation block says its algorithm first.
+          from: b.bypass ? "off" : [ALGOS[`block:${type}/${b.name}`] as string | undefined, b.used_by.length ? `in ${plural(b.used_by.length, "preset")}` : ""].filter(Boolean).join(" · ") || undefined,
           colour: BLOCK_COLOUR[type] ?? "#a1a1aa",
           state: pickedPart === i || pickedPreset === b.name ? ("swapped" as const) : undefined,
         }));
@@ -610,9 +626,9 @@ function PresetColumns({ items, onPick }: { items: Item[]; onPick?: (item: Item)
                 <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: p.colour, opacity: on || used ? 1 : 0.35 }} />
                 <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                   <span style={{ fontSize: 15, fontWeight: on ? 700 : 600, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
-                  <span style={{ fontSize: 12, color: used ? (used.state === "swapped" ? "var(--modified)" : "var(--live)") : "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {used ? `${used.state === "swapped" ? "Swapped in" : "Playing"} · ${used.name}` : plural(p.items.length, "variation")}
-                  </span>
+                  {used && <span style={{ fontSize: 12, color: used ? (used.state === "swapped" ? "var(--modified)" : "var(--live)") : "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {used ? `${used.state === "swapped" ? "Swapped in" : "Playing"} · ${used.name}` : ""}
+                  </span>}
                 </span>
                 {narrow && (
                   <svg width="7" height="12" viewBox="0 0 7 12" aria-hidden style={{ color: "var(--ink-3)", flexShrink: 0 }}>
@@ -636,9 +652,6 @@ function PresetColumns({ items, onPick }: { items: Item[]; onPick?: (item: Item)
             )}
             <span style={{ width: 10, height: 10, borderRadius: 3, background: preset.colour, flexShrink: 0 }} />
             <span style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{preset.name}</span>
-            <span className="t-meta" style={{ fontSize: 12 }}>
-              {plural(preset.items.length, "variation")}
-            </span>
           </div>
           {preset.items.map((i) => (
             <Variation key={i.id} item={i} colour={preset.colour} onPick={onPick ? () => onPick(i) : undefined} />
@@ -668,6 +681,14 @@ function Variation({ item, colour, onPick }: { item: Item; colour: string; onPic
       </span>
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ fontSize: 16, fontWeight: on ? 700 : 600, color: "var(--ink)" }}>{item.name}</span>
+        {item.algos?.map((a, k) => (
+          <span key={`a${k}`} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12.5, color: "var(--ink-3)" }}>
+            <ModuleIcon kind={a.block.startsWith("VERB") ? "Reverb" : "Delay"} size={12} colour={a.block.startsWith("VERB") ? "#8B5CF6" : "#3B82F6"} />
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <b style={{ color: "var(--ink-2)", fontWeight: 650 }}>{a.algo}</b> · {a.preset}
+            </span>
+          </span>
+        ))}
         {item.models?.map((m, k) => (
           <span key={k} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12.5, color: "var(--ink-3)" }}>
             <ModuleIcon kind={m.role === "amp" ? "Core" : m.role === "drive" ? "Drive" : "Amp"} size={12} colour={m.role === "amp" ? "#D6B36A" : m.role === "drive" ? "#ef4444" : "#a1a1aa"} />
