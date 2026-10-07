@@ -279,6 +279,27 @@ pub fn GuitarRigRemote() -> Element {
 
     // A phone held sideways: the chain a page at a time, nothing else.
     let size = try_use_context::<crate::control::WindowSize>().map_or((0.0, 0.0), |s| (s.0)());
+    // An iPad: the touch layout — setlist, macros, switches, a foot bar of
+    // views.
+    if crate::control::FormFactor::of(size) == crate::control::FormFactor::Tablet {
+        return rsx! {
+            fts_audio_ui::drag::DragProvider { fill: true,
+                div { style: "position: relative; width: 100%; height: 100%; display: flex;",
+                    onpointermove: move |e: PointerEvent| drag_bus.root_move(&e),
+                    onpointerup: move |_| drag_bus.root_up(),
+                    onpointercancel: move |_| drag_bus.root_up(),
+                    crate::tablet::TabletRemote { model: perf_now.clone(), state,
+                        switches: rsx! {
+                            if let Some((on_press, on_toggle_fx, on_toggle_boost, on_cycle_boost, on_tap_tempo, on_prev_song, on_next_song, on_select_song)) = controls {
+                                PerformGrid { model: perf_now.clone(), on_press, on_toggle_fx, on_toggle_boost, on_cycle_boost, on_tap_tempo, on_prev_song, on_next_song, on_select_song }
+                            }
+                        },
+                    }
+                    document::Style { {crate::theme::CSS} }
+                }
+            }
+        };
+    }
     if crate::control::FormFactor::of(size) == crate::control::FormFactor::Phone {
         return rsx! {
             fts_audio_ui::drag::DragProvider { fill: true,

@@ -49,6 +49,8 @@ mod sidebars;
 mod stable;
 mod time_face;
 mod state;
+/// The iPad layout: the touch prototype on the live rig.
+mod tablet;
 mod theme;
 mod wire_param;
 

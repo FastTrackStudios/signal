@@ -2847,6 +2847,7 @@ pub fn use_tier() -> Tier {
     let size = try_use_context::<WindowSize>().map_or((0.0, 0.0), |s| (s.0)());
     match FormFactor::of(size) {
         FormFactor::Phone => Tier::Phone,
+        FormFactor::Tablet => Tier::Ipad,
         FormFactor::Desktop => Tier::Desktop,
     }
 }
@@ -2857,6 +2858,9 @@ pub enum FormFactor {
     /// A phone held sideways (an iPhone 16 Pro: 874 × 402): the chain a
     /// page at a time.
     Phone,
+    /// An iPad: the touch layout (`tablet`) — the setlist beside the
+    /// performance, a foot bar of views.
+    Tablet,
     /// Everything larger: the Control view.
     Desktop,
 }
@@ -2867,8 +2871,13 @@ impl FormFactor {
     #[must_use]
     pub fn of(size: (f64, f64)) -> Self {
         #[cfg(not(target_arch = "wasm32"))]
-        if std::env::var("FTS_FORM_FACTOR").is_ok_and(|v| v.eq_ignore_ascii_case("phone")) {
-            return Self::Phone;
+        if let Ok(v) = std::env::var("FTS_FORM_FACTOR") {
+            if v.eq_ignore_ascii_case("phone") {
+                return Self::Phone;
+            }
+            if v.eq_ignore_ascii_case("tablet") {
+                return Self::Tablet;
+            }
         }
         // By the short side, not by which way up it is: a phone is a phone
         // held either way, and for a moment it is held "portrait" whatever
@@ -2876,7 +2885,14 @@ impl FormFactor {
         // on `w > h` dropped it into the desktop layout, chain at the
         // bottom, and left it there.
         let short = size.0.min(size.1);
-        if short > 0.0 && short <= 500.0 { Self::Phone } else { Self::Desktop }
+        if short > 0.0 && short <= 500.0 {
+            Self::Phone
+        } else if cfg!(target_os = "ios") {
+            // Anything bigger on iOS is an iPad.
+            Self::Tablet
+        } else {
+            Self::Desktop
+        }
     }
 }
 
