@@ -1267,8 +1267,8 @@ function ProfileCell({ name, of, profile, colour, on, onClick }: { name: string;
       aria-pressed={on}
       style={{
         width: "100%",
-        minHeight: 64,
-        padding: "10px 16px",
+        minHeight: 52,
+        padding: "6px 16px",
         display: "flex",
         alignItems: "center",
         gap: 12,
@@ -1286,9 +1286,9 @@ function ProfileCell({ name, of, profile, colour, on, onClick }: { name: string;
           <SourceIcon from={colour ? "other" : "profile"} colour={colour ?? "var(--ink-3)"} size={14} />
         )}
       </span>
-      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-        <span style={{ fontSize: 16, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)" }}>{name}</span>
-        <span className="t-meta" style={{ fontSize: 12.5 }}>
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+        <span style={{ fontSize: 15, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)" }}>{name}</span>
+        <span className="t-meta" style={{ fontSize: 12 }}>
           {of && <b style={{ color: "var(--ink-2)", fontWeight: 650 }}>{of} · </b>}
           {stacks.length} stacks · {total} patches
         </span>
