@@ -119,7 +119,8 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
             <MacroBar cols={8} up />
           </div>
         )}
-        {dock && <div style={{ flexShrink: 0, borderTop: "1px solid var(--rule)" }}>{dock === "switches" ? <Switches /> : <AudioControls />}</div>}
+        {/* Flush: the switches bring their own hairline. */}
+        {dock && <div style={{ flexShrink: 0 }}>{dock === "switches" ? <Switches /> : <AudioControls />}</div>}
         {/* Landscape: the setlist slides in over the stage. */}
         {landscape && setlist && (
           <>

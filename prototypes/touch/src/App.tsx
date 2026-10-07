@@ -460,7 +460,7 @@ function Main({ view, dock, macros }: { view: View; dock: Dock; macros: boolean 
       <div style={{ flex: 1, minHeight: 0 }}>
         <Placeholder title={label} note="Main area" />
       </div>
-      {dock && <div style={{ flexShrink: 0, borderTop: "1px solid var(--rule)" }}>{dock === "switches" ? <Switches /> : <AudioControls />}</div>}
+      {dock && <div style={{ flexShrink: 0 }}>{dock === "switches" ? <Switches /> : <AudioControls />}</div>}
     </main>
   );
 }
