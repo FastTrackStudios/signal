@@ -1,0 +1,180 @@
+@import "@fontsource-variable/archivo/standard.css";
+
+/* Signal Touch — the floor setlist world.
+   Paper sheets on a cool desk, one heavy grotesk as the marker voice, fluoro
+   gaffer tape for the stacks, one ballpoint blue kept for the live signal path.
+   Every value is a token: the Dioxus port reads these, not the components. */
+
+:root {
+  --desk: #e9ece9;
+  --sheet: #ffffff;
+  --sheet-2: #f6f7f5;
+  --rule: #dcdfda;
+  --rule-strong: #b9bdb6;
+  --ink: #121212;
+  --ink-2: #3d3f43;
+  --ink-3: #64666c;
+
+  /* Gaffer tape: one colour per stack, black ink on every one of them. */
+  --tape-clean: #19c3ff;
+  --tape-crunch: #9b7bff;
+  --tape-drive: #ff8a00;
+  --tape-lead: #ff3b5c;
+  --tape-ambient: #1ed98d;
+  --tape-special: #ffd60a;
+  --tape-gaffer: #2a2b2f;
+
+  /* Reserved: the live signal path in Routing, and nothing else. */
+  --path: #2433ff;
+
+  --marker: #121212;
+  --void: #d7263d;
+
+  --r: 4px;
+  --bar-h: 60px;
+  --strip-h: 104px;
+  --hit: 48px;
+
+  --font: "Archivo Variable", "Archivo", system-ui, sans-serif;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--desk);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+
+::selection {
+  background: var(--tape-special);
+  color: var(--ink);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+input {
+  font: inherit;
+  color: inherit;
+}
+
+/* Thin scrollbars that belong to the sheet, not the browser. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
+/* ── Type voices ─────────────────────────────────────────────────────── */
+
+.t-marker {
+  font-weight: 860;
+  font-stretch: 112%;
+  letter-spacing: -0.015em;
+  line-height: 1.02;
+}
+
+.t-label {
+  font-weight: 760;
+  font-stretch: 78%;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 13px;
+}
+
+.t-meta {
+  font-size: 14px;
+  color: var(--ink-3);
+  font-weight: 560;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ── Marks ───────────────────────────────────────────────────────────── */
+
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.mark path {
+  stroke: var(--marker);
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: draw 260ms var(--ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark path {
+    animation: none;
+  }
+}
+
+/* A sheet: white, hairline edge, a lift that reads as paper on a desk. */
+.sheet {
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 6px 16px -10px rgba(0, 0, 0, 0.18);
+}
+
+/* A ruled list: hairlines between rows, the grid under the marker. */
+.ruled > * + * {
+  border-top: 1px solid var(--rule);
+}
+
+.pressable {
+  transition: background 140ms var(--ease), transform 140ms var(--ease);
+}
+
+.pressable:active {
+  transform: scale(0.985);
+  background: var(--sheet-2);
+}
+
+@media (hover: hover) {
+  .pressable:hover {
+    background: var(--sheet-2);
+  }
+}
