@@ -80,7 +80,7 @@ const FitCtx = createContext<Fit>("sidebar");
 /** Set by a host with a Compose area beside the setlist (the iPad, the
  *  phone's Compose page): a section's patch is then picked there — a tap
  *  on its chip selects it — instead of in a sheet over the setlist. */
-export const ComposeCtx = createContext<{ onPicked?: () => void } | null>(null);
+export const ComposeCtx = createContext<{ onPicked?: () => void; pickRows?: boolean } | null>(null);
 
 /** Pick what a part plays: select it for Compose when there is one, else
  *  open the patch sheet. */
@@ -349,6 +349,18 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
   );
 }
 
+/** Whether a song (or one of its sections) carries changes of its own —
+ *  modules swapped in, or Edit's changes not yet saved to the preset. */
+function hasOverride(s: ReturnType<typeof useStore>, song: string, section?: number): boolean {
+  const prefix = section === undefined ? `${song}|` : `${song}|${section}|`;
+  return Object.keys(s.overrides).some((k) => k.startsWith(prefix));
+}
+
+/** The amber mark of "its own changes", beside a name. */
+function OverrideDot() {
+  return <span title="Has its own changes over the preset" aria-label="has its own changes" style={{ display: "inline-block", width: 7, height: 7, marginLeft: 7, borderRadius: 999, background: "var(--modified)", verticalAlign: "middle" }} />;
+}
+
 /** The song row's height: the section playing sticks just under it. */
 const SONG_ROW_H = 64;
 
@@ -537,6 +549,7 @@ function SongRow({
             >
               {song.name}
               {played && <Strike width={1.6} />}
+              {hasOverride(s, song.name) && <OverrideDot />}
             </span>
             {!narrow && up && <Badge tone="live">Now</Badge>}
             {!narrow && next && <Badge>Next</Badge>}
@@ -681,6 +694,7 @@ function soundOf(sec: { parts: { sound: Sound | null }[] }): Sound | null {
 function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { song: string; songIndex: number; index: number; count: number; onPanel: (p: Panel) => void; onGrip: (e: React.PointerEvent) => void }) {
   const s = useStore();
   const pick = usePick(onPanel);
+  const compose = useContext(ComposeCtx);
   const sec = sectionsOf(s, song)[j];
   const menu = useMenu();
   const up = songIndex === s.songIndex;
@@ -766,7 +780,8 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
         </span>
         <button
           className="pressable"
-          onClick={go}
+          // Building (pickRows): a tap picks the section to build into; else it plays there.
+          onClick={() => (compose?.pickRows && !several ? pick(song, j) : go())}
           style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: narrow ? 8 : 12, minHeight: 50, padding: "4px 4px 4px 6px", textAlign: "left" }}
         >
           <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
@@ -782,6 +797,7 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
               }}
             >
               {sec.name}
+              {hasOverride(s, song, j) && <OverrideDot />}
             </span>
             {narrow && <span style={{ alignSelf: "flex-start", maxWidth: "100%", display: "flex" }}>{chip}</span>}
           </span>
@@ -847,6 +863,7 @@ function Parts({ song, index: j, onPanel }: { song: string; index: number; onPan
 function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: string; section: number; index: number; count: number; left: number; onPanel: (p: Panel) => void }) {
   const s = useStore();
   const pick = usePick(onPanel);
+  const compose = useContext(ComposeCtx);
   const part = sectionsOf(s, song)[j].parts[k];
   const menu = useMenu();
   const narrow = useFit() === "narrow";
@@ -873,7 +890,7 @@ function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: s
   const chip = part.sound ? <PatchChip name={part.sound.name} borrowed={part.sound.profile} lit={state === "now"} small /> : <span className="t-meta" style={{ fontSize: 12, padding: "0 4px" }}>keeps</span>;
   return (
     <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 44, background: state === "now" ? tint(songColour(song, s.songColours), 18) : undefined }}>
-      <button className="pressable" onClick={() => goToSub(j, k)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: `2px 4px 2px ${left}px`, textAlign: "left" }}>
+      <button className="pressable" onClick={() => (compose?.pickRows ? pick(song, j, k) : goToSub(j, k))} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: `2px 4px 2px ${left}px`, textAlign: "left" }}>
         <span
           style={{
             position: "relative",

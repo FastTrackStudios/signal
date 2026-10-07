@@ -23,6 +23,7 @@ import {
   currentSet,
   editParam,
   overrideOf,
+  playPreset,
   playing,
   profileOf,
   profileStacksOf,
@@ -91,8 +92,10 @@ interface Item {
   mark?: ReactNode;
   /** Its state for the target. */
   state?: "playing" | "swapped" | "picked" | "in";
-  /** A heading it sits under (the stack, for patches). */
+  /** A heading it sits under (the stack, for patches; the preset, for variations). */
   group?: string;
+  /** The heading's colour, when not its stack's. */
+  groupColour?: string;
 }
 
 const MODULE_COLOUR: Record<string, string> = { Core: "#D6B36A", Amp: "#f97316", Drive: "#ef4444", Time: "#8B5CF6", Delay: "#3B82F6", Reverb: "#8B5CF6" };
@@ -190,17 +193,26 @@ const KINDS: Kind[] = [
     label: "Presets",
     group: "Sounds",
     colour: "#a1a1aa",
+    // Every preset with all its variations, each under its preset.
     items: (s, bt) => {
       const now = bt?.kind === "part" ? partOf(s, bt.t).part?.sound : undefined;
-      return modulesOf("Preset").map((m) => ({
-        id: m.name,
-        name: m.name,
-        from: m.snapshots.length > 1 ? plural(m.snapshots.length, "variation") : undefined,
-        colour: "#a1a1aa",
-        state: now?.kind === "preset" && now.name === m.name ? ("playing" as const) : undefined,
-      }));
+      return s.presets
+        .filter((p) => !p.cancelled)
+        .flatMap((p) => {
+          const colour = tapeFor(stackOf(p.name)) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(stackOf(p.name));
+          return p.variations.map((v) => {
+            const name = `${p.name} · ${v}`;
+            const playing = (now?.kind === "preset" && now.name === name) || (s.presetUp?.preset === p.name && s.presetUp.variation === v && s.performMode === "preset");
+            return { id: name, name: v, group: p.name, groupColour: colour, from: p.variations.length > 1 ? `variation of ${p.name}` : p.name, colour, state: playing ? ("playing" as const) : undefined };
+          });
+        });
     },
-    apply: (_, bt) => (bt?.kind === "part" ? (item) => setSectionSound(bt.t.song, bt.t.section, { kind: "preset", name: item.name }, bt.t.part) : null),
+    apply: (s, bt) => {
+      // A section plays a preset's variation; in Preset mode a tap plays it.
+      if (bt?.kind === "part") return (item) => setSectionSound(bt.t.song, bt.t.section, { kind: "preset", name: item.id }, bt.t.part);
+      if (s.performMode === "preset") return (item) => playPreset(item.group!, item.name);
+      return null;
+    },
   },
   ...(["Core", "Amp", "Drive", "Time", "Delay", "Reverb"] as const).map(
     (kind): Kind => ({
@@ -320,7 +332,7 @@ export function Browser({ onClose }: { onClose?: () => void }) {
   const q = query.trim().toLowerCase();
   // Searching looks through every kind at once.
   const results = useMemo(
-    () => (q ? KINDS.flatMap((k) => k.items(s, bt).filter((i) => i.id && i.name.toLowerCase().includes(q)).map((i) => ({ ...i, kind: k }))) : []),
+    () => (q ? KINDS.flatMap((k) => k.items(s, bt).filter((i) => i.id && (i.name.toLowerCase().includes(q) || i.group?.toLowerCase().includes(q))).map((i) => ({ ...i, kind: k }))) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [q, s, targetKey],
   );
@@ -362,6 +374,9 @@ export function Browser({ onClose }: { onClose?: () => void }) {
               <span style={{ fontSize: 15, fontWeight: 700 }}>{!wide && opened ? kind.label : "Browser"}</span>
             )}
           </span>
+          {/* Step the target through the song's sections and parts — set a
+              whole song without going back to the setlist. */}
+          {t && sec && <StepTarget t={t} />}
           {t && (
             <button className="pressable" onClick={() => select(null)} title="Stop choosing for this part" style={{ height: 44, padding: "0 10px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 650, color: "var(--ink-3)" }}>
               Unpick
@@ -444,7 +459,9 @@ export function Browser({ onClose }: { onClose?: () => void }) {
               results.length ? (
                 results.map((i) => {
                   const apply = i.kind.apply(s, bt);
-                  return <Row key={`${i.kind.id}/${i.id}`} item={i} sub={`${i.kind.label}${i.from ? ` · ${i.from}` : ""}`} onPick={apply ? () => apply(i) : undefined} />;
+                  // A variation found by search says whose it is.
+                  const shown = i.kind.id === "presets" ? { ...i, name: i.id } : i;
+                  return <Row key={`${i.kind.id}/${i.id}`} item={shown} sub={`${i.kind.label}${i.from ? ` · ${i.from}` : ""}`} onPick={apply ? () => apply(i) : undefined} />;
                 })
               ) : (
                 <Quiet>Nothing called “{query}”.</Quiet>
@@ -490,7 +507,7 @@ function KindList({ kind, items, apply, hint }: { kind: Kind; items: Item[]; app
           <div key={i.id || "none"}>
             {head && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px 6px" }}>
-                <span style={{ width: 9, height: 9, borderRadius: 2, background: tapeFor(head) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(head) }} />
+                <span style={{ width: 9, height: 9, borderRadius: 2, background: i.groupColour ?? (tapeFor(head) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(head)) }} />
                 <span className="t-label" style={{ fontSize: 11, color: "var(--ink-2)" }}>
                   {head}
                 </span>
@@ -546,4 +563,37 @@ function Row({ item, sub, onPick }: { item: Item; sub?: string; onPick?: () => v
 
 function Quiet({ children, small }: { children: ReactNode; small?: boolean }) {
   return <div style={{ padding: small ? "12px 16px 4px" : "32px 16px", fontSize: 13.5, color: "var(--ink-3)", lineHeight: 1.4, textAlign: small ? "left" : "center" }}>{children}</div>;
+}
+
+/** ‹ › through a song's parts, section by section. */
+function StepTarget({ t }: { t: Target }) {
+  const s = useStore();
+  const steps = sectionsOf(s, t.song).flatMap((sec, i) => sec.parts.map((_, k) => ({ section: i, part: k })));
+  const at = steps.findIndex((x) => x.section === t.section && x.part === t.part);
+  const go = (d: number) => {
+    const x = steps[at + d];
+    if (x) select({ song: t.song, section: x.section, part: x.part });
+  };
+  const btn = (d: number, label: string) => (
+    <button
+      className={steps[at + d] ? "pressable" : ""}
+      disabled={!steps[at + d]}
+      onClick={() => go(d)}
+      aria-label={label}
+      style={{ width: 40, height: 44, borderRadius: "var(--r)", display: "flex", alignItems: "center", justifyContent: "center", color: steps[at + d] ? "var(--ink-2)" : "var(--dim)" }}
+    >
+      <svg width="9" height="15" viewBox="0 0 9 15" aria-hidden style={{ transform: d > 0 ? "scaleX(-1)" : undefined }}>
+        <path d="M7.5 1.5 1.5 7.5l6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+  return (
+    <span style={{ display: "flex", alignItems: "center" }}>
+      {btn(-1, "Previous section")}
+      <span className="num" style={{ fontSize: 12, color: "var(--ink-3)", minWidth: 34, textAlign: "center" }}>
+        {at + 1}/{steps.length}
+      </span>
+      {btn(1, "Next section")}
+    </span>
+  );
 }

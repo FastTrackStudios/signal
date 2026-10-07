@@ -276,7 +276,7 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
               the sidebar a tap away, to pick a section). */}
           {sidebar && (
             <aside style={{ width: SIDEBAR, flexShrink: 0, borderRight: "1px solid var(--rule)", minHeight: 0, display: "flex", flexDirection: "column" }}>
-              <ComposeCtx.Provider value={{ onPicked: () => view === "perform" && setBrowser(true) }}>
+              <ComposeCtx.Provider value={{ onPicked: () => view === "perform" && setBrowser(true), pickRows: view === "build" }}>
                 {view === "edit" ? (
                   <>
                     <LeftSwitch value={left} onChange={setLeft} />
