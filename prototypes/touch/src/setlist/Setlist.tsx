@@ -14,6 +14,7 @@ import { rig, stackOf, type ProfileEntry } from "../data/rig";
 import {
   partPatch,
   addPart,
+  select,
   addSection,
   backToPart,
   profileOf,
@@ -66,6 +67,28 @@ const KEYS = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
  *  each row down to what fits; the sidebar and a tablet show it all. */
 type Fit = "narrow" | "sidebar" | "wide";
 const FitCtx = createContext<Fit>("sidebar");
+
+/** Set by a host with a Compose area beside the setlist (the iPad, the
+ *  phone's Compose page): a section's patch is then picked there — a tap
+ *  on its chip selects it — instead of in a sheet over the setlist. */
+export const ComposeCtx = createContext<{ onPicked?: () => void } | null>(null);
+
+/** Pick what a part plays: select it for Compose when there is one, else
+ *  open the patch sheet. */
+function usePick(onPanel: (p: Panel) => void) {
+  const compose = useContext(ComposeCtx);
+  return (song: string, section: number, part?: number) => {
+    if (!compose) return onPanel({ kind: "patch", song, section, part });
+    select({ song, section, part: part ?? 0 });
+    // The device the pick was made on opens its browser — not every remote.
+    compose.onPicked?.();
+  };
+}
+
+/** Whether this part is what Compose / Edit are working on. */
+function isPicked(sel: { song: string; section: number; part: number } | null, song: string, section: number, part = 0) {
+  return !!sel && sel.song === song && sel.section === section && sel.part === part;
+}
 const useFit = () => useContext(FitCtx);
 
 type Panel =
@@ -579,6 +602,7 @@ function soundOf(sec: { parts: { sound: Sound | null }[] }): Sound | null {
 
 function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { song: string; songIndex: number; index: number; count: number; onPanel: (p: Panel) => void; onGrip: (e: React.PointerEvent) => void }) {
   const s = useStore();
+  const pick = usePick(onPanel);
   const sec = sectionsOf(s, song)[j];
   const menu = useMenu();
   const up = songIndex === s.songIndex;
@@ -607,7 +631,7 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
   };
   const onPick = (p: Picked) => {
     if (p.id === "go" || p.id === "parts") go();
-    if (p.id === "patch") onPanel({ kind: "patch", song, section: j });
+    if (p.id === "patch") pick(song, j);
     if (p.id === "part") {
       addPart(song, j, p.text);
       go();
@@ -673,9 +697,10 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
         {!narrow && (
           <button
             className="pressable"
-            onClick={() => (several ? go() : onPanel({ kind: "patch", song, section: j }))}
+            onClick={() => (several ? go() : pick(song, j))}
             title={several ? "Show its parts" : "Change the patch"}
-            style={{ width: 178, flexShrink: 0, minHeight: 44, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", justifyContent: "flex-start", borderRadius: "var(--r)" }}
+            aria-pressed={!several && isPicked(s.selection, song, j)}
+            style={{ width: 178, flexShrink: 0, minHeight: 44, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", justifyContent: "flex-start", borderRadius: "var(--r)", boxShadow: !several && isPicked(s.selection, song, j) ? "inset 0 0 0 1.5px var(--focus-fg)" : undefined }}
           >
             {chip}
           </button>
@@ -729,6 +754,7 @@ function Parts({ song, index: j, onPanel }: { song: string; index: number; onPan
 
 function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: string; section: number; index: number; count: number; left: number; onPanel: (p: Panel) => void }) {
   const s = useStore();
+  const pick = usePick(onPanel);
   const part = sectionsOf(s, song)[j].parts[k];
   const menu = useMenu();
   const narrow = useFit() === "narrow";
@@ -746,7 +772,7 @@ function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: s
   ];
   const onPick = (p: Picked) => {
     if (p.id === "go") goToSub(j, k);
-    if (p.id === "patch") onPanel({ kind: "patch", song, section: j, part: k });
+    if (p.id === "patch") pick(song, j, k);
     if (p.id === "rename") renamePart(song, j, k, p.text);
     if (p.id === "earlier") movePart(song, j, k, k - 1);
     if (p.id === "later") movePart(song, j, k, k + 1);
@@ -778,9 +804,10 @@ function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: s
       {!narrow && (
         <button
           className="pressable"
-          onClick={() => onPanel({ kind: "patch", song, section: j, part: k })}
+          onClick={() => pick(song, j, k)}
           title="Change the patch"
-          style={{ width: 178, flexShrink: 0, minHeight: 40, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", borderRadius: "var(--r)" }}
+          aria-pressed={isPicked(s.selection, song, j, k)}
+          style={{ width: 178, flexShrink: 0, minHeight: 40, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", borderRadius: "var(--r)", boxShadow: isPicked(s.selection, song, j, k) ? "inset 0 0 0 1.5px var(--focus-fg)" : undefined }}
         >
           {chip}
         </button>
@@ -1220,9 +1247,9 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
   );
 }
 
-type Pick = { name: string; profile?: string } | null;
+export type Pick = { name: string; profile?: string } | null;
 
-function PatchList({ song, current, defaultLabel, onPick }: { song?: string; current: string | null; defaultLabel: string; onPick: (p: Pick) => void }) {
+export function PatchList({ song, current, defaultLabel, onPick }: { song?: string; current: string | null; defaultLabel: string; onPick: (p: Pick) => void }) {
   // Every stack of the song's profile, the song's own patches first in
   // each: what its sections were dialled in with, then what passes through,
   // then what its parts borrow. Other profiles' patches wait below.

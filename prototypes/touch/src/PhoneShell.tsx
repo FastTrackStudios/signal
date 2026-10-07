@@ -17,33 +17,67 @@
 // Both read the same store as the iPad — linked remotes.
 
 import { useRef, useState, type ReactNode } from "react";
-import { Setlist } from "./setlist/Setlist";
+import { ComposeCtx, Setlist } from "./setlist/Setlist";
+import { Browser } from "./views/Browser";
+import { EditView } from "./views/Edit";
 import { MacroBar } from "./dock/MacroBar";
-import { AudioControls, Switches } from "./dock/Switches";
+import { Switches } from "./dock/Switches";
 import { redo, setPerformMode, undo, useStore, useUndo } from "./store";
 import { MuteButton, PanicButton } from "./ui/Safety";
 import { Indicator, SettingsSheet } from "./ui/Settings";
 import { ModeButton } from "./ui/ModeButton";
 import { SetlistStrip } from "./setlist/SetlistStrip";
-import { Cpu, FootButton, Meters, MODES, Placeholder, Rule, type Dock, type View } from "./App";
+import { Cpu, FootButton, Meters, MODES, Rule, type Dock, type View } from "./App";
 import { useSafe } from "./Phone";
 import { useStage } from "./ui/stage";
 
 const MENU_W = 300;
 
 /** What fills an upright phone: one page at a time, chosen from the foot. */
-export type Page = "setlist" | "switches" | "macros" | "control" | "audio";
+export type Page = "setlist" | "browser" | "switches" | "macros" | "edit";
+
+const ICON = {
+  setlist: (
+    <>
+      <rect x="2.5" y="3.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M5.5 7h7M5.5 9.5h7M5.5 12h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </>
+  ),
+  perform: <path d="M5 3.5v11l9-5.5Z" fill="currentColor" />,
+  browser: <path d="M3 3.5h3v11H3ZM7.5 3.5h3v11h-3ZM12 4l2.8-.8 2 10.6-2.8.8Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
+  switches: (
+    <>
+      <rect x="2" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="7" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="12" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </>
+  ),
+  macros: (
+    <>
+      <circle cx="4.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="13.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M4.5 9 6 7.4M13.5 9l1.5-1.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </>
+  ),
+  edit: (
+    <>
+      <path d="M4 2.5v13M9 2.5v13M14 2.5v13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <rect x="2.3" y="10" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
+      <rect x="7.3" y="5" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
+      <rect x="12.3" y="8" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
+    </>
+  ),
+};
 
 export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { page?: Page; menuOpen?: boolean } = {}) {
-  const s = useStore();
   const safe = useSafe();
   const { landscape } = safe;
   const stage = useStage();
-  const [chosen, setView] = useState<View>("play");
-  const view: View = s.performMode !== "preset" && (chosen === "routing" || chosen === "tones") ? "play" : chosen;
+  const [view, setView] = useState<View>("perform");
   const [dock, setDock] = useState<Dock>(landscape ? "switches" : null);
   const [macros, setMacros] = useState(landscape);
-  const [setlist, setSetlist] = useState(false);
+  // Landscape drawers over the stage: the setlist, the browser.
+  const [drawer, setDrawer] = useState<"setlist" | "browser" | null>(null);
   // The side menu: open, or following a finger in from the left edge.
   const [menu, setMenu] = useState(menuOpen);
   const [page, setPage] = useState<Page>(firstPage);
@@ -51,6 +85,11 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
   const edge = useRef<{ x: number } | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const localX = (clientX: number) => (clientX - (root.current?.getBoundingClientRect().left ?? 0)) / stage.scale;
+  const drawerTab = (id: "setlist" | "browser", label: string) => (
+    <Tab landscape label={label} on={drawer === id} onClick={() => setDrawer(drawer === id ? null : id)}>
+      {ICON[id]}
+    </Tab>
+  );
   return (
     <div
       ref={root}
@@ -73,114 +112,99 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
         setPull(null);
       }}
     >
-      {landscape ? (
-        // Landscape: the bar is a rail down the left (as Signal's and
-        // Session's), carrying the status too, so the stage keeps its height.
-        <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
-          <Rail onMenu={() => setMenu(true)}>
-        {landscape && (
-          <Tab landscape label="Setlist" on={setlist} onClick={() => setSetlist(!setlist)}>
-            <rect x="2.5" y="3.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-            <path d="M7 4v10" stroke="currentColor" strokeWidth="1.4" />
-          </Tab>
-        )}
-        <Tab landscape={landscape} label="Play" on={view === "play"} onClick={() => setView("play")}>
-          <path d="M5 3.5v11l9-5.5Z" fill="currentColor" />
-        </Tab>
-        <Tab landscape={landscape} label="Control" on={view === "control"} onClick={() => setView("control")}>
-          <path d="M4 2.5v13M9 2.5v13M14 2.5v13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          <rect x="2.3" y="10" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
-          <rect x="7.3" y="5" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
-          <rect x="12.3" y="8" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
-        </Tab>
-        <Rule />
-        <Tab landscape={landscape} label="Macros" on={macros} pin onClick={() => setMacros(!macros)}>
-          <circle cx="4.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <circle cx="13.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <path d="M4.5 9 6 7.4M13.5 9l1.5-1.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-        </Tab>
-        <Tab landscape={landscape} label="Switches" on={dock === "switches"} pin onClick={() => setDock(dock === "switches" ? null : "switches")}>
-          <rect x="2" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <rect x="7" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <rect x="12" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
-        </Tab>
-        <Tab landscape={landscape} label="Audio" on={dock === "audio"} pin onClick={() => setDock(dock === "audio" ? null : "audio")}>
-          <circle cx="5" cy="9" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <circle cx="13" cy="9" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-        </Tab>
-          </Rail>
-      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative", paddingRight: safe.right }}>
-        {/* The stage: the macros sitting on the switches at the foot, at the
-            iPad's sizes, and all the room above them for where you are in
-            the set — the song, its sections, the part. No view of its own. */}
-        <SetlistStrip fill />
-        {macros && (
-          <div style={{ flexShrink: 0, position: "relative", zIndex: 4, borderTop: "1px solid #000" }}>
-            <MacroBar cols={8} up />
-          </div>
-        )}
-        {/* Flush: the switches bring their own hairline. */}
-        {dock && <div style={{ flexShrink: 0 }}>{dock === "switches" ? <Switches /> : <AudioControls />}</div>}
-        {/* Landscape: the setlist slides in over the stage. */}
-        {landscape && setlist && (
-          <>
-            <button aria-label="Close the setlist" onClick={() => setSetlist(false)} style={{ position: "absolute", inset: 0, zIndex: 9, background: "rgba(0,0,0,0.5)" }} />
-            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 402, zIndex: 10, display: "flex", flexDirection: "column", borderRight: "1px solid var(--rule-strong)", boxShadow: "16px 0 40px rgba(0,0,0,0.5)", animation: "drawer-in 200ms var(--ease) both" }}>
-              <Setlist />
+      {/* Picking a part on this phone takes it to the browser for it. */}
+      <ComposeCtx.Provider value={{ onPicked: () => (landscape ? setDrawer("browser") : setPage("browser")) }}>
+        {landscape ? (
+          // Landscape: the bar is a rail down the left (as Signal's and
+          // Session's), carrying the status too, so the stage keeps its height.
+          <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+            <Rail onMenu={() => setMenu(true)}>
+              <Tab landscape label="Perform" on={view === "perform"} onClick={() => setView("perform")}>
+                {ICON.perform}
+              </Tab>
+              <Tab landscape label="Edit" on={view === "edit"} onClick={() => setView("edit")}>
+                {ICON.edit}
+              </Tab>
+              <Rule />
+              {drawerTab("setlist", "Setlist")}
+              {drawerTab("browser", "Browser")}
+              {view === "perform" && (
+                <>
+                  <Tab landscape label="Macros" on={macros} pin onClick={() => setMacros(!macros)}>
+                    {ICON.macros}
+                  </Tab>
+                  <Tab landscape label="Switches" on={dock === "switches"} pin onClick={() => setDock(dock === "switches" ? null : "switches")}>
+                    {ICON.switches}
+                  </Tab>
+                </>
+              )}
+            </Rail>
+            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative", paddingRight: safe.right }}>
+              {view === "perform" ? (
+                <>
+                  {/* The stage: the macros sitting on the switches at the foot,
+                      at the iPad's sizes, and all the room above them for where
+                      you are in the set. */}
+                  <SetlistStrip fill />
+                  {macros && (
+                    <div style={{ flexShrink: 0, position: "relative", zIndex: 4, borderTop: "1px solid #000" }}>
+                      <MacroBar cols={8} up />
+                    </div>
+                  )}
+                  {/* Flush: the switches bring their own hairline. */}
+                  {dock && <div style={{ flexShrink: 0 }}>{dock === "switches" && <Switches />}</div>}
+                </>
+              ) : (
+                // Edit on its side: the FX row fills the screen — it was made
+                // this size; routing waits for the iPad.
+                <EditView routing={false} fill />
+              )}
+              {/* The setlist or the browser slides in over the stage. */}
+              {drawer && (
+                <>
+                  <button aria-label="Close" onClick={() => setDrawer(null)} style={{ position: "absolute", inset: 0, zIndex: 9, background: "rgba(0,0,0,0.5)" }} />
+                  <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: drawer === "browser" ? 520 : 402, zIndex: 10, display: "flex", flexDirection: "column", borderRight: "1px solid var(--rule-strong)", boxShadow: "16px 0 40px rgba(0,0,0,0.5)", animation: "drawer-in 200ms var(--ease) both" }}>
+                    {drawer === "setlist" ? <Setlist /> : <Browser onClose={() => setDrawer(null)} />}
+                  </div>
+                </>
+              )}
             </div>
+          </div>
+        ) : (
+          <>
+            <TopBar onMenu={() => setMenu(true)} />
+            {/* Upright, a page at a time: the setlist, the browser, the
+                switches (the board turned a quarter), the macros two to a
+                row, Edit. */}
+            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }}>
+              {page === "setlist" && <Setlist />}
+              {page === "browser" && <Browser />}
+              {page === "switches" && <Switches vertical />}
+              {page === "macros" && (
+                <div style={{ flex: 1, minHeight: 0, overflowY: "auto", background: "#000" }}>
+                  <MacroBar cols={2} cellH={64} />
+                </div>
+              )}
+              {page === "edit" && <EditView routing={false} fill />}
+            </div>
+            <footer style={{ flexShrink: 0, display: "flex", alignItems: "stretch", height: 54 + safe.bottom, padding: `0 2px ${safe.bottom}px`, borderTop: "1px solid var(--rule)", background: "var(--sheet)" }}>
+              {(
+                [
+                  ["setlist", "Setlist"],
+                  ["browser", "Browser"],
+                  ["switches", "Switches"],
+                  ["macros", "Macros"],
+                  ["edit", "Edit"],
+                ] as const
+              ).map(([id, label]) => (
+                <Tab key={id} label={label} on={page === id} onClick={() => setPage(id)}>
+                  {ICON[id]}
+                </Tab>
+              ))}
+            </footer>
           </>
         )}
-      </div>
-
-        </div>
-      ) : (
-        <>
-          <TopBar onMenu={() => setMenu(true)} />
-          {/* Upright, a page at a time: the setlist, the switches (the board
-              turned a quarter), the macros two to a row, Control, Audio. */}
-          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }}>
-            {page === "setlist" && <Setlist />}
-            {page === "switches" && <Switches vertical />}
-            {page === "macros" && (
-              <div style={{ flex: 1, minHeight: 0, overflowY: "auto", background: "#000" }}>
-                <MacroBar cols={2} cellH={64} />
-              </div>
-            )}
-            {page === "control" && <Placeholder title="Control" note="Main area" />}
-            {page === "audio" && (
-              <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                <AudioControls />
-              </div>
-            )}
-          </div>
-          <footer style={{ flexShrink: 0, display: "flex", alignItems: "stretch", height: 54 + safe.bottom, padding: `0 2px ${safe.bottom}px`, borderTop: "1px solid var(--rule)", background: "var(--sheet)" }}>
-            <Tab label="Setlist" on={page === "setlist"} onClick={() => setPage("setlist")}>
-              <rect x="2.5" y="3.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-              <path d="M5.5 7h7M5.5 9.5h7M5.5 12h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-            </Tab>
-            <Tab label="Switches" on={page === "switches"} onClick={() => setPage("switches")}>
-              <rect x="2" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
-              <rect x="7" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
-              <rect x="12" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
-            </Tab>
-            <Tab label="Macros" on={page === "macros"} onClick={() => setPage("macros")}>
-              <circle cx="4.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-              <circle cx="13.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-              <path d="M4.5 9 6 7.4M13.5 9l1.5-1.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </Tab>
-            <Tab label="Control" on={page === "control"} onClick={() => setPage("control")}>
-              <path d="M4 2.5v13M9 2.5v13M14 2.5v13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-              <rect x="2.3" y="10" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
-              <rect x="7.3" y="5" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
-              <rect x="12.3" y="8" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
-            </Tab>
-            <Tab label="Audio" on={page === "audio"} onClick={() => setPage("audio")}>
-              <circle cx="5" cy="9" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-              <circle cx="13" cy="9" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-            </Tab>
-          </footer>
-        </>
-      )}
+      </ComposeCtx.Provider>
 
       {(menu || pull !== null) && <SideMenu offset={menu ? 0 : MENU_W - (pull ?? 0)} view={view} onView={setView} onClose={() => setMenu(false)} />}
       <style>{`@keyframes drawer-in { from { transform: translateX(-24px); opacity: 0 } to { transform: none; opacity: 1 } }`}</style>
@@ -314,13 +338,12 @@ function SideMenu({ offset, view, onView, onClose }: { offset: number; view: Vie
           );
         })}
         <div style={{ height: 1, background: "var(--rule)", margin: "8px 0" }} />
-        {/* Every view, so the phone reaches all the iPad does; Routing and
-            Tones edit a preset, so they wait for Preset mode. */}
+        {/* Every view, so the phone reaches all the iPad does. */}
         <div className="t-label" style={{ padding: "8px 16px 6px", color: "var(--ink-3)" }}>
           View
         </div>
-        {(["play", "control", "routing", "tones"] as View[]).map((v) => {
-          const off = s.performMode !== "preset" && (v === "routing" || v === "tones");
+        {(["perform", "edit"] as View[]).map((v) => {
+          const off = false;
           const on = view === v;
           return (
             <button

@@ -88,6 +88,13 @@ export interface State {
   phonesMute: boolean;
   /** When Panic last reset the audio and MIDI (ms), while it runs. */
   panicAt: number | null;
+  /** What Compose and Edit work on: a section's part, picked in the
+   *  sidebar. Nothing until something is picked. */
+  selection: Target | null;
+  /** Per section/part: module presets swapped in for it (Compose), and
+   *  edits made to its sound in Edit — both its own, over the preset,
+   *  until saved to the preset. Keyed by `targetKey`. */
+  overrides: Record<string, Override>;
 }
 
 let seedAt = { section: 0, part: 0 };
@@ -152,6 +159,8 @@ function seed(): State {
     houseMute: false,
     phonesMute: false,
     panicAt: null,
+    selection: null,
+    overrides: {},
   };
 }
 
@@ -681,4 +690,67 @@ export function panic() {
   const at = Date.now();
   move((s) => ({ ...s, panicAt: at, live: null }));
   window.setTimeout(() => move((s) => (s.panicAt === at ? { ...s, panicAt: null } : s)), 1200);
+}
+
+// ── Compose and Edit: what a section plays, and its own changes ──────
+
+/** A part of a section of a song: what Compose and Edit work on. */
+export interface Target {
+  song: string;
+  section: number;
+  part: number;
+}
+
+export interface Override {
+  /** Module → the module preset swapped in for this part. */
+  modules: Record<string, string>;
+  /** Edits made in Edit (param → value), over the patch, not yet saved. */
+  edits: Record<string, number>;
+}
+
+export const targetKey = (t: Target) => `${t.song}|${t.section}|${t.part}`;
+
+export function select(t: Target | null) {
+  move((s) => ({ ...s, selection: t }));
+}
+
+export function overrideOf(s: State, t: Target | null): Override {
+  return (t && s.overrides[targetKey(t)]) || { modules: {}, edits: {} };
+}
+
+function withOverride(s: State, t: Target, f: (o: Override) => Override): State {
+  const k = targetKey(t);
+  const next = f(s.overrides[k] ?? { modules: {}, edits: {} });
+  const overrides = { ...s.overrides };
+  if (Object.keys(next.modules).length || Object.keys(next.edits).length) overrides[k] = next;
+  else delete overrides[k];
+  return { ...s, overrides };
+}
+
+/** Swap a module preset in for this part (null: back to the patch's). */
+export function setModuleOverride(t: Target, module: string, preset: string | null) {
+  change(`${t.song} · ${module} → ${preset ?? "the patch's"}`, (s) =>
+    withOverride(s, t, (o) => {
+      const modules = { ...o.modules };
+      if (preset) modules[module] = preset;
+      else delete modules[module];
+      return { ...o, modules };
+    }),
+  );
+}
+
+/** An edit to this part's sound, in Edit: kept as its override. */
+export function editParam(t: Target, param: string, value: number) {
+  move((s) => withOverride(s, t, (o) => ({ ...o, edits: { ...o.edits, [param]: value } })));
+}
+
+/** Write this part's edits back into the preset itself — everywhere it
+ *  plays — and clear them from the part. */
+export function saveEditsToPreset(t: Target, preset: string) {
+  change(`${preset} ← ${t.song}'s edits`, (s) => withOverride(s, t, (o) => ({ ...o, edits: {} })));
+}
+
+/** Drop this part's edits: back to the preset. */
+export function discardEdits(t: Target) {
+  change(`${t.song} · edits dropped`, (s) => withOverride(s, t, (o) => ({ ...o, edits: {} })));
 }

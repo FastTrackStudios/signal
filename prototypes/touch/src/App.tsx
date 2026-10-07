@@ -19,8 +19,10 @@ import { StageCtx } from "./ui/stage";
 import { MuteButton, PanicButton } from "./ui/Safety";
 import { Indicator } from "./ui/Settings";
 import { ModeButton } from "./ui/ModeButton";
-import { Setlist } from "./setlist/Setlist";
-import { AudioControls, Switches } from "./dock/Switches";
+import { ComposeCtx, Setlist } from "./setlist/Setlist";
+import { Switches } from "./dock/Switches";
+import { Browser } from "./views/Browser";
+import { EditView } from "./views/Edit";
 import { MacroBar } from "./dock/MacroBar";
 import { Phone } from "./Phone";
 import { PhoneShell } from "./PhoneShell";
@@ -30,8 +32,9 @@ const SIDEBAR = 402;
 const TOP = 48;
 const FOOT = 56;
 
-export type View = "play" | "control" | "routing" | "tones";
-export type Dock = "switches" | "audio" | null;
+/** What the screen is for: playing (Perform) or taking a sound apart (Edit). */
+export type View = "perform" | "edit";
+export type Dock = "switches" | null;
 
 // ── The stage: the iPad at its real size ─────────────────────────────
 //
@@ -241,13 +244,11 @@ function Body({ model, bezel, show, children }: { model: Model; bezel: { x: numb
 }
 
 function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: number; corner: number }) {
-  const s = useStore();
-  const [chosen, setView] = useState<View>("play");
-  // Routing and Tones edit a preset: outside Preset mode, Play shows instead.
-  const view: View = s.performMode !== "preset" && (chosen === "routing" || chosen === "tones") ? "play" : chosen;
+  const [view, setView] = useState<View>("perform");
   const [dock, setDock] = useState<Dock>("switches");
   const [macros, setMacros] = useState(true);
   const [sidebar, setSidebar] = useState(true);
+  const [browser, setBrowser] = useState(false);
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   return (
     <StageCtx.Provider value={{ el, scale }}>
@@ -266,12 +267,55 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
       >
         <TopBar sidebar={sidebar} onSidebar={() => setSidebar(!sidebar)} />
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
-          {sidebar && <Sidebar />}
-          <Main view={view} dock={dock} macros={macros} />
+          {/* The left area: the setlist — or, in Edit, where the main area
+              is busy, the browser in its place. */}
+          {sidebar && (
+            <aside style={{ width: SIDEBAR, flexShrink: 0, borderRight: "1px solid var(--rule)", minHeight: 0 }}>
+              {/* Picking a part here opens the browser for it. */}
+              <ComposeCtx.Provider value={{ onPicked: () => setBrowser(true) }}>
+                {view === "edit" && browser ? <Browser onClose={() => setBrowser(false)} /> : <Sidebar />}
+              </ComposeCtx.Provider>
+            </aside>
+          )}
+          <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--desk)" }}>
+            {view === "perform" ? (
+              <>
+                {/* The macros along the top: what you turn while playing; their panels drop down. */}
+                {macros && (
+                  <div style={{ flexShrink: 0, position: "relative", zIndex: 4, borderBottom: "1px solid #000" }}>
+                    <MacroBar />
+                  </div>
+                )}
+                {/* The middle: the browser when it's open, else nothing until something is picked. */}
+                <div style={{ flex: 1, minHeight: 0 }}>{browser ? <Browser onClose={() => setBrowser(false)} /> : <Quiet />}</div>
+                {dock && <div style={{ flexShrink: 0 }}>{dock === "switches" && <Switches />}</div>}
+              </>
+            ) : (
+              <EditView />
+            )}
+          </main>
         </div>
-        <BottomBar view={view} onView={setView} dock={dock} onDock={(d) => setDock(dock === d ? null : d)} macros={macros} onMacros={() => setMacros(!macros)} />
+        <BottomBar
+          view={view}
+          onView={setView}
+          dock={dock}
+          onDock={(d) => setDock(dock === d ? null : d)}
+          macros={macros}
+          onMacros={() => setMacros(!macros)}
+          browser={browser}
+          onBrowser={() => setBrowser(!browser)}
+        />
       </div>
     </StageCtx.Provider>
+  );
+}
+
+/** The main area with nothing in it yet. */
+function Quiet() {
+  return (
+    <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <span style={{ fontSize: 13, color: "var(--dim)", textAlign: "center", maxWidth: 280, lineHeight: 1.4 }}>Tap a section's patch in the setlist, or open the Browser.</span>
+    </div>
   );
 }
 
@@ -435,33 +479,10 @@ function Headphones() {
 
 function Sidebar() {
   const s = useStore();
-  return (
-    <aside style={{ width: SIDEBAR, flexShrink: 0, borderRight: "1px solid var(--rule)", minHeight: 0 }}>
-      {s.performMode === "setlist" ? (
-        <Setlist />
-      ) : (
-        <Placeholder title={s.performMode === "preset" ? "Presets" : "Profile stacks"} note="The sidebar for this mode — next." />
-      )}
-    </aside>
-  );
-}
-
-function Main({ view, dock, macros }: { view: View; dock: Dock; macros: boolean }) {
-  const label = { play: "Play", control: "Control", routing: "Routing", tones: "Tones" }[view];
-  return (
-    <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--desk)" }}>
-      {/* The macros, along the top of the main area: what you turn while
-          playing, out of the feet's way; their panels drop down. */}
-      {macros && (
-        <div style={{ flexShrink: 0, position: "relative", zIndex: 4, borderBottom: "1px solid #000" }}>
-          <MacroBar />
-        </div>
-      )}
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <Placeholder title={label} note="Main area" />
-      </div>
-      {dock && <div style={{ flexShrink: 0 }}>{dock === "switches" ? <Switches /> : <AudioControls />}</div>}
-    </main>
+  return s.performMode === "setlist" ? (
+    <Setlist />
+  ) : (
+    <Placeholder title={s.performMode === "preset" ? "Presets" : "Profile stacks"} note="The sidebar for this mode — next." />
   );
 }
 
@@ -478,75 +499,49 @@ export function Placeholder({ title, note }: { title: string; note: string }) {
 
 // ── Bottom: what you look at ─────────────────────────────────────────
 
-function BottomBar({ view, onView, dock, onDock, macros, onMacros }: { view: View; onView: (v: View) => void; dock: Dock; onDock: (d: Exclude<Dock, null>) => void; macros: boolean; onMacros: () => void }) {
-  const s = useStore();
-  const presetOnly = s.performMode !== "preset";
-  const views: { id: View; label: string; icon: ReactNode; off?: string }[] = [
-    { id: "play", label: "Play", icon: <path d="M5 3.5v11l9-5.5Z" fill="currentColor" /> },
-    {
-      id: "control",
-      label: "Control",
-      icon: (
+function BottomBar({ view, onView, dock, onDock, macros, onMacros, browser, onBrowser }: { view: View; onView: (v: View) => void; dock: Dock; onDock: (d: Exclude<Dock, null>) => void; macros: boolean; onMacros: () => void; browser: boolean; onBrowser: () => void }) {
+  return (
+    <footer style={{ height: FOOT, flexShrink: 0, display: "flex", alignItems: "stretch", borderTop: "1px solid var(--rule)", background: "var(--sheet)", padding: "0 6px" }}>
+      {/* The two views. */}
+      <FootButton label="Perform" on={view === "perform"} onClick={() => onView("perform")}>
+        <path d="M5 3.5v11l9-5.5Z" fill="currentColor" />
+      </FootButton>
+      <FootButton label="Edit" on={view === "edit"} onClick={() => onView("edit")}>
         <>
           <path d="M4 2.5v13M9 2.5v13M14 2.5v13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
           <rect x="2.3" y="10" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
           <rect x="7.3" y="5" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
           <rect x="12.3" y="8" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
         </>
-      ),
-    },
-    {
-      id: "routing",
-      label: "Routing",
-      off: presetOnly ? "Routing edits a preset — switch to Preset mode" : undefined,
-      icon: <path d="M2.5 5h4l5 8h4M2.5 13h4l1.6-2.5M11.5 5h4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />,
-    },
-    {
-      id: "tones",
-      label: "Tones",
-      off: presetOnly ? "Tones edits a preset — switch to Preset mode" : undefined,
-      icon: <path d="M2 9c1.5-4 3-4 4.5 0s3 4 4.5 0 3-4 4.5 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />,
-    },
-  ];
-  return (
-    <footer style={{ height: FOOT, flexShrink: 0, display: "flex", alignItems: "stretch", borderTop: "1px solid var(--rule)", background: "var(--sheet)", padding: "0 6px" }}>
-      {views.map((v) => (
-        <FootButton key={v.id} label={v.label} on={view === v.id} off={v.off} onClick={() => onView(v.id)}>
-          {v.icon}
-        </FootButton>
-      ))}
-      <Rule />
-      <FootButton label="Macros" on={macros} pin onClick={onMacros}>
-        <>
-          <circle cx="4.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <circle cx="13.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <path d="M4.5 9 6 7.4M13.5 9l1.5-1.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          <path d="M8 4.5h2M8 13.5h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-        </>
       </FootButton>
       <Rule />
-      {/* The dock along the foot of the main area: one or the other, or none. */}
-      <FootButton label="Switches" on={dock === "switches"} pin onClick={() => onDock("switches")}>
-        <>
-          <rect x="2" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <rect x="7" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <rect x="12" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
-        </>
+      <FootButton label="Browser" on={browser} pin onClick={onBrowser}>
+        <path d="M3 3.5h3v11H3ZM7.5 3.5h3v11h-3ZM12 4l2.8-.8 2 10.6-2.8.8Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
       </FootButton>
-      <FootButton label="Audio" on={dock === "audio"} pin onClick={() => onDock("audio")}>
+      {/* Perform's docks: the macros along the top, the switches along the foot. */}
+      {view === "perform" && (
         <>
-          <circle cx="5" cy="9" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <path d="M5 9 6.6 6.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          <circle cx="13" cy="9" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <path d="M13 9 11.2 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <Rule />
+          <FootButton label="Macros" on={macros} pin onClick={onMacros}>
+            <>
+              <circle cx="4.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <circle cx="13.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M4.5 9 6 7.4M13.5 9l1.5-1.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              <path d="M8 4.5h2M8 13.5h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </>
+          </FootButton>
+          <FootButton label="Switches" on={dock === "switches"} pin onClick={() => onDock("switches")}>
+            <>
+              <rect x="2" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <rect x="7" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <rect x="12" y="5" width="4" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            </>
+          </FootButton>
         </>
-      </FootButton>
+      )}
       <span style={{ flex: 1 }} />
       <FootButton label="Tuner" onClick={() => {}}>
         <path d="M3 13a6 6 0 0 1 12 0M9 13l3-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </FootButton>
-      <FootButton label="Library" onClick={() => {}}>
-        <path d="M3 3.5h3v11H3ZM7.5 3.5h3v11h-3ZM12 4l2.8-.8 2 10.6-2.8.8Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
       </FootButton>
     </footer>
   );
