@@ -10,7 +10,8 @@
 // it (relative to where the finger lands; a full sweep is 2.5 cells);
 // double-tap puts it back to rest. A knob with sub-macros (▾) opens them on
 // a tap — a panel rising over the main area, its children the same cells,
-// in rows when the knob spans several blocks (Delay: DLY 1, DLY 2).
+// in rows when the knob spans several blocks (Delay: DLY 1, DLY 2). The bar
+// sits along the top of the main area, so the panel drops down over it.
 
 import { useEffect, useRef, useState } from "react";
 
@@ -122,11 +123,11 @@ function Panel({ knob, values, set, onClose }: { knob: Knob; values: Values; set
         position: "absolute",
         left: 0,
         right: 0,
-        bottom: "100%",
+        top: "100%",
         zIndex: 5,
         background: "#0d0d10",
-        borderTop: `2px solid ${knob.colour}`,
-        boxShadow: "0 -16px 32px rgba(0,0,0,0.55)",
+        borderBottom: `2px solid ${knob.colour}`,
+        boxShadow: "0 16px 32px rgba(0,0,0,0.55)",
         animation: "macro-rise 160ms var(--ease) both",
       }}
     >
@@ -144,7 +145,7 @@ function Panel({ knob, values, set, onClose }: { knob: Knob; values: Values; set
       <div style={{ display: "grid", gridTemplateColumns: `${heads ? "64px " : ""}repeat(${cols}, minmax(0, 1fr))`, gap: 1, background: "#000", borderTop: "1px solid #000" }}>
         {knob.rows!.map((row, r) => [
           heads && (
-            <span key={`h${r}`} className="t-label" style={{ display: "flex", alignItems: "center", padding: "0 10px", fontSize: 10.5, color: "var(--ink-3)", background: "#111114" }}>
+            <span key={`h${r}`} className="t-label" style={{ display: "flex", alignItems: "center", padding: "0 10px", fontSize: 10.5, whiteSpace: "nowrap", color: "var(--ink-3)", background: "#111114" }}>
               {row.head}
             </span>
           ),
@@ -155,7 +156,7 @@ function Panel({ knob, values, set, onClose }: { knob: Knob; values: Values; set
           ...Array.from({ length: cols - row.kids.length }, (_, k) => <span key={`pad${r}-${k}`} style={{ background: "#111114" }} />),
         ])}
       </div>
-      <style>{`@keyframes macro-rise { from { transform: translateY(8px); opacity: 0 } to { transform: none; opacity: 1 } }`}</style>
+      <style>{`@keyframes macro-rise { from { transform: translateY(-8px); opacity: 0 } to { transform: none; opacity: 1 } }`}</style>
     </div>
   );
 }

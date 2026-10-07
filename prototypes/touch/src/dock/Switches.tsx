@@ -14,7 +14,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { borrowedOf, currentSong, playing, profileOf, tapStack, useStore } from "../store";
 import { findPatch, stacksFor, type SongStack } from "../setlist/stacks";
-import { MacroBar } from "./MacroBar";
 
 /** perform::folder_color: a stack's tile and its text. */
 const FOLDER: Record<string, [string, string]> = {
@@ -48,7 +47,6 @@ export function Switches() {
   const lit = (i: number) => at?.stack === i;
   return (
     <div style={{ display: "flex", flexDirection: "column", background: "#0a0a0c" }}>
-      <MacroBar />
       {/* One grid, two rows of five, the same columns: the hold layer slim
           above (a foot's hold lives "up" from the toe), the switches under
           the feet tall below — Signal's minmax(44px, 1fr) / 7fr. */}

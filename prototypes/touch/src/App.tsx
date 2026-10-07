@@ -18,6 +18,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { StageCtx } from "./ui/stage";
 import { Setlist } from "./setlist/Setlist";
 import { AudioControls, Switches } from "./dock/Switches";
+import { MacroBar } from "./dock/MacroBar";
 import { setPerformMode, toggleHouseMute, useStore, type PerformMode } from "./store";
 
 const SIDEBAR = 402;
@@ -39,15 +40,18 @@ type Dock = "switches" | "audio" | null;
 
 type Size = "actual" | "fit" | "points";
 
-/** iPads in landscape: points, and the glass's pixels and density (every
- *  current iPad is 264 ppi except the mini's 326). */
+/** iPads in landscape: the screen in points, its glass (pixels at its
+ *  ppi), the body in mm (Apple's tech specs, long side first), the screen's
+ *  corner radius in points, and where the front camera sits in landscape.
+ *  The body's corners are concentric with the screen's: radius = the
+ *  screen's corner + the bezel. */
 const MODELS = [
-  { id: "pro11-m4", name: "iPad Pro 11″ (M4)", w: 1210, h: 834, px: 2420, ppi: 264 },
-  { id: "pro11", name: "iPad Pro 11″ (M1 · M2 · 2018–22)", w: 1194, h: 834, px: 2388, ppi: 264 },
-  { id: "air11", name: "iPad Air (M1 10.9″ · M2 11″) · iPad 10.9″", w: 1180, h: 820, px: 2360, ppi: 264 },
-  { id: "pro13-m4", name: "iPad Pro 13″ (M4)", w: 1376, h: 1032, px: 2752, ppi: 264 },
-  { id: "air13", name: "iPad Air 13″ · Pro 12.9″", w: 1366, h: 1024, px: 2732, ppi: 264 },
-  { id: "mini", name: "iPad mini", w: 1133, h: 744, px: 2266, ppi: 326 },
+  { id: "pro11", name: "iPad Pro 11″ (M1 · M2 · 2018–22)", w: 1194, h: 834, px: 2388, ppi: 264, body: [247.6, 178.5], corner: 18, camera: "short" },
+  { id: "pro11-m4", name: "iPad Pro 11″ (M4)", w: 1210, h: 834, px: 2420, ppi: 264, body: [249.7, 177.5], corner: 18, camera: "long" },
+  { id: "air11", name: "iPad Air (M1 10.9″ · M2 11″) · iPad 10.9″", w: 1180, h: 820, px: 2360, ppi: 264, body: [247.6, 178.5], corner: 18, camera: "short" },
+  { id: "pro13-m4", name: "iPad Pro 13″ (M4)", w: 1376, h: 1032, px: 2752, ppi: 264, body: [281.6, 215.5], corner: 18, camera: "long" },
+  { id: "air13", name: "iPad Air 13″ · Pro 12.9″", w: 1366, h: 1024, px: 2732, ppi: 264, body: [280.6, 214.9], corner: 18, camera: "short" },
+  { id: "mini", name: "iPad mini", w: 1133, h: 744, px: 2266, ppi: 326, body: [195.4, 134.8], corner: 21.5, camera: "short" },
 ] as const;
 type Model = (typeof MODELS)[number];
 
@@ -75,6 +79,13 @@ export function App() {
       return "actual";
     }
   });
+  const [showBody, setShowBody] = useState(() => {
+    try {
+      return localStorage.getItem("stage.body") !== "off";
+    } catch {
+      return true;
+    }
+  });
   const [ppi, setPpi] = useState(() => readNumber("stage.ppi", 127));
   const [modelId, setModelId] = useState<string>(() => {
     try {
@@ -85,6 +96,11 @@ export function App() {
   });
   const model: Model = MODELS.find((m) => m.id === modelId) ?? MODELS[0];
   const { w: W, h: H } = model;
+  // The body around the glass, in the screen's points.
+  const mmPerPt = ((model.px / model.ppi) * 25.4) / W;
+  const bezel = showBody ? { x: (model.body[0] / mmPerPt - W) / 2, y: (model.body[1] / mmPerPt - H) / 2 } : { x: 0, y: 0 };
+  const OW = W + bezel.x * 2;
+  const OH = H + bezel.y * 2;
   const [calibrating, setCalibrating] = useState(false);
   const [win, setWin] = useState({ w: window.innerWidth, h: window.innerHeight });
   useEffect(() => {
@@ -92,7 +108,7 @@ export function App() {
     window.addEventListener("resize", on);
     return () => window.removeEventListener("resize", on);
   }, []);
-  const fit = Math.min((win.w - 32) / W, (win.h - 96) / H);
+  const fit = Math.min((win.w - 32) / OW, (win.h - 96) / OH);
   // Actual size: the glass's inches (pixels ÷ density) in this screen's pixels.
   const scale = size === "points" ? 1 : size === "fit" ? fit : ((model.px / model.ppi) * ppi) / W;
   const pick = (v: Size) => {
@@ -101,15 +117,19 @@ export function App() {
   };
   return (
     <div style={{ minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "12px 16px 24px", overflow: "auto" }}>
-      <StageBar model={model} onModel={(id) => { setModelId(id); save("stage.model", id); }} size={size} onSize={pick} scale={scale} ppi={ppi} calibrating={calibrating} onCalibrate={() => { setCalibrating(!calibrating); pick("actual"); }} onPpi={(v) => { setPpi(v); save("stage.ppi", String(v)); }} />
-      <div style={{ width: W * scale, height: H * scale, flexShrink: 0 }}>
-        <Device scale={scale} w={W} h={H} />
+      <StageBar showBody={showBody} onBody={() => { setShowBody(!showBody); save("stage.body", showBody ? "off" : "on"); }} model={model} onModel={(id) => { setModelId(id); save("stage.model", id); }} size={size} onSize={pick} scale={scale} ppi={ppi} calibrating={calibrating} onCalibrate={() => { setCalibrating(!calibrating); pick("actual"); }} onPpi={(v) => { setPpi(v); save("stage.ppi", String(v)); }} />
+      <div style={{ width: OW * scale, height: OH * scale, flexShrink: 0 }}>
+        <div style={{ width: OW, height: OH, transform: scale === 1 ? undefined : `scale(${scale})`, transformOrigin: "0 0" }}>
+          <Body model={model} bezel={bezel} show={showBody}>
+            <Device scale={scale} w={W} h={H} corner={model.corner} />
+          </Body>
+        </div>
       </div>
     </div>
   );
 }
 
-function StageBar({ model, onModel, size, onSize, scale, ppi, calibrating, onCalibrate, onPpi }: { model: Model; onModel: (id: string) => void; size: Size; onSize: (s: Size) => void; scale: number; ppi: number; calibrating: boolean; onCalibrate: () => void; onPpi: (v: number) => void }) {
+function StageBar({ showBody, onBody, model, onModel, size, onSize, scale, ppi, calibrating, onCalibrate, onPpi }: { showBody: boolean; onBody: () => void; model: Model; onModel: (id: string) => void; size: Size; onSize: (s: Size) => void; scale: number; ppi: number; calibrating: boolean; onCalibrate: () => void; onPpi: (v: number) => void }) {
   const opt = (v: Size, label: string) => (
     <button
       key={v}
@@ -140,6 +160,9 @@ function StageBar({ model, onModel, size, onSize, scale, ppi, calibrating, onCal
         {opt("fit", "Fit")}
         {opt("points", "1 : 1")}
         <span style={{ width: 1, height: 18, background: "var(--rule)", margin: "0 6px" }} />
+        <button className="pressable" onClick={onBody} aria-pressed={showBody} style={{ height: 30, padding: "0 12px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 600, color: showBody ? "var(--ink)" : "var(--ink-3)" }}>
+          {showBody ? "Body on" : "Body off"}
+        </button>
         <button className="pressable" onClick={onCalibrate} aria-pressed={calibrating} style={{ height: 30, padding: "0 12px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 600, color: calibrating ? "var(--ink)" : "var(--ink-3)" }}>
           {calibrating ? "Done matching" : "Match my iPad…"}
         </button>
@@ -149,7 +172,7 @@ function StageBar({ model, onModel, size, onSize, scale, ppi, calibrating, onCal
       </div>
       {calibrating && (
         <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "var(--ink-2)" }}>
-          <span>Hold your iPad against the screen and slide until the frame matches its lit screen (not the bezel)</span>
+          <span>{showBody ? "Lay your iPad over the outline and slide until its edges trace it" : "Hold your iPad against the screen and slide until the frame matches its lit screen"}</span>
           <input type="range" min={70} max={240} step={0.25} value={ppi} onChange={(e) => onPpi(Number(e.target.value))} style={{ width: 240 }} aria-label="Pixels per inch" />
           <span className="num" style={{ width: 80, color: "var(--ink-3)" }}>{ppi.toFixed(1)} px/in</span>
         </div>
@@ -158,12 +181,47 @@ function StageBar({ model, onModel, size, onSize, scale, ppi, calibrating, onCal
   );
 }
 
-function Device({ scale, w: W, h: H }: { scale: number; w: number; h: number }) {
+/** The iPad's body around the glass: black bezels, corners concentric with
+ *  the screen's, the aluminium edge as a traceable line, the camera. */
+function Body({ model, bezel, show, children }: { model: Model; bezel: { x: number; y: number }; show: boolean; children: ReactNode }) {
+  if (!show) return <div style={{ borderRadius: model.corner, boxShadow: "0 24px 60px rgba(0,0,0,0.5)", outline: "1px solid var(--rule-strong)" }}>{children}</div>;
+  const outer = model.corner + Math.min(bezel.x, bezel.y);
+  const long = model.camera === "long";
+  return (
+    <div
+      style={{
+        position: "relative",
+        padding: `${bezel.y}px ${bezel.x}px`,
+        borderRadius: outer,
+        background: "#050506",
+        // The edge to trace: a bright hairline exactly on the body's outline.
+        boxShadow: "inset 0 0 0 1.5px #a1a1aa, inset 0 0 0 4px #2a2a2e, 0 24px 60px rgba(0,0,0,0.5)",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          position: "absolute",
+          width: 9,
+          height: 9,
+          borderRadius: 999,
+          background: "#16161a",
+          boxShadow: "inset 0 0 0 2px #0b0b0d",
+          ...(long ? { top: bezel.y / 2 - 4.5, left: "50%", marginLeft: -4.5 } : { left: bezel.x / 2 - 4.5, top: "50%", marginTop: -4.5 }),
+        }}
+      />
+      {children}
+    </div>
+  );
+}
+
+function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: number; corner: number }) {
   const s = useStore();
   const [chosen, setView] = useState<View>("play");
   // Routing and Tones edit a preset: outside Preset mode, Play shows instead.
   const view: View = s.performMode !== "preset" && (chosen === "routing" || chosen === "tones") ? "play" : chosen;
   const [dock, setDock] = useState<Dock>("switches");
+  const [macros, setMacros] = useState(true);
   const [sidebar, setSidebar] = useState(true);
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   return (
@@ -174,23 +232,19 @@ function Device({ scale, w: W, h: H }: { scale: number; w: number; h: number }) 
           position: "relative",
           width: W,
           height: H,
-          transform: scale === 1 ? undefined : `scale(${scale})`,
-          transformOrigin: "0 0",
           display: "flex",
           flexDirection: "column",
           background: "var(--desk)",
-          outline: "1px solid var(--rule-strong)",
-          borderRadius: 18,
+          borderRadius: corner,
           overflow: "hidden",
-          boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
         }}
       >
         <TopBar sidebar={sidebar} onSidebar={() => setSidebar(!sidebar)} />
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
           {sidebar && <Sidebar />}
-          <Main view={view} dock={dock} />
+          <Main view={view} dock={dock} macros={macros} />
         </div>
-        <BottomBar view={view} onView={setView} dock={dock} onDock={(d) => setDock(dock === d ? null : d)} />
+        <BottomBar view={view} onView={setView} dock={dock} onDock={(d) => setDock(dock === d ? null : d)} macros={macros} onMacros={() => setMacros(!macros)} />
       </div>
     </StageCtx.Provider>
   );
@@ -389,10 +443,17 @@ function Sidebar() {
   );
 }
 
-function Main({ view, dock }: { view: View; dock: Dock }) {
+function Main({ view, dock, macros }: { view: View; dock: Dock; macros: boolean }) {
   const label = { play: "Play", control: "Control", routing: "Routing", tones: "Tones" }[view];
   return (
     <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--desk)" }}>
+      {/* The macros, along the top of the main area: what you turn while
+          playing, out of the feet's way; their panels drop down. */}
+      {macros && (
+        <div style={{ flexShrink: 0, position: "relative", zIndex: 4, borderBottom: "1px solid #000" }}>
+          <MacroBar />
+        </div>
+      )}
       <div style={{ flex: 1, minHeight: 0 }}>
         <Placeholder title={label} note="Main area" />
       </div>
@@ -414,7 +475,7 @@ function Placeholder({ title, note }: { title: string; note: string }) {
 
 // ── Bottom: what you look at ─────────────────────────────────────────
 
-function BottomBar({ view, onView, dock, onDock }: { view: View; onView: (v: View) => void; dock: Dock; onDock: (d: Exclude<Dock, null>) => void }) {
+function BottomBar({ view, onView, dock, onDock, macros, onMacros }: { view: View; onView: (v: View) => void; dock: Dock; onDock: (d: Exclude<Dock, null>) => void; macros: boolean; onMacros: () => void }) {
   const s = useStore();
   const presetOnly = s.performMode !== "preset";
   const views: { id: View; label: string; icon: ReactNode; off?: string }[] = [
@@ -451,6 +512,15 @@ function BottomBar({ view, onView, dock, onDock }: { view: View; onView: (v: Vie
           {v.icon}
         </FootButton>
       ))}
+      <Rule />
+      <FootButton label="Macros" on={macros} pin onClick={onMacros}>
+        <>
+          <circle cx="4.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <circle cx="13.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M4.5 9 6 7.4M13.5 9l1.5-1.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <path d="M8 4.5h2M8 13.5h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </>
+      </FootButton>
       <Rule />
       {/* The dock along the foot of the main area: one or the other, or none. */}
       <FootButton label="Switches" on={dock === "switches"} pin onClick={() => onDock("switches")}>
