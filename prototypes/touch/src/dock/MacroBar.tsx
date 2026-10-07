@@ -75,6 +75,10 @@ const BANK: Knob[] = [
   { id: "output", label: "Output", colour: "#6B7280" },
 ];
 
+/** The bar's height with the rule under it: two 44pt rows and the hairline
+ *  between them, plus 1. The setlist's header matches it. */
+export const MACRO_BAR_H = 44 * 2 + 1 + 1;
+
 /** Where each knob sits (0..1, rest 0.5), shared by the bar and its panels. */
 type Values = Record<string, number>;
 

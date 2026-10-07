@@ -54,6 +54,7 @@ import {
   type Sound,
 } from "../store";
 import { SourceIcon, Strike, Tape, tapeFor } from "../ui/marks";
+import { MACRO_BAR_H } from "../dock/MacroBar";
 import { ProfileIcon } from "../ui/profileIcons";
 import { Button, KeyBox, Tabs } from "../ui/kit";
 import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
@@ -230,7 +231,9 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
   const minutes = Math.round(set.songs.length * 4.5);
   const when = whenLabel(set.date);
   return (
-    <header style={{ flexShrink: 0, padding: "14px 6px 12px 18px", borderBottom: "1px solid var(--rule)", display: "flex", alignItems: "flex-start", gap: 2 }}>
+    // Exactly the macro bar's height (two 44pt rows, a hairline between, its
+    // rule under), so the two lines run straight across the screen.
+    <header style={{ flexShrink: 0, height: MACRO_BAR_H, padding: "0 6px 0 18px", borderBottom: "1px solid var(--rule)", display: "flex", alignItems: "center", gap: 2 }}>
       <button
         className="pressable"
         onClick={() => onPanel({ kind: "sets" })}
