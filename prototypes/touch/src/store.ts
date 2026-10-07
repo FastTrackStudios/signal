@@ -103,6 +103,9 @@ export interface State {
   /** The kind the browser should show for what's being worked on (a block
    *  picked in Edit's routing → its presets). */
   browserFocus: string | null;
+  /** Rig setups — the hardware and the hands this rig plays through. */
+  setups: RigSetup[];
+  setupIndex: number;
   /** In Preset mode, the preset and variation playing. */
   presetUp: { preset: string; variation: string } | null;
 }
@@ -174,6 +177,8 @@ function seed(): State {
     profileStacks: {},
     browserFocus: null,
     presetUp: null,
+    setups: [seedSetup()],
+    setupIndex: 0,
   };
 }
 
@@ -863,4 +868,95 @@ export function clearVariationPicks(preset: string, variation: string) {
     ...s,
     presetPicks: Object.fromEntries(Object.entries(s.presetPicks).filter(([k]) => !k.startsWith(`${preset}/${variation}/`))),
   }));
+}
+
+// ── Setup: rig setups ──────────────────────────────────────────────────
+// A rig setup is what the rig plays through, saved as one thing: the
+// guitar (its pickups, its own input EQ), the audio interface (its input,
+// rate, buffer, outputs, and an input trim that brings the guitar to the
+// level presets expect), the MIDI controller, and the gates — five
+// presets whose thresholds are set for this guitar into this interface,
+// so a preset's gate means the same on any rig.
+
+export type GateLevel = "off" | "subtle" | "default" | "tight" | "ultra";
+export const GATE_LEVELS: GateLevel[] = ["off", "subtle", "default", "tight", "ultra"];
+
+export interface Pickup {
+  position: string;
+  model: string;
+}
+
+export interface RigSetup {
+  name: string;
+  guitar: {
+    name: string;
+    pickups: Pickup[];
+    /** The guitar's own input EQ, before anything: a low cut (Hz) and three
+     *  bands (dB). */
+    eq: { lowCut: number; bass: number; mid: number; treble: number };
+  };
+  audio: { device: string; input: string; rate: string; buffer: number; house: string; phones: string; trimDb: number; targetDb: number };
+  midi: { device: string; channel: number | "Omni" };
+  /** Each gate preset's threshold for this rig, in dBFS (off: none). */
+  gates: Record<Exclude<GateLevel, "off">, number>;
+  /** Noisy input: Off plays Subtle and Subtle plays Default. */
+  noisy: boolean;
+}
+
+// A function, hoisted: the store seeds itself before this point in the file.
+function seedSetup(): RigSetup {
+  return {
+  name: "MiniFuse 4 · TMG Strat",
+  guitar: {
+    name: "TMG Strat (White and Gold)",
+    pickups: [
+      { position: "Bridge", model: "Seymour Duncan SH-PG1b Pearly Gates" },
+      { position: "Middle", model: "Lawler Blonde" },
+      { position: "Neck", model: "Lawler Blonde" },
+    ],
+    eq: { lowCut: 70, bass: 0, mid: 0, treble: 0 },
+  },
+  audio: { device: "Arturia MiniFuse 4", input: "Input 1 · Inst (Hi-Z)", rate: "48 kHz", buffer: 128, house: "Outputs 1–2", phones: "Phones 1", trimDb: 0, targetDb: -15 },
+  midi: { device: "Morningstar MC8", channel: "Omni" },
+  gates: { subtle: -72, default: -64, tight: -56, ultra: -48 },
+  noisy: false,
+  };
+}
+
+/** The gate a preset's level plays at on this rig. A noisy input lifts
+ *  the light end only: Off plays Subtle, Subtle plays Default; Default,
+ *  Tight and Ultra stay as they are. */
+export function gateFor(setup: RigSetup, level: GateLevel): GateLevel {
+  if (!setup.noisy) return level;
+  return level === "off" ? "subtle" : level === "subtle" ? "default" : level;
+}
+
+export function currentSetup(s: State): RigSetup {
+  return s.setups[s.setupIndex] ?? s.setups[0];
+}
+
+/** Edit the setup in use (an undoable change). */
+export function editSetup(label: string, f: (x: RigSetup) => RigSetup) {
+  change(`Setup · ${label}`, (s) => ({ ...s, setups: s.setups.map((x, i) => (i === s.setupIndex ? f(x) : x)) }));
+}
+
+/** Turning a value continuously (a slider): no undo step per move. */
+export function tuneSetup(f: (x: RigSetup) => RigSetup) {
+  move((s) => ({ ...s, setups: s.setups.map((x, i) => (i === s.setupIndex ? f(x) : x)) }));
+}
+
+export function chooseSetup(index: number) {
+  move((s) => ({ ...s, setupIndex: index }));
+}
+
+export function newSetup(name: string) {
+  change(`New setup ${name}`, (s) => ({ ...s, setups: [...s.setups, { ...structuredClone(currentSetup(s)), name }], setupIndex: s.setups.length }));
+}
+
+export function removeSetup(index: number) {
+  change("Setup removed", (s) => {
+    if (s.setups.length <= 1) return s;
+    const setups = s.setups.filter((_, i) => i !== index);
+    return { ...s, setups, setupIndex: Math.min(s.setupIndex, setups.length - 1) };
+  });
 }

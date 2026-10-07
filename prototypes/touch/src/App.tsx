@@ -24,6 +24,7 @@ import { ComposeCtx, SidebarContent } from "./setlist/Setlist";
 import { Switches } from "./dock/Switches";
 import { Browser } from "./views/Browser";
 import { EditView } from "./views/Edit";
+import { SetupView } from "./views/Setup";
 import { MacroBar } from "./dock/MacroBar";
 import { Phone } from "./Phone";
 import { PhoneShell } from "./PhoneShell";
@@ -36,7 +37,7 @@ const FOOT = 56;
 /** What the screen is for: playing (Perform), putting setlists, profiles
  *  and presets together from the browser (Build), or taking a sound apart
  *  (Edit). */
-export type View = "perform" | "build" | "edit";
+export type View = "perform" | "build" | "edit" | "setup";
 export type Dock = "switches" | null;
 
 // ── The stage: the iPad at its real size ─────────────────────────────
@@ -274,7 +275,9 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
           {/* The left area: the sidebar for the mode — or, in Edit, where
               routing and the FX row hold the main area, the browser (with
               the sidebar a tap away, to pick a section). */}
-          {sidebar && (
+          {/* Setup takes the whole body: its own list and its page. */}
+          {view === "setup" && <SetupView />}
+          {view !== "setup" && sidebar && (
             <aside style={{ width: SIDEBAR, flexShrink: 0, borderRight: "1px solid var(--rule)", minHeight: 0, display: "flex", flexDirection: "column" }}>
               <ComposeCtx.Provider value={{ onPicked: () => view === "perform" && setBrowser(true), pickRows: view === "build" }}>
                 {view === "edit" ? (
@@ -288,7 +291,7 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
               </ComposeCtx.Provider>
             </aside>
           )}
-          <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--desk)" }}>
+          {view !== "setup" && <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--desk)" }}>
             {view === "perform" && (
               <>
                 {/* The macros along the top: what you turn while playing; their panels drop down. */}
@@ -305,7 +308,7 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
             {/* Build: the browser takes the main area. */}
             {view === "build" && <Browser />}
             {view === "edit" && <EditView />}
-          </main>
+          </main>}
         </div>
         <BottomBar
           view={view}
@@ -572,6 +575,12 @@ function BottomBar({ view, onView, dock, onDock, macros, onMacros, browser, onBr
         </>
       )}
       <span style={{ flex: 1 }} />
+      <FootButton label="Setup" on={view === "setup"} onClick={() => onView("setup")}>
+        <>
+          <circle cx="9" cy="9" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M9 1.8v2M9 14.2v2M1.8 9h2M14.2 9h2M3.9 3.9l1.4 1.4M12.7 12.7l1.4 1.4M3.9 14.1l1.4-1.4M12.7 5.3l1.4-1.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </>
+      </FootButton>
       <FootButton label="Tuner" onClick={() => {}}>
         <path d="M3 13a6 6 0 0 1 12 0M9 13l3-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       </FootButton>

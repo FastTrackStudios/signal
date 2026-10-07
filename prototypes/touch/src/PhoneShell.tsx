@@ -21,6 +21,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { ComposeCtx, SidebarContent } from "./setlist/Setlist";
 import { Browser } from "./views/Browser";
 import { EditView } from "./views/Edit";
+import { SetupView } from "./views/Setup";
 import { MacroBar } from "./dock/MacroBar";
 import { Switches } from "./dock/Switches";
 import { redo, setPerformMode, undo, useStore, useUndo } from "./store";
@@ -134,6 +135,8 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
                   {/* Flush: the switches bring their own hairline. */}
                   {dock && <div style={{ flexShrink: 0 }}>{dock === "switches" && <Switches />}</div>}
                 </>
+              ) : view === "setup" ? (
+                <SetupView />
               ) : view === "build" ? (
                 // Build on its side: the browser fills the screen.
                 <Browser />
@@ -160,6 +163,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
                 switches (the board turned a quarter), the macros two to a
                 row, Edit. */}
             <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }}>
+              {view === "setup" ? <SetupView /> : <>
               {page === "setlist" && <SidebarContent />}
               {page === "browser" && <Browser />}
               {page === "switches" && <Switches vertical />}
@@ -169,6 +173,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
                 </div>
               )}
               {page === "edit" && <EditView routing={false} fill />}
+              </>}
             </div>
             <footer style={{ flexShrink: 0, display: "flex", alignItems: "stretch", height: 54 + safe.bottom, padding: `0 2px ${safe.bottom}px`, borderTop: "1px solid var(--rule)", background: "var(--sheet)" }}>
               {(
@@ -324,7 +329,7 @@ function SideMenu({ offset, view, onView, onClose, docks }: { offset: number; vi
         <div className="t-label" style={{ padding: "8px 16px 6px", color: "var(--ink-3)" }}>
           View
         </div>
-        {(["perform", "build", "edit"] as View[]).map((v) => {
+        {(["perform", "build", "edit", "setup"] as View[]).map((v) => {
           const off = false;
           const on = view === v;
           return (
