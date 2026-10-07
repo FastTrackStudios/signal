@@ -199,81 +199,102 @@ function SwitchNo({ no }: { no: number }) {
 }
 
 // ── The macro bar ────────────────────────────────────────────────────
+//
+// Made for a finger, not a mouse: no little knobs to grab. Each macro is a
+// whole cell, flush with its neighbours, and the cell IS the control — its
+// value is a fill across it in the macro's colour, with a bright edge where
+// the value sits. Slide sideways anywhere on it to turn it (relative, so a
+// touch never jumps the value; a full sweep is 2.5 cells wide, for fine
+// control); double-tap puts it back. While it moves, the cell lifts and the
+// number grows so the finger never hides what it is doing.
 
-const MACROS: { label: string; colour?: string; value: number; unit?: string }[] = [
+const MACROS: { label: string; colour: string; value: number }[] = [
   { label: "Gain", colour: "#f97316", value: 0.55 },
-  { label: "Bass", value: 0.5 },
-  { label: "Mid", value: 0.6 },
-  { label: "Treble", value: 0.45 },
+  { label: "Bass", colour: "#94a3b8", value: 0.5 },
+  { label: "Mid", colour: "#94a3b8", value: 0.6 },
+  { label: "Treble", colour: "#94a3b8", value: 0.45 },
   { label: "Delay", colour: "#a78bfa", value: 0.3 },
   { label: "Reverb", colour: "#22d3ee", value: 0.35 },
   { label: "Mod", colour: "#e879f9", value: 0.2 },
   { label: "Volume", colour: "#e4e4e7", value: 0.72 },
 ];
 
-function MacroBar({ colour }: { colour: string }) {
+function MacroBar(_: { colour: string }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${MACROS.length}, 1fr)`, background: "#111114" }}>
-      {MACROS.map((m, i) => (
-        <MacroCell key={m.label} {...m} colour={m.colour ?? colour} last={i === MACROS.length - 1} />
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${MACROS.length}, minmax(0, 1fr))`, gap: 1, background: "#000" }}>
+      {MACROS.map((m) => (
+        <MacroCell key={m.label} {...m} />
       ))}
     </div>
   );
 }
 
-function MacroCell({ label, colour, value: initial, unit, last }: { label: string; colour: string; value: number; unit?: string; last: boolean }) {
+function MacroCell({ label, colour, value: initial }: { label: string; colour: string; value: number }) {
   const [v, setV] = useState(initial);
-  const from = useRef<{ y: number; v: number } | null>(null);
+  const [active, setActive] = useState(false);
+  const from = useRef<{ x: number; v: number; w: number } | null>(null);
+  const lastTap = useRef(0);
+  const pct = Math.round(v * 100);
   return (
     <div
+      role="slider"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pct}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowRight" || e.key === "ArrowUp") setV(Math.min(1, v + 0.01));
+        if (e.key === "ArrowLeft" || e.key === "ArrowDown") setV(Math.max(0, v - 0.01));
+      }}
       onPointerDown={(e) => {
-        from.current = { y: e.clientY, v };
+        const now = performance.now();
+        if (now - lastTap.current < 300) {
+          setV(initial);
+          lastTap.current = 0;
+          return;
+        }
+        lastTap.current = now;
+        from.current = { x: e.clientX, v, w: (e.currentTarget as HTMLElement).clientWidth * 2.5 };
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        setActive(true);
       }}
       onPointerMove={(e) => {
-        if (from.current) setV(Math.max(0, Math.min(1, from.current.v + (from.current.y - e.clientY) / 160)));
+        const f = from.current;
+        if (f) setV(Math.max(0, Math.min(1, f.v + (e.clientX - f.x) / f.w)));
       }}
-      onPointerUp={() => (from.current = null)}
-      onDoubleClick={() => setV(initial)}
-      title={`${label} — drag up or down; double-tap to reset`}
-      style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", minHeight: 48, borderRight: last ? undefined : "1px solid #1d1d22", touchAction: "none", cursor: "ns-resize", userSelect: "none" }}
+      onPointerUp={() => {
+        from.current = null;
+        setActive(false);
+      }}
+      onPointerCancel={() => {
+        from.current = null;
+        setActive(false);
+      }}
+      title={`${label} — slide sideways; double-tap to reset`}
+      style={{
+        position: "relative",
+        height: 52,
+        overflow: "hidden",
+        background: active ? "#1a1a1f" : "#111114",
+        touchAction: "none",
+        userSelect: "none",
+        cursor: "ew-resize",
+        outline: "none",
+      }}
     >
-      <Knob value={v} colour={colour} />
-      <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-        <span className="t-label" style={{ fontSize: 10, letterSpacing: "0.08em", color: colour === "#e4e4e7" ? "var(--ink-2)" : colour }}>
+      {/* The value, as a fill and a bright edge. */}
+      <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${v * 100}%`, background: `color-mix(in oklab, ${colour} ${active ? 30 : 20}%, transparent)` }} />
+      <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${v * 100}% - 1px)`, width: 2, background: colour, opacity: v > 0.003 ? 1 : 0.4 }} />
+      <span style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, padding: "0 10px" }}>
+        <span className="t-label" style={{ fontSize: 10.5, letterSpacing: "0.08em", color: colour === "#e4e4e7" || colour === "#94a3b8" ? "var(--ink-2)" : colour }}>
           {label}
         </span>
-        <span className="num" style={{ fontSize: 12, fontFamily: "ui-monospace, monospace", color: "var(--ink-2)", whiteSpace: "nowrap" }}>
-          {Math.round(v * 100)}
-          {unit ? ` ${unit}` : "%"}
+        <span className="num" style={{ fontSize: active ? 20 : 16, fontWeight: 700, color: "var(--ink)", lineHeight: 1, transition: "font-size 120ms var(--ease)" }}>
+          {pct}
         </span>
       </span>
     </div>
-  );
-}
-
-/** A mini knob: a 270° arc track, the value arc in its colour, a pointer. */
-function Knob({ value, colour }: { value: number; colour: string }) {
-  const r = 12;
-  const c = 16;
-  const a0 = 135;
-  const pt = (deg: number) => {
-    const rad = (deg * Math.PI) / 180;
-    return [c + r * Math.cos(rad), c + r * Math.sin(rad)];
-  };
-  const arc = (from: number, to: number) => {
-    const [x0, y0] = pt(from);
-    const [x1, y1] = pt(to);
-    return `M${x0} ${y0} A${r} ${r} 0 ${to - from > 180 ? 1 : 0} 1 ${x1} ${y1}`;
-  };
-  const end = a0 + 270 * value;
-  const [px, py] = pt(end);
-  return (
-    <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden style={{ flexShrink: 0 }}>
-      <path d={arc(a0, a0 + 270)} fill="none" stroke="#26262b" strokeWidth="3" strokeLinecap="round" />
-      {value > 0.005 && <path d={arc(a0, end)} fill="none" stroke={colour} strokeWidth="3" strokeLinecap="round" />}
-      <line x1={c} y1={c} x2={px} y2={py} stroke="var(--ink)" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
   );
 }
 
