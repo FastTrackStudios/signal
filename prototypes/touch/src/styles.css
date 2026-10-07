@@ -117,10 +117,27 @@ input {
   color: inherit;
 }
 
-/* Thin scrollbars that belong to the sheet, not the browser. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--dim) transparent;
+/* Scrollbars as slim as a hairline, belonging to the sheet: 4 px, no
+   track, a dim thumb that brightens under the finger. (WebKit's styling is
+   used rather than scrollbar-width, which Chrome lets override it but only
+   ever draws "thin" at ~11 px.) */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.3);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* ── Type voices ─────────────────────────────────────────────────────── */

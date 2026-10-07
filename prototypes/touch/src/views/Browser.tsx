@@ -730,7 +730,9 @@ function PresetColumns({ items, onPick }: { items: Item[]; onPick?: (item: Item)
         <div ref={presetsRef} style={{ position: "relative", width: narrow ? "100%" : "38%", maxWidth: narrow ? undefined : 240, flexShrink: 0, overflowY: "auto", borderRight: narrow ? undefined : "1px solid var(--rule)" }}>
           {presets.map((p) => {
             const on = p.name === preset?.name;
-            const used = p.items.find((i) => i.state) ?? p.items.find((i) => i.inherited);
+            const over = p.items.some((i) => i.state === "swapped");
+            const plays = p.items.some((i) => i.state === "playing");
+            const from = p.items.some((i) => i.inherited);
             return (
               <button
                 key={p.name}
@@ -741,17 +743,25 @@ function PresetColumns({ items, onPick }: { items: Item[]; onPick?: (item: Item)
                 className={on && !narrow ? "" : "pressable"}
                 aria-current={on ? "true" : undefined}
                 data-current={on ? "true" : undefined}
-                style={{ position: "relative", width: "100%", minHeight: 52, display: "flex", alignItems: "center", gap: 10, padding: "6px 12px 6px 14px", textAlign: "left", background: on && !narrow ? "rgba(255,255,255,0.07)" : undefined }}
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  minHeight: 46,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "0 12px 0 16px",
+                  textAlign: "left",
+                  // The picked preset in a muted wash of its colour.
+                  background: on && !narrow ? `color-mix(in oklab, ${p.colour} 18%, #0f0f12)` : undefined,
+                }}
               >
-                <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: p.colour, opacity: on || used ? 1 : 0.35 }} />
-                <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-                  <span style={{ fontSize: 15, fontWeight: on ? 700 : 600, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
-                  {used && <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: used.state === "swapped" ? `color-mix(in oklab, ${p.colour} 70%, white)` : used.state ? "var(--live)" : "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {used.state === "swapped" && <OverrideMark colour={p.colour} />}
-                    {!used.state && used.inherited && <InheritIcon colour="var(--ink-3)" size={11} />}
-                    {used.state === "swapped" ? `Override · ${used.name}` : used.state ? `Playing · ${used.name}` : `${used.name} · from ${used.inherited}`}
-                  </span>}
-                </span>
+                {on && !narrow && <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: p.colour }} />}
+                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: on ? 700 : 560, color: on ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                {/* Where something of it is in use: icons, not words. */}
+                {over && <OverrideIcon colour={p.colour} size={12} title="An override is from here" />}
+                {plays && <span title="Playing" style={{ width: 7, height: 7, borderRadius: 999, background: "var(--live)" }} />}
+                {from && !over && <span title="Inherited from here" style={{ display: "flex" }}><InheritIcon colour="var(--ink-3)" size={12} /></span>}
                 {narrow && (
                   <svg width="7" height="12" viewBox="0 0 7 12" aria-hidden style={{ color: "var(--ink-3)", flexShrink: 0 }}>
                     <path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -764,7 +774,7 @@ function PresetColumns({ items, onPick }: { items: Item[]; onPick?: (item: Item)
       )}
       {showVariations && preset && (
         <div ref={variationsRef} style={{ position: "relative", flex: 1, minWidth: 0, overflowY: "auto" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 48, padding: "8px 16px 6px", borderBottom: "1px solid var(--rule)" }}>
+          <div style={{ position: "sticky", top: 0, zIndex: 1, display: "flex", alignItems: "center", gap: 10, minHeight: 48, padding: "8px 16px 6px", background: "#0f0f12", borderBottom: "1px solid var(--rule)" }}>
             {narrow && (
               <button className="pressable" onClick={() => setStep("presets")} aria-label="All presets" style={{ width: 32, height: 44, marginLeft: -8, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", borderRadius: "var(--r)" }}>
                 <svg width="9" height="15" viewBox="0 0 9 15" aria-hidden>
@@ -784,13 +794,37 @@ function PresetColumns({ items, onPick }: { items: Item[]; onPick?: (item: Item)
   );
 }
 
-/** One variation: its name, and the NAM models it loads — an amp head for
- *  an amp capture, a bolt for a drive (pedal · setting), a speaker for a
- *  cab IR. */
+/** One variation: a state glyph (the override icon, the inherit icon, a
+ *  live dot — or a quiet ring), its name, and what it loads or runs as
+ *  compact chips — an amp capture, a drive pedal · setting, a cab IR, a
+ *  delay or reverb algorithm. The one in use sits in a muted wash of its
+ *  effect's colour. */
 function Variation({ item, colour, onPick }: { item: Item; colour: string; onPick?: () => void }) {
-  // In use: the override, or — with none — what's inherited.
   const on = !!item.state;
   const underneath = !!item.inherited;
+  const chips: { icon: string; tint: string; text: ReactNode }[] = [
+    ...(item.algos ?? []).map((a) => ({
+      icon: a.block.startsWith("VERB") ? "Reverb" : "Delay",
+      tint: a.block.startsWith("VERB") ? "#8B5CF6" : "#3B82F6",
+      text: (
+        <>
+          <b style={{ color: "var(--ink-2)", fontWeight: 650 }}>{a.algo}</b> {a.preset}
+        </>
+      ),
+    })),
+    ...(item.models ?? []).map((m) => ({
+      icon: m.role === "amp" ? "Core" : m.role === "drive" ? "Drive" : "Amp",
+      tint: m.role === "amp" ? "#D6B36A" : m.role === "drive" ? "#ef4444" : "#a1a1aa",
+      text: m.role === "drive" && m.pedal ? (
+        <>
+          <b style={{ color: "var(--ink-2)", fontWeight: 650 }}>{m.pedal}</b>
+          {m.option ? ` ${m.option}` : ""}
+        </>
+      ) : (
+        m.name
+      ),
+    })),
+  ];
   return (
     <button
       onClick={onPick}
@@ -798,41 +832,51 @@ function Variation({ item, colour, onPick }: { item: Item; colour: string; onPic
       aria-pressed={on}
       data-current={on || underneath ? "true" : undefined}
       className={onPick && !on ? "pressable" : ""}
-      style={{ position: "relative", width: "100%", display: "flex", alignItems: "flex-start", gap: 12, minHeight: 52, padding: "10px 16px", textAlign: "left", borderBottom: "1px solid var(--rule)", background: on ? `color-mix(in oklab, ${colour} 12%, transparent)` : undefined, cursor: onPick ? "pointer" : "default" }}
+      style={{
+        position: "relative",
+        width: "100%",
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 12,
+        minHeight: 52,
+        padding: "12px 16px",
+        textAlign: "left",
+        borderBottom: "1px solid var(--rule)",
+        background: on ? `color-mix(in oklab, ${colour} 16%, #0f0f12)` : underneath ? "rgba(255,255,255,0.025)" : undefined,
+        cursor: onPick ? "pointer" : "default",
+      }}
     >
-      {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: item.state === "swapped" ? colour : "var(--live)" }} />}
-      <span style={{ width: 16, height: 16, marginTop: 2, borderRadius: 999, flexShrink: 0, boxShadow: `inset 0 0 0 1.5px ${on ? colour : "var(--ink-3)"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {(on || underneath) && <span style={{ width: 8, height: 8, borderRadius: 999, background: colour, opacity: on ? 1 : 0.45 }} />}
+      {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: item.state === "swapped" ? colour : "var(--live)" }} />}
+      {/* Its state, as a glyph. */}
+      <span style={{ width: 16, height: 20, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {item.state === "swapped" ? (
+          <OverrideIcon colour={colour} size={14} />
+        ) : item.state ? (
+          <span style={{ width: 9, height: 9, borderRadius: 999, background: "var(--live)" }} />
+        ) : underneath ? (
+          <InheritIcon colour="var(--ink-2)" size={13} />
+        ) : (
+          <span style={{ width: 9, height: 9, borderRadius: 999, boxShadow: "inset 0 0 0 1.5px #3f3f46" }} />
+        )}
       </span>
-      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-        <span style={{ fontSize: 16, fontWeight: on ? 700 : 600, color: "var(--ink)" }}>{item.name}</span>
-        {item.algos?.map((a, k) => (
-          <span key={`a${k}`} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12.5, color: "var(--ink-3)" }}>
-            <ModuleIcon kind={a.block.startsWith("VERB") ? "Reverb" : "Delay"} size={12} colour={a.block.startsWith("VERB") ? "#8B5CF6" : "#3B82F6"} />
-            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              <b style={{ color: "var(--ink-2)", fontWeight: 650 }}>{a.algo}</b> · {a.preset}
-            </span>
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 7 }}>
+        <span style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: on ? 700 : 600, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</span>
+          {item.state === "swapped" && <span style={{ fontSize: 12, fontWeight: 700, color: `color-mix(in oklab, ${colour} 45%, var(--ink-2))`, whiteSpace: "nowrap" }}>Override</span>}
+          {item.state && item.state !== "swapped" && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--live)", whiteSpace: "nowrap" }}>Playing</span>}
+          {!item.state && underneath && <span title={`Chosen by ${item.inherited}`} style={{ fontSize: 12, fontWeight: 650, color: "var(--ink-3)", whiteSpace: "nowrap" }}>From {item.inherited}</span>}
+        </span>
+        {chips.length > 0 && (
+          <span style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+            {chips.map((c, k) => (
+              <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: "100%", height: 24, padding: "0 8px 0 6px", borderRadius: 5, background: `color-mix(in oklab, ${c.tint} 10%, #17171b)`, fontSize: 12, color: "var(--ink-3)" }}>
+                <ModuleIcon kind={c.icon} size={11} colour={c.tint} />
+                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.text}</span>
+              </span>
+            ))}
           </span>
-        ))}
-        {item.models?.map((m, k) => (
-          <span key={k} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12.5, color: "var(--ink-3)" }}>
-            <ModuleIcon kind={m.role === "amp" ? "Core" : m.role === "drive" ? "Drive" : "Amp"} size={12} colour={m.role === "amp" ? "#D6B36A" : m.role === "drive" ? "#ef4444" : "#a1a1aa"} />
-            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.role === "drive" && m.pedal ? `${m.pedal}${m.option ? ` · ${m.option}` : ""}` : m.name}</span>
-          </span>
-        ))}
+        )}
       </span>
-      {!item.state && underneath && (
-        <span title={`Chosen by ${item.inherited}`} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 650, marginTop: 2, color: "var(--ink-2)" }}>
-          <InheritIcon colour="var(--ink-2)" size={11} />
-          From {item.inherited}
-        </span>
-      )}
-      {item.state && (
-        <span style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, marginTop: 2, color: item.state === "swapped" ? `color-mix(in oklab, ${colour} 70%, white)` : "var(--live)" }}>
-          {item.state === "swapped" && <OverrideMark colour={colour} />}
-          {item.state === "swapped" ? "Override" : item.state === "playing" ? "Playing" : "In use"}
-        </span>
-      )}
     </button>
   );
 }
