@@ -369,7 +369,7 @@ function SongRow({
         borderTop: dropAbove ? "3px solid var(--focus-fg)" : "1px solid var(--rule)",
       }}
     >
-      {up && <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--live)" }} />}
+      {up && <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: colour }} />}
       <button
         className="pressable"
         onClick={() => !reordering && (up ? onToggle() : goToSong(i))}
@@ -474,7 +474,7 @@ function Sections({ songIndex, onPanel }: { songIndex: number; onPanel: (p: Pane
   const colour = songColour(song.name, s.songColours);
   return (
     <div style={{ position: "relative", padding: "2px 0 10px", background: tint(colour, up ? 7 : 4) }}>
-      {up && <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--live)" }} />}
+      {up && <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: colour }} />}
       {/* The song's timeline: one line its sections sit on. */}
       {sections.length > 0 && (
         <span aria-hidden style={{ position: "absolute", left: fit === "narrow" ? 21 : 35, top: 18, bottom: 40, width: 1, background: "var(--rule-strong)" }} />
