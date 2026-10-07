@@ -10,7 +10,7 @@
 // Every change goes through the store, so the bar-less Undo undoes it.
 
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { rig, stackOf } from "../data/rig";
+import { rig, stackOf, type ProfileEntry } from "../data/rig";
 import {
   partPatch,
   addPart,
@@ -1050,10 +1050,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
         <div style={{ display: "flex", flexDirection: "column" }}>
           <ProfileCell
             name={song ? `The set's — ${fallback.name}` : `The rig's — ${fallback.name}`}
-            stacks={(() => {
-              const p = rig.library.profiles.find((x) => x.name === fallback.name);
-              return p ? p.stacks.filter((st) => p.patch_list.some((x) => x.stack === st)) : [];
-            })()}
+            profile={rig.library.profiles.find((x) => x.name === fallback.name)}
             on={current === null}
             onClick={() => (song ? setSongProfile(song.name, null) : setSetProfile(null))}
           />
@@ -1065,7 +1062,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
               key={p.name}
               name={p.name}
               colour={nameColour(p.name)}
-              stacks={p.stacks.filter((st) => p.patch_list.some((x) => x.stack === st))}
+              profile={p}
               on={current === p.name}
               onClick={() => (song ? setSongProfile(song.name, p.name) : setSetProfile(p.name))}
             />
@@ -1139,15 +1136,15 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
   const top = panel.kind === "sets";
   return (
     <div style={{ position: "absolute", inset: 0, zIndex: 20, display: "flex", flexDirection: "column", justifyContent: top ? "flex-start" : "flex-end" }}>
-      <button aria-label="Close" onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", cursor: "default" }} />
+      <button aria-label="Close" onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.66)", cursor: "default" }} />
       <div
         style={{
           position: "relative",
-          maxHeight: top ? "92%" : "86%",
+          maxHeight: top ? "92%" : "95%",
           display: "flex",
           flexDirection: "column",
-          background: "var(--sheet-2)",
-          borderTop: top ? undefined : "1px solid var(--rule-strong)",
+          background: "#18181c",
+          borderTop: top ? undefined : "1px solid #3a3a42",
           borderBottom: top ? "1px solid var(--rule-strong)" : undefined,
           borderRadius: top ? "0 0 14px 14px" : "12px 12px 0 0",
           boxShadow: top ? "0 16px 40px rgba(0,0,0,0.55)" : "0 -16px 40px rgba(0,0,0,0.5)",
@@ -1254,10 +1251,14 @@ function PatchList({ song, current, defaultLabel, onPick }: { song?: string; cur
   );
 }
 
-/** A profile in the list: its name, and its stacks across the full width
- *  — each a muted name over a thin line of its colour. Rows run flush,
- *  hairlines between them; the one picked is lifted. */
-function ProfileCell({ name, colour, stacks, on, onClick }: { name: string; colour?: string; stacks: string[]; on: boolean; onClick: () => void }) {
+/** A profile in the list: its name and what it holds, with its stacks
+ *  drawn small at the right — one thin bar each, in the stack's colour, as
+ *  tall as the stack is full. Rows run flush, hairlines between; the one
+ *  picked is lifted. */
+function ProfileCell({ name, profile, colour, on, onClick }: { name: string; profile?: ProfileEntry; colour?: string; on: boolean; onClick: () => void }) {
+  const stacks = profile ? profile.stacks.map((st) => ({ name: st, count: profile.patch_list.filter((x) => x.stack === st).length })).filter((x) => x.count > 0) : [];
+  const most = Math.max(1, ...rig.library.profiles.flatMap((p) => p.stacks.map((st) => p.patch_list.filter((x) => x.stack === st).length)));
+  const total = stacks.reduce((n, x) => n + x.count, 0);
   return (
     <button
       className={on ? "" : "pressable"}
@@ -1265,35 +1266,35 @@ function ProfileCell({ name, colour, stacks, on, onClick }: { name: string; colo
       aria-pressed={on}
       style={{
         width: "100%",
-        padding: "12px 16px 0",
+        minHeight: 64,
+        padding: "10px 16px",
         display: "flex",
-        flexDirection: "column",
-        gap: 10,
+        alignItems: "center",
+        gap: 12,
         textAlign: "left",
         background: on ? "var(--focus-bg)" : "transparent",
         borderBottom: "1px solid var(--rule)",
       }}
     >
-      <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <SourceIcon from={colour ? "other" : "profile"} colour={colour ?? "var(--ink-3)"} size={14} />
-        <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: on ? 700 : 600 }}>{name}</span>
-        {on && (
-          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden style={{ color: "var(--ink)" }}>
+      <span style={{ width: 18, display: "flex", justifyContent: "center", flexShrink: 0 }}>
+        {on ? (
+          <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden style={{ color: "var(--ink)" }}>
             <path d="M2.5 7.5 5.5 10.5 11.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
+        ) : (
+          <SourceIcon from={colour ? "other" : "profile"} colour={colour ?? "var(--ink-3)"} size={14} />
         )}
       </span>
-      <span style={{ display: "flex", gap: 2 }}>
-        {stacks.map((st) => {
-          const tape = tapeFor(st) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(st);
-          return (
-            <span key={st} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
-              <span className="t-label" style={{ fontSize: 9.5, letterSpacing: "0.08em", color: "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {st}
-              </span>
-              <span style={{ height: 2, background: tape, opacity: on ? 1 : 0.7 }} />
-            </span>
-          );
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+        <span style={{ fontSize: 16, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)" }}>{name}</span>
+        <span className="t-meta" style={{ fontSize: 12.5 }}>
+          {stacks.length} stacks · {total} patches
+        </span>
+      </span>
+      <span aria-label={stacks.map((x) => `${x.name} ${x.count}`).join(", ")} style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 28, flexShrink: 0 }}>
+        {stacks.map((x) => {
+          const tape = tapeFor(x.name) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(x.name);
+          return <span key={x.name} title={`${x.name} · ${x.count}`} style={{ width: 4, height: Math.max(4, Math.round((x.count / most) * 28)), borderRadius: 1.5, background: tape, opacity: on ? 1 : 0.75 }} />;
         })}
       </span>
     </button>
