@@ -832,3 +832,21 @@ export function focusBrowser(kind: string | null) {
 export function playPreset(preset: string, variation: string) {
   move((s) => ({ ...s, presetUp: { preset, variation }, live: null }));
 }
+
+/** Drop everything a part carries of its own: the modules swapped in and
+ *  Edit's unsaved changes — back to its preset as it is. */
+export function clearOverrides(t: Target) {
+  change(`${t.song} · own changes cleared`, (s) => {
+    const overrides = { ...s.overrides };
+    delete overrides[targetKey(t)];
+    return { ...s, overrides };
+  });
+}
+
+/** Drop every module or block swapped into a preset's variation. */
+export function clearVariationPicks(preset: string, variation: string) {
+  change(`${preset} · ${variation}: swaps cleared`, (s) => ({
+    ...s,
+    presetPicks: Object.fromEntries(Object.entries(s.presetPicks).filter(([k]) => !k.startsWith(`${preset}/${variation}/`))),
+  }));
+}

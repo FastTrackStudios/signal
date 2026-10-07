@@ -19,7 +19,9 @@ import { blockPresetsByType, modulesOf, rig, stackOf } from "../data/rig";
 import {
   addSong,
   addStackPatch,
+  clearOverrides,
   clearVariationPick,
+  clearVariationPicks,
   currentSet,
   editParam,
   overrideOf,
@@ -419,6 +421,8 @@ export function Browser({ onClose }: { onClose?: () => void }) {
               <span style={{ fontSize: 15, fontWeight: 700 }}>{!wide && opened ? kind.label : "Browser"}</span>
             )}
           </span>
+          {/* Clear what the target carries of its own, in one go. */}
+          <ClearOwn bt={bt} />
           {/* Step the target through the song's sections and parts — set a
               whole song without going back to the setlist. */}
           {t && sec && <StepTarget t={t} />}
@@ -785,5 +789,36 @@ function StepTarget({ t }: { t: Target }) {
       </span>
       {btn(1, "Next section")}
     </span>
+  );
+}
+
+/** "Clear n": every module swapped in (and, for a part, Edit's unsaved
+ *  changes) dropped at once — back to the preset as it is. Shown only when
+ *  there is something to clear. */
+function ClearOwn({ bt }: { bt: BuildTarget }) {
+  const s = useStore();
+  let n = 0;
+  let clear: (() => void) | null = null;
+  if (bt?.kind === "part") {
+    const o = overrideOf(s, bt.t);
+    n = Object.keys(o.modules).length + Object.keys(o.edits).length;
+    clear = () => clearOverrides(bt.t);
+  } else if (bt?.kind === "preset") {
+    n = Object.keys(s.presetPicks).filter((k) => k.startsWith(`${bt.preset}/${bt.variation}/`)).length;
+    clear = () => clearVariationPicks(bt.preset, bt.variation);
+  }
+  if (!n || !clear) return null;
+  return (
+    <button
+      className="pressable"
+      onClick={clear}
+      title={bt?.kind === "part" ? "Drop every module swapped in and every unsaved change — back to its preset" : "Drop every module swapped into this variation"}
+      style={{ height: 32, padding: "0 10px", borderRadius: "var(--r)", display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap", color: "var(--modified)", boxShadow: "inset 0 0 0 1px color-mix(in oklab, var(--modified) 45%, transparent)" }}
+    >
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+        <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+      Clear {n} override{n === 1 ? "" : "s"}
+    </button>
   );
 }
