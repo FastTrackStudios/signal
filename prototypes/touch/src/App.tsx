@@ -19,6 +19,7 @@ import { StageCtx } from "./ui/stage";
 import { Setlist } from "./setlist/Setlist";
 import { AudioControls, Switches } from "./dock/Switches";
 import { MacroBar } from "./dock/MacroBar";
+import { Phone } from "./Phone";
 import { redo, undo, useUndo, setPerformMode, toggleHouseMute, useStore, type PerformMode } from "./store";
 
 const SIDEBAR = 402;
@@ -125,6 +126,21 @@ export function App() {
             <Device scale={scale} w={W} h={H} corner={model.corner} />
           </Body>
         </div>
+      </div>
+      {/* The phones, below it on the right, at the same real scale: the
+          setlist in portrait, the stage view (macros + switches) in
+          landscape. */}
+      <div style={{ width: OW * scale, display: "flex", justifyContent: "flex-end", alignItems: "flex-end", gap: 28 * scale, marginTop: 12 }}>
+        <Phone pagePpi={(scale * W) / (model.px / model.ppi)}>
+          <Setlist />
+        </Phone>
+        <Phone landscape pagePpi={(scale * W) / (model.px / model.ppi)}>
+          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            <MacroBar />
+            <span style={{ flex: 1 }} />
+            <Switches />
+          </div>
+        </Phone>
       </div>
     </div>
   );
