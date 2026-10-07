@@ -953,7 +953,7 @@ function Row({ item, sub, onPick }: { item: Item; sub?: string; onPick?: () => v
 const KEY_ORDER = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"];
 
 /** The library's songs, found fast: a collection along the top (All, or
- *  one of the user's — Church, Contemporary…), then artist, key and genre
+ *  one of the user's — Church…), then artist, key and genre
  *  to narrow it; each song's ⋯ puts it in collections and sets its
  *  artist and genre. */
 function SongList({ items, apply, hint }: { items: Item[]; apply: ((item: Item) => void) | null; hint: string | null }) {

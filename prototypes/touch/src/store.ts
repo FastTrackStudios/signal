@@ -76,7 +76,7 @@ export interface State {
    *  it's by, and its genre. */
   songInfo: Record<string, SongInfo>;
   /** Song collections — named groups a song can be in any number of
-   *  ("Church", "Contemporary"…), for finding songs faster. */
+   *  ("Church"…), for finding songs faster. */
   collections: Collection[];
   /** Colours set by hand, by song name (the rest are their names'). */
   songColours: Record<string, string>;
@@ -1321,8 +1321,6 @@ function seedSongInfo(): Record<string, SongInfo> {
 function seedCollections(): Collection[] {
   return [
     { name: "Church", colour: collectionColours()[0], songs: ["What a God", "No Other Name", "Owe You Praise", "Who Else", "Build My Life / With Everything", "Reckless Love", "Great Are You Lord", "Give Me Jesus", "Always on Time", "Praise"] },
-    { name: "Contemporary", colour: collectionColours()[1], songs: ["WASHED", "AMAZING!", "TAKEOVER", "Thank God I'm Free", "I Thank God", "Praise", "GOODBYE YESTERDAY", "Keep On Finding More", "On And On"] },
-    { name: "Openers", colour: collectionColours()[4], songs: ["AMAZING!", "TAKEOVER", "GOODBYE YESTERDAY", "Owe You Praise", "Thank God I'm Free"] },
   ];
 }
 
