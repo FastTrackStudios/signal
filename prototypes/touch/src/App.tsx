@@ -39,7 +39,7 @@ export function App() {
         <span style={{ width: 1, height: 28, background: "var(--rule)" }} />
         <Tabs options={MODES} value={mode} onChange={setMode} size="lg" />
         <span style={{ flex: 1 }} />
-        <Tape colour="var(--tape-special)" tilt={-1} style={{ fontSize: 13, padding: "6px 10px" }}>
+        <Tape colour="var(--tape-gaffer)" tilt={-1} style={{ fontSize: 14, padding: "7px 11px" }}>
           {rig.perf.profile_name}
         </Tape>
         <button
@@ -65,12 +65,22 @@ export function App() {
           </svg>
           <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label ? `Undo ${label}` : "Undo"}</span>
         </button>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minHeight: 48, padding: "0 6px", fontWeight: 760 }} title="Audio running">
-          <span style={{ width: 10, height: 10, borderRadius: 999, background: "#18b46b" }} />
-          Audio
+        {/* The prototype runs on an exported copy of the rig: say so. */}
+        <span className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 8, minHeight: 48, padding: "0 6px", fontWeight: 700 }} title="A copy of the rig's data, exported from the engine — nothing here plays or saves">
+          <span style={{ width: 10, height: 10, borderRadius: 999, border: "2px solid var(--ink-3)" }} />
+          Demo rig · no audio
         </span>
       </header>
-      <main style={{ flex: 1, minHeight: 0, position: "relative" }}>
+      {/* The ruled sheet under every page. */}
+      <main
+        style={{
+          flex: 1,
+          minHeight: 0,
+          position: "relative",
+          backgroundImage: "linear-gradient(rgba(0,0,0,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.045) 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      >
         {mode === "Set" && <SetView />}
         {mode === "Sounds" && <SoundsView />}
         {mode === "Library" && <LibraryView />}

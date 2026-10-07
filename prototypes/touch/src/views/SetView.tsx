@@ -118,7 +118,7 @@ function SetSheet() {
                     {played && <Strike />}
                   </span>
                   {startTape && !played && (
-                    <Tape colour={startTape} style={{ alignSelf: "flex-start", fontSize: 11, padding: "2px 7px" }}>
+                    <Tape colour={startTape} style={{ alignSelf: "flex-start", fontSize: 13, padding: "2px 8px" }}>
                       starts {song.start}
                     </Tape>
                   )}
@@ -397,8 +397,8 @@ function SoundPicker({ sectionName, current, onPick }: { sectionName: string; cu
           onChange={setTab}
         />
         <span style={{ flex: 1 }} />
-        <Button onClick={() => onPick(null)} disabled={!current}>
-          Keep what plays
+        <Button onClick={() => onPick(null)} disabled={!current} title="This section stops changing the sound: it keeps whatever is playing">
+          Clear its sound
         </Button>
       </div>
       {tab === "patches" ? (

@@ -79,6 +79,8 @@ export function Tape({
         transform: tilt ? `rotate(${tilt}deg)` : undefined,
         whiteSpace: "nowrap",
         boxShadow: "inset 0 -1px 0 rgba(0,0,0,0.12)",
+        // Tape is translucent: the sheet's rules show through the colour.
+        mixBlendMode: dark || colour === "var(--sheet)" ? undefined : "multiply",
         ...style,
       }}
     >

@@ -4,8 +4,8 @@
 // is not hidden — it is struck, so the chain always reads whole.
 
 import { useState } from "react";
-import { blockPresetsByType, chain, type ChainNode } from "../data/rig";
-import { pickBlockPreset, toggleBypass, useStore } from "../store";
+import { blockPresetsByType, type ChainNode } from "../data/rig";
+import { orderedChain, pickBlockPreset, toggleBypass, useStore } from "../store";
 import { Strike } from "./marks";
 import { SideSheet } from "./kit";
 
@@ -14,7 +14,7 @@ const TYPES = blockPresetsByType();
 export function ChainStrip() {
   const s = useStore();
   const [open, setOpen] = useState<ChainNode | null>(null);
-  const blocks = chain();
+  const blocks = orderedChain(s);
   let lastModule = "";
   return (
     <footer
@@ -57,7 +57,7 @@ export function ChainStrip() {
                 flexShrink: 0,
               }}
             >
-              <div className="t-label" style={{ height: 22, padding: "5px 10px 0", fontSize: 11, color: "var(--ink-3)" }}>
+              <div className="t-label" style={{ height: 24, padding: "5px 10px 0", fontSize: 13, color: "var(--ink-3)" }}>
                 {firstOfModule ? module : ""}
               </div>
               <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
@@ -101,7 +101,7 @@ export function ChainStrip() {
   );
 }
 
-function BlockSheet({ node, pick, onClose }: { node: ChainNode; pick: string; onClose: () => void }) {
+export function BlockSheet({ node, pick, onClose }: { node: ChainNode; pick: string; onClose: () => void }) {
   const type = (node.block_type ?? "").toLowerCase();
   const fromLibrary = TYPES.get(type) ?? [];
   const names = fromLibrary.length > 0 ? fromLibrary.map((b) => b.name) : node.presets.map((p) => p.name);

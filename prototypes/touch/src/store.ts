@@ -4,7 +4,7 @@
 // purge; a played song is struck, not removed.
 
 import { useSyncExternalStore } from "react";
-import { rig, modulesOf, type ModulePreset, type Setlist, type SongSlot } from "./data/rig";
+import { chain, rig, modulesOf, type ModulePreset, type Setlist, type SongSlot } from "./data/rig";
 
 /** What a section plays: a patch of the profile, or a preset. */
 export interface Sound {
@@ -39,8 +39,12 @@ export interface State {
   bypass: Record<string, boolean>;
   /** Block preset picks by chain block id. */
   blockPick: Record<string, string>;
-  /** A preset's module picks changed here, by "preset/module". */
+  /** A preset's module picks changed here, by "preset/variation/module". */
   presetPicks: Record<string, string>;
+  /** The chain's order, by module: block ids as the player arranged them. */
+  order: Record<string, string[]>;
+  /** A block moved to the amp pair's other side (or out of it). */
+  side: Record<string, "L" | "R" | null>;
 }
 
 function seed(): State {
@@ -81,6 +85,8 @@ function seed(): State {
     bypass,
     blockPick: {},
     presetPicks: {},
+    order: {},
+    side: {},
   };
 }
 
@@ -276,9 +282,50 @@ export function addSection(song: string, name: string) {
   }));
 }
 
-export function setVariationPick(preset: string, module: string, pick: string) {
-  change(`${preset}: ${module} → ${pick}`, (s) => ({
+export function setVariationPick(preset: string, variation: string, module: string, pick: string) {
+  change(`${preset} · ${variation}: ${module} → ${pick}`, (s) => ({
     ...s,
-    presetPicks: { ...s.presetPicks, [`${preset}/${module}`]: pick },
+    presetPicks: { ...s.presetPicks, [`${preset}/${variation}/${module}`]: pick },
   }));
+}
+
+/** A block moved within its module (a drag in Routing). */
+export function moveBlock(module: string, ids: string[], from: number, to: number) {
+  change(`Move a block in ${module}`, (s) => {
+    const list = [...(s.order[module] ?? ids)];
+    const [x] = list.splice(from, 1);
+    list.splice(to, 0, x);
+    return { ...s, order: { ...s.order, [module]: list } };
+  });
+}
+
+/** Split a block onto the amp pair's other side, or join it back. */
+export function setSide(id: string, name: string, side: "L" | "R" | null) {
+  change(`${name} → ${side === "R" ? "right side" : side === "L" ? "left side" : "the main path"}`, (s) => ({
+    ...s,
+    side: { ...s.side, [id]: side },
+  }));
+}
+
+/** The chain in signal order as the player arranged it (Routing's drags). */
+export function orderedChain(s: State): ReturnType<typeof chain> {
+  const base = chain();
+  const out: ReturnType<typeof chain> = [];
+  let i = 0;
+  while (i < base.length) {
+    const module = base[i].module;
+    const group: ReturnType<typeof chain> = [];
+    while (i < base.length && base[i].module === module) group.push(base[i++]);
+    const order = s.order[module];
+    if (order) group.sort((a, b) => order.indexOf(a.node.id) - order.indexOf(b.node.id));
+    out.push(...group);
+  }
+  return out;
+}
+
+/** Which side of the amp pair a block plays on: the player's choice, else
+ *  what its name says (Amp R, Cab R). */
+export function sideOf(s: State, id: string, name: string): "L" | "R" | null {
+  if (id in s.side) return s.side[id];
+  return /(\s|\[)R\]?$|\bR$/.test(name) ? "R" : /(\s|\[)L\]?$|\bL$/.test(name) ? "L" : null;
 }
