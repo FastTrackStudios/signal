@@ -1052,10 +1052,13 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
           <ProfileCell
             name={song ? "Setlist default" : "Rig default"}
             of={fallback.name}
+            inherit
             profile={rig.library.profiles.find((x) => x.name === fallback.name)}
             on={current === null}
             onClick={() => (song ? setSongProfile(song.name, null) : setSetProfile(null))}
           />
+          {/* The default stands apart: a band of the desk between it and the profiles. */}
+          <div aria-hidden style={{ height: 8, background: "var(--desk)", borderBottom: "1px solid var(--rule)" }} />
           {/* The one picked leads, right under the default; the rest follow. */}
           {[...rig.library.profiles].sort((a, b) => Number(b.name === current) - Number(a.name === current)).map((p) => (
             <ProfileCell
@@ -1257,7 +1260,7 @@ function PatchList({ song, current, defaultLabel, onPick }: { song?: string; cur
  *  drawn small at the right — one thin bar each, in the stack's colour, as
  *  tall as the stack is full. Rows run flush, hairlines between; the one
  *  picked is lifted. */
-function ProfileCell({ name, of, profile, colour, on, onClick }: { name: string; of?: string; profile?: ProfileEntry; colour?: string; on: boolean; onClick: () => void }) {
+function ProfileCell({ name, of, inherit, profile, colour, on, onClick }: { name: string; of?: string; inherit?: boolean; profile?: ProfileEntry; colour?: string; on: boolean; onClick: () => void }) {
   const stacks = profile ? profile.stacks.map((st) => ({ name: st, count: profile.patch_list.filter((x) => x.stack === st).length })).filter((x) => x.count > 0) : [];
   const first = profile?.patch_list.find((x) => x.stack === stacks[0]?.name)?.name;
   const most = Math.max(1, ...rig.library.profiles.flatMap((p) => p.stacks.map((st) => p.patch_list.filter((x) => x.stack === st).length)));
@@ -1275,13 +1278,21 @@ function ProfileCell({ name, of, profile, colour, on, onClick }: { name: string;
         gap: 12,
         textAlign: "left",
         background: on ? "var(--focus-bg)" : "transparent",
-        borderBottom: "1px solid var(--rule)",
+        borderBottom: inherit ? undefined : "1px solid var(--rule)",
       }}
     >
       <span style={{ width: 22, display: "flex", justifyContent: "center", flexShrink: 0 }}>
-        <ProfileIcon name={profile?.name} colour={colour ?? "var(--ink-3)"} size={18} />
+        {inherit ? (
+          // Follows the set: an arrow coming down from above.
+          <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden style={{ color: "var(--ink-3)" }}>
+            <path d="M4 2v5.5a2.5 2.5 0 0 0 2.5 2.5H13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M10 7l3 3-3 3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : (
+          <ProfileIcon name={profile?.name} colour={colour ?? "var(--ink-3)"} size={18} />
+        )}
       </span>
-      <span style={{ flexShrink: 0, fontSize: 15, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap" }}>{name}</span>
+      <span style={{ flexShrink: 0, fontSize: 15, fontWeight: on ? 700 : 600, fontStyle: inherit ? "italic" : undefined, color: on ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap" }}>{name}</span>
       {/* What it opens on: the first patch of its first stack. */}
       <span className="t-meta" style={{ flex: 1, minWidth: 0, textAlign: "right", fontSize: 11.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {[of, first].filter(Boolean).join(" · ")}
