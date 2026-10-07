@@ -1,0 +1,502 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-07T01:07:14+00:00",
+  "title": "Design System: Signal Touch",
+  "extensions": {
+    "colorMeta": {
+      "desk": {
+        "role": "neutral",
+        "displayName": "Desk",
+        "canonical": "#e9ece9",
+        "tonalRamp": [
+          "#464746",
+          "#747674",
+          "#a3a5a3",
+          "#cdd0cd",
+          "#eef1ee",
+          "#f4f6f4",
+          "#fafafa",
+          "#fdfdfd"
+        ]
+      },
+      "sheet": {
+        "role": "neutral",
+        "displayName": "Sheet",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#4c4c4c",
+          "#808080",
+          "#b2b2b2",
+          "#e0e0e0",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff"
+        ]
+      },
+      "sheet-2": {
+        "role": "neutral",
+        "displayName": "Sheet Underlay",
+        "canonical": "#f6f7f5",
+        "tonalRamp": [
+          "#4a4a4a",
+          "#7b7c7a",
+          "#acadac",
+          "#d8d9d8",
+          "#f8f9f8",
+          "#fafbfa",
+          "#fdfdfc",
+          "#fefefe"
+        ]
+      },
+      "up-now-wash": {
+        "role": "neutral",
+        "displayName": "Up-Now Wash",
+        "canonical": "#fffbe0",
+        "tonalRamp": [
+          "#4c4b43",
+          "#807e70",
+          "#b2b09d",
+          "#e0ddc5",
+          "#fffce8",
+          "#fffdf0",
+          "#fffef7",
+          "#fffffc"
+        ],
+        "note": "Literal #fffbe0 in the views (SetView, SoundsView, LibraryView); not yet a :root custom property."
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "#dcdfda",
+        "tonalRamp": [
+          "#424341",
+          "#6e706d",
+          "#9a9c99",
+          "#c2c4c0",
+          "#e5e7e3",
+          "#eeefec",
+          "#f6f7f6",
+          "#fcfcfb"
+        ]
+      },
+      "rule-strong": {
+        "role": "neutral",
+        "displayName": "Rule Strong",
+        "canonical": "#b9bdb6",
+        "tonalRamp": [
+          "#383937",
+          "#5c5e5b",
+          "#82847f",
+          "#a3a6a0",
+          "#cacec8",
+          "#dcdeda",
+          "#eeeeed",
+          "#f8f8f8"
+        ]
+      },
+      "ink": {
+        "role": "primary",
+        "displayName": "Marker Ink",
+        "canonical": "#121212",
+        "tonalRamp": [
+          "#050505",
+          "#090909",
+          "#0d0d0d",
+          "#101010",
+          "#4d4d4d",
+          "#888888",
+          "#c4c4c4",
+          "#e7e7e7"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Ink 2",
+        "canonical": "#3d3f43",
+        "tonalRamp": [
+          "#121314",
+          "#1e2022",
+          "#2b2c2f",
+          "#36373b",
+          "#6e6f72",
+          "#9e9fa1",
+          "#cecfd0",
+          "#ececec"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Ink 3",
+        "canonical": "#64666c",
+        "tonalRamp": [
+          "#1e1f20",
+          "#323336",
+          "#46474c",
+          "#585a5f",
+          "#8b8c91",
+          "#b2b2b6",
+          "#d8d9da",
+          "#f0f0f0"
+        ]
+      },
+      "tape-gaffer": {
+        "role": "secondary",
+        "displayName": "Gaffer Black",
+        "canonical": "#2a2b2f",
+        "tonalRamp": [
+          "#0d0d0e",
+          "#151618",
+          "#1d1e21",
+          "#252629",
+          "#5f6063",
+          "#949597",
+          "#cacacb",
+          "#eaeaea"
+        ]
+      },
+      "tape-clean": {
+        "role": "secondary",
+        "displayName": "Clean Tape Cyan",
+        "canonical": "#19c3ff",
+        "tonalRamp": [
+          "#083a4c",
+          "#0c6280",
+          "#1288b2",
+          "#16ace0",
+          "#52d2ff",
+          "#8ce1ff",
+          "#c6f0ff",
+          "#e8f9ff"
+        ]
+      },
+      "tape-crunch": {
+        "role": "secondary",
+        "displayName": "Crunch Tape Violet",
+        "canonical": "#9b7bff",
+        "tonalRamp": [
+          "#2e254c",
+          "#4e3e80",
+          "#6c56b2",
+          "#886ce0",
+          "#b49cff",
+          "#cdbdff",
+          "#e6deff",
+          "#f5f2ff"
+        ]
+      },
+      "tape-drive": {
+        "role": "secondary",
+        "displayName": "Drive Tape Orange",
+        "canonical": "#ff8a00",
+        "tonalRamp": [
+          "#4c2900",
+          "#804500",
+          "#b26100",
+          "#e07900",
+          "#ffa740",
+          "#ffc480",
+          "#ffe2bf",
+          "#fff3e6"
+        ]
+      },
+      "tape-lead": {
+        "role": "secondary",
+        "displayName": "Lead Tape Pink-Red",
+        "canonical": "#ff3b5c",
+        "tonalRamp": [
+          "#4c121c",
+          "#801e2e",
+          "#b22940",
+          "#e03451",
+          "#ff6c85",
+          "#ff9dae",
+          "#ffced6",
+          "#ffebef"
+        ]
+      },
+      "tape-ambient": {
+        "role": "secondary",
+        "displayName": "Ambient Tape Green",
+        "canonical": "#1ed98d",
+        "tonalRamp": [
+          "#09412a",
+          "#0f6c46",
+          "#159863",
+          "#1abf7c",
+          "#56e2aa",
+          "#8eecc6",
+          "#c7f6e2",
+          "#e8fbf4"
+        ]
+      },
+      "tape-special": {
+        "role": "secondary",
+        "displayName": "Special Tape Yellow",
+        "canonical": "#ffd60a",
+        "tonalRamp": [
+          "#4c4003",
+          "#806b05",
+          "#b29607",
+          "#e0bc09",
+          "#ffe047",
+          "#ffea84",
+          "#fff5c2",
+          "#fffbe6"
+        ]
+      },
+      "path": {
+        "role": "tertiary",
+        "displayName": "Ballpoint Ultramarine",
+        "canonical": "#2433ff",
+        "tonalRamp": [
+          "#0b0f4c",
+          "#121a80",
+          "#1924b2",
+          "#202de0",
+          "#5b66ff",
+          "#9299ff",
+          "#c8ccff",
+          "#e9ebff"
+        ]
+      },
+      "void": {
+        "role": "tertiary",
+        "displayName": "Void Red",
+        "canonical": "#d7263d",
+        "tonalRamp": [
+          "#400b12",
+          "#6c131e",
+          "#961b2b",
+          "#bd2136",
+          "#e15c6e",
+          "#eb929e",
+          "#f5c9ce",
+          "#fbe9ec"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Marker Display",
+        "purpose": "The thing in hand: the song up, the preset open (44px, width 112%)."
+      },
+      "headline": {
+        "displayName": "Marker Headline",
+        "purpose": "Sheet titles, 26-30px."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Song names in the set, section names, block names."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "List rows, buttons, tabs; tabular numerals."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "One line of facts under a title, ink-3, joined by middots."
+      },
+      "label": {
+        "displayName": "Tape Label",
+        "purpose": "Uppercase narrow labels: module names, stack names on tape, state words."
+      }
+    },
+    "shadows": [
+      {
+        "name": "paper-lift",
+        "value": "0 1px 0 rgba(0,0,0,0.04), 0 6px 16px -10px rgba(0,0,0,0.18)",
+        "purpose": "Every sheet lying on the desk."
+      },
+      {
+        "name": "held",
+        "value": "0 10px 24px -8px rgba(0,0,0,0.35)",
+        "purpose": "A routing block while a finger is dragging it."
+      },
+      {
+        "name": "tape-edge",
+        "value": "inset 0 -1px 0 rgba(0,0,0,0.12)",
+        "purpose": "The bottom edge of a strip of tape."
+      },
+      {
+        "name": "drop-line",
+        "value": "inset 0 3px 0 #121212",
+        "purpose": "Insertion point while reordering a set."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "purpose": "The one easing for every transition."
+      },
+      {
+        "name": "press",
+        "value": "140ms",
+        "purpose": "Pressable background and scale(0.985)."
+      },
+      {
+        "name": "mark-draw",
+        "value": "260ms",
+        "purpose": "Strike and circle drawing themselves on via stroke-dashoffset; none under reduced motion."
+      },
+      {
+        "name": "sheet-in",
+        "value": "220ms",
+        "purpose": "Side sheet slides in 24px from the right and fades in."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "ipad-11-landscape",
+        "value": "1194px"
+      },
+      {
+        "name": "framework-13",
+        "value": "1504px"
+      }
+    ],
+    "layout": {
+      "barHeight": "60px",
+      "stripHeight": "104px",
+      "grid": "24px hairlines rgba(0,0,0,0.045)",
+      "pageGap": "14px",
+      "sheetGutter": "22px",
+      "sideSheetWidth": "460px (max 92%)",
+      "scrim": "rgba(18,18,18,0.22)"
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Solid ink for the one thing you came to do; one per area.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Add songs</button>",
+      "css": ":host{--desk:#e9ece9;--sheet:#fff;--sheet-2:#f6f7f5;--rule:#dcdfda;--rule-strong:#b9bdb6;--ink:#121212;--ink-2:#3d3f43;--ink-3:#64666c;--tape-clean:#19c3ff;--tape-crunch:#9b7bff;--tape-drive:#ff8a00;--tape-lead:#ff3b5c;--tape-ambient:#1ed98d;--tape-special:#ffd60a;--tape-gaffer:#2a2b2f;--path:#2433ff;--void:#d7263d;--r:4px;--hit:48px;--font:\"Archivo Variable\",\"Archivo\",system-ui,sans-serif;--ease:cubic-bezier(0.2,0.8,0.2,1);font-family:var(--font);font-variant-numeric:tabular-nums;color:var(--ink)} .ds-btn{min-height:var(--hit);padding:0 18px;border-radius:var(--r);border:2px solid var(--ink);font:inherit;font-weight:760;font-size:15px;cursor:pointer;transition:background 140ms var(--ease),transform 140ms var(--ease)} .ds-btn:focus-visible{outline:3px solid var(--ink);outline-offset:2px} .ds-btn:active{transform:scale(0.985)} .ds-btn-primary{background:var(--ink);color:#fff} .ds-btn-primary:hover{background:#2a2b2f}"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Ink outline on the sheet; Done, Remove, Clear its sound.",
+      "html": "<button class=\"ds-btn ds-btn-outline\">Done</button> <button class=\"ds-btn ds-btn-outline\" disabled>Remove</button>",
+      "css": ":host{--desk:#e9ece9;--sheet:#fff;--sheet-2:#f6f7f5;--rule:#dcdfda;--rule-strong:#b9bdb6;--ink:#121212;--ink-2:#3d3f43;--ink-3:#64666c;--tape-clean:#19c3ff;--tape-crunch:#9b7bff;--tape-drive:#ff8a00;--tape-lead:#ff3b5c;--tape-ambient:#1ed98d;--tape-special:#ffd60a;--tape-gaffer:#2a2b2f;--path:#2433ff;--void:#d7263d;--r:4px;--hit:48px;--font:\"Archivo Variable\",\"Archivo\",system-ui,sans-serif;--ease:cubic-bezier(0.2,0.8,0.2,1);font-family:var(--font);font-variant-numeric:tabular-nums;color:var(--ink)} .ds-btn{min-height:var(--hit);padding:0 18px;border-radius:var(--r);border:2px solid var(--ink);font:inherit;font-weight:760;font-size:15px;cursor:pointer;transition:background 140ms var(--ease),transform 140ms var(--ease)} .ds-btn:focus-visible{outline:3px solid var(--ink);outline-offset:2px} .ds-btn:active{transform:scale(0.985)} .ds-btn-outline{background:var(--sheet);color:var(--ink)} .ds-btn-outline:hover,.ds-btn-outline:active{background:var(--sheet-2)} .ds-btn-outline:disabled{border-color:var(--rule-strong);color:var(--ink-3);cursor:default}"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Outline in void red for cancelling a preset or variation.",
+      "html": "<button class=\"ds-btn ds-btn-void\">Cancel preset</button>",
+      "css": ":host{--desk:#e9ece9;--sheet:#fff;--sheet-2:#f6f7f5;--rule:#dcdfda;--rule-strong:#b9bdb6;--ink:#121212;--ink-2:#3d3f43;--ink-3:#64666c;--tape-clean:#19c3ff;--tape-crunch:#9b7bff;--tape-drive:#ff8a00;--tape-lead:#ff3b5c;--tape-ambient:#1ed98d;--tape-special:#ffd60a;--tape-gaffer:#2a2b2f;--path:#2433ff;--void:#d7263d;--r:4px;--hit:48px;--font:\"Archivo Variable\",\"Archivo\",system-ui,sans-serif;--ease:cubic-bezier(0.2,0.8,0.2,1);font-family:var(--font);font-variant-numeric:tabular-nums;color:var(--ink)} .ds-btn{min-height:var(--hit);padding:0 18px;border-radius:var(--r);border:2px solid var(--ink);font:inherit;font-weight:760;font-size:15px;cursor:pointer;transition:background 140ms var(--ease),transform 140ms var(--ease)} .ds-btn:focus-visible{outline:3px solid var(--ink);outline-offset:2px} .ds-btn:active{transform:scale(0.985)} .ds-btn-void{background:var(--sheet);border-color:var(--void);color:var(--void)} .ds-btn-void:hover{background:var(--sheet-2)}"
+    },
+    {
+      "name": "Mode Tabs",
+      "kind": "nav",
+      "refersTo": "tab-active",
+      "description": "The tab in use is taped down in gaffer black.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\"><button class=\"ds-tab on\" role=\"tab\" aria-selected=\"true\">Set</button><button class=\"ds-tab\" role=\"tab\">Sounds</button><button class=\"ds-tab\" role=\"tab\">Library <span class=\"ds-count\">190</span></button><button class=\"ds-tab\" role=\"tab\">Routing</button></div>",
+      "css": ":host{--desk:#e9ece9;--sheet:#fff;--sheet-2:#f6f7f5;--rule:#dcdfda;--rule-strong:#b9bdb6;--ink:#121212;--ink-2:#3d3f43;--ink-3:#64666c;--tape-clean:#19c3ff;--tape-crunch:#9b7bff;--tape-drive:#ff8a00;--tape-lead:#ff3b5c;--tape-ambient:#1ed98d;--tape-special:#ffd60a;--tape-gaffer:#2a2b2f;--path:#2433ff;--void:#d7263d;--r:4px;--hit:48px;--font:\"Archivo Variable\",\"Archivo\",system-ui,sans-serif;--ease:cubic-bezier(0.2,0.8,0.2,1);font-family:var(--font);font-variant-numeric:tabular-nums;color:var(--ink)} .ds-tabs{display:flex;gap:4px;background:var(--sheet);padding:6px} .ds-tab{min-height:48px;padding:0 18px;border:none;border-radius:2px;background:transparent;color:var(--ink-2);font:inherit;font-weight:650;font-stretch:96%;font-size:17px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;transition:background 140ms var(--ease)} .ds-tab:hover{background:var(--sheet-2)} .ds-tab:focus-visible{outline:3px solid var(--ink);outline-offset:2px} .ds-tab.on{background:var(--tape-gaffer);color:#fff;font-weight:800} .ds-count{font-size:12px;opacity:.7;font-weight:600}"
+    },
+    {
+      "name": "Stack Tape",
+      "kind": "chip",
+      "refersTo": "tape-stack",
+      "description": "Fluoro tape per stack, black ink, multiply over the ruled sheet; gaffer black means this one.",
+      "html": "<div class=\"ds-tape-row\"><span class=\"ds-tape\" style=\"background:var(--tape-clean)\">Clean</span><span class=\"ds-tape\" style=\"background:var(--tape-crunch)\">Crunch</span><span class=\"ds-tape\" style=\"background:var(--tape-drive)\">Drive</span><span class=\"ds-tape\" style=\"background:var(--tape-lead)\">Lead</span><span class=\"ds-tape\" style=\"background:var(--tape-ambient)\">Ambient</span><span class=\"ds-tape\" style=\"background:var(--tape-special)\">Special</span><span class=\"ds-tape ds-gaffer\" style=\"transform:rotate(-1deg)\">Worship</span></div>",
+      "css": ":host{--desk:#e9ece9;--sheet:#fff;--sheet-2:#f6f7f5;--rule:#dcdfda;--rule-strong:#b9bdb6;--ink:#121212;--ink-2:#3d3f43;--ink-3:#64666c;--tape-clean:#19c3ff;--tape-crunch:#9b7bff;--tape-drive:#ff8a00;--tape-lead:#ff3b5c;--tape-ambient:#1ed98d;--tape-special:#ffd60a;--tape-gaffer:#2a2b2f;--path:#2433ff;--void:#d7263d;--r:4px;--hit:48px;--font:\"Archivo Variable\",\"Archivo\",system-ui,sans-serif;--ease:cubic-bezier(0.2,0.8,0.2,1);font-family:var(--font);font-variant-numeric:tabular-nums;color:var(--ink)} .ds-tape-row{display:flex;flex-wrap:wrap;gap:8px;padding:12px;background-color:#fff;background-image:linear-gradient(rgba(0,0,0,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.045) 1px,transparent 1px);background-size:24px 24px} .ds-tape{display:inline-flex;align-items:center;padding:4px 9px;color:var(--ink);font-weight:760;font-stretch:78%;text-transform:uppercase;letter-spacing:.03em;font-size:13px;mix-blend-mode:multiply;box-shadow:inset 0 -1px 0 rgba(0,0,0,.12)} .ds-gaffer{background:var(--tape-gaffer);color:#fff;mix-blend-mode:normal}"
+    },
+    {
+      "name": "Set Row",
+      "kind": "custom",
+      "refersTo": "row-up-now",
+      "description": "Ruled set rows: played struck, the song up washed and circled, key box and tabular BPM.",
+      "html": "<div class=\"ds-set\"><div class=\"ds-row up\"><span class=\"ds-idx\">1<svg class=\"ds-mark ds-circle\" viewBox=\"0 0 100 40\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"M58 3 C 82 2, 98 9, 98 20 C 98 32, 76 38, 50 38 C 22 38, 2 32, 2 20 C 2 9, 22 3, 46 2.5 C 56 2, 66 3.5, 72 5\" style=\"stroke-width:2.5\"/></svg></span><span class=\"ds-name\" style=\"font-weight:860\">WASHED</span><span class=\"ds-key\">F</span><span class=\"ds-bpm\">139</span></div><div class=\"ds-row played\"><span class=\"ds-idx\">2</span><span class=\"ds-name\">Takeover<svg class=\"ds-mark ds-strike\" viewBox=\"0 0 100 10\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"M1 6 C 20 4.5, 40 6.8, 60 5.2 S 90 4.6, 99 5.6\" style=\"stroke-width:3\"/></svg></span><span class=\"ds-key\">C</span><span class=\"ds-bpm\">132</span></div><div class=\"ds-row\"><span class=\"ds-idx\">3</span><span class=\"ds-name\">Give Me Jesus</span><span class=\"ds-key\">G</span><span class=\"ds-bpm\">70</span></div></div>",
+      "css": ":host{--desk:#e9ece9;--sheet:#fff;--sheet-2:#f6f7f5;--rule:#dcdfda;--rule-strong:#b9bdb6;--ink:#121212;--ink-2:#3d3f43;--ink-3:#64666c;--tape-clean:#19c3ff;--tape-crunch:#9b7bff;--tape-drive:#ff8a00;--tape-lead:#ff3b5c;--tape-ambient:#1ed98d;--tape-special:#ffd60a;--tape-gaffer:#2a2b2f;--path:#2433ff;--void:#d7263d;--r:4px;--hit:48px;--font:\"Archivo Variable\",\"Archivo\",system-ui,sans-serif;--ease:cubic-bezier(0.2,0.8,0.2,1);font-family:var(--font);font-variant-numeric:tabular-nums;color:var(--ink)} .ds-mark path{stroke:var(--ink);fill:none;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke} .ds-set{background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r);box-shadow:0 1px 0 rgba(0,0,0,.04),0 6px 16px -10px rgba(0,0,0,.18)} .ds-row{height:76px;display:flex;align-items:center;gap:12px;padding:0 16px;cursor:pointer;transition:background 140ms var(--ease)} .ds-row+.ds-row{border-top:1px solid var(--rule)} .ds-row:hover{background:var(--sheet-2)} .ds-row.up{background:#fffbe0} .ds-idx{position:relative;width:28px;text-align:center;font-size:18px;font-weight:760} .ds-name{position:relative;flex:1;font-size:20px;font-weight:720;font-stretch:104%} .ds-row.played .ds-idx,.ds-row.played .ds-name{color:var(--ink-3)} .ds-key{min-width:30px;height:28px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;border:2px solid var(--ink);border-radius:2px;font-weight:800;font-size:15px} .ds-bpm{width:38px;text-align:right;font-size:17px;font-weight:650;color:var(--ink-2)} .ds-strike{position:absolute;left:-4px;top:50%;margin-top:-6px;height:12px;width:calc(100% + 8px)} .ds-circle{position:absolute;inset:-9px;width:calc(100% + 18px);height:calc(100% + 18px);overflow:visible}"
+    },
+    {
+      "name": "Section Tab",
+      "kind": "card",
+      "refersTo": "sheet",
+      "description": "A song section topped with its sound's stack tape; selected gets 3px ink.",
+      "html": "<div class=\"ds-secs\"><button class=\"ds-sec\"><span class=\"ds-bar\" style=\"background:var(--tape-clean)\"></span><span class=\"ds-sn\">Verse 1</span><span class=\"ds-ss\">Dry Chorus Clean</span></button><button class=\"ds-sec on\"><span class=\"ds-bar\" style=\"background:var(--tape-drive)\"></span><span class=\"ds-sn\">Chorus 2</span><span class=\"ds-ss\">Drive</span></button><button class=\"ds-sec\"><span class=\"ds-bar\" style=\"background:var(--rule-strong)\"></span><span class=\"ds-sn\">Tag</span><span class=\"ds-ss\" style=\"color:var(--ink-3)\">keeps what plays</span></button></div>",
+      "css": ":host{--desk:#e9ece9;--sheet:#fff;--sheet-2:#f6f7f5;--rule:#dcdfda;--rule-strong:#b9bdb6;--ink:#121212;--ink-2:#3d3f43;--ink-3:#64666c;--tape-clean:#19c3ff;--tape-crunch:#9b7bff;--tape-drive:#ff8a00;--tape-lead:#ff3b5c;--tape-ambient:#1ed98d;--tape-special:#ffd60a;--tape-gaffer:#2a2b2f;--path:#2433ff;--void:#d7263d;--r:4px;--hit:48px;--font:\"Archivo Variable\",\"Archivo\",system-ui,sans-serif;--ease:cubic-bezier(0.2,0.8,0.2,1);font-family:var(--font);font-variant-numeric:tabular-nums;color:var(--ink)} .ds-secs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding:12px} .ds-sec{min-height:84px;text-align:left;background:var(--sheet);border:1px solid var(--rule-strong);border-radius:var(--r);padding:0 12px 12px;display:flex;flex-direction:column;gap:6px;overflow:hidden;font:inherit;cursor:pointer;transition:background 140ms var(--ease),transform 140ms var(--ease)} .ds-sec:hover{background:var(--sheet-2)} .ds-sec:active{transform:scale(.985)} .ds-sec:focus-visible{outline:3px solid var(--ink);outline-offset:2px} .ds-sec.on{border:3px solid var(--ink);padding:0 10px 10px} .ds-bar{height:10px;margin:0 -12px 4px} .ds-sec.on .ds-bar{margin:0 -10px 4px} .ds-sn{font-size:18px;font-weight:840} .ds-ss{font-size:14px;font-weight:560;color:var(--ink-2)}"
+    },
+    {
+      "name": "Chain Block",
+      "kind": "custom",
+      "refersTo": "sheet",
+      "description": "One block in the chain strip; bypassed blocks are struck and dimmed, never hidden.",
+      "html": "<div class=\"ds-chain\"><div class=\"ds-blk first\"><div class=\"ds-mod\">Drive</div><div class=\"ds-body\"><span class=\"ds-bn\">Drive 1</span><span class=\"ds-pk\">Drive</span></div><span class=\"ds-sw on\"></span></div><div class=\"ds-blk off\"><div class=\"ds-mod\"></div><div class=\"ds-body\"><span class=\"ds-bn\">King of Tone<svg class=\"ds-mark ds-strike\" viewBox=\"0 0 100 10\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"M1 6 C 20 4.5, 40 6.8, 60 5.2 S 90 4.6, 99 5.6\" style=\"stroke-width:3\"/></svg></span><span class=\"ds-pk\">out</span></div><span class=\"ds-sw\"></span></div></div>",
+      "css": ":host{--desk:#e9ece9;--sheet:#fff;--sheet-2:#f6f7f5;--rule:#dcdfda;--rule-strong:#b9bdb6;--ink:#121212;--ink-2:#3d3f43;--ink-3:#64666c;--tape-clean:#19c3ff;--tape-crunch:#9b7bff;--tape-drive:#ff8a00;--tape-lead:#ff3b5c;--tape-ambient:#1ed98d;--tape-special:#ffd60a;--tape-gaffer:#2a2b2f;--path:#2433ff;--void:#d7263d;--r:4px;--hit:48px;--font:\"Archivo Variable\",\"Archivo\",system-ui,sans-serif;--ease:cubic-bezier(0.2,0.8,0.2,1);font-family:var(--font);font-variant-numeric:tabular-nums;color:var(--ink)} .ds-mark path{stroke:var(--ink);fill:none;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke} .ds-chain{display:flex;height:104px;background:var(--sheet);border-top:1px solid var(--rule-strong)} .ds-blk{position:relative;min-width:138px;border-left:1px solid var(--rule);display:grid;grid-template-columns:1fr 40px;grid-template-rows:24px 1fr} .ds-blk.first{border-left-color:var(--rule-strong)} .ds-mod{grid-column:1/-1;padding:5px 10px 0;font-size:13px;font-weight:760;font-stretch:78%;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-3)} .ds-body{padding:4px 6px 8px 10px;display:flex;flex-direction:column;justify-content:center;gap:3px} .ds-blk.off .ds-body{opacity:.55} .ds-bn{position:relative;align-self:flex-start;font-size:15px;font-weight:780;white-space:nowrap} .ds-pk{font-size:13px;font-weight:560;color:var(--ink-3)} .ds-sw{align-self:center;justify-self:center;width:14px;height:14px;border-radius:999px;border:2px solid var(--ink)} .ds-sw.on{background:var(--ink)} .ds-strike{position:absolute;left:-4px;top:50%;margin-top:-6px;height:12px;width:calc(100% + 8px)}"
+    },
+    {
+      "name": "Library Search",
+      "kind": "input",
+      "refersTo": "library-cell",
+      "description": "The library's find field: ink outline on the sheet, ink focus ring.",
+      "html": "<input class=\"ds-input\" placeholder=\"Find anything — a song, a sound, a pedal\">",
+      "css": ":host{--desk:#e9ece9;--sheet:#fff;--sheet-2:#f6f7f5;--rule:#dcdfda;--rule-strong:#b9bdb6;--ink:#121212;--ink-2:#3d3f43;--ink-3:#64666c;--tape-clean:#19c3ff;--tape-crunch:#9b7bff;--tape-drive:#ff8a00;--tape-lead:#ff3b5c;--tape-ambient:#1ed98d;--tape-special:#ffd60a;--tape-gaffer:#2a2b2f;--path:#2433ff;--void:#d7263d;--r:4px;--hit:48px;--font:\"Archivo Variable\",\"Archivo\",system-ui,sans-serif;--ease:cubic-bezier(0.2,0.8,0.2,1);font-family:var(--font);font-variant-numeric:tabular-nums;color:var(--ink)} .ds-input{min-height:48px;width:100%;max-width:360px;padding:0 14px;border:2px solid var(--ink);border-radius:var(--r);background:var(--sheet);font:inherit;font-size:17px;color:var(--ink)} .ds-input::placeholder{color:var(--ink-3)} .ds-input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Floor Setlist",
+    "overview": "**Creative North Star: \"The Floor Setlist\"**\n\nEvery set, song and sound reads like the setlist gaffer-taped at a player's feet. Copy-paper sheets lie on a cool off-white desk, and a faint 24px hairline grid runs under every page. One heavy grotesk, Archivo with its width axis pushed wide for the marker voice and narrow for labels, does all the talking. Colour comes from fluoro gaffer tape, one roll per stack. The live signal path is drawn in a single ballpoint ultramarine and nothing else uses it. A marker strike and a marker circle are the only hand-drawn marks: the strike goes through what is done or out, the circle goes round what is up now.\n\nDensity is arm's-length. Every target is at least 48px. Song rows are 76px and list rows 64px. Titles go up to 44px in the marker weight. Nothing disappears: played songs, bypassed blocks and cancelled presets stay in place and get struck through, so a list always reads whole. The world rejects the dark modeller tile grid and the SaaS sidebar-and-cards.",
+    "keyCharacteristics": [
+      "Bright paper sheets with hairline edges on a cool desk with a ruled grid.",
+      "One variable family: wide and heavy for marker headings, narrow uppercase for labels, tabular numerals everywhere.",
+      "Fluoro tape carries stack identity. Black gaffer tape marks \"this one\" (the active tab, the shown variation, the profile, the open set).",
+      "Strike and circle are the only hand-drawn marks. Both draw themselves in once over 260ms.",
+      "Ultramarine belongs only to the live signal path."
+    ],
+    "rules": [
+      {
+        "name": "The Tape Is the Stack Rule",
+        "body": "A fluoro tape colour always means a stack (Clean, Crunch, Drive, Lead, Ambient, Special). Never use one for decoration, emphasis or status. \"Selected\" is gaffer black.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Pen Rule",
+        "body": "Ultramarine is the live signal path. If a surface has no signal path, it has no blue.",
+        "section": "colors"
+      },
+      {
+        "name": "The Black Ink on Tape Rule",
+        "body": "Text on fluoro tape is ink (#121212). Only gaffer-black tape takes white.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "The whole body has `tabular-nums` set. Every BPM, count, index and key lines up in columns.",
+        "section": "typography"
+      },
+      {
+        "name": "The Width Is the Voice Rule",
+        "body": "Hierarchy comes from the width axis plus weight, never from a second family.",
+        "section": "typography"
+      },
+      {
+        "name": "The Ruled, Not Raised Rule",
+        "body": "Rows, cells and blocks inside a sheet are divided by 1px hairlines. Only the sheet itself lifts, plus whatever a finger is holding.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do put every value on the sheet in tabular numerals, and keep counts and BPM in ink-2 or ink-3 beside their subject.",
+      "Do strike what is done, out or cancelled, and leave it in place. Ink strikes mean played or bypassed, and void strikes mean cancelled.",
+      "Do circle exactly what is up now, and pair the circle with the up-now wash on rows and cells.",
+      "Do colour a stack with its own tape and black ink, and use gaffer black for \"this one\".",
+      "Do keep every target at least 48px (the `--hit` token) and divide rows with 1px rules.",
+      "Do open pickers as a right-hand side sheet over the page, never as a centred modal."
+    ],
+    "donts": [
+      "Don't use a fluoro tape colour for anything but its stack, or ultramarine for anything but the live signal path.",
+      "Don't hide a played song, a bypassed block or a cancelled preset. Nothing vanishes; it cancels.",
+      "Don't add hand-drawn marks beyond the strike and the circle (no scribbles, arrows or underlines drawn as marks).",
+      "Don't lift rows, cells or blocks with shadows. Only the sheet and a held block lift.",
+      "Don't introduce a second typeface. Hierarchy comes from Archivo's width and weight.",
+      "Don't set label text below 12px."
+    ]
+  }
+}

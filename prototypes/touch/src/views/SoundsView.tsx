@@ -85,7 +85,7 @@ export function SoundsView() {
                   alignItems: "center",
                   gap: 10,
                   textAlign: "left",
-                  background: on ? "#fffbe0" : undefined,
+                  background: on ? "var(--up)" : undefined,
                 }}
               >
                 <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>

@@ -86,7 +86,7 @@ function SetSheet() {
                 height: ROW_H,
                 display: "flex",
                 alignItems: "center",
-                background: lifted ? "var(--sheet-2)" : up ? "#fffbe0" : undefined,
+                background: lifted ? "var(--sheet-2)" : up ? "var(--up)" : undefined,
                 boxShadow: drag && drag.to === i && drag.from !== i ? "inset 0 3px 0 var(--ink)" : undefined,
               }}
             >
@@ -367,7 +367,7 @@ function Stepper({ value, unit, onChange }: { value: number; unit: string; onCha
         <span className="num" style={{ display: "block", fontSize: 22, fontWeight: 840 }}>
           {value || "—"}
         </span>
-        <span className="t-label" style={{ fontSize: 10, color: "var(--ink-3)" }}>
+        <span className="t-label" style={{ fontSize: 12, color: "var(--ink-3)" }}>
           {unit}
         </span>
       </span>

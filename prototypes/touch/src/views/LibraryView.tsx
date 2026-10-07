@@ -103,7 +103,7 @@ export function LibraryView() {
               <button
                 className="pressable"
                 onClick={() => setPicked(on ? null : it)}
-                style={{ position: "relative", minHeight: 96, background: on ? "#fffbe0" : "var(--sheet)", boxShadow: "inset -1px -1px 0 var(--rule)", padding: "12px 14px", textAlign: "left", display: "flex", flexDirection: "column", gap: 6, overflow: "hidden" }}
+                style={{ position: "relative", minHeight: 96, background: on ? "var(--up)" : "var(--sheet)", boxShadow: "inset -1px -1px 0 var(--rule)", padding: "12px 14px", textAlign: "left", display: "flex", flexDirection: "column", gap: 6, overflow: "hidden" }}
               >
 
                 <span style={{ position: "relative", alignSelf: "flex-start", maxWidth: "100%", fontSize: 17, fontWeight: 800, lineHeight: 1.15, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: on ? "visible" : "hidden" }}>

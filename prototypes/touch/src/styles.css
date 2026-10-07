@@ -28,6 +28,8 @@
   --path: #2433ff;
 
   --marker: #121212;
+  /* The row that is up now (the song, the picked preset): a pale marker wash. */
+  --up: #fffbe0;
   --void: #d7263d;
 
   --r: 4px;
