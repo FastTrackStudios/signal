@@ -14,8 +14,9 @@
 // Bar items sit flat and full height, hairlines between groups; the pick is
 // pressed into the bar (theme::PRESSED), green when it is live rig state.
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { StageCtx } from "./ui/stage";
+import { setSignalTempo, useSignal } from "./ui/signal";
 import { MuteButton, PanicButton } from "./ui/Safety";
 import { Indicator } from "./ui/Settings";
 import { ModeButton } from "./ui/ModeButton";
@@ -26,7 +27,7 @@ import { EditView } from "./views/Edit";
 import { MacroBar } from "./dock/MacroBar";
 import { Phone } from "./Phone";
 import { PhoneShell } from "./PhoneShell";
-import { redo, undo, useUndo, useStore, type PerformMode } from "./store";
+import { currentSong, redo, undo, useUndo, useStore, type PerformMode } from "./store";
 
 const SIDEBAR = 402;
 const TOP = 48;
@@ -457,29 +458,15 @@ export function Cpu() {
  *  (the names in full on hover and to assistive tech). Simulated here; the rig streams peaks. */
 export function Meters() {
   const s = useStore();
-  const [lv, setLv] = useState({ i: 0.4, o: 0.5, p: 0.45 });
-  const raf = useRef(0);
-  useEffect(() => {
-    let t = 0;
-    const tick = () => {
-      t += 1;
-      const strum = Math.max(0, Math.sin(t / 22)) ** 3;
-      setLv({
-        i: Math.min(1, 0.25 + 0.55 * strum + Math.random() * 0.08),
-        o: Math.min(1, 0.3 + 0.5 * strum + Math.random() * 0.06),
-        p: Math.min(1, 0.28 + 0.45 * strum + Math.random() * 0.06),
-      });
-      raf.current = requestAnimationFrame(tick);
-    };
-    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) raf.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf.current);
-  }, []);
+  const sig = useSignal();
+  const song = currentSong(s);
+  setSignalTempo(song?.bpm || 120);
   const reset = s.panicAt !== null;
   return (
     <div title="IN · OUT · PHONES" style={{ alignSelf: "stretch", flexShrink: 0, display: "flex", gap: 5, padding: "6px 8px 4px" }}>
-      <MiniMeter label="In" level={reset ? 0 : lv.i} />
-      <MiniMeter label="Out" level={reset ? 0 : lv.o} muted={s.houseMute} />
-      <MiniMeter label="Phones" icon={<Headphones />} level={reset ? 0 : lv.p} muted={s.phonesMute} />
+      <MiniMeter label="In" level={reset ? 0 : sig.input} />
+      <MiniMeter label="Out" level={reset ? 0 : sig.output} muted={s.houseMute} />
+      <MiniMeter label="Phones" icon={<Headphones />} level={reset ? 0 : sig.phones} muted={s.phonesMute} />
     </div>
   );
 }

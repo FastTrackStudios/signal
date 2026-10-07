@@ -23,6 +23,46 @@
 // sits along the top of the main area, so the panel drops down over it.
 
 import { useEffect, useRef, useState } from "react";
+import { useSignal, type Signal } from "../ui/signal";
+
+/** How a macro answers the signal, subtly: a glow behind it while its
+ *  effect is doing something (each delay echo, the reverb's tail, the
+ *  drive pushed, the modulation's cycle), and for the gate a little meter
+ *  — the guitar's level against the threshold the knob sets, so it can be
+ *  set by eye. Effects that are off don't stir. */
+function reaction(id: string, v: number, sig: Signal): { glow: number; meter?: { level: number; mark: number } } {
+  const wet = Math.min(1, v * 2); // a wet knob's normal level sits at the middle
+  switch (id) {
+    case "gate":
+      return { glow: 0, meter: { level: sig.input, mark: v } };
+    case "pre-comp":
+    case "comp":
+      return { glow: sig.squash * v };
+    case "drive":
+      return { glow: sig.input * v };
+    case "boost":
+    case "pitch":
+      return { glow: v > 0 ? sig.input * 0.7 : 0 };
+    case "delay":
+      return { glow: sig.echo * wet };
+    case "reverb":
+      return { glow: sig.tail * wet };
+    case "space":
+      return { glow: sig.tail * 0.6 * wet };
+    case "clarity":
+      return { glow: sig.echo * v };
+    case "mod":
+      return { glow: v > 0 ? sig.lfo * Math.min(1, v * 2) * 0.7 : 0 };
+    case "motion":
+      return { glow: v > 0 ? (sig.lfo > 0.5 ? 0.8 : 0.15) * v : 0 };
+    case "gain":
+      return { glow: sig.input * 0.35 };
+    case "output":
+      return { glow: sig.output * 0.3 };
+    default:
+      return { glow: 0 };
+  }
+}
 
 interface Child {
   label: string;
@@ -116,6 +156,7 @@ export function MacroBar({ cols = 8, cellH = 44, fill, up }: { cols?: number; ce
     return () => window.removeEventListener("pointerdown", away);
   }, [open]);
   const knob = BANK.find((k) => k.id === open);
+  const sig = useSignal();
   return (
     // fill: the bar takes the height it is given, its rows sharing it.
     <div ref={ref} style={{ position: "relative", height: fill ? "100%" : undefined }}>
@@ -134,6 +175,7 @@ export function MacroBar({ cols = 8, cellH = 44, fill, up }: { cols?: number; ce
             height={fill ? "100%" : cellH}
             scale={k.scale}
             rest={k.patch}
+            {...reaction(k.id, values[k.id] ?? k.patch, sig)}
           />
         ))}
       </div>
@@ -193,7 +235,7 @@ function Panel({ knob, values, set, up, onClose }: { knob: Knob; values: Values;
  *  falling away); a relative knob fills from the centre (its rest). A
  *  double-tap goes back to where the patch put it. A tap that doesn't move
  *  opens its sub-macros, when it has them. */
-function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44, scale = "relative", rest = 0.5 }: { label: string; colour: string; value: number; onValue: (v: number) => void; more?: boolean; open?: boolean; onTap?: () => void; height?: number | string; scale?: Scale; rest?: number }) {
+function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44, scale = "relative", rest = 0.5, glow = 0, meter }: { label: string; colour: string; value: number; onValue: (v: number) => void; more?: boolean; open?: boolean; onTap?: () => void; height?: number | string; scale?: Scale; rest?: number; glow?: number; meter?: { level: number; mark: number } }) {
   const [active, setActive] = useState(false);
   const from = useRef<{ x: number; v: number; w: number; moved: boolean } | null>(null);
   const lastTap = useRef(0);
@@ -264,6 +306,16 @@ function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44
         outline: "none",
       }}
     >
+      {/* Its effect at work: a glow that rises and falls with it. */}
+      {glow > 0.01 && <span aria-hidden style={{ position: "absolute", inset: 0, background: `color-mix(in oklab, ${colour} ${Math.round(glow * 26)}%, transparent)`, pointerEvents: "none" }} />}
+      {/* The gate's meter along the foot: the guitar's level, the threshold
+          the knob sets, green while the gate is open. */}
+      {meter && (
+        <span aria-hidden style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 4, background: "rgba(0,0,0,0.55)", pointerEvents: "none" }}>
+          <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${meter.level * 100}%`, background: meter.level >= meter.mark ? "var(--live)" : "#52525b" }} />
+          <span style={{ position: "absolute", top: -2, bottom: 0, left: `calc(${meter.mark * 100}% - 1px)`, width: 2, background: "#f4f4f5" }} />
+        </span>
+      )}
       {/* The middle: rest for a relative knob, the normal level for a wet one. */}
       {scale !== "level" && <span aria-hidden style={{ position: "absolute", top: scale === "wet" ? 4 : 8, bottom: scale === "wet" ? 4 : 8, left: "50%", width: 1, background: scale === "wet" ? "#45454d" : "#2b2b31" }} />}
       <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: `${lo * 100}%`, width: `${(Math.min(hi, scale === "wet" ? 0.5 : 1) - lo) * 100}%`, background: `color-mix(in oklab, ${colour} ${active ? 32 : 22}%, transparent)` }} />
