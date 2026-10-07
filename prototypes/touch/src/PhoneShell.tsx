@@ -110,18 +110,18 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
         </Tab>
           </Rail>
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative", paddingRight: safe.right }}>
-        {/* The stage: macros and switches at the iPad's sizes, and between
-            them where you are in the set — the song, its sections, the
-            part. The view takes what room is left, if any. */}
-        {macros && (
-          <div style={{ flexShrink: 0, position: "relative", zIndex: 4, borderBottom: "1px solid #000" }}>
-            <MacroBar cols={8} />
-          </div>
-        )}
+        {/* The stage: where you are in the set along the top — the song,
+            its sections, the part — the view in the middle, and the macros
+            sitting on the switches at the foot, at the iPad's sizes. */}
         <SetlistStrip />
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           <Placeholder title={view} note="Main area" />
         </div>
+        {macros && (
+          <div style={{ flexShrink: 0, position: "relative", zIndex: 4, borderTop: "1px solid #000" }}>
+            <MacroBar cols={8} up />
+          </div>
+        )}
         {dock && <div style={{ flexShrink: 0, borderTop: "1px solid var(--rule)" }}>{dock === "switches" ? <Switches /> : <AudioControls />}</div>}
         {/* Landscape: the setlist slides in over the stage. */}
         {landscape && setlist && (

@@ -82,7 +82,7 @@ export const MACRO_BAR_H = 44 * 2 + 1 + 1;
 /** Where each knob sits (0..1, rest 0.5), shared by the bar and its panels. */
 type Values = Record<string, number>;
 
-export function MacroBar({ cols = 8, cellH = 44, fill }: { cols?: number; cellH?: number; fill?: boolean }) {
+export function MacroBar({ cols = 8, cellH = 44, fill, up }: { cols?: number; cellH?: number; fill?: boolean; up?: boolean }) {
   const [values, setValues] = useState<Values>({ drive: 0.62, delay: 0.42, reverb: 0.58, width: 0.66 });
   const [open, setOpen] = useState<string | null>(null);
   const set = (id: string) => (v: number) => setValues((x) => ({ ...x, [id]: v }));
@@ -100,7 +100,7 @@ export function MacroBar({ cols = 8, cellH = 44, fill }: { cols?: number; cellH?
   return (
     // fill: the bar takes the height it is given, its rows sharing it.
     <div ref={ref} style={{ position: "relative", height: fill ? "100%" : undefined }}>
-      {knob?.rows && <Panel knob={knob} values={values} set={set} onClose={() => setOpen(null)} />}
+      {knob?.rows && <Panel knob={knob} values={values} set={set} up={up} onClose={() => setOpen(null)} />}
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoRows: fill ? "minmax(0, 1fr)" : undefined, height: fill ? "100%" : undefined, gap: 1, background: "#000" }}>
         {BANK.map((k) => (
           <Cell
@@ -120,7 +120,8 @@ export function MacroBar({ cols = 8, cellH = 44, fill }: { cols?: number; cellH?
   );
 }
 
-function Panel({ knob, values, set, onClose }: { knob: Knob; values: Values; set: (id: string) => (v: number) => void; onClose: () => void }) {
+/** `up`: the bar sits low (over the switches), so the panel rises above it. */
+function Panel({ knob, values, set, up, onClose }: { knob: Knob; values: Values; set: (id: string) => (v: number) => void; up?: boolean; onClose: () => void }) {
   const cols = Math.max(...knob.rows!.map((r) => r.kids.length));
   const heads = knob.rows!.some((r) => r.head);
   return (
@@ -129,11 +130,9 @@ function Panel({ knob, values, set, onClose }: { knob: Knob; values: Values; set
         position: "absolute",
         left: 0,
         right: 0,
-        top: "100%",
+        ...(up ? { bottom: "100%", borderTop: `2px solid ${knob.colour}`, boxShadow: "0 -16px 32px rgba(0,0,0,0.55)" } : { top: "100%", borderBottom: `2px solid ${knob.colour}`, boxShadow: "0 16px 32px rgba(0,0,0,0.55)" }),
         zIndex: 5,
         background: "#0d0d10",
-        borderBottom: `2px solid ${knob.colour}`,
-        boxShadow: "0 16px 32px rgba(0,0,0,0.55)",
         animation: "macro-rise 160ms var(--ease) both",
       }}
     >
