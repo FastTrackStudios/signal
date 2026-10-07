@@ -43,6 +43,7 @@ import {
 import type { StackPatch } from "../setlist/stacks";
 import { nameColour, sectionColour, songColour } from "../setlist/colors";
 import { ProfileIcon } from "../ui/profileIcons";
+import { MODULE_COLOUR } from "../ui/moduleIcons";
 import { SourceIcon, tapeFor } from "../ui/marks";
 
 // ── What there is to browse, and what it's for ─────────────────────
@@ -100,7 +101,6 @@ interface Item {
   nested?: boolean;
 }
 
-const MODULE_COLOUR: Record<string, string> = { Core: "#D6B36A", Amp: "#f97316", Drive: "#ef4444", Time: "#8B5CF6", Delay: "#3B82F6", Reverb: "#8B5CF6" };
 const BLOCK_COLOUR: Record<string, string> = { compressor: "#E5E7EB", gate: "#94A3B8", eq: "#22C55E", delay: "#3B82F6", reverb: "#8B5CF6", chorus: "#7DD3FC" };
 const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;

@@ -19,6 +19,10 @@ const PATHS: Record<string, string[]> = {
   edits: ["M6 20V10", "M12 20V4", "M18 20v-6"],
 };
 
+/** Each module's colour — the macros' for its effect (Drive red, Delay
+ *  blue, Reverb violet…); a part's own edits stay amber. */
+export const MODULE_COLOUR: Record<string, string> = { Core: "#D6B36A", Amp: "#f97316", Drive: "#ef4444", Time: "#6366F1", Delay: "#3B82F6", Reverb: "#8B5CF6", edits: "#f59e0b" };
+
 /** The glyph for one of the browser's module kinds (or "edits"). */
 const FOR: Record<string, string> = { Core: "amp", Amp: "volume", Drive: "drive", Time: "time", Delay: "motion", Reverb: "special", edits: "edits" };
 

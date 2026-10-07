@@ -64,7 +64,7 @@ import {
 import { SourceIcon, Strike, Tape, tapeFor } from "../ui/marks";
 import { MACRO_BAR_H } from "../dock/MacroBar";
 import { ProfileIcon } from "../ui/profileIcons";
-import { ModuleIcon } from "../ui/moduleIcons";
+import { MODULE_COLOUR, ModuleIcon } from "../ui/moduleIcons";
 import { Button, KeyBox, Tabs } from "../ui/kit";
 import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
 import { nameColour, sectionColour, songColour, SONG_PALETTE } from "./colors";
@@ -364,8 +364,9 @@ function ownChanges(s: ReturnType<typeof useStore>, song: string, section?: numb
   return { modules: [...modules], edits };
 }
 
-/** Its own changes as icons beside a name, in amber: each module swapped
- *  in (Signal's module glyph), and sliders for unsaved edits. A song shows
+/** Its own changes as icons beside a name: each module swapped in, by
+ *  Signal's module glyph in that effect's colour, and amber EQ bars for
+ *  unsaved edits. A song shows
  *  at most three, then a count. */
 function ChangeIcons({ song, section, max = 6 }: { song: string; section?: number; max?: number }) {
   const s = useStore();
@@ -376,7 +377,7 @@ function ChangeIcons({ song, section, max = 6 }: { song: string; section?: numbe
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 8, verticalAlign: "middle" }}>
       {shown.map((m) => (
-        <ModuleIcon key={m.kind} kind={m.kind} size={12} colour="var(--modified)" title={m.title} />
+        <ModuleIcon key={m.kind} kind={m.kind} size={12} colour={MODULE_COLOUR[m.kind] ?? "var(--modified)"} title={m.title} />
       ))}
       {marks.length > shown.length && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--modified)" }}>+{marks.length - shown.length}</span>}
     </span>
