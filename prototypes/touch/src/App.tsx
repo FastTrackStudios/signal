@@ -370,7 +370,7 @@ export function Cpu() {
 /** IN, OUT and PHONES as three slim upright bars: not a meter to read,
  *  just signal moving and how loud — clipping turns the top red. A muted
  *  output's bar goes red and still; all go flat while Panic resets. Labels
- *  underneath. Simulated here; the rig streams peaks. */
+ *  underneath: IN, OUT, and the phones as a headphone icon. Simulated here; the rig streams peaks. */
 export function Meters() {
   const s = useStore();
   const [lv, setLv] = useState({ i: 0.4, o: 0.5, p: 0.45 });
@@ -395,12 +395,12 @@ export function Meters() {
     <div title="IN · OUT · PHONES" style={{ alignSelf: "stretch", flexShrink: 0, display: "flex", gap: 5, padding: "6px 8px 4px" }}>
       <MiniMeter label="IN" level={reset ? 0 : lv.i} />
       <MiniMeter label="OUT" level={reset ? 0 : lv.o} muted={s.houseMute} />
-      <MiniMeter label="PH" level={reset ? 0 : lv.p} muted={s.phonesMute} />
+      <MiniMeter label="Phones" icon={<Headphones />} level={reset ? 0 : lv.p} muted={s.phonesMute} />
     </div>
   );
 }
 
-export function MiniMeter({ label, level, muted }: { label: string; level: number; muted?: boolean }) {
+export function MiniMeter({ label, icon, level, muted }: { label: string; icon?: ReactNode; level: number; muted?: boolean }) {
   return (
     <div title={muted ? `${label} muted` : label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minHeight: 0 }}>
       <span style={{ position: "relative", flex: 1, width: 6, minHeight: 0, borderRadius: 3, overflow: "hidden", background: muted ? "color-mix(in oklab, var(--void) 55%, #000)" : "#08080a" }}>
@@ -415,8 +415,19 @@ export function MiniMeter({ label, level, muted }: { label: string; level: numbe
           />
         )}
       </span>
-      <span style={{ fontSize: 6.5, fontWeight: 800, letterSpacing: "0.04em", lineHeight: 1, color: muted ? "var(--void)" : "var(--ink-3)" }}>{label}</span>
+      <span style={{ height: 7, display: "flex", alignItems: "center", fontSize: 6.5, fontWeight: 800, letterSpacing: "0.04em", lineHeight: 1, color: muted ? "var(--void)" : "var(--ink-3)" }}>{icon ?? label}</span>
     </div>
+  );
+}
+
+/** The phones, drawn: a headband and two cups, sized to a meter's label. */
+function Headphones() {
+  return (
+    <svg width="9" height="8" viewBox="0 0 16 14" aria-hidden>
+      <path d="M2.5 9V7.5a5.5 5.5 0 0 1 11 0V9" fill="none" stroke="currentColor" strokeWidth="2" />
+      <rect x="1.2" y="8.2" width="3.6" height="5" rx="1.2" fill="currentColor" />
+      <rect x="11.2" y="8.2" width="3.6" height="5" rx="1.2" fill="currentColor" />
+    </svg>
   );
 }
 
