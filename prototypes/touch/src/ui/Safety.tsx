@@ -1,9 +1,11 @@
 // The two safety buttons, side by side on every device:
 //
-//   Mute   a tap mutes the house (the main outs) — the phones keep playing,
-//          so you can rehearse, tune or fix something mid-set. Hold it for
-//          the rest: mute the phones too, mute everything, unmute all.
-//          Red and crossed while anything is muted, saying what.
+//   Mute   a tap mutes the house (the main outs): you still hear yourself
+//          in the phones, so you can rehearse, tune or fix something
+//          mid-set. Hold it to mute fully — your guitar out of the phones
+//          too (the band stays in your ears). Lit red while muted: it reads
+//          MUTE HOUSE for the house alone, MUTED when fully muted; a tap
+//          while lit unmutes.
 //   Panic  for when something is stuck: every note off on every MIDI
 //          channel, the audio engine stopped, cleared and started again.
 //          One tap — it's for emergencies — and it shows it's working.
@@ -18,27 +20,26 @@ export function MuteButton({ size = 36, label }: { size?: number; label?: boolea
   const s = useStore();
   const menu = useMenu();
   const held = useRef<{ t: number; fired: boolean } | null>(null);
+  const full = s.houseMute && s.phonesMute;
   const any = s.houseMute || s.phonesMute;
-  const what = s.houseMute && s.phonesMute ? "All muted" : s.houseMute ? "House muted" : s.phonesMute ? "Phones muted" : "Mute house";
+  const what = full ? "MUTED" : "MUTE HOUSE";
   const items: MenuItem[] = [
     { kind: "head", label: "Mute" },
-    { kind: "run", id: "house", label: "House", detail: "main outs", checked: s.houseMute },
-    { kind: "run", id: "phones", label: "Phones", detail: "in-ears", checked: s.phonesMute },
+    { kind: "run", id: "house", label: "Mute house", detail: "you still hear yourself", checked: s.houseMute && !full },
+    { kind: "run", id: "full", label: "Mute fully", detail: "your guitar out of the phones too", checked: full },
     { kind: "sep" },
-    { kind: "run", id: "all", label: "Mute everything", disabled: s.houseMute && s.phonesMute ? "Everything is muted" : undefined },
-    { kind: "run", id: "none", label: "Unmute all", disabled: any ? undefined : "Nothing is muted" },
+    { kind: "run", id: "none", label: "Unmute", disabled: any ? undefined : "Nothing is muted" },
   ];
   const onPick = (p: Picked) => {
-    if (p.id === "house") setMutes(!s.houseMute, s.phonesMute);
-    if (p.id === "phones") setMutes(s.houseMute, !s.phonesMute);
-    if (p.id === "all") setMutes(true, true);
+    if (p.id === "house") setMutes(true, false);
+    if (p.id === "full") setMutes(true, true);
     if (p.id === "none") setMutes(false, false);
   };
   return (
     <>
       <button
-        aria-label={`${what} — tap to ${s.houseMute ? "unmute" : "mute"} the house, hold for more`}
-        title={`${what} — tap: house · hold: phones, everything`}
+        aria-label={any ? `${full ? "Fully muted" : "House muted"} — tap to unmute, hold for more` : "Mute house — tap to mute the house, hold to mute fully"}
+        title={any ? `${full ? "Fully muted" : "House muted"} — tap: unmute · hold: more` : "Tap: mute the house · hold: mute fully"}
         aria-pressed={any}
         onPointerDown={(e) => {
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -52,7 +53,7 @@ export function MuteButton({ size = 36, label }: { size?: number; label?: boolea
           held.current = null;
           if (!h) return;
           window.clearTimeout(h.t);
-          if (!h.fired) toggleHouseMute();
+          if (!h.fired) (any ? setMutes(false, false) : toggleHouseMute());
         }}
         onPointerLeave={() => {
           if (held.current && !held.current.fired) window.clearTimeout(held.current.t);
@@ -84,8 +85,8 @@ export function MuteButton({ size = 36, label }: { size?: number; label?: boolea
           touchAction: "none",
         }}
       >
-        <SpeakerIcon muted={any} phones={s.phonesMute && !s.houseMute} />
-        {label && what.toUpperCase()}
+        <SpeakerIcon muted={any} />
+        {label && what}
       </button>
       {menu.open && <Menu at={menu.open.at} items={items} onPick={onPick} onClose={menu.close} />}
       <style>{`@keyframes mute-pulse { 50% { filter: brightness(0.82) } } @media (prefers-reduced-motion: reduce) { [aria-pressed="true"] { animation: none !important } }`}</style>
@@ -93,17 +94,8 @@ export function MuteButton({ size = 36, label }: { size?: number; label?: boolea
   );
 }
 
-/** A speaker; crossed when muted. With only the phones muted, headphones. */
-function SpeakerIcon({ muted, phones }: { muted: boolean; phones: boolean }) {
-  if (phones)
-    return (
-      <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden>
-        <path d="M2.5 10V8a5.5 5.5 0 0 1 11 0v2" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="1.8" y="9.5" width="3" height="4.5" rx="1" fill="currentColor" />
-        <rect x="11.2" y="9.5" width="3" height="4.5" rx="1" fill="currentColor" />
-        <path d="M1.5 1.5l13 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    );
+/** A speaker; crossed when muted. */
+function SpeakerIcon({ muted }: { muted: boolean }) {
   return (
     <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden>
       <path d="M2 6h2.5L8 3v10L4.5 10H2Z" fill="currentColor" />

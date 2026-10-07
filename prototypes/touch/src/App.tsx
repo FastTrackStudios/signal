@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { StageCtx } from "./ui/stage";
 import { MuteButton, PanicButton } from "./ui/Safety";
+import { Indicator } from "./ui/Settings";
 import { Setlist } from "./setlist/Setlist";
 import { AudioControls, Switches } from "./dock/Switches";
 import { MacroBar } from "./dock/MacroBar";
@@ -333,11 +334,11 @@ function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => voi
       <div style={{ display: "flex", alignItems: "center", padding: "0 4px 0 8px" }}>
         <PanicButton />
       </div>
-      <Status label="MIDI" ok detail="Morningstar MC8 · in" />
-      <Status label="Audio" ok detail="voyager · 48 kHz · 128 samples" />
+      <Indicator kind="midi" />
+      <Indicator kind="audio" />
       <Cpu />
       <Rule />
-      <Meters />
+      <Meters width={128} />
       <Rule />
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 8px 0 6px" }}>
         <MuteButton />
@@ -371,15 +372,6 @@ export function UndoRedo({ compact }: { compact?: boolean } = {}) {
   );
 }
 
-export function Status({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
-  return (
-    <button className="pressable" title={detail} style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 10px", fontSize: 12, fontWeight: 650, color: "var(--ink-2)" }}>
-      <span style={{ width: 7, height: 7, borderRadius: 999, background: ok ? "var(--live)" : "var(--void)" }} />
-      {label}
-    </button>
-  );
-}
-
 /** CPU, as a number that jitters the way a real one does. */
 export function Cpu() {
   const [cpu, setCpu] = useState(14);
@@ -396,11 +388,12 @@ export function Cpu() {
 
 /** IN and OUT, small: enough to see signal and clipping at a glance (the
  *  views carry the big ones). Simulated here; the rig streams peaks. */
-/** IN, OUT and PHONES, small: enough to see signal and clipping at a
- *  glance (the views carry the big ones). OUT is covered with MUTED while
- *  the house is muted, PHONES while the phones are; both go flat while
- *  Panic resets. Simulated here; the rig streams peaks. */
-export function Meters({ width = 72 }: { width?: number }) {
+/** IN, OUT and PHONES, as big as their spot allows: no padding, three
+ *  bars filling the bar's height, as wide as given. OUT is covered while
+ *  the house is muted (MUTE HOUSE; MUTED when fully muted), PH while your
+ *  guitar is out of the phones; all go flat while Panic resets. Simulated
+ *  here; the rig streams peaks. */
+export function Meters({ width = 96 }: { width?: number }) {
   const s = useStore();
   const [lv, setLv] = useState({ i: 0.4, o: 0.5, p: 0.45, ih: 0.4, oh: 0.5, ph: 0.45 });
   const raf = useRef(0);
@@ -422,39 +415,38 @@ export function Meters({ width = 72 }: { width?: number }) {
     return () => cancelAnimationFrame(raf.current);
   }, []);
   const reset = s.panicAt !== null;
+  const full = s.houseMute && s.phonesMute;
   return (
-    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, padding: "0 10px" }}>
-      <MiniMeter label="IN" level={reset ? 0 : lv.i} hold={reset ? 0 : lv.ih} w={width} />
-      <MiniMeter label="OUT" level={reset ? 0 : lv.o} hold={reset ? 0 : lv.oh} muted={s.houseMute} w={width} />
-      <MiniMeter label="PH" level={reset ? 0 : lv.p} hold={reset ? 0 : lv.ph} muted={s.phonesMute} w={width} />
+    <div style={{ alignSelf: "stretch", width, flexShrink: 0, display: "flex", flexDirection: "column", gap: 2, padding: "4px 0" }}>
+      <MiniMeter label="IN" level={reset ? 0 : lv.i} hold={reset ? 0 : lv.ih} />
+      <MiniMeter label="OUT" level={reset ? 0 : lv.o} hold={reset ? 0 : lv.oh} cover={s.houseMute ? (full ? "MUTED" : "MUTE HOUSE") : undefined} />
+      <MiniMeter label="PH" level={reset ? 0 : lv.p} hold={reset ? 0 : lv.ph} cover={s.phonesMute ? "MUTED" : undefined} />
     </div>
   );
 }
 
-export function MiniMeter({ label, level, hold, muted, w = 72 }: { label: string; level: number; hold: number; muted?: boolean; w?: number }) {
+/** One meter: its label inside the bar's left end, the bar filling the row. */
+export function MiniMeter({ label, level, hold, cover }: { label: string; level: number; hold: number; cover?: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 5, height: 9 }} title={muted ? `${label} muted` : label}>
-      <span className="t-label" style={{ width: 20, fontSize: 8.5, letterSpacing: "0.06em", color: muted ? "var(--void)" : "var(--ink-3)" }}>
-        {label}
-      </span>
-      <span style={{ position: "relative", width: w, height: muted ? 9 : 4, borderRadius: 2, background: muted ? "var(--void)" : "var(--field)", overflow: "hidden" }}>
-        {muted ? (
-          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7.5, fontWeight: 800, letterSpacing: "0.12em", color: "#1a0505" }}>MUTED</span>
-        ) : (
-          <>
-            <span
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: `${level * 100}%`,
-                background: "linear-gradient(90deg, var(--live) 0%, var(--live) 70%, #eab308 85%, var(--void) 100%)",
-                backgroundSize: `${w}px 100%`,
-              }}
-            />
-            {hold > 0.02 && <span style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${hold * 100}% - 1px)`, width: 2, background: hold > 0.92 ? "var(--void)" : "var(--ink-2)" }} />}
-          </>
-        )}
-      </span>
+    <div title={cover ? `${label}: ${cover}` : label} style={{ position: "relative", flex: 1, minHeight: 0, borderRadius: 2, overflow: "hidden", background: cover ? "var(--void)" : "#08080a" }}>
+      {cover ? (
+        <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7.5, fontWeight: 800, letterSpacing: "0.1em", color: "#1a0505", whiteSpace: "nowrap" }}>{cover}</span>
+      ) : (
+        <>
+          {/* The full scale, revealed up to the level: green, then amber, red at the top. */}
+          <span
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "linear-gradient(90deg, #15803d 0%, var(--live) 65%, #eab308 85%, var(--void) 100%)",
+              clipPath: `inset(0 ${(1 - level) * 100}% 0 0)`,
+              opacity: 0.9,
+            }}
+          />
+          {hold > 0.02 && <span style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${hold * 100}% - 1px)`, width: 2, background: hold > 0.92 ? "var(--void)" : "var(--ink)" }} />}
+          <span style={{ position: "absolute", left: 4, top: 0, bottom: 0, display: "flex", alignItems: "center", fontSize: 7.5, fontWeight: 800, letterSpacing: "0.08em", color: "rgba(255,255,255,0.85)", textShadow: "0 0 2px #000" }}>{label}</span>
+        </>
+      )}
     </div>
   );
 }

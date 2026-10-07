@@ -83,7 +83,8 @@ export interface State {
   performMode: PerformMode;
   /** The house (main outputs) muted; the phones keep playing. */
   houseMute: boolean;
-  /** The phones (in-ear / headphone mix) muted too. */
+  /** Fully muted: your own guitar out of the phones too (the rest of the
+   *  in-ear mix plays on). Only ever with the house muted. */
   phonesMute: boolean;
   /** When Panic last reset the audio and MIDI (ms), while it runs. */
   panicAt: number | null;
@@ -666,7 +667,8 @@ export function toggleHouseMute() {
   move((s) => ({ ...s, houseMute: !s.houseMute }));
 }
 
-/** Mute or unmute the house, the phones, or both. Not edits: no undo. */
+/** Mute the house, mute fully (house + your guitar in the phones), or
+ *  unmute. Not edits: no undo. */
 export function setMutes(house: boolean, phones: boolean) {
   move((s) => ({ ...s, houseMute: house, phonesMute: phones }));
 }

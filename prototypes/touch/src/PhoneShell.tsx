@@ -22,6 +22,7 @@ import { MacroBar } from "./dock/MacroBar";
 import { AudioControls, Switches } from "./dock/Switches";
 import { redo, setPerformMode, undo, useStore, useUndo } from "./store";
 import { MuteButton, PanicButton } from "./ui/Safety";
+import { Indicator, SettingsSheet } from "./ui/Settings";
 import { Cpu, FootButton, Meters, MODES, Placeholder, Rule, type Dock, type View } from "./App";
 import { useSafe } from "./Phone";
 import { useStage } from "./ui/stage";
@@ -213,12 +214,10 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
       <span style={{ display: "flex", alignItems: "center" }}>
         <PanicButton size={30} />
       </span>
-      <span title="MIDI · Audio" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 650, color: "var(--ink-2)" }}>
-        <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--live)" }} />
-        {safe.landscape && "MIDI · Audio"}
-      </span>
+      <Indicator kind="midi" compact />
+      <Indicator kind="audio" compact />
       {safe.landscape && <Cpu />}
-      <Meters width={safe.landscape ? 56 : 34} />
+      <Meters width={safe.landscape ? 120 : 86} />
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <MuteButton size={32} />
       </div>
@@ -245,7 +244,7 @@ function Rail({ onMenu, children }: { onMenu: () => void; children: ReactNode })
       <div className="rail" style={{ display: "flex", flexDirection: "column" }}>{children}</div>
       <span style={{ flex: 1 }} />
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "6px 0 8px" }}>
-        <Meters width={28} />
+        <Meters width={58} />
         <MuteButton size={34} />
       </div>
       <style>{`.rail > span > button { margin: 1px 4px !important; min-width: 0 !important; flex: 1; padding: 0 !important } .rail > span[aria-hidden] { width: 36px !important; height: 1px !important; align-self: center; margin: 4px 0 }`}</style>
@@ -259,6 +258,7 @@ function SideMenu({ offset, view, onView, onClose }: { offset: number; view: Vie
   const s = useStore();
   const safe = useSafe();
   const { depth, label, redoDepth, redoLabel } = useUndo();
+  const [settings, setSettings] = useState<"midi" | "audio" | null>(null);
   const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 12, width: "100%", minHeight: 52, padding: "0 16px", textAlign: "left", fontSize: 16, fontWeight: 600 };
   return (
     <>
@@ -361,18 +361,24 @@ function SideMenu({ offset, view, onView, onClose }: { offset: number; view: Vie
         <div className="t-label" style={{ padding: "8px 16px 6px", color: "var(--ink-3)" }}>
           Rig
         </div>
-        {[
-          ["MIDI", "Morningstar MC8 · in"],
-          ["Audio", "48 kHz · 128 samples"],
-        ].map(([k, v]) => (
-          <div key={k} style={{ ...row, minHeight: 40, fontSize: 14 }}>
+        {(
+          [
+            ["midi", "MIDI", "Morningstar MC8 · in"],
+            ["audio", "Audio", "48 kHz · 128 samples"],
+          ] as const
+        ).map(([kind, k, v]) => (
+          <button key={k} className="pressable" onClick={() => setSettings(kind)} style={{ ...row, minHeight: 44, fontSize: 14 }}>
             <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--live)" }} />
             <span style={{ flex: 1 }}>{k}</span>
             <span className="t-meta" style={{ fontSize: 13 }}>
               {v}
             </span>
-          </div>
+            <svg width="7" height="12" viewBox="0 0 7 12" aria-hidden style={{ color: "var(--ink-3)" }}>
+              <path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         ))}
+        {settings && <SettingsSheet kind={settings} onClose={() => setSettings(null)} />}
         <div style={{ ...row, minHeight: 40, fontSize: 14 }}>
           <Cpu />
         </div>
