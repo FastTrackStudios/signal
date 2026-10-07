@@ -121,25 +121,28 @@ export function App() {
   return (
     <div style={{ minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "12px 16px 24px", overflow: "auto" }}>
       <StageBar showBody={showBody} onBody={() => { setShowBody(!showBody); save("stage.body", showBody ? "off" : "on"); }} model={model} onModel={(id) => { setModelId(id); save("stage.model", id); }} size={size} onSize={pick} scale={scale} ppi={ppi} calibrating={calibrating} onCalibrate={() => { setCalibrating(!calibrating); pick("actual"); }} onPpi={(v) => { setPpi(v); save("stage.ppi", String(v)); }} />
-      <div style={{ width: OW * scale, height: OH * scale, flexShrink: 0 }}>
-        <div style={{ width: OW, height: OH, transform: scale === 1 ? undefined : `scale(${scale})`, transformOrigin: "0 0" }}>
-          <Body model={model} bezel={bezel} show={showBody}>
-            <Device scale={scale} w={W} h={H} corner={model.corner} />
-          </Body>
+      {/* The side menu, drawn out, on the iPad's left. */}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 24 }}>
+        <Phone pagePpi={(scale * W) / (model.px / model.ppi)}>
+          <PhoneShell menuOpen />
+        </Phone>
+        <div style={{ width: OW * scale, height: OH * scale, flexShrink: 0 }}>
+          <div style={{ width: OW, height: OH, transform: scale === 1 ? undefined : `scale(${scale})`, transformOrigin: "0 0" }}>
+            <Body model={model} bezel={bezel} show={showBody}>
+              <Device scale={scale} w={W} h={H} corner={model.corner} />
+            </Body>
+          </div>
         </div>
       </div>
-      {/* The phones at the same real scale: upright on its four pages —
-          the setlist, the switches, the macros, the side menu drawn out —
-          and on its side, the stage. They wrap to the window's width. */}
+      {/* The phones at the same real scale: upright on three pages — the
+          setlist, the switches, the macros — and on its side, the stage.
+          They wrap to the window's width. */}
       <div style={{ alignSelf: "stretch", display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "flex-end", gap: 24, marginTop: 12 }}>
         {(["setlist", "switches", "macros"] as const).map((pg) => (
           <Phone key={pg} pagePpi={(scale * W) / (model.px / model.ppi)}>
             <PhoneShell page={pg} />
           </Phone>
         ))}
-        <Phone pagePpi={(scale * W) / (model.px / model.ppi)}>
-          <PhoneShell menuOpen />
-        </Phone>
         <Phone landscape pagePpi={(scale * W) / (model.px / model.ppi)}>
           <PhoneShell />
         </Phone>
