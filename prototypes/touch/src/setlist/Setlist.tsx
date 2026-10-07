@@ -1259,7 +1259,6 @@ function PatchList({ song, current, defaultLabel, onPick }: { song?: string; cur
 function ProfileCell({ name, of, profile, colour, on, onClick }: { name: string; of?: string; profile?: ProfileEntry; colour?: string; on: boolean; onClick: () => void }) {
   const stacks = profile ? profile.stacks.map((st) => ({ name: st, count: profile.patch_list.filter((x) => x.stack === st).length })).filter((x) => x.count > 0) : [];
   const most = Math.max(1, ...rig.library.profiles.flatMap((p) => p.stacks.map((st) => p.patch_list.filter((x) => x.stack === st).length)));
-  const total = stacks.reduce((n, x) => n + x.count, 0);
   return (
     <button
       className={on ? "" : "pressable"}
@@ -1288,10 +1287,11 @@ function ProfileCell({ name, of, profile, colour, on, onClick }: { name: string;
       </span>
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
         <span style={{ fontSize: 15, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)" }}>{name}</span>
-        <span className="t-meta" style={{ fontSize: 12 }}>
-          {of && <b style={{ color: "var(--ink-2)", fontWeight: 650 }}>{of} · </b>}
-          {stacks.length} stacks · {total} patches
-        </span>
+        {of && (
+          <span className="t-meta" style={{ fontSize: 12 }}>
+            {of}
+          </span>
+        )}
       </span>
       {/* One column per stack, one block per patch: count them. */}
       <span aria-label={stacks.map((x) => `${x.name} ${x.count}`).join(", ")} style={{ display: "flex", alignItems: "flex-end", gap: 3, height: most * 5, flexShrink: 0 }}>
