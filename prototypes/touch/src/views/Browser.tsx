@@ -96,6 +96,8 @@ interface Item {
   group?: string;
   /** The heading's colour, when not its stack's. */
   groupColour?: string;
+  /** A variation, under its preset: drawn as a child of the heading. */
+  nested?: boolean;
 }
 
 const MODULE_COLOUR: Record<string, string> = { Core: "#D6B36A", Amp: "#f97316", Drive: "#ef4444", Time: "#8B5CF6", Delay: "#3B82F6", Reverb: "#8B5CF6" };
@@ -203,7 +205,7 @@ const KINDS: Kind[] = [
           return p.variations.map((v) => {
             const name = `${p.name} · ${v}`;
             const playing = (now?.kind === "preset" && now.name === name) || (s.presetUp?.preset === p.name && s.presetUp.variation === v && s.performMode === "preset");
-            return { id: name, name: v, group: p.name, groupColour: colour, from: p.variations.length > 1 ? `variation of ${p.name}` : p.name, colour, state: playing ? ("playing" as const) : undefined };
+            return { id: name, name: v, group: p.name, groupColour: colour, nested: true, colour, state: playing ? ("playing" as const) : undefined };
           });
         });
     },
@@ -235,7 +237,8 @@ const KINDS: Kind[] = [
                 name: v,
                 group: m.name,
                 groupColour: MODULE_COLOUR[kind],
-                from: n === 0 && m.used_by.length ? `${m.name} · in ${plural(m.used_by.length, "preset")}` : m.name,
+                nested: true,
+                from: n === 0 && m.used_by.length ? `in ${plural(m.used_by.length, "preset")}` : undefined,
                 colour: MODULE_COLOUR[kind],
                 state: swapped === id ? ("swapped" as const) : undefined,
               };
@@ -514,14 +517,24 @@ function KindList({ kind, items, apply, hint }: { kind: Kind; items: Item[]; app
         if (i.group) last = i.group;
         return (
           <div key={i.id || "none"}>
-            {head && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px 6px" }}>
-                <span style={{ width: 9, height: 9, borderRadius: 2, background: i.groupColour ?? (tapeFor(head) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(head)) }} />
-                <span className="t-label" style={{ fontSize: 11, color: "var(--ink-2)" }}>
-                  {head}
-                </span>
-              </div>
-            )}
+            {head &&
+              (i.nested ? (
+                // A preset: a heading in its own right — its name, its count.
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: "14px 16px 4px", borderTop: "1px solid var(--rule)" }}>
+                  <span style={{ width: 12, height: 12, borderRadius: 3, flexShrink: 0, background: i.groupColour ?? "var(--ink-3)" }} />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 750, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{head}</span>
+                  <span className="t-meta" style={{ fontSize: 12 }}>
+                    {items.filter((x) => x.group === head).length} variation{items.filter((x) => x.group === head).length === 1 ? "" : "s"}
+                  </span>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px 6px" }}>
+                  <span style={{ width: 9, height: 9, borderRadius: 2, background: i.groupColour ?? (tapeFor(head) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(head)) }} />
+                  <span className="t-label" style={{ fontSize: 11, color: "var(--ink-2)" }}>
+                    {head}
+                  </span>
+                </div>
+              ))}
             <Row item={i} sub={i.from} onPick={apply ? () => apply(i) : undefined} />
           </div>
         );
@@ -534,6 +547,8 @@ function KindList({ kind, items, apply, hint }: { kind: Kind; items: Item[]; app
 /** One thing: its mark, its name, where it comes from, its state. */
 function Row({ item, sub, onPick }: { item: Item; sub?: string; onPick?: () => void }) {
   const on = item.state === "playing" || item.state === "picked" || item.state === "swapped" || item.state === "in";
+  // A variation: indented on its preset's guide line, a lighter row.
+  const nested = !!item.nested;
   return (
     <button
       onClick={onPick}
@@ -543,22 +558,27 @@ function Row({ item, sub, onPick }: { item: Item; sub?: string; onPick?: () => v
       style={{
         position: "relative",
         width: "100%",
-        minHeight: 56,
+        minHeight: nested ? 46 : 56,
         display: "flex",
         alignItems: "center",
         gap: 12,
-        padding: "6px 16px",
+        padding: nested ? "4px 16px 4px 38px" : "6px 16px",
         textAlign: "left",
         background: on ? "rgba(255,255,255,0.06)" : undefined,
         cursor: onPick ? "pointer" : "default",
       }}
     >
       {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2, background: item.state === "swapped" ? "var(--modified)" : "var(--live)" }} />}
-      <span style={{ width: 18, display: "flex", justifyContent: "center", flexShrink: 0 }}>
-        {item.mark ?? <span style={{ width: 10, height: 10, borderRadius: 3, background: item.colour === "var(--tape-gaffer)" ? "var(--ink-3)" : item.colour }} />}
+      {nested && <span aria-hidden style={{ position: "absolute", left: 21, top: 0, bottom: 0, width: 1.5, background: `color-mix(in oklab, ${item.colour} 45%, transparent)` }} />}
+      <span style={{ width: nested ? 10 : 18, display: "flex", justifyContent: "center", flexShrink: 0 }}>
+        {nested ? (
+          <span style={{ width: 8, height: 8, borderRadius: 999, background: on ? item.colour : "transparent", boxShadow: on ? undefined : `inset 0 0 0 1.5px ${item.colour}` }} />
+        ) : (
+          item.mark ?? <span style={{ width: 10, height: 10, borderRadius: 3, background: item.colour === "var(--tape-gaffer)" ? "var(--ink-3)" : item.colour }} />
+        )}
       </span>
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-        <span style={{ fontSize: 16, fontWeight: on ? 700 : 560, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</span>
+        <span style={{ fontSize: nested ? 15 : 16, fontWeight: on ? 700 : nested ? 520 : 560, color: nested && !on ? "var(--ink-2)" : "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</span>
         {sub && <span style={{ fontSize: 13, color: "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>}
       </span>
       {item.state && (
