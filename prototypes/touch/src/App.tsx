@@ -34,9 +34,10 @@ type Dock = "switches" | "audio" | null;
 // (pixels ÷ 264 ppi; the mini 326): the 11" iPad Pro (M4) is 1210 × 834
 // points, 9.17 × 6.32 in. Shown at that size, a real iPad held against the
 // monitor covers it exactly — and the layout is laid out at its points. A browser
-// can't know its monitor's pixels per inch, so it starts from a Mac
-// laptop's (~127 CSS px per inch) and a slider matches it to the iPad in
-// your hand; the match is remembered.
+// can't know its monitor's pixels per inch, so it starts from the studio
+// monitor's — 93.7 CSS px per inch, traced against a real iPad Pro 11" (M1)
+// (71% here) — and a slider matches it to the iPad in your hand; the match
+// is remembered.
 
 type Size = "actual" | "fit" | "points";
 
@@ -86,7 +87,7 @@ export function App() {
       return true;
     }
   });
-  const [ppi, setPpi] = useState(() => readNumber("stage.ppi", 127));
+  const [ppi, setPpi] = useState(() => readNumber("stage.ppi", 93.7));
   const [modelId, setModelId] = useState<string>(() => {
     try {
       return localStorage.getItem("stage.model") || "pro11";
