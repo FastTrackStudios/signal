@@ -45,9 +45,21 @@ import { nameColour, sectionColour, songColour } from "../setlist/colors";
 import { ProfileIcon } from "../ui/profileIcons";
 import { MODULE_COLOUR } from "../ui/moduleIcons";
 import { MACRO_BAR_H } from "../dock/MacroBar";
+import { ModuleIcon } from "../ui/moduleIcons";
+import nam from "../data/nam.json";
 import { SourceIcon, tapeFor } from "../ui/marks";
 
 // ── What there is to browse, and what it's for ─────────────────────
+
+/** A NAM model a variation loads — exported from the rig's own config by
+ *  scripts/export_nam.py (names only). */
+interface NamModel {
+  role: "amp" | "drive" | "cab";
+  name: string;
+  pedal?: string;
+  option?: string | null;
+}
+const NAM = nam as Record<string, NamModel[]>;
 
 /** What the browser builds into, by the footswitch mode: a section's part
  *  (Setlist — picked in the setlist), the stack open in the Profile view
@@ -100,6 +112,8 @@ interface Item {
   groupColour?: string;
   /** A variation, under its preset: drawn as a child of the heading. */
   nested?: boolean;
+  /** The NAM models it loads (amps, drives, cabs). */
+  models?: NamModel[];
 }
 
 const BLOCK_COLOUR: Record<string, string> = { compressor: "#E5E7EB", gate: "#94A3B8", eq: "#22C55E", delay: "#3B82F6", reverb: "#8B5CF6", chorus: "#7DD3FC" };
@@ -239,6 +253,7 @@ const KINDS: Kind[] = [
                 group: m.name,
                 groupColour: MODULE_COLOUR[kind],
                 nested: true,
+                models: NAM[`${kind}/${m.name}/${v}`],
                 from: n === 0 && m.used_by.length ? `in ${plural(m.used_by.length, "preset")}` : undefined,
                 colour: MODULE_COLOUR[kind],
                 state: swapped === id ? ("swapped" as const) : undefined,
@@ -509,96 +524,163 @@ function hintFor(s: State, bt: BuildTarget, kind: Kind): string | null {
 }
 
 function KindList({ kind, items, apply, hint }: { kind: Kind; items: Item[]; apply: ((item: Item) => void) | null; hint: string | null }) {
-  // Variations come as preset blocks; patches sit under their stacks.
-  const blocks: ({ type: "row"; item: Item; head: string | null } | { type: "preset"; name: string; colour: string; items: Item[] })[] = [];
+  const nested = items.filter((i) => i.nested);
+  const plain = items.filter((i) => !i.nested);
+  // Presets with variations: a column browser — presets, then the picked
+  // preset's variations with what they load.
+  if (nested.length)
+    return (
+      <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+        {hint && <Quiet small>{hint}</Quiet>}
+        {plain.map((i) => (
+          <Row key={i.id || "none"} item={i} sub={i.from} onPick={apply ? () => apply(i) : undefined} />
+        ))}
+        <PresetColumns key={kind.id} items={nested} onPick={apply ?? undefined} />
+      </div>
+    );
   let last = "";
-  for (const i of items) {
-    if (i.nested && i.group) {
-      const b = blocks[blocks.length - 1];
-      if (b && b.type === "preset" && b.name === i.group) b.items.push(i);
-      else blocks.push({ type: "preset", name: i.group, colour: i.groupColour ?? i.colour, items: [i] });
-    } else {
-      const head = i.group && i.group !== last ? i.group : null;
-      if (i.group) last = i.group;
-      blocks.push({ type: "row", item: i, head });
-    }
-  }
   return (
     <div style={{ paddingBottom: 16 }}>
       {hint && <Quiet small>{hint}</Quiet>}
-      {blocks.map((b) =>
-        b.type === "preset" ? (
-          <PresetBlock key={`p:${b.name}`} name={b.name} colour={b.colour} items={b.items} onPick={apply ?? undefined} />
-        ) : (
-          <div key={b.item.id || "none"}>
-            {b.head && (
+      {items.map((i) => {
+        const head = i.group && i.group !== last ? i.group : null;
+        if (i.group) last = i.group;
+        return (
+          <div key={i.id || "none"}>
+            {head && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px 6px" }}>
-                <span style={{ width: 9, height: 9, borderRadius: 2, background: b.item.groupColour ?? (tapeFor(b.head) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(b.head)) }} />
+                <span style={{ width: 9, height: 9, borderRadius: 2, background: i.groupColour ?? (tapeFor(head) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(head)) }} />
                 <span className="t-label" style={{ fontSize: 11, color: "var(--ink-2)" }}>
-                  {b.head}
+                  {head}
                 </span>
               </div>
             )}
-            <Row item={b.item} sub={b.item.from} onPick={apply ? () => apply(b.item) : undefined} />
+            <Row item={i} sub={i.from} onPick={apply ? () => apply(i) : undefined} />
           </div>
-        ),
-      )}
+        );
+      })}
       {kind.id === "songs" && apply && <Quiet small>A tap adds the song to the end of the set.</Quiet>}
     </div>
   );
 }
 
-/** A preset and its variations: the preset as a heading — a bar of its
- *  colour, its name, how many variations, and which one is in use — and
- *  the variations under it as large pills that wrap, the one in use filled
- *  with its colour. Two levels that can't be confused. */
-function PresetBlock({ name, colour, items, onPick }: { name: string; colour: string; items: Item[]; onPick?: (item: Item) => void }) {
-  const inUse = items.find((i) => i.state);
+/** Presets on the left, the picked preset's variations on the right — each
+ *  variation with the NAM models it loads. Narrow, the two become steps. */
+function PresetColumns({ items, onPick }: { items: Item[]; onPick?: (item: Item) => void }) {
+  const presets: { name: string; colour: string; items: Item[] }[] = [];
+  for (const i of items) {
+    const p = presets[presets.length - 1];
+    if (p && p.name === i.group) p.items.push(i);
+    else presets.push({ name: i.group!, colour: i.groupColour ?? i.colour, items: [i] });
+  }
+  const inUse = presets.find((p) => p.items.some((i) => i.state));
+  const [picked, setPicked] = useState<string>(inUse?.name ?? presets[0]?.name);
+  const [step, setStep] = useState<"presets" | "variations">("presets");
+  const ref = useRef<HTMLDivElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setNarrow(el.clientWidth < 480));
+    ro.observe(el);
+    setNarrow(el.clientWidth < 480);
+    return () => ro.disconnect();
+  }, []);
+  const preset = presets.find((p) => p.name === picked) ?? presets[0];
+  const showPresets = !narrow || step === "presets";
+  const showVariations = !narrow || step === "variations";
   return (
-    <section style={{ position: "relative", padding: "12px 16px 14px 20px", borderTop: "1px solid var(--rule)" }}>
-      <span aria-hidden style={{ position: "absolute", left: 0, top: 12, bottom: 14, width: 4, borderRadius: "0 3px 3px 0", background: colour, opacity: inUse ? 1 : 0.55 }} />
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10 }}>
-        <span style={{ fontSize: 17, fontWeight: 750, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-        <span className="t-meta" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
-          {items.length} variation{items.length === 1 ? "" : "s"}
-        </span>
-        <span style={{ flex: 1 }} />
-        {inUse && (
-          <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", color: inUse.state === "swapped" ? "var(--modified)" : "var(--live)" }}>
-            {inUse.state === "swapped" ? "Swapped in" : "Playing"} · {inUse.name}
+    <div ref={ref} style={{ flex: 1, minHeight: 0, display: "flex", borderTop: "1px solid var(--rule)" }}>
+      {showPresets && (
+        <div style={{ width: narrow ? "100%" : "38%", maxWidth: narrow ? undefined : 240, flexShrink: 0, overflowY: "auto", borderRight: narrow ? undefined : "1px solid var(--rule)" }}>
+          {presets.map((p) => {
+            const on = p.name === preset?.name;
+            const used = p.items.find((i) => i.state);
+            return (
+              <button
+                key={p.name}
+                onClick={() => {
+                  setPicked(p.name);
+                  setStep("variations");
+                }}
+                className={on && !narrow ? "" : "pressable"}
+                aria-current={on ? "true" : undefined}
+                style={{ position: "relative", width: "100%", minHeight: 52, display: "flex", alignItems: "center", gap: 10, padding: "6px 12px 6px 14px", textAlign: "left", background: on && !narrow ? "rgba(255,255,255,0.07)" : undefined }}
+              >
+                <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: p.colour, opacity: on || used ? 1 : 0.35 }} />
+                <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span style={{ fontSize: 15, fontWeight: on ? 700 : 600, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                  <span style={{ fontSize: 12, color: used ? (used.state === "swapped" ? "var(--modified)" : "var(--live)") : "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {used ? `${used.state === "swapped" ? "Swapped in" : "Playing"} · ${used.name}` : plural(p.items.length, "variation")}
+                  </span>
+                </span>
+                {narrow && (
+                  <svg width="7" height="12" viewBox="0 0 7 12" aria-hidden style={{ color: "var(--ink-3)", flexShrink: 0 }}>
+                    <path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {showVariations && preset && (
+        <div style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 48, padding: "8px 16px 6px", borderBottom: "1px solid var(--rule)" }}>
+            {narrow && (
+              <button className="pressable" onClick={() => setStep("presets")} aria-label="All presets" style={{ width: 32, height: 44, marginLeft: -8, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", borderRadius: "var(--r)" }}>
+                <svg width="9" height="15" viewBox="0 0 9 15" aria-hidden>
+                  <path d="M7.5 1.5 1.5 7.5l6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: preset.colour, flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{preset.name}</span>
+            <span className="t-meta" style={{ fontSize: 12 }}>
+              {plural(preset.items.length, "variation")}
+            </span>
+          </div>
+          {preset.items.map((i) => (
+            <Variation key={i.id} item={i} colour={preset.colour} onPick={onPick ? () => onPick(i) : undefined} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One variation: its name, and the NAM models it loads — an amp head for
+ *  an amp capture, a bolt for a drive (pedal · setting), a speaker for a
+ *  cab IR. */
+function Variation({ item, colour, onPick }: { item: Item; colour: string; onPick?: () => void }) {
+  const on = !!item.state;
+  return (
+    <button
+      onClick={onPick}
+      disabled={!onPick}
+      aria-pressed={on}
+      className={onPick && !on ? "pressable" : ""}
+      style={{ position: "relative", width: "100%", display: "flex", alignItems: "flex-start", gap: 12, minHeight: 52, padding: "10px 16px", textAlign: "left", borderBottom: "1px solid var(--rule)", background: on ? `color-mix(in oklab, ${colour} 12%, transparent)` : undefined, cursor: onPick ? "pointer" : "default" }}
+    >
+      {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: item.state === "swapped" ? "var(--modified)" : "var(--live)" }} />}
+      <span style={{ width: 16, height: 16, marginTop: 2, borderRadius: 999, flexShrink: 0, boxShadow: `inset 0 0 0 1.5px ${on ? colour : "var(--ink-3)"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {on && <span style={{ width: 8, height: 8, borderRadius: 999, background: colour }} />}
+      </span>
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 16, fontWeight: on ? 700 : 600, color: "var(--ink)" }}>{item.name}</span>
+        {item.models?.map((m, k) => (
+          <span key={k} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12.5, color: "var(--ink-3)" }}>
+            <ModuleIcon kind={m.role === "amp" ? "Core" : m.role === "drive" ? "Drive" : "Amp"} size={12} colour={m.role === "amp" ? "#D6B36A" : m.role === "drive" ? "#ef4444" : "#a1a1aa"} />
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.role === "drive" && m.pedal ? `${m.pedal}${m.option ? ` · ${m.option}` : ""}` : m.name}</span>
           </span>
-        )}
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {items.map((i) => {
-          const on = !!i.state;
-          return (
-            <button
-              key={i.id}
-              onClick={onPick ? () => onPick(i) : undefined}
-              disabled={!onPick}
-              aria-pressed={on}
-              className={onPick && !on ? "pressable" : ""}
-              title={i.from}
-              style={{
-                height: 40,
-                padding: "0 14px",
-                borderRadius: 8,
-                fontSize: 14,
-                fontWeight: on ? 700 : 560,
-                whiteSpace: "nowrap",
-                color: on ? "var(--ink)" : "var(--ink-2)",
-                background: on ? `color-mix(in oklab, ${colour} 26%, #141418)` : "#18181c",
-                boxShadow: on ? `inset 0 0 0 1.5px ${colour}` : "inset 0 0 0 1px #26262c",
-                cursor: onPick ? "pointer" : "default",
-              }}
-            >
-              {i.name}
-            </button>
-          );
-        })}
-      </div>
-    </section>
+        ))}
+      </span>
+      {item.state && (
+        <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, marginTop: 2, color: item.state === "swapped" ? "var(--modified)" : "var(--live)" }}>
+          {item.state === "swapped" ? "Swapped in" : item.state === "playing" ? "Playing" : "In use"}
+        </span>
+      )}
+    </button>
   );
 }
 

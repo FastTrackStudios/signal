@@ -1,0 +1,3144 @@
+{
+ "Drive/King of Tone + Morning Glory/King of Tone": [
+  {
+   "role": "drive",
+   "name": "King of Tone",
+   "pedal": "King of Tone",
+   "option": null
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Low Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Low Gain"
+  }
+ ],
+ "Drive/King of Tone + Morning Glory/Stacked": [
+  {
+   "role": "drive",
+   "name": "King of Tone",
+   "pedal": "King of Tone",
+   "option": null
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Low Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Low Gain"
+  }
+ ],
+ "Drive/King of Tone + Morning Glory/Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone both sides",
+   "pedal": "King of Tone",
+   "option": "Both Sides"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Amp/Fender Deluxe Reverb/Clean": [
+  {
+   "role": "amp",
+   "name": "FNDR BFDRI VB Clean BAL2 CAB"
+  }
+ ],
+ "Amp/Fender Deluxe Reverb/Warm Clean": [
+  {
+   "role": "amp",
+   "name": "Deluxe Reverb"
+  }
+ ],
+ "Amp/Fender Deluxe Reverb/Edge": [
+  {
+   "role": "amp",
+   "name": "EDGY - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  }
+ ],
+ "Amp/Fender Deluxe Reverb/Drive": [
+  {
+   "role": "amp",
+   "name": "Fender Deluxe Reverb - V5_ T6_ B4_ Klon Gain 10_ SM57 - Standard"
+  }
+ ],
+ "Amp/Fender Deluxe Reverb/Cranked": [
+  {
+   "role": "amp",
+   "name": "CRANCKED - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  }
+ ],
+ "Amp/Fender Twin Reverb/Clean": [
+  {
+   "role": "amp",
+   "name": "Fender 65_ Twin Reverb_2x12_CLEAN_SM57"
+  }
+ ],
+ "Amp/Fender Twin Reverb/Bright": [
+  {
+   "role": "amp",
+   "name": "Fender 65_ Twin Reverb_2x12_BRIGHT_SM57"
+  }
+ ],
+ "Amp/Fender Twin Reverb/Edge": [
+  {
+   "role": "amp",
+   "name": "FENDER TWIN CAP EDGE U67_R121"
+  }
+ ],
+ "Amp/Fender Twin Reverb/Breakup": [
+  {
+   "role": "amp",
+   "name": "Tim R Fender Twin Reverb Ch1 BR G06"
+  },
+  {
+   "role": "cab",
+   "name": "1966 Bassman Cabinet with Jensen C12N - SM57 - Cap"
+  }
+ ],
+ "Amp/Fender Bassman/Clean": [
+  {
+   "role": "amp",
+   "name": "Fender Bassman 5F6A - Super Clean"
+  }
+ ],
+ "Amp/Fender Bassman/Warm": [
+  {
+   "role": "amp",
+   "name": "Fender Bassman 5F6A - Clean Warm"
+  }
+ ],
+ "Amp/Fender Bassman/Edge": [
+  {
+   "role": "amp",
+   "name": "Fender Bassman 5F6A - Edge"
+  }
+ ],
+ "Amp/Fender Bassman/Pushed": [
+  {
+   "role": "amp",
+   "name": "Fender Bassman 5F6A - Pushed"
+  }
+ ],
+ "Amp/Fender Bassman/Cranked": [
+  {
+   "role": "amp",
+   "name": "Clapton_s Bassman - Marked Settings _Jumpered_"
+  }
+ ],
+ "Amp/Vox AC30/Clean": [
+  {
+   "role": "amp",
+   "name": "_65 AC30_6 - The Iconic Cleanish"
+  }
+ ],
+ "Amp/Vox AC30/Edge": [
+  {
+   "role": "amp",
+   "name": "VX TB30 BR Edge0 BAL2 CAB FREE"
+  }
+ ],
+ "Amp/Vox AC30/Crunch": [
+  {
+   "role": "amp",
+   "name": "VX 304 NR Crunch BAL CAB"
+  }
+ ],
+ "Amp/Vox AC30/Drive": [
+  {
+   "role": "amp",
+   "name": "1966 AC30 Bril OD"
+  }
+ ],
+ "Amp/Dumble ODS/Clean": [
+  {
+   "role": "amp",
+   "name": "Dumble ODS Clean"
+  }
+ ],
+ "Amp/Dumble ODS/Two-Rock Clean": [
+  {
+   "role": "amp",
+   "name": "TRCK SSS Clean BAL CAB"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Dumble ODS/Two-Rock Edge": [
+  {
+   "role": "amp",
+   "name": "TRCK TCL Edge BAL DI"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Dumble ODS/Drive": [
+  {
+   "role": "amp",
+   "name": "Dumble ODS Drive"
+  }
+ ],
+ "Amp/Dumble ODS/Lead": [
+  {
+   "role": "amp",
+   "name": "Dumble ODS HiGain"
+  }
+ ],
+ "Amp/Marshall Plexi/Edge": [
+  {
+   "role": "amp",
+   "name": "Marshall 1959 Plexi Super Lead Low Gain"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Amp/Marshall Plexi/Crunch": [
+  {
+   "role": "amp",
+   "name": "MRSH JM50LD I Crunch2 FAT CAB"
+  }
+ ],
+ "Amp/Marshall Plexi/Drive": [
+  {
+   "role": "amp",
+   "name": "MRSH SL68 I Drive BRI CAB"
+  }
+ ],
+ "Amp/Marshall Plexi/Dimed": [
+  {
+   "role": "amp",
+   "name": "MRSH MJR I Dimed BAL3 CAB"
+  }
+ ],
+ "Amp/Marshall Plexi/Lead": [
+  {
+   "role": "amp",
+   "name": "Marshall 1959 Plexi Super Lead _ Boost"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Amp/Marshall JCM800/Edge": [
+  {
+   "role": "amp",
+   "name": "_AMP_ JCM800-2203-MODIFIED-LO Edge of Breakup - BLEND _3"
+  }
+ ],
+ "Amp/Marshall JCM800/Crunch": [
+  {
+   "role": "amp",
+   "name": "JCM800 Lo P6 B8 M4 T7 G4"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Amp/Marshall JCM800/Lead": [
+  {
+   "role": "amp",
+   "name": "_AMP_ JCM800-2203-MODIFIED-HI The Sound - BLEND _1"
+  }
+ ],
+ "Amp/Marshall JCM800/Hot Lead": [
+  {
+   "role": "amp",
+   "name": "JCM800 Hi P6 B8 M4 T7 G10"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Amp/Friedman BE-100/Clean": [
+  {
+   "role": "amp",
+   "name": "_AMP_ BE100DLX-CLN Tender Clean - BLEND"
+  }
+ ],
+ "Amp/Friedman BE-100/Crunch": [
+  {
+   "role": "amp",
+   "name": "_AMP_ BE100DLX-CLN Rock _01 - SM57"
+  }
+ ],
+ "Amp/Friedman BE-100/BE": [
+  {
+   "role": "amp",
+   "name": "_AMP_ BE100DLX-BE Man in the Cogs _01 - BLEND"
+  }
+ ],
+ "Amp/Friedman BE-100/HBE": [
+  {
+   "role": "amp",
+   "name": "_AMP_ BE100DLX-HBE Tallica - SM57"
+  }
+ ],
+ "Amp/Soldano SLO-100/Clean": [
+  {
+   "role": "amp",
+   "name": "_AMP_ SLO100-NRM-CLN Journeyvan - BLEND _1"
+  }
+ ],
+ "Amp/Soldano SLO-100/Crunch": [
+  {
+   "role": "amp",
+   "name": "_AMP_ SLO100-NRM-CRN Thing of Joy _01 - BLEND _1"
+  }
+ ],
+ "Amp/Soldano SLO-100/Overdrive": [
+  {
+   "role": "amp",
+   "name": "_AMP_ SLO100-OVD The King - BLEND _3"
+  }
+ ],
+ "Amp/Mesa Dual Rectifier/Clean": [
+  {
+   "role": "amp",
+   "name": "_AMP_ DREC.G-TUB-SPG-ORG-CLN Factory Clean - SM57"
+  }
+ ],
+ "Amp/Mesa Dual Rectifier/Crunch": [
+  {
+   "role": "amp",
+   "name": "_AMP_ DREC.G-DIO-BLD-ORG-VNT Factory Orange Crunch - SM57"
+  }
+ ],
+ "Amp/Mesa Dual Rectifier/Red Vintage": [
+  {
+   "role": "amp",
+   "name": "_AMP_ DREC.G-DIO-BLD-RED-VNT Factory Molten Red - SM57"
+  }
+ ],
+ "Amp/Mesa Mark IIC+/Clean": [
+  {
+   "role": "amp",
+   "name": "Mesa Boogie IIC_ Combo Clean"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Mesa Mark IIC+/Rock": [
+  {
+   "role": "amp",
+   "name": "Mesa Boogie IIC_ Combo Rock"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Mesa Mark IIC+/Fat Gain": [
+  {
+   "role": "amp",
+   "name": "Mesa Boogie IIC_ Combo Fat Gain"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Mesa Mark IIC+/Lead": [
+  {
+   "role": "amp",
+   "name": "Mesa Boogie IIC_ Deth Lead"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/EVH 5150 III/Blue": [
+  {
+   "role": "amp",
+   "name": "5150 Stealth 100w Blue Mesa OS - jp_is_out_of_tune"
+  }
+ ],
+ "Amp/EVH 5150 III/Red": [
+  {
+   "role": "amp",
+   "name": "5150 Stealth 100w Red Mesa OS - jp_is_out_of_tune"
+  }
+ ],
+ "Amp/EVH 5150 III/Green Boosted": [
+  {
+   "role": "amp",
+   "name": "5150 Stealth 100w Green SD1 Mesa OS - jp_is_out_of_tune"
+  }
+ ],
+ "Amp/Peavey 5150/6505/Clean": [
+  {
+   "role": "amp",
+   "name": "PEAVEY - 5150 II - CLEAN - B0 - G3.0"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Peavey 5150/6505/Crunch": [
+  {
+   "role": "amp",
+   "name": "PEAVEY - 6506 - CRUNCH - B0 - NORMAL - G6.0"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Peavey 5150/6505/Lead": [
+  {
+   "role": "amp",
+   "name": "PEAVEY - 6506 - RED - NORMAL - G9.0"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Bogner Uberschall/Clean": [
+  {
+   "role": "amp",
+   "name": "Uberschall Capture 16 Clean - Emil Rohbe"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Bogner Uberschall/Rhythm": [
+  {
+   "role": "amp",
+   "name": "BOG UU II Gain BAL CAB"
+  }
+ ],
+ "Amp/Bogner Uberschall/Lead": [
+  {
+   "role": "amp",
+   "name": "_AMP_ UBER.BLUE-Mar412-LEAD Basher - SM57"
+  }
+ ],
+ "Amp/Bogner Uberschall/Boosted": [
+  {
+   "role": "amp",
+   "name": "Uberschall Capture 10 Emil Settings Boosted - Emil Rohbe"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Diezel VH4/Breakup": [
+  {
+   "role": "amp",
+   "name": "_AMP_ DiZLVH4-CH1 Breakup - BLEND _1"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Diezel VH4/Crunch": [
+  {
+   "role": "amp",
+   "name": "_AMP_ DiZLVH4-CH2 Those Bones - BLEND _2"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Diezel VH4/Mega": [
+  {
+   "role": "amp",
+   "name": "DZL V4 III Gain FAT CAB FREE"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Diezel VH4/Lead": [
+  {
+   "role": "amp",
+   "name": "_AMP_ DiZLVH4-CH4 Lead the Way - BLEND _1"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/ENGL Powerball/Clean": [
+  {
+   "role": "amp",
+   "name": "ENGL Powerball Clean"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/ENGL Powerball/Crunch": [
+  {
+   "role": "amp",
+   "name": "ENGL Powerball Crunch"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/ENGL Powerball/Drive": [
+  {
+   "role": "amp",
+   "name": "ENGL Powerball Overdrive 1"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/ENGL Powerball/Lead": [
+  {
+   "role": "amp",
+   "name": "ENGL Powerball Overdrive 2"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/ENGL Fireball/Rhythm": [
+  {
+   "role": "amp",
+   "name": "ENGL FIREBALL 100"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/ENGL Fireball/Lead": [
+  {
+   "role": "amp",
+   "name": "ENGL FB25 Lead - Modern"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Amp/Hiwatt DR103/Crunch": [
+  {
+   "role": "amp",
+   "name": "Hiwatt DR 103 crunch Bridged"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Amp/Hiwatt DR103/Pushed": [
+  {
+   "role": "amp",
+   "name": "Hiwatt DR 103 Archer Klon Pushed"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Amp/Hiwatt DR103/Cranked": [
+  {
+   "role": "amp",
+   "name": "Hiwatt DR 103 Crancked"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Amp/Deluxe + AC30/Clean": [
+  {
+   "role": "amp",
+   "name": "CLEAN - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  },
+  {
+   "role": "amp",
+   "name": "_65 AC30_6 - The Iconic Cleanish"
+  }
+ ],
+ "Amp/Deluxe + AC30/Edge": [
+  {
+   "role": "amp",
+   "name": "EDGY - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  },
+  {
+   "role": "amp",
+   "name": "VX TB30 BR Edge0 BAL2 CAB FREE"
+  }
+ ],
+ "Amp/Deluxe + AC30/Cranked": [
+  {
+   "role": "amp",
+   "name": "CRANCKED - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  },
+  {
+   "role": "amp",
+   "name": "VX 304 NR Crunch BAL CAB"
+  }
+ ],
+ "Amp/Deluxe + AC30/Drive": [
+  {
+   "role": "amp",
+   "name": "CRANCKED - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  },
+  {
+   "role": "amp",
+   "name": "1966 AC30 Bril OD"
+  }
+ ],
+ "Amp/Plexi + AC30/Crunch": [
+  {
+   "role": "amp",
+   "name": "MRSH JM50LD I Crunch2 FAT CAB"
+  },
+  {
+   "role": "amp",
+   "name": "VX 304 NR Crunch BAL CAB"
+  }
+ ],
+ "Amp/Plexi + AC30/Drive": [
+  {
+   "role": "amp",
+   "name": "MRSH SL68 I Drive BRI CAB"
+  },
+  {
+   "role": "amp",
+   "name": "1966 AC30 Bril OD"
+  }
+ ],
+ "Amp/JCM800 + AC30/Crunch": [
+  {
+   "role": "amp",
+   "name": "JCM800 Lo P6 B8 M4 T7 G4"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  },
+  {
+   "role": "amp",
+   "name": "VX 304 NR Crunch BAL CAB"
+  }
+ ],
+ "Amp/5150 III + Recto/Crunch": [
+  {
+   "role": "amp",
+   "name": "5150 Stealth 100w Blue Mesa OS - jp_is_out_of_tune"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ DREC.G-DIO-BLD-RED-VNT Factory Molten Red - SM57"
+  }
+ ],
+ "Drive/Off/Off": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Drive/King of Tone/Light": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Drive/King of Tone/Low": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Drive/King of Tone/Mild": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Drive/King of Tone/Medium": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Drive/King of Tone/Tight": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Drive/King of Tone/Push": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Drive/King of Tone/Cranked": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Drive/King of Tone/Boost + Low": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Drive/Morning Glory/On": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Drive/Morning Glory/Medium": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Drive/King of Tone (Both Sides)/Medium": [
+  {
+   "role": "drive",
+   "name": "King of Tone both sides",
+   "pedal": "King of Tone",
+   "option": "Both Sides"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Low Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Low Gain"
+  }
+ ],
+ "Drive/King of Tone (Both Sides)/Strong": [
+  {
+   "role": "drive",
+   "name": "King of Tone both sides",
+   "pedal": "King of Tone",
+   "option": "Both Sides"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Low Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Low Gain"
+  }
+ ],
+ "Drive/King of Tone (Both Sides)/Hot": [
+  {
+   "role": "drive",
+   "name": "King of Tone both sides",
+   "pedal": "King of Tone",
+   "option": "Both Sides"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Low Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Low Gain"
+  }
+ ],
+ "Drive/Morning Glory (Low Gain)/Push": [
+  {
+   "role": "drive",
+   "name": "King of Tone both sides",
+   "pedal": "King of Tone",
+   "option": "Both Sides"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Low Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Low Gain"
+  }
+ ],
+ "Core/Fender Deluxe Reverb/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "FNDR BFDRI VB Clean BAL2 CAB"
+  }
+ ],
+ "Core/Fender Deluxe Reverb/Country": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "FNDR BFDRI VB Clean BAL2 CAB"
+  }
+ ],
+ "Core/Fender Deluxe Reverb/Warm Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Deluxe Reverb"
+  }
+ ],
+ "Core/Fender Deluxe Reverb/Edge": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "EDGY - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  }
+ ],
+ "Core/Fender Deluxe Reverb/Drive": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Fender Deluxe Reverb - V5_ T6_ B4_ Klon Gain 10_ SM57 - Standard"
+  }
+ ],
+ "Core/Fender Deluxe Reverb/Cranked": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "CRANCKED - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  }
+ ],
+ "Core/Fender Deluxe Reverb/Clean + King of Tone": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "FNDR BFDRI VB Clean BAL2 CAB"
+  }
+ ],
+ "Core/Fender Deluxe Reverb/Clean Verb": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "FNDR BFDRI VB Clean BAL2 CAB"
+  }
+ ],
+ "Core/Fender Deluxe Reverb/Deluxe OD": [
+  {
+   "role": "drive",
+   "name": "King of Tone both sides",
+   "pedal": "King of Tone",
+   "option": "Both Sides"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Low Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Low Gain"
+  },
+  {
+   "role": "amp",
+   "name": "CRANCKED - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  }
+ ],
+ "Core/Fender Twin Reverb/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Fender 65_ Twin Reverb_2x12_CLEAN_SM57"
+  }
+ ],
+ "Core/Fender Twin Reverb/Funk": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Fender 65_ Twin Reverb_2x12_CLEAN_SM57"
+  }
+ ],
+ "Core/Fender Twin Reverb/Bright": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Fender 65_ Twin Reverb_2x12_BRIGHT_SM57"
+  }
+ ],
+ "Core/Fender Twin Reverb/Edge": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "FENDER TWIN CAP EDGE U67_R121"
+  }
+ ],
+ "Core/Fender Twin Reverb/Breakup": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Tim R Fender Twin Reverb Ch1 BR G06"
+  },
+  {
+   "role": "cab",
+   "name": "1966 Bassman Cabinet with Jensen C12N - SM57 - Cap"
+  }
+ ],
+ "Core/Fender Twin Reverb/Texas": [
+  {
+   "role": "drive",
+   "name": "King of Tone both sides",
+   "pedal": "King of Tone",
+   "option": "Both Sides"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Low Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Low Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Tim R Fender Twin Reverb Ch1 BR G06"
+  },
+  {
+   "role": "cab",
+   "name": "1966 Bassman Cabinet with Jensen C12N - SM57 - Cap"
+  }
+ ],
+ "Core/Fender Twin Reverb/Lead Texas": [
+  {
+   "role": "drive",
+   "name": "King of Tone both sides",
+   "pedal": "King of Tone",
+   "option": "Both Sides"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Low Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Low Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Tim R Fender Twin Reverb Ch1 BR G06"
+  },
+  {
+   "role": "cab",
+   "name": "1966 Bassman Cabinet with Jensen C12N - SM57 - Cap"
+  }
+ ],
+ "Core/Fender Twin Reverb/Slow Verb": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Fender 65_ Twin Reverb_2x12_CLEAN_SM57"
+  }
+ ],
+ "Core/Fender Bassman/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Fender Bassman 5F6A - Super Clean"
+  }
+ ],
+ "Core/Fender Bassman/Warm": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Fender Bassman 5F6A - Clean Warm"
+  }
+ ],
+ "Core/Fender Bassman/Edge": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Fender Bassman 5F6A - Edge"
+  }
+ ],
+ "Core/Fender Bassman/Pushed": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Fender Bassman 5F6A - Pushed"
+  }
+ ],
+ "Core/Fender Bassman/Cranked": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Clapton_s Bassman - Marked Settings _Jumpered_"
+  }
+ ],
+ "Core/Fender Bassman/Lead Lux": [
+  {
+   "role": "drive",
+   "name": "King of Tone both sides",
+   "pedal": "King of Tone",
+   "option": "Both Sides"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Low Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Low Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Clapton_s Bassman - Marked Settings _Jumpered_"
+  }
+ ],
+ "Core/Fender Bassman/Rhythm Tight": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Clapton_s Bassman - Marked Settings _Jumpered_"
+  }
+ ],
+ "Core/Vox AC30/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_65 AC30_6 - The Iconic Cleanish"
+  }
+ ],
+ "Core/Vox AC30/Edge": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "VX TB30 BR Edge0 BAL2 CAB FREE"
+  }
+ ],
+ "Core/Vox AC30/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "VX 304 NR Crunch BAL CAB"
+  }
+ ],
+ "Core/Vox AC30/Drive": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "1966 AC30 Bril OD"
+  }
+ ],
+ "Core/Vox AC30/Ambient": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_65 AC30_6 - The Iconic Cleanish"
+  }
+ ],
+ "Core/Vox AC30/Ambient Swells": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_65 AC30_6 - The Iconic Cleanish"
+  }
+ ],
+ "Core/Dumble ODS/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Dumble ODS Clean"
+  }
+ ],
+ "Core/Dumble ODS/Two-Rock Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "TRCK SSS Clean BAL CAB"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Dumble ODS/Two-Rock Edge": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "TRCK TCL Edge BAL DI"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Dumble ODS/Drive": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Dumble ODS Drive"
+  }
+ ],
+ "Core/Dumble ODS/Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Dumble ODS HiGain"
+  }
+ ],
+ "Core/Dumble ODS/Lead \u00b7 Dotted Eighth": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Dumble ODS HiGain"
+  }
+ ],
+ "Core/Dumble ODS/Verb Energy Tremolo": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Dumble ODS HiGain"
+  }
+ ],
+ "Core/Marshall Plexi/Edge": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Marshall 1959 Plexi Super Lead Low Gain"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Core/Marshall Plexi/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "MRSH JM50LD I Crunch2 FAT CAB"
+  }
+ ],
+ "Core/Marshall Plexi/Drive": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "MRSH SL68 I Drive BRI CAB"
+  }
+ ],
+ "Core/Marshall Plexi/Dimed": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "MRSH MJR I Dimed BAL3 CAB"
+  }
+ ],
+ "Core/Marshall Plexi/Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Marshall 1959 Plexi Super Lead _ Boost"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Core/Marshall Plexi/Crunch Boost": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "MRSH JM50LD I Crunch2 FAT CAB"
+  }
+ ],
+ "Core/Marshall Plexi/Big Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "MRSH MJR I Dimed BAL3 CAB"
+  }
+ ],
+ "Core/Marshall Plexi/Lead Vintage": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Marshall 1959 Plexi Super Lead _ Boost"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Core/Marshall JCM800/Edge": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ JCM800-2203-MODIFIED-LO Edge of Breakup - BLEND _3"
+  }
+ ],
+ "Core/Marshall JCM800/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "JCM800 Lo P6 B8 M4 T7 G4"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Core/Marshall JCM800/Drive": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Core/Marshall JCM800/Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ JCM800-2203-MODIFIED-HI The Sound - BLEND _1"
+  }
+ ],
+ "Core/Marshall JCM800/Hot Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "JCM800 Hi P6 B8 M4 T7 G10"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Core/Marshall JCM800/Rhythm": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Core/Marshall JCM800/Lead + King of Tone": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ JCM800-2203-MODIFIED-HI The Sound - BLEND _1"
+  }
+ ],
+ "Core/Friedman BE-100/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ BE100DLX-CLN Tender Clean - BLEND"
+  }
+ ],
+ "Core/Friedman BE-100/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ BE100DLX-CLN Rock _01 - SM57"
+  }
+ ],
+ "Core/Friedman BE-100/BE": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ BE100DLX-BE Man in the Cogs _01 - BLEND"
+  }
+ ],
+ "Core/Friedman BE-100/HBE": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ BE100DLX-HBE Tallica - SM57"
+  }
+ ],
+ "Core/Friedman BE-100/Lead Friedman": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ BE100DLX-HBE Tallica - SM57"
+  }
+ ],
+ "Core/Soldano SLO-100/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ SLO100-NRM-CLN Journeyvan - BLEND _1"
+  }
+ ],
+ "Core/Soldano SLO-100/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ SLO100-NRM-CRN Thing of Joy _01 - BLEND _1"
+  }
+ ],
+ "Core/Soldano SLO-100/Overdrive": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ SLO100-OVD The King - BLEND _3"
+  }
+ ],
+ "Core/Soldano SLO-100/Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Core/Soldano SLO-100/Lead Dragon": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ SLO100-OVD The King - BLEND _3"
+  }
+ ],
+ "Core/Soldano SLO-100/Crunch Dragon": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ SLO100-OVD The King - BLEND _3"
+  }
+ ],
+ "Core/Mesa Dual Rectifier/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ DREC.G-TUB-SPG-ORG-CLN Factory Clean - SM57"
+  }
+ ],
+ "Core/Mesa Dual Rectifier/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ DREC.G-DIO-BLD-ORG-VNT Factory Orange Crunch - SM57"
+  }
+ ],
+ "Core/Mesa Dual Rectifier/Red Vintage": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ DREC.G-DIO-BLD-RED-VNT Factory Molten Red - SM57"
+  }
+ ],
+ "Core/Mesa Dual Rectifier/Red Modern": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Core/Mesa Dual Rectifier/Rhythm Recto": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Core/Mesa Mark IIC+/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Mesa Boogie IIC_ Combo Clean"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Mesa Mark IIC+/Rock": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Mesa Boogie IIC_ Combo Rock"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Mesa Mark IIC+/Fat Gain": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Mesa Boogie IIC_ Combo Fat Gain"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Mesa Mark IIC+/Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Mesa Boogie IIC_ Deth Lead"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/EVH 5150 III/Blue": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "5150 Stealth 100w Blue Mesa OS - jp_is_out_of_tune"
+  }
+ ],
+ "Core/EVH 5150 III/Red": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "5150 Stealth 100w Red Mesa OS - jp_is_out_of_tune"
+  }
+ ],
+ "Core/EVH 5150 III/Red Noon": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Core/EVH 5150 III/Green Boosted": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "5150 Stealth 100w Green SD1 Mesa OS - jp_is_out_of_tune"
+  }
+ ],
+ "Core/EVH 5150 III/Chug": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "5150 Stealth 100w Red Mesa OS - jp_is_out_of_tune"
+  }
+ ],
+ "Core/EVH 5150 III/Lead Wide": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "5150 Stealth 100w Red Mesa OS - jp_is_out_of_tune"
+  }
+ ],
+ "Core/EVH 5150 III/Chug Noon": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Core/Peavey 5150/6505/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "PEAVEY - 5150 II - CLEAN - B0 - G3.0"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Peavey 5150/6505/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "PEAVEY - 6506 - CRUNCH - B0 - NORMAL - G6.0"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Peavey 5150/6505/Rhythm": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Core/Peavey 5150/6505/Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "PEAVEY - 6506 - RED - NORMAL - G9.0"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Peavey 5150/6505/Boosted": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Core/Peavey 5150/6505/Rhythm + King of Tone": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Core/Peavey 5150/6505/Lead + King of Tone": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "PEAVEY - 6506 - RED - NORMAL - G9.0"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Bogner Uberschall/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Uberschall Capture 16 Clean - Emil Rohbe"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Bogner Uberschall/Rhythm": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "BOG UU II Gain BAL CAB"
+  }
+ ],
+ "Core/Bogner Uberschall/Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ UBER.BLUE-Mar412-LEAD Basher - SM57"
+  }
+ ],
+ "Core/Bogner Uberschall/Boosted": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Uberschall Capture 10 Emil Settings Boosted - Emil Rohbe"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Bogner Uberschall/Chug Uber": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "BOG UU II Gain BAL CAB"
+  }
+ ],
+ "Core/Diezel VH4/Breakup": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ DiZLVH4-CH1 Breakup - BLEND _1"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Diezel VH4/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ DiZLVH4-CH2 Those Bones - BLEND _2"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Diezel VH4/Mega": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "DZL V4 III Gain FAT CAB FREE"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Diezel VH4/Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ DiZLVH4-CH4 Lead the Way - BLEND _1"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/ENGL Powerball/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "ENGL Powerball Clean"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/ENGL Powerball/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "ENGL Powerball Crunch"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/ENGL Powerball/Drive": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "ENGL Powerball Overdrive 1"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/ENGL Powerball/Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "ENGL Powerball Overdrive 2"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/ENGL Fireball/Rhythm": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "ENGL FIREBALL 100"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/ENGL Fireball/Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "ENGL FB25 Lead - Modern"
+  },
+  {
+   "role": "cab",
+   "name": "V30 UL 4FB 4x12 SM57 0.50in 0.0in SA73"
+  }
+ ],
+ "Core/Hiwatt DR103/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Hiwatt DR 103 crunch Bridged"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Core/Hiwatt DR103/Pushed": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Hiwatt DR 103 Archer Klon Pushed"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Core/Hiwatt DR103/Cranked": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "Hiwatt DR 103 Crancked"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  }
+ ],
+ "Core/Deluxe + AC30/Clean": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "CLEAN - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  },
+  {
+   "role": "amp",
+   "name": "_65 AC30_6 - The Iconic Cleanish"
+  }
+ ],
+ "Core/Deluxe + AC30/Edge": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "EDGY - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  },
+  {
+   "role": "amp",
+   "name": "VX TB30 BR Edge0 BAL2 CAB FREE"
+  }
+ ],
+ "Core/Deluxe + AC30/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone",
+   "pedal": "King of Tone",
+   "option": null
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Low Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Low Gain"
+  },
+  {
+   "role": "amp",
+   "name": "EDGY - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  },
+  {
+   "role": "amp",
+   "name": "VX TB30 BR Edge0 BAL2 CAB FREE"
+  }
+ ],
+ "Core/Deluxe + AC30/Drive": [
+  {
+   "role": "drive",
+   "name": "King of Tone",
+   "pedal": "King of Tone",
+   "option": null
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Low Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Low Gain"
+  },
+  {
+   "role": "amp",
+   "name": "CRANCKED - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  },
+  {
+   "role": "amp",
+   "name": "VX 304 NR Crunch BAL CAB"
+  }
+ ],
+ "Core/Deluxe + AC30/Lead": [
+  {
+   "role": "drive",
+   "name": "King of Tone both sides",
+   "pedal": "King of Tone",
+   "option": "Both Sides"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "CRANCKED - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  },
+  {
+   "role": "amp",
+   "name": "1966 AC30 Bril OD"
+  }
+ ],
+ "Core/Deluxe + AC30/Swells": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "CLEAN - Fender Deluxe Reverb 1965 _Hyper Accuracy_"
+  },
+  {
+   "role": "cab",
+   "name": "TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30"
+  },
+  {
+   "role": "amp",
+   "name": "_65 AC30_6 - The Iconic Cleanish"
+  }
+ ],
+ "Core/Plexi + AC30/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "MRSH JM50LD I Crunch2 FAT CAB"
+  },
+  {
+   "role": "amp",
+   "name": "VX 304 NR Crunch BAL CAB"
+  }
+ ],
+ "Core/Plexi + AC30/Drive": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "MRSH SL68 I Drive BRI CAB"
+  },
+  {
+   "role": "amp",
+   "name": "1966 AC30 Bril OD"
+  }
+ ],
+ "Core/JCM800 + AC30/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "JCM800 Lo P6 B8 M4 T7 G4"
+  },
+  {
+   "role": "cab",
+   "name": "M25 UL 1960TV 4x12 SM57 1.75in 0.0in SA73"
+  },
+  {
+   "role": "amp",
+   "name": "VX 304 NR Crunch BAL CAB"
+  }
+ ],
+ "Core/JCM800 + AC30/Drive": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Core/5150 III + Recto/Rhythm": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  }
+ ],
+ "Core/5150 III + Recto/Crunch": [
+  {
+   "role": "drive",
+   "name": "King of Tone ver4 Red channel set to Boost",
+   "pedal": "King of Tone",
+   "option": "Red = Boost"
+  },
+  {
+   "role": "drive",
+   "name": "JHS Morning Glory V4 - Medium Gain Blue",
+   "pedal": "JHS Morning Glory",
+   "option": "Medium Gain"
+  },
+  {
+   "role": "amp",
+   "name": "5150 Stealth 100w Blue Mesa OS - jp_is_out_of_tune"
+  },
+  {
+   "role": "amp",
+   "name": "_AMP_ DREC.G-DIO-BLD-RED-VNT Factory Molten Red - SM57"
+  }
+ ]
+}
