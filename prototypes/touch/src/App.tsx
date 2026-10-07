@@ -51,7 +51,7 @@ export type Dock = "switches" | null;
 // (71% here) — and a slider matches it to the iPad in your hand; the match
 // is remembered.
 
-type Size = "actual" | "fit" | "points";
+type Size = "actual" | "fit";
 
 /** iPads in landscape: the screen in points, its glass (pixels at its
  *  ppi), the body in mm (Apple's tech specs, long side first), the screen's
@@ -87,7 +87,8 @@ function save(key: string, v: string) {
 export function App() {
   const [size, setSize] = useState<Size>(() => {
     try {
-      return (localStorage.getItem("stage.size") as Size) || "actual";
+      // Actual size is 100%: an old "1 : 1" choice comes back as it.
+      return localStorage.getItem("stage.size") === "fit" ? "fit" : "actual";
     } catch {
       return "actual";
     }
@@ -123,14 +124,15 @@ export function App() {
   }, []);
   const fit = Math.min((win.w - 32) / OW, (win.h - 96) / OH);
   // Actual size: the glass's inches (pixels ÷ density) in this screen's pixels.
-  const scale = size === "points" ? 1 : size === "fit" ? fit : ((model.px / model.ppi) * ppi) / W;
+  const actual = ((model.px / model.ppi) * ppi) / W;
+  const scale = size === "fit" ? fit : actual;
   const pick = (v: Size) => {
     setSize(v);
     save("stage.size", v);
   };
   return (
     <div style={{ minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "12px 16px 24px", overflow: "auto" }}>
-      <StageBar showBody={showBody} onBody={() => { setShowBody(!showBody); save("stage.body", showBody ? "off" : "on"); }} model={model} onModel={(id) => { setModelId(id); save("stage.model", id); }} size={size} onSize={pick} scale={scale} ppi={ppi} calibrating={calibrating} onCalibrate={() => { setCalibrating(!calibrating); pick("actual"); }} onPpi={(v) => { setPpi(v); save("stage.ppi", String(v)); }} />
+      <StageBar showBody={showBody} onBody={() => { setShowBody(!showBody); save("stage.body", showBody ? "off" : "on"); }} model={model} onModel={(id) => { setModelId(id); save("stage.model", id); }} size={size} onSize={pick} scale={scale} actual={actual} ppi={ppi} calibrating={calibrating} onCalibrate={() => { setCalibrating(!calibrating); pick("actual"); }} onPpi={(v) => { setPpi(v); save("stage.ppi", String(v)); }} />
       {/* The side menu, drawn out, on the iPad's left. */}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 24 }}>
         <Phone pagePpi={(scale * W) / (model.px / model.ppi)}>
@@ -161,7 +163,7 @@ export function App() {
   );
 }
 
-function StageBar({ showBody, onBody, model, onModel, size, onSize, scale, ppi, calibrating, onCalibrate, onPpi }: { showBody: boolean; onBody: () => void; model: Model; onModel: (id: string) => void; size: Size; onSize: (s: Size) => void; scale: number; ppi: number; calibrating: boolean; onCalibrate: () => void; onPpi: (v: number) => void }) {
+function StageBar({ showBody, onBody, model, onModel, size, onSize, scale, actual, ppi, calibrating, onCalibrate, onPpi }: { showBody: boolean; onBody: () => void; model: Model; onModel: (id: string) => void; size: Size; onSize: (s: Size) => void; scale: number; actual: number; ppi: number; calibrating: boolean; onCalibrate: () => void; onPpi: (v: number) => void }) {
   const opt = (v: Size, label: string) => (
     <button
       key={v}
@@ -190,7 +192,6 @@ function StageBar({ showBody, onBody, model, onModel, size, onSize, scale, ppi, 
         </select>
         {opt("actual", "Actual size")}
         {opt("fit", "Fit")}
-        {opt("points", "1 : 1")}
         <span style={{ width: 1, height: 18, background: "var(--rule)", margin: "0 6px" }} />
         <button className="pressable" onClick={onBody} aria-pressed={showBody} style={{ height: 30, padding: "0 12px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 600, color: showBody ? "var(--ink)" : "var(--ink-3)" }}>
           {showBody ? "Body on" : "Body off"}
@@ -199,7 +200,8 @@ function StageBar({ showBody, onBody, model, onModel, size, onSize, scale, ppi, 
           {calibrating ? "Done matching" : "Match my iPad…"}
         </button>
         <span className="num" style={{ marginLeft: 6, fontSize: 12 }}>
-          {Math.round(scale * 100)}%
+          {/* Against actual size — the real iPad is 100%. */}
+          {Math.round((scale / actual) * 100)}%
         </span>
       </div>
       {calibrating && (

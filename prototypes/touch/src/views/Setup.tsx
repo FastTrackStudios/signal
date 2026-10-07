@@ -28,7 +28,6 @@ import {
   editTone,
   gateFor,
   gatesAbove,
-  GATE_LEVELS,
   interfaceOf,
   INTERFACES,
   latencyMs,
@@ -212,9 +211,7 @@ function GuitarRow({ g, index, inUse, shown, rig, onPick }: { g: Guitar; index: 
             <OverrideIcon colour={RIG_COLOUR} size={11} />
             {over.map((k) => TONE_NAME[k]).join(", ")} on {rig.name}
           </span>
-        ) : (
-          "Its defaults"
-        )
+        ) : undefined
       }
       menu={
         <>
@@ -328,73 +325,66 @@ function GuitarTab({ g, rig }: { g: Guitar; rig: Rig }) {
   const tone = scope === "guitar" ? g.tone : toneOn(g, rig.id);
   const add = useMenu();
   return (
-    <>
-      {/* The guitar, large. */}
-      <div style={{ position: "relative", height: 200, overflow: "hidden", background: g.colour }}>
-        <GuitarPhoto g={g} radius={0} style={{ width: "100%", height: "100%" }} />
-        <span aria-hidden style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(10,10,12,0.94) 100%)" }} />
-        <div style={{ position: "absolute", left: 20, right: 20, bottom: 14, display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", color: "#fafafa", textShadow: "0 1px 12px rgba(0,0,0,0.6)" }}>{g.name}</span>
-          <span style={{ fontSize: 13.5, color: "rgba(250,250,250,0.78)" }}>{pickupLine(g)}</span>
+    <div style={{ display: "flex", alignItems: "flex-start", minHeight: "100%" }}>
+      {/* The guitar: its photo, upright, and its pickups. */}
+      <aside style={{ position: "sticky", top: 0, width: 232, flexShrink: 0, padding: 16, display: "flex", flexDirection: "column", gap: 14, borderRight: "1px solid var(--rule)", alignSelf: "stretch" }}>
+        <GuitarPhoto g={g} radius={10} style={{ width: "100%", height: 260 }} />
+        <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.15 }}>{g.name}</span>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {g.pickups.map((p, i) => (
+            <label key={i} style={{ display: "flex", flexDirection: "column", gap: 4, padding: "8px 0", borderTop: "1px solid var(--rule)" }}>
+              <span style={{ fontSize: 11.5, fontWeight: 750, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--ink-3)" }}>{p.position}</span>
+              <Text value={p.model} placeholder="Pickup model" onCommit={(v) => editGuitar("pickup", (y) => ({ ...y, pickups: y.pickups.map((q, k) => (k === i ? { ...q, model: v } : q)) }))} />
+            </label>
+          ))}
+          <button className="pressable" onClick={add.fromButton} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 44, color: "var(--ink-3)", fontSize: 14, fontWeight: 600, borderTop: "1px solid var(--rule)", width: "100%" }}>
+            <Plus />
+            Pickup
+          </button>
+          {add.open && (
+            <Menu at={add.open.at} naming={0} items={[{ kind: "name", id: "add", label: "Pickup position…", initial: "Middle", confirm: "Add" }]} onPick={(p) => editGuitar("pickup added", (y) => ({ ...y, pickups: [...y.pickups, { position: p.text, model: "" }] }))} onClose={add.close} />
+          )}
         </div>
-      </div>
+      </aside>
 
-      {/* Where a change lands. */}
-      <div style={{ position: "sticky", top: 0, zIndex: 2, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minHeight: 60, padding: "8px 20px", background: "rgba(14,14,17,0.96)", borderBottom: "1px solid var(--rule)" }}>
-        <span style={{ fontSize: 13.5, fontWeight: 650, color: "var(--ink-2)" }}>Changes go to</span>
-        <span style={{ display: "flex", padding: 3, gap: 2, borderRadius: 10, background: "#0a0a0c", boxShadow: "inset 0 0 0 1px var(--rule)" }}>
-          {(["guitar", "rig"] as ToneScope[]).map((sc) => {
-            const on = sc === scope;
-            return (
-              <button
-                key={sc}
-                onClick={() => setScope(sc)}
-                aria-pressed={on}
-                className={on ? "" : "pressable"}
-                style={{ height: 38, padding: "0 14px", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, fontSize: 13.5, fontWeight: on ? 750 : 600, color: on ? "var(--ink)" : "var(--ink-3)", background: on ? (sc === "rig" ? `color-mix(in oklab, ${RIG_COLOUR} 22%, #1c1c21)` : "#26262c") : "transparent" }}
-              >
-                {sc === "rig" && <OverrideIcon colour={on ? RIG_COLOUR : "currentColor"} size={12} />}
-                {sc === "guitar" ? "The guitar · every rig" : `Only ${rig.name}`}
-              </button>
-            );
-          })}
-        </span>
-        {over.length > 0 && (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 650, color: `color-mix(in oklab, ${RIG_COLOUR} 70%, var(--ink))` }}>
-            <OverrideIcon colour={RIG_COLOUR} size={12} />
-            {over.map((k) => TONE_NAME[k]).join(", ")}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Where a change lands. */}
+        <div style={{ position: "sticky", top: 0, zIndex: 2, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minHeight: 60, padding: "8px 20px", background: "rgba(14,14,17,0.97)", borderBottom: "1px solid var(--rule)" }}>
+          <span style={{ display: "flex", padding: 3, gap: 2, borderRadius: 10, background: "#0a0a0c", boxShadow: "inset 0 0 0 1px var(--rule)" }}>
+            {(["guitar", "rig"] as ToneScope[]).map((sc) => {
+              const on = sc === scope;
+              return (
+                <button
+                  key={sc}
+                  onClick={() => setScope(sc)}
+                  aria-pressed={on}
+                  className={on ? "" : "pressable"}
+                  style={{ height: 38, padding: "0 14px", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, fontSize: 13.5, fontWeight: on ? 750 : 600, whiteSpace: "nowrap", color: on ? "var(--ink)" : "var(--ink-3)", background: on ? (sc === "rig" ? `color-mix(in oklab, ${RIG_COLOUR} 22%, #1c1c21)` : "#26262c") : "transparent" }}
+                >
+                  {sc === "rig" && <OverrideIcon colour={on ? RIG_COLOUR : "currentColor"} size={12} />}
+                  {sc === "guitar" ? "Guitar default" : `Only on ${rig.name}`}
+                </button>
+              );
+            })}
           </span>
-        )}
+          {over.length > 0 && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 650, color: `color-mix(in oklab, ${RIG_COLOUR} 70%, var(--ink))` }}>
+              <OverrideIcon colour={RIG_COLOUR} size={12} />
+              {over.map((k) => TONE_NAME[k]).join(", ")}
+            </span>
+          )}
+        </div>
+        <ToneBlock title="Trim" keys={["trimDb"]} g={g} rig={rig} scope={scope} was={`${signed(g.tone.trimDb)} dB`}>
+          <LevelMatch tone={tone} scope={scope} rig={rig} />
+        </ToneBlock>
+        <ToneBlock title="Gate" keys={["gates", "noisy"]} g={g} rig={rig} scope={scope} was={`Default ${g.tone.gates.default} dB${g.tone.noisy ? " · noisy" : ""}`}>
+          <Gates tone={tone} scope={scope} />
+        </ToneBlock>
+        <ToneBlock title="Input EQ" keys={["eq"]} g={g} rig={rig} scope={scope} was={`Low cut ${g.tone.eq.lowCut} Hz`}>
+          <GuitarEq tone={tone} scope={scope} />
+        </ToneBlock>
       </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))" }}>
-      <ToneBlock title="Trim" keys={["trimDb"]} g={g} rig={rig} scope={scope} was={`${signed(g.tone.trimDb)} dB`}>
-        <LevelMatch tone={tone} scope={scope} rig={rig} />
-      </ToneBlock>
-      <ToneBlock title="Input EQ" keys={["eq"]} g={g} rig={rig} scope={scope} was={`Low cut ${g.tone.eq.lowCut} Hz`}>
-        <GuitarEq tone={tone} scope={scope} />
-      </ToneBlock>
-      </div>
-      <ToneBlock title="Gate" keys={["gates", "noisy"]} g={g} rig={rig} scope={scope} was={`Default ${g.tone.gates.default} dB${g.tone.noisy ? " · noisy" : ""}`}>
-        <Gates tone={tone} scope={scope} />
-      </ToneBlock>
-      
-
-      <Section title="Pickups">
-        {g.pickups.map((p, i) => (
-          <Field key={i} label={p.position}>
-            <Text value={p.model} placeholder="Pickup model" onCommit={(v) => editGuitar("pickup", (y) => ({ ...y, pickups: y.pickups.map((q, k) => (k === i ? { ...q, model: v } : q)) }))} />
-          </Field>
-        ))}
-        <button className="pressable" onClick={add.fromButton} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 44, color: "var(--ink-3)", fontSize: 14, fontWeight: 600, borderTop: "1px solid var(--rule)", width: "100%" }}>
-          <Plus />
-          Add a pickup
-        </button>
-        {add.open && (
-          <Menu at={add.open.at} naming={0} items={[{ kind: "name", id: "add", label: "Pickup position…", initial: "Middle", confirm: "Add" }]} onPick={(p) => editGuitar("pickup added", (y) => ({ ...y, pickups: [...y.pickups, { position: p.text, model: "" }] }))} onClose={add.close} />
-        )}
-      </Section>
-    </>
+    </div>
   );
 }
 
@@ -648,16 +638,7 @@ function OutputStrip({ kind, r }: { kind: "house" | "phones"; r: Rig }) {
           onPick={(v) => editRig(`${kind} output`, (y) => ({ ...y, audio: { ...y.audio, [kind]: v } }))}
         />
       </div>
-      {/* The level: a wide touch fader, the signal moving under it. */}
-      <div style={{ position: "relative", height: 52, borderRadius: 10, background: "#0b0b0e", boxShadow: "inset 0 0 0 1px var(--rule)", overflow: "hidden" }}>
-        <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${fill * 100}%`, background: "linear-gradient(90deg, #1e1e24, #2a2a31)" }} />
-        <span aria-hidden style={{ position: "absolute", left: 0, bottom: 0, height: 4, width: `${Math.min(1, level) * fill * 100}%`, background: level > 0.95 ? "#f87171" : "var(--live)", transition: "width 60ms linear" }} />
-        <span aria-hidden style={{ position: "absolute", top: 8, bottom: 8, left: `calc(${fill * 100}% - 2px)`, width: 4, borderRadius: 2, background: "#f4f4f5" }} />
-        <span className="num" style={{ position: "absolute", left: 14, top: 0, bottom: 0, display: "flex", alignItems: "center", fontSize: 18, fontWeight: 800, pointerEvents: "none" }}>
-          {db <= -60 ? "−∞" : `${signed(db)} dB`}
-        </span>
-        <input type="range" min={-60} max={6} step={0.5} value={db} aria-label={`${kind === "house" ? "House" : "Phones"} level`} onChange={(e) => setDb(Number(e.target.value))} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "ew-resize", margin: 0 }} />
-      </div>
+      <Fader value={db} min={-60} max={6} step={0.5} label={`${kind === "house" ? "House" : "Phones"} level`} level={Math.min(1, level) * fill} hot={level > 0.95} show={(v) => (v <= -60 ? "−∞" : `${signed(v)} dB`)} onChange={setDb} />
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <button
           className={check ? "" : "pressable"}
@@ -668,6 +649,23 @@ function OutputStrip({ kind, r }: { kind: "house" | "phones"; r: Rig }) {
           {check ? (side === "L" ? "Left…" : side === "R" ? "Right…" : "Both…") : kind === "house" ? "Check speakers" : "Check phones"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** A wide touch fader: its value written in it, the signal moving along
+ *  its foot; the whole strip is the target. */
+function Fader({ value, min, max, step, label, level, hot, show, onChange }: { value: number; min: number; max: number; step: number; label: string; level?: number; hot?: boolean; show: (v: number) => string; onChange: (v: number) => void }) {
+  const fill = (value - min) / (max - min);
+  return (
+    <div style={{ position: "relative", flex: 1, minWidth: 0, height: 52, borderRadius: 10, background: "#0b0b0e", boxShadow: "inset 0 0 0 1px var(--rule)", overflow: "hidden" }}>
+      <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${fill * 100}%`, background: "linear-gradient(90deg, #1e1e24, #2a2a31)" }} />
+      {level !== undefined && <span aria-hidden style={{ position: "absolute", left: 0, bottom: 0, height: 4, width: `${Math.max(0, Math.min(1, level)) * 100}%`, background: hot ? "#f87171" : "var(--live)" }} />}
+      <span aria-hidden style={{ position: "absolute", top: 8, bottom: 8, left: `calc(${fill * 100}% - 2px)`, width: 4, borderRadius: 2, background: "#f4f4f5" }} />
+      <span className="num" style={{ position: "absolute", left: 14, top: 0, bottom: 0, display: "flex", alignItems: "center", fontSize: 18, fontWeight: 800, pointerEvents: "none" }}>
+        {show(value)}
+      </span>
+      <input type="range" min={min} max={max} step={step} value={value} aria-label={label} onChange={(e) => onChange(Number(e.target.value))} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "ew-resize", margin: 0 }} />
     </div>
   );
 }
@@ -786,20 +784,19 @@ function MidiTab({ r }: { r: Rig }) {
 
 /** A row in the list: the one in use marked green; the one open on the
  *  right in a light wash. */
-function ListRow({ inUse, shown, onPick, lead, title, sub, menu }: { inUse: boolean; shown: boolean; onPick: () => void; lead: ReactNode; title: string; sub: ReactNode; menu: ReactNode }) {
+function ListRow({ inUse, shown, onPick, lead, title, sub, menu }: { inUse: boolean; shown: boolean; onPick: () => void; lead: ReactNode; title: string; sub?: ReactNode; menu: ReactNode }) {
   return (
     <div style={{ position: "relative", display: "flex", alignItems: "center", borderTop: "1px solid var(--rule)", background: shown ? "rgba(255,255,255,0.06)" : undefined }}>
       {inUse && <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: "var(--live)" }} />}
       <button className="pressable" onClick={onPick} aria-current={inUse ? "true" : undefined} style={{ flex: 1, minWidth: 0, minHeight: 68, display: "flex", alignItems: "center", gap: 12, padding: "8px 4px 8px 14px", textAlign: "left" }}>
         {lead}
         <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-          <span style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: inUse ? 700 : 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</span>
-            {inUse && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--live)", whiteSpace: "nowrap" }}>In use</span>}
-          </span>
-          <span className="t-meta" style={{ fontSize: 12.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {sub}
-          </span>
+          <span style={{ fontSize: 15, fontWeight: inUse ? 700 : 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</span>
+          {sub && (
+            <span className="t-meta" style={{ fontSize: 12.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {sub}
+            </span>
+          )}
         </span>
       </button>
       {menu}
@@ -807,12 +804,6 @@ function ListRow({ inUse, shown, onPick, lead, title, sub, menu }: { inUse: bool
   );
 }
 
-/** Pickups in a line: "Pearly Gates · Lawler Blonde ×2". */
-function pickupLine(g: Guitar) {
-  const counts = new Map<string, number>();
-  for (const p of g.pickups) if (p.model) counts.set(p.model, (counts.get(p.model) ?? 0) + 1);
-  return [...counts].map(([m, n]) => (n > 1 ? `${m} ×${n}` : m)).join(" · ") || "No pickups yet";
-}
 
 function RigGlyph({ on }: { on: boolean }) {
   // An interface, front on: two inputs and a knob.
@@ -838,25 +829,7 @@ function BackButton({ onList }: { onList: () => void }) {
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section style={{ padding: "18px 20px 22px", borderBottom: "1px solid var(--rule)" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14 }}>
-        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>{title}</h2>
-      </div>
-      {children}
-    </section>
-  );
-}
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label style={{ display: "flex", alignItems: "center", gap: 14, minHeight: 48, borderTop: "1px solid var(--rule)" }}>
-      <span style={{ width: 120, flexShrink: 0, fontSize: 14, color: "var(--ink-2)", fontWeight: 600 }}>{label}</span>
-      <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>{children}</span>
-    </label>
-  );
-}
 
 function Text({ value, onCommit, placeholder }: { value: string; onCommit: (v: string) => void; placeholder?: string }) {
   const [v, setV] = useState(value);
@@ -913,72 +886,79 @@ function GuitarEq({ tone, scope }: { tone: Tone; scope: ToneScope }) {
   );
 }
 
-/** The input trim, and the level match: the guitar's level on a dBFS scale
- *  with the band the presets expect; play as you would and Match trims the
- *  peaks into it. */
+/** The trim, against the level: the guitar's level on a dBFS scale with
+ *  the band presets expect and its peak; a wide fader for the trim, and
+ *  Match level, which listens and trims the peaks into the band. */
 function LevelMatch({ tone, scope, rig }: { tone: Tone; scope: ToneScope; rig: Rig }) {
   const sig = useSignal();
-  const a = { targetDb: rig.audio.targetDb, trimDb: tone.trimDb };
-  const now = levelDb(sig.input, a.trimDb);
+  const target = rig.audio.targetDb;
+  const now = levelDb(sig.input, tone.trimDb);
   const [peak, setPeak] = useState(-90);
   const [matching, setMatching] = useState<{ until: number; max: number } | null>(null);
   useEffect(() => {
     setPeak((p) => Math.max(now, p - 0.35));
     if (matching) {
-      const max = Math.max(matching.max, now - a.trimDb);
+      const max = Math.max(matching.max, now - tone.trimDb);
       if (performance.now() > matching.until) {
         // Trim the measured peaks onto the target.
-        editTone("level matched", scope, "trimDb", (y) => ({ ...y, trimDb: Math.round((a.targetDb - max) * 2) / 2 }));
+        editTone("level matched", scope, "trimDb", (y) => ({ ...y, trimDb: Math.max(-24, Math.min(24, Math.round((target - max) * 2) / 2)) }));
         setMatching(null);
       } else if (max !== matching.max) setMatching({ ...matching, max });
     }
   });
   const pos = (db: number) => `${((db + 60) / 60) * 100}%`;
-  const inBand = Math.abs(peak - a.targetDb) <= 3;
+  const inBand = Math.abs(peak - target) <= 3;
   return (
-    <div>
-      {/* The meter: −60…0 dBFS, the target band, the level and its peak. */}
-      <div style={{ position: "relative", height: 26, borderRadius: 6, background: "#08080a", overflow: "hidden" }}>
-        <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: pos(a.targetDb - 3), width: `${(6 / 60) * 100}%`, background: "rgba(34,197,94,0.16)", boxShadow: "inset 0 0 0 1px rgba(34,197,94,0.5)" }} />
-        <span aria-hidden style={{ position: "absolute", top: 6, bottom: 6, left: 0, width: pos(now), borderRadius: 3, background: "linear-gradient(90deg, #15803d, #22c55e 70%, #eab308 90%, #f87171)" }} />
-        <span aria-hidden style={{ position: "absolute", top: 3, bottom: 3, left: `calc(${pos(peak)} - 1px)`, width: 2, background: inBand ? "var(--live)" : "#f4f4f5" }} />
-      </div>
-      <div className="num" style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 11, color: "var(--ink-3)" }}>
-        <span>−60</span>
-        <span>−30</span>
-        <span>−15</span>
-        <span>0 dBFS</span>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--ink-2)" }}>Trim</span>
-        <input type="range" min={-24} max={24} step={0.5} value={a.trimDb} onChange={(e) => tuneTone(scope, "trimDb", (y) => ({ ...y, trimDb: Number(e.target.value) }))} style={{ flex: "1 1 160px", accentColor: "#22C55E" }} aria-label="Input trim" />
-        <span className="num" style={{ width: 64, fontSize: 15, fontWeight: 700 }}>
-          {a.trimDb > 0 ? "+" : ""}
-          {a.trimDb} dB
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        {/* −60…0 dBFS: the band presets expect, the level, its peak. */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ position: "relative", height: 22, borderRadius: 5, background: "#08080a", overflow: "hidden" }}>
+            <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: pos(target - 3), width: `${(6 / 60) * 100}%`, background: "rgba(34,197,94,0.14)", boxShadow: "inset 0 0 0 1px rgba(34,197,94,0.45)" }} />
+            <span aria-hidden style={{ position: "absolute", top: 5, bottom: 5, left: 0, width: pos(Math.max(-60, now)), borderRadius: 3, background: "linear-gradient(90deg, #15803d, #22c55e 70%, #eab308 90%, #f87171)" }} />
+            <span aria-hidden style={{ position: "absolute", top: 2, bottom: 2, left: `calc(${pos(Math.max(-60, peak))} - 1px)`, width: 2, background: inBand ? "var(--live)" : "#f4f4f5" }} />
+          </div>
+          <div className="num" style={{ position: "relative", height: 14, marginTop: 3, fontSize: 11, color: "var(--ink-3)" }}>
+            {[-60, -45, -30, -15, 0].map((d) => (
+              <span key={d} style={{ position: "absolute", left: pos(d), transform: d === -60 ? undefined : d === 0 ? "translateX(-100%)" : "translateX(-50%)" }}>
+                {d === 0 ? "0" : `−${-d}`}
+              </span>
+            ))}
+          </div>
+        </div>
+        <span className="num" style={{ width: 92, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
+          <span style={{ fontSize: 17, fontWeight: 800, color: inBand ? "var(--live)" : "var(--ink)" }}>{Math.round(peak)}</span>
+          <span style={{ fontSize: 11, color: "var(--ink-3)" }}>peak · {target}</span>
         </span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <Fader value={tone.trimDb} min={-24} max={24} step={0.5} label="Trim" show={(v) => `${signed(v)} dB`} onChange={(v) => tuneTone(scope, "trimDb", (y) => ({ ...y, trimDb: v }))} />
         <button
           className={matching ? "" : "pressable"}
           disabled={!!matching}
           onClick={() => setMatching({ until: performance.now() + 4000, max: -90 })}
-          style={{ height: 40, padding: "0 16px", borderRadius: "var(--r)", fontSize: 14, fontWeight: 700, color: matching ? "#04210f" : "var(--ink)", background: matching ? "var(--live)" : "transparent", boxShadow: matching ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
+          style={{ flexShrink: 0, height: 52, minWidth: 128, padding: "0 16px", borderRadius: 10, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", color: matching ? "#04210f" : "var(--ink)", background: matching ? "var(--live)" : "transparent", boxShadow: matching ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
         >
-          {matching ? "Play as you would…" : "Match level"}
+          {matching ? "Play…" : "Match level"}
         </button>
-      </div>
-      <div style={{ marginTop: 8, fontSize: 12.5, color: inBand ? "var(--live)" : "var(--ink-3)" }}>
-        <span className="num">Peak {Math.round(peak)} · target {a.targetDb} dBFS</span>
       </div>
     </div>
   );
 }
 
-/** The five gate presets for this rig: a measure of the noise floor sets
- *  them; each can be fine-tuned against the live level; Noisy input lifts
- *  the light end (Off → Subtle, Subtle → Default). */
+type Threshold = Exclude<GateLevel, "off">;
+const THRESHOLDS: Threshold[] = ["subtle", "default", "tight", "ultra"];
+const GATE_MIN = -96;
+const GATE_MAX = -24;
+
+/** The four gate thresholds on one strip, over the live level: drag the
+ *  nearest marker, or step a value; Measure sets all four above the noise
+ *  floor. Noisy input lifts Off to Subtle and Subtle to Default. */
 function Gates({ tone, scope }: { tone: Tone; scope: ToneScope }) {
   const sig = useSignal();
   const now = levelDb(sig.input, tone.trimDb);
   const [measuring, setMeasuring] = useState<{ until: number; floor: number } | null>(null);
+  const drag = useRef<{ which: Threshold; moved: boolean } | null>(null);
   useEffect(() => {
     if (!measuring) return;
     // The floor: the quietest the input gets while nothing is played.
@@ -989,71 +969,85 @@ function Gates({ tone, scope }: { tone: Tone; scope: ToneScope }) {
       setMeasuring(null);
     } else if (floor !== measuring.floor) setMeasuring({ ...measuring, floor });
   });
-  const pos = (db: number) => `${((db + 96) / 96) * 100}%`;
+  const frac = (db: number) => (db - GATE_MIN) / (GATE_MAX - GATE_MIN);
+  const pct = (db: number) => `${Math.max(0, Math.min(1, frac(db))) * 100}%`;
+  // Keep the four in order, a dB apart.
+  const place = (which: Threshold, db: number, gates: Tone["gates"]) => {
+    const i = THRESHOLDS.indexOf(which);
+    const lo = i > 0 ? gates[THRESHOLDS[i - 1]] + 1 : GATE_MIN;
+    const hi = i < 3 ? gates[THRESHOLDS[i + 1]] - 1 : GATE_MAX;
+    return { ...gates, [which]: Math.round(Math.max(lo, Math.min(hi, db))) };
+  };
+  const dbAt = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return GATE_MIN + ((e.clientX - r.left) / r.width) * (GATE_MAX - GATE_MIN);
+  };
+  const set = (which: Threshold, db: number, undoable: boolean) =>
+    (undoable ? (f: (t: Tone) => Tone) => editTone(`${GATE_NAME[which]} gate`, scope, "gates", f) : (f: (t: Tone) => Tone) => tuneTone(scope, "gates", f))((y) => ({ ...y, gates: place(which, db, y.gates) }));
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* The strip: the level moving, the four thresholds over it. */}
+      <div
+        onPointerDown={(e) => {
+          const db = dbAt(e);
+          const which = THRESHOLDS.reduce((a, b) => (Math.abs(tone.gates[b] - db) < Math.abs(tone.gates[a] - db) ? b : a));
+          drag.current = { which, moved: false };
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          const d = drag.current;
+          if (!d) return;
+          // The first move is the undo step; the rest follow the finger.
+          set(d.which, dbAt(e), !d.moved);
+          d.moved = true;
+        }}
+        onPointerUp={() => (drag.current = null)}
+        onPointerCancel={() => (drag.current = null)}
+        style={{ position: "relative", height: 64, borderRadius: 10, background: "#08080a", boxShadow: "inset 0 0 0 1px var(--rule)", touchAction: "none", cursor: "ew-resize", overflow: "hidden" }}
+      >
+        <span aria-hidden style={{ position: "absolute", left: 0, top: 26, bottom: 10, width: pct(now), borderRadius: "0 3px 3px 0", background: now >= tone.gates.default ? "rgba(34,197,94,0.55)" : "#3f3f46" }} />
+        {THRESHOLDS.map((t) => {
+          const open = now >= tone.gates[t];
+          return (
+            <span key={t} aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: pct(tone.gates[t]), transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", pointerEvents: "none" }}>
+              <span style={{ marginTop: 5, width: 18, height: 16, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10.5, fontWeight: 800, color: open ? "#04210f" : "var(--ink)", background: open ? "var(--live)" : "#3a3a42" }}>{GATE_NAME[t][0]}</span>
+              <span style={{ flex: 1, width: 2, marginTop: 2, background: "#f4f4f5", opacity: 0.85 }} />
+            </span>
+          );
+        })}
+      </div>
+      {/* Each threshold, to step. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+        {THRESHOLDS.map((t) => (
+          <div key={t} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 4px 6px 12px", borderRadius: 8, background: "#141418" }}>
+            <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 750, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-3)" }}>{GATE_NAME[t]}</span>
+              <span className="num" style={{ fontSize: 16, fontWeight: 800 }}>{tone.gates[t]}</span>
+            </span>
+            {[-1, 1].map((d) => (
+              <button key={d} className="pressable" aria-label={`${GATE_NAME[t]} ${d < 0 ? "lower" : "higher"}`} onClick={() => set(t, tone.gates[t] + d, true)} style={{ width: 36, height: 44, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", fontSize: 20, fontWeight: 600 }}>
+                {d < 0 ? "−" : "+"}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minHeight: 52, borderTop: "1px solid var(--rule)", paddingTop: 8 }}>
         <button
           className={measuring ? "" : "pressable"}
           disabled={!!measuring}
           onClick={() => setMeasuring({ until: performance.now() + 3000, floor: 0 })}
-          style={{ height: 44, padding: "0 16px", borderRadius: "var(--r)", fontSize: 14, fontWeight: 700, color: measuring ? "#04210f" : "var(--ink)", background: measuring ? "var(--live)" : "transparent", boxShadow: measuring ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
+          style={{ height: 44, padding: "0 16px", borderRadius: "var(--r)", fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", color: measuring ? "#04210f" : "var(--ink)", background: measuring ? "var(--live)" : "transparent", boxShadow: measuring ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
         >
-          {measuring ? "Hands off the strings…" : "Measure the noise floor"}
+          {measuring ? "Hands off the strings…" : "Measure noise floor"}
         </button>
-      </div>
-      {GATE_LEVELS.map((level) => {
-        const db = level === "off" ? null : tone.gates[level];
-        const open = db === null || now >= db;
-        return (
-          <div key={level} style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 56, borderTop: "1px solid var(--rule)" }}>
-            <span style={{ width: 84, flexShrink: 0, fontSize: 15, fontWeight: 700 }}>{GATE_NAME[level]}</span>
-            {db === null ? (
-              <span style={{ flex: 1, fontSize: 13, color: "var(--ink-3)" }}>No gate</span>
-            ) : (
-              <>
-                {/* The live level against this threshold: green while open. */}
-                <span style={{ position: "relative", flex: 1, minWidth: 120, height: 22, borderRadius: 5, background: "#08080a", overflow: "hidden" }}>
-                  <span aria-hidden style={{ position: "absolute", top: 5, bottom: 5, left: 0, width: pos(now), borderRadius: 3, background: open ? "var(--live)" : "#52525b" }} />
-                  <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${pos(db)} - 1px)`, width: 2, background: "#f4f4f5" }} />
-                </span>
-                <input
-                  type="range"
-                  min={-96}
-                  max={-24}
-                  step={1}
-                  value={db}
-                  aria-label={`${GATE_NAME[level]} threshold`}
-                  onChange={(e) => tuneTone(scope, "gates", (y) => ({ ...y, gates: { ...y.gates, [level]: Number(e.target.value) } }))}
-                  style={{ width: 140, accentColor: "#94A3B8" }}
-                />
-                <span className="num" style={{ width: 66, fontSize: 14, fontWeight: 700 }}>
-                  {db} dB
-                </span>
-              </>
-            )}
-            <span style={{ width: 52, textAlign: "right", fontSize: 12, fontWeight: 700, color: open ? "var(--live)" : "var(--ink-3)" }}>{open ? "Open" : "Closed"}</span>
-          </div>
-        );
-      })}
-      {/* Noisy input: every preset one step tighter. */}
-      <button
-        role="switch"
-        aria-checked={tone.noisy}
-        className="pressable"
-        onClick={() => editTone(tone.noisy ? "noisy input off" : "noisy input on", scope, "noisy", (y) => ({ ...y, noisy: !y.noisy }))}
-        style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", minHeight: 64, marginTop: 6, padding: "8px 0", borderTop: "1px solid var(--rule)", textAlign: "left" }}
-      >
-        <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ flex: 1 }} />
+        <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
           <span style={{ fontSize: 15, fontWeight: 700 }}>Noisy input</span>
-          {tone.noisy && (
-            <span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>{(["off", "subtle"] as GateLevel[]).map((l) => `${GATE_NAME[l]} → ${GATE_NAME[gateFor(tone, l)]}`).join(" · ")}</span>
-          )}
+          {tone.noisy && <span style={{ fontSize: 12, color: "var(--ink-3)" }}>{(["off", "subtle"] as GateLevel[]).map((l) => `${GATE_NAME[l]} → ${GATE_NAME[gateFor(tone, l)]}`).join(" · ")}</span>}
         </span>
-        <span aria-hidden style={{ width: 46, height: 28, borderRadius: 999, padding: 3, flexShrink: 0, background: tone.noisy ? "var(--live)" : "#2b2b31", display: "flex", justifyContent: tone.noisy ? "flex-end" : "flex-start" }}>
-          <span style={{ width: 22, height: 22, borderRadius: 999, background: "#f4f4f5" }} />
-        </span>
-      </button>
+        <Toggle on={tone.noisy} label="Noisy input" onFlip={() => editTone(tone.noisy ? "noisy input off" : "noisy input on", scope, "noisy", (y) => ({ ...y, noisy: !y.noisy }))} />
+      </div>
     </div>
   );
 }
