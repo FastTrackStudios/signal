@@ -439,7 +439,7 @@ export function Cpu() {
   // Green while easy, amber from 60%, red from 85% (where xruns start).
   const tone = cpu >= 85 ? "var(--void)" : cpu >= 60 ? "var(--modified)" : "var(--ink-3)";
   return (
-    <span title={`DSP load on the rig: ${cpu}%`} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, padding: "0 6px", fontSize: 10, fontWeight: 750, lineHeight: 1, color: tone }}>
+    <span title={`DSP load on the rig: ${cpu}%`} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, padding: "0 6px", fontSize: 11, fontWeight: 750, lineHeight: 1, color: tone }}>
       <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden>
         <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
         <rect x="6" y="6" width="4" height="4" rx="0.5" fill="currentColor" />
@@ -453,7 +453,8 @@ export function Cpu() {
 /** IN, OUT and PHONES as three slim upright bars: not a meter to read,
  *  just signal moving and how loud — clipping turns the top red. A muted
  *  output's bar goes red and still; all go flat while Panic resets. Labels
- *  underneath: IN, OUT, and the phones as a headphone icon. Simulated here; the rig streams peaks. */
+ *  underneath at 11 pt: I(n), O(ut), and the phones as a headphone icon
+ *  (the names in full on hover and to assistive tech). Simulated here; the rig streams peaks. */
 export function Meters() {
   const s = useStore();
   const [lv, setLv] = useState({ i: 0.4, o: 0.5, p: 0.45 });
@@ -476,8 +477,8 @@ export function Meters() {
   const reset = s.panicAt !== null;
   return (
     <div title="IN · OUT · PHONES" style={{ alignSelf: "stretch", flexShrink: 0, display: "flex", gap: 5, padding: "6px 8px 4px" }}>
-      <MiniMeter label="IN" level={reset ? 0 : lv.i} />
-      <MiniMeter label="OUT" level={reset ? 0 : lv.o} muted={s.houseMute} />
+      <MiniMeter label="In" level={reset ? 0 : lv.i} />
+      <MiniMeter label="Out" level={reset ? 0 : lv.o} muted={s.houseMute} />
       <MiniMeter label="Phones" icon={<Headphones />} level={reset ? 0 : lv.p} muted={s.phonesMute} />
     </div>
   );
@@ -485,7 +486,7 @@ export function Meters() {
 
 export function MiniMeter({ label, icon, level, muted }: { label: string; icon?: ReactNode; level: number; muted?: boolean }) {
   return (
-    <div title={muted ? `${label} muted` : label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minHeight: 0 }}>
+    <div title={muted ? `${label} muted` : label} aria-label={muted ? `${label} muted` : `${label} level`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minHeight: 0, minWidth: 10 }}>
       <span style={{ position: "relative", flex: 1, width: 6, minHeight: 0, borderRadius: 3, overflow: "hidden", background: muted ? "color-mix(in oklab, var(--void) 55%, #000)" : "#08080a" }}>
         {!muted && (
           <span
@@ -498,7 +499,7 @@ export function MiniMeter({ label, icon, level, muted }: { label: string; icon?:
           />
         )}
       </span>
-      <span style={{ height: 7, display: "flex", alignItems: "center", fontSize: 6.5, fontWeight: 800, letterSpacing: "0.04em", lineHeight: 1, color: muted ? "var(--void)" : "var(--ink-3)" }}>{icon ?? label}</span>
+      <span style={{ height: 12, display: "flex", alignItems: "center", fontSize: 11, fontWeight: 800, lineHeight: 1, color: muted ? "var(--void)" : "var(--ink-3)" }}>{icon ?? label.charAt(0)}</span>
     </div>
   );
 }
@@ -506,7 +507,7 @@ export function MiniMeter({ label, icon, level, muted }: { label: string; icon?:
 /** The phones, drawn: a headband and two cups, sized to a meter's label. */
 function Headphones() {
   return (
-    <svg width="9" height="8" viewBox="0 0 16 14" aria-hidden>
+    <svg width="12" height="11" viewBox="0 0 16 14" aria-hidden>
       <path d="M2.5 9V7.5a5.5 5.5 0 0 1 11 0V9" fill="none" stroke="currentColor" strokeWidth="2" />
       <rect x="1.2" y="8.2" width="3.6" height="5" rx="1.2" fill="currentColor" />
       <rect x="11.2" y="8.2" width="3.6" height="5" rx="1.2" fill="currentColor" />
@@ -618,7 +619,7 @@ export function FootButton({ label, on, pin, off, onClick, children }: { label: 
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
         {children}
       </svg>
-      <span style={{ fontSize: 10.5, fontWeight: on ? 700 : 600, letterSpacing: "0.02em" }}>{label}</span>
+      <span style={{ fontSize: 11, fontWeight: on ? 700 : 600, letterSpacing: "0.02em" }}>{label}</span>
     </button>
   );
 }

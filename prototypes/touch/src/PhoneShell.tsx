@@ -14,7 +14,8 @@
 //   landscape   the stage: macros and switches docked; the setlist slides
 //               in from its tab
 //
-// Both read the same store as the iPad — linked remotes.
+// The side menu opens from ☰ only — no edge swipe, which iOS keeps for
+// going back. Both read the same store as the iPad — linked remotes.
 
 import { useRef, useState, type ReactNode } from "react";
 import { ComposeCtx, SidebarContent } from "./setlist/Setlist";
@@ -29,7 +30,6 @@ import { ModeButton } from "./ui/ModeButton";
 import { SetlistStrip } from "./setlist/SetlistStrip";
 import { Cpu, FootButton, Meters, MODES, Rule, type Dock, type View } from "./App";
 import { useSafe } from "./Phone";
-import { useStage } from "./ui/stage";
 
 const MENU_W = 300;
 
@@ -80,7 +80,6 @@ const ICON = {
 export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { page?: Page; menuOpen?: boolean } = {}) {
   const safe = useSafe();
   const { landscape } = safe;
-  const stage = useStage();
   const [view, setView] = useState<View>("perform");
   const [dock, setDock] = useState<Dock>(landscape ? "switches" : null);
   const [macros, setMacros] = useState(landscape);
@@ -89,10 +88,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
   // The side menu: open, or following a finger in from the left edge.
   const [menu, setMenu] = useState(menuOpen);
   const [page, setPage] = useState<Page>(firstPage);
-  const [pull, setPull] = useState<number | null>(null);
-  const edge = useRef<{ x: number } | null>(null);
   const root = useRef<HTMLDivElement>(null);
-  const localX = (clientX: number) => (clientX - (root.current?.getBoundingClientRect().left ?? 0)) / stage.scale;
   const drawerTab = (id: "setlist" | "browser", label: string) => (
     <Tab landscape label={label} on={drawer === id} onClick={() => setDrawer(drawer === id ? null : id)}>
       {ICON[id]}
@@ -102,23 +98,6 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
     <div
       ref={root}
       style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
-      // An edge swipe: a press within 20 pt of the left edge, dragged right.
-      onPointerDownCapture={(e) => {
-        if (menu || localX(e.clientX) > 20) return;
-        edge.current = { x: e.clientX };
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-        e.stopPropagation();
-      }}
-      onPointerMove={(e) => {
-        if (!edge.current) return;
-        setPull(Math.max(0, Math.min(MENU_W, (e.clientX - edge.current.x) / stage.scale)));
-      }}
-      onPointerUp={() => {
-        if (!edge.current) return;
-        edge.current = null;
-        if ((pull ?? 0) > 60) setMenu(true);
-        setPull(null);
-      }}
     >
       {/* Picking a part on this phone takes it to the browser for it. */}
       <ComposeCtx.Provider value={{ onPicked: () => (landscape ? setDrawer("browser") : setPage("browser")) }}>
@@ -139,16 +118,6 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
               <Rule />
               {drawerTab("setlist", "Setlist")}
               {drawerTab("browser", "Browser")}
-              {view === "perform" && (
-                <>
-                  <Tab landscape label="Macros" on={macros} pin onClick={() => setMacros(!macros)}>
-                    {ICON.macros}
-                  </Tab>
-                  <Tab landscape label="Switches" on={dock === "switches"} pin onClick={() => setDock(dock === "switches" ? null : "switches")}>
-                    {ICON.switches}
-                  </Tab>
-                </>
-              )}
             </Rail>
             <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative", paddingRight: safe.right }}>
               {view === "perform" ? (
@@ -220,7 +189,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
         )}
       </ComposeCtx.Provider>
 
-      {(menu || pull !== null) && <SideMenu offset={menu ? 0 : MENU_W - (pull ?? 0)} view={view} onView={setView} onClose={() => setMenu(false)} />}
+      {menu && <SideMenu offset={0} view={view} onView={setView} onClose={() => setMenu(false)} docks={landscape && view === "perform" ? { macros, dock, onMacros: () => setMacros(!macros), onSwitches: () => setDock(dock === "switches" ? null : "switches") } : undefined} />}
       <style>{`@keyframes drawer-in { from { transform: translateX(-24px); opacity: 0 } to { transform: none; opacity: 1 } }`}</style>
     </div>
   );
@@ -273,7 +242,6 @@ function Rail({ onMenu, children }: { onMenu: () => void; children: ReactNode })
           <path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
         </svg>
       </button>
-      <PanicButton size={34} rail />
       <div className="rail" style={{ display: "flex", flexDirection: "column" }}>{children}</div>
       <span style={{ flex: 1 }} />
       <div style={{ height: 52, display: "flex", justifyContent: "center" }}>
@@ -287,7 +255,7 @@ function Rail({ onMenu, children }: { onMenu: () => void; children: ReactNode })
 
 /** The side menu: what the iPad's top bar holds, for a thumb. Slides in
  *  from the left, under the finger while it pulls. */
-function SideMenu({ offset, view, onView, onClose }: { offset: number; view: View; onView: (v: View) => void; onClose: () => void }) {
+function SideMenu({ offset, view, onView, onClose, docks }: { offset: number; view: View; onView: (v: View) => void; onClose: () => void; docks?: { macros: boolean; dock: Dock; onMacros: () => void; onSwitches: () => void } }) {
   const s = useStore();
   const safe = useSafe();
   const { depth, label, redoDepth, redoLabel } = useUndo();
@@ -375,6 +343,27 @@ function SideMenu({ offset, view, onView, onClose }: { offset: number; view: Vie
             </button>
           );
         })}
+        {/* On its side the rail has no room for the docks: they're here. */}
+        {docks && (
+          <>
+            <div className="t-label" style={{ padding: "8px 16px 6px", color: "var(--ink-3)" }}>
+              Show
+            </div>
+            {(
+              [
+                ["Macros", docks.macros, docks.onMacros],
+                ["Switches", docks.dock === "switches", docks.onSwitches],
+              ] as const
+            ).map(([label, on, toggle]) => (
+              <button key={label} className="pressable" role="switch" aria-checked={on} onClick={toggle} style={{ ...row, minHeight: 46 }}>
+                <span style={{ flex: 1 }}>{label}</span>
+                <span aria-hidden style={{ width: 40, height: 24, borderRadius: 999, padding: 2, background: on ? "var(--live)" : "#2b2b31", display: "flex", justifyContent: on ? "flex-end" : "flex-start" }}>
+                  <span style={{ width: 20, height: 20, borderRadius: 999, background: "#f4f4f5" }} />
+                </span>
+              </button>
+            ))}
+          </>
+        )}
         <div style={{ height: 1, background: "var(--rule)", margin: "8px 0" }} />
         <div style={{ display: "flex", padding: "0 8px", gap: 4 }}>
           <button className={depth ? "pressable" : ""} disabled={!depth} onClick={undo} title={label ? `Undo ${label}` : undefined} style={{ ...row, flex: 1, padding: "0 10px", justifyContent: "center", borderRadius: "var(--r)", color: depth ? "var(--ink)" : "var(--dim)" }}>
@@ -434,7 +423,7 @@ function Tab({ landscape, children, ...rest }: { landscape?: boolean; label: str
   // In the rail: a stack, each button the rail's width; in the foot: shares
   // the bar evenly.
   return (
-    <span style={{ display: "flex", flex: landscape ? undefined : "1 1 0", minWidth: 0, height: landscape ? 36 : undefined }}>
+    <span style={{ display: "flex", flex: landscape ? undefined : "1 1 0", minWidth: 0, height: landscape ? 44 : undefined }}>
       <FootButton {...rest}>{children}</FootButton>
     </span>
   );

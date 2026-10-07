@@ -865,7 +865,7 @@ function Badge({ children, tone }: { children: ReactNode; tone?: "live" }) {
       className="t-label"
       style={{
         flexShrink: 0,
-        fontSize: 10,
+        fontSize: 11,
         letterSpacing: "0.1em",
         padding: "2px 6px",
         borderRadius: 4,
@@ -1216,7 +1216,7 @@ function StackRow({ stack, index: i, count, profile, on, home, where, pos, songC
 
       <span style={{ width: narrow ? 58 : 70, flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: tape }} />
-        <span className="t-label" style={{ fontSize: 10.5, letterSpacing: "0.08em", color: on ? "var(--ink)" : "var(--ink-3)" }}>
+        <span className="t-label" style={{ fontSize: 11, letterSpacing: "0.08em", color: on ? "var(--ink)" : "var(--ink-3)" }}>
           {stack.name}
         </span>
       </span>
@@ -1724,7 +1724,7 @@ function SetsBody({ onClose, onNew }: { onClose: () => void; onNew: () => void }
             >
               {/* The date as a block: the day large, the month and weekday small. */}
               <span style={{ width: 44, flexShrink: 0, textAlign: "center", lineHeight: 1 }}>
-                <span className="t-label" style={{ display: "block", fontSize: 10, color: "var(--ink-3)" }}>
+                <span className="t-label" style={{ display: "block", fontSize: 11, color: "var(--ink-3)" }}>
                   {d ? MONTHS[d.getMonth()] : "—"}
                 </span>
                 <span className="num" style={{ display: "block", fontSize: 22, fontWeight: 750, margin: "2px 0" }}>

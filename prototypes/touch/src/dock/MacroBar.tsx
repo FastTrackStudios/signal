@@ -171,7 +171,7 @@ function Panel({ knob, values, set, up, onClose }: { knob: Knob; values: Values;
       <div style={{ display: "grid", gridTemplateColumns: `${heads ? "64px " : ""}repeat(${cols}, minmax(0, 1fr))`, gap: 1, background: "#000", borderTop: "1px solid #000" }}>
         {knob.rows!.map((row, r) => [
           heads && (
-            <span key={`h${r}`} className="t-label" style={{ display: "flex", alignItems: "center", padding: "0 10px", fontSize: 10.5, whiteSpace: "nowrap", color: "var(--ink-3)", background: "#111114" }}>
+            <span key={`h${r}`} className="t-label" style={{ display: "flex", alignItems: "center", padding: "0 10px", fontSize: 11, whiteSpace: "nowrap", color: "var(--ink-3)", background: "#111114" }}>
               {row.head}
             </span>
           ),
@@ -283,7 +283,7 @@ function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44
       )}
       {!quiet && <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${v * 100}% - 1px)`, width: 2, background: colour }} />}
       <span style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, padding: "0 8px" }}>
-        <span className="t-label" style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 3, fontSize: 10.5, letterSpacing: "0.06em", color: grey ? "var(--ink-2)" : colour, whiteSpace: "nowrap", overflow: "hidden" }}>
+        <span className="t-label" style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 3, fontSize: 11, letterSpacing: "0.06em", color: grey ? "var(--ink-2)" : colour, whiteSpace: "nowrap", overflow: "hidden" }}>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
           {more && (
             <svg width="8" height="5" viewBox="0 0 8 5" aria-hidden style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : undefined, opacity: 0.8 }}>

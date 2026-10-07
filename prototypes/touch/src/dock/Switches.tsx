@@ -129,7 +129,7 @@ function StackTile({ no, stack, pos, lit, compact, onTap }: { no: number; stack:
     >
       <SwitchNo no={no} />
       <span style={{ fontSize: compact ? 14 : 24, fontWeight: 700, letterSpacing: "0.02em", whiteSpace: "nowrap" }}>{stack.name}</span>
-      {variation && <span style={{ fontSize: compact ? 10 : 14, fontWeight: 600, opacity: compact ? 0.8 : 0.9, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{variation}</span>}
+      {variation && <span style={{ fontSize: compact ? 11 : 14, fontWeight: 600, opacity: compact ? 0.8 : 0.9, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{variation}</span>}
       {dots}
     </button>
   );
@@ -160,7 +160,7 @@ function FnTile({ no, title, subtitle, bg, text, lit, stacked, onTap }: { no: nu
     >
       <SwitchNo no={no} />
       <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: "0.02em", whiteSpace: "nowrap" }}>{title}</span>
-      <span style={{ fontSize: 10, opacity: 0.8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{subtitle}</span>
+      <span style={{ fontSize: 11, opacity: 0.8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{subtitle}</span>
     </button>
   );
 }
@@ -210,7 +210,7 @@ function TapTempo({ bpm }: { bpm: number }) {
 }
 
 function SwitchNo({ no }: { no: number }) {
-  return <span style={{ position: "absolute", top: 5, left: 9, fontSize: 10, fontFamily: "ui-monospace, monospace", opacity: 0.45 }}>{no}</span>;
+  return <span style={{ position: "absolute", top: 5, left: 9, fontSize: 11, fontFamily: "ui-monospace, monospace", opacity: 0.45 }}>{no}</span>;
 }
 
 export function AudioControls(): ReactNode {

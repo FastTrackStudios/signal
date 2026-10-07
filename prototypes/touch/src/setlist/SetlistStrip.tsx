@@ -95,7 +95,7 @@ export function SetlistStrip(_: { fill?: boolean } = {}) {
           }}
         >
           <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-            <span className="t-label" style={{ fontSize: 10, color: "var(--ink-3)" }}>
+            <span className="t-label" style={{ fontSize: 11, color: "var(--ink-3)" }}>
               {next ? next.detail : "End of the set"}
             </span>
             {next && (
