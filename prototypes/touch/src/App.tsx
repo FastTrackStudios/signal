@@ -20,8 +20,6 @@ import { Setlist } from "./setlist/Setlist";
 import { AudioControls, Switches } from "./dock/Switches";
 import { setPerformMode, toggleHouseMute, useStore, type PerformMode } from "./store";
 
-const W = 1194;
-const H = 834;
 const SIDEBAR = 402;
 const TOP = 48;
 const FOOT = 56;
@@ -31,15 +29,27 @@ type Dock = "switches" | "audio" | null;
 
 // ── The stage: the iPad at its real size ─────────────────────────────
 //
-// 1194 × 834 points is the 11" iPad Pro / Air's screen in landscape: 2388
-// pixels at 264 per inch, so 9.045 × 6.318 inches of glass. Shown at that
-// size, a real iPad held against the monitor covers it exactly. A browser
+// Each iPad's screen in landscape, in points, and its glass in inches
+// (pixels ÷ 264 ppi; the mini 326): the 11" iPad Pro (M4) is 1210 × 834
+// points, 9.17 × 6.32 in. Shown at that size, a real iPad held against the
+// monitor covers it exactly — and the layout is laid out at its points. A browser
 // can't know its monitor's pixels per inch, so it starts from a Mac
 // laptop's (~127 CSS px per inch) and a slider matches it to the iPad in
 // your hand; the match is remembered.
 
-const GLASS_IN = 2388 / 264;
 type Size = "actual" | "fit" | "points";
+
+/** iPads in landscape: points, and the glass's pixels and density (every
+ *  current iPad is 264 ppi except the mini's 326). */
+const MODELS = [
+  { id: "pro11-m4", name: "iPad Pro 11″ (M4)", w: 1210, h: 834, px: 2420, ppi: 264 },
+  { id: "pro11", name: "iPad Pro 11″ (2018–22)", w: 1194, h: 834, px: 2388, ppi: 264 },
+  { id: "air11", name: "iPad Air 11″ · iPad 10.9″", w: 1180, h: 820, px: 2360, ppi: 264 },
+  { id: "pro13-m4", name: "iPad Pro 13″ (M4)", w: 1376, h: 1032, px: 2752, ppi: 264 },
+  { id: "air13", name: "iPad Air 13″ · Pro 12.9″", w: 1366, h: 1024, px: 2732, ppi: 264 },
+  { id: "mini", name: "iPad mini", w: 1133, h: 744, px: 2266, ppi: 326 },
+] as const;
+type Model = (typeof MODELS)[number];
 
 function readNumber(key: string, fallback: number): number {
   try {
@@ -66,6 +76,15 @@ export function App() {
     }
   });
   const [ppi, setPpi] = useState(() => readNumber("stage.ppi", 127));
+  const [modelId, setModelId] = useState<string>(() => {
+    try {
+      return localStorage.getItem("stage.model") || "pro11-m4";
+    } catch {
+      return "pro11-m4";
+    }
+  });
+  const model: Model = MODELS.find((m) => m.id === modelId) ?? MODELS[0];
+  const { w: W, h: H } = model;
   const [calibrating, setCalibrating] = useState(false);
   const [win, setWin] = useState({ w: window.innerWidth, h: window.innerHeight });
   useEffect(() => {
@@ -74,22 +93,23 @@ export function App() {
     return () => window.removeEventListener("resize", on);
   }, []);
   const fit = Math.min((win.w - 32) / W, (win.h - 96) / H);
-  const scale = size === "points" ? 1 : size === "fit" ? fit : (GLASS_IN * ppi) / W;
+  // Actual size: the glass's inches (pixels ÷ density) in this screen's pixels.
+  const scale = size === "points" ? 1 : size === "fit" ? fit : ((model.px / model.ppi) * ppi) / W;
   const pick = (v: Size) => {
     setSize(v);
     save("stage.size", v);
   };
   return (
     <div style={{ minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "12px 16px 24px", overflow: "auto" }}>
-      <StageBar size={size} onSize={pick} scale={scale} ppi={ppi} calibrating={calibrating} onCalibrate={() => { setCalibrating(!calibrating); pick("actual"); }} onPpi={(v) => { setPpi(v); save("stage.ppi", String(v)); }} />
+      <StageBar model={model} onModel={(id) => { setModelId(id); save("stage.model", id); }} size={size} onSize={pick} scale={scale} ppi={ppi} calibrating={calibrating} onCalibrate={() => { setCalibrating(!calibrating); pick("actual"); }} onPpi={(v) => { setPpi(v); save("stage.ppi", String(v)); }} />
       <div style={{ width: W * scale, height: H * scale, flexShrink: 0 }}>
-        <Device scale={scale} />
+        <Device scale={scale} w={W} h={H} />
       </div>
     </div>
   );
 }
 
-function StageBar({ size, onSize, scale, ppi, calibrating, onCalibrate, onPpi }: { size: Size; onSize: (s: Size) => void; scale: number; ppi: number; calibrating: boolean; onCalibrate: () => void; onPpi: (v: number) => void }) {
+function StageBar({ model, onModel, size, onSize, scale, ppi, calibrating, onCalibrate, onPpi }: { model: Model; onModel: (id: string) => void; size: Size; onSize: (s: Size) => void; scale: number; ppi: number; calibrating: boolean; onCalibrate: () => void; onPpi: (v: number) => void }) {
   const opt = (v: Size, label: string) => (
     <button
       key={v}
@@ -104,7 +124,18 @@ function StageBar({ size, onSize, scale, ppi, calibrating, onCalibrate, onPpi }:
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "var(--ink-3)" }}>
-        <span style={{ marginRight: 6 }}>iPad Pro 11″ · 1194 × 834</span>
+        <select
+          value={model.id}
+          onChange={(e) => onModel(e.target.value)}
+          aria-label="iPad model"
+          style={{ height: 30, marginRight: 6, padding: "0 8px", borderRadius: "var(--r)", border: "1px solid var(--rule-strong)", background: "var(--sheet)", color: "var(--ink-2)", font: "inherit", fontSize: 13 }}
+        >
+          {MODELS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name} · {m.w} × {m.h}
+            </option>
+          ))}
+        </select>
         {opt("actual", "Actual size")}
         {opt("fit", "Fit")}
         {opt("points", "1 : 1")}
@@ -118,7 +149,7 @@ function StageBar({ size, onSize, scale, ppi, calibrating, onCalibrate, onPpi }:
       </div>
       {calibrating && (
         <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "var(--ink-2)" }}>
-          <span>Hold your iPad against the screen, then slide until the frame matches its glass edge to edge</span>
+          <span>Hold your iPad against the screen and slide until the frame matches its lit screen (not the bezel)</span>
           <input type="range" min={70} max={240} step={0.25} value={ppi} onChange={(e) => onPpi(Number(e.target.value))} style={{ width: 240 }} aria-label="Pixels per inch" />
           <span className="num" style={{ width: 80, color: "var(--ink-3)" }}>{ppi.toFixed(1)} px/in</span>
         </div>
@@ -127,7 +158,7 @@ function StageBar({ size, onSize, scale, ppi, calibrating, onCalibrate, onPpi }:
   );
 }
 
-function Device({ scale }: { scale: number }) {
+function Device({ scale, w: W, h: H }: { scale: number; w: number; h: number }) {
   const s = useStore();
   const [chosen, setView] = useState<View>("play");
   // Routing and Tones edit a preset: outside Preset mode, Play shows instead.
