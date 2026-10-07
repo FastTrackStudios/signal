@@ -4,7 +4,7 @@
 // purge; a played song is struck, not removed.
 
 import { useSyncExternalStore } from "react";
-import { stacksFor, type Borrowed } from "./setlist/stacks";
+import { defaultStacks, profileNamed, stacksFor, type Borrowed, type StackDef } from "./setlist/stacks";
 import { chain, rig, modulesOf, type ModulePreset, type Setlist as RigSetlist, type SongEntry, type SongSlot } from "./data/rig";
 import { parseSetName, setName, type SetMeta } from "./setlist/sets";
 
@@ -95,6 +95,9 @@ export interface State {
    *  edits made to its sound in Edit — both its own, over the preset,
    *  until saved to the preset. Keyed by `targetKey`. */
   overrides: Record<string, Override>;
+  /** Profiles' stacks as the player has edited them (names, order,
+   *  patches); a profile not here plays as the library has it. */
+  profileStacks: Record<string, StackDef[]>;
 }
 
 let seedAt = { section: 0, part: 0 };
@@ -161,6 +164,7 @@ function seed(): State {
     panicAt: null,
     selection: null,
     overrides: {},
+    profileStacks: {},
   };
 }
 
@@ -620,7 +624,7 @@ export function keepLive() {
   const song = currentSong(state)?.name;
   const name = state.live;
   if (!song || !name) return;
-  const hit = stacksFor(song, borrowedOf(state, song), profileOf(state, song).name)
+  const hit = songStacks(state, song)
     .flatMap((st) => st.patches)
     .find((p) => p.name === name);
   const profile = hit?.from === "other" ? hit.profile : undefined;
@@ -753,4 +757,55 @@ export function saveEditsToPreset(t: Target, preset: string) {
 /** Drop this part's edits: back to the preset. */
 export function discardEdits(t: Target) {
   change(`${t.song} · edits dropped`, (s) => withOverride(s, t, (o) => ({ ...o, edits: {} })));
+}
+
+// ── Stacks: the profile's, as the player keeps them ─────────────────
+
+/** A profile's stacks: the player's edit, else the library's. */
+export function profileStacksOf(s: State, profile: string): StackDef[] {
+  return s.profileStacks[profile] ?? defaultStacks(profileNamed(profile));
+}
+
+/** The stacks a song plays through: its profile's (as edited), with the
+ *  song's own patches and any its parts borrow. */
+export function songStacks(s: State, song?: string) {
+  const profile = profileOf(s, song).name;
+  return stacksFor(song, borrowedOf(s, song), profile, profileStacksOf(s, profile));
+}
+
+function editStacks(profile: string, label: string, f: (d: StackDef[]) => StackDef[]) {
+  change(`${profile} · ${label}`, (s) => ({ ...s, profileStacks: { ...s.profileStacks, [profile]: f(profileStacksOf(s, profile).map((d) => ({ ...d, patches: [...d.patches] }))) } }));
+}
+
+const moved = <T,>(list: T[], from: number, to: number) => {
+  const out = [...list];
+  if (to < 0 || to >= out.length) return out;
+  const [x] = out.splice(from, 1);
+  out.splice(to, 0, x);
+  return out;
+};
+
+export function addStack(profile: string, name: string) {
+  editStacks(profile, `new stack ${name}`, (d) => [...d, { name, patches: [name] }]);
+}
+export function renameStack(profile: string, i: number, name: string) {
+  editStacks(profile, `stack → ${name}`, (d) => d.map((x, k) => (k === i ? { ...x, name } : x)));
+}
+export function removeStack(profile: string, i: number) {
+  editStacks(profile, "stack removed", (d) => d.filter((_, k) => k !== i));
+}
+export function moveStack(profile: string, from: number, to: number) {
+  editStacks(profile, "stack moved", (d) => moved(d, from, to));
+}
+export function addStackPatch(profile: string, i: number, name: string) {
+  editStacks(profile, `${name} added`, (d) => d.map((x, k) => (k === i ? { ...x, patches: [...x.patches, name] } : x)));
+}
+export function renameStackPatch(profile: string, i: number, j: number, name: string) {
+  editStacks(profile, `patch → ${name}`, (d) => d.map((x, k) => (k === i ? { ...x, patches: x.patches.map((p, n) => (n === j ? name : p)) } : x)));
+}
+export function removeStackPatch(profile: string, i: number, j: number) {
+  editStacks(profile, "patch removed", (d) => d.map((x, k) => (k === i ? { ...x, patches: x.patches.filter((_, n) => n !== j) } : x)));
+}
+export function moveStackPatch(profile: string, i: number, from: number, to: number) {
+  editStacks(profile, "patch moved", (d) => d.map((x, k) => (k === i ? { ...x, patches: moved(x.patches, from, to) } : x)));
 }

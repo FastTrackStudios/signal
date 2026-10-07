@@ -12,8 +12,8 @@
 // colour, lit when it plays and dimmed toward the grid when not.
 
 import { useRef, useState, type ReactNode } from "react";
-import { borrowedOf, currentSong, playing, profileOf, tapStack, useStore } from "../store";
-import { findPatch, stacksFor, type SongStack } from "../setlist/stacks";
+import { currentSong, playing, songStacks, tapStack, useStore } from "../store";
+import { findPatch, type SongStack } from "../setlist/stacks";
 
 /** perform::folder_color: a stack's tile and its text. */
 const FOLDER: Record<string, [string, string]> = {
@@ -36,7 +36,7 @@ function dim(hex: string, amount: number): string {
 export function Switches({ vertical, fill }: { vertical?: boolean; fill?: boolean } = {}) {
   const s = useStore();
   const song = currentSong(s)?.name;
-  const stacks = stacksFor(song, borrowedOf(s, song), profileOf(s, song).name);
+  const stacks = songStacks(s, song);
   const now = playing(s);
   const at = now ? findPatch(stacks, now) : null;
   const [fx, setFx] = useState(true);

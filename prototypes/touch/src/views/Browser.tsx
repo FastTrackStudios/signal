@@ -16,8 +16,8 @@
 
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { blockPresetsByType, modulesOf, rig } from "../data/rig";
-import { borrowedOf, editParam, overrideOf, profileOf, sectionsOf, select, setModuleOverride, setSectionSound, setSongProfile, useStore, type State, type Target } from "../store";
-import { stacksFor, type StackPatch } from "../setlist/stacks";
+import { songStacks, editParam, overrideOf, profileOf, sectionsOf, select, setModuleOverride, setSectionSound, setSongProfile, useStore, type State, type Target } from "../store";
+import type { StackPatch } from "../setlist/stacks";
 import { nameColour, sectionColour, songColour } from "../setlist/colors";
 import { ProfileIcon } from "../ui/profileIcons";
 import { SourceIcon, tapeFor } from "../ui/marks";
@@ -68,7 +68,7 @@ const KINDS: Kind[] = [
       const song = t?.song ?? s.setlists[s.setIndex]?.songs[s.songIndex]?.name;
       const now = partOf(s, t).part?.sound?.name;
       const colour = song ? songColour(song, s.songColours) : "var(--ink-3)";
-      return stacksFor(song, borrowedOf(s, song), profileOf(s, song).name).flatMap((st) =>
+      return songStacks(s, song).flatMap((st) =>
         st.patches.map((p: StackPatch) => ({
           id: `${st.name}/${p.name}`,
           name: p.name,

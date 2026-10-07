@@ -17,7 +17,7 @@
 // Both read the same store as the iPad — linked remotes.
 
 import { useRef, useState, type ReactNode } from "react";
-import { ComposeCtx, Setlist } from "./setlist/Setlist";
+import { ComposeCtx, SidebarContent } from "./setlist/Setlist";
 import { Browser } from "./views/Browser";
 import { EditView } from "./views/Edit";
 import { MacroBar } from "./dock/MacroBar";
@@ -164,7 +164,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
                 <>
                   <button aria-label="Close" onClick={() => setDrawer(null)} style={{ position: "absolute", inset: 0, zIndex: 9, background: "rgba(0,0,0,0.5)" }} />
                   <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: drawer === "browser" ? 520 : 402, zIndex: 10, display: "flex", flexDirection: "column", borderRight: "1px solid var(--rule-strong)", boxShadow: "16px 0 40px rgba(0,0,0,0.5)", animation: "drawer-in 200ms var(--ease) both" }}>
-                    {drawer === "setlist" ? <Setlist /> : <Browser onClose={() => setDrawer(null)} />}
+                    {drawer === "setlist" ? <SidebarContent /> : <Browser onClose={() => setDrawer(null)} />}
                   </div>
                 </>
               )}
@@ -177,7 +177,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
                 switches (the board turned a quarter), the macros two to a
                 row, Edit. */}
             <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }}>
-              {page === "setlist" && <Setlist />}
+              {page === "setlist" && <SidebarContent />}
               {page === "browser" && <Browser />}
               {page === "switches" && <Switches vertical />}
               {page === "macros" && (

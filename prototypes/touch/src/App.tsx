@@ -19,7 +19,7 @@ import { StageCtx } from "./ui/stage";
 import { MuteButton, PanicButton } from "./ui/Safety";
 import { Indicator } from "./ui/Settings";
 import { ModeButton } from "./ui/ModeButton";
-import { ComposeCtx, Setlist } from "./setlist/Setlist";
+import { ComposeCtx, SidebarContent } from "./setlist/Setlist";
 import { Switches } from "./dock/Switches";
 import { Browser } from "./views/Browser";
 import { EditView } from "./views/Edit";
@@ -478,12 +478,7 @@ function Headphones() {
 // ── The body ─────────────────────────────────────────────────────────
 
 function Sidebar() {
-  const s = useStore();
-  return s.performMode === "setlist" ? (
-    <Setlist />
-  ) : (
-    <Placeholder title={s.performMode === "preset" ? "Presets" : "Profile stacks"} note="The sidebar for this mode — next." />
-  );
+  return <SidebarContent />;
 }
 
 export function Placeholder({ title, note }: { title: string; note: string }) {

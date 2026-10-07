@@ -65,6 +65,18 @@ export function placeOf(patch: string, stacks: string[]): string {
   return stacks[stacks.length - 1];
 }
 
+/** A profile's stacks as the player keeps them: named, ordered, each with
+ *  its patches in rotation order. */
+export interface StackDef {
+  name: string;
+  patches: string[];
+}
+
+/** A profile's stacks as the rig's library has them (before any edit). */
+export function defaultStacks(profile: ProfileEntry): StackDef[] {
+  return topStacks(profile).map((name) => ({ name, patches: profile.patch_list.filter((p) => p.stack === name).map((p) => p.name) }));
+}
+
 /** The profile's top-level stacks: the ones it fills (an empty slot, like
  *  Worship's Special, is not a stack you can play). */
 export function topStacks(profile: ProfileEntry): string[] {
@@ -74,12 +86,14 @@ export function topStacks(profile: ProfileEntry): string[] {
 /** Every top-level stack of the song's profile, in the profile's order,
  *  holding the song's patches, then the profile's, then any its parts
  *  borrow from other profiles (in the stack they sit in there). */
-export function stacksFor(song?: string, borrowed: Borrowed[] = [], profileName?: string): SongStack[] {
+export function stacksFor(song?: string, borrowed: Borrowed[] = [], profileName?: string, def?: StackDef[]): SongStack[] {
   const profile = profileFor(song, profileName);
-  const names = topStacks(profile);
+  // The player's stacks for the profile when they have edited them, else the library's.
+  const defs = def ?? defaultStacks(profile);
+  const names = defs.map((d) => d.name);
   const own = songPatches(song);
   const taken = new Set(own.map((p) => p.toLowerCase()));
-  const mine = profile.patch_list.filter((p) => p.stack && !taken.has(p.name.toLowerCase()));
+  const mine = defs.flatMap((d) => d.patches.map((name) => ({ name, stack: d.name }))).filter((p) => !taken.has(p.name.toLowerCase()));
   for (const p of mine) taken.add(p.name.toLowerCase());
   const extra = borrowed.filter((b, i) => !taken.has(b.name.toLowerCase()) && borrowed.findIndex((x) => x.name === b.name) === i);
   const homeOf = (b: Borrowed) => {

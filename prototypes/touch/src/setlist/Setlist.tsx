@@ -15,12 +15,20 @@ import {
   partPatch,
   addPart,
   select,
+  addStack,
+  addStackPatch,
+  moveStack,
+  profileStacksOf,
+  removeStack,
+  removeStackPatch,
+  renameStack,
+  renameStackPatch,
   addSection,
   backToPart,
   profileOf,
   setSetProfile,
   setSongProfile,
-  borrowedOf,
+  songStacks,
   keepLive,
   playing,
   tapStack,
@@ -876,20 +884,52 @@ function Badge({ children, tone }: { children: ReactNode; tone?: "live" }) {
  *  so any patch is always in reach: a tap plays a stack, a tap on the one
  *  playing steps through it. Each patch shows where it came from — the
  *  song put it there, or the profile passes it through. */
-function Stacks({ left }: { left: number }) {
+/** The stacks, managed where they are: under the section playing (the
+ *  song's stacks) or as the Profile view (the profile's own, `reorder` on:
+ *  grips to drag them into order). Long-press a stack — or its ⋯ — to
+ *  rename it, add a patch, rename or remove the one showing, move it, or
+ *  delete it; "Add a stack" at the foot. */
+export function Stacks({ left, profile: only, reorder }: { left: number; profile?: string; reorder?: boolean }) {
   const s = useStore();
-  const song = currentSong(s)?.name;
-  const stacks = stacksFor(song, borrowedOf(s, song), profileOf(s, song).name);
+  const song = only ? undefined : currentSong(s)?.name;
+  const profile = only ?? profileOf(s, song).name;
+  const stacks = only ? songStacksForProfile(s, only) : songStacks(s, song);
   const now = playing(s);
   const at = now ? findPatch(stacks, now) : null;
   const own = partPatch(s);
   const saved = own ? findPatch(stacks, own) : null;
-  const colour = song ? songColour(song, s.songColours) : "var(--ink-3)";
+  const colour = song ? songColour(song, s.songColours) : nameColour(profile);
+  const add = useMenu();
   const where = (() => {
     const sec = song ? sectionsOf(s, song)[s.partIndex] : undefined;
     if (!sec) return song ?? "this song";
     return sec.parts.length > 1 ? (sec.parts[s.subIndex]?.name ?? sec.name) : sec.name;
   })();
+  // Drag a stack by its grip to move it (Profile view).
+  const rows = useRef<(HTMLDivElement | null)[]>([]);
+  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
+  const onGrip = (i: number) => (e: React.PointerEvent) => {
+    e.stopPropagation();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    const atY = (y: number) => {
+      let to = 0;
+      rows.current.forEach((el, k) => {
+        if (el && y > el.getBoundingClientRect().top + 16) to = k;
+      });
+      return to;
+    };
+    setDrag({ from: i, to: i });
+    const onMove = (ev: PointerEvent) => setDrag({ from: i, to: atY(ev.clientY) });
+    const onUp = (ev: PointerEvent) => {
+      const to = atY(ev.clientY);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setDrag(null);
+      if (to !== i) moveStack(profile, i, to);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
   return (
     <div style={{ position: "relative", padding: `2px 8px 8px ${left}px` }}>
       <div style={{ borderRadius: "var(--r-md)", background: "rgba(0,0,0,0.22)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
@@ -898,11 +938,45 @@ function Stacks({ left }: { left: number }) {
           // The part's own patch, while something else plays by hand.
           const home = s.live && saved && saved.stack === i ? saved.index : null;
           const pos = on ? at!.index : home ?? (s.stackAt[st.name] ?? 0) % Math.max(1, st.patches.length);
-          return <StackRow key={st.name} stack={st} on={on} home={home !== null} where={where} pos={pos} songColour={colour} />;
+          return (
+            <div
+              key={st.name}
+              ref={(el) => {
+                rows.current[i] = el;
+              }}
+              style={{ opacity: drag?.from === i ? 0.5 : 1, boxShadow: drag && drag.to === i && drag.from !== i ? `inset 0 ${drag.to < drag.from ? 2 : -2}px 0 var(--ink-2)` : undefined }}
+            >
+              <StackRow stack={st} index={i} count={stacks.length} profile={profile} on={on} home={home !== null} where={where} pos={pos} songColour={colour} onGrip={reorder ? onGrip(i) : undefined} />
+            </div>
+          );
         })}
+        <button
+          className="pressable"
+          onClick={add.fromButton}
+          style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: "0 12px", borderTop: "1px solid var(--rule)", color: "var(--ink-3)", fontSize: 14, fontWeight: 600, textAlign: "left" }}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+            <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          Add a stack
+        </button>
+        {add.open && (
+          <Menu
+            at={add.open.at}
+            naming={0}
+            items={[{ kind: "name", id: "add", label: `New stack in ${profile}…`, initial: "", confirm: "Add", taken: stacks.map((x) => x.name) }]}
+            onPick={(p) => addStack(profile, p.text)}
+            onClose={add.close}
+          />
+        )}
       </div>
     </div>
   );
+}
+
+/** A profile's stacks on their own — no song's patches in them. */
+function songStacksForProfile(s: ReturnType<typeof useStore>, profile: string) {
+  return stacksFor(undefined, [], profile, profileStacksOf(s, profile));
 }
 
 /** Where a patch comes from, in words, for its tooltip. */
@@ -918,50 +992,84 @@ function markColour(p: StackPatch, songColour: string): string {
 /** One stack: its name, the patch a tap plays, its rotation as dots (the
  *  song's filled in the song's colour, the profile's open), and whose that
  *  patch is. */
-function StackRow({ stack, on, home, where, pos, songColour: colour }: { stack: ReturnType<typeof stacksFor>[number]; on: boolean; home: boolean; where: string; pos: number; songColour: string }) {
+function StackRow({ stack, index: i, count, profile, on, home, where, pos, songColour: colour, onGrip }: { stack: ReturnType<typeof stacksFor>[number]; index: number; count: number; profile: string; on: boolean; home: boolean; where: string; pos: number; songColour: string; onGrip?: (e: React.PointerEvent) => void }) {
   const s = useStore();
   const menu = useMenu();
   const byHand = on && !!s.live;
+  const showing = stack.patches[pos];
+  // Only the profile's own patches are the profile's to rename or remove;
+  // a song's own, or one borrowed, belongs elsewhere.
+  const defs = profileStacksOf(s, profile);
+  const def = defs.findIndex((d) => d.name === stack.name);
+  const mine = showing && showing.from === "profile" && def >= 0 ? defs[def].patches.indexOf(showing.name) : -1;
   const items: MenuItem[] = [
-    { kind: "head", label: `${stack.name} · ${stack.patches[pos]?.name}` },
+    { kind: "head", label: `${stack.name} · ${showing?.name ?? "empty"}` },
     ...stack.patches.map((p, k) => ({ kind: "run" as const, id: `p${k}`, label: p.name, detail: fromLabel(p), checked: k === pos && on })),
     ...(byHand
       ? [{ kind: "sep" as const }, { kind: "run" as const, id: "keep", label: `Keep for ${where}` }, { kind: "run" as const, id: "back", label: `Back to ${where}'s patch` }]
       : []),
+    { kind: "sep" },
+    { kind: "name", id: "add", label: "Add a patch…", initial: `${stack.name} ${stack.patches.length + 1}`, confirm: "Add", taken: stack.patches.map((p) => p.name) },
+    ...(mine >= 0 ? [{ kind: "name" as const, id: "renamePatch", label: `Rename “${showing.name}”…`, initial: showing.name, confirm: "Rename", taken: stack.patches.map((p) => p.name) }] : []),
+    { kind: "name", id: "rename", label: "Rename stack…", initial: stack.name, confirm: "Rename", taken: defs.map((d) => d.name) },
+    { kind: "run", id: "up", label: "Move up", disabled: i === 0 ? "Already first" : undefined },
+    { kind: "run", id: "down", label: "Move down", disabled: i === count - 1 ? "Already last" : undefined },
+    { kind: "sep" },
+    ...(mine >= 0 ? [{ kind: "delete" as const, id: "removePatch", label: `Remove “${showing.name}”` }] : []),
+    { kind: "delete", id: "delete", label: "Delete stack", disabled: count <= 1 ? "A profile keeps at least one stack" : undefined },
   ];
   const onPick = (p: Picked) => {
     if (p.id === "keep") keepLive();
     else if (p.id === "back") backToPart();
+    else if (p.id === "add") addStackPatch(profile, def, p.text);
+    else if (p.id === "renamePatch") renameStackPatch(profile, def, mine, p.text);
+    else if (p.id === "rename") renameStack(profile, def, p.text);
+    else if (p.id === "up") moveStack(profile, def, def - 1);
+    else if (p.id === "down") moveStack(profile, def, def + 1);
+    else if (p.id === "removePatch") removeStackPatch(profile, def, mine);
+    else if (p.id === "delete") removeStack(profile, def);
     else if (p.id.startsWith("p")) {
       const k = Number(p.id.slice(1));
       tapStack(stack.name, stack.patches.map((x) => x.name), (k - 1 + stack.patches.length) % stack.patches.length);
     }
   };
   const tape = tapeFor(stack.name);
-  const patch = stack.patches[pos];
+  const patch = stack.patches[pos] ?? { name: "Empty", from: "profile" as const, profile };
   const many = stack.patches.length > 1;
   const next = many ? stack.patches[(pos + 1) % stack.patches.length] : undefined;
   const narrow = useFit() === "narrow";
   return (
-    <>
+    <div style={{ display: "flex", alignItems: "stretch", borderTop: "1px solid var(--rule)", background: on ? tint(colour, 18) : undefined }}>
     {menu.open && <Menu at={menu.open.at} items={items} onPick={onPick} onClose={menu.close} />}
+    {onGrip && (
+      <span
+        role="button"
+        aria-label={`Drag ${stack.name} to move it`}
+        onPointerDown={onGrip}
+        style={{ width: 36, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "grab", touchAction: "none" }}
+      >
+        <svg width="14" height="12" viewBox="0 0 14 12" aria-hidden>
+          <path d="M1.5 2h11M1.5 6h11M1.5 10h11" stroke={tape === "var(--tape-gaffer)" ? "var(--ink-3)" : tape} strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+      </span>
+    )}
     <button
       className="pressable"
+      disabled={stack.patches.length === 0}
       onClick={() => (home ? backToPart() : tapStack(stack.name, stack.patches.map((p) => p.name), on ? pos : null))}
       title={on && next ? `Tap again for ${next.name}` : home ? `${where}'s patch — tap to go back to it` : `Play ${patch.name}`}
       aria-pressed={on}
       {...menu.longPress()}
       style={{
         position: "relative",
-        width: "100%",
+        flex: 1,
+        minWidth: 0,
         display: "flex",
         alignItems: "center",
         gap: 10,
         minHeight: 44,
-        padding: "0 10px",
+        padding: onGrip ? "0 4px 0 2px" : "0 4px 0 10px",
         textAlign: "left",
-        borderTop: "1px solid var(--rule)",
-        background: on ? tint(colour, 18) : undefined,
       }}
     >
       {/* Green bar: what plays. Hollow: the part's own patch, while
@@ -1023,8 +1131,49 @@ function StackRow({ stack, on, home, where, pos, songColour: colour }: { stack: 
         )}
       </span>
     </button>
-    </>
+    <MoreButton label={`${stack.name} actions`} onClick={menu.fromButton} />
+    </div>
   );
+}
+
+/** The Profile view: the profile's stacks on their own — the same rows the
+ *  setlist shows under a section, with grips to drag them into order. */
+export function ProfileView() {
+  const s = useStore();
+  const profile = profileOf(s, undefined).name;
+  const stacks = profileStacksOf(s, profile);
+  return (
+    <section style={{ height: "100%", display: "flex", flexDirection: "column", background: "var(--sheet)", minHeight: 0 }}>
+      <header style={{ flexShrink: 0, height: MACRO_BAR_H, display: "flex", alignItems: "center", gap: 12, padding: "0 16px", borderBottom: "1px solid var(--rule)" }}>
+        <ProfileIcon name={profile} colour={nameColour(profile)} size={22} />
+        <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <span className="t-marker" style={{ fontSize: 22 }}>
+            {profile}
+          </span>
+          <span className="t-meta" style={{ fontSize: 13 }}>
+            {stacks.length} stacks · {stacks.reduce((n, d) => n + d.patches.length, 0)} patches
+          </span>
+        </span>
+      </header>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingTop: 8 }}>
+        <Stacks left={8} profile={profile} reorder />
+      </div>
+    </section>
+  );
+}
+
+/** The sidebar for the footswitch mode: the setlist, the profile's stacks,
+ *  or (next) the presets. */
+export function SidebarContent() {
+  const s = useStore();
+  if (s.performMode === "profile") return <ProfileView />;
+  if (s.performMode === "preset")
+    return (
+      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--dim)", fontSize: 13 }}>
+        Presets — next
+      </div>
+    );
+  return <Setlist />;
 }
 
 // ── Panels: the pickers, sliding over the list, inside the component ─
@@ -1261,7 +1410,7 @@ export function PatchList({ song, current, defaultLabel, onPick }: { song?: stri
   return (
     <div style={{ padding: "10px 14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
       <Cell title={defaultLabel} on={current === null} onClick={() => onPick(null)} />
-      {stacksFor(song, borrowedOf(s, song), profile.name).map((st) => (
+      {songStacks(s, song).map((st) => (
         <div key={st.name}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
             <Tape colour={tapeFor(st.name)}>{st.name}</Tape>
