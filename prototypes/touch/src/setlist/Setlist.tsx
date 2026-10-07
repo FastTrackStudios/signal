@@ -54,6 +54,7 @@ import {
   type Sound,
 } from "../store";
 import { SourceIcon, Strike, Tape, tapeFor } from "../ui/marks";
+import { ProfileIcon } from "../ui/profileIcons";
 import { Button, KeyBox, Tabs } from "../ui/kit";
 import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
 import { nameColour, sectionColour, songColour, SONG_PALETTE } from "./colors";
@@ -254,7 +255,7 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
           <div className="t-meta" style={{ marginTop: 3, fontSize: 13 }}>
             {set.songs.length} songs · about {minutes} min
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginLeft: 8, verticalAlign: "-1px" }} title="The set's default profile">
-              <SourceIcon from="profile" colour="var(--ink-3)" size={11} />
+              <SourceIcon from="profile" profile={profileOf(s, undefined).name} colour="var(--ink-3)" size={11} />
               {profileOf(s, undefined).name}
             </span>
           </div>
@@ -427,7 +428,7 @@ function SongRow({
                   title={prof.from === "song" ? `${song.name} plays on ${prof.name}` : `${prof.name} — the set's default`}
                   style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, color: prof.from === "song" ? nameColour(prof.name) : "var(--ink-3)", fontWeight: prof.from === "song" ? 650 : 500 }}
                 >
-                  <SourceIcon from={prof.from === "song" ? "other" : "profile"} colour={prof.from === "song" ? nameColour(prof.name) : "var(--ink-3)"} size={11} />
+                  <SourceIcon from={prof.from === "song" ? "other" : "profile"} profile={prof.name} colour={prof.from === "song" ? nameColour(prof.name) : "var(--ink-3)"} size={11} />
                   {prof.name}
                 </span>
               )}
@@ -771,7 +772,7 @@ function PatchChip({ name, lit, small, borrowed }: { name: string; lit?: boolean
       <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
       {borrowed && (
         <span title={`Borrowed from ${borrowed}`} style={{ display: "inline-flex", marginLeft: 1 }}>
-          <SourceIcon from="other" colour={nameColour(borrowed)} size={small ? 10 : 11} />
+          <SourceIcon from="other" profile={borrowed} colour={nameColour(borrowed)} size={small ? 10 : 11} />
         </span>
       )}
     </span>
@@ -940,7 +941,7 @@ function StackRow({ stack, on, home, where, pos, songColour: colour }: { stack: 
         {patch.from === "other" && (
           <span style={{ fontSize: 11, fontWeight: 650, color: nameColour(patch.profile!) }}>{patch.profile}</span>
         )}
-        <SourceIcon from={patch.from} colour={markColour(patch, colour)} size={13} />
+        <SourceIcon from={patch.from} profile={patch.profile} colour={markColour(patch, colour)} size={13} />
       </span>
       <span style={{ width: 16, flexShrink: 0, display: "flex", justifyContent: "center", color: "var(--live)" }}>
         {on && many && (
@@ -1193,7 +1194,7 @@ function PatchList({ song, current, defaultLabel, onPick }: { song?: string; cur
               <Cell
                 key={p.name}
                 title={p.name}
-                mark={<SourceIcon from={p.from} colour={markColour(p, colour)} size={13} />}
+                mark={<SourceIcon from={p.from} profile={p.profile} colour={markColour(p, colour)} size={13} />}
                 hint={fromLabel(p)}
                 on={current === p.name}
                 onClick={() => onPick(p.from === "other" ? { name: p.name, profile: p.profile } : { name: p.name })}
@@ -1227,7 +1228,7 @@ function PatchList({ song, current, defaultLabel, onPick }: { song?: string; cur
               {others.map((g) => (
                 <div key={g.profile}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, color: nameColour(g.profile) }}>
-                    <SourceIcon from="other" colour={nameColour(g.profile)} size={12} />
+                    <SourceIcon from="other" profile={g.profile} colour={nameColour(g.profile)} size={12} />
                     <span className="t-label">{g.profile}</span>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 6 }}>
@@ -1258,6 +1259,7 @@ function PatchList({ song, current, defaultLabel, onPick }: { song?: string; cur
  *  picked is lifted. */
 function ProfileCell({ name, of, profile, colour, on, onClick }: { name: string; of?: string; profile?: ProfileEntry; colour?: string; on: boolean; onClick: () => void }) {
   const stacks = profile ? profile.stacks.map((st) => ({ name: st, count: profile.patch_list.filter((x) => x.stack === st).length })).filter((x) => x.count > 0) : [];
+  const first = profile?.patch_list.find((x) => x.stack === stacks[0]?.name)?.name;
   const most = Math.max(1, ...rig.library.profiles.flatMap((p) => p.stacks.map((st) => p.patch_list.filter((x) => x.stack === st).length)));
   return (
     <button
@@ -1276,23 +1278,21 @@ function ProfileCell({ name, of, profile, colour, on, onClick }: { name: string;
         borderBottom: "1px solid var(--rule)",
       }}
     >
-      <span style={{ width: 18, display: "flex", justifyContent: "center", flexShrink: 0 }}>
-        {on ? (
-          <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden style={{ color: "var(--ink)" }}>
-            <path d="M2.5 7.5 5.5 10.5 11.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        ) : (
-          <SourceIcon from={colour ? "other" : "profile"} colour={colour ?? "var(--ink-3)"} size={14} />
-        )}
+      <span style={{ width: 22, display: "flex", justifyContent: "center", flexShrink: 0 }}>
+        <ProfileIcon name={profile?.name} colour={colour ?? "var(--ink-3)"} size={18} />
       </span>
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
         <span style={{ fontSize: 15, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)" }}>{name}</span>
-        {of && (
-          <span className="t-meta" style={{ fontSize: 12 }}>
-            {of}
-          </span>
-        )}
+        {/* What it opens on: the first patch of its first stack. */}
+        <span className="t-meta" style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {[of, first].filter(Boolean).join(" · ")}
+        </span>
       </span>
+      {on && (
+        <svg width="16" height="16" viewBox="0 0 14 14" aria-label="picked" style={{ color: "var(--ink)", flexShrink: 0 }}>
+          <path d="M2.5 7.5 5.5 10.5 11.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
       {/* One column per stack, one block per patch: count them. */}
       <span aria-label={stacks.map((x) => `${x.name} ${x.count}`).join(", ")} style={{ display: "flex", alignItems: "flex-end", gap: 3, height: most * 5, flexShrink: 0 }}>
         {stacks.map((x) => {

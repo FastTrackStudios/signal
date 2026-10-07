@@ -3,6 +3,7 @@
 // and the stack colours as tinted chips.
 
 import type { CSSProperties, ReactNode } from "react";
+import { ProfileIcon } from "./profileIcons";
 
 /** A marker line through its parent's content, drawn once when it appears. */
 export function Strike({ width = 3, tone = "var(--marker)" }: { width?: number; tone?: string }) {
@@ -104,7 +105,9 @@ export function Tape({
 /** Where a patch comes from, as a mark the size of a letter: a note for the
  *  song's own, a stack of layers for a profile's (quiet for the profile the
  *  song plays on, in its own colour for one it borrows from). */
-export function SourceIcon({ from, colour, size = 12 }: { from: "song" | "profile" | "other"; colour: string; size?: number }) {
+export function SourceIcon({ from, colour, size = 12, profile }: { from: "song" | "profile" | "other"; colour: string; size?: number; profile?: string }) {
+  // A profile's patch carries that profile's own icon.
+  if (from !== "song" && profile) return <ProfileIcon name={profile} colour={colour} size={size} />;
   if (from === "song")
     return (
       <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden style={{ flexShrink: 0, display: "block" }}>
