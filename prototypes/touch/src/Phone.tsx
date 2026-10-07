@@ -2,7 +2,8 @@
 // points, 1206 × 2622 px at 460 ppi (2.62 × 5.70 in of glass) in a
 // 71.5 × 149.6 mm body (Apple's tech specs). The screen's corners are
 // ~62 pt; the body's are concentric with them. The Dynamic Island is a
-// 126 × 37 pt pill 11 pt from the top edge; the safe areas are 62 pt at the
+// 126 × 37 pt pill 11 pt from the top edge (in landscape, the right edge —
+// the phone turned left, as it is held on a stand); the safe areas are 62 pt at the
 // island's edge, 34 pt (portrait) or 21 pt (landscape) at the home
 // indicator. Both phones read the same store as the iPad, as linked
 // remotes do.
@@ -55,7 +56,7 @@ export function Phone({ landscape, pagePpi, children }: { landscape?: boolean; p
                   background: "#000",
                   borderRadius: 999,
                   ...(landscape
-                    ? { left: ISLAND.inset, top: (sh - ISLAND.w) / 2, width: ISLAND.h, height: ISLAND.w }
+                    ? { right: ISLAND.inset, top: (sh - ISLAND.w) / 2, width: ISLAND.h, height: ISLAND.w }
                     : { top: ISLAND.inset, left: (sw - ISLAND.w) / 2, width: ISLAND.w, height: ISLAND.h }),
                 }}
               />

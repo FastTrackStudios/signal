@@ -82,7 +82,7 @@ export const MACRO_BAR_H = 44 * 2 + 1 + 1;
 /** Where each knob sits (0..1, rest 0.5), shared by the bar and its panels. */
 type Values = Record<string, number>;
 
-export function MacroBar() {
+export function MacroBar({ cols = 8 }: { cols?: number }) {
   const [values, setValues] = useState<Values>({ drive: 0.62, delay: 0.42, reverb: 0.58, width: 0.66 });
   const [open, setOpen] = useState<string | null>(null);
   const set = (id: string) => (v: number) => setValues((x) => ({ ...x, [id]: v }));
@@ -100,7 +100,7 @@ export function MacroBar() {
   return (
     <div ref={ref} style={{ position: "relative" }}>
       {knob?.rows && <Panel knob={knob} values={values} set={set} onClose={() => setOpen(null)} />}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(8, minmax(0, 1fr))", gap: 1, background: "#000" }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 1, background: "#000" }}>
         {BANK.map((k) => (
           <Cell
             key={k.id}

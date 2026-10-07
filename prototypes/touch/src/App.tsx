@@ -20,14 +20,15 @@ import { Setlist } from "./setlist/Setlist";
 import { AudioControls, Switches } from "./dock/Switches";
 import { MacroBar } from "./dock/MacroBar";
 import { Phone } from "./Phone";
+import { PhoneShell } from "./PhoneShell";
 import { redo, undo, useUndo, setPerformMode, toggleHouseMute, useStore, type PerformMode } from "./store";
 
 const SIDEBAR = 402;
 const TOP = 48;
 const FOOT = 56;
 
-type View = "play" | "control" | "routing" | "tones";
-type Dock = "switches" | "audio" | null;
+export type View = "play" | "control" | "routing" | "tones";
+export type Dock = "switches" | "audio" | null;
 
 // ── The stage: the iPad at its real size ─────────────────────────────
 //
@@ -132,14 +133,10 @@ export function App() {
           landscape. */}
       <div style={{ width: OW * scale, display: "flex", justifyContent: "flex-end", alignItems: "flex-end", gap: 28 * scale, marginTop: 12 }}>
         <Phone pagePpi={(scale * W) / (model.px / model.ppi)}>
-          <Setlist />
+          <PhoneShell />
         </Phone>
         <Phone landscape pagePpi={(scale * W) / (model.px / model.ppi)}>
-          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-            <MacroBar />
-            <span style={{ flex: 1 }} />
-            <Switches />
-          </div>
+          <PhoneShell landscape />
         </Phone>
       </div>
     </div>
@@ -269,7 +266,7 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
 
 // ── Top: the rig ─────────────────────────────────────────────────────
 
-const MODES: { id: PerformMode; label: string; hint: string }[] = [
+export const MODES: { id: PerformMode; label: string; hint: string }[] = [
   { id: "preset", label: "Preset", hint: "Footswitches pick presets and their variations" },
   { id: "profile", label: "Profile", hint: "Footswitches play the profile's stacks" },
   { id: "setlist", label: "Setlist", hint: "Footswitches step through the set: songs, sections, parts" },
@@ -334,7 +331,7 @@ function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => voi
   );
 }
 
-function UndoRedo() {
+export function UndoRedo({ compact }: { compact?: boolean } = {}) {
   const { depth, label, redoDepth, redoLabel } = useUndo();
   const btn = (on: boolean, title: string, onClick: () => void, flip: boolean) => (
     <button
@@ -343,7 +340,7 @@ function UndoRedo() {
       aria-label={title}
       title={title}
       className={on ? "pressable" : ""}
-      style={{ width: 48, display: "flex", alignItems: "center", justifyContent: "center", color: on ? "var(--ink-2)" : "var(--dim)" }}
+      style={{ width: compact ? 34 : 48, display: "flex", alignItems: "center", justifyContent: "center", color: on ? "var(--ink-2)" : "var(--dim)" }}
     >
       <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden style={{ transform: flip ? "scaleX(-1)" : undefined }}>
         <path d="M7 4.5 3.5 8 7 11.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
@@ -352,14 +349,14 @@ function UndoRedo() {
     </button>
   );
   return (
-    <div style={{ display: "flex", alignItems: "stretch", paddingLeft: 4 }}>
+    <div style={{ display: "flex", alignItems: "stretch", paddingLeft: compact ? 0 : 4 }}>
       {btn(depth > 0, label ? `Undo ${label}` : "Nothing to undo", undo, false)}
       {btn(redoDepth > 0, redoLabel ? `Redo ${redoLabel}` : "Nothing to redo", redo, true)}
     </div>
   );
 }
 
-function Status({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
+export function Status({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
   return (
     <button className="pressable" title={detail} style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 10px", fontSize: 12, fontWeight: 650, color: "var(--ink-2)" }}>
       <span style={{ width: 7, height: 7, borderRadius: 999, background: ok ? "var(--live)" : "var(--void)" }} />
@@ -369,7 +366,7 @@ function Status({ label, ok, detail }: { label: string; ok: boolean; detail: str
 }
 
 /** CPU, as a number that jitters the way a real one does. */
-function Cpu() {
+export function Cpu() {
   const [cpu, setCpu] = useState(14);
   useEffect(() => {
     const t = window.setInterval(() => setCpu((c) => Math.max(9, Math.min(24, Math.round(c + (Math.random() - 0.5) * 4)))), 900);
@@ -384,7 +381,7 @@ function Cpu() {
 
 /** IN and OUT, small: enough to see signal and clipping at a glance (the
  *  views carry the big ones). Simulated here; the rig streams peaks. */
-function Meters({ muted }: { muted: boolean }) {
+export function Meters({ muted, width = 72 }: { muted: boolean; width?: number }) {
   const [lv, setLv] = useState({ i: 0.4, o: 0.5, ih: 0.4, oh: 0.5 });
   const raf = useRef(0);
   useEffect(() => {
@@ -404,14 +401,13 @@ function Meters({ muted }: { muted: boolean }) {
   }, []);
   return (
     <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 5, padding: "0 12px" }}>
-      <MiniMeter label="IN" level={lv.i} hold={lv.ih} />
-      <MiniMeter label="OUT" level={muted ? 0 : lv.o} hold={muted ? 0 : lv.oh} dim={muted} />
+      <MiniMeter label="IN" level={lv.i} hold={lv.ih} w={width} />
+      <MiniMeter label="OUT" level={muted ? 0 : lv.o} hold={muted ? 0 : lv.oh} dim={muted} w={width} />
     </div>
   );
 }
 
-function MiniMeter({ label, level, hold, dim }: { label: string; level: number; hold: number; dim?: boolean }) {
-  const w = 72;
+export function MiniMeter({ label, level, hold, dim, w = 72 }: { label: string; level: number; hold: number; dim?: boolean; w?: number }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
       <span className="t-label" style={{ width: 24, fontSize: 9, letterSpacing: "0.08em", color: dim ? "var(--void)" : "var(--ink-3)" }}>
@@ -435,7 +431,7 @@ function MiniMeter({ label, level, hold, dim }: { label: string; level: number; 
 
 /** The house mute: the main outputs go silent, the phones keep playing —
  *  rehearse, tune, or fix something mid-set. Unmissable when on. */
-function HouseMute({ on }: { on: boolean }) {
+export function HouseMute({ on, compact }: { on: boolean; compact?: boolean }) {
   return (
     <button
       onClick={toggleHouseMute}
@@ -446,8 +442,9 @@ function HouseMute({ on }: { on: boolean }) {
         display: "flex",
         alignItems: "center",
         gap: 8,
-        margin: 6,
-        padding: "0 14px",
+        margin: compact ? "6px 6px 6px 4px" : 6,
+        padding: compact ? "0 9px" : "0 14px",
+        whiteSpace: "nowrap",
         borderRadius: "var(--r)",
         fontSize: 12,
         fontWeight: 750,
@@ -466,7 +463,7 @@ function HouseMute({ on }: { on: boolean }) {
           <path d="M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.8a6 6 0 0 1 0 8.4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
         )}
       </svg>
-      {on ? "HOUSE MUTED" : "MUTE HOUSE"}
+      {compact ? null : on ? "HOUSE MUTED" : "MUTE HOUSE"}
       <style>{`@keyframes house-pulse { 50% { filter: brightness(0.82) } } @media (prefers-reduced-motion: reduce) { [aria-pressed="true"] { animation: none !important } }`}</style>
     </button>
   );
@@ -506,7 +503,7 @@ function Main({ view, dock, macros }: { view: View; dock: Dock; macros: boolean 
   );
 }
 
-function Placeholder({ title, note }: { title: string; note: string }) {
+export function Placeholder({ title, note }: { title: string; note: string }) {
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
       <span className="t-label" style={{ color: "var(--dim)" }}>
@@ -594,7 +591,7 @@ function BottomBar({ view, onView, dock, onDock, macros, onMacros }: { view: Vie
 }
 
 /** A bar button in the foot: an icon, its word under it (Session's foot). */
-function FootButton({ label, on, pin, off, onClick, children }: { label: string; on?: boolean; pin?: boolean; off?: string; onClick: () => void; children: ReactNode }) {
+export function FootButton({ label, on, pin, off, onClick, children }: { label: string; on?: boolean; pin?: boolean; off?: string; onClick: () => void; children: ReactNode }) {
   return (
     <button
       onClick={onClick}
@@ -625,7 +622,7 @@ function FootButton({ label, on, pin, off, onClick, children }: { label: string;
   );
 }
 
-function BarButton({ label, on, onClick, children }: { label: string; on?: boolean; onClick: () => void; children: ReactNode }) {
+export function BarButton({ label, on, onClick, children }: { label: string; on?: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button aria-label={label} title={label} aria-pressed={on} className="pressable" onClick={onClick} style={{ width: 52, display: "flex", alignItems: "center", justifyContent: "center", color: on ? "var(--ink)" : "var(--ink-3)" }}>
       {children}
@@ -633,6 +630,6 @@ function BarButton({ label, on, onClick, children }: { label: string; on?: boole
   );
 }
 
-function Rule() {
+export function Rule() {
   return <span aria-hidden style={{ width: 1, alignSelf: "center", height: 22, background: "var(--rule)", flexShrink: 0 }} />;
 }
