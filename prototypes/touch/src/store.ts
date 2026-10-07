@@ -4,7 +4,13 @@
 // purge; a played song is struck, not removed.
 
 import { useSyncExternalStore } from "react";
-import { chain, rig, modulesOf, type ModulePreset, type Setlist, type SongEntry, type SongSlot } from "./data/rig";
+import { chain, rig, modulesOf, type ModulePreset, type Setlist as RigSetlist, type SongEntry, type SongSlot } from "./data/rig";
+import { parseSetName, setName, type SetMeta } from "./setlist/sets";
+
+/** A set as the player keeps it: its songs, and what it is — an event on a
+ *  date, with a title only when the night has one. `name` is built from
+ *  those (the house style the rig's files use). */
+export type Setlist = RigSetlist & SetMeta;
 
 /** What a section plays: a patch of the profile, or a preset. */
 export interface Sound {
@@ -53,7 +59,7 @@ export interface State {
 
 function seed(): State {
   const perf = rig.perf;
-  const setlists = rig.library.setlists.map((s) => ({ ...s, songs: s.songs.map((x) => ({ ...x })) }));
+  const setlists: Setlist[] = rig.library.setlists.map((s) => ({ ...s, ...parseSetName(s.name), songs: s.songs.map((x) => ({ ...x })) }));
   const setIndex = Math.max(0, setlists.findIndex((s) => s.active));
   // The rig's own view of the set up carries what each song starts on.
   for (const song of setlists[setIndex]?.songs ?? []) {
@@ -225,12 +231,23 @@ export function chooseSet(index: number) {
   move((s) => ({ ...s, setIndex: index, songIndex: 0, partIndex: 0 }));
 }
 
-export function newSetlist(name: string) {
+export function newSetlist(meta: SetMeta, songs: SongSlot[] = []) {
+  const name = setName(meta);
   change(`New set ${name}`, (s) => ({
     ...s,
-    setlists: [...s.setlists, { name, active: false, songs: [] }],
+    setlists: [...s.setlists, { name, active: false, songs: songs.map((x) => ({ ...x })), ...meta }],
     setIndex: s.setlists.length,
     songIndex: 0,
+    partIndex: 0,
+  }));
+}
+
+/** A set's event, date and title (its stored name follows). */
+export function setDetails(index: number, meta: SetMeta) {
+  const name = setName(meta);
+  change(`Set → ${name}`, (s) => ({
+    ...s,
+    setlists: s.setlists.map((l, i) => (i === index ? { ...l, ...meta, name } : l)),
   }));
 }
 
@@ -338,20 +355,10 @@ export function sideOf(s: State, id: string, name: string): "L" | "R" | null {
 
 // ── Setlist management ───────────────────────────────────────────────
 
-export function renameSet(index: number, name: string) {
-  change(`Rename set → ${name}`, (s) => ({
-    ...s,
-    setlists: s.setlists.map((l, i) => (i === index ? { ...l, name } : l)),
-  }));
-}
 
-export function duplicateSet(index: number, name: string) {
-  change(`Duplicate set as ${name}`, (s) => {
-    const src = s.setlists[index];
-    const copy = { ...src, name, active: false, songs: src.songs.map((x) => ({ ...x })) };
-    const setlists = [...s.setlists.slice(0, index + 1), copy, ...s.setlists.slice(index + 1)];
-    return { ...s, setlists, setIndex: index + 1, songIndex: 0, partIndex: 0 };
-  });
+export function duplicateSet(index: number, meta: SetMeta) {
+  const src = state.setlists[index];
+  newSetlist(meta, src?.songs ?? []);
 }
 
 export function deleteSet(index: number) {

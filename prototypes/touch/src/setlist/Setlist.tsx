@@ -27,7 +27,7 @@ import {
   removeSection,
   removeSong,
   renameSection,
-  renameSet,
+  setDetails,
   sectionsOf,
   setSectionSound,
   setSongField,
@@ -41,6 +41,7 @@ import { Strike, Tape, tapeFor } from "../ui/marks";
 import { Button, KeyBox, Tabs } from "../ui/kit";
 import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
 import { nameColour, sectionColour, songColour, SONG_PALETTE } from "./colors";
+import { addDays, dateLabel, isoOf, MONTHS, nextDateFor, setHeading, setName, WEEKDAYS, whenLabel, type SetMeta } from "./sets";
 
 const KEYS = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
@@ -58,6 +59,7 @@ type Panel =
   | { kind: "tempo"; song: number }
   | { kind: "start"; song: number }
   | { kind: "colour"; song: number }
+  | { kind: "details"; mode: "new" | "edit" | "duplicate" }
   | { kind: "patch"; song: string; section: number };
 
 export function Setlist() {
@@ -171,37 +173,44 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
   const s = useStore();
   const set = currentSet(s);
   const menu = useMenu();
-  const names = s.setlists.map((l) => l.name);
+  const fit = useFit();
   const items: MenuItem[] = [
     { kind: "head", label: set.name },
-    { kind: "name", id: "new", label: "New set…", initial: "", confirm: "Create", taken: names },
-    { kind: "name", id: "rename", label: "Rename…", initial: set.name, confirm: "Rename", taken: names },
-    { kind: "name", id: "duplicate", label: "Duplicate…", initial: `${set.name} copy`, confirm: "Duplicate", taken: names },
+    { kind: "run", id: "edit", label: "Edit details…", detail: "event · date · title" },
+    { kind: "run", id: "new", label: "New set…" },
+    { kind: "run", id: "duplicate", label: "Duplicate for next week" },
     { kind: "run", id: "sets", label: "All sets…", detail: `${s.setlists.length}` },
     { kind: "run", id: "reorder", label: "Reorder songs", disabled: set.songs.length < 2 ? "Fewer than two songs" : undefined },
     { kind: "sep" },
     { kind: "delete", id: "delete", label: "Delete set", disabled: s.setlists.length <= 1 ? "The only set — make another first" : undefined },
   ];
   const onPick = (p: Picked) => {
-    if (p.id === "new") newSetlist(p.text);
-    if (p.id === "rename") renameSet(s.setIndex, p.text);
-    if (p.id === "duplicate") duplicateSet(s.setIndex, p.text);
+    if (p.id === "edit") onPanel({ kind: "details", mode: "edit" });
+    if (p.id === "new") onPanel({ kind: "details", mode: "new" });
+    if (p.id === "duplicate") onPanel({ kind: "details", mode: "duplicate" });
     if (p.id === "sets") onPanel({ kind: "sets" });
     if (p.id === "reorder") onReorder(true);
     if (p.id === "delete") deleteSet(s.setIndex);
   };
   const step = (d: number) => chooseSet((s.setIndex + d + s.setlists.length) % s.setlists.length);
   const minutes = Math.round(set.songs.length * 4.5);
-  const fit = useFit();
+  const when = whenLabel(set.date);
   return (
     <header style={{ flexShrink: 0, padding: "14px 6px 12px 18px", borderBottom: "1px solid var(--rule)", display: "flex", alignItems: "flex-start", gap: 2 }}>
-      <button onClick={() => onPanel({ kind: "sets" })} style={{ flex: 1, minWidth: 0, textAlign: "left", paddingTop: 2 }} title="All sets">
-        <h1 className="t-marker" style={{ margin: 0, fontSize: fit === "narrow" ? 17 : 22, lineHeight: 1.15 }}>
-          {set.name}
+      <button onClick={() => onPanel({ kind: "details", mode: "edit" })} style={{ flex: 1, minWidth: 0, textAlign: "left", paddingTop: 2 }} title="Edit the set's event, date and title">
+        <h1 className="t-marker" style={{ margin: 0, fontSize: fit === "narrow" ? 18 : 24, lineHeight: 1.12 }}>
+          {setHeading(set)}
         </h1>
-        <div className="t-meta" style={{ marginTop: 5, fontSize: 13 }}>
-          {fit === "narrow" ? `${set.songs.length} songs` : `${set.songs.length} songs · about ${minutes} min · on ${rig.perf.profile_name}`}
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "4px 8px", marginTop: 6 }}>
+          {set.title && set.event && <EventChip event={set.event} />}
+          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)" }}>{dateLabel(set.date)}</span>
+          {when && <span style={{ fontSize: 13, fontWeight: 600, color: when === "Today" ? "var(--live)" : "var(--ink-3)" }}>{when}</span>}
         </div>
+        {fit !== "narrow" && (
+          <div className="t-meta" style={{ marginTop: 3, fontSize: 13 }}>
+            {set.songs.length} songs · about {minutes} min
+          </div>
+        )}
       </button>
       {reordering ? (
         <Button primary onClick={() => onReorder(false)} style={{ alignSelf: "center", marginRight: 6 }}>
@@ -220,6 +229,30 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
       {!reordering && <MoreButton label="Set actions" onClick={menu.fromButton} />}
       {menu.open && <Menu at={menu.open.at} items={items} onPick={onPick} onClose={menu.close} />}
     </header>
+  );
+}
+
+/** A recurring event, as a chip in its colour (its name's, like a song). */
+function EventChip({ event, big }: { event: string; big?: boolean }) {
+  const c = nameColour(event);
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: big ? "5px 10px" : "2px 8px",
+        borderRadius: 999,
+        background: `color-mix(in srgb, ${c} 18%, transparent)`,
+        color: "var(--ink)",
+        fontSize: big ? 14 : 12,
+        fontWeight: 650,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span style={{ width: 7, height: 7, borderRadius: 999, background: c }} />
+      {event}
+    </span>
   );
 }
 
@@ -585,9 +618,12 @@ function Footer({ onPanel }: { onPanel: (p: Panel) => void }) {
 
 // ── Panels: the pickers, sliding over the list, inside the component ─
 
-function PanelView({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => void }) {
+function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onClose: () => void }) {
   const s = useStore();
   const set = currentSet(s);
+  // The sets list can hand on to "New set" without closing.
+  const [panel, setPanel] = useState<NonNullable<Panel>>(initial);
+  const setPanelMode = (mode: "new") => setPanel({ kind: "details", mode });
   let title = "";
   let sub = "";
   let body: ReactNode = null;
@@ -595,7 +631,13 @@ function PanelView({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () 
     case "sets": {
       title = "Sets";
       sub = `${s.setlists.length} sets`;
-      body = <SetsBody onClose={onClose} />;
+      body = <SetsBody onClose={onClose} onNew={() => setPanelMode("new")} />;
+      break;
+    }
+    case "details": {
+      title = panel.mode === "new" ? "New set" : panel.mode === "duplicate" ? "Duplicate set" : "Set details";
+      sub = panel.mode === "duplicate" ? `${set.songs.length} songs from ${setHeading(set)}` : panel.mode === "new" ? "An event on a date — a title only if the night has one" : set.name;
+      body = <DetailsBody mode={panel.mode} onDone={onClose} />;
       break;
     }
     case "add": {
@@ -789,49 +831,190 @@ function Cell({ title, on, onClick, swatch }: { title: string; on: boolean; onCl
   );
 }
 
-function SetsBody({ onClose }: { onClose: () => void }) {
+function SetsBody({ onClose, onNew }: { onClose: () => void; onNew: () => void }) {
   const s = useStore();
-  const [name, setName] = useState("");
-  const taken = s.setlists.some((l) => l.name.toLowerCase() === name.trim().toLowerCase());
+  const todayIso = isoOf(new Date());
+  const rows = s.setlists.map((l, i) => ({ l, i }));
+  const upcoming = rows.filter((r) => r.l.date >= todayIso).sort((a, b) => a.l.date.localeCompare(b.l.date));
+  const past = rows.filter((r) => r.l.date && r.l.date < todayIso).sort((a, b) => b.l.date.localeCompare(a.l.date));
+  const undated = rows.filter((r) => !r.l.date);
+  const group = (label: string, list: typeof rows) =>
+    list.length > 0 && (
+      <div key={label}>
+        <div className="t-label" style={{ padding: "14px 18px 6px", color: "var(--ink-3)" }}>
+          {label}
+        </div>
+        {list.map(({ l, i }) => {
+          const d = l.date ? new Date(l.date + "T00:00") : null;
+          const on = i === s.setIndex;
+          return (
+            <button
+              key={`${i}-${l.name}`}
+              className="pressable"
+              onClick={() => {
+                chooseSet(i);
+                onClose();
+              }}
+              style={{ width: "100%", minHeight: 64, padding: "8px 14px 8px 18px", display: "flex", alignItems: "center", gap: 14, textAlign: "left", borderTop: "1px solid var(--rule)", background: on ? "var(--focus-bg)" : undefined }}
+            >
+              {/* The date as a block: the day large, the month and weekday small. */}
+              <span style={{ width: 44, flexShrink: 0, textAlign: "center", lineHeight: 1 }}>
+                <span className="t-label" style={{ display: "block", fontSize: 10, color: "var(--ink-3)" }}>
+                  {d ? MONTHS[d.getMonth()] : "—"}
+                </span>
+                <span className="num" style={{ display: "block", fontSize: 22, fontWeight: 750, margin: "2px 0" }}>
+                  {d ? d.getDate() : ""}
+                </span>
+                <span style={{ display: "block", fontSize: 11, color: "var(--ink-3)" }}>{d ? WEEKDAYS[d.getDay()] : ""}</span>
+              </span>
+              <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 16, fontWeight: on ? 750 : 620, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{setHeading(l)}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {l.title && l.event && <EventChip event={l.event} />}
+                  <span className="t-meta" style={{ fontSize: 13 }}>
+                    {l.songs.length} songs{l.date ? ` · ${whenLabel(l.date)}` : ""}
+                  </span>
+                </span>
+              </span>
+              {on && <Badge tone="live">Open</Badge>}
+            </button>
+          );
+        })}
+      </div>
+    );
   return (
-    <div>
-      {s.setlists.map((l, i) => (
-        <button
-          key={`${i}-${l.name}`}
-          className="pressable"
-          onClick={() => {
-            chooseSet(i);
-            onClose();
-          }}
-          style={{ width: "100%", minHeight: 60, padding: "8px 18px", display: "flex", alignItems: "center", gap: 10, textAlign: "left", borderBottom: "1px solid var(--rule)", background: i === s.setIndex ? "var(--up)" : undefined }}
-        >
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: "block", fontSize: 16, fontWeight: i === s.setIndex ? 700 : 560 }}>{l.name}</span>
-            <span className="t-meta" style={{ fontSize: 13 }}>
-              {l.songs.length} songs
-            </span>
-          </span>
-          {i === s.setIndex && <Badge tone="live">Open</Badge>}
-        </button>
-      ))}
-      <div style={{ display: "flex", gap: 8, padding: 14 }}>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="New set"
-          style={{ flex: 1, minWidth: 0, minHeight: 48, padding: "0 12px", border: "1px solid var(--rule-strong)", borderRadius: "var(--r)", fontSize: 16 }}
-        />
-        <Button
-          primary
-          disabled={!name.trim() || taken}
-          onClick={() => {
-            newSetlist(name.trim());
-            onClose();
-          }}
-        >
-          Create
+    <div style={{ paddingBottom: 14 }}>
+      <div style={{ padding: "12px 14px 0" }}>
+        <Button primary onClick={onNew} style={{ width: "100%" }}>
+          New set
         </Button>
       </div>
+      {group("Upcoming", upcoming)}
+      {group("Past", past)}
+      {group("No date", undated)}
+    </div>
+  );
+}
+
+function DetailsBody({ mode, onDone }: { mode: "new" | "edit" | "duplicate"; onDone: () => void }) {
+  const s = useStore();
+  const set = currentSet(s);
+  const metas: SetMeta[] = s.setlists;
+  // Events, most recently used first.
+  const events = [...new Set([...metas].filter((m) => m.event).sort((a, b) => b.date.localeCompare(a.date)).map((m) => m.event))];
+  const start: SetMeta =
+    mode === "edit"
+      ? { event: set.event, date: set.date, title: set.title }
+      : mode === "duplicate"
+        ? { event: set.event, date: set.date ? addDays(set.date, 7) : isoOf(new Date()), title: "" }
+        : { event: set.event || events[0] || "", date: nextDateFor(set.event || events[0] || "", metas), title: "" };
+  const [m, setM] = useState<SetMeta>(start);
+  const [newEvent, setNewEvent] = useState<string | null>(null);
+  const name = setName(m);
+  const clash = s.setlists.some((l, i) => l.name.toLowerCase() === name.toLowerCase() && !(mode === "edit" && i === s.setIndex));
+  const ok = m.event.trim().length > 0 && !clash;
+  const today = isoOf(new Date());
+  const quick: { label: string; date: string }[] = [
+    { label: "Today", date: today },
+    { label: "Tomorrow", date: addDays(today, 1) },
+  ];
+  const nextUsual = m.event ? nextDateFor(m.event, metas.filter((x) => mode !== "edit" || x !== set)) : "";
+  if (nextUsual && nextUsual !== today && nextUsual !== addDays(today, 1)) quick.push({ label: `Next ${m.event} · ${dateLabel(nextUsual)}`, date: nextUsual });
+  const field = { width: "100%", minHeight: 48, padding: "0 12px", border: "1px solid var(--rule-strong)", borderRadius: "var(--r)", fontSize: 16 } as const;
+  return (
+    <div style={{ padding: "14px 16px 18px", display: "flex", flexDirection: "column", gap: 18 }}>
+      <div>
+        <div className="t-label" style={{ color: "var(--ink-3)", marginBottom: 8 }}>
+          Event
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {events.map((e) => {
+            const on = e === m.event && newEvent === null;
+            return (
+              <button
+                key={e}
+                onClick={() => {
+                  setNewEvent(null);
+                  setM({ ...m, event: e, date: mode === "edit" ? m.date : nextDateFor(e, metas) });
+                }}
+                style={{ borderRadius: 999, boxShadow: on ? "0 0 0 2px var(--focus-fg)" : undefined }}
+              >
+                <EventChip event={e} big />
+              </button>
+            );
+          })}
+          <button
+            className="pressable"
+            onClick={() => setNewEvent("")}
+            style={{ minHeight: 34, padding: "0 12px", borderRadius: 999, border: "1px dashed var(--rule-strong)", color: "var(--ink-2)", fontSize: 14, fontWeight: 600 }}
+          >
+            + New event
+          </button>
+        </div>
+        {newEvent !== null && (
+          <input
+            autoFocus
+            value={newEvent}
+            onChange={(e) => {
+              setNewEvent(e.target.value);
+              setM({ ...m, event: e.target.value });
+            }}
+            placeholder="e.g. Sunday AM, Youth, Easter"
+            style={{ ...field, marginTop: 10 }}
+          />
+        )}
+      </div>
+      <div>
+        <div className="t-label" style={{ color: "var(--ink-3)", marginBottom: 8 }}>
+          Date
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+          {quick.map((q) => {
+            const on = q.date === m.date;
+            return (
+              <button
+                key={q.label}
+                className={on ? "" : "pressable"}
+                onClick={() => setM({ ...m, date: q.date })}
+                style={{ minHeight: 40, padding: "0 12px", borderRadius: "var(--r)", border: on ? "2px solid var(--focus-fg)" : "1px solid var(--rule-strong)", background: on ? "var(--focus-bg)" : "transparent", fontSize: 14, fontWeight: on ? 700 : 560 }}
+              >
+                {q.label}
+              </button>
+            );
+          })}
+        </div>
+        <input type="date" value={m.date} onChange={(e) => setM({ ...m, date: e.target.value })} style={{ ...field, colorScheme: "dark" }} />
+      </div>
+      <div>
+        <div className="t-label" style={{ color: "var(--ink-3)", marginBottom: 8 }}>
+          Title <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500 }}>— optional</span>
+        </div>
+        <input value={m.title} onChange={(e) => setM({ ...m, title: e.target.value })} placeholder="Only for a special night — e.g. Worship Night" style={field} />
+      </div>
+      <div style={{ padding: "12px 14px", borderRadius: "var(--r-md)", background: "var(--sheet)", border: "1px solid var(--rule)" }}>
+        <div style={{ fontSize: 18, fontWeight: 750 }}>{setHeading(m)}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+          {m.title && m.event && <EventChip event={m.event} />}
+          <span style={{ fontSize: 14, fontWeight: 600 }}>{dateLabel(m.date)}</span>
+          <span className="t-meta" style={{ fontSize: 13 }}>{whenLabel(m.date)}</span>
+        </div>
+        <div className="t-meta" style={{ marginTop: 8, fontSize: 12 }}>
+          Saved as “{name}”
+        </div>
+        {clash && <div style={{ marginTop: 6, color: "var(--void)", fontSize: 13 }}>There's already a set for this event on this date.</div>}
+      </div>
+      <Button
+        primary
+        disabled={!ok}
+        onClick={() => {
+          if (mode === "edit") setDetails(s.setIndex, m);
+          else if (mode === "duplicate") duplicateSet(s.setIndex, m);
+          else newSetlist(m);
+          onDone();
+        }}
+      >
+        {mode === "edit" ? "Save" : mode === "duplicate" ? `Duplicate ${set.songs.length} songs` : "Create set"}
+      </Button>
     </div>
   );
 }
