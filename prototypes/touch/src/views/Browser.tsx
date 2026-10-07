@@ -14,7 +14,7 @@
 // (a module preset), makes it the part's own edit (a block preset), or
 // gives the song that profile. With nothing picked it just browses.
 
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { blockPresetsByType, modulesOf, rig } from "../data/rig";
 import { songStacks, editParam, overrideOf, profileOf, sectionsOf, select, setModuleOverride, setSectionSound, setSongProfile, useStore, type State, type Target } from "../store";
 import type { StackPatch } from "../setlist/stacks";
@@ -160,6 +160,14 @@ export function Browser({ onClose }: { onClose?: () => void }) {
   const [kindId, setKindId] = useState("patches");
   const [opened, setOpened] = useState(false); // narrow: inside a kind
   const [query, setQuery] = useState("");
+  // It filters itself to what's being worked on (a block picked in Edit).
+  useEffect(() => {
+    if (s.browserFocus && KINDS.some((k) => k.id === s.browserFocus)) {
+      setKindId(s.browserFocus);
+      setOpened(true);
+      setQuery("");
+    }
+  }, [s.browserFocus]);
   const ref = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(true);
   useLayoutEffect(() => {

@@ -32,8 +32,10 @@ const SIDEBAR = 402;
 const TOP = 48;
 const FOOT = 56;
 
-/** What the screen is for: playing (Perform) or taking a sound apart (Edit). */
-export type View = "perform" | "edit";
+/** What the screen is for: playing (Perform), putting setlists, profiles
+ *  and presets together from the browser (Build), or taking a sound apart
+ *  (Edit). */
+export type View = "perform" | "build" | "edit";
 export type Dock = "switches" | null;
 
 // ── The stage: the iPad at its real size ─────────────────────────────
@@ -249,6 +251,7 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
   const [macros, setMacros] = useState(true);
   const [sidebar, setSidebar] = useState(true);
   const [browser, setBrowser] = useState(false);
+  const [left, setLeft] = useState<"browser" | "sidebar">("browser");
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   return (
     <StageCtx.Provider value={{ el, scale }}>
@@ -267,18 +270,25 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
       >
         <TopBar sidebar={sidebar} onSidebar={() => setSidebar(!sidebar)} />
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
-          {/* The left area: the setlist — or, in Edit, where the main area
-              is busy, the browser in its place. */}
+          {/* The left area: the sidebar for the mode — or, in Edit, where
+              routing and the FX row hold the main area, the browser (with
+              the sidebar a tap away, to pick a section). */}
           {sidebar && (
-            <aside style={{ width: SIDEBAR, flexShrink: 0, borderRight: "1px solid var(--rule)", minHeight: 0 }}>
-              {/* Picking a part here opens the browser for it. */}
-              <ComposeCtx.Provider value={{ onPicked: () => setBrowser(true) }}>
-                {view === "edit" && browser ? <Browser onClose={() => setBrowser(false)} /> : <Sidebar />}
+            <aside style={{ width: SIDEBAR, flexShrink: 0, borderRight: "1px solid var(--rule)", minHeight: 0, display: "flex", flexDirection: "column" }}>
+              <ComposeCtx.Provider value={{ onPicked: () => view === "perform" && setBrowser(true) }}>
+                {view === "edit" ? (
+                  <>
+                    <LeftSwitch value={left} onChange={setLeft} />
+                    <div style={{ flex: 1, minHeight: 0 }}>{left === "browser" ? <Browser /> : <Sidebar />}</div>
+                  </>
+                ) : (
+                  <Sidebar />
+                )}
               </ComposeCtx.Provider>
             </aside>
           )}
           <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--desk)" }}>
-            {view === "perform" ? (
+            {view === "perform" && (
               <>
                 {/* The macros along the top: what you turn while playing; their panels drop down. */}
                 {macros && (
@@ -286,13 +296,14 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
                     <MacroBar />
                   </div>
                 )}
-                {/* The middle: the browser when it's open, else nothing until something is picked. */}
+                {/* The middle: the browser when it's asked for, else nothing. */}
                 <div style={{ flex: 1, minHeight: 0 }}>{browser ? <Browser onClose={() => setBrowser(false)} /> : <Quiet />}</div>
                 {dock && <div style={{ flexShrink: 0 }}>{dock === "switches" && <Switches />}</div>}
               </>
-            ) : (
-              <EditView />
             )}
+            {/* Build: the browser takes the main area. */}
+            {view === "build" && <Browser />}
+            {view === "edit" && <EditView />}
           </main>
         </div>
         <BottomBar
@@ -307,6 +318,34 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
         />
       </div>
     </StageCtx.Provider>
+  );
+}
+
+/** Edit's left area: the browser, or the sidebar to pick a section. */
+function LeftSwitch({ value, onChange }: { value: "browser" | "sidebar"; onChange: (v: "browser" | "sidebar") => void }) {
+  const s = useStore();
+  const name = s.performMode === "setlist" ? "Setlist" : s.performMode === "profile" ? "Profile" : "Presets";
+  return (
+    <div role="tablist" style={{ flexShrink: 0, display: "flex", borderBottom: "1px solid var(--rule)", background: "var(--sheet)" }}>
+      {(
+        [
+          ["browser", "Browser"],
+          ["sidebar", name],
+        ] as const
+      ).map(([id, label]) => (
+        <button
+          key={id}
+          role="tab"
+          aria-selected={value === id}
+          className="pressable"
+          onClick={() => onChange(id)}
+          style={{ position: "relative", flex: 1, height: 44, fontSize: 14, fontWeight: value === id ? 700 : 560, color: value === id ? "var(--ink)" : "var(--ink-3)" }}
+        >
+          {label}
+          {value === id && <span aria-hidden style={{ position: "absolute", left: 16, right: 16, bottom: 0, height: 2, borderRadius: 1, background: "var(--ink-2)" }} />}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -501,6 +540,14 @@ function BottomBar({ view, onView, dock, onDock, macros, onMacros, browser, onBr
       <FootButton label="Perform" on={view === "perform"} onClick={() => onView("perform")}>
         <path d="M5 3.5v11l9-5.5Z" fill="currentColor" />
       </FootButton>
+      <FootButton label="Build" on={view === "build"} onClick={() => onView("build")}>
+        <>
+          <rect x="2.5" y="2.5" width="5.5" height="5.5" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <rect x="10" y="2.5" width="5.5" height="5.5" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <rect x="2.5" y="10" width="5.5" height="5.5" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M12.75 10v5.5M10 12.75h5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </>
+      </FootButton>
       <FootButton label="Edit" on={view === "edit"} onClick={() => onView("edit")}>
         <>
           <path d="M4 2.5v13M9 2.5v13M14 2.5v13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -509,13 +556,15 @@ function BottomBar({ view, onView, dock, onDock, macros, onMacros, browser, onBr
           <rect x="12.3" y="8" width="3.4" height="2.6" rx="0.8" fill="currentColor" />
         </>
       </FootButton>
-      <Rule />
-      <FootButton label="Browser" on={browser} pin onClick={onBrowser}>
-        <path d="M3 3.5h3v11H3ZM7.5 3.5h3v11h-3ZM12 4l2.8-.8 2 10.6-2.8.8Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-      </FootButton>
-      {/* Perform's docks: the macros along the top, the switches along the foot. */}
+      {/* Perform: the browser on call, and the docks — the macros along
+          the top, the switches along the foot. (Build and Edit have the
+          browser always.) */}
       {view === "perform" && (
         <>
+          <Rule />
+          <FootButton label="Browser" on={browser} pin onClick={onBrowser}>
+            <path d="M3 3.5h3v11H3ZM7.5 3.5h3v11h-3ZM12 4l2.8-.8 2 10.6-2.8.8Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+          </FootButton>
           <Rule />
           <FootButton label="Macros" on={macros} pin onClick={onMacros}>
             <>

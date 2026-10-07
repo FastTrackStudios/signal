@@ -59,6 +59,14 @@ const ICON = {
       <path d="M4.5 9 6 7.4M13.5 9l1.5-1.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </>
   ),
+  build: (
+    <>
+      <rect x="2.5" y="2.5" width="5.5" height="5.5" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="10" y="2.5" width="5.5" height="5.5" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="2.5" y="10" width="5.5" height="5.5" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M12.75 10v5.5M10 12.75h5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </>
+  ),
   edit: (
     <>
       <path d="M4 2.5v13M9 2.5v13M14 2.5v13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -122,6 +130,9 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
               <Tab landscape label="Perform" on={view === "perform"} onClick={() => setView("perform")}>
                 {ICON.perform}
               </Tab>
+              <Tab landscape label="Build" on={view === "build"} onClick={() => setView("build")}>
+                {ICON.build}
+              </Tab>
               <Tab landscape label="Edit" on={view === "edit"} onClick={() => setView("edit")}>
                 {ICON.edit}
               </Tab>
@@ -154,6 +165,9 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
                   {/* Flush: the switches bring their own hairline. */}
                   {dock && <div style={{ flexShrink: 0 }}>{dock === "switches" && <Switches />}</div>}
                 </>
+              ) : view === "build" ? (
+                // Build on its side: the browser fills the screen.
+                <Browser />
               ) : (
                 // Edit on its side: the FX row fills the screen — it was made
                 // this size; routing waits for the iPad.
@@ -342,7 +356,7 @@ function SideMenu({ offset, view, onView, onClose }: { offset: number; view: Vie
         <div className="t-label" style={{ padding: "8px 16px 6px", color: "var(--ink-3)" }}>
           View
         </div>
-        {(["perform", "edit"] as View[]).map((v) => {
+        {(["perform", "build", "edit"] as View[]).map((v) => {
           const off = false;
           const on = view === v;
           return (

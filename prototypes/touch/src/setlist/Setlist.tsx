@@ -15,11 +15,9 @@ import {
   partPatch,
   addPart,
   select,
-  addStack,
   addStackPatch,
   moveStack,
   profileStacksOf,
-  removeStack,
   removeStackPatch,
   renameStack,
   renameStackPatch,
@@ -718,7 +716,7 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
       </div>
       {/* The section playing opens into its parts, when it has more than one. */}
       {up && state === "now" && several && <Parts song={song} index={j} onPanel={onPanel} />}
-      {up && state === "now" && <Stacks left={narrow ? 34 : 50} />}
+      {up && state === "now" && <Stacks left={narrow ? 36 : 46} />}
     </>
   );
 }
@@ -730,7 +728,7 @@ function Parts({ song, index: j, onPanel }: { song: string; index: number; onPan
   const sec = sectionsOf(s, song)[j];
   const narrow = useFit() === "narrow";
   const add = useMenu();
-  const left = narrow ? 34 : 50;
+  const left = narrow ? 36 : 46;
   return (
     <div style={{ position: "relative", paddingBottom: 4 }}>
       <span aria-hidden style={{ position: "absolute", left: left + 3, top: 0, bottom: 26, width: 1, background: "color-mix(in srgb, var(--live) 40%, var(--rule-strong))" }} />
@@ -886,9 +884,10 @@ function Badge({ children, tone }: { children: ReactNode; tone?: "live" }) {
  *  song put it there, or the profile passes it through. */
 /** The stacks, managed where they are: under the section playing (the
  *  song's stacks) or as the Profile view (the profile's own, `reorder` on:
- *  grips to drag them into order). Long-press a stack — or its ⋯ — to
- *  rename it, add a patch, rename or remove the one showing, move it, or
- *  delete it; "Add a stack" at the foot. */
+ *  grips to drag them into order). A profile has five stacks — they are
+ *  the five switches — so none are added or deleted; long-press a stack
+ *  (or its ⋯) to add a patch to it, rename or remove the one showing,
+ *  rename the stack, or move it. */
 export function Stacks({ left, profile: only, reorder }: { left: number; profile?: string; reorder?: boolean }) {
   const s = useStore();
   const song = only ? undefined : currentSong(s)?.name;
@@ -899,7 +898,6 @@ export function Stacks({ left, profile: only, reorder }: { left: number; profile
   const own = partPatch(s);
   const saved = own ? findPatch(stacks, own) : null;
   const colour = song ? songColour(song, s.songColours) : nameColour(profile);
-  const add = useMenu();
   const where = (() => {
     const sec = song ? sectionsOf(s, song)[s.partIndex] : undefined;
     if (!sec) return song ?? "this song";
@@ -950,25 +948,6 @@ export function Stacks({ left, profile: only, reorder }: { left: number; profile
             </div>
           );
         })}
-        <button
-          className="pressable"
-          onClick={add.fromButton}
-          style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: "0 12px", borderTop: "1px solid var(--rule)", color: "var(--ink-3)", fontSize: 14, fontWeight: 600, textAlign: "left" }}
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
-            <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-          Add a stack
-        </button>
-        {add.open && (
-          <Menu
-            at={add.open.at}
-            naming={0}
-            items={[{ kind: "name", id: "add", label: `New stack in ${profile}…`, initial: "", confirm: "Add", taken: stacks.map((x) => x.name) }]}
-            onPick={(p) => addStack(profile, p.text)}
-            onClose={add.close}
-          />
-        )}
       </div>
     </div>
   );
@@ -1014,9 +993,7 @@ function StackRow({ stack, index: i, count, profile, on, home, where, pos, songC
     { kind: "name", id: "rename", label: "Rename stack…", initial: stack.name, confirm: "Rename", taken: defs.map((d) => d.name) },
     { kind: "run", id: "up", label: "Move up", disabled: i === 0 ? "Already first" : undefined },
     { kind: "run", id: "down", label: "Move down", disabled: i === count - 1 ? "Already last" : undefined },
-    { kind: "sep" },
-    ...(mine >= 0 ? [{ kind: "delete" as const, id: "removePatch", label: `Remove “${showing.name}”` }] : []),
-    { kind: "delete", id: "delete", label: "Delete stack", disabled: count <= 1 ? "A profile keeps at least one stack" : undefined },
+    ...(mine >= 0 ? [{ kind: "sep" as const }, { kind: "delete" as const, id: "removePatch", label: `Remove “${showing.name}”`, disabled: stack.patches.length <= 1 ? "A stack keeps at least one patch" : undefined }] : []),
   ];
   const onPick = (p: Picked) => {
     if (p.id === "keep") keepLive();
@@ -1027,7 +1004,6 @@ function StackRow({ stack, index: i, count, profile, on, home, where, pos, songC
     else if (p.id === "up") moveStack(profile, def, def - 1);
     else if (p.id === "down") moveStack(profile, def, def + 1);
     else if (p.id === "removePatch") removeStackPatch(profile, def, mine);
-    else if (p.id === "delete") removeStack(profile, def);
     else if (p.id.startsWith("p")) {
       const k = Number(p.id.slice(1));
       tapStack(stack.name, stack.patches.map((x) => x.name), (k - 1 + stack.patches.length) % stack.patches.length);

@@ -98,6 +98,9 @@ export interface State {
   /** Profiles' stacks as the player has edited them (names, order,
    *  patches); a profile not here plays as the library has it. */
   profileStacks: Record<string, StackDef[]>;
+  /** The kind the browser should show for what's being worked on (a block
+   *  picked in Edit's routing → its presets). */
+  browserFocus: string | null;
 }
 
 let seedAt = { section: 0, part: 0 };
@@ -165,6 +168,7 @@ function seed(): State {
     selection: null,
     overrides: {},
     profileStacks: {},
+    browserFocus: null,
   };
 }
 
@@ -760,6 +764,8 @@ export function discardEdits(t: Target) {
 }
 
 // ── Stacks: the profile's, as the player keeps them ─────────────────
+// Five stacks — the five switches — named and ordered by the player; what
+// changes is their names, their order, and the patches in each.
 
 /** A profile's stacks: the player's edit, else the library's. */
 export function profileStacksOf(s: State, profile: string): StackDef[] {
@@ -785,14 +791,8 @@ const moved = <T,>(list: T[], from: number, to: number) => {
   return out;
 };
 
-export function addStack(profile: string, name: string) {
-  editStacks(profile, `new stack ${name}`, (d) => [...d, { name, patches: [name] }]);
-}
 export function renameStack(profile: string, i: number, name: string) {
   editStacks(profile, `stack → ${name}`, (d) => d.map((x, k) => (k === i ? { ...x, name } : x)));
-}
-export function removeStack(profile: string, i: number) {
-  editStacks(profile, "stack removed", (d) => d.filter((_, k) => k !== i));
 }
 export function moveStack(profile: string, from: number, to: number) {
   editStacks(profile, "stack moved", (d) => moved(d, from, to));
@@ -808,4 +808,10 @@ export function removeStackPatch(profile: string, i: number, j: number) {
 }
 export function moveStackPatch(profile: string, i: number, from: number, to: number) {
   editStacks(profile, "patch moved", (d) => d.map((x, k) => (k === i ? { ...x, patches: moved(x.patches, from, to) } : x)));
+}
+
+/** Point the browser at a kind (its id), for what's being worked on. */
+export function focusBrowser(kind: string | null) {
+  if (state.browserFocus === kind) return;
+  move((s) => ({ ...s, browserFocus: kind }));
 }

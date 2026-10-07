@@ -8,9 +8,20 @@
 // such, until Save to preset writes them into the preset (everywhere it
 // plays) or Discard drops them.
 
-import { useState } from "react";
-import { chain } from "../data/rig";
-import { discardEdits, editParam, overrideOf, saveEditsToPreset, sectionsOf, useStore } from "../store";
+import { useEffect, useState } from "react";
+import { blockPresetsByType, chain } from "../data/rig";
+import { discardEdits, editParam, focusBrowser, overrideOf, saveEditsToPreset, sectionsOf, useStore } from "../store";
+
+const MODULE_KINDS = ["Core", "Amp", "Drive", "Time", "Delay", "Reverb"];
+
+/** The browser kind for a block: its block presets when there are any,
+ *  else its module's presets, else the patches. */
+function kindFor(block?: { node: { block_type: string | null }; module: string }): string {
+  const t = block?.node.block_type?.toLowerCase();
+  if (t && blockPresetsByType().has(t)) return `block:${t}`;
+  const m = MODULE_KINDS.find((k) => block?.module.toLowerCase().includes(k.toLowerCase()));
+  return m ? `module:${m}` : "patches";
+}
 import { sectionColour } from "../setlist/colors";
 
 export const FX_ROW = { w: 750, h: 381 };
@@ -20,6 +31,11 @@ export function EditView({ routing = true, fill }: { routing?: boolean; fill?: b
   const blocks = chain();
   const [blockId, setBlockId] = useState<string>(blocks.find((b) => b.node.block_type === "Drive")?.node.id ?? blocks[0]?.node.id);
   const block = blocks.find((b) => b.node.id === blockId);
+  // The browser follows the block being edited.
+  const kind = kindFor(block);
+  useEffect(() => {
+    focusBrowser(kind);
+  }, [kind]);
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
       {routing && <Routing blockId={blockId} onBlock={setBlockId} />}
