@@ -45,29 +45,26 @@ export function Switches() {
   const main = stacks.slice(0, 4);
   const ambient = stacks[4];
   const posOf = (i: number) => (at?.stack === i ? at.index : (s.stackAt[stacks[i]?.name] ?? 0) % Math.max(1, stacks[i]?.patches.length ?? 1));
+  const lit = (i: number) => at?.stack === i;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 10px 10px", background: "#0a0a0c" }}>
+    <div style={{ display: "flex", flexDirection: "column", background: "#0a0a0c" }}>
       <MacroBar colour={song ? songColour(song, s.songColours) : "#94a3b8"} />
-      {/* Row A: the hold layer. */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+      {/* One grid, two rows of five, the same columns: the hold layer slim
+          above (a foot's hold lives "up" from the toe), the switches under
+          the feet tall below — Signal's minmax(44px, 1fr) / 7fr. */}
+      {/* Flush: no padding, no gaps — a hairline of the ground between switches. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gridTemplateRows: "44px 124px", gap: 1, background: "#000", borderTop: "1px solid #000" }}>
         {ambient ? (
-          <HoldTile no={6} label={ambient.name} detail={ambient.patches[posOf(4)]?.name} colour={folder(ambient.name)[0]} lit={at?.stack === 4} onTap={() => tap(ambient, at?.stack === 4 ? posOf(4) : null)} />
+          <StackTile no={6} stack={ambient} pos={posOf(4)} lit={lit(4)} compact onTap={() => tap(ambient, lit(4) ? posOf(4) : null)} />
         ) : (
-          <HoldTile no={6} label="—" />
+          <Empty no={6} />
         )}
-        <HoldTile no={7} label="FX Toggle" detail={fx ? "Time FX on" : "Time FX off"} colour="#a78bfa" lit={fx} onTap={() => setFx(!fx)} />
-        <HoldTile no={8} label="Song" detail={song ?? "—"} colour={song ? songColour(song, s.songColours) : undefined} />
-        <HoldTile no={9} label="Boost" detail={boost ? "+3 dB" : "off"} colour="#facc15" lit={boost} onTap={() => setBoost(!boost)} />
-        <HoldTile no={10} label="Tuner" detail="A 440" colour="#e4e4e7" />
-      </div>
-      {/* Row B: the switches under the feet. */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+        <FnTile no={7} title="FX Toggle" subtitle={fx ? "Time FX on" : "Time FX off"} bg="#ec4899" text="#ffffff" lit={fx} onTap={() => setFx(!fx)} />
+        <FnTile no={8} title="Song" subtitle={song ?? "—"} bg="#a78bfa" text="#1e1b4b" lit={s.performMode === "setlist"} />
+        <FnTile no={9} title="Boost" subtitle={boost ? "+3 dB" : "+3 dB · off"} bg="#fafafa" text="#0a0a0a" lit={boost} onTap={() => setBoost(!boost)} />
+        <FnTile no={10} title="Tuner" subtitle="A 440" bg="#3f3f46" text="#e4e4e7" lit={false} />
         {[0, 1, 2, 3].map((i) =>
-          main[i] ? (
-            <StackTile key={main[i].name} no={i + 1} stack={main[i]} pos={posOf(i)} lit={at?.stack === i} onTap={() => tap(main[i], at?.stack === i ? posOf(i) : null)} />
-          ) : (
-            <div key={i} style={{ borderRadius: 12, border: "2px dashed var(--rule)", minHeight: 88 }} />
-          ),
+          main[i] ? <StackTile key={main[i].name} no={i + 1} stack={main[i]} pos={posOf(i)} lit={lit(i)} onTap={() => tap(main[i], lit(i) ? posOf(i) : null)} /> : <Empty key={i} no={i + 1} />,
         )}
         <TapTempo bpm={currentSong(s)?.bpm || 120} />
       </div>
@@ -79,69 +76,85 @@ function tap(stack: SongStack, playingIndex: number | null) {
   tapStack(stack.name, stack.patches.map((p) => p.name), playingIndex);
 }
 
-function StackTile({ no, stack, pos, lit, onTap }: { no: number; stack: SongStack; pos: number; lit: boolean; onTap: () => void }) {
+/** The lit switch's ring, inside the tile: flush tiles have no room outside. */
+const LIT_RING = "inset 0 0 0 2px rgba(255,255,255,0.85)";
+
+/** A stack's switch: lit in its folder colour when it plays, dark when
+ *  not. The stack name is the main sound; a variation gets a sub-label;
+ *  dots say where the next press lands. */
+function StackTile({ no, stack, pos, lit, compact, onTap }: { no: number; stack: SongStack; pos: number; lit: boolean; compact?: boolean; onTap: () => void }) {
   const [bg, fg] = folder(stack.name);
   const patch = stack.patches[pos];
+  const variation = patch && patch.name.toLowerCase() !== stack.name.toLowerCase() ? patch.name : null;
+  const dots = stack.patches.length > 1 && (
+    <span style={{ display: "flex", alignItems: "center", gap: compact ? 4 : 6, marginTop: compact ? 0 : 4 }}>
+      {stack.patches.map((p, k) => (
+        <span key={p.name} style={{ width: compact ? 5 : 6, height: compact ? 5 : 6, borderRadius: 999, background: "currentColor", opacity: k === pos ? 0.95 : 0.35 }} />
+      ))}
+    </span>
+  );
   return (
     <button
       onClick={onTap}
       aria-pressed={lit}
       style={{
         position: "relative",
-        minHeight: 88,
-        borderRadius: 12,
-        padding: "18px 10px 10px",
+        minWidth: 0,
+        overflow: "hidden",
+        borderRadius: 0,
+        padding: "0 8px",
         display: "flex",
-        flexDirection: "column",
-        justifyContent: "flex-end",
-        gap: 4,
-        textAlign: "left",
-        background: lit ? bg : dim(bg, 0.22),
-        color: lit ? fg : dim(bg, 0.95),
-        boxShadow: lit ? "0 0 0 2px rgba(255,255,255,0.8), 0 10px 24px rgba(0,0,0,0.5)" : undefined,
-        transition: "background 120ms var(--ease)",
+        flexDirection: compact ? "row" : "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: compact ? 8 : 4,
+        background: lit ? bg : dim(bg, 0.24),
+        color: lit ? fg : dim(fg, 0.35),
+        boxShadow: lit ? LIT_RING : undefined,
       }}
     >
       <SwitchNo no={no} />
-      <span className="t-label" style={{ fontSize: 11, opacity: 0.8 }}>
-        {stack.name}
-      </span>
-      <span style={{ fontSize: 17, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{patch?.name ?? "—"}</span>
-      <span style={{ display: "flex", gap: 4 }}>
-        {stack.patches.map((p, k) => (
-          <span key={p.name} style={{ width: k === pos ? 12 : 5, height: 5, borderRadius: 999, background: "currentColor", opacity: k === pos ? 0.95 : 0.35 }} />
-        ))}
-      </span>
+      <span style={{ fontSize: compact ? 14 : 24, fontWeight: 700, letterSpacing: "0.02em", whiteSpace: "nowrap" }}>{stack.name}</span>
+      {variation && <span style={{ fontSize: compact ? 10 : 14, fontWeight: 600, opacity: compact ? 0.8 : 0.9, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{variation}</span>}
+      {dots}
     </button>
   );
 }
 
-function HoldTile({ no, label, detail, colour, lit, onTap }: { no: number; label: string; detail?: string; colour?: string; lit?: boolean; onTap?: () => void }) {
-  const c = colour && colour.startsWith("#") ? colour : "#71717a";
+/** A function switch: a title and what it is doing, lit in its colour. */
+function FnTile({ no, title, subtitle, bg, text, lit, onTap }: { no: number; title: string; subtitle: string; bg: string; text: string; lit: boolean; onTap?: () => void }) {
   return (
     <button
       onClick={onTap}
-      disabled={!onTap}
       aria-pressed={lit}
       style={{
         position: "relative",
-        minHeight: 40,
-        borderRadius: 9,
-        padding: "0 10px 0 26px",
+        minWidth: 0,
+        overflow: "hidden",
+        borderRadius: 0,
+        padding: "0 8px",
         display: "flex",
         alignItems: "center",
+        justifyContent: "center",
         gap: 8,
-        textAlign: "left",
-        background: lit ? dim(c, 0.4) : "#141418",
-        boxShadow: lit ? `inset 0 0 0 1.5px ${c}` : "inset 0 0 0 1px #222228",
-        color: "var(--ink)",
+        background: lit ? bg : dim(bg, 0.3),
+        color: lit ? text : dim(text, 0.45),
+        boxShadow: lit ? LIT_RING : undefined,
         cursor: onTap ? "pointer" : "default",
       }}
     >
-      <SwitchNo no={no} top={13} />
-      <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" }}>{label}</span>
-      {detail && <span style={{ fontSize: 12, color: "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{detail}</span>}
+      <SwitchNo no={no} />
+      <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: "0.02em", whiteSpace: "nowrap" }}>{title}</span>
+      <span style={{ fontSize: 10, opacity: 0.8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{subtitle}</span>
     </button>
+  );
+}
+
+function Empty({ no }: { no: number }) {
+  return (
+    <div style={{ position: "relative", background: "#0e0e11" }}>
+      <SwitchNo no={no} />
+    </div>
   );
 }
 
@@ -164,32 +177,25 @@ function TapTempo({ bpm }: { bpm: number }) {
       onClick={onTap}
       style={{
         position: "relative",
-        minHeight: 88,
-        borderRadius: 12,
-        padding: "18px 10px 10px",
+        borderRadius: 0,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "flex-end",
-        gap: 4,
-        textAlign: "left",
-        background: flash ? "#3f3f46" : "#1d1d22",
-        color: "var(--ink)",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 2,
+        background: flash ? "#52525b" : "#3f3f46",
+        color: "#e4e4e7",
       }}
     >
       <SwitchNo no={5} />
-      <span className="t-label" style={{ fontSize: 11, color: "var(--ink-3)" }}>
-        Tap Tempo
-      </span>
-      <span className="num" style={{ fontSize: 22, fontWeight: 750 }}>
-        {tempo}
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-3)", marginLeft: 4 }}>BPM</span>
-      </span>
+      <span style={{ fontSize: 20, fontWeight: 700 }}>Tap Tempo</span>
+      <span className="num" style={{ fontSize: 14, fontWeight: 600, opacity: 0.8 }}>{tempo} BPM</span>
     </button>
   );
 }
 
-function SwitchNo({ no, top = 6 }: { no: number; top?: number }) {
-  return <span style={{ position: "absolute", top, left: 9, fontSize: 10, fontFamily: "ui-monospace, monospace", opacity: 0.45 }}>{no}</span>;
+function SwitchNo({ no }: { no: number }) {
+  return <span style={{ position: "absolute", top: 5, left: 9, fontSize: 10, fontFamily: "ui-monospace, monospace", opacity: 0.45 }}>{no}</span>;
 }
 
 // ── The macro bar ────────────────────────────────────────────────────
@@ -207,7 +213,7 @@ const MACROS: { label: string; colour?: string; value: number; unit?: string }[]
 
 function MacroBar({ colour }: { colour: string }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${MACROS.length}, 1fr)`, borderRadius: 10, background: "#111114", boxShadow: "inset 0 0 0 1px #1d1d22" }}>
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${MACROS.length}, 1fr)`, background: "#111114" }}>
       {MACROS.map((m, i) => (
         <MacroCell key={m.label} {...m} colour={m.colour ?? colour} last={i === MACROS.length - 1} />
       ))}
