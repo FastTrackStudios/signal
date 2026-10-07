@@ -79,6 +79,10 @@ export interface State {
   live: string | null;
   /** Where each stack's rotation is: the patch a tap on it plays. */
   stackAt: Record<string, number>;
+  /** What the footswitches step through — rig state, shared by every remote. */
+  performMode: PerformMode;
+  /** The house (main outputs) muted; the phones keep playing. */
+  houseMute: boolean;
 }
 
 let seedAt = { section: 0, part: 0 };
@@ -139,6 +143,8 @@ function seed(): State {
     songProfiles: {},
     live: null,
     stackAt: {},
+    performMode: "setlist",
+    houseMute: false,
   };
 }
 
@@ -622,4 +628,17 @@ export function setSongProfile(song: string, name: string | null) {
     else delete songProfiles[song];
     return { ...s, songProfiles, live: null, stackAt: {} };
   });
+}
+
+// ── Rig state the bars show ──────────────────────────────────────────
+
+export type PerformMode = "preset" | "profile" | "setlist";
+
+export function setPerformMode(mode: PerformMode) {
+  move((s) => ({ ...s, performMode: mode }));
+}
+
+/** Mute the house, or bring it back. Not an edit: no undo. */
+export function toggleHouseMute() {
+  move((s) => ({ ...s, houseMute: !s.houseMute }));
 }
