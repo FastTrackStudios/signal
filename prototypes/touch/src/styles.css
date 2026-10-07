@@ -6,7 +6,7 @@
 
 :root {
   /* The Signal app's own greys (crates/signal/widgets/src/theme.rs). */
-  --desk: #0a0a0c;
+  --desk: #0c0c0f;
   --sheet: #0e0e11;
   --sheet-2: #141418;
   --field: #0a0a0d;
@@ -23,7 +23,7 @@
   --tape-drive: #f97316;
   --tape-lead: #ef4444;
   --tape-ambient: #06b6d4;
-  --tape-special: #71717a;
+  --tape-special: #3f3f46;
   --tape-gaffer: #1d1d22;
 
   /* States: playing (green), selected (blue), edited, danger. */
@@ -175,7 +175,7 @@ input {
   }
 }
 
-/* A sheet: white, hairline edge, a lift that reads as paper on a desk. */
+/* A pane: the app's ground, a hairline edge, no shadow. */
 .sheet {
   background: var(--sheet);
   border: 1px solid var(--rule);
@@ -197,6 +197,9 @@ input {
 }
 
 @media (hover: hover) {
+  button:not(:disabled):hover {
+    filter: brightness(1.08);
+  }
   .pressable:hover {
     background: rgba(255, 255, 255, 0.05);
   }

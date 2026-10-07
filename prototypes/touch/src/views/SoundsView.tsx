@@ -274,7 +274,7 @@ function PresetPage({ preset, onRenamed }: { preset?: PresetState; onRenamed: (n
                   <div style={{ fontSize: 17, fontWeight: 650, marginTop: 2, color: "var(--ink-2)" }}>
                     {snap ?? ""}
                     {differs(module) && (
-                      <span className="t-label" style={{ marginLeft: 10, color: "var(--void)" }}>
+                      <span className="t-label" style={{ marginLeft: 10, color: "var(--modified)" }}>
                         differs from {preset.variations[0]}
                       </span>
                     )}
@@ -331,7 +331,7 @@ function PresetPage({ preset, onRenamed }: { preset?: PresetState; onRenamed: (n
                   <div style={{ fontSize: 16, fontWeight: 800 }}>{bname}</div>
                   <div className="t-meta" style={{ fontSize: 14 }}>
                     {pickOf(variation, `block:${bname}`)}
-                    {differs(`block:${bname}`) && <span style={{ color: "var(--void)" }}> · differs</span>}
+                    {differs(`block:${bname}`) && <span style={{ color: "var(--modified)" }}> · differs</span>}
                   </div>
                 </button>
               ))}

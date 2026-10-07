@@ -71,16 +71,7 @@ export function App() {
           Demo rig · no audio
         </span>
       </header>
-      {/* The ruled sheet under every page. */}
-      <main
-        style={{
-          flex: 1,
-          minHeight: 0,
-          position: "relative",
-          backgroundImage: "linear-gradient(rgba(0,0,0,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.045) 1px, transparent 1px)",
-          backgroundSize: "24px 24px",
-        }}
-      >
+      <main style={{ flex: 1, minHeight: 0, position: "relative" }}>
         {mode === "Set" && <SetView />}
         {mode === "Sounds" && <SoundsView />}
         {mode === "Library" && <LibraryView />}

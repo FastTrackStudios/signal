@@ -4,7 +4,7 @@
 // purge; a played song is struck, not removed.
 
 import { useSyncExternalStore } from "react";
-import { chain, rig, modulesOf, type ModulePreset, type Setlist, type SongSlot } from "./data/rig";
+import { chain, rig, modulesOf, type ModulePreset, type Setlist, type SongEntry, type SongSlot } from "./data/rig";
 
 /** What a section plays: a patch of the profile, or a preset. */
 export interface Sound {
@@ -45,6 +45,8 @@ export interface State {
   order: Record<string, string[]>;
   /** A block moved to the amp pair's other side (or out of it). */
   side: Record<string, "L" | "R" | null>;
+  /** Songs made in this session, beside the rig's library. */
+  newSongs: SongEntry[];
 }
 
 function seed(): State {
@@ -87,6 +89,7 @@ function seed(): State {
     presetPicks: {},
     order: {},
     side: {},
+    newSongs: [],
   };
 }
 
@@ -328,4 +331,78 @@ export function orderedChain(s: State): ReturnType<typeof chain> {
 export function sideOf(s: State, id: string, name: string): "L" | "R" | null {
   if (id in s.side) return s.side[id];
   return /(\s|\[)R\]?$|\bR$/.test(name) ? "R" : /(\s|\[)L\]?$|\bL$/.test(name) ? "L" : null;
+}
+
+// ── Setlist management ───────────────────────────────────────────────
+
+export function renameSet(index: number, name: string) {
+  change(`Rename set → ${name}`, (s) => ({
+    ...s,
+    setlists: s.setlists.map((l, i) => (i === index ? { ...l, name } : l)),
+  }));
+}
+
+export function duplicateSet(index: number, name: string) {
+  change(`Duplicate set as ${name}`, (s) => {
+    const src = s.setlists[index];
+    const copy = { ...src, name, active: false, songs: src.songs.map((x) => ({ ...x })) };
+    const setlists = [...s.setlists.slice(0, index + 1), copy, ...s.setlists.slice(index + 1)];
+    return { ...s, setlists, setIndex: index + 1, songIndex: 0, partIndex: 0 };
+  });
+}
+
+export function deleteSet(index: number) {
+  const name = state.setlists[index]?.name ?? "set";
+  change(`Delete ${name}`, (s) => {
+    const setlists = s.setlists.filter((_, i) => i !== index);
+    const setIndex = Math.max(0, Math.min(s.setIndex - (index < s.setIndex ? 1 : 0), setlists.length - 1));
+    return { ...s, setlists, setIndex, songIndex: 0, partIndex: 0 };
+  });
+}
+
+/** What a song starts on in this set (empty: the profile's default). */
+export function setStart(index: number, patch: string) {
+  const name = currentSet(state).songs[index]?.name ?? "song";
+  change(`${name} starts on ${patch || "the default"}`, (s) => {
+    const setlists = s.setlists.map((l, i) =>
+      i === s.setIndex ? { ...l, songs: l.songs.map((x, j) => (j === index ? { ...x, start: patch } : x)) } : l,
+    );
+    return { ...s, setlists };
+  });
+}
+
+/** A song made here: into the library (this session's) and onto the set. */
+export function newSong(name: string, key: string, bpm: number) {
+  change(`New song ${name}`, (s) => ({
+    ...s,
+    newSongs: [...s.newSongs, { name, key, bpm, parts: [], setlists: [currentSet(s).name], profile: "", start_part: "" }],
+    sections: { ...s.sections, [name]: [] },
+    setlists: s.setlists.map((l, i) => (i === s.setIndex ? { ...l, songs: [...l.songs, { name, key, bpm, start: "" }] } : l)),
+  }));
+}
+
+export function renameSection(song: string, index: number, name: string) {
+  change(`${song}: rename section → ${name}`, (s) => ({
+    ...s,
+    sections: { ...s.sections, [song]: sectionsOf(s, song).map((x, i) => (i === index ? { ...x, name } : x)) },
+  }));
+}
+
+export function removeSection(song: string, index: number) {
+  const name = sectionsOf(state, song)[index]?.name ?? "section";
+  change(`${song}: delete ${name}`, (s) => ({
+    ...s,
+    sections: { ...s.sections, [song]: sectionsOf(s, song).filter((_, i) => i !== index) },
+    partIndex: Math.max(0, s.partIndex - (index <= s.partIndex ? 1 : 0)),
+  }));
+}
+
+export function moveSection(song: string, from: number, to: number) {
+  change(`${song}: move a section`, (s) => {
+    const list = [...sectionsOf(s, song)];
+    if (to < 0 || to >= list.length) return s;
+    const [x] = list.splice(from, 1);
+    list.splice(to, 0, x);
+    return { ...s, sections: { ...s.sections, [song]: list } };
+  });
 }
