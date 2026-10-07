@@ -74,8 +74,9 @@ type Tab = "guitar" | "audio" | "midi";
 export function SetupView() {
   const ref = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(true);
-  const [showList, setShowList] = useState(false);
   const [tab, setTab] = useState<Tab>("guitar");
+  // The open tab's options, down the left — brought up from its tab.
+  const [options, setOptions] = useState(false);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -85,18 +86,27 @@ export function SetupView() {
     return () => ro.disconnect();
   }, []);
   return (
-    <div ref={ref} style={{ flex: 1, minWidth: 0, height: "100%", minHeight: 0, display: "flex", background: "var(--desk)" }}>
-      {(wide || showList) && (
-        <SetupList
-          wide={wide}
-          tab={tab}
-          onPicked={(t) => {
+    <div ref={ref} style={{ flex: 1, minWidth: 0, height: "100%", minHeight: 0, display: "flex", flexDirection: "column", background: "var(--desk)" }}>
+      <SetupTabs
+        tab={tab}
+        options={options}
+        onTab={(t) => {
+          // A tap on the open tab brings up its options; another tab opens.
+          if (t === tab) setOptions(!options);
+          else {
             setTab(t);
-            setShowList(false);
-          }}
-        />
-      )}
-      {(wide || !showList) && <SetupDetail tab={tab} onTab={setTab} onList={wide ? undefined : () => setShowList(true)} />}
+            setOptions(false);
+          }
+        }}
+      />
+      <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex" }}>
+        {options && <SetupList wide={wide} tab={tab} onPicked={() => setOptions(false)} />}
+        {(wide || !options) && (
+          <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto" }}>
+            <SetupBody tab={tab} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -121,85 +131,75 @@ function GuitarPhoto({ g, size, radius = 8, style }: { g: Guitar; size?: number;
   return <img src={g.image} alt="" onError={() => setBroken(true)} draggable={false} style={{ ...box, display: "block", objectFit: "cover", objectPosition: "50% 62%" }} />;
 }
 
-function ListHead({ label, onAdd, addLabel }: { label: string; onAdd?: (e: React.MouseEvent<HTMLButtonElement>) => void; addLabel?: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", minHeight: 44, padding: "8px 4px 0 16px" }}>
-      <span className="t-label" style={{ flex: 1, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ink-3)", fontWeight: 700 }}>
-        {label}
-      </span>
-      {onAdd && <button className="pressable" onClick={onAdd} aria-label={addLabel} style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", borderRadius: "var(--r)" }}>
-        <svg width="13" height="13" viewBox="0 0 12 12" aria-hidden>
-          <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      </button>}
-    </div>
-  );
-}
 
-function SetupList({ wide, tab, onPicked }: { wide: boolean; tab: Tab; onPicked: (t: Tab) => void }) {
+function SetupList({ wide, tab, onPicked }: { wide: boolean; tab: Tab; onPicked: () => void }) {
   const s = useStore();
-  const addGuitar = useMenu();
-  const addRig = useMenu();
+  const add = useMenu();
   const rig = currentRig(s);
   return (
-    <aside style={{ width: wide ? 290 : "100%", flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0, borderRight: wide ? "1px solid var(--rule)" : undefined, background: "var(--sheet)" }}>
+    <aside style={{ width: wide ? 320 : "100%", flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0, borderRight: wide ? "1px solid var(--rule)" : undefined, background: "var(--sheet)" }}>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        <ListHead label="Guitar" addLabel="New guitar" onAdd={addGuitar.fromButton} />
-        {s.guitars.map((g, i) => (
-          <GuitarRow
-            key={g.id}
-            g={g}
-            index={i}
-            inUse={i === s.guitarIndex}
-            shown={tab === "guitar" && i === s.guitarIndex}
-            rig={rig}
-            onPick={() => {
-              if (i !== s.guitarIndex) chooseGuitar(i);
-              onPicked("guitar");
-            }}
-          />
-        ))}
-        {addGuitar.open && (
-          <Menu at={addGuitar.open.at} naming={0} items={[{ kind: "name", id: "add", label: "New guitar…", initial: "New guitar", confirm: "Add", taken: s.guitars.map((x) => x.name) }]} onPick={(p) => newGuitar(p.text)} onClose={addGuitar.close} />
-        )}
-        <div style={{ height: 14 }} />
-        <ListHead label="Audio" addLabel="New audio rig" onAdd={addRig.fromButton} />
-        {s.rigs.map((r, i) => (
-          <RigRow
-            key={r.id}
-            r={r}
-            index={i}
-            inUse={i === s.rigIndex}
-            shown={tab === "audio" && i === s.rigIndex}
-            onPick={() => {
-              if (i !== s.rigIndex) chooseRig(i);
-              onPicked("audio");
-            }}
-          />
-        ))}
-        {addRig.open && (
-          <Menu at={addRig.open.at} naming={0} items={[{ kind: "name", id: "add", label: "New audio rig — a copy of this one…", initial: "New rig", confirm: "Add", taken: s.rigs.map((x) => x.name) }]} onPick={(p) => newRig(p.text)} onClose={addRig.close} />
-        )}
-        <div style={{ height: 14 }} />
-        <ListHead label="MIDI" />
-        {s.controllers.map((c, i) => {
-          const dev = MIDI_DEVICES.find((d) => d.name === c.device);
-          return (
-            <ListRow
-              key={c.id}
-              inUse={i === s.controllerIndex}
-              shown={tab === "midi" && i === s.controllerIndex}
+        {tab === "guitar" &&
+          s.guitars.map((g, i) => (
+            <GuitarRow
+              key={g.id}
+              g={g}
+              index={i}
+              inUse={i === s.guitarIndex}
+              shown={false}
+              rig={rig}
               onPick={() => {
-                if (i !== s.controllerIndex) chooseController(i);
-                onPicked("midi");
+                if (i !== s.guitarIndex) chooseGuitar(i);
+                onPicked();
               }}
-              lead={<ControllerGlyph switches={dev?.switches ?? 4} on={i === s.controllerIndex} />}
-              title={c.name}
-              sub={`${c.device} · ${dev?.link ?? "USB"}`}
-              menu={<span style={{ width: 44 }} />}
             />
-          );
-        })}
+          ))}
+        {tab === "audio" &&
+          s.rigs.map((r, i) => (
+            <RigRow
+              key={r.id}
+              r={r}
+              index={i}
+              inUse={i === s.rigIndex}
+              shown={false}
+              onPick={() => {
+                if (i !== s.rigIndex) chooseRig(i);
+                onPicked();
+              }}
+            />
+          ))}
+        {tab === "midi" &&
+          s.controllers.map((c, i) => {
+            const dev = MIDI_DEVICES.find((d) => d.name === c.device);
+            return (
+              <ListRow
+                key={c.id}
+                inUse={i === s.controllerIndex}
+                shown={false}
+                onPick={() => {
+                  if (i !== s.controllerIndex) chooseController(i);
+                  onPicked();
+                }}
+                lead={<ControllerGlyph switches={dev?.switches ?? 4} on={i === s.controllerIndex} />}
+                title={c.name}
+                sub={`${c.device} · ${dev?.link ?? "USB"}`}
+                menu={null}
+              />
+            );
+          })}
+        {tab !== "midi" && (
+          <button className="pressable" onClick={add.fromButton} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", minHeight: 52, padding: "0 16px", borderTop: "1px solid var(--rule)", color: "var(--ink-3)", fontSize: 14, fontWeight: 600, textAlign: "left" }}>
+            <Plus />
+            {tab === "guitar" ? "New guitar" : "New audio rig"}
+          </button>
+        )}
+        {add.open &&
+          (tab === "guitar" ? (
+            <Menu at={add.open.at} naming={0} items={[{ kind: "name", id: "add", label: "New guitar…", initial: "New guitar", confirm: "Add", taken: s.guitars.map((x) => x.name) }]} onPick={(p) => newGuitar(p.text)} onClose={add.close} />
+          ) : (
+            <Menu at={add.open.at} naming={0} items={[{ kind: "name", id: "add", label: "New audio rig — a copy of this one…", initial: "New rig", confirm: "Add", taken: s.rigs.map((x) => x.name) }]} onPick={(p) => newRig(p.text)} onClose={add.close} />
+          ))}
+        <div style={{ borderTop: "1px solid var(--rule)" }} />
       </div>
     </aside>
   );
@@ -285,61 +285,66 @@ const khz = (rate: number) => `${(rate / 1000).toLocaleString("en", { maximumFra
 
 // ── The detail: guitar into rig, three tabs ────────────────────────
 
-function SetupDetail({ tab, onTab, onList }: { tab: Tab; onTab: (t: Tab) => void; onList?: () => void }) {
+/** The three tabs, the device's full width: each says what it is and
+ *  what is chosen; the open one, tapped again, brings up its options. */
+function SetupTabs({ tab, options, onTab }: { tab: Tab; options: boolean; onTab: (t: Tab) => void }) {
   const s = useStore();
   const g = currentGuitar(s);
   const r = currentRig(s);
   const c = currentController(s);
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "guitar", label: "Guitar" },
-    { id: "audio", label: "Audio" },
-    { id: "midi", label: "MIDI" },
+  const dev = MIDI_DEVICES.find((d) => d.name === c.device);
+  const tabs: { id: Tab; label: string; lead: ReactNode; name: string; sub: string }[] = [
+    { id: "guitar", label: "Guitar", lead: <GuitarPhoto g={g} size={48} />, name: g.name, sub: overriddenOn(g, r.id).map((k) => TONE_NAME[k]).join(", ") },
+    { id: "audio", label: "Audio", lead: <RigGlyph on />, name: r.name, sub: `${khz(r.audio.rate)} · ${r.audio.buffer} · ${latencyMs(r).toFixed(1)} ms` },
+    { id: "midi", label: "MIDI", lead: <ControllerGlyph switches={dev?.switches ?? 4} on />, name: c.name, sub: `${c.device} · ${dev?.link ?? "USB"}` },
   ];
   return (
-    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
-      <header style={{ flexShrink: 0, minHeight: MACRO_BAR_H, display: "flex", alignItems: "center", gap: 12, padding: "8px 16px", flexWrap: "wrap", borderBottom: "1px solid var(--rule)", background: "var(--sheet)" }}>
-        {onList && <BackButton onList={onList} />}
-        {/* What plays: this guitar, into this rig. */}
-        <span style={{ flex: "1 1 260px", minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
-          <GuitarPhoto g={g} size={44} />
-          <span style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-            <span style={{ fontSize: 17, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.name}</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden" }}>
-              <svg width="14" height="8" viewBox="0 0 14 8" aria-hidden style={{ flexShrink: 0 }}>
-                <path d="M0 4h12M9 1l3 3-3 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                {r.name} · {c.name}
-              </span>
+    <div role="tablist" style={{ flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", height: MACRO_BAR_H, borderBottom: "1px solid var(--rule)", background: "var(--sheet)" }}>
+      {tabs.map((t, i) => {
+        const on = t.id === tab;
+        return (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={on}
+            aria-expanded={on ? options : undefined}
+            onClick={() => onTab(t.id)}
+            className="pressable"
+            style={{ position: "relative", minWidth: 0, display: "flex", alignItems: "center", gap: 12, padding: "0 16px", textAlign: "left", borderLeft: i ? "1px solid var(--rule)" : undefined, background: on ? "rgba(255,255,255,0.05)" : undefined }}
+          >
+            {on && <span aria-hidden style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: 3, background: "var(--ink)" }} />}
+            <span style={{ opacity: on ? 1 : 0.55, display: "flex" }}>{t.lead}</span>
+            <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 750, letterSpacing: "0.08em", textTransform: "uppercase", color: on ? "var(--ink-2)" : "var(--ink-3)" }}>{t.label}</span>
+              <span style={{ fontSize: 17, fontWeight: 750, color: on ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</span>
+              {t.sub && (
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: t.id === "guitar" ? `color-mix(in oklab, ${RIG_COLOUR} 70%, var(--ink))` : "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {t.id === "guitar" && <OverrideIcon colour={RIG_COLOUR} size={11} />}
+                  {t.sub}
+                </span>
+              )}
             </span>
-          </span>
-        </span>
-        {/* Guitar · Audio · MIDI */}
-        <span role="tablist" style={{ display: "flex", alignSelf: "stretch", margin: "-8px 0" }}>
-          {tabs.map((t) => {
-            const on = t.id === tab;
-            return (
-              <button
-                key={t.id}
-                role="tab"
-                aria-selected={on}
-                onClick={() => onTab(t.id)}
-                className={on ? "" : "pressable"}
-                style={{ minWidth: 88, padding: "0 18px", fontSize: 15, fontWeight: on ? 750 : 600, color: on ? "var(--ink)" : "var(--ink-3)", boxShadow: on ? "inset 0 -2px 0 var(--ink)" : undefined }}
-              >
-                {t.label}
-              </button>
-            );
-          })}
-        </span>
-      </header>
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        {tab === "guitar" && <GuitarTab g={g} rig={r} />}
-        {tab === "audio" && <AudioTab r={r} />}
-        {tab === "midi" && <MidiTab c={c} />}
-      </div>
+            {/* The open tab can change what's chosen. */}
+            {on && (
+              <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden style={{ flexShrink: 0, color: "var(--ink-2)", transform: options ? "rotate(180deg)" : undefined }}>
+                <path d="M1 1.5l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
+}
+
+function SetupBody({ tab }: { tab: Tab }) {
+  const s = useStore();
+  const g = currentGuitar(s);
+  const r = currentRig(s);
+  const c = currentController(s);
+  if (tab === "guitar") return <GuitarTab g={g} rig={r} />;
+  if (tab === "audio") return <AudioTab r={r} />;
+  return <MidiTab c={c} />;
 }
 
 // ── Guitar ─────────────────────────────────────────────────────────
@@ -859,15 +864,6 @@ function ControllerGlyph({ switches, on }: { switches: number; on: boolean }) {
   );
 }
 
-function BackButton({ onList }: { onList: () => void }) {
-  return (
-    <button className="pressable" onClick={onList} aria-label="Guitars and rigs" style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink)", borderRadius: "var(--r)", background: "rgba(0,0,0,0.45)" }}>
-      <svg width="9" height="15" viewBox="0 0 9 15" aria-hidden>
-        <path d="M7.5 1.5 1.5 7.5l6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </button>
-  );
-}
 
 
 
