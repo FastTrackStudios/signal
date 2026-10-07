@@ -24,6 +24,7 @@ import { redo, setPerformMode, undo, useStore, useUndo } from "./store";
 import { MuteButton, PanicButton } from "./ui/Safety";
 import { Indicator, SettingsSheet } from "./ui/Settings";
 import { ModeButton } from "./ui/ModeButton";
+import { SetlistStrip } from "./setlist/SetlistStrip";
 import { Cpu, FootButton, Meters, MODES, Placeholder, Rule, type Dock, type View } from "./App";
 import { useSafe } from "./Phone";
 import { useStage } from "./ui/stage";
@@ -109,30 +110,19 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
         </Tab>
           </Rail>
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative", paddingRight: safe.right }}>
-        {macros && dock === "switches" ? (
-          // Both docked: no room left for a view, so the two split the
-          // screen — macros the top half, switches the bottom.
-          <>
-            <div style={{ flex: 1, minHeight: 0, position: "relative", zIndex: 4, borderBottom: "1px solid #000" }}>
-              <MacroBar cols={8} fill />
-            </div>
-            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-              <Switches fill />
-            </div>
-          </>
-        ) : (
-          <>
-            {macros && (
-              <div style={{ flexShrink: 0, position: "relative", zIndex: 4, borderBottom: "1px solid #000" }}>
-                <MacroBar cols={8} />
-              </div>
-            )}
-            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-              <Placeholder title={view} note="Main area" />
-            </div>
-            {dock && <div style={{ flexShrink: 0, borderTop: "1px solid var(--rule)" }}>{dock === "switches" ? <Switches /> : <AudioControls />}</div>}
-          </>
+        {/* The stage: macros and switches at the iPad's sizes, and between
+            them where you are in the set — the song, its sections, the
+            part. The view takes what room is left, if any. */}
+        {macros && (
+          <div style={{ flexShrink: 0, position: "relative", zIndex: 4, borderBottom: "1px solid #000" }}>
+            <MacroBar cols={8} />
+          </div>
         )}
+        <SetlistStrip />
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <Placeholder title={view} note="Main area" />
+        </div>
+        {dock && <div style={{ flexShrink: 0, borderTop: "1px solid var(--rule)" }}>{dock === "switches" ? <Switches /> : <AudioControls />}</div>}
         {/* Landscape: the setlist slides in over the stage. */}
         {landscape && setlist && (
           <>
@@ -228,7 +218,7 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
       <Indicator kind="midi" compact />
       <Indicator kind="audio" compact />
       <Cpu />
-      <Meters width={safe.landscape ? 120 : 54} />
+      <Meters />
       <MuteButton size={32} />
     </header>
   );
@@ -250,8 +240,8 @@ function Rail({ onMenu, children }: { onMenu: () => void; children: ReactNode })
       <PanicButton size={34} rail />
       <div className="rail" style={{ display: "flex", flexDirection: "column" }}>{children}</div>
       <span style={{ flex: 1 }} />
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, paddingTop: 4 }}>
-        <Meters width={58} />
+      <div style={{ height: 52, display: "flex", justifyContent: "center" }}>
+        <Meters />
       </div>
       <MuteButton size={40} rail />
       <style>{`.rail > span > button { margin: 1px 4px !important; min-width: 0 !important; flex: 1; padding: 0 !important } .rail > span[aria-hidden] { width: 36px !important; height: 1px !important; align-self: center; margin: 4px 0 }`}</style>

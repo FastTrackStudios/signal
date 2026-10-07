@@ -314,7 +314,7 @@ function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => voi
       <Indicator kind="audio" />
       <Cpu />
       <Rule />
-      <Meters width={128} />
+      <Meters />
       <Rule />
       <MuteButton />
     </header>
@@ -356,76 +356,66 @@ export function Cpu() {
   // Green while easy, amber from 60%, red from 85% (where xruns start).
   const tone = cpu >= 85 ? "var(--void)" : cpu >= 60 ? "var(--modified)" : "var(--ink-3)";
   return (
-    <span title={`DSP load on the rig: ${cpu}%`} style={{ display: "flex", alignItems: "center", gap: 3, padding: "0 6px", fontSize: 11.5, fontWeight: 700, color: tone }}>
-      <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+    <span title={`DSP load on the rig: ${cpu}%`} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, padding: "0 6px", fontSize: 10, fontWeight: 750, lineHeight: 1, color: tone }}>
+      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden>
         <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
         <rect x="6" y="6" width="4" height="4" rx="0.5" fill="currentColor" />
         <path d="M6 1.5v2M10 1.5v2M6 12.5v2M10 12.5v2M1.5 6h2M1.5 10h2M12.5 6h2M12.5 10h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
       </svg>
-      <span className="num" style={{ minWidth: 22 }}>{cpu}%</span>
+      <span className="num">{cpu}%</span>
     </span>
   );
 }
 
-/** IN, OUT and PHONES, as big as their spot allows: no padding, three
- *  bars filling the bar's height, as wide as given. OUT is covered while
- *  the house is muted (MUTE HOUSE; MUTED when fully muted), PH while your
- *  guitar is out of the phones; all go flat while Panic resets. Simulated
- *  here; the rig streams peaks. */
-export function Meters({ width = 96 }: { width?: number }) {
+/** IN, OUT and PHONES as three slim upright bars: not a meter to read,
+ *  just signal moving and how loud — clipping turns the top red. A muted
+ *  output's bar goes red and still; all go flat while Panic resets. Labels
+ *  underneath. Simulated here; the rig streams peaks. */
+export function Meters() {
   const s = useStore();
-  const [lv, setLv] = useState({ i: 0.4, o: 0.5, p: 0.45, ih: 0.4, oh: 0.5, ph: 0.45 });
+  const [lv, setLv] = useState({ i: 0.4, o: 0.5, p: 0.45 });
   const raf = useRef(0);
   useEffect(() => {
     let t = 0;
-    let hold = { i: 0, o: 0, p: 0, at: 0 };
     const tick = () => {
       t += 1;
       const strum = Math.max(0, Math.sin(t / 22)) ** 3;
-      const i = Math.min(1, 0.25 + 0.55 * strum + Math.random() * 0.08);
-      const o = Math.min(1, 0.3 + 0.5 * strum + Math.random() * 0.06);
-      const p = Math.min(1, 0.28 + 0.45 * strum + Math.random() * 0.06);
-      const stale = t - hold.at > 60;
-      if (i > hold.i || o > hold.o || p > hold.p || stale) hold = { i: Math.max(i, stale ? 0 : hold.i), o: Math.max(o, stale ? 0 : hold.o), p: Math.max(p, stale ? 0 : hold.p), at: t };
-      setLv({ i, o, p, ih: hold.i, oh: hold.o, ph: hold.p });
+      setLv({
+        i: Math.min(1, 0.25 + 0.55 * strum + Math.random() * 0.08),
+        o: Math.min(1, 0.3 + 0.5 * strum + Math.random() * 0.06),
+        p: Math.min(1, 0.28 + 0.45 * strum + Math.random() * 0.06),
+      });
       raf.current = requestAnimationFrame(tick);
     };
     if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) raf.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf.current);
   }, []);
   const reset = s.panicAt !== null;
-  const full = s.houseMute && s.phonesMute;
   return (
-    <div style={{ alignSelf: "stretch", width, flexShrink: 0, display: "flex", flexDirection: "column", gap: 2, padding: "4px 0" }}>
-      <MiniMeter label="IN" level={reset ? 0 : lv.i} hold={reset ? 0 : lv.ih} />
-      <MiniMeter label="OUT" level={reset ? 0 : lv.o} hold={reset ? 0 : lv.oh} cover={s.houseMute ? (full ? "MUTED" : "MUTE HOUSE") : undefined} />
-      <MiniMeter label="PH" level={reset ? 0 : lv.p} hold={reset ? 0 : lv.ph} cover={s.phonesMute ? "MUTED" : undefined} />
+    <div title="IN · OUT · PHONES" style={{ alignSelf: "stretch", flexShrink: 0, display: "flex", gap: 5, padding: "6px 8px 4px" }}>
+      <MiniMeter label="IN" level={reset ? 0 : lv.i} />
+      <MiniMeter label="OUT" level={reset ? 0 : lv.o} muted={s.houseMute} />
+      <MiniMeter label="PH" level={reset ? 0 : lv.p} muted={s.phonesMute} />
     </div>
   );
 }
 
-/** One meter: its label inside the bar's left end, the bar filling the row. */
-export function MiniMeter({ label, level, hold, cover }: { label: string; level: number; hold: number; cover?: string }) {
+export function MiniMeter({ label, level, muted }: { label: string; level: number; muted?: boolean }) {
   return (
-    <div title={cover ? `${label}: ${cover}` : label} style={{ position: "relative", flex: 1, minHeight: 0, borderRadius: 2, overflow: "hidden", background: cover ? "var(--void)" : "#08080a" }}>
-      {cover ? (
-        <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7.5, fontWeight: 800, letterSpacing: "0.1em", color: "#1a0505", whiteSpace: "nowrap" }}>{cover}</span>
-      ) : (
-        <>
-          {/* The full scale, revealed up to the level: green, then amber, red at the top. */}
+    <div title={muted ? `${label} muted` : label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minHeight: 0 }}>
+      <span style={{ position: "relative", flex: 1, width: 6, minHeight: 0, borderRadius: 3, overflow: "hidden", background: muted ? "color-mix(in oklab, var(--void) 55%, #000)" : "#08080a" }}>
+        {!muted && (
           <span
             style={{
               position: "absolute",
               inset: 0,
-              background: "linear-gradient(90deg, #15803d 0%, var(--live) 65%, #eab308 85%, var(--void) 100%)",
-              clipPath: `inset(0 ${(1 - level) * 100}% 0 0)`,
-              opacity: 0.9,
+              background: "linear-gradient(0deg, #15803d 0%, var(--live) 60%, #eab308 82%, var(--void) 100%)",
+              clipPath: `inset(${(1 - level) * 100}% 0 0 0)`,
             }}
           />
-          {hold > 0.02 && <span style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${hold * 100}% - 1px)`, width: 2, background: hold > 0.92 ? "var(--void)" : "var(--ink)" }} />}
-          <span style={{ position: "absolute", left: 4, top: 0, bottom: 0, display: "flex", alignItems: "center", fontSize: 7.5, fontWeight: 800, letterSpacing: "0.08em", color: "rgba(255,255,255,0.85)", textShadow: "0 0 2px #000" }}>{label}</span>
-        </>
-      )}
+        )}
+      </span>
+      <span style={{ fontSize: 6.5, fontWeight: 800, letterSpacing: "0.04em", lineHeight: 1, color: muted ? "var(--void)" : "var(--ink-3)" }}>{label}</span>
     </div>
   );
 }
