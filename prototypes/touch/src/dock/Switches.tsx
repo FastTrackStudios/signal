@@ -64,12 +64,11 @@ export function Switches({ vertical }: { vertical?: boolean } = {}) {
   ];
   if (vertical) {
     // The phone upright: the board turned a quarter — a row per footswitch,
-    // the switch under the foot wide on the right, its hold beside it on the
-    // left (still "up" from the toe, turned with the board). Rows share the
-    // height they are given.
+    // the switch under the foot wide on the left, its hold beside it on the
+    // right. Rows share the height they are given.
     return (
-      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "minmax(0, 34fr) minmax(0, 66fr)", gridTemplateRows: "repeat(5, minmax(0, 1fr))", gap: 1, background: "#000" }}>
-        {mains.flatMap((m, i) => [holds[i], m])}
+      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "minmax(0, 66fr) minmax(0, 34fr)", gridTemplateRows: "repeat(5, minmax(0, 1fr))", gap: 1, background: "#000" }}>
+        {mains.flatMap((m, i) => [m, holds[i]])}
       </div>
     );
   }

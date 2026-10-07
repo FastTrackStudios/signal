@@ -117,7 +117,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
         {landscape && setlist && (
           <>
             <button aria-label="Close the setlist" onClick={() => setSetlist(false)} style={{ position: "absolute", inset: 0, zIndex: 9, background: "rgba(0,0,0,0.5)" }} />
-            <div style={{ position: "absolute", top: 0, bottom: 0, left: safe.left, width: 402, zIndex: 10, display: "flex", flexDirection: "column", borderRight: "1px solid var(--rule-strong)", boxShadow: "16px 0 40px rgba(0,0,0,0.5)", animation: "drawer-in 200ms var(--ease) both" }}>
+            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 402, zIndex: 10, display: "flex", flexDirection: "column", borderRight: "1px solid var(--rule-strong)", boxShadow: "16px 0 40px rgba(0,0,0,0.5)", animation: "drawer-in 200ms var(--ease) both" }}>
               <Setlist />
             </div>
           </>
@@ -232,13 +232,14 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
 }
 
 /** Landscape's rail: the menu at the top, the views and docks, then the
- *  status at the foot — health, meters, the house mute. Its background runs
- *  to the screen's edge; its buttons sit inside the safe area. */
+ *  status at the foot — health, meters, the house mute. It hugs the left
+ *  edge (the island is on the right; this side's inset is only the
+ *  corners'), its ends kept in from the rounded corners. */
 function Rail({ onMenu, children }: { onMenu: () => void; children: ReactNode }) {
   const s = useStore();
   const safe = useSafe();
   return (
-    <nav style={{ flexShrink: 0, width: safe.left + 66, paddingLeft: safe.left, paddingBottom: safe.bottom, display: "flex", flexDirection: "column", alignItems: "stretch", borderRight: "1px solid var(--rule)", background: "var(--sheet)" }}>
+    <nav style={{ flexShrink: 0, width: 74, paddingLeft: 8, paddingTop: 14, paddingBottom: safe.bottom, display: "flex", flexDirection: "column", alignItems: "stretch", borderRight: "1px solid var(--rule)", background: "var(--sheet)" }}>
       <button aria-label="Menu" onClick={onMenu} className="pressable" style={{ height: 44, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)" }}>
         <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
           <path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -282,9 +283,11 @@ function SideMenu({ offset, view, onView, onClose }: { offset: number; view: Vie
           top: 0,
           bottom: 0,
           left: 0,
-          width: MENU_W + safe.left,
+          // Landscape: the island is on the right, so this edge needs only a
+          // little room for the corner.
+          width: MENU_W + (safe.landscape ? 8 : safe.left),
           paddingTop: safe.top,
-          paddingLeft: safe.left,
+          paddingLeft: safe.landscape ? 8 : safe.left,
           paddingBottom: safe.bottom,
           display: "flex",
           flexDirection: "column",
