@@ -1045,19 +1045,18 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
       const current = song ? (s.songProfiles[song.name] ?? null) : (set.profile ?? null);
       const fallback = song ? profileOf({ ...s, songProfiles: {} }, song.name) : profileOf({ ...s, setlists: s.setlists.map((l) => ({ ...l, profile: undefined })) }, undefined);
       title = song ? song.name : "Default profile";
-      sub = song ? "The profile it plays on" : "Every song in the set plays on it, unless it has its own";
+      sub = "";
       body = (
         <div style={{ display: "flex", flexDirection: "column" }}>
           <ProfileCell
-            name={song ? `The set's — ${fallback.name}` : `The rig's — ${fallback.name}`}
+            name={song ? "Setlist default" : "Rig default"}
+            of={fallback.name}
             profile={rig.library.profiles.find((x) => x.name === fallback.name)}
             on={current === null}
             onClick={() => (song ? setSongProfile(song.name, null) : setSetProfile(null))}
           />
-          <div className="t-label" style={{ color: "var(--ink-3)", padding: "16px 16px 6px", borderBottom: "1px solid var(--rule)" }}>
-            {song ? "Its own" : "Profiles"}
-          </div>
-          {rig.library.profiles.map((p) => (
+          {/* The one picked leads, right under the default; the rest follow. */}
+          {[...rig.library.profiles].sort((a, b) => Number(b.name === current) - Number(a.name === current)).map((p) => (
             <ProfileCell
               key={p.name}
               name={p.name}
@@ -1155,9 +1154,11 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
         <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px 10px 18px", borderBottom: "1px solid var(--rule)" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 18, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
-            <div className="t-meta" style={{ fontSize: 13 }}>
-              {sub}
-            </div>
+            {sub && (
+              <div className="t-meta" style={{ fontSize: 13 }}>
+                {sub}
+              </div>
+            )}
           </div>
           <Button onClick={onClose}>Done</Button>
         </header>
@@ -1255,7 +1256,7 @@ function PatchList({ song, current, defaultLabel, onPick }: { song?: string; cur
  *  drawn small at the right — one thin bar each, in the stack's colour, as
  *  tall as the stack is full. Rows run flush, hairlines between; the one
  *  picked is lifted. */
-function ProfileCell({ name, profile, colour, on, onClick }: { name: string; profile?: ProfileEntry; colour?: string; on: boolean; onClick: () => void }) {
+function ProfileCell({ name, of, profile, colour, on, onClick }: { name: string; of?: string; profile?: ProfileEntry; colour?: string; on: boolean; onClick: () => void }) {
   const stacks = profile ? profile.stacks.map((st) => ({ name: st, count: profile.patch_list.filter((x) => x.stack === st).length })).filter((x) => x.count > 0) : [];
   const most = Math.max(1, ...rig.library.profiles.flatMap((p) => p.stacks.map((st) => p.patch_list.filter((x) => x.stack === st).length)));
   const total = stacks.reduce((n, x) => n + x.count, 0);
@@ -1288,13 +1289,21 @@ function ProfileCell({ name, profile, colour, on, onClick }: { name: string; pro
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
         <span style={{ fontSize: 16, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)" }}>{name}</span>
         <span className="t-meta" style={{ fontSize: 12.5 }}>
+          {of && <b style={{ color: "var(--ink-2)", fontWeight: 650 }}>{of} · </b>}
           {stacks.length} stacks · {total} patches
         </span>
       </span>
-      <span aria-label={stacks.map((x) => `${x.name} ${x.count}`).join(", ")} style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 28, flexShrink: 0 }}>
+      {/* One column per stack, one block per patch: count them. */}
+      <span aria-label={stacks.map((x) => `${x.name} ${x.count}`).join(", ")} style={{ display: "flex", alignItems: "flex-end", gap: 3, height: most * 5, flexShrink: 0 }}>
         {stacks.map((x) => {
           const tape = tapeFor(x.name) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(x.name);
-          return <span key={x.name} title={`${x.name} · ${x.count}`} style={{ width: 4, height: Math.max(4, Math.round((x.count / most) * 28)), borderRadius: 1.5, background: tape, opacity: on ? 1 : 0.75 }} />;
+          return (
+            <span key={x.name} title={`${x.name} · ${x.count}`} style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              {Array.from({ length: x.count }, (_, k) => (
+                <span key={k} style={{ width: 6, height: 4, borderRadius: 1, background: tape, opacity: on ? 1 : 0.75 }} />
+              ))}
+            </span>
+          );
         })}
       </span>
     </button>
