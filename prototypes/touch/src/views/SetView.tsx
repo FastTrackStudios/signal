@@ -63,7 +63,7 @@ function SetSheet() {
 
   return (
     <section className="sheet" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-      <header style={{ padding: "18px 14px 14px 20px", borderBottom: "2px solid var(--ink)", display: "flex", gap: 10, alignItems: "flex-start" }}>
+      <header style={{ padding: "18px 14px 14px 20px", borderBottom: "1px solid var(--rule-strong)", display: "flex", gap: 10, alignItems: "flex-start" }}>
         <button onClick={() => setSheet("sets")} style={{ flex: 1, minWidth: 0, textAlign: "left" }} title="Choose a set">
           <h1 className="t-marker" style={{ margin: 0, fontSize: 30 }}>
             {set.name}
@@ -97,7 +97,7 @@ function SetSheet() {
               >
                 <span className="num" style={{ position: "relative", width: 28, textAlign: "center", fontSize: 18, fontWeight: 760, color: played ? "var(--ink-3)" : "var(--ink)" }}>
                   {i + 1}
-                  {up && <Circle inset={-9} />}
+                  {up && <Circle />}
                 </span>
                 <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
                   <span
@@ -107,7 +107,6 @@ function SetSheet() {
                       maxWidth: "100%",
                       fontSize: 20,
                       fontWeight: up ? 860 : 720,
-                      fontStretch: "104%",
                       color: played ? "var(--ink-3)" : "var(--ink)",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
@@ -193,7 +192,7 @@ function SetsSheet({ onClose }: { onClose: () => void }) {
           value={naming}
           onChange={(e) => setNaming(e.target.value)}
           placeholder="New set — e.g. Sunday 10-12"
-          style={{ flex: 1, minWidth: 0, minHeight: 48, padding: "0 12px", border: "2px solid var(--ink)", borderRadius: "var(--r)", fontSize: 16 }}
+          style={{ flex: 1, minWidth: 0, minHeight: 48, padding: "0 12px", border: "1px solid var(--rule-strong)", borderRadius: "var(--r)", fontSize: 16 }}
         />
         <Button
           primary
@@ -224,7 +223,7 @@ function AddSongsSheet({ onClose }: { onClose: () => void }) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Find a song"
-          style={{ width: "100%", minHeight: 48, padding: "0 14px", border: "2px solid var(--ink)", borderRadius: "var(--r)", fontSize: 17 }}
+          style={{ width: "100%", minHeight: 48, padding: "0 14px", border: "1px solid var(--rule-strong)", borderRadius: "var(--r)", fontSize: 17 }}
         />
       </div>
       <div className="ruled">
@@ -312,7 +311,7 @@ function SongPage() {
                   minHeight: 84,
                   textAlign: "left",
                   background: "var(--sheet)",
-                  border: on ? "3px solid var(--ink)" : "1px solid var(--rule-strong)",
+                  border: on ? "2px solid var(--focus-fg)" : "1px solid var(--rule-strong)",
                   borderRadius: "var(--r)",
                   padding: on ? "0 10px 10px" : "2px 12px 12px",
                   display: "flex",
@@ -323,7 +322,7 @@ function SongPage() {
                 <span style={{ height: 10, margin: on ? "0 -10px 4px" : "-2px -12px 4px", background: tape }} />
                 <span style={{ position: "relative", alignSelf: "flex-start", fontSize: 18, fontWeight: 840 }}>
                   {sec.name}
-                  {now && <Circle inset={-7} />}
+                  {now && <Circle />}
                 </span>
                 <span className="t-meta" style={{ fontSize: 14, color: sec.sound ? "var(--ink-2)" : "var(--ink-3)" }}>
                   {sec.sound ? sec.sound.name : "keeps what plays"}
@@ -359,7 +358,7 @@ function SongPage() {
 
 function Stepper({ value, unit, onChange }: { value: number; unit: string; onChange: (v: number) => void }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", border: "2px solid var(--ink)", borderRadius: 2, height: 48 }}>
+    <div style={{ display: "flex", alignItems: "center", border: "1px solid var(--rule-strong)", borderRadius: 2, height: 48 }}>
       <button aria-label={`Lower ${unit}`} onClick={() => onChange(Math.max(30, value - 1))} style={{ width: 44, height: "100%", fontSize: 22, fontWeight: 700 }}>
         −
       </button>
@@ -385,7 +384,7 @@ function SoundPicker({ sectionName, current, onPick }: { sectionName: string; cu
   const s = useStore();
   const presets = s.presets.filter((p) => !p.cancelled);
   return (
-    <div style={{ borderTop: "2px solid var(--ink)", background: "var(--sheet-2)" }}>
+    <div style={{ borderTop: "1px solid var(--rule-strong)", background: "var(--sheet-2)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 22px 10px", flexWrap: "wrap" }}>
         <h3 style={{ margin: 0, fontSize: 20, fontWeight: 840 }}>{sectionName} plays</h3>
         <Tabs
@@ -455,7 +454,7 @@ function PickCell({ title, sub, on, onClick }: { title: string; sub?: string; on
         padding: "8px 12px",
         textAlign: "left",
         background: "var(--sheet)",
-        border: on ? "3px solid var(--ink)" : "1px solid var(--rule-strong)",
+        border: on ? "2px solid var(--focus-fg)" : "1px solid var(--rule-strong)",
         borderRadius: "var(--r)",
         display: "flex",
         flexDirection: "column",

@@ -53,7 +53,7 @@ export function App() {
             display: "inline-flex",
             alignItems: "center",
             gap: 8,
-            border: `2px solid ${depth ? "var(--ink)" : "var(--rule-strong)"}`,
+            border: "1px solid var(--rule-strong)",
             borderRadius: "var(--r)",
             color: depth ? "var(--ink)" : "var(--ink-3)",
             fontWeight: 780,

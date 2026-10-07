@@ -56,7 +56,7 @@ export function SoundsView() {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(320px, 34%) 1fr", gap: 14, padding: 14, height: "100%", minHeight: 0 }}>
       <section className="sheet" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-        <div style={{ padding: "12px 10px 10px", borderBottom: "2px solid var(--ink)" }}>
+        <div style={{ padding: "12px 10px 10px", borderBottom: "1px solid var(--rule-strong)" }}>
           <Tabs
             options={KINDS.map((k) => ({ id: k, label: k, count: counts[k] }))}
             value={kind}
@@ -92,7 +92,7 @@ export function SoundsView() {
                   <span style={{ position: "relative", alignSelf: "flex-start", fontSize: 18, fontWeight: on ? 860 : 720, color: r.cancelled ? "var(--ink-3)" : undefined }}>
                     {r.name}
                     {r.cancelled && <Strike tone="var(--void)" />}
-                    {on && !r.cancelled && <Circle inset={-7} />}
+                    {on && !r.cancelled && <Circle tone="focus" />}
                   </span>
                   <span className="t-meta" style={{ fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {r.cancelled ? "Deleted — Undo or Restore brings it back" : r.sub}
@@ -115,7 +115,7 @@ export function SoundsView() {
                   value={naming}
                   onChange={(e) => setNaming(e.target.value)}
                   placeholder="Name it — e.g. Washed Pad"
-                  style={{ flex: 1, minWidth: 0, minHeight: 48, padding: "0 12px", border: "2px solid var(--ink)", borderRadius: "var(--r)", fontSize: 16 }}
+                  style={{ flex: 1, minWidth: 0, minHeight: 48, padding: "0 12px", border: "1px solid var(--rule-strong)", borderRadius: "var(--r)", fontSize: 16 }}
                 />
                 <Button
                   primary
@@ -203,7 +203,7 @@ function PresetPage({ preset, onRenamed }: { preset?: PresetState; onRenamed: (n
               value={renaming}
               onChange={(e) => setRenaming(e.target.value)}
               className="t-marker"
-              style={{ fontSize: 40, width: "100%", border: "none", borderBottom: "3px solid var(--ink)", outline: "none", background: "transparent" }}
+              style={{ fontSize: 40, width: "100%", border: "none", borderBottom: "2px solid var(--focus-fg)", outline: "none", background: "transparent" }}
             />
           )}
           <div className="t-meta" style={{ marginTop: 6 }}>
@@ -292,7 +292,7 @@ function PresetPage({ preset, onRenamed }: { preset?: PresetState; onRenamed: (n
                           style={{
                             minHeight: 44,
                             padding: "0 12px",
-                            border: on ? "3px solid var(--ink)" : "1px solid var(--rule-strong)",
+                            border: on ? "2px solid var(--focus-fg)" : "1px solid var(--rule-strong)",
                             borderRadius: "var(--r)",
                             fontWeight: on ? 840 : 620,
                             fontSize: 15,
@@ -447,7 +447,7 @@ function ModulePickSheet({ module, current, onPick, onClose }: { module: string;
                   style={{
                     minHeight: 44,
                     padding: "0 14px",
-                    border: on ? "3px solid var(--ink)" : "1px solid var(--rule-strong)",
+                    border: on ? "2px solid var(--focus-fg)" : "1px solid var(--rule-strong)",
                     borderRadius: "var(--r)",
                     fontWeight: on ? 840 : 620,
                     fontSize: 15,
@@ -495,7 +495,7 @@ function ModulePage({ module }: { module?: ModulePreset }) {
             </button>
           ))}
         </div>
-        <div className="ruled" style={{ borderTop: "2px solid var(--ink)", borderBottom: "1px solid var(--rule)" }}>
+        <div className="ruled" style={{ borderTop: "1px solid var(--rule-strong)", borderBottom: "1px solid var(--rule)" }}>
           {(info?.modules ?? []).map((m) => (
             <RecipeRow key={m.module} label={m.module} detail="Module" value={`${m.preset} · ${m.snapshot}`} />
           ))}
@@ -526,7 +526,7 @@ function BlockTypePage({ type }: { type: string }) {
   const list = BLOCKS.get(type) ?? [];
   return (
     <section className="sheet" style={{ display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
-      <header style={{ padding: "18px 22px 14px", borderBottom: "2px solid var(--ink)" }}>
+      <header style={{ padding: "18px 22px 14px", borderBottom: "1px solid var(--rule-strong)" }}>
         <h2 className="t-marker" style={{ margin: 0, fontSize: 44 }}>
           {cap(type)} presets
         </h2>

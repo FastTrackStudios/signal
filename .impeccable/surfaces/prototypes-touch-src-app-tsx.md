@@ -24,14 +24,14 @@ settings forms).
 
 ## Direction contract
 
-THESIS: Every set, song and sound reads like the setlist gaffer-taped at your feet — huge, legible at arm's length, struck through as it's played. It refuses the dark modeller tile grid and the SaaS sidebar-and-cards.
+THESIS: The Signal app's own world, made for touch and polished — the user chose to keep "the same vibe and theme as the old one" (2026-10-06) over the floor-setlist world. Structure and touch layouts from the prototype stay; the look is the incumbent app's.
 
-OWN-WORLD: Bright copy-paper sheets on a cool off-white desk, one heavy grotesk (Archivo, wide/condensed axis) as the marker voice, hairline-ruled grid under everything. Fluoro gaffer-tape colours carry the stacks (Clean cyan, Crunch violet, Drive orange, Lead pink-red, Ambient green, Special yellow); one ballpoint ultramarine is reserved for the live signal path. Marker strikes and circles are the only hand-drawn marks. Tabular numerals for every value.
+OWN-WORLD: The app's dark zinc greys (theme.rs: ground #0e0e11, panes, hairlines #222228/#2b2b31, ink #e4e4e7/#a1a1aa/#80808a), its stack colours (perform::folder_color) as tinted chips with a swatch, green for what plays (#22c55e), blue for what is picked (#1b2331 / #bfdbfe), primary blue buttons, the pick pressed into the bar (theme::PRESSED). System sans; tabular numerals; strikes for what is out or done.
 
-STORY: The player opens to tonight's set, sees where the band is, taps a song's section and gives it a sound from big taped lists; builds a preset from Core, Time and blocks with its variations; finds anything in the library grid; undoes what they don't like.
+STORY: Unchanged — tonight's set, give a section its sound, build presets from Core + Time + blocks with variations, find anything in the library, work the chain by touch in Routing, Undo anything.
 
-FIRST VIEWPORT: Top bar (56px): wordmark, mode tabs Set · Sounds · Library · Routing, profile, Undo, audio status. Left 38%: the set sheet — title in marker weight, songs as 64px rows (number, name, key tape, BPM), played ones struck, the current circled. Right 62%: the song up — title huge, key/BPM, its form as taped section tabs; the tapped section's sound picker beneath. Primary action: tap a section, tap a sound.
+FIRST VIEWPORT: Unchanged — bar (modes, profile, Undo, demo status); set sheet left 38%; the song up right with its sections and the picker; chain strip along the bottom.
 
-FORM: Floor Setlist (gaffer-taped Sharpie setlist), position 3 of 7 on the grounded list; seed key 85132dfe. Raises: hairline-ruled grid (design annual); nothing vanishes, it cancels (ticket wallet); one reserved colour for the live path (orienteering); tabular numerals (datamatics); whole-cell library grid with circled picks (circle catalog).
+FORM: Incumbent world inherited (user-pinned); the earlier roll (seed 85132dfe, Floor Setlist) is superseded.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

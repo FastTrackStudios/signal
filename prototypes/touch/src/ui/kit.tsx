@@ -23,7 +23,7 @@ export function SideSheet({
       <button
         aria-label="Close"
         onClick={onClose}
-        style={{ position: "absolute", inset: 0, background: "rgba(18,18,18,0.22)", cursor: "default" }}
+        style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", cursor: "default" }}
       />
       <section
         className="sheet"
@@ -84,10 +84,10 @@ export function Button({
         minHeight: "var(--hit)",
         padding: "0 18px",
         borderRadius: "var(--r)",
-        border: `2px solid ${disabled ? "var(--rule-strong)" : "var(--ink)"}`,
-        background: primary ? "var(--ink)" : "var(--sheet)",
+        border: `1px solid ${primary && !disabled ? "var(--primary)" : "var(--rule-strong)"}`,
+        background: primary && !disabled ? "var(--primary)" : "transparent",
         color: disabled ? "var(--ink-3)" : primary ? "#fff" : "var(--ink)",
-        fontWeight: 760,
+        fontWeight: 650,
         fontSize: 15,
         whiteSpace: "nowrap",
         cursor: disabled ? "default" : "pointer",
@@ -131,11 +131,11 @@ export function Tabs<T extends string>({
             style={{
               minHeight: size === "lg" ? 48 : 40,
               padding: size === "lg" ? "0 18px" : "0 13px",
-              borderRadius: 2,
-              background: on ? "var(--tape-gaffer)" : "transparent",
-              color: on ? "#fff" : "var(--ink-2)",
-              fontWeight: on ? 800 : 650,
-              fontStretch: "96%",
+              borderRadius: "var(--r)",
+              background: on ? "var(--pressed-bg)" : "transparent",
+              boxShadow: on ? "var(--pressed-shadow)" : undefined,
+              color: on ? "#fafafa" : "var(--ink-2)",
+              fontWeight: on ? 700 : 560,
               fontSize: size === "lg" ? 17 : 15,
               whiteSpace: "nowrap",
               display: "inline-flex",
@@ -169,10 +169,11 @@ export function KeyBox({ k, big }: { k: string; big?: boolean }) {
         minWidth: big ? 44 : 30,
         height: big ? 44 : 28,
         padding: "0 6px",
-        border: "2px solid var(--ink)",
-        borderRadius: 2,
-        fontWeight: 800,
-        fontSize: big ? 22 : 15,
+        border: "1px solid var(--rule-strong)",
+        borderRadius: 4,
+        fontWeight: 650,
+        color: "var(--ink-2)",
+        fontSize: big ? 20 : 14,
         flexShrink: 0,
       }}
     >

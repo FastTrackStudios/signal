@@ -1,43 +1,58 @@
-@import "@fontsource-variable/archivo/standard.css";
 
-/* Signal Touch — the floor setlist world.
-   Paper sheets on a cool desk, one heavy grotesk as the marker voice, fluoro
-   gaffer tape for the stacks, one ballpoint blue kept for the live signal path.
-   Every value is a token: the Dioxus port reads these, not the components. */
+/* Signal Touch — the Signal app's own world, made for touch: its dark zinc
+   greys, its stack colours, green for what plays, blue for what's picked,
+   the pick pressed into the bar. Every value is a token: the Dioxus port
+   reads these (theme.rs holds the same), not the components. */
 
 :root {
-  --desk: #e9ece9;
-  --sheet: #ffffff;
-  --sheet-2: #f6f7f5;
-  --rule: #dcdfda;
-  --rule-strong: #b9bdb6;
-  --ink: #121212;
-  --ink-2: #3d3f43;
-  --ink-3: #64666c;
+  /* The Signal app's own greys (crates/signal/widgets/src/theme.rs). */
+  --desk: #0a0a0c;
+  --sheet: #0e0e11;
+  --sheet-2: #141418;
+  --field: #0a0a0d;
+  --rule: #222228;
+  --rule-strong: #2b2b31;
+  --ink: #e4e4e7;
+  --ink-2: #a1a1aa;
+  --ink-3: #80808a;
+  --dim: #3f3f46;
 
-  /* Gaffer tape: one colour per stack, black ink on every one of them. */
-  --tape-clean: #19c3ff;
-  --tape-crunch: #9b7bff;
-  --tape-drive: #ff8a00;
-  --tape-lead: #ff3b5c;
-  --tape-ambient: #1ed98d;
-  --tape-special: #ffd60a;
-  --tape-gaffer: #2a2b2f;
+  /* Stack colours, as the perform grid paints them (perform::folder_color). */
+  --tape-clean: #38bdf8;
+  --tape-crunch: #2563eb;
+  --tape-drive: #f97316;
+  --tape-lead: #ef4444;
+  --tape-ambient: #06b6d4;
+  --tape-special: #71717a;
+  --tape-gaffer: #1d1d22;
 
-  /* Reserved: the live signal path in Routing, and nothing else. */
-  --path: #2433ff;
+  /* States: playing (green), selected (blue), edited, danger. */
+  --live: #22c55e;
+  --live-bg: rgba(34, 197, 94, 0.12);
+  --focus-bg: #1b2331;
+  --focus-fg: #bfdbfe;
+  --primary: #2563eb;
+  --modified: #f59e0b;
+  --void: #f87171;
 
-  --marker: #121212;
-  /* The row that is up now (the song, the picked preset): a pale marker wash. */
-  --up: #fffbe0;
-  --void: #d7263d;
+  /* The live signal path in Routing: the playing green. */
+  --path: #22c55e;
 
-  --r: 4px;
-  --bar-h: 60px;
+  --marker: #a1a1aa;
+  /* The row that is up now. */
+  --up: #1b2331;
+
+  /* The bar's pick: pressed into its surface (theme::PRESSED). */
+  --pressed-bg: rgba(0, 0, 0, 0.5);
+  --pressed-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.75), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+
+  --r: 6px;
+  --r-md: 8px;
+  --bar-h: 56px;
   --strip-h: 104px;
   --hit: 48px;
 
-  --font: "Archivo Variable", "Archivo", system-ui, sans-serif;
+  --font: -apple-system, "SF Pro Text", system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -66,8 +81,8 @@ body {
 }
 
 ::selection {
-  background: var(--tape-special);
-  color: var(--ink);
+  background: var(--primary);
+  color: #fff;
 }
 
 button {
@@ -82,8 +97,17 @@ button {
 
 button:focus-visible,
 input:focus-visible {
-  outline: 3px solid var(--ink);
+  outline: 2px solid var(--focus-fg);
   outline-offset: 2px;
+}
+
+input {
+  background: var(--field);
+  color: var(--ink);
+}
+
+input::placeholder {
+  color: var(--ink-3);
 }
 
 input {
@@ -94,30 +118,28 @@ input {
 /* Thin scrollbars that belong to the sheet, not the browser. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--rule-strong) transparent;
+  scrollbar-color: var(--dim) transparent;
 }
 
 /* ── Type voices ─────────────────────────────────────────────────────── */
 
 .t-marker {
-  font-weight: 860;
-  font-stretch: 112%;
-  letter-spacing: -0.015em;
-  line-height: 1.02;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
 }
 
 .t-label {
-  font-weight: 760;
-  font-stretch: 78%;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  font-size: 13px;
+  letter-spacing: 0.1em;
+  font-size: 12px;
 }
 
 .t-meta {
   font-size: 14px;
   color: var(--ink-3);
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .num {
@@ -157,8 +179,7 @@ input {
 .sheet {
   background: var(--sheet);
   border: 1px solid var(--rule);
-  border-radius: var(--r);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 6px 16px -10px rgba(0, 0, 0, 0.18);
+  border-radius: var(--r-md);
 }
 
 /* A ruled list: hairlines between rows, the grid under the marker. */
@@ -172,11 +193,11 @@ input {
 
 .pressable:active {
   transform: scale(0.985);
-  background: var(--sheet-2);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 @media (hover: hover) {
   .pressable:hover {
-    background: var(--sheet-2);
+    background: rgba(255, 255, 255, 0.05);
   }
 }

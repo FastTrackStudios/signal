@@ -254,7 +254,7 @@ export function RoutingView() {
   return (
     <div style={{ padding: 14, height: "100%", minHeight: 0 }}>
       <section className="sheet" style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
-        <header style={{ display: "flex", alignItems: "center", gap: 18, padding: "10px 20px", borderBottom: "2px solid var(--ink)", flexWrap: "wrap" }}>
+        <header style={{ display: "flex", alignItems: "center", gap: 18, padding: "10px 20px", borderBottom: "1px solid var(--rule-strong)", flexWrap: "wrap" }}>
           <h2 className="t-marker" style={{ margin: 0, fontSize: 28 }}>
             Routing
           </h2>
@@ -296,7 +296,7 @@ export function RoutingView() {
                   <div
                     key={p.key}
                     className="t-label"
-                    style={{ position: "absolute", left: p.x, top: p.y, width: p.w, height: p.h, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--path)", color: "#fff", borderRadius: 999, fontSize: 15 }}
+                    style={{ position: "absolute", left: p.x, top: p.y, width: p.w, height: p.h, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--path)", color: "#052e16", borderRadius: 999, fontSize: 15 }}
                   >
                     {p.label}
                   </div>
@@ -334,7 +334,7 @@ export function RoutingView() {
                     zIndex: lifted ? 5 : 1,
                     touchAction: "none",
                     background: "var(--sheet)",
-                    border: "2px solid var(--ink)",
+                    border: "1px solid var(--rule-strong)",
                     boxShadow: lifted ? "0 10px 24px -8px rgba(0,0,0,0.35)" : undefined,
                     borderRadius: "var(--r)",
                     padding: "6px 10px",

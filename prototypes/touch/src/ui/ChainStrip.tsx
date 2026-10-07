@@ -84,8 +84,8 @@ export function ChainStrip() {
                       width: 14,
                       height: 14,
                       borderRadius: 999,
-                      border: "2px solid var(--ink)",
-                      background: off ? "transparent" : "var(--ink)",
+                      border: `2px solid ${off ? "var(--dim)" : "var(--live)"}`,
+                      background: off ? "transparent" : "var(--live)",
                     }}
                   />
                 </button>

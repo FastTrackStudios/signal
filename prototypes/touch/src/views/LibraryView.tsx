@@ -66,12 +66,12 @@ export function LibraryView() {
   return (
     <div style={{ display: "grid", gridTemplateColumns: picked ? "1fr 360px" : "1fr", gap: 14, padding: 14, height: "100%", minHeight: 0 }}>
       <section className="sheet" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "2px solid var(--ink)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "1px solid var(--rule-strong)" }}>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Find anything — a song, a sound, a pedal"
-            style={{ width: 340, minHeight: 48, padding: "0 14px", border: "2px solid var(--ink)", borderRadius: "var(--r)", fontSize: 17 }}
+            style={{ width: 340, minHeight: 48, padding: "0 14px", border: "1px solid var(--rule-strong)", borderRadius: "var(--r)", fontSize: 17 }}
           />
           <div style={{ flex: 1, minWidth: 0 }}>
             <Tabs options={kinds.map((k) => ({ id: k, label: k, count: count(k) }))} value={kind} onChange={setKind} />
@@ -108,7 +108,7 @@ export function LibraryView() {
 
                 <span style={{ position: "relative", alignSelf: "flex-start", maxWidth: "100%", fontSize: 17, fontWeight: 800, lineHeight: 1.15, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: on ? "visible" : "hidden" }}>
                   {it.name}
-                  {on && <Circle inset={-7} />}
+                  {on && <Circle tone="focus" />}
                 </span>
                 <span className="t-meta" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden" }}>
                   {it.tape && (
