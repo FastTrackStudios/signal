@@ -82,7 +82,7 @@ export const MACRO_BAR_H = 44 * 2 + 1 + 1;
 /** Where each knob sits (0..1, rest 0.5), shared by the bar and its panels. */
 type Values = Record<string, number>;
 
-export function MacroBar({ cols = 8, cellH = 44 }: { cols?: number; cellH?: number }) {
+export function MacroBar({ cols = 8, cellH = 44, fill }: { cols?: number; cellH?: number; fill?: boolean }) {
   const [values, setValues] = useState<Values>({ drive: 0.62, delay: 0.42, reverb: 0.58, width: 0.66 });
   const [open, setOpen] = useState<string | null>(null);
   const set = (id: string) => (v: number) => setValues((x) => ({ ...x, [id]: v }));
@@ -98,9 +98,10 @@ export function MacroBar({ cols = 8, cellH = 44 }: { cols?: number; cellH?: numb
   }, [open]);
   const knob = BANK.find((k) => k.id === open);
   return (
-    <div ref={ref} style={{ position: "relative" }}>
+    // fill: the bar takes the height it is given, its rows sharing it.
+    <div ref={ref} style={{ position: "relative", height: fill ? "100%" : undefined }}>
       {knob?.rows && <Panel knob={knob} values={values} set={set} onClose={() => setOpen(null)} />}
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 1, background: "#000" }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoRows: fill ? "minmax(0, 1fr)" : undefined, height: fill ? "100%" : undefined, gap: 1, background: "#000" }}>
         {BANK.map((k) => (
           <Cell
             key={k.id}
@@ -111,7 +112,7 @@ export function MacroBar({ cols = 8, cellH = 44 }: { cols?: number; cellH?: numb
             more={!!k.rows}
             open={open === k.id}
             onTap={k.rows ? () => setOpen(open === k.id ? null : k.id) : undefined}
-            height={cellH}
+            height={fill ? "100%" : cellH}
           />
         ))}
       </div>
@@ -169,7 +170,7 @@ function Panel({ knob, values, set, onClose }: { knob: Knob; values: Values; set
 /** One macro: the whole cell is the control. The fill grows from the
  *  centre (rest) toward the value; the number is the offset. A tap that
  *  doesn't move opens its sub-macros, when it has them. */
-function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44 }: { label: string; colour: string; value: number; onValue: (v: number) => void; more?: boolean; open?: boolean; onTap?: () => void; height?: number }) {
+function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44 }: { label: string; colour: string; value: number; onValue: (v: number) => void; more?: boolean; open?: boolean; onTap?: () => void; height?: number | string }) {
   const [active, setActive] = useState(false);
   const from = useRef<{ x: number; v: number; w: number; moved: boolean } | null>(null);
   const lastTap = useRef(0);

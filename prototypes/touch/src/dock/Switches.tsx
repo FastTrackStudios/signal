@@ -33,7 +33,7 @@ function dim(hex: string, amount: number): string {
   return `rgb(${[0, 2, 4].map((i, k) => Math.round(base[k] + (ch(i) - base[k]) * amount)).join(",")})`;
 }
 
-export function Switches({ vertical }: { vertical?: boolean } = {}) {
+export function Switches({ vertical, fill }: { vertical?: boolean; fill?: boolean } = {}) {
   const s = useStore();
   const song = currentSong(s)?.name;
   const stacks = stacksFor(song, borrowedOf(s, song), profileOf(s, song).name);
@@ -73,12 +73,12 @@ export function Switches({ vertical }: { vertical?: boolean } = {}) {
     );
   }
   return (
-    <div style={{ display: "flex", flexDirection: "column", background: "#0a0a0c" }}>
+    <div style={{ display: "flex", flexDirection: "column", background: "#0a0a0c", height: fill ? "100%" : undefined }}>
       {/* One grid, two rows of five, the same columns: the hold layer slim
           above (a foot's hold lives "up" from the toe), the switches under
           the feet tall below — Signal's minmax(44px, 1fr) / 7fr.
           Flush: no padding, no gaps — a hairline of the ground between. */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gridTemplateRows: "44px 124px", gap: 1, background: "#000", borderTop: "1px solid #000" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gridTemplateRows: fill ? "minmax(0, 1fr) minmax(0, 3fr)" : "44px 124px", flex: fill ? 1 : undefined, gap: 1, background: "#000", borderTop: "1px solid #000" }}>
         {holds}
         {mains}
       </div>

@@ -108,13 +108,30 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
         </Tab>
           </Rail>
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative", paddingRight: safe.right }}>
-        {macros && (
-          <div style={{ flexShrink: 0, position: "relative", zIndex: 4, borderBottom: "1px solid #000" }}>
-            <MacroBar cols={landscape ? 8 : 4} />
-          </div>
+        {macros && dock === "switches" ? (
+          // Both docked: no room left for a view, so the two split the
+          // screen — macros the top half, switches the bottom.
+          <>
+            <div style={{ flex: 1, minHeight: 0, position: "relative", zIndex: 4, borderBottom: "1px solid #000" }}>
+              <MacroBar cols={8} fill />
+            </div>
+            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+              <Switches fill />
+            </div>
+          </>
+        ) : (
+          <>
+            {macros && (
+              <div style={{ flexShrink: 0, position: "relative", zIndex: 4, borderBottom: "1px solid #000" }}>
+                <MacroBar cols={8} />
+              </div>
+            )}
+            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+              <Placeholder title={view} note="Main area" />
+            </div>
+            {dock && <div style={{ flexShrink: 0, borderTop: "1px solid var(--rule)" }}>{dock === "switches" ? <Switches /> : <AudioControls />}</div>}
+          </>
         )}
-        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>{landscape ? <Placeholder title={view} note="Main area" /> : <Setlist />}</div>
-        {dock && <div style={{ flexShrink: 0, borderTop: "1px solid var(--rule)" }}>{dock === "switches" ? <Switches /> : <AudioControls />}</div>}
         {/* Landscape: the setlist slides in over the stage. */}
         {landscape && setlist && (
           <>
