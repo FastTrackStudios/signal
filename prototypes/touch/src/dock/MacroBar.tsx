@@ -82,7 +82,7 @@ export const MACRO_BAR_H = 44 * 2 + 1 + 1;
 /** Where each knob sits (0..1, rest 0.5), shared by the bar and its panels. */
 type Values = Record<string, number>;
 
-export function MacroBar({ cols = 8 }: { cols?: number }) {
+export function MacroBar({ cols = 8, cellH = 44 }: { cols?: number; cellH?: number }) {
   const [values, setValues] = useState<Values>({ drive: 0.62, delay: 0.42, reverb: 0.58, width: 0.66 });
   const [open, setOpen] = useState<string | null>(null);
   const set = (id: string) => (v: number) => setValues((x) => ({ ...x, [id]: v }));
@@ -111,6 +111,7 @@ export function MacroBar({ cols = 8 }: { cols?: number }) {
             more={!!k.rows}
             open={open === k.id}
             onTap={k.rows ? () => setOpen(open === k.id ? null : k.id) : undefined}
+            height={cellH}
           />
         ))}
       </div>
@@ -168,7 +169,7 @@ function Panel({ knob, values, set, onClose }: { knob: Knob; values: Values; set
 /** One macro: the whole cell is the control. The fill grows from the
  *  centre (rest) toward the value; the number is the offset. A tap that
  *  doesn't move opens its sub-macros, when it has them. */
-function Cell({ label, colour, value: v, onValue, more, open, onTap }: { label: string; colour: string; value: number; onValue: (v: number) => void; more?: boolean; open?: boolean; onTap?: () => void }) {
+function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44 }: { label: string; colour: string; value: number; onValue: (v: number) => void; more?: boolean; open?: boolean; onTap?: () => void; height?: number }) {
   const [active, setActive] = useState(false);
   const from = useRef<{ x: number; v: number; w: number; moved: boolean } | null>(null);
   const lastTap = useRef(0);
@@ -223,7 +224,7 @@ function Cell({ label, colour, value: v, onValue, more, open, onTap }: { label: 
       title={`${label} — slide sideways; double-tap for rest${more ? "; tap for its sub-macros" : ""}`}
       style={{
         position: "relative",
-        height: 44,
+        height,
         overflow: "hidden",
         background: open ? "#1c1c22" : active ? "#18181d" : "#111114",
         boxShadow: open ? `inset 0 -2px 0 ${colour}` : undefined,

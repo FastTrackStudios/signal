@@ -33,7 +33,7 @@ function dim(hex: string, amount: number): string {
   return `rgb(${[0, 2, 4].map((i, k) => Math.round(base[k] + (ch(i) - base[k]) * amount)).join(",")})`;
 }
 
-export function Switches() {
+export function Switches({ vertical }: { vertical?: boolean } = {}) {
   const s = useStore();
   const song = currentSong(s)?.name;
   const stacks = stacksFor(song, borrowedOf(s, song), profileOf(s, song).name);
@@ -45,26 +45,43 @@ export function Switches() {
   const ambient = stacks[4];
   const posOf = (i: number) => (at?.stack === i ? at.index : (s.stackAt[stacks[i]?.name] ?? 0) % Math.max(1, stacks[i]?.patches.length ?? 1));
   const lit = (i: number) => at?.stack === i;
+  const holds = [
+    ambient ? (
+      <StackTile key="h6" no={6} stack={ambient} pos={posOf(4)} lit={lit(4)} compact={!vertical} onTap={() => tap(ambient, lit(4) ? posOf(4) : null)} />
+    ) : (
+      <Empty key="h6" no={6} />
+    ),
+    <FnTile key="h7" no={7} title="FX Toggle" subtitle={fx ? "Time FX on" : "Time FX off"} bg="#ec4899" text="#ffffff" lit={fx} stacked={vertical} onTap={() => setFx(!fx)} />,
+    <FnTile key="h8" no={8} title="Song" subtitle={song ?? "—"} bg="#a78bfa" text="#1e1b4b" lit={s.performMode === "setlist"} stacked={vertical} />,
+    <FnTile key="h9" no={9} title="Boost" subtitle={boost ? "+3 dB" : "+3 dB · off"} bg="#fafafa" text="#0a0a0a" lit={boost} stacked={vertical} onTap={() => setBoost(!boost)} />,
+    <FnTile key="h10" no={10} title="Tuner" subtitle="A 440" bg="#3f3f46" text="#e4e4e7" lit={false} stacked={vertical} />,
+  ];
+  const mains = [
+    ...[0, 1, 2, 3].map((i) =>
+      main[i] ? <StackTile key={`m${i}`} no={i + 1} stack={main[i]} pos={posOf(i)} lit={lit(i)} onTap={() => tap(main[i], lit(i) ? posOf(i) : null)} /> : <Empty key={`m${i}`} no={i + 1} />,
+    ),
+    <TapTempo key="m5" bpm={currentSong(s)?.bpm || 120} />,
+  ];
+  if (vertical) {
+    // The phone upright: the board turned a quarter — a row per footswitch,
+    // the switch under the foot wide on the right, its hold beside it on the
+    // left (still "up" from the toe, turned with the board). Rows share the
+    // height they are given.
+    return (
+      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "minmax(0, 34fr) minmax(0, 66fr)", gridTemplateRows: "repeat(5, minmax(0, 1fr))", gap: 1, background: "#000" }}>
+        {mains.flatMap((m, i) => [holds[i], m])}
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", flexDirection: "column", background: "#0a0a0c" }}>
       {/* One grid, two rows of five, the same columns: the hold layer slim
           above (a foot's hold lives "up" from the toe), the switches under
-          the feet tall below — Signal's minmax(44px, 1fr) / 7fr. */}
-      {/* Flush: no padding, no gaps — a hairline of the ground between switches. */}
+          the feet tall below — Signal's minmax(44px, 1fr) / 7fr.
+          Flush: no padding, no gaps — a hairline of the ground between. */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gridTemplateRows: "44px 124px", gap: 1, background: "#000", borderTop: "1px solid #000" }}>
-        {ambient ? (
-          <StackTile no={6} stack={ambient} pos={posOf(4)} lit={lit(4)} compact onTap={() => tap(ambient, lit(4) ? posOf(4) : null)} />
-        ) : (
-          <Empty no={6} />
-        )}
-        <FnTile no={7} title="FX Toggle" subtitle={fx ? "Time FX on" : "Time FX off"} bg="#ec4899" text="#ffffff" lit={fx} onTap={() => setFx(!fx)} />
-        <FnTile no={8} title="Song" subtitle={song ?? "—"} bg="#a78bfa" text="#1e1b4b" lit={s.performMode === "setlist"} />
-        <FnTile no={9} title="Boost" subtitle={boost ? "+3 dB" : "+3 dB · off"} bg="#fafafa" text="#0a0a0a" lit={boost} onTap={() => setBoost(!boost)} />
-        <FnTile no={10} title="Tuner" subtitle="A 440" bg="#3f3f46" text="#e4e4e7" lit={false} />
-        {[0, 1, 2, 3].map((i) =>
-          main[i] ? <StackTile key={main[i].name} no={i + 1} stack={main[i]} pos={posOf(i)} lit={lit(i)} onTap={() => tap(main[i], lit(i) ? posOf(i) : null)} /> : <Empty key={i} no={i + 1} />,
-        )}
-        <TapTempo bpm={currentSong(s)?.bpm || 120} />
+        {holds}
+        {mains}
       </div>
     </div>
   );
@@ -120,7 +137,7 @@ function StackTile({ no, stack, pos, lit, compact, onTap }: { no: number; stack:
 }
 
 /** A function switch: a title and what it is doing, lit in its colour. */
-function FnTile({ no, title, subtitle, bg, text, lit, onTap }: { no: number; title: string; subtitle: string; bg: string; text: string; lit: boolean; onTap?: () => void }) {
+function FnTile({ no, title, subtitle, bg, text, lit, stacked, onTap }: { no: number; title: string; subtitle: string; bg: string; text: string; lit: boolean; stacked?: boolean; onTap?: () => void }) {
   return (
     <button
       onClick={onTap}
@@ -132,9 +149,10 @@ function FnTile({ no, title, subtitle, bg, text, lit, onTap }: { no: number; tit
         borderRadius: 0,
         padding: "0 8px",
         display: "flex",
+        flexDirection: stacked ? "column" : "row",
         alignItems: "center",
         justifyContent: "center",
-        gap: 8,
+        gap: stacked ? 3 : 8,
         background: lit ? bg : dim(bg, 0.3),
         color: lit ? text : dim(text, 0.45),
         boxShadow: lit ? LIT_RING : undefined,

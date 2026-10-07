@@ -128,12 +128,17 @@ export function App() {
           </Body>
         </div>
       </div>
-      {/* The phones, below it on the right, at the same real scale: the
-          setlist in portrait, the stage view (macros + switches) in
-          landscape. */}
-      <div style={{ width: OW * scale, display: "flex", justifyContent: "flex-end", alignItems: "flex-end", gap: 28 * scale, marginTop: 12 }}>
+      {/* The phones at the same real scale: upright on its four pages —
+          the setlist, the switches, the macros, the side menu drawn out —
+          and on its side, the stage. They wrap to the window's width. */}
+      <div style={{ alignSelf: "stretch", display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "flex-end", gap: 24, marginTop: 12 }}>
+        {(["setlist", "switches", "macros"] as const).map((pg) => (
+          <Phone key={pg} pagePpi={(scale * W) / (model.px / model.ppi)}>
+            <PhoneShell page={pg} />
+          </Phone>
+        ))}
         <Phone pagePpi={(scale * W) / (model.px / model.ppi)}>
-          <PhoneShell />
+          <PhoneShell menuOpen />
         </Phone>
         <Phone landscape pagePpi={(scale * W) / (model.px / model.ppi)}>
           <PhoneShell />
