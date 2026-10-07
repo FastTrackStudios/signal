@@ -21,12 +21,12 @@ import { useRef, useState, type ReactNode } from "react";
 import { ComposeCtx, SidebarContent } from "./setlist/Setlist";
 import { Browser } from "./views/Browser";
 import { EditView } from "./views/Edit";
-import { SetupView } from "./views/Setup";
+import { OpenSetup, SetupView, useOpenSetup, type SetupTab } from "./views/Setup";
 import { MacroBar } from "./dock/MacroBar";
 import { Switches } from "./dock/Switches";
 import { redo, setPerformMode, undo, useStore, useUndo } from "./store";
 import { MuteButton, PanicButton } from "./ui/Safety";
-import { Indicator, linkDetail, SettingsSheet } from "./ui/Settings";
+import { Indicator, linkDetail } from "./ui/Settings";
 import { ModeButton } from "./ui/ModeButton";
 import { SetlistStrip } from "./setlist/SetlistStrip";
 import { Cpu, FootButton, Meters, MODES, Rule, type Dock, type View } from "./App";
@@ -82,6 +82,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
   const safe = useSafe();
   const { landscape } = safe;
   const [view, setView] = useState<View>("perform");
+  const [setupTab, setSetupTab] = useState<SetupTab>("guitar");
   const [dock, setDock] = useState<Dock>(landscape ? "switches" : null);
   const [macros, setMacros] = useState(landscape);
   // Landscape drawers over the stage: the setlist, the browser.
@@ -95,7 +96,13 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
       {ICON[id]}
     </Tab>
   );
+  const openSetup = (t: SetupTab) => {
+    setSetupTab(t);
+    setView("setup");
+    setMenu(false);
+  };
   return (
+    <OpenSetup.Provider value={openSetup}>
     <div
       ref={root}
       style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
@@ -136,7 +143,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
                   {dock && <div style={{ flexShrink: 0 }}>{dock === "switches" && <Switches />}</div>}
                 </>
               ) : view === "setup" ? (
-                <SetupView />
+                <SetupView tab={setupTab} onTab={setSetupTab} />
               ) : view === "build" ? (
                 // Build on its side: the browser fills the screen.
                 <Browser />
@@ -163,7 +170,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
                 switches (the board turned a quarter), the macros two to a
                 row, Edit. */}
             <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }}>
-              {view === "setup" ? <SetupView /> : <>
+              {view === "setup" ? <SetupView tab={setupTab} onTab={setSetupTab} /> : <>
               {page === "setlist" && <SidebarContent />}
               {page === "browser" && <Browser />}
               {page === "switches" && <Switches vertical />}
@@ -197,6 +204,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
       {menu && <SideMenu offset={0} view={view} onView={setView} onClose={() => setMenu(false)} docks={landscape && view === "perform" ? { macros, dock, onMacros: () => setMacros(!macros), onSwitches: () => setDock(dock === "switches" ? null : "switches") } : undefined} />}
       <style>{`@keyframes drawer-in { from { transform: translateX(-24px); opacity: 0 } to { transform: none; opacity: 1 } }`}</style>
     </div>
+    </OpenSetup.Provider>
   );
 }
 
@@ -264,7 +272,7 @@ function SideMenu({ offset, view, onView, onClose, docks }: { offset: number; vi
   const s = useStore();
   const safe = useSafe();
   const { depth, label, redoDepth, redoLabel } = useUndo();
-  const [settings, setSettings] = useState<"midi" | "audio" | null>(null);
+  const openSetup = useOpenSetup();
   const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 12, width: "100%", minHeight: 52, padding: "0 16px", textAlign: "left", fontSize: 16, fontWeight: 600 };
   return (
     <>
@@ -393,7 +401,10 @@ function SideMenu({ offset, view, onView, onClose, docks }: { offset: number; vi
             ["audio", "Audio", linkDetail(s, "audio")],
           ] as const
         ).map(([kind, k, v]) => (
-          <button key={k} className="pressable" onClick={() => setSettings(kind)} style={{ ...row, minHeight: 44, fontSize: 14 }}>
+          <button key={k} className="pressable" onClick={() => {
+              openSetup(kind);
+              onClose();
+            }} style={{ ...row, minHeight: 44, fontSize: 14 }}>
             <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--live)" }} />
             <span style={{ flex: 1 }}>{k}</span>
             <span className="t-meta" style={{ fontSize: 13 }}>
@@ -404,7 +415,6 @@ function SideMenu({ offset, view, onView, onClose, docks }: { offset: number; vi
             </svg>
           </button>
         ))}
-        {settings && <SettingsSheet kind={settings} onClose={() => setSettings(null)} />}
         <div style={{ ...row, minHeight: 40, fontSize: 14 }}>
           <Cpu />
         </div>

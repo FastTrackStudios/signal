@@ -16,7 +16,7 @@
 //
 // Levels and MIDI are simulated (ui/signal.ts); the rig measures them.
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   chooseGuitar,
   chooseController,
@@ -69,12 +69,17 @@ function levelDb(input: number, trimDb: number) {
   return Math.min(0, -90 + 90 * input + trimDb);
 }
 
-type Tab = "guitar" | "audio" | "midi";
+export type SetupTab = "guitar" | "audio" | "midi";
+type Tab = SetupTab;
 
-export function SetupView() {
+/** Open Setup on a tab — given by the device shell, which owns the view;
+ *  the MIDI and Audio indicators use it. */
+export const OpenSetup = createContext<(tab: SetupTab) => void>(() => {});
+export const useOpenSetup = () => useContext(OpenSetup);
+
+export function SetupView({ tab, onTab: setTab }: { tab: SetupTab; onTab: (t: SetupTab) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(true);
-  const [tab, setTab] = useState<Tab>("guitar");
   // The open tab's options, down the left — brought up from its tab.
   const [options, setOptions] = useState(false);
   useLayoutEffect(() => {
@@ -88,6 +93,7 @@ export function SetupView() {
   return (
     <div ref={ref} style={{ flex: 1, minWidth: 0, height: "100%", minHeight: 0, display: "flex", flexDirection: "column", background: "var(--desk)" }}>
       <SetupTabs
+        compact={!wide}
         tab={tab}
         options={options}
         onTab={(t) => {
@@ -287,7 +293,7 @@ const khz = (rate: number) => `${(rate / 1000).toLocaleString("en", { maximumFra
 
 /** The three tabs, the device's full width: each says what it is and
  *  what is chosen; the open one, tapped again, brings up its options. */
-function SetupTabs({ tab, options, onTab }: { tab: Tab; options: boolean; onTab: (t: Tab) => void }) {
+function SetupTabs({ tab, options, onTab, compact }: { tab: Tab; options: boolean; onTab: (t: Tab) => void; compact?: boolean }) {
   const s = useStore();
   const g = currentGuitar(s);
   const r = currentRig(s);
@@ -299,7 +305,7 @@ function SetupTabs({ tab, options, onTab }: { tab: Tab; options: boolean; onTab:
     { id: "midi", label: "MIDI", lead: <ControllerGlyph switches={dev?.switches ?? 4} on />, name: c.name, sub: `${c.device} · ${dev?.link ?? "USB"}` },
   ];
   return (
-    <div role="tablist" style={{ flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", height: MACRO_BAR_H, borderBottom: "1px solid var(--rule)", background: "var(--sheet)" }}>
+    <div role="tablist" style={{ flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", height: compact ? 60 : MACRO_BAR_H, borderBottom: "1px solid var(--rule)", background: "var(--sheet)" }}>
       {tabs.map((t, i) => {
         const on = t.id === tab;
         return (
@@ -310,14 +316,14 @@ function SetupTabs({ tab, options, onTab }: { tab: Tab; options: boolean; onTab:
             aria-expanded={on ? options : undefined}
             onClick={() => onTab(t.id)}
             className="pressable"
-            style={{ position: "relative", minWidth: 0, display: "flex", alignItems: "center", gap: 12, padding: "0 16px", textAlign: "left", borderLeft: i ? "1px solid var(--rule)" : undefined, background: on ? "rgba(255,255,255,0.05)" : undefined }}
+            style={{ position: "relative", minWidth: 0, display: "flex", alignItems: "center", gap: compact ? 4 : 12, padding: compact ? "0 10px" : "0 16px", textAlign: "left", borderLeft: i ? "1px solid var(--rule)" : undefined, background: on ? "rgba(255,255,255,0.05)" : undefined }}
           >
             {on && <span aria-hidden style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: 3, background: "var(--ink)" }} />}
-            <span style={{ opacity: on ? 1 : 0.55, display: "flex" }}>{t.lead}</span>
+            {!compact && <span style={{ opacity: on ? 1 : 0.55, display: "flex" }}>{t.lead}</span>}
             <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
               <span style={{ fontSize: 11.5, fontWeight: 750, letterSpacing: "0.08em", textTransform: "uppercase", color: on ? "var(--ink-2)" : "var(--ink-3)" }}>{t.label}</span>
-              <span style={{ fontSize: 17, fontWeight: 750, color: on ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</span>
-              {t.sub && (
+              <span style={{ fontSize: compact ? 15 : 17, fontWeight: 750, color: on ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</span>
+              {t.sub && !compact && (
                 <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: t.id === "guitar" ? `color-mix(in oklab, ${RIG_COLOUR} 70%, var(--ink))` : "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {t.id === "guitar" && <OverrideIcon colour={RIG_COLOUR} size={11} />}
                   {t.sub}

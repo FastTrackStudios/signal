@@ -24,7 +24,7 @@ import { ComposeCtx, SidebarContent } from "./setlist/Setlist";
 import { Switches } from "./dock/Switches";
 import { Browser } from "./views/Browser";
 import { EditView } from "./views/Edit";
-import { SetupView } from "./views/Setup";
+import { OpenSetup, SetupView, type SetupTab } from "./views/Setup";
 import { MacroBar } from "./dock/MacroBar";
 import { Phone } from "./Phone";
 import { PhoneShell } from "./PhoneShell";
@@ -251,6 +251,11 @@ function Body({ model, bezel, show, children }: { model: Model; bezel: { x: numb
 
 function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: number; corner: number }) {
   const [view, setView] = useState<View>("perform");
+  const [setupTab, setSetupTab] = useState<SetupTab>("guitar");
+  const openSetup = (t: SetupTab) => {
+    setSetupTab(t);
+    setView("setup");
+  };
   const [dock, setDock] = useState<Dock>("switches");
   const [macros, setMacros] = useState(true);
   const [sidebar, setSidebar] = useState(true);
@@ -259,6 +264,7 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   return (
     <StageCtx.Provider value={{ el, scale }}>
+      <OpenSetup.Provider value={openSetup}>
       <div
         ref={setEl}
         style={{
@@ -278,7 +284,7 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
               routing and the FX row hold the main area, the browser (with
               the sidebar a tap away, to pick a section). */}
           {/* Setup takes the whole body: its own list and its page. */}
-          {view === "setup" && <SetupView />}
+          {view === "setup" && <SetupView tab={setupTab} onTab={setSetupTab} />}
           {view !== "setup" && sidebar && (
             <aside style={{ width: SIDEBAR, flexShrink: 0, borderRight: "1px solid var(--rule)", minHeight: 0, display: "flex", flexDirection: "column" }}>
               <ComposeCtx.Provider value={{ onPicked: () => view === "perform" && setBrowser(true), pickRows: view === "build" }}>
@@ -323,6 +329,7 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
           onBrowser={() => setBrowser(!browser)}
         />
       </div>
+      </OpenSetup.Provider>
     </StageCtx.Provider>
   );
 }
