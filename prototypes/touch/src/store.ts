@@ -103,9 +103,13 @@ export interface State {
   /** The kind the browser should show for what's being worked on (a block
    *  picked in Edit's routing → its presets). */
   browserFocus: string | null;
-  /** Rig setups — the hardware and the hands this rig plays through. */
-  setups: RigSetup[];
-  setupIndex: number;
+  /** The guitars — each its own profile, carrying how it sits on every
+   *  rig it has been set up on. */
+  guitars: Guitar[];
+  guitarIndex: number;
+  /** The audio + MIDI rigs — the interface and controller. */
+  rigs: Rig[];
+  rigIndex: number;
   /** In Preset mode, the preset and variation playing. */
   presetUp: { preset: string; variation: string } | null;
 }
@@ -177,8 +181,10 @@ function seed(): State {
     profileStacks: {},
     browserFocus: null,
     presetUp: null,
-    setups: [seedSetup()],
-    setupIndex: 0,
+    guitars: seedGuitars(),
+    guitarIndex: 0,
+    rigs: seedRigs(),
+    rigIndex: 0,
   };
 }
 
@@ -870,13 +876,19 @@ export function clearVariationPicks(preset: string, variation: string) {
   }));
 }
 
-// ── Setup: rig setups ──────────────────────────────────────────────────
-// A rig setup is what the rig plays through, saved as one thing: the
-// guitar (its pickups, its own input EQ), the audio interface (its input,
-// rate, buffer, outputs, and an input trim that brings the guitar to the
-// level presets expect), the MIDI controller, and the gates — five
-// presets whose thresholds are set for this guitar into this interface,
-// so a preset's gate means the same on any rig.
+// ── Setup: guitars and rigs ────────────────────────────────────────────
+// What the rig plays through is two things chosen apart: a guitar and a rig.
+//
+//   Guitar  a profile of its own: its photo, its pickups, its own input EQ,
+//           and — per rig it has been set up on — the input trim that brings
+//           it to the level presets expect, the five gate thresholds, and
+//           whether it is noisy there. A gate's level depends on both the
+//           guitar and the interface, so the guitar carries one per rig.
+//   Rig     the audio interface (input, rate, buffer, outputs) and the MIDI
+//           controller.
+//
+// Choose a guitar and a rig and it is set. (A song will later be able to
+// ask for a different guitar.)
 
 export type GateLevel = "off" | "subtle" | "default" | "tight" | "ultra";
 export const GATE_LEVELS: GateLevel[] = ["off", "subtle", "default", "tight", "ultra"];
@@ -886,77 +898,200 @@ export interface Pickup {
   model: string;
 }
 
-export interface RigSetup {
-  name: string;
-  guitar: {
-    name: string;
-    pickups: Pickup[];
-    /** The guitar's own input EQ, before anything: a low cut (Hz) and three
-     *  bands (dB). */
-    eq: { lowCut: number; bass: number; mid: number; treble: number };
-  };
-  audio: { device: string; input: string; rate: string; buffer: number; house: string; phones: string; trimDb: number; targetDb: number };
-  midi: { device: string; channel: number | "Omni" };
-  /** Each gate preset's threshold for this rig, in dBFS (off: none). */
-  gates: Record<Exclude<GateLevel, "off">, number>;
+export type Gates = Record<Exclude<GateLevel, "off">, number>;
+
+/** How a guitar sits on one rig: measured there, kept with the guitar. */
+export interface Fit {
+  /** Input trim, dB: brings this guitar's peaks to the rig's target. */
+  trimDb: number;
+  /** Each gate preset's threshold, dBFS (off: none). */
+  gates: Gates;
   /** Noisy input: Off plays Subtle and Subtle plays Default. */
   noisy: boolean;
 }
 
-// A function, hoisted: the store seeds itself before this point in the file.
-function seedSetup(): RigSetup {
-  return {
-  name: "MiniFuse 4 · TMG Strat",
-  guitar: {
-    name: "TMG Strat (White and Gold)",
-    pickups: [
-      { position: "Bridge", model: "Seymour Duncan SH-PG1b Pearly Gates" },
-      { position: "Middle", model: "Lawler Blonde" },
-      { position: "Neck", model: "Lawler Blonde" },
-    ],
-    eq: { lowCut: 70, bass: 0, mid: 0, treble: 0 },
-  },
-  audio: { device: "Arturia MiniFuse 4", input: "Input 1 · Inst (Hi-Z)", rate: "48 kHz", buffer: 128, house: "Outputs 1–2", phones: "Phones 1", trimDb: 0, targetDb: -15 },
-  midi: { device: "Morningstar MC8", channel: "Omni" },
-  gates: { subtle: -72, default: -64, tight: -56, ultra: -48 },
-  noisy: false,
-  };
+export interface Guitar {
+  id: string;
+  name: string;
+  /** A photo, served locally (public/guitars/, not committed). */
+  image?: string;
+  /** Its finish, for when the photo is missing. */
+  colour: string;
+  pickups: Pickup[];
+  /** The guitar's own input EQ, before anything: a low cut (Hz) and three
+   *  bands (dB). */
+  eq: { lowCut: number; bass: number; mid: number; treble: number };
+  /** Its fit on each rig it has been set up on, by rig id. */
+  fits: Record<string, Fit>;
 }
 
-/** The gate a preset's level plays at on this rig. A noisy input lifts
- *  the light end only: Off plays Subtle, Subtle plays Default; Default,
- *  Tight and Ultra stay as they are. */
-export function gateFor(setup: RigSetup, level: GateLevel): GateLevel {
-  if (!setup.noisy) return level;
+export interface Rig {
+  id: string;
+  name: string;
+  audio: { device: string; input: string; rate: string; buffer: number; house: string; phones: string; targetDb: number };
+  midi: { device: string; channel: number | "Omni" };
+}
+
+/** Gates set a step above a noise floor. */
+export function gatesAbove(floor: number): Gates {
+  return { subtle: floor + 5, default: floor + 10, tight: floor + 16, ultra: floor + 24 };
+}
+
+// Functions, hoisted: the store seeds itself before this point in the file.
+function seedRigs(): Rig[] {
+  return [
+    {
+      id: "minifuse",
+      name: "MiniFuse 4 · Home",
+      audio: { device: "Arturia MiniFuse 4", input: "Input 1 · Inst (Hi-Z)", rate: "48 kHz", buffer: 128, house: "Outputs 1–2", phones: "Phones 1", targetDb: -15 },
+      midi: { device: "Morningstar MC8", channel: "Omni" },
+    },
+    {
+      id: "stage",
+      name: "Stage · Scarlett 2i2",
+      audio: { device: "Focusrite Scarlett 2i2", input: "Input 1 · Inst (Hi-Z)", rate: "48 kHz", buffer: 64, house: "Outputs 1–2", phones: "Phones 1", targetDb: -15 },
+      midi: { device: "Morningstar MC6", channel: 1 },
+    },
+  ];
+}
+
+function seedGuitars(): Guitar[] {
+  const flat = { lowCut: 70, bass: 0, mid: 0, treble: 0 };
+  return [
+    {
+      id: "strat",
+      name: "TMG Strat",
+      image: "/guitars/strat-white-gold.webp",
+      colour: "#e9e4d8",
+      pickups: [
+        { position: "Bridge", model: "Seymour Duncan SH-PG1b Pearly Gates" },
+        { position: "Middle", model: "Lawler Blonde" },
+        { position: "Neck", model: "Lawler Blonde" },
+      ],
+      eq: flat,
+      fits: {
+        minifuse: { trimDb: 0, gates: gatesAbove(-77), noisy: false },
+        stage: { trimDb: 2.5, gates: gatesAbove(-72), noisy: false },
+      },
+    },
+    {
+      id: "tele",
+      name: "Blacked Out Tele",
+      image: "/guitars/tele-black.webp",
+      colour: "#18181b",
+      pickups: [
+        { position: "Bridge", model: "Tele single-coil" },
+        { position: "Neck", model: "Tele single-coil" },
+      ],
+      eq: { lowCut: 80, bass: 1, mid: 0, treble: -1.5 },
+      fits: { minifuse: { trimDb: 3, gates: gatesAbove(-70), noisy: true } },
+    },
+    {
+      id: "es339",
+      name: "Epiphone ES-339",
+      image: "/guitars/es339-cherry.webp",
+      colour: "#9f1d2b",
+      pickups: [
+        { position: "Bridge", model: "P-90" },
+        { position: "Neck", model: "P-90" },
+      ],
+      eq: { lowCut: 90, bass: -1, mid: 0, treble: 0.5 },
+      fits: { minifuse: { trimDb: 1.5, gates: gatesAbove(-68), noisy: true } },
+    },
+    {
+      id: "goldtop",
+      name: "Goldtop Les Paul",
+      image: "/guitars/lp-goldtop.webp",
+      colour: "#c9a24a",
+      pickups: [
+        { position: "Bridge", model: "P-90" },
+        { position: "Neck", model: "P-90" },
+      ],
+      eq: { lowCut: 80, bass: -1.5, mid: 0, treble: 1 },
+      fits: {},
+    },
+  ];
+}
+
+/** The fit to start a guitar on a rig it has not been set up on. */
+export const UNFIT: Fit = { trimDb: 0, gates: gatesAbove(-74), noisy: false };
+
+/** The gate a preset's level plays at. A noisy input lifts the light end
+ *  only: Off plays Subtle, Subtle plays Default; the rest stay. */
+export function gateFor(fit: Fit, level: GateLevel): GateLevel {
+  if (!fit.noisy) return level;
   return level === "off" ? "subtle" : level === "subtle" ? "default" : level;
 }
 
-export function currentSetup(s: State): RigSetup {
-  return s.setups[s.setupIndex] ?? s.setups[0];
+export function currentGuitar(s: State): Guitar {
+  return s.guitars[s.guitarIndex] ?? s.guitars[0];
+}
+export function currentRig(s: State): Rig {
+  return s.rigs[s.rigIndex] ?? s.rigs[0];
+}
+/** The guitar in use on the rig in use: its fit, if it has one there. */
+export function currentFit(s: State): Fit | undefined {
+  return currentGuitar(s).fits[currentRig(s).id];
 }
 
-/** Edit the setup in use (an undoable change). */
-export function editSetup(label: string, f: (x: RigSetup) => RigSetup) {
-  change(`Setup · ${label}`, (s) => ({ ...s, setups: s.setups.map((x, i) => (i === s.setupIndex ? f(x) : x)) }));
+function mapAt<T>(xs: T[], i: number, f: (x: T) => T) {
+  return xs.map((x, k) => (k === i ? f(x) : x));
 }
 
+/** Edit the guitar in use (an undoable change). */
+export function editGuitar(label: string, f: (g: Guitar) => Guitar) {
+  change(`Guitar · ${label}`, (s) => ({ ...s, guitars: mapAt(s.guitars, s.guitarIndex, f) }));
+}
 /** Turning a value continuously (a slider): no undo step per move. */
-export function tuneSetup(f: (x: RigSetup) => RigSetup) {
-  move((s) => ({ ...s, setups: s.setups.map((x, i) => (i === s.setupIndex ? f(x) : x)) }));
+export function tuneGuitar(f: (g: Guitar) => Guitar) {
+  move((s) => ({ ...s, guitars: mapAt(s.guitars, s.guitarIndex, f) }));
+}
+/** Edit the guitar in use's fit on the rig in use (made if it has none). */
+export function editFit(label: string, f: (x: Fit) => Fit) {
+  change(`Fit · ${label}`, (s) => fitting(s, f));
+}
+export function tuneFit(f: (x: Fit) => Fit) {
+  move((s) => fitting(s, f));
+}
+function fitting(s: State, f: (x: Fit) => Fit): State {
+  const rig = currentRig(s).id;
+  return { ...s, guitars: mapAt(s.guitars, s.guitarIndex, (g) => ({ ...g, fits: { ...g.fits, [rig]: f(g.fits[rig] ?? UNFIT) } })) };
+}
+export function editRig(label: string, f: (r: Rig) => Rig) {
+  change(`Rig · ${label}`, (s) => ({ ...s, rigs: mapAt(s.rigs, s.rigIndex, f) }));
 }
 
-export function chooseSetup(index: number) {
-  move((s) => ({ ...s, setupIndex: index }));
+export function chooseGuitar(index: number) {
+  change("Guitar chosen", (s) => ({ ...s, guitarIndex: index }));
+}
+export function chooseRig(index: number) {
+  change("Rig chosen", (s) => ({ ...s, rigIndex: index }));
 }
 
-export function newSetup(name: string) {
-  change(`New setup ${name}`, (s) => ({ ...s, setups: [...s.setups, { ...structuredClone(currentSetup(s)), name }], setupIndex: s.setups.length }));
+export function newGuitar(name: string) {
+  change(`New guitar ${name}`, (s) => ({
+    ...s,
+    guitars: [...s.guitars, { id: `g${Date.now()}`, name, colour: "#71717a", pickups: [{ position: "Bridge", model: "" }], eq: { lowCut: 70, bass: 0, mid: 0, treble: 0 }, fits: {} }],
+    guitarIndex: s.guitars.length,
+  }));
 }
-
-export function removeSetup(index: number) {
-  change("Setup removed", (s) => {
-    if (s.setups.length <= 1) return s;
-    const setups = s.setups.filter((_, i) => i !== index);
-    return { ...s, setups, setupIndex: Math.min(s.setupIndex, setups.length - 1) };
+export function newRig(name: string) {
+  change(`New rig ${name}`, (s) => ({ ...s, rigs: [...s.rigs, { ...structuredClone(currentRig(s)), id: `r${Date.now()}`, name }], rigIndex: s.rigs.length }));
+}
+export function removeGuitar(index: number) {
+  change("Guitar removed", (s) => {
+    if (s.guitars.length <= 1) return s;
+    const guitars = s.guitars.filter((_, i) => i !== index);
+    return { ...s, guitars, guitarIndex: Math.min(s.guitarIndex > index ? s.guitarIndex - 1 : s.guitarIndex, guitars.length - 1) };
+  });
+}
+export function removeRig(index: number) {
+  change("Rig removed", (s) => {
+    if (s.rigs.length <= 1) return s;
+    const gone = s.rigs[index].id;
+    const rigs = s.rigs.filter((_, i) => i !== index);
+    // Its fits go with it.
+    const guitars = s.guitars.map((g) => ({ ...g, fits: Object.fromEntries(Object.entries(g.fits).filter(([k]) => k !== gone)) }));
+    return { ...s, rigs, guitars, rigIndex: Math.min(s.rigIndex > index ? s.rigIndex - 1 : s.rigIndex, rigs.length - 1) };
   });
 }
