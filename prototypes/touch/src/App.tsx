@@ -43,8 +43,8 @@ type Size = "actual" | "fit" | "points";
  *  current iPad is 264 ppi except the mini's 326). */
 const MODELS = [
   { id: "pro11-m4", name: "iPad Pro 11″ (M4)", w: 1210, h: 834, px: 2420, ppi: 264 },
-  { id: "pro11", name: "iPad Pro 11″ (2018–22)", w: 1194, h: 834, px: 2388, ppi: 264 },
-  { id: "air11", name: "iPad Air 11″ · iPad 10.9″", w: 1180, h: 820, px: 2360, ppi: 264 },
+  { id: "pro11", name: "iPad Pro 11″ (M1 · M2 · 2018–22)", w: 1194, h: 834, px: 2388, ppi: 264 },
+  { id: "air11", name: "iPad Air (M1 10.9″ · M2 11″) · iPad 10.9″", w: 1180, h: 820, px: 2360, ppi: 264 },
   { id: "pro13-m4", name: "iPad Pro 13″ (M4)", w: 1376, h: 1032, px: 2752, ppi: 264 },
   { id: "air13", name: "iPad Air 13″ · Pro 12.9″", w: 1366, h: 1024, px: 2732, ppi: 264 },
   { id: "mini", name: "iPad mini", w: 1133, h: 744, px: 2266, ppi: 326 },
@@ -78,9 +78,9 @@ export function App() {
   const [ppi, setPpi] = useState(() => readNumber("stage.ppi", 127));
   const [modelId, setModelId] = useState<string>(() => {
     try {
-      return localStorage.getItem("stage.model") || "pro11-m4";
+      return localStorage.getItem("stage.model") || "pro11";
     } catch {
-      return "pro11-m4";
+      return "pro11";
     }
   });
   const model: Model = MODELS.find((m) => m.id === modelId) ?? MODELS[0];
