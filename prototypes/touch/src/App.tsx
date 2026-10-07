@@ -353,15 +353,20 @@ export function Cpu() {
     const t = window.setInterval(() => setCpu((c) => Math.max(9, Math.min(24, Math.round(c + (Math.random() - 0.5) * 4)))), 900);
     return () => window.clearInterval(t);
   }, []);
+  // Green while easy, amber from 60%, red from 85% (where xruns start).
+  const tone = cpu >= 85 ? "var(--void)" : cpu >= 60 ? "var(--modified)" : "var(--ink-3)";
   return (
-    <span title="DSP load on the rig" style={{ display: "flex", alignItems: "center", gap: 5, padding: "0 10px 0 4px", fontSize: 12, fontWeight: 650, color: "var(--ink-3)" }}>
-      CPU <span className="num" style={{ color: cpu > 70 ? "var(--modified)" : "var(--ink-2)", width: 26 }}>{cpu}%</span>
+    <span title={`DSP load on the rig: ${cpu}%`} style={{ display: "flex", alignItems: "center", gap: 3, padding: "0 6px", fontSize: 11.5, fontWeight: 700, color: tone }}>
+      <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+        <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        <rect x="6" y="6" width="4" height="4" rx="0.5" fill="currentColor" />
+        <path d="M6 1.5v2M10 1.5v2M6 12.5v2M10 12.5v2M1.5 6h2M1.5 10h2M12.5 6h2M12.5 10h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
+      <span className="num" style={{ minWidth: 22 }}>{cpu}%</span>
     </span>
   );
 }
 
-/** IN and OUT, small: enough to see signal and clipping at a glance (the
- *  views carry the big ones). Simulated here; the rig streams peaks. */
 /** IN, OUT and PHONES, as big as their spot allows: no padding, three
  *  bars filling the bar's height, as wide as given. OUT is covered while
  *  the house is muted (MUTE HOUSE; MUTED when fully muted), PH while your

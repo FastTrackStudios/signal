@@ -227,8 +227,8 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
       <PanicButton size={30} />
       <Indicator kind="midi" compact />
       <Indicator kind="audio" compact />
-      {safe.landscape && <Cpu />}
-      <Meters width={safe.landscape ? 120 : 86} />
+      <Cpu />
+      <Meters width={safe.landscape ? 120 : 54} />
       <MuteButton size={32} />
     </header>
   );

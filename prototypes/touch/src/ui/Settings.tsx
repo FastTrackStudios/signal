@@ -12,34 +12,25 @@ type Kind = "midi" | "audio";
 
 const DETAIL: Record<Kind, string> = { midi: "Morningstar MC8 · in", audio: "voyager · 48 kHz · 128" };
 
-/** A status light that opens its settings. `compact`: the light and an
- *  icon only, for a phone's bar. */
-export function Indicator({ kind, ok = true, compact }: { kind: Kind; ok?: boolean; compact?: boolean }) {
+export type Health = "ok" | "warn" | "down";
+const TONE: Record<Health, string> = { ok: "var(--live)", warn: "#eab308", down: "var(--void)" };
+const SAYS: Record<Health, string> = { ok: "connected", warn: "struggling", down: "down" };
+
+/** Its icon, coloured by how the link is — green, amber, red — and a
+ *  press away from its settings. */
+export function Indicator({ kind, health = "ok" }: { kind: Kind; health?: Health; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const label = kind === "midi" ? "MIDI" : "Audio";
   return (
     <>
-      {/* Part of the bar: full height, flat, its icon and name and the
-          link's light — a press opens its settings. */}
       <button
         className="pressable"
         onClick={() => setOpen(true)}
-        title={`${label}: ${DETAIL[kind]} — settings`}
-        aria-label={`${label} ${ok ? "connected" : "down"} — open ${label} settings`}
-        style={{
-          alignSelf: "stretch",
-          padding: compact ? "0 8px" : "0 12px",
-          display: "flex",
-          alignItems: "center",
-          gap: 7,
-          fontSize: 12.5,
-          fontWeight: 700,
-          color: ok ? "var(--ink-2)" : "var(--void)",
-        }}
+        title={`${label} ${SAYS[health]}: ${DETAIL[kind]} — settings`}
+        aria-label={`${label} ${SAYS[health]} — open ${label} settings`}
+        style={{ alignSelf: "stretch", padding: "0 7px", display: "flex", alignItems: "center", color: TONE[health] }}
       >
-        <span style={{ width: 7, height: 7, borderRadius: 999, flexShrink: 0, background: ok ? "var(--live)" : "var(--void)", boxShadow: ok ? "0 0 4px var(--live)" : undefined }} />
         <KindIcon kind={kind} />
-        {!compact && label}
       </button>
       {open && <SettingsSheet kind={kind} onClose={() => setOpen(false)} />}
     </>
@@ -48,7 +39,7 @@ export function Indicator({ kind, ok = true, compact }: { kind: Kind; ok?: boole
 
 function KindIcon({ kind }: { kind: Kind }) {
   return kind === "midi" ? (
-    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden>
+    <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden>
       <circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
       {[
         [4.6, 8],
@@ -61,7 +52,7 @@ function KindIcon({ kind }: { kind: Kind }) {
       ))}
     </svg>
   ) : (
-    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden>
+    <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden>
       <path d="M1.5 8h2l1.5-4 2.5 8 2-6 1.5 4 1-2h2.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
