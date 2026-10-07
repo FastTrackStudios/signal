@@ -11,7 +11,10 @@ import { parseSetName, setName, type SetMeta } from "./setlist/sets";
 /** A set as the player keeps it: its songs, and what it is — an event on a
  *  date, with a title only when the night has one. `name` is built from
  *  those (the house style the rig's files use). */
-export type Setlist = RigSetlist & SetMeta;
+export type Setlist = RigSetlist & SetMeta & {
+  /** The profile every song in the set plays on, unless the song has its own. */
+  profile?: string;
+};
 
 /** What a section plays: a patch of the profile, or a preset. */
 export interface Sound {
@@ -69,6 +72,8 @@ export interface State {
   newSongs: SongEntry[];
   /** Colours set by hand, by song name (the rest are their names'). */
   songColours: Record<string, string>;
+  /** A song's own profile, picked by the player (over the set's default). */
+  songProfiles: Record<string, string>;
   /** What the player switched to by hand, over what the part plays; null
    *  when the part's own patch is playing. */
   live: string | null;
@@ -131,6 +136,7 @@ function seed(): State {
     side: {},
     newSongs: [],
     songColours: {},
+    songProfiles: {},
     live: null,
     stackAt: {},
   };
@@ -568,10 +574,45 @@ export function keepLive() {
   const song = currentSong(state)?.name;
   const name = state.live;
   if (!song || !name) return;
-  const hit = stacksFor(song, borrowedOf(state, song))
+  const hit = stacksFor(song, borrowedOf(state, song), profileOf(state, song).name)
     .flatMap((st) => st.patches)
     .find((p) => p.name === name);
   const profile = hit?.from === "other" ? hit.profile : undefined;
   setSectionSound(song, state.partIndex, { kind: "patch", name, ...(profile ? { profile } : {}) }, state.subIndex);
   move((s) => ({ ...s, live: null }));
+}
+
+// ── Profiles: the set's default, a song's own ────────────────────────
+
+export type ProfileFrom = "song" | "set" | "rig";
+
+/** The profile a song plays on, and why: the song's own (the player's
+ *  pick, else the library's), else the set's default, else the rig's
+ *  active profile. */
+export function profileOf(s: State, song?: string): { name: string; from: ProfileFrom } {
+  const own = (song && s.songProfiles[song]) || rig.library.songs.find((x) => x.name === song)?.profile;
+  if (own) return { name: own, from: "song" };
+  const set = currentSet(s)?.profile;
+  if (set) return { name: set, from: "set" };
+  return { name: rig.library.profiles.find((p) => p.active)?.name ?? rig.library.profiles[0].name, from: "rig" };
+}
+
+/** The set's default profile; null: the rig's active one. */
+export function setSetProfile(name: string | null) {
+  change(`${currentSet(state).name} · default profile → ${name ?? "the rig's"}`, (s) => ({
+    ...s,
+    setlists: s.setlists.map((l, i) => (i === s.setIndex ? { ...l, profile: name ?? undefined } : l)),
+    live: null,
+    stackAt: {},
+  }));
+}
+
+/** A song's own profile; null: it inherits the set's. */
+export function setSongProfile(song: string, name: string | null) {
+  change(`${song} · profile → ${name ?? "the set's"}`, (s) => {
+    const songProfiles = { ...s.songProfiles };
+    if (name) songProfiles[song] = name;
+    else delete songProfiles[song];
+    return { ...s, songProfiles, live: null, stackAt: {} };
+  });
 }

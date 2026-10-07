@@ -16,6 +16,9 @@ import {
   addPart,
   addSection,
   backToPart,
+  profileOf,
+  setSetProfile,
+  setSongProfile,
   borrowedOf,
   keepLive,
   playing,
@@ -54,7 +57,7 @@ import { SourceIcon, Strike, Tape, tapeFor } from "../ui/marks";
 import { Button, KeyBox, Tabs } from "../ui/kit";
 import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
 import { nameColour, sectionColour, songColour, SONG_PALETTE } from "./colors";
-import { borrowable, findPatch, profileFor, stacksFor, type StackPatch } from "./stacks";
+import { borrowable, findPatch, stacksFor, type StackPatch } from "./stacks";
 import { addDays, dateLabel, isoOf, MONTHS, nextDateFor, setHeading, setName, WEEKDAYS, whenLabel, type SetMeta } from "./sets";
 
 const KEYS = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
@@ -74,7 +77,9 @@ type Panel =
   | { kind: "start"; song: number }
   | { kind: "colour"; song: number }
   | { kind: "details"; mode: "new" | "edit" | "duplicate" }
-  | { kind: "patch"; song: string; section: number; part?: number };
+  | { kind: "patch"; song: string; section: number; part?: number }
+  /** A song's profile (by index in the set), or the set's default. */
+  | { kind: "profile"; song?: number };
 
 export function Setlist() {
   const s = useStore();
@@ -203,6 +208,7 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
     { kind: "head", label: set.name },
     { kind: "run", id: "add", label: "Add songs…" },
     { kind: "run", id: "edit", label: "Edit details…", detail: "event · date · title" },
+    { kind: "run", id: "profile", label: "Default profile…", detail: set.profile ?? "the rig's" },
     { kind: "run", id: "new", label: "New set…" },
     { kind: "run", id: "duplicate", label: "Duplicate for next week" },
     { kind: "run", id: "sets", label: "All sets…", detail: `${s.setlists.length}` },
@@ -213,6 +219,7 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
   const onPick = (p: Picked) => {
     if (p.id === "add") onPanel({ kind: "add" });
     if (p.id === "edit") onPanel({ kind: "details", mode: "edit" });
+    if (p.id === "profile") onPanel({ kind: "profile" });
     if (p.id === "new") onPanel({ kind: "details", mode: "new" });
     if (p.id === "duplicate") onPanel({ kind: "details", mode: "duplicate" });
     if (p.id === "sets") onPanel({ kind: "sets" });
@@ -246,6 +253,10 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
         {fit !== "narrow" && (
           <div className="t-meta" style={{ marginTop: 3, fontSize: 13 }}>
             {set.songs.length} songs · about {minutes} min
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginLeft: 8, verticalAlign: "-1px" }} title="The set's default profile">
+              <SourceIcon from="profile" colour="var(--ink-3)" size={11} />
+              {profileOf(s, undefined).name}
+            </span>
           </div>
         )}
       </button>
@@ -318,6 +329,7 @@ function SongRow({
   const fit = useFit();
   const narrow = fit === "narrow";
   const colour = songColour(song.name, s.songColours);
+  const prof = profileOf(s, song.name);
   const items: MenuItem[] = [
     { kind: "head", label: `${i + 1} · ${song.name}` },
     { kind: "run", id: "go", label: "Play from here", disabled: up ? "It's up now" : undefined },
@@ -325,6 +337,7 @@ function SongRow({
     { kind: "run", id: "key", label: "Key…", detail: song.key || "—" },
     { kind: "run", id: "tempo", label: "Tempo…", detail: song.bpm ? `${song.bpm} BPM` : "—" },
     { kind: "run", id: "start", label: "Starts on…", detail: song.start || "default" },
+    { kind: "run", id: "profile", label: "Profile…", detail: prof.from === "song" ? prof.name : `${prof.name} (set's)` },
     { kind: "run", id: "colour", label: "Colour…", detail: s.songColours[song.name] ? "set" : "from its name" },
     { kind: "sep" },
     { kind: "run", id: "up", label: "Move up", disabled: i === 0 ? "Already first" : undefined },
@@ -337,6 +350,7 @@ function SongRow({
     if (p.id === "key") onPanel({ kind: "key", song: i });
     if (p.id === "tempo") onPanel({ kind: "tempo", song: i });
     if (p.id === "start") onPanel({ kind: "start", song: i });
+    if (p.id === "profile") onPanel({ kind: "profile", song: i });
     if (p.id === "colour") onPanel({ kind: "colour", song: i });
     if (p.id === "up") moveSong(i, i - 1);
     if (p.id === "down") moveSong(i, i + 1);
@@ -357,8 +371,8 @@ function SongRow({
       {up && <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--live)" }} />}
       <button
         className="pressable"
-        onClick={() => !reordering && onToggle()}
-        aria-expanded={open}
+        onClick={() => !reordering && (up ? onToggle() : goToSong(i))}
+        aria-current={up ? "true" : undefined}
         style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, padding: "10px 2px 10px 14px", textAlign: "left" }}
       >
         {/* The song's number on its colour: the song, at a glance. */}
@@ -407,7 +421,17 @@ function SongRow({
           ) : (
             <span className="t-meta" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden" }}>
               {song.start && <PatchChip name={song.start} small />}
-              {!open && sections.length > 0 && <span style={{ flexShrink: 0 }}>{song.start ? "· " : ""}{sections.length} sections</span>}
+              {/* Its profile: always on the song up; elsewhere only when it has its own. */}
+              {(up || prof.from === "song") && (
+                <span
+                  title={prof.from === "song" ? `${song.name} plays on ${prof.name}` : `${prof.name} — the set's default`}
+                  style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, color: prof.from === "song" ? nameColour(prof.name) : "var(--ink-3)", fontWeight: prof.from === "song" ? 650 : 500 }}
+                >
+                  <SourceIcon from={prof.from === "song" ? "other" : "profile"} colour={prof.from === "song" ? nameColour(prof.name) : "var(--ink-3)"} size={11} />
+                  {prof.name}
+                </span>
+              )}
+              {!open && sections.length > 0 && <span style={{ flexShrink: 0 }}>{sections.length} sections</span>}
             </span>
           )}
         </span>
@@ -783,7 +807,7 @@ function Badge({ children, tone }: { children: ReactNode; tone?: "live" }) {
 function Stacks({ left }: { left: number }) {
   const s = useStore();
   const song = currentSong(s)?.name;
-  const stacks = stacksFor(song, borrowedOf(s, song));
+  const stacks = stacksFor(song, borrowedOf(s, song), profileOf(s, song).name);
   const now = playing(s);
   const at = now ? findPatch(stacks, now) : null;
   const own = partPatch(s);
@@ -1016,6 +1040,40 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
       );
       break;
     }
+    case "profile": {
+      const song = panel.song !== undefined ? set.songs[panel.song] : undefined;
+      const current = song ? (s.songProfiles[song.name] ?? null) : (set.profile ?? null);
+      const fallback = song ? profileOf({ ...s, songProfiles: {} }, song.name) : profileOf({ ...s, setlists: s.setlists.map((l) => ({ ...l, profile: undefined })) }, undefined);
+      title = song ? song.name : "Default profile";
+      sub = song ? "The profile it plays on" : "Every song in the set plays on it, unless it has its own";
+      body = (
+        <div style={{ padding: "10px 14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+          <ProfileCell
+            name={song ? `The set's — ${fallback.name}` : `The rig's — ${fallback.name}`}
+            stacks={(() => {
+              const p = rig.library.profiles.find((x) => x.name === fallback.name);
+              return p ? p.stacks.filter((st) => p.patch_list.some((x) => x.stack === st)) : [];
+            })()}
+            on={current === null}
+            onClick={() => (song ? setSongProfile(song.name, null) : setSetProfile(null))}
+          />
+          <div className="t-label" style={{ color: "var(--ink-3)", margin: "8px 2px 0" }}>
+            {song ? "Its own" : "Profiles"}
+          </div>
+          {rig.library.profiles.map((p) => (
+            <ProfileCell
+              key={p.name}
+              name={p.name}
+              colour={nameColour(p.name)}
+              stacks={p.stacks.filter((st) => p.patch_list.some((x) => x.stack === st))}
+              on={current === p.name}
+              onClick={() => (song ? setSongProfile(song.name, p.name) : setSetProfile(p.name))}
+            />
+          ))}
+        </div>
+      );
+      break;
+    }
     case "start": {
       const song = set.songs[panel.song];
       title = song.name;
@@ -1121,13 +1179,13 @@ function PatchList({ song, current, defaultLabel, onPick }: { song?: string; cur
   // then what its parts borrow. Other profiles' patches wait below.
   const s = useStore();
   const colour = song ? songColour(song, s.songColours) : "var(--ink-3)";
-  const profile = profileFor(song);
-  const others = borrowable(song);
+  const profile = profileOf(s, song);
+  const others = borrowable(song, profile.name);
   const [showOthers, setShowOthers] = useState(false);
   return (
     <div style={{ padding: "10px 14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
       <Cell title={defaultLabel} on={current === null} onClick={() => onPick(null)} />
-      {stacksFor(song, borrowedOf(s, song)).map((st) => (
+      {stacksFor(song, borrowedOf(s, song), profile.name).map((st) => (
         <div key={st.name}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
             <Tape colour={tapeFor(st.name)}>{st.name}</Tape>
@@ -1193,6 +1251,39 @@ function PatchList({ song, current, defaultLabel, onPick }: { song?: string; cur
         </div>
       )}
     </div>
+  );
+}
+
+function ProfileCell({ name, colour, stacks, on, onClick }: { name: string; colour?: string; stacks: string[]; on: boolean; onClick: () => void }) {
+  return (
+    <button
+      className={on ? "" : "pressable"}
+      onClick={onClick}
+      style={{
+        minHeight: 56,
+        padding: "8px 12px",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        textAlign: "left",
+        borderRadius: "var(--r)",
+        background: on ? "var(--focus-bg)" : "var(--sheet)",
+        border: on ? "1.5px solid var(--focus-fg)" : "1px solid var(--rule-strong)",
+      }}
+    >
+      <SourceIcon from={colour ? "other" : "profile"} colour={colour ?? "var(--ink-3)"} size={16} />
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 15, fontWeight: on ? 700 : 600 }}>{name}</span>
+        <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {stacks.map((st) => (
+            <span key={st} className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+              <span style={{ width: 6, height: 6, borderRadius: 2, background: tapeFor(st) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(st) }} />
+              {st}
+            </span>
+          ))}
+        </span>
+      </span>
+    </button>
   );
 }
 

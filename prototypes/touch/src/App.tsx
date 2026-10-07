@@ -3,8 +3,7 @@
 // area (empty for now), a status bar along the foot.
 
 import { Setlist } from "./setlist/Setlist";
-import { currentSong, playing, sectionsOf, useStore } from "./store";
-import { profileFor } from "./setlist/stacks";
+import { currentSong, playing, profileOf, sectionsOf, useStore } from "./store";
 import { songColour } from "./setlist/colors";
 import { tapeFor } from "./ui/marks";
 import { stackOf } from "./data/rig";
@@ -47,7 +46,7 @@ function TopBar() {
   const song = currentSong(s);
   const sec = song ? sectionsOf(s, song.name)[s.partIndex] : undefined;
   const now = playing(s);
-  const profile = profileFor(song?.name);
+  const profile = profileOf(s, song?.name);
   return (
     <header style={{ height: "var(--bar-h)", flexShrink: 0, display: "flex", alignItems: "center", borderBottom: "1px solid var(--rule)", background: "var(--sheet)" }}>
       <div style={{ width: 402, flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "0 16px", height: "100%", borderRight: "1px solid var(--rule)" }}>

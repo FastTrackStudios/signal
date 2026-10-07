@@ -46,6 +46,8 @@ export const TAPE: Record<string, string> = {
   lead: "var(--tape-lead)",
   ambient: "var(--tape-ambient)",
   special: "var(--tape-special)",
+  // Rhythm (Metal, Rock): the drive orange's heavier neighbour.
+  rhythm: "var(--tape-drive)",
 };
 
 /** A stack's tape colour; anything unknown is gaffer black. */

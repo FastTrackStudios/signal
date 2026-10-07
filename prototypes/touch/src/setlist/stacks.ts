@@ -33,11 +33,17 @@ export interface SongStack {
   song: boolean;
 }
 
-/** The profile a song plays on: its own, else the one that is active. */
-export function profileFor(song?: string): ProfileEntry {
-  const own = rig.library.songs.find((x) => x.name === song)?.profile;
+/** A profile by name, else the one the rig has active. */
+export function profileNamed(name?: string): ProfileEntry {
   const profiles = rig.library.profiles;
-  return profiles.find((p) => p.name === own) ?? profiles.find((p) => p.active) ?? profiles[0];
+  return profiles.find((p) => p.name === name) ?? profiles.find((p) => p.active) ?? profiles[0];
+}
+
+/** The profile a song plays on, when nothing in the set says otherwise:
+ *  its own, else the one that is active. (The store's `profileOf` knows
+ *  the set's default and the player's picks.) */
+export function profileFor(song?: string, name?: string): ProfileEntry {
+  return profileNamed(name ?? (rig.library.songs.find((x) => x.name === song)?.profile || undefined));
 }
 
 /** A song's own patches: the patches filed under the song's name. */
@@ -68,8 +74,8 @@ export function topStacks(profile: ProfileEntry): string[] {
 /** Every top-level stack of the song's profile, in the profile's order,
  *  holding the song's patches, then the profile's, then any its parts
  *  borrow from other profiles (in the stack they sit in there). */
-export function stacksFor(song?: string, borrowed: Borrowed[] = []): SongStack[] {
-  const profile = profileFor(song);
+export function stacksFor(song?: string, borrowed: Borrowed[] = [], profileName?: string): SongStack[] {
+  const profile = profileFor(song, profileName);
   const names = topStacks(profile);
   const own = songPatches(song);
   const taken = new Set(own.map((p) => p.toLowerCase()));
@@ -90,8 +96,8 @@ export function stacksFor(song?: string, borrowed: Borrowed[] = []): SongStack[]
 
 /** The other profiles' patches a song could borrow: everything they have
  *  in a stack that the song's own profile doesn't, by profile. */
-export function borrowable(song?: string): { profile: string; patches: { name: string; stack: string }[] }[] {
-  const own = profileFor(song);
+export function borrowable(song?: string, profileName?: string): { profile: string; patches: { name: string; stack: string }[] }[] {
+  const own = profileFor(song, profileName);
   const have = new Set(own.patch_list.map((p) => p.name.toLowerCase()));
   return rig.library.profiles
     .filter((p) => p.name !== own.name)
