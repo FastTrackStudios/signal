@@ -1047,7 +1047,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
       title = song ? song.name : "Default profile";
       sub = song ? "The profile it plays on" : "Every song in the set plays on it, unless it has its own";
       body = (
-        <div style={{ padding: "10px 14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", flexDirection: "column" }}>
           <ProfileCell
             name={song ? `The set's — ${fallback.name}` : `The rig's — ${fallback.name}`}
             stacks={(() => {
@@ -1057,7 +1057,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
             on={current === null}
             onClick={() => (song ? setSongProfile(song.name, null) : setSetProfile(null))}
           />
-          <div className="t-label" style={{ color: "var(--ink-3)", margin: "8px 2px 0" }}>
+          <div className="t-label" style={{ color: "var(--ink-3)", padding: "16px 16px 6px", borderBottom: "1px solid var(--rule)" }}>
             {song ? "Its own" : "Profiles"}
           </div>
           {rig.library.profiles.map((p) => (
@@ -1254,34 +1254,47 @@ function PatchList({ song, current, defaultLabel, onPick }: { song?: string; cur
   );
 }
 
+/** A profile in the list: its name, and its stacks across the full width
+ *  — each a muted name over a thin line of its colour. Rows run flush,
+ *  hairlines between them; the one picked is lifted. */
 function ProfileCell({ name, colour, stacks, on, onClick }: { name: string; colour?: string; stacks: string[]; on: boolean; onClick: () => void }) {
   return (
     <button
       className={on ? "" : "pressable"}
       onClick={onClick}
+      aria-pressed={on}
       style={{
-        minHeight: 56,
-        padding: "8px 12px",
+        width: "100%",
+        padding: "12px 16px 0",
         display: "flex",
-        alignItems: "center",
-        gap: 12,
+        flexDirection: "column",
+        gap: 10,
         textAlign: "left",
-        borderRadius: "var(--r)",
-        background: on ? "var(--focus-bg)" : "var(--sheet)",
-        border: on ? "1.5px solid var(--focus-fg)" : "1px solid var(--rule-strong)",
+        background: on ? "var(--focus-bg)" : "transparent",
+        borderBottom: "1px solid var(--rule)",
       }}
     >
-      <SourceIcon from={colour ? "other" : "profile"} colour={colour ?? "var(--ink-3)"} size={16} />
-      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-        <span style={{ fontSize: 15, fontWeight: on ? 700 : 600 }}>{name}</span>
-        <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {stacks.map((st) => (
-            <span key={st} className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}>
-              <span style={{ width: 6, height: 6, borderRadius: 2, background: tapeFor(st) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(st) }} />
-              {st}
+      <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <SourceIcon from={colour ? "other" : "profile"} colour={colour ?? "var(--ink-3)"} size={14} />
+        <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: on ? 700 : 600 }}>{name}</span>
+        {on && (
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden style={{ color: "var(--ink)" }}>
+            <path d="M2.5 7.5 5.5 10.5 11.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </span>
+      <span style={{ display: "flex", gap: 2 }}>
+        {stacks.map((st) => {
+          const tape = tapeFor(st) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(st);
+          return (
+            <span key={st} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
+              <span className="t-label" style={{ fontSize: 9.5, letterSpacing: "0.08em", color: "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {st}
+              </span>
+              <span style={{ height: 2, background: tape, opacity: on ? 1 : 0.7 }} />
             </span>
-          ))}
-        </span>
+          );
+        })}
       </span>
     </button>
   );
