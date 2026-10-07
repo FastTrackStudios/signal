@@ -15,6 +15,9 @@ import {
   partPatch,
   addPart,
   select,
+  addVariation,
+  moveStackPatch,
+  playPreset,
   addStackPatch,
   moveStack,
   profileStacksOf,
@@ -945,10 +948,164 @@ export function Stacks({ left, profile: only, reorder }: { left: number; profile
               style={{ opacity: drag?.from === i ? 0.5 : 1, boxShadow: drag && drag.to === i && drag.from !== i ? `inset 0 ${drag.to < drag.from ? 2 : -2}px 0 var(--ink-2)` : undefined }}
             >
               <StackRow stack={st} index={i} count={stacks.length} profile={profile} on={on} home={home !== null} where={where} pos={pos} songColour={colour} onGrip={reorder ? onGrip(i) : undefined} />
+              {/* The Profile view opens the stack playing into all its patches. */}
+              {reorder && on && <StackPatches profile={profile} stack={st} index={i} pos={pos} />}
             </div>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** Every patch in a stack, under it: tap one to play it; ⋯ (or a
+ *  long-press) to rename it, move it, or remove it; "Add a patch" at the
+ *  foot. The Profile view's open stack. */
+function StackPatches({ profile, stack, pos }: { profile: string; stack: ReturnType<typeof stacksFor>[number]; index: number; pos: number }) {
+  const s = useStore();
+  const add = useMenu();
+  const defs = profileStacksOf(s, profile);
+  const def = defs.findIndex((d) => d.name === stack.name);
+  const tape = tapeFor(stack.name);
+  return (
+    <div style={{ background: "rgba(0,0,0,0.25)", paddingBottom: 2 }}>
+      {stack.patches.map((p, k) => (
+        <PatchRow key={p.name} profile={profile} stack={stack} def={def} index={k} count={stack.patches.length} on={k === pos} tape={tape} />
+      ))}
+      <button className="pressable" onClick={add.fromButton} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", minHeight: 44, padding: "0 12px 0 52px", color: "var(--ink-3)", fontSize: 14, fontWeight: 600, textAlign: "left" }}>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+          <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+        Add a patch to {stack.name}
+      </button>
+      {add.open && (
+        <Menu
+          at={add.open.at}
+          naming={0}
+          items={[{ kind: "name", id: "add", label: `New patch in ${stack.name}…`, initial: `${stack.name} ${stack.patches.length + 1}`, confirm: "Add", taken: stack.patches.map((x) => x.name) }]}
+          onPick={(x) => def >= 0 && addStackPatch(profile, def, x.text)}
+          onClose={add.close}
+        />
+      )}
+          </div>
+  );
+}
+
+function PatchRow({ profile, stack, def, index: k, count, on, tape }: { profile: string; stack: ReturnType<typeof stacksFor>[number]; def: number; index: number; count: number; on: boolean; tape: string }) {
+  const menu = useMenu();
+  const p = stack.patches[k];
+  const items: MenuItem[] = [
+    { kind: "head", label: p.name },
+    { kind: "name", id: "rename", label: "Rename…", initial: p.name, confirm: "Rename", taken: stack.patches.map((x) => x.name) },
+    { kind: "run", id: "up", label: "Move up", disabled: k === 0 ? "Already first" : undefined },
+    { kind: "run", id: "down", label: "Move down", disabled: k === count - 1 ? "Already last" : undefined },
+    { kind: "sep" },
+    { kind: "delete", id: "remove", label: "Remove from the stack", disabled: count <= 1 ? "A stack keeps at least one patch" : undefined },
+  ];
+  const onPick = (x: Picked) => {
+    if (def < 0) return;
+    if (x.id === "rename") renameStackPatch(profile, def, k, x.text);
+    if (x.id === "up") moveStackPatch(profile, def, k, k - 1);
+    if (x.id === "down") moveStackPatch(profile, def, k, k + 1);
+    if (x.id === "remove") removeStackPatch(profile, def, k);
+  };
+  return (
+    <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 44, background: on ? "rgba(255,255,255,0.06)" : undefined }}>
+      <button
+        className="pressable"
+        // Play this one: step the stack so a tap lands on it.
+        onClick={() => tapStack(stack.name, stack.patches.map((x) => x.name), (k - 1 + count) % count)}
+        style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: "0 4px 0 52px", textAlign: "left" }}
+      >
+        <span style={{ width: 8, height: 8, borderRadius: 999, flexShrink: 0, background: on ? "var(--live)" : "transparent", boxShadow: on ? undefined : `inset 0 0 0 1.5px ${tape === "var(--tape-gaffer)" ? "var(--ink-3)" : tape}` }} />
+        <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: on ? 700 : 560, color: on ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+      </button>
+      <MoreButton label={`${p.name} actions`} onClick={menu.fromButton} />
+      {menu.open && <Menu at={menu.open.at} items={items} onPick={onPick} onClose={menu.close} />}
+    </div>
+  );
+}
+
+/** The Preset view: the presets, and the one playing (or picked) open into
+ *  all its variations — tap a variation to play it; add one at the foot. */
+export function PresetView() {
+  const s = useStore();
+  const [open, setOpen] = useState<string | null>(s.presetUp?.preset ?? null);
+  const presets = s.presets.filter((p) => !p.cancelled);
+  return (
+    <section style={{ height: "100%", display: "flex", flexDirection: "column", background: "var(--sheet)", minHeight: 0 }}>
+      <header style={{ flexShrink: 0, height: MACRO_BAR_H, display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, padding: "0 16px", borderBottom: "1px solid var(--rule)" }}>
+        <span className="t-marker" style={{ fontSize: 22 }}>
+          Presets
+        </span>
+        <span className="t-meta" style={{ fontSize: 13 }}>
+          {presets.length} presets · {presets.reduce((n, p) => n + p.variations.length, 0)} variations
+        </span>
+      </header>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+        {presets.map((p) => {
+          const playing = s.presetUp?.preset === p.name;
+          const isOpen = open === p.name;
+          return (
+            <div key={p.name} style={{ borderBottom: "1px solid var(--rule)" }}>
+              <button
+                className="pressable"
+                onClick={() => {
+                  setOpen(isOpen ? null : p.name);
+                  if (!playing) playPreset(p.name, p.variations[0]);
+                }}
+                aria-expanded={isOpen}
+                style={{ position: "relative", width: "100%", display: "flex", alignItems: "center", gap: 10, minHeight: 52, padding: "0 14px 0 16px", textAlign: "left", background: playing ? "rgba(255,255,255,0.05)" : undefined }}
+              >
+                {playing && <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: 2, background: "var(--live)" }} />}
+                <span style={{ width: 9, height: 9, borderRadius: 2, flexShrink: 0, background: tapeFor(stackOf(p.name)) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(stackOf(p.name)) }} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: playing ? 700 : 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                <span className="t-meta" style={{ fontSize: 13 }}>
+                  {p.variations.length} {p.variations.length === 1 ? "variation" : "variations"}
+                </span>
+                <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden style={{ color: "var(--ink-3)", transform: isOpen ? "rotate(180deg)" : undefined }}>
+                  <path d="M1 1 L5 5 L9 1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {isOpen && <Variations preset={p.name} variations={p.variations} />}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function Variations({ preset, variations }: { preset: string; variations: string[] }) {
+  const s = useStore();
+  const add = useMenu();
+  return (
+    <div style={{ background: "rgba(0,0,0,0.25)", paddingBottom: 2 }}>
+      {variations.map((v) => {
+        const on = s.presetUp?.preset === preset && s.presetUp.variation === v;
+        return (
+          <button key={v} className="pressable" onClick={() => playPreset(preset, v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: "0 16px 0 36px", textAlign: "left", background: on ? "rgba(255,255,255,0.06)" : undefined }}>
+            <span style={{ width: 8, height: 8, borderRadius: 999, flexShrink: 0, background: on ? "var(--live)" : "transparent", boxShadow: on ? undefined : "inset 0 0 0 1.5px var(--ink-3)" }} />
+            <span style={{ flex: 1, fontSize: 15, fontWeight: on ? 700 : 560, color: on ? "var(--ink)" : "var(--ink-2)" }}>{v}</span>
+            {on && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--live)" }}>Playing</span>}
+          </button>
+        );
+      })}
+      <button className="pressable" onClick={add.fromButton} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", minHeight: 44, padding: "0 16px 0 36px", color: "var(--ink-3)", fontSize: 14, fontWeight: 600, textAlign: "left" }}>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+          <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+        Add a variation
+      </button>
+      {add.open && (
+        <Menu
+          at={add.open.at}
+          naming={0}
+          items={[{ kind: "name", id: "add", label: `New variation of ${preset}…`, initial: `Variation ${variations.length + 1}`, confirm: "Add", taken: variations }]}
+          onPick={(x) => addVariation(preset, x.text)}
+          onClose={add.close}
+        />
+      )}
     </div>
   );
 }
@@ -1143,12 +1300,7 @@ export function ProfileView() {
 export function SidebarContent() {
   const s = useStore();
   if (s.performMode === "profile") return <ProfileView />;
-  if (s.performMode === "preset")
-    return (
-      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--dim)", fontSize: 13 }}>
-        Presets — next
-      </div>
-    );
+  if (s.performMode === "preset") return <PresetView />;
   return <Setlist />;
 }
 

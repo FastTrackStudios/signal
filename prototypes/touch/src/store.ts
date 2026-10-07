@@ -101,6 +101,8 @@ export interface State {
   /** The kind the browser should show for what's being worked on (a block
    *  picked in Edit's routing → its presets). */
   browserFocus: string | null;
+  /** In Preset mode, the preset and variation playing. */
+  presetUp: { preset: string; variation: string } | null;
 }
 
 let seedAt = { section: 0, part: 0 };
@@ -169,6 +171,7 @@ function seed(): State {
     overrides: {},
     profileStacks: {},
     browserFocus: null,
+    presetUp: null,
   };
 }
 
@@ -814,4 +817,9 @@ export function moveStackPatch(profile: string, i: number, from: number, to: num
 export function focusBrowser(kind: string | null) {
   if (state.browserFocus === kind) return;
   move((s) => ({ ...s, browserFocus: kind }));
+}
+
+/** Play a preset's variation (Preset mode): not an edit, no undo. */
+export function playPreset(preset: string, variation: string) {
+  move((s) => ({ ...s, presetUp: { preset, variation }, live: null }));
 }
