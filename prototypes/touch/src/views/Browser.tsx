@@ -440,6 +440,9 @@ export function Browser({ onClose }: { onClose?: () => void }) {
   }, [targetKey.split(":")[0], s.performMode]);
   const [opened, setOpened] = useState(false); // narrow: inside a kind
   const [query, setQuery] = useState("");
+  // The search opens from its icon; until then the row holds the filters.
+  const [searching, setSearching] = useState(false);
+  const [songFilter, setSongFilter] = useState<SongFilter>(NO_SONG_FILTER);
   // It filters itself to what's being worked on (a block picked in Edit).
   useEffect(() => {
     if (s.browserFocus && KINDS.some((k) => k.id === s.browserFocus)) {
@@ -516,6 +519,14 @@ export function Browser({ onClose }: { onClose?: () => void }) {
               Unpick
             </button>
           )}
+          {!searching && (
+            <button className="pressable" aria-label="Search" onClick={() => setSearching(true)} style={{ width: 44, height: 44, flexShrink: 0, borderRadius: "var(--r)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)" }}>
+              <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden>
+                <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M10.6 10.6 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
           {onClose && (
             <button className="pressable" aria-label="Close the browser" onClick={onClose} style={{ width: 44, height: 44, borderRadius: "var(--r)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)" }}>
               <svg width="13" height="13" viewBox="0 0 12 12" aria-hidden>
@@ -524,20 +535,31 @@ export function Browser({ onClose }: { onClose?: () => void }) {
             </button>
           )}
         </div>
-        <div style={{ padding: "0 12px 8px" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, height: 36, padding: "0 12px", borderRadius: 10, background: "#1a1a1f" }}>
-            <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden style={{ color: "var(--ink-3)", flexShrink: 0 }}>
-              <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />
-              <path d="M10.6 10.6 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search everything" aria-label="Search the browser" style={{ flex: 1, minWidth: 0, height: "100%", border: "none", outline: "none", background: "transparent", fontSize: 15 }} />
-            {query && (
-              <button onClick={() => setQuery("")} style={{ color: "var(--ink-3)", fontSize: 13, fontWeight: 650 }}>
-                Clear
-              </button>
-            )}
-          </label>
-        </div>
+        {searching || q ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 6px 4px 12px" }}>
+            <label style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, height: 40, padding: "0 12px", borderRadius: "var(--r)", background: "var(--fill)" }}>
+              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden style={{ color: "var(--ink-3)", flexShrink: 0 }}>
+                <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M10.6 10.6 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search everything" aria-label="Search the browser" style={{ flex: 1, minWidth: 0, height: "100%", border: "none", outline: "none", background: "transparent", fontSize: 15 }} />
+            </label>
+            <button
+              className="pressable"
+              onClick={() => {
+                setQuery("");
+                setSearching(false);
+              }}
+              style={{ height: 44, padding: "0 10px", flexShrink: 0, fontSize: 14, fontWeight: 650, color: "var(--ink-2)" }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : kind.id === "songs" && (wide || opened) ? (
+          <div style={{ display: "flex", alignItems: "center", padding: "0 6px 4px 12px" }}>
+            <SongFilters items={kind.items(s, bt)} f={songFilter} onF={setSongFilter} />
+          </div>
+        ) : null}
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
@@ -621,7 +643,7 @@ export function Browser({ onClose }: { onClose?: () => void }) {
                 <Quiet>Nothing called “{query}”.</Quiet>
               )
             ) : (
-              <KindList kind={kind} items={kind.items(s, bt)} apply={kind.apply(s, bt)} hint={hintFor(s, bt, kind)} />
+              <KindList kind={kind} items={kind.items(s, bt)} apply={kind.apply(s, bt)} hint={hintFor(s, bt, kind)} songFilter={songFilter} onSongFilter={setSongFilter} />
             )}
           </div>
         )}
@@ -663,11 +685,11 @@ function hintFor(_s: State, _bt: BuildTarget, _kind: Kind): string | null {
   return null;
 }
 
-function KindList({ kind, items, apply, hint }: { kind: Kind; items: Item[]; apply: ((item: Item) => void) | null; hint: string | null }) {
+function KindList({ kind, items, apply, hint, songFilter, onSongFilter }: { kind: Kind; items: Item[]; apply: ((item: Item) => void) | null; hint: string | null; songFilter: SongFilter; onSongFilter: (f: SongFilter) => void }) {
   // Profiles open into their stacks and patches.
   if (kind.id === "profiles") return <ProfileColumns />;
   // Songs: by collection, artist, key and genre.
-  if (kind.id === "songs") return <SongList items={items} apply={apply} hint={hint} />;
+  if (kind.id === "songs") return <SongList items={items} apply={apply} hint={hint} f={songFilter} onF={onSongFilter} />;
   const nested = items.filter((i) => i.nested);
   const plain = items.filter((i) => !i.nested);
   // Presets with variations: a column browser — presets, then the picked
@@ -950,119 +972,126 @@ function Row({ item, sub, onPick }: { item: Item; sub?: string; onPick?: () => v
 
 const KEY_ORDER = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"];
 
-/** The library's songs, found fast: a collection along the top (All, or
- *  one of the user's — Church…), then artist, key and genre
- *  to narrow it; each song's ⋯ puts it in collections and sets its
- *  artist and genre. */
-function SongList({ items, apply, hint }: { items: Item[]; apply: ((item: Item) => void) | null; hint: string | null }) {
+export interface SongFilter {
+  collection: string | null;
+  artist: string | null;
+  key: string | null;
+  genre: string | null;
+}
+export const NO_SONG_FILTER: SongFilter = { collection: null, artist: null, key: null, genre: null };
+
+function songKeyOf(s: State, name: string) {
+  return [...rig.library.songs, ...s.newSongs].find((x) => x.name === name)?.key ?? "";
+}
+
+/** The songs a filter lets through. */
+function filterSongs(s: State, items: Item[], f: SongFilter) {
+  const col = s.collections.find((c) => c.name === f.collection);
+  return items.filter((i) => {
+    const info = songInfoOf(s, i.name);
+    return (!col || col.songs.includes(i.name)) && (!f.artist || info.artist === f.artist) && (!f.key || songKeyOf(s, i.name) === f.key) && (!f.genre || info.genre === f.genre);
+  });
+}
+
+/** The song filters, up in the browser's header where the search was: a
+ *  collection (All, or one of the user's — Church…) and artist, key and
+ *  genre, offering only what the library has; one row, scrolling sideways
+ *  if it must. */
+function SongFilters({ items, f, onF }: { items: Item[]; f: SongFilter; onF: (f: SongFilter) => void }) {
   const s = useStore();
-  const [collection, setCollection] = useState<string | null>(null);
-  const [artist, setArtist] = useState<string | null>(null);
-  const [key, setKey] = useState<string | null>(null);
-  const [genre, setGenre] = useState<string | null>(null);
   const addMenu = useMenu();
   const colMenu = useMenu();
-  const songs = [...rig.library.songs, ...s.newSongs];
-  const keyOf = (name: string) => songs.find((x) => x.name === name)?.key ?? "";
-  // The facets offer only what the library has.
   const artists = [...new Set(items.map((i) => songInfoOf(s, i.name).artist).filter(Boolean))].sort();
-  const keys = [...new Set(items.map((i) => keyOf(i.name)).filter(Boolean))].sort((a, b) => KEY_ORDER.indexOf(a) - KEY_ORDER.indexOf(b));
+  const keys = [...new Set(items.map((i) => songKeyOf(s, i.name)).filter(Boolean))].sort((a, b) => KEY_ORDER.indexOf(a) - KEY_ORDER.indexOf(b));
   const genres = [...new Set(items.map((i) => songInfoOf(s, i.name).genre).filter(Boolean))].sort();
-  const col = s.collections.find((c) => c.name === collection);
-  const shown = items.filter((i) => {
-    const info = songInfoOf(s, i.name);
-    return (!col || col.songs.includes(i.name)) && (!artist || info.artist === artist) && (!key || keyOf(i.name) === key) && (!genre || info.genre === genre);
-  });
-  const filtered = !!(col || artist || key || genre);
-  const clear = () => {
-    setCollection(null);
-    setArtist(null);
-    setKey(null);
-    setGenre(null);
-  };
+  const col = s.collections.find((c) => c.name === f.collection);
+  const set = (patch: Partial<SongFilter>) => onF({ ...f, ...patch });
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, flex: 1, overflowX: "auto", scrollbarWidth: "none" }}>
+      {/* Collections, as one segmented control. */}
+      <span role="tablist" aria-label="Collections" style={{ display: "flex", alignItems: "center", flexShrink: 0, padding: 2, borderRadius: "var(--r)", background: "var(--fill)" }}>
+        {[{ name: null as string | null, colour: "" }, ...s.collections.map((c) => ({ name: c.name as string | null, colour: c.colour }))].map((c) => {
+          const on = c.name === f.collection;
+          return (
+            <button
+              key={c.name ?? "all"}
+              role="tab"
+              aria-selected={on}
+              onClick={() => set({ collection: c.name })}
+              className="pressable"
+              style={{ height: 40, display: "flex", alignItems: "center", gap: 6, padding: "0 12px", borderRadius: 4, fontSize: 14, fontWeight: on ? 750 : 600, whiteSpace: "nowrap", color: on ? "var(--ink)" : "var(--ink-3)", background: on ? "var(--fill-on)" : "transparent" }}
+            >
+              {c.name && <span aria-hidden style={{ width: 7, height: 7, borderRadius: 999, background: c.colour }} />}
+              {c.name ?? "All"}
+            </button>
+          );
+        })}
+        <button className="pressable" onClick={addMenu.fromButton} aria-label="New collection" style={{ width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)" }}>
+          <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden>
+            <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+      </span>
+      {col && <MoreButton label={`${col.name} actions`} onClick={colMenu.fromButton} />}
+      <span aria-hidden style={{ width: 1, height: 22, margin: "0 4px", flexShrink: 0, background: "var(--rule-strong)" }} />
+      <Facet label="Artist" value={f.artist} options={artists} onPick={(v) => set({ artist: v })} />
+      <Facet label="Key" value={f.key} options={keys} onPick={(v) => set({ key: v })} />
+      <Facet label="Genre" value={f.genre} options={genres} onPick={(v) => set({ genre: v })} />
+      {addMenu.open && (
+        <Menu
+          at={addMenu.open.at}
+          naming={0}
+          items={[{ kind: "name", id: "add", label: "New collection…", initial: "", confirm: "Add", taken: s.collections.map((c) => c.name) }]}
+          onPick={(p) => {
+            newCollection(p.text);
+            set({ collection: p.text });
+          }}
+          onClose={addMenu.close}
+        />
+      )}
+      {col && colMenu.open && (
+        <Menu
+          at={colMenu.open.at}
+          items={[
+            { kind: "head", label: col.name },
+            { kind: "name", id: "rename", label: "Rename…", initial: col.name, confirm: "Rename", taken: s.collections.map((c) => c.name) },
+            { kind: "sep" },
+            { kind: "delete", id: "delete", label: "Delete collection" },
+          ]}
+          onPick={(p) => {
+            if (p.id === "rename") {
+              renameCollection(col.name, p.text);
+              set({ collection: p.text });
+            }
+            if (p.id === "delete") {
+              removeCollection(col.name);
+              set({ collection: null });
+            }
+          }}
+          onClose={colMenu.close}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The songs the header's filters let through. */
+function SongList({ items, apply, hint, f, onF }: { items: Item[]; apply: ((item: Item) => void) | null; hint: string | null; f: SongFilter; onF: (f: SongFilter) => void }) {
+  const s = useStore();
+  const shown = filterSongs(s, items, f);
+  const col = s.collections.find((c) => c.name === f.collection);
+  const filtered = !!(col || f.artist || f.key || f.genre);
   return (
     <div style={{ paddingBottom: 16 }}>
-      <div style={{ position: "sticky", top: 0, zIndex: 2, background: "#0f0f12", borderBottom: "1px solid var(--rule)" }}>
-        {/* Collections. */}
-        <div role="tablist" aria-label="Collections" style={{ display: "flex", alignItems: "stretch", height: 46, overflowX: "auto", scrollbarWidth: "none", padding: "0 6px" }}>
-          {[{ name: null as string | null, colour: "var(--ink-2)" }, ...s.collections.map((c) => ({ name: c.name as string | null, colour: c.colour }))].map((c) => {
-            const on = c.name === collection;
-            return (
-              <button
-                key={c.name ?? "all"}
-                role="tab"
-                aria-selected={on}
-                onClick={() => setCollection(c.name)}
-                className="pressable"
-                style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 7, padding: "0 12px", fontSize: 14.5, fontWeight: on ? 750 : 600, whiteSpace: "nowrap", color: on ? "var(--ink)" : "var(--ink-3)", boxShadow: on ? `inset 0 -2px 0 ${c.colour}` : undefined }}
-              >
-                {c.name && <span aria-hidden style={{ width: 8, height: 8, borderRadius: 999, background: c.colour }} />}
-                {c.name ?? "All songs"}
-              </button>
-            );
-          })}
-          <button className="pressable" onClick={addMenu.fromButton} aria-label="New collection" style={{ flexShrink: 0, width: 44, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)" }}>
-            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
-              <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </button>
-          {addMenu.open && (
-            <Menu
-              at={addMenu.open.at}
-              naming={0}
-              items={[{ kind: "name", id: "add", label: "New collection…", initial: "", confirm: "Add", taken: s.collections.map((c) => c.name) }]}
-              onPick={(p) => {
-                newCollection(p.text);
-                setCollection(p.text);
-              }}
-              onClose={addMenu.close}
-            />
-          )}
-        </div>
-        {/* Narrow it: artist, key, genre. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 52, padding: "4px 8px 6px 10px", flexWrap: "wrap" }}>
-          <Facet label="Artist" value={artist} options={artists} onPick={setArtist} />
-          <Facet label="Key" value={key} options={keys} onPick={setKey} />
-          <Facet label="Genre" value={genre} options={genres} onPick={setGenre} />
-          <span style={{ flex: 1 }} />
-          {col && (
-            <>
-              <MoreButton label={`${col.name} actions`} onClick={colMenu.fromButton} />
-              {colMenu.open && (
-                <Menu
-                  at={colMenu.open.at}
-                  items={[
-                    { kind: "head", label: col.name },
-                    { kind: "name", id: "rename", label: "Rename…", initial: col.name, confirm: "Rename", taken: s.collections.map((c) => c.name) },
-                    { kind: "sep" },
-                    { kind: "delete", id: "delete", label: "Delete collection" },
-                  ]}
-                  onPick={(p) => {
-                    if (p.id === "rename") {
-                      renameCollection(col.name, p.text);
-                      setCollection(p.text);
-                    }
-                    if (p.id === "delete") {
-                      removeCollection(col.name);
-                      setCollection(null);
-                    }
-                  }}
-                  onClose={colMenu.close}
-                />
-              )}
-            </>
-          )}
-        </div>
-      </div>
       {hint && <Quiet small>{hint}</Quiet>}
       {shown.map((i) => (
         <SongRow key={i.id} item={i} onPick={apply ? () => apply(i) : undefined} />
       ))}
       {shown.length === 0 && (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "32px 16px" }}>
-          <span style={{ fontSize: 14, color: "var(--ink-3)" }}>{col && !artist && !key && !genre ? `${col.name} is empty` : "No songs match"}</span>
+          <span style={{ fontSize: 14, color: "var(--ink-3)" }}>{col && !f.artist && !f.key && !f.genre ? `${col.name} is empty` : "No songs match"}</span>
           {filtered && (
-            <button className="pressable" onClick={clear} style={{ height: 44, padding: "0 16px", borderRadius: "var(--r)", fontSize: 14, fontWeight: 700, color: "var(--ink)", boxShadow: "inset 0 0 0 1px var(--rule-strong)" }}>
+            <button className="pressable" onClick={() => onF(NO_SONG_FILTER)} style={{ height: 44, padding: "0 16px", borderRadius: "var(--r)", fontSize: 14, fontWeight: 700, color: "var(--ink)", boxShadow: "inset 0 0 0 1px var(--rule-strong)" }}>
               Clear filters
             </button>
           )}
