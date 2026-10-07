@@ -64,7 +64,7 @@ import {
 import { SourceIcon, Strike, Tape, tapeFor } from "../ui/marks";
 import { MACRO_BAR_H } from "../dock/MacroBar";
 import { ProfileIcon } from "../ui/profileIcons";
-import { MODULE_COLOUR, ModuleIcon } from "../ui/moduleIcons";
+import { MODULE_COLOUR } from "../ui/moduleIcons";
 import { OverrideIcon } from "../ui/OverrideIcon";
 import { Button, KeyBox, Tabs } from "../ui/kit";
 import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
@@ -284,29 +284,39 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
   };
   const when = whenLabel(set.date);
   const prof = profileOf(s, undefined);
+  // Only today and tomorrow are worth a word beside the date.
+  const soon = when === "Today" || when === "Tomorrow" ? when : null;
   return (
-    // Exactly the macro bar's height (two 44pt rows, a hairline between, its
-    // rule under), so the two lines run straight across the screen.
-    <header style={{ flexShrink: 0, height: MACRO_BAR_H, padding: "8px 6px 8px 18px", borderBottom: "1px solid var(--rule)", display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
+    // Exactly the macro bar's height, so the two lines run straight across.
+    <header style={{ flexShrink: 0, height: MACRO_BAR_H, padding: "0 6px 0 18px", borderBottom: "1px solid var(--rule)", display: "flex", flexDirection: "column", justifyContent: "center", gap: 7 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 2, minHeight: 0 }}>
         <button
           className="pressable"
           onClick={() => onPanel({ kind: "sets" })}
-          style={{ flex: 1, minWidth: 0, textAlign: "left", padding: "2px 8px", margin: "0 0 0 -8px", borderRadius: "var(--r-md)" }}
+          style={{ flex: 1, minWidth: 0, minHeight: 44, display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, textAlign: "left", padding: "0 8px", margin: "0 0 0 -8px", borderRadius: "var(--r-md)" }}
           title="Sets — choose another or make a new one"
           aria-haspopup="dialog"
         >
-          <h1 className="t-marker" style={{ margin: 0, fontSize: fit === "narrow" ? 18 : 22, lineHeight: 1.1, display: "flex", alignItems: "center", gap: 8 }}>
+          <h1 className="t-marker" style={{ margin: 0, fontSize: fit === "narrow" ? 18 : 21, lineHeight: 1.1, display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{setHeading(set)}</span>
             <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden style={{ flexShrink: 0, color: "var(--ink-3)" }}>
               <path d="M1 1 L5 5 L9 1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </h1>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, whiteSpace: "nowrap" }}>
-            {set.title && set.event && <EventChip event={set.event} />}
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)" }}>{dateLabel(set.date)}</span>
-            {when && <span style={{ fontSize: 13, fontWeight: 600, color: when === "Today" ? "var(--live)" : "var(--ink-3)" }}>{when}</span>}
-          </div>
+          {/* Event · date · the set's profile — words, no chips or icons. */}
+          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 560, color: "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden" }}>
+            {set.title && set.event && (
+              <>
+                <span aria-hidden style={{ width: 7, height: 7, borderRadius: 999, flexShrink: 0, background: nameColour(set.event) }} />
+                <span style={{ color: "var(--ink-2)", fontWeight: 650 }}>{set.event}</span>
+                <span aria-hidden>·</span>
+              </>
+            )}
+            <span>{dateLabel(set.date)}</span>
+            {soon && <span style={{ color: soon === "Today" ? "var(--live)" : "var(--ink-2)", fontWeight: 650 }}>{soon}</span>}
+            <span aria-hidden>·</span>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{prof.name}</span>
+          </span>
         </button>
         {reordering ? (
           <Button primary onClick={() => onReorder(false)} style={{ alignSelf: "center", marginRight: 6 }}>
@@ -315,40 +325,22 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
         ) : null}
         {!reordering && <MoreButton label="Set actions" onClick={menu.fromButton} />}
       </div>
-      {fit !== "narrow" && (
+      {fit !== "narrow" && set.songs.length > 0 && (
+        // The set as a bar: a segment per song in its colour — played ones
+        // dim, the one up full and taller — and its place in the set.
         <div style={{ display: "flex", alignItems: "center", gap: 10, paddingRight: 12 }}>
-          {/* The set's default profile: its icon in its colour; a tap picks another. */}
-          <button
-            className="pressable"
-            onClick={() => onPanel({ kind: "profile" })}
-            title={prof.from === "set" ? `Every song plays on ${prof.name} unless it has its own — tap to change` : `No default set: the rig's ${prof.name} — tap to choose one`}
-            style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", height: 44, margin: "-10px 0 -10px -6px", padding: 0, background: "transparent" }}
-          >
-            {/* The chip as drawn; the button around it is the 44pt target. */}
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 24, padding: "0 8px 0 6px", borderRadius: 4, fontSize: 12.5, fontWeight: 650, color: prof.from === "set" ? "var(--ink)" : "var(--ink-3)", background: "rgba(255,255,255,0.05)" }}>
-              <ProfileIcon name={prof.name} colour={prof.from === "set" ? nameColour(prof.name) : "var(--ink-3)"} size={13} />
-              {prof.name}
-            </span>
-          </button>
-          {/* The set at a glance: a tick per song in its colour, played ones
-              faded, the one up taller — and where you are in it. */}
-          <span title={`${set.songs.length} songs`} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 3, height: 24 }}>
+          <span aria-label={`Song ${s.songIndex + 1} of ${set.songs.length}`} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 3, height: 10 }}>
             {set.songs.map((song, i) => (
               <span
                 key={`${i}-${song.name}`}
-                style={{
-                  flex: "1 1 0",
-                  maxWidth: 22,
-                  height: i === s.songIndex ? 8 : 4,
-                  borderRadius: 2,
-                  background: songColour(song.name, s.songColours),
-                  opacity: i < s.songIndex ? 0.3 : i === s.songIndex ? 1 : 0.7,
-                }}
+                title={song.name}
+                style={{ flex: "1 1 0", height: i === s.songIndex ? 8 : 4, borderRadius: 2, background: songColour(song.name, s.songColours), opacity: i < s.songIndex ? 0.3 : i === s.songIndex ? 1 : 0.6 }}
               />
             ))}
           </span>
-          <span className="num" style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 650, color: "var(--ink-3)" }}>
-            {set.songs.length ? `${s.songIndex + 1} of ${set.songs.length}` : "No songs"}
+          <span className="num" style={{ flexShrink: 0, fontSize: 13, fontWeight: 650, color: "var(--ink-2)" }}>
+            {s.songIndex + 1}
+            <span style={{ color: "var(--ink-3)", fontWeight: 560 }}> / {set.songs.length}</span>
           </span>
         </div>
       )}
@@ -371,24 +363,29 @@ function ownChanges(s: ReturnType<typeof useStore>, song: string, section?: numb
   return { modules: [...modules], edits };
 }
 
-/** Its own changes as icons beside a name: each module override, by
- *  Signal's module glyph in that effect's colour, and amber EQ bars for
- *  unsaved edits. A song shows
- *  at most three, then a count. */
-function ChangeIcons({ song, section, max = 6 }: { song: string; section?: number; max?: number }) {
+/** Its own changes, in words: the override icon, then each effect it
+ *  overrides by name in that effect's colour; "Unsaved" in amber for Edit
+ *  changes not yet saved to the preset. A song shows a few, then a count. */
+function Changes({ song, section, max = 4 }: { song: string; section?: number; max?: number }) {
   const s = useStore();
   const { modules, edits } = ownChanges(s, song, section);
-  const marks = [...modules.map((m) => ({ kind: m, title: `${m} override` })), ...(edits ? [{ kind: "edits", title: "Changes not saved to the preset" }] : [])];
-  if (!marks.length) return null;
-  const shown = marks.slice(0, max);
+  if (!modules.length && !edits) return null;
+  const shown = modules.slice(0, max);
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 8, verticalAlign: "middle" }}>
-      {/* The override icon leads; then which effects. */}
-      <OverrideIcon colour="var(--ink-2)" size={11} title="Has overrides" />
-      {shown.map((m) => (
-        <ModuleIcon key={m.kind} kind={m.kind} size={12} colour={MODULE_COLOUR[m.kind] ?? "var(--modified)"} title={m.title} />
-      ))}
-      {marks.length > shown.length && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-2)" }}>+{marks.length - shown.length}</span>}
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12, fontWeight: 650, whiteSpace: "nowrap", overflow: "hidden" }}>
+      {modules.length > 0 && (
+        <>
+          <OverrideIcon colour="var(--ink-2)" size={11} title="Overrides" />
+          {shown.map((m, k) => (
+            <span key={m} style={{ color: `color-mix(in oklab, ${MODULE_COLOUR[m] ?? "var(--ink-2)"} 78%, white)` }}>
+              {m}
+              {k < shown.length - 1 ? <span style={{ color: "var(--ink-3)" }}> ·</span> : null}
+            </span>
+          ))}
+          {modules.length > shown.length && <span style={{ color: "var(--ink-3)" }}>+{modules.length - shown.length}</span>}
+        </>
+      )}
+      {edits && <span style={{ color: "var(--modified)" }}>Unsaved</span>}
     </span>
   );
 }
@@ -581,13 +578,6 @@ function SongRow({
             >
               {song.name}
               {played && <Strike width={1.6} />}
-              <ChangeIcons song={song.name} max={3} />
-              {/* Its own profile, as that profile's icon in its colour. */}
-              {prof.from === "song" && (
-                <span title={`${song.name} plays on ${prof.name}`} style={{ display: "inline-flex", marginLeft: 8, verticalAlign: "middle" }}>
-                  <ProfileIcon name={prof.name} colour={nameColour(prof.name)} size={13} />
-                </span>
-              )}
             </span>
             {!narrow && up && <Badge tone="live">Now</Badge>}
             {!narrow && next && <Badge>Next</Badge>}
@@ -599,16 +589,9 @@ function SongRow({
           ) : (
             <span className="t-meta" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden" }}>
               {song.start && <PatchChip name={song.start} small />}
-              {/* Its profile by name on the song up; elsewhere its own shows as an icon by the name. */}
-              {up && (
-                <span
-                  title={prof.from === "song" ? `${song.name} plays on ${prof.name}` : `${prof.name} — the set's default`}
-                  style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, color: prof.from === "song" ? nameColour(prof.name) : "var(--ink-3)", fontWeight: prof.from === "song" ? 650 : 500 }}
-                >
-                  <SourceIcon from={prof.from === "song" ? "other" : "profile"} profile={prof.name} colour={prof.from === "song" ? nameColour(prof.name) : "var(--ink-3)"} size={11} />
-                  {prof.name}
-                </span>
-              )}
+              {/* Its own profile, in words — only when it isn't the set's. */}
+              {prof.from === "song" && <span style={{ flexShrink: 0, color: "var(--ink-2)", fontWeight: 650 }}>{prof.name}</span>}
+              <Changes song={song.name} max={2} />
               {!open && sections.length > 0 && <span style={{ flexShrink: 0 }}>{sections.length} sections</span>}
             </span>
           )}
@@ -838,8 +821,8 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
               }}
             >
               {sec.name}
-              <ChangeIcons song={song} section={j} />
             </span>
+            <Changes song={song} section={j} />
             {narrow && <span style={{ alignSelf: "flex-start", maxWidth: "100%", display: "flex" }}>{chip}</span>}
           </span>
         </button>
@@ -849,7 +832,7 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
             onClick={() => (several ? go() : pick(song, j))}
             title={several ? "Show its parts" : "Change the patch"}
             aria-pressed={!several && isPicked(s.selection, song, j)}
-            style={{ width: 178, flexShrink: 0, minHeight: 44, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", justifyContent: "flex-start", borderRadius: "var(--r)", boxShadow: !several && isPicked(s.selection, song, j) ? "inset 0 0 0 1.5px var(--focus-fg)" : undefined }}
+            style={{ flex: "0 1 auto", maxWidth: "64%", minWidth: 0, minHeight: 44, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", justifyContent: "flex-start", borderRadius: "var(--r)", boxShadow: !several && isPicked(s.selection, song, j) ? "inset 0 0 0 1.5px var(--focus-fg)" : undefined }}
           >
             {chip}
           </button>
@@ -957,7 +940,7 @@ function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: s
           onClick={() => pick(song, j, k)}
           title="Change the patch"
           aria-pressed={isPicked(s.selection, song, j, k)}
-          style={{ width: 178, flexShrink: 0, minHeight: 40, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", borderRadius: "var(--r)", boxShadow: isPicked(s.selection, song, j, k) ? "inset 0 0 0 1.5px var(--focus-fg)" : undefined }}
+          style={{ flex: "0 1 auto", maxWidth: "64%", minWidth: 0, minHeight: 40, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", borderRadius: "var(--r)", boxShadow: isPicked(s.selection, song, j, k) ? "inset 0 0 0 1.5px var(--focus-fg)" : undefined }}
         >
           {chip}
         </button>
@@ -969,33 +952,35 @@ function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: s
 }
 
 
-/** A patch: its name on a tint of its stack's colour, with a swatch. */
+/** A patch, with the stack it lands on: the stack's name in its colour,
+ *  then the patch; a patch borrowed from another profile says from where. */
 function PatchChip({ name, lit, small, borrowed }: { name: string; lit?: boolean; small?: boolean; borrowed?: string }) {
-  const colour = tapeFor(stackOf(name));
+  const isStack = name.endsWith(" stack");
+  const stack = isStack ? name.slice(0, -6) : stackOf(name);
+  const colour = tapeFor(stack);
+  const gaffer = colour === "var(--tape-gaffer)";
   return (
     <span
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 6,
+        gap: 7,
         minWidth: 0,
         maxWidth: "100%",
-        padding: small ? "1px 7px 1px 6px" : "4px 9px 4px 8px",
+        padding: small ? "2px 8px 2px 7px" : "5px 9px 5px 8px",
         borderRadius: 4,
-        background: lit ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.05)",
+        background: lit ? "var(--fill-on)" : "var(--fill)",
         color: lit ? "var(--ink)" : "var(--ink-2)",
         fontSize: small ? 12 : 13,
         fontWeight: 600,
         whiteSpace: "nowrap",
       }}
     >
-      <span style={{ width: 7, height: 7, borderRadius: 2, background: colour, flexShrink: 0 }} />
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-      {borrowed && (
-        <span title={`Borrowed from ${borrowed}`} style={{ display: "inline-flex", marginLeft: 1 }}>
-          <SourceIcon from="other" profile={borrowed} colour={nameColour(borrowed)} size={small ? 10 : 11} />
-        </span>
+      {stack && (
+        <span style={{ flexShrink: 0, fontSize: small ? 10.5 : 11, fontWeight: 750, letterSpacing: "0.07em", textTransform: "uppercase", color: gaffer ? "var(--ink-3)" : `color-mix(in oklab, ${colour} 80%, white)` }}>{stack}</span>
       )}
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{isStack ? "the stack" : name}</span>
+      {borrowed && <span style={{ flexShrink: 0, color: nameColour(borrowed), fontWeight: 650 }}>{borrowed}</span>}
     </span>
   );
 }
@@ -1076,8 +1061,8 @@ export function Stacks({ left, profile: only, reorder }: { left: number; profile
     window.addEventListener("pointercancel", onUp);
   };
   return (
-    <div style={{ position: "relative", padding: `2px 8px 8px ${left}px` }}>
-      <div style={{ borderRadius: "var(--r-md)", background: "rgba(0,0,0,0.22)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    <div style={{ position: "relative", padding: `2px 0 8px ${left}px` }}>
+      <div style={{ background: "rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", borderBottom: "1px solid var(--rule)" }}>
         {stacks.map((st, i) => {
           const on = at?.stack === i;
           // The part's own patch, while something else plays by hand.
@@ -1390,23 +1375,17 @@ function StackRow({ stack, index: i, count, profile, on, home, where, pos, songC
                 />
               );
             })}
+            {/* What the next tap plays, on the stack that's playing. */}
+            {on && next && (
+              <span style={{ marginLeft: 6, minWidth: 0, fontSize: 12, fontWeight: 600, color: "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                next › <span style={{ color: "var(--ink-2)" }}>{next.name}</span>
+              </span>
+            )}
           </span>
         )}
       </span>
-      <span title={fromLabel(patch)} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
-        {patch.from === "other" && (
-          <span style={{ fontSize: 11, fontWeight: 650, color: nameColour(patch.profile!) }}>{patch.profile}</span>
-        )}
-        <SourceIcon from={patch.from} profile={patch.profile} colour={markColour(patch, colour)} size={13} />
-      </span>
-      <span style={{ width: 16, flexShrink: 0, display: "flex", justifyContent: "center", color: "var(--live)" }}>
-        {on && many && (
-          <svg width="14" height="14" viewBox="0 0 14 14" aria-label="tap again to step">
-            <path d="M11.5 5.5A5 5 0 1 0 12 9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            <path d="M12 2.2v3.6H8.4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </span>
+      {/* Borrowed from another profile: that profile, by name. */}
+      {patch.from === "other" && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 650, color: nameColour(patch.profile!) }}>{patch.profile}</span>}
     </button>
     <MoreButton label={`${stack.name} actions`} onClick={menu.fromButton} />
     </div>
