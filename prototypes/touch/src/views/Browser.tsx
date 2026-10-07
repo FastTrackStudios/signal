@@ -44,6 +44,7 @@ import type { StackPatch } from "../setlist/stacks";
 import { nameColour, sectionColour, songColour } from "../setlist/colors";
 import { ProfileIcon } from "../ui/profileIcons";
 import { MODULE_COLOUR } from "../ui/moduleIcons";
+import { MACRO_BAR_H } from "../dock/MacroBar";
 import { SourceIcon, tapeFor } from "../ui/marks";
 
 // ── What there is to browse, and what it's for ─────────────────────
@@ -353,8 +354,9 @@ export function Browser({ onClose }: { onClose?: () => void }) {
   return (
     <div ref={ref} style={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column", background: "#0f0f12" }}>
       {/* What it's for, and the search. */}
-      <div style={{ flexShrink: 0, borderBottom: "1px solid var(--rule)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 48, padding: "0 4px 0 14px" }}>
+      {/* The macro bar's / set header's height, so the lines run straight across. */}
+      <div style={{ flexShrink: 0, height: MACRO_BAR_H, display: "flex", flexDirection: "column", justifyContent: "center", borderBottom: "1px solid var(--rule)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, height: 42, padding: "0 4px 0 14px" }}>
           {!wide && opened && !q && (
             <button className="pressable" onClick={() => setOpened(false)} aria-label="All kinds" style={{ width: 36, height: 44, marginLeft: -8, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", borderRadius: "var(--r)" }}>
               <svg width="9" height="15" viewBox="0 0 9 15" aria-hidden>
@@ -402,8 +404,8 @@ export function Browser({ onClose }: { onClose?: () => void }) {
             </button>
           )}
         </div>
-        <div style={{ padding: "0 12px 10px" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, height: 40, padding: "0 12px", borderRadius: 10, background: "#1a1a1f" }}>
+        <div style={{ padding: "0 12px 8px" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, height: 36, padding: "0 12px", borderRadius: 10, background: "#1a1a1f" }}>
             <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden style={{ color: "var(--ink-3)", flexShrink: 0 }}>
               <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />
               <path d="M10.6 10.6 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -507,40 +509,96 @@ function hintFor(s: State, bt: BuildTarget, kind: Kind): string | null {
 }
 
 function KindList({ kind, items, apply, hint }: { kind: Kind; items: Item[]; apply: ((item: Item) => void) | null; hint: string | null }) {
-  // Patches sit under their stacks.
+  // Variations come as preset blocks; patches sit under their stacks.
+  const blocks: ({ type: "row"; item: Item; head: string | null } | { type: "preset"; name: string; colour: string; items: Item[] })[] = [];
   let last = "";
+  for (const i of items) {
+    if (i.nested && i.group) {
+      const b = blocks[blocks.length - 1];
+      if (b && b.type === "preset" && b.name === i.group) b.items.push(i);
+      else blocks.push({ type: "preset", name: i.group, colour: i.groupColour ?? i.colour, items: [i] });
+    } else {
+      const head = i.group && i.group !== last ? i.group : null;
+      if (i.group) last = i.group;
+      blocks.push({ type: "row", item: i, head });
+    }
+  }
   return (
     <div style={{ paddingBottom: 16 }}>
       {hint && <Quiet small>{hint}</Quiet>}
-      {items.map((i) => {
-        const head = i.group && i.group !== last ? i.group : null;
-        if (i.group) last = i.group;
-        return (
-          <div key={i.id || "none"}>
-            {head &&
-              (i.nested ? (
-                // A preset: a heading in its own right — its name, its count.
-                <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: "14px 16px 4px", borderTop: "1px solid var(--rule)" }}>
-                  <span style={{ width: 12, height: 12, borderRadius: 3, flexShrink: 0, background: i.groupColour ?? "var(--ink-3)" }} />
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 750, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{head}</span>
-                  <span className="t-meta" style={{ fontSize: 12 }}>
-                    {items.filter((x) => x.group === head).length} variation{items.filter((x) => x.group === head).length === 1 ? "" : "s"}
-                  </span>
-                </div>
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px 6px" }}>
-                  <span style={{ width: 9, height: 9, borderRadius: 2, background: i.groupColour ?? (tapeFor(head) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(head)) }} />
-                  <span className="t-label" style={{ fontSize: 11, color: "var(--ink-2)" }}>
-                    {head}
-                  </span>
-                </div>
-              ))}
-            <Row item={i} sub={i.from} onPick={apply ? () => apply(i) : undefined} />
+      {blocks.map((b) =>
+        b.type === "preset" ? (
+          <PresetBlock key={`p:${b.name}`} name={b.name} colour={b.colour} items={b.items} onPick={apply ?? undefined} />
+        ) : (
+          <div key={b.item.id || "none"}>
+            {b.head && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px 6px" }}>
+                <span style={{ width: 9, height: 9, borderRadius: 2, background: b.item.groupColour ?? (tapeFor(b.head) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(b.head)) }} />
+                <span className="t-label" style={{ fontSize: 11, color: "var(--ink-2)" }}>
+                  {b.head}
+                </span>
+              </div>
+            )}
+            <Row item={b.item} sub={b.item.from} onPick={apply ? () => apply(b.item) : undefined} />
           </div>
-        );
-      })}
+        ),
+      )}
       {kind.id === "songs" && apply && <Quiet small>A tap adds the song to the end of the set.</Quiet>}
     </div>
+  );
+}
+
+/** A preset and its variations: the preset as a heading — a bar of its
+ *  colour, its name, how many variations, and which one is in use — and
+ *  the variations under it as large pills that wrap, the one in use filled
+ *  with its colour. Two levels that can't be confused. */
+function PresetBlock({ name, colour, items, onPick }: { name: string; colour: string; items: Item[]; onPick?: (item: Item) => void }) {
+  const inUse = items.find((i) => i.state);
+  return (
+    <section style={{ position: "relative", padding: "12px 16px 14px 20px", borderTop: "1px solid var(--rule)" }}>
+      <span aria-hidden style={{ position: "absolute", left: 0, top: 12, bottom: 14, width: 4, borderRadius: "0 3px 3px 0", background: colour, opacity: inUse ? 1 : 0.55 }} />
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10 }}>
+        <span style={{ fontSize: 17, fontWeight: 750, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+        <span className="t-meta" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+          {items.length} variation{items.length === 1 ? "" : "s"}
+        </span>
+        <span style={{ flex: 1 }} />
+        {inUse && (
+          <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", color: inUse.state === "swapped" ? "var(--modified)" : "var(--live)" }}>
+            {inUse.state === "swapped" ? "Swapped in" : "Playing"} · {inUse.name}
+          </span>
+        )}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {items.map((i) => {
+          const on = !!i.state;
+          return (
+            <button
+              key={i.id}
+              onClick={onPick ? () => onPick(i) : undefined}
+              disabled={!onPick}
+              aria-pressed={on}
+              className={onPick && !on ? "pressable" : ""}
+              title={i.from}
+              style={{
+                height: 40,
+                padding: "0 14px",
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: on ? 700 : 560,
+                whiteSpace: "nowrap",
+                color: on ? "var(--ink)" : "var(--ink-2)",
+                background: on ? `color-mix(in oklab, ${colour} 26%, #141418)` : "#18181c",
+                boxShadow: on ? `inset 0 0 0 1.5px ${colour}` : "inset 0 0 0 1px #26262c",
+                cursor: onPick ? "pointer" : "default",
+              }}
+            >
+              {i.name}
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
