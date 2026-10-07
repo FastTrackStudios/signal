@@ -64,7 +64,7 @@ function TopBar() {
         {sec && <span style={{ color: "var(--ink-2)", fontSize: 15, whiteSpace: "nowrap" }}>{sec.parts.length > 1 ? `${sec.name} · ${sec.parts[s.subIndex]?.name}` : sec.name}</span>}
         <span style={{ flex: 1 }} />
         {now && (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 10px", borderRadius: 4, background: "var(--live-bg)", color: "var(--ink)", fontSize: 14, fontWeight: 650, whiteSpace: "nowrap" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 10px", borderRadius: 4, background: "rgba(255,255,255,0.06)", color: "var(--ink)", fontSize: 14, fontWeight: 650, whiteSpace: "nowrap" }}>
             <span style={{ width: 7, height: 7, borderRadius: 2, background: tapeFor(stackOf(now)) === "var(--tape-gaffer)" ? "var(--live)" : tapeFor(stackOf(now)) }} />
             {now}
           </span>

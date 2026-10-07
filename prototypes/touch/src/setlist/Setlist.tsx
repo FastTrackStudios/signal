@@ -350,7 +350,7 @@ function SongRow({
         display: "flex",
         alignItems: "stretch",
         minHeight: 64,
-        background: lifted ? "var(--sheet-2)" : open ? `color-mix(in srgb, ${colour} ${up ? 13 : 8}%, var(--sheet))` : undefined,
+        background: lifted ? "var(--sheet-2)" : open ? tint(colour, up ? 7 : 4) : undefined,
         borderTop: dropAbove ? "3px solid var(--focus-fg)" : "1px solid var(--rule)",
       }}
     >
@@ -448,7 +448,7 @@ function Sections({ songIndex, onPanel }: { songIndex: number; onPanel: (p: Pane
   const fit = useFit();
   const colour = songColour(song.name, s.songColours);
   return (
-    <div style={{ position: "relative", padding: "2px 0 10px", background: `color-mix(in srgb, ${colour} ${up ? 13 : 8}%, var(--sheet))` }}>
+    <div style={{ position: "relative", padding: "2px 0 10px", background: tint(colour, up ? 7 : 4) }}>
       {up && <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--live)" }} />}
       {/* The song's timeline: one line its sections sit on. */}
       {sections.length > 0 && (
@@ -482,6 +482,12 @@ function Sections({ songIndex, onPanel }: { songIndex: number; onPanel: (p: Pane
       )}
     </div>
   );
+}
+
+/** A muted tint of a song's colour over the sheet: how anything that
+ *  belongs to a song is picked out (oklab keeps it from going neon). */
+function tint(colour: string, pct: number): string {
+  return `color-mix(in oklab, ${colour} ${pct}%, var(--sheet))`;
 }
 
 /** A section's sound when it is one part; null when it has several. */
@@ -542,7 +548,7 @@ function SectionRow({ song, songIndex, index: j, count, onPanel }: { song: strin
   );
   return (
     <>
-      <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 50, background: state === "now" && !several ? "var(--live-bg)" : undefined }}>
+      <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 50, background: state === "now" && !several ? tint(songColour(song, s.songColours), 18) : undefined }}>
         <button
           className="pressable"
           onClick={go}
@@ -650,7 +656,7 @@ function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: s
   };
   const chip = part.sound ? <PatchChip name={part.sound.name} borrowed={part.sound.profile} lit={state === "now"} small /> : <span className="t-meta" style={{ fontSize: 12, padding: "0 4px" }}>keeps</span>;
   return (
-    <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 44, background: state === "now" ? "var(--live-bg)" : undefined }}>
+    <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 44, background: state === "now" ? tint(songColour(song, s.songColours), 18) : undefined }}>
       <button className="pressable" onClick={() => goToSub(j, k)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: `2px 4px 2px ${left}px`, textAlign: "left" }}>
         <span
           style={{
@@ -730,7 +736,7 @@ function PatchChip({ name, lit, small, borrowed }: { name: string; lit?: boolean
         maxWidth: "100%",
         padding: small ? "1px 7px 1px 6px" : "4px 9px 4px 8px",
         borderRadius: 4,
-        background: `color-mix(in srgb, ${colour} ${lit ? 30 : 18}%, transparent)`,
+        background: lit ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.05)",
         color: lit ? "var(--ink)" : "var(--ink-2)",
         fontSize: small ? 12 : 13,
         fontWeight: 600,
@@ -859,7 +865,7 @@ function StackRow({ stack, on, home, where, pos, songColour: colour }: { stack: 
         padding: "0 10px",
         textAlign: "left",
         borderTop: "1px solid var(--rule)",
-        background: on ? `color-mix(in srgb, ${tape} 22%, transparent)` : undefined,
+        background: on ? tint(colour, 18) : undefined,
       }}
     >
       {/* Green bar: what plays. Hollow: the part's own patch, while
@@ -1202,7 +1208,7 @@ function Cell({ title, on, onClick, mark, hint }: { title: string; on: boolean; 
         textAlign: "left",
         borderRadius: "var(--r)",
         background: on ? "var(--focus-bg)" : "var(--sheet)",
-        border: on ? "2px solid var(--focus-fg)" : "1px solid var(--rule-strong)",
+        border: on ? "1.5px solid var(--focus-fg)" : "1px solid var(--rule-strong)",
         fontSize: 15,
         fontWeight: on ? 700 : 560,
         display: "flex",
