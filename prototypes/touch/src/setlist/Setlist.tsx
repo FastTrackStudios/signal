@@ -1013,7 +1013,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
       sub = "Key in this set";
       body = (
         <div style={{ padding: 16 }}>
-          <KeyGrid value={song.key || "C"} onPick={(k) => setSongField(panel.song, "key", k)} />
+          <KeyGrid value={song.key || "C"} onPick={(k) => { setSongField(panel.song, "key", k); onClose(); }} />
         </div>
       );
       break;
@@ -1055,7 +1055,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
             inherit
             profile={rig.library.profiles.find((x) => x.name === fallback.name)}
             on={current === null}
-            onClick={() => (song ? setSongProfile(song.name, null) : setSetProfile(null))}
+            onClick={() => { if (song) setSongProfile(song.name, null); else setSetProfile(null); onClose(); }}
           />
           {/* The default stands apart: a band of the desk between it and the profiles. */}
           <div aria-hidden style={{ height: 8, background: "var(--desk)", borderBottom: "1px solid var(--rule)" }} />
@@ -1067,7 +1067,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
               colour={nameColour(p.name)}
               profile={p}
               on={current === p.name}
-              onClick={() => (song ? setSongProfile(song.name, p.name) : setSetProfile(p.name))}
+              onClick={() => { if (song) setSongProfile(song.name, p.name); else setSetProfile(p.name); onClose(); }}
             />
           ))}
         </div>
@@ -1078,7 +1078,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
       const song = set.songs[panel.song];
       title = song.name;
       sub = "The patch it starts on";
-      body = <PatchList song={song.name} current={song.start || null} defaultLabel="The profile's default" onPick={(p) => setStart(panel.song, p?.name ?? "")} />;
+      body = <PatchList song={song.name} current={song.start || null} defaultLabel="The profile's default" onPick={(p) => { setStart(panel.song, p?.name ?? ""); onClose(); }} />;
       break;
     }
     case "colour": {
@@ -1091,7 +1091,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
           <button
             className="pressable"
-            onClick={() => setSongColour(song.name, null)}
+            onClick={() => { setSongColour(song.name, null); onClose(); }}
             style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 56, padding: "0 14px", borderRadius: "var(--r)", border: !chosen ? "2px solid var(--focus-fg)" : "1px solid var(--rule-strong)", background: !chosen ? "var(--focus-bg)" : "var(--sheet)", textAlign: "left" }}
           >
             <span style={{ width: 28, height: 28, borderRadius: 7, background: auto, flexShrink: 0 }} />
@@ -1107,7 +1107,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
                 <button
                   key={c}
                   aria-label={`Colour ${c}`}
-                  onClick={() => setSongColour(song.name, c)}
+                  onClick={() => { setSongColour(song.name, c); onClose(); }}
                   style={{ aspectRatio: "1", minHeight: 44, borderRadius: 10, background: c, boxShadow: on ? "0 0 0 2px var(--sheet-2), 0 0 0 4px var(--focus-fg)" : undefined }}
                 />
               );
@@ -1128,7 +1128,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
           song={panel.song}
           current={part?.sound?.name ?? null}
           defaultLabel="Keep what plays"
-          onPick={(p) => setSectionSound(panel.song, panel.section, p ? { kind: "patch", ...p } : null, k)}
+          onPick={(p) => { setSectionSound(panel.song, panel.section, p ? { kind: "patch", ...p } : null, k); onClose(); }}
         />
       );
       break;
@@ -1137,6 +1137,26 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
   // The sets switcher drops from the title it opened from; the pickers
   // rise from the bottom, under the thumb.
   const top = panel.kind === "sets";
+  const [pull, setPull] = useState(0);
+  const from = useRef<number | null>(null);
+  const swipe = {
+    onPointerDown: (e: React.PointerEvent) => {
+      from.current = e.clientY;
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (from.current !== null) setPull(Math.max(0, e.clientY - from.current));
+    },
+    onPointerUp: () => {
+      from.current = null;
+      if (pull > 80) onClose();
+      else setPull(0);
+    },
+    onPointerCancel: () => {
+      from.current = null;
+      setPull(0);
+    },
+  };
   return (
     <div style={{ position: "absolute", inset: 0, zIndex: 20, display: "flex", flexDirection: "column", justifyContent: top ? "flex-start" : "flex-end" }}>
       <button aria-label="Close" onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.66)", cursor: "default" }} />
@@ -1152,10 +1172,14 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
           borderRadius: top ? "0 0 14px 14px" : "12px 12px 0 0",
           boxShadow: top ? "0 16px 40px rgba(0,0,0,0.55)" : "0 -16px 40px rgba(0,0,0,0.5)",
           animation: `${top ? "panel-down" : "panel-up"} 220ms var(--ease) both`,
+          transform: pull ? `translateY(${pull}px)` : undefined,
+          transition: pull ? "none" : "transform 180ms var(--ease)",
         }}
       >
+        {/* Pull it down by its grabber or its title to close it. */}
+        <div {...(top ? {} : swipe)} style={{ touchAction: "none", cursor: top ? undefined : "grab", display: "flex", flexDirection: "column" }}>
         {!top && <span aria-hidden style={{ alignSelf: "center", width: 36, height: 4, borderRadius: 2, background: "var(--dim)", marginTop: 8 }} />}
-        <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px 10px 18px", borderBottom: "1px solid var(--rule)" }}>
+        <header style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 52, padding: "6px 18px 10px", borderBottom: "1px solid var(--rule)" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 18, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
             {sub && (
@@ -1164,8 +1188,8 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
               </div>
             )}
           </div>
-          <Button onClick={onClose}>Done</Button>
         </header>
+        </div>
         <div style={{ overflowY: "auto", minHeight: 0 }}>{body}</div>
       </div>
       <style>{`@keyframes panel-up { from { transform: translateY(24px); opacity: 0 } to { transform: none; opacity: 1 } } @keyframes panel-down { from { transform: translateY(-24px); opacity: 0 } to { transform: none; opacity: 1 } }`}</style>
