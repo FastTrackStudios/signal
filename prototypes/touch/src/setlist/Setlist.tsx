@@ -486,7 +486,7 @@ function SongRow({
       style={{
         // The song up stays at the top while you scroll through it.
         position: up && !reordering ? "sticky" : "relative",
-        top: 0,
+        top: up && !reordering ? 0 : undefined,
         zIndex: up ? 3 : undefined,
         display: "flex",
         alignItems: "stretch",
@@ -737,7 +737,8 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
         style={{
           // The section playing stays under the song while you scroll its stacks.
           position: state === "now" ? "sticky" : "relative",
-          top: SONG_ROW_H,
+          // Only the pinned row is offset: on a relative row `top` would shift it.
+          top: state === "now" ? SONG_ROW_H : undefined,
           zIndex: state === "now" ? 2 : undefined,
           display: "flex",
           alignItems: "center",
