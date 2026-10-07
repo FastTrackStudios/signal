@@ -467,8 +467,10 @@ export function Browser({ onClose }: { onClose?: () => void }) {
                 {kinds.map((k) => {
                   const on = wide && k.id === kindId && !q;
                   const items = k.items(s, bt);
-                  const count = items.filter((i) => i.id).length;
-                  const swapped = items.some((i) => i.state === "swapped");
+                  // What the picked part (or stack, or variation) has here now.
+                  const cur = items.find((i) => i.state && i.state !== "picked" && i.state !== "in");
+                  const swapped = cur?.state === "swapped";
+                  const label = cur ? (cur.nested ? cur.id : cur.name) : null;
                   return (
                     <button
                       key={k.id}
@@ -479,17 +481,33 @@ export function Browser({ onClose }: { onClose?: () => void }) {
                       }}
                       className={on ? "" : "pressable"}
                       aria-current={on ? "true" : undefined}
-                      style={{ position: "relative", width: "100%", minHeight: 44, display: "flex", alignItems: "center", gap: 10, padding: "0 14px 0 16px", textAlign: "left", background: on ? "rgba(255,255,255,0.07)" : undefined }}
+                      title={label ? `${swapped ? "Swapped in" : "Now"}: ${label}` : k.label}
+                      style={{
+                        position: "relative",
+                        width: "100%",
+                        minHeight: label ? 52 : 44,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "4px 14px 4px 16px",
+                        marginBottom: 1,
+                        textAlign: "left",
+                        // The kind's colour, muted, behind the whole row — stronger when open.
+                        background: `color-mix(in oklab, ${k.colour} ${on ? 30 : 11}%, #0f0f12)`,
+                      }}
                     >
-                      {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: 2, background: k.colour }} />}
-                      <span style={{ width: 9, height: 9, borderRadius: 3, flexShrink: 0, background: k.colour }} />
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: on ? 700 : 560, color: on ? "var(--ink)" : "var(--ink-2)" }}>{k.label}</span>
-                      {swapped && <span title="Swapped in for this part" style={{ width: 7, height: 7, borderRadius: 999, background: "var(--modified)" }} />}
-                      <span className="num" style={{ fontSize: 12, color: "var(--ink-3)" }}>
-                        {count}
+                      {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: k.colour }} />}
+                      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                        <span style={{ fontSize: 15, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)" }}>{k.label}</span>
+                        {label && (
+                          <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, fontSize: 12, fontWeight: 600, color: swapped ? "var(--modified)" : "var(--ink-3)" }}>
+                            {swapped && <span style={{ width: 6, height: 6, borderRadius: 999, flexShrink: 0, background: "var(--modified)" }} />}
+                            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+                          </span>
+                        )}
                       </span>
                       {!wide && (
-                        <svg width="7" height="12" viewBox="0 0 7 12" aria-hidden style={{ color: "var(--ink-3)" }}>
+                        <svg width="7" height="12" viewBox="0 0 7 12" aria-hidden style={{ color: "var(--ink-3)", flexShrink: 0 }}>
                           <path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       )}
