@@ -1268,8 +1268,8 @@ function ProfileCell({ name, of, profile, colour, on, onClick }: { name: string;
       aria-pressed={on}
       style={{
         width: "100%",
-        minHeight: 52,
-        padding: "6px 16px",
+        minHeight: 48,
+        padding: "4px 16px",
         display: "flex",
         alignItems: "center",
         gap: 12,
@@ -1281,12 +1281,10 @@ function ProfileCell({ name, of, profile, colour, on, onClick }: { name: string;
       <span style={{ width: 22, display: "flex", justifyContent: "center", flexShrink: 0 }}>
         <ProfileIcon name={profile?.name} colour={colour ?? "var(--ink-3)"} size={18} />
       </span>
-      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
-        <span style={{ fontSize: 15, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)" }}>{name}</span>
-        {/* What it opens on: the first patch of its first stack. */}
-        <span className="t-meta" style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {[of, first].filter(Boolean).join(" · ")}
-        </span>
+      <span style={{ flexShrink: 0, fontSize: 15, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap" }}>{name}</span>
+      {/* What it opens on: the first patch of its first stack. */}
+      <span className="t-meta" style={{ flex: 1, minWidth: 0, textAlign: "right", fontSize: 11.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {[of, first].filter(Boolean).join(" · ")}
       </span>
       {on && (
         <svg width="16" height="16" viewBox="0 0 14 14" aria-label="picked" style={{ color: "var(--ink)", flexShrink: 0 }}>
@@ -1294,7 +1292,7 @@ function ProfileCell({ name, of, profile, colour, on, onClick }: { name: string;
         </svg>
       )}
       {/* One column per stack, one block per patch: count them. */}
-      <span aria-label={stacks.map((x) => `${x.name} ${x.count}`).join(", ")} style={{ display: "flex", alignItems: "flex-end", gap: 3, height: most * 5, flexShrink: 0 }}>
+      <span aria-label={stacks.map((x) => `${x.name} ${x.count}`).join(", ")} style={{ display: "flex", alignItems: "flex-end", justifyContent: "flex-end", gap: 3, width: 45, height: most * 5, flexShrink: 0 }}>
         {stacks.map((x) => {
           const tape = tapeFor(x.name) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(x.name);
           return (
