@@ -18,12 +18,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { StageCtx } from "./ui/stage";
 import { MuteButton, PanicButton } from "./ui/Safety";
 import { Indicator } from "./ui/Settings";
+import { ModeButton } from "./ui/ModeButton";
 import { Setlist } from "./setlist/Setlist";
 import { AudioControls, Switches } from "./dock/Switches";
 import { MacroBar } from "./dock/MacroBar";
 import { Phone } from "./Phone";
 import { PhoneShell } from "./PhoneShell";
-import { redo, undo, useUndo, setPerformMode, useStore, type PerformMode } from "./store";
+import { redo, undo, useUndo, useStore, type PerformMode } from "./store";
 
 const SIDEBAR = 402;
 const TOP = 48;
@@ -283,7 +284,6 @@ export const MODES: { id: PerformMode; label: string; hint: string }[] = [
 ];
 
 function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => void }) {
-  const s = useStore();
   return (
     <header style={{ height: TOP, flexShrink: 0, display: "flex", alignItems: "stretch", borderBottom: "1px solid var(--rule)", background: "var(--sheet)" }}>
       {/* Over the sidebar: its toggle and the mode the footswitches are in. */}
@@ -295,37 +295,15 @@ function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => voi
           </svg>
         </BarButton>
         <Rule />
-        <div role="radiogroup" aria-label="Footswitch mode" style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, padding: "0 8px" }}>
-          {MODES.map((m) => {
-            const on = s.performMode === m.id;
-            return (
-              <button
-                key={m.id}
-                role="radio"
-                aria-checked={on}
-                title={m.hint}
-                className={on ? "" : "pressable"}
-                onClick={() => setPerformMode(m.id)}
-                style={{
-                  flex: 1,
-                  height: 36,
-                  borderRadius: "var(--r)",
-                  fontSize: 14,
-                  fontWeight: on ? 700 : 560,
-                  color: on ? "var(--ink)" : "var(--ink-3)",
-                  background: on ? "var(--pressed-bg)" : "transparent",
-                  boxShadow: on ? "var(--pressed-shadow), inset 0 -2px 0 var(--live)" : undefined,
-                }}
-              >
-                {m.label}
-              </button>
-            );
-          })}
+        {/* The footswitch mode: one button, its menu picks. */}
+        <div style={{ display: "flex", alignItems: "center", padding: "0 10px" }}>
+          <ModeButton wide />
         </div>
+        <span style={{ flex: 1 }} />
+        {/* Undo and Redo, for the whole app: every edit anywhere is one step. */}
+        <UndoRedo />
       </div>
 
-      {/* Undo and Redo, for the whole app: every edit anywhere is one step. */}
-      <UndoRedo />
       <span style={{ flex: 1 }} />
 
       {/* Health and safety: always in view. */}

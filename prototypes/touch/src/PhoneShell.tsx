@@ -23,6 +23,7 @@ import { AudioControls, Switches } from "./dock/Switches";
 import { redo, setPerformMode, undo, useStore, useUndo } from "./store";
 import { MuteButton, PanicButton } from "./ui/Safety";
 import { Indicator, SettingsSheet } from "./ui/Settings";
+import { ModeButton } from "./ui/ModeButton";
 import { Cpu, FootButton, Meters, MODES, Placeholder, Rule, type Dock, type View } from "./App";
 import { useSafe } from "./Phone";
 import { useStage } from "./ui/stage";
@@ -202,9 +203,7 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
 /** Status only, edge to edge: its background runs up under the status bar
  *  (portrait) or across the side insets (landscape). */
 function TopBar({ onMenu }: { onMenu: () => void }) {
-  const s = useStore();
   const safe = useSafe();
-  const mode = MODES.find((m) => m.id === s.performMode)!;
   return (
     <header
       style={{
@@ -223,10 +222,7 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
           <path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
         </svg>
       </button>
-      {/* The mode, as a fact: green-edged like the iPad's pick; a tap opens the menu. */}
-      <button onClick={onMenu} style={{ alignSelf: "center", height: 28, padding: "0 10px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 700, background: "var(--pressed-bg)", boxShadow: "var(--pressed-shadow), inset 0 -2px 0 var(--live)" }}>
-        {mode.label}
-      </button>
+      <ModeButton height={30} />
       <span style={{ flex: 1 }} />
       <span style={{ display: "flex", alignItems: "center" }}>
         <PanicButton size={30} />
