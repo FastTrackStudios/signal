@@ -64,6 +64,7 @@ import {
 import { SourceIcon, Strike, Tape, tapeFor } from "../ui/marks";
 import { MACRO_BAR_H } from "../dock/MacroBar";
 import { ProfileIcon } from "../ui/profileIcons";
+import { ModuleIcon } from "../ui/moduleIcons";
 import { Button, KeyBox, Tabs } from "../ui/kit";
 import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
 import { nameColour, sectionColour, songColour, SONG_PALETTE } from "./colors";
@@ -349,16 +350,37 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
   );
 }
 
-/** Whether a song (or one of its sections) carries changes of its own —
- *  modules swapped in, or Edit's changes not yet saved to the preset. */
-function hasOverride(s: ReturnType<typeof useStore>, song: string, section?: number): boolean {
+/** What a song (or one of its sections) carries of its own over its
+ *  preset: the modules swapped in, and whether Edit has unsaved changes. */
+function ownChanges(s: ReturnType<typeof useStore>, song: string, section?: number): { modules: string[]; edits: boolean } {
   const prefix = section === undefined ? `${song}|` : `${song}|${section}|`;
-  return Object.keys(s.overrides).some((k) => k.startsWith(prefix));
+  const modules = new Set<string>();
+  let edits = false;
+  for (const [k, o] of Object.entries(s.overrides)) {
+    if (!k.startsWith(prefix)) continue;
+    for (const m of Object.keys(o.modules)) modules.add(m);
+    if (Object.keys(o.edits).length) edits = true;
+  }
+  return { modules: [...modules], edits };
 }
 
-/** The amber mark of "its own changes", beside a name. */
-function OverrideDot() {
-  return <span title="Has its own changes over the preset" aria-label="has its own changes" style={{ display: "inline-block", width: 7, height: 7, marginLeft: 7, borderRadius: 999, background: "var(--modified)", verticalAlign: "middle" }} />;
+/** Its own changes as icons beside a name, in amber: each module swapped
+ *  in (Signal's module glyph), and sliders for unsaved edits. A song shows
+ *  at most three, then a count. */
+function ChangeIcons({ song, section, max = 6 }: { song: string; section?: number; max?: number }) {
+  const s = useStore();
+  const { modules, edits } = ownChanges(s, song, section);
+  const marks = [...modules.map((m) => ({ kind: m, title: `${m} swapped in` })), ...(edits ? [{ kind: "edits", title: "Changes not saved to the preset" }] : [])];
+  if (!marks.length) return null;
+  const shown = marks.slice(0, max);
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 8, verticalAlign: "middle" }}>
+      {shown.map((m) => (
+        <ModuleIcon key={m.kind} kind={m.kind} size={12} colour="var(--modified)" title={m.title} />
+      ))}
+      {marks.length > shown.length && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--modified)" }}>+{marks.length - shown.length}</span>}
+    </span>
+  );
 }
 
 /** The song row's height: the section playing sticks just under it. */
@@ -549,7 +571,13 @@ function SongRow({
             >
               {song.name}
               {played && <Strike width={1.6} />}
-              {hasOverride(s, song.name) && <OverrideDot />}
+              <ChangeIcons song={song.name} max={3} />
+              {/* Its own profile, as that profile's icon in its colour. */}
+              {prof.from === "song" && (
+                <span title={`${song.name} plays on ${prof.name}`} style={{ display: "inline-flex", marginLeft: 8, verticalAlign: "middle" }}>
+                  <ProfileIcon name={prof.name} colour={nameColour(prof.name)} size={13} />
+                </span>
+              )}
             </span>
             {!narrow && up && <Badge tone="live">Now</Badge>}
             {!narrow && next && <Badge>Next</Badge>}
@@ -561,8 +589,8 @@ function SongRow({
           ) : (
             <span className="t-meta" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden" }}>
               {song.start && <PatchChip name={song.start} small />}
-              {/* Its profile: always on the song up; elsewhere only when it has its own. */}
-              {(up || prof.from === "song") && (
+              {/* Its profile by name on the song up; elsewhere its own shows as an icon by the name. */}
+              {up && (
                 <span
                   title={prof.from === "song" ? `${song.name} plays on ${prof.name}` : `${prof.name} — the set's default`}
                   style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, color: prof.from === "song" ? nameColour(prof.name) : "var(--ink-3)", fontWeight: prof.from === "song" ? 650 : 500 }}
@@ -797,7 +825,7 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
               }}
             >
               {sec.name}
-              {hasOverride(s, song, j) && <OverrideDot />}
+              <ChangeIcons song={song} section={j} />
             </span>
             {narrow && <span style={{ alignSelf: "flex-start", maxWidth: "100%", display: "flex" }}>{chip}</span>}
           </span>
