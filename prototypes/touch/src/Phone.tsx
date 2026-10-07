@@ -8,8 +8,21 @@
 // indicator. Both phones read the same store as the iPad, as linked
 // remotes do.
 
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { StageCtx } from "./ui/stage";
+
+/** The screen's safe area, in points: the app draws its bars' backgrounds
+ *  edge to edge (under the status bar, around the island, under the home
+ *  indicator) and keeps their content inside these insets — as iOS apps do. */
+export interface Safe {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+  landscape: boolean;
+}
+const SafeCtx = createContext<Safe>({ top: 0, right: 0, bottom: 0, left: 0, landscape: false });
+export const useSafe = () => useContext(SafeCtx);
 
 const PT = { w: 402, h: 874 };
 const GLASS_IN = 1206 / 460;
@@ -28,7 +41,8 @@ export function Phone({ landscape, pagePpi, children }: { landscape?: boolean; p
   const oh = sh + bezel * 2;
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   // Safe area: the island's edge and the home indicator's.
-  const safe = landscape ? { top: 0, right: 62, bottom: 21, left: 62 } : { top: 62, right: 0, bottom: 34, left: 0 };
+  // (Landscape hides the status bar, as iOS does.)
+  const safe: Safe = landscape ? { top: 0, right: 62, bottom: 21, left: 62, landscape: true } : { top: 62, right: 0, bottom: 34, left: 0, landscape: false };
   return (
     <div style={{ width: ow * scale, height: oh * scale, flexShrink: 0 }}>
       <div style={{ width: ow, height: oh, transform: `scale(${scale})`, transformOrigin: "0 0" }}>
@@ -45,7 +59,9 @@ export function Phone({ landscape, pagePpi, children }: { landscape?: boolean; p
         >
           <StageCtx.Provider value={{ el, scale }}>
             <div ref={setEl} style={{ position: "relative", width: sw, height: sh, borderRadius: CORNER, overflow: "hidden", background: "var(--desk)" }}>
-              <div style={{ position: "absolute", top: safe.top, right: safe.right, bottom: safe.bottom, left: safe.left, display: "flex", flexDirection: "column", minHeight: 0 }}>{children}</div>
+              <SafeCtx.Provider value={safe}>
+                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>{children}</div>
+              </SafeCtx.Provider>
               {!landscape && <StatusBar />}
               {/* The Dynamic Island. */}
               <span
@@ -73,7 +89,7 @@ export function Phone({ landscape, pagePpi, children }: { landscape?: boolean; p
 /** The portrait status bar, either side of the island. */
 function StatusBar() {
   return (
-    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 54, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 34px 0 46px", fontSize: 16, fontWeight: 650, color: "var(--ink)", pointerEvents: "none" }}>
+    <div style={{ position: "absolute", zIndex: 99, top: 0, left: 0, right: 0, height: 54, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 34px 0 46px", fontSize: 16, fontWeight: 650, color: "var(--ink)", pointerEvents: "none" }}>
       <span className="num">9:41</span>
       <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <svg width="18" height="12" viewBox="0 0 18 12" aria-hidden>

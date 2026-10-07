@@ -136,7 +136,7 @@ export function App() {
           <PhoneShell />
         </Phone>
         <Phone landscape pagePpi={(scale * W) / (model.px / model.ppi)}>
-          <PhoneShell landscape />
+          <PhoneShell />
         </Phone>
       </div>
     </div>
