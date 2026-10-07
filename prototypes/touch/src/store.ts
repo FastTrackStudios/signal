@@ -879,13 +879,15 @@ export function clearVariationPicks(preset: string, variation: string) {
 // ── Setup: guitars and rigs ────────────────────────────────────────────
 // What the rig plays through is two things chosen apart: a guitar and a rig.
 //
-//   Guitar  a profile of its own: its photo, its pickups, its own input EQ,
-//           and — per rig it has been set up on — the input trim that brings
-//           it to the level presets expect, the five gate thresholds, and
-//           whether it is noisy there. A gate's level depends on both the
-//           guitar and the interface, so the guitar carries one per rig.
-//   Rig     the audio interface (input, rate, buffer, outputs) and the MIDI
-//           controller.
+//   Guitar  a profile of its own: its photo, its pickups, and its tone —
+//           the input trim that brings it to the level presets expect, the
+//           five gate thresholds (and Noisy input), and its own input EQ.
+//           The tone is the guitar's default; any rig can override any
+//           part of it (a gate's level depends on the interface too), with
+//           the same override model as a section over its preset: an
+//           override is marked, and saved back to the guitar or discarded.
+//   Rig     the audio interface (input, rate, buffer, house and phones
+//           outputs and their levels) and the MIDI controller.
 //
 // Choose a guitar and a rig and it is set. (A song will later be able to
 // ask for a different guitar.)
@@ -899,16 +901,26 @@ export interface Pickup {
 }
 
 export type Gates = Record<Exclude<GateLevel, "off">, number>;
+export interface Eq {
+  lowCut: number;
+  bass: number;
+  mid: number;
+  treble: number;
+}
 
-/** How a guitar sits on one rig: measured there, kept with the guitar. */
-export interface Fit {
-  /** Input trim, dB: brings this guitar's peaks to the rig's target. */
+/** A guitar's tone into the rig: what a rig can override. */
+export interface Tone {
+  /** Input trim, dB: brings the guitar's peaks to the presets' level. */
   trimDb: number;
   /** Each gate preset's threshold, dBFS (off: none). */
   gates: Gates;
   /** Noisy input: Off plays Subtle and Subtle plays Default. */
   noisy: boolean;
+  /** The guitar's own input EQ, before anything: a low cut (Hz) and three
+   *  bands (dB). */
+  eq: Eq;
 }
+export type ToneKey = keyof Tone;
 
 export interface Guitar {
   id: string;
@@ -918,18 +930,96 @@ export interface Guitar {
   /** Its finish, for when the photo is missing. */
   colour: string;
   pickups: Pickup[];
-  /** The guitar's own input EQ, before anything: a low cut (Hz) and three
-   *  bands (dB). */
-  eq: { lowCut: number; bass: number; mid: number; treble: number };
-  /** Its fit on each rig it has been set up on, by rig id. */
-  fits: Record<string, Fit>;
+  /** The guitar's default tone, on any rig. */
+  tone: Tone;
+  /** What a rig overrides of it, by rig id. */
+  overrides: Record<string, Partial<Tone>>;
 }
 
 export interface Rig {
   id: string;
   name: string;
-  audio: { device: string; input: string; rate: string; buffer: number; house: string; phones: string; targetDb: number };
-  midi: { device: string; channel: number | "Omni" };
+  audio: {
+    device: string;
+    input: string;
+    rate: number;
+    buffer: number;
+    house: string;
+    /** House output level, dB. */
+    houseDb: number;
+    phones: string;
+    /** Phones level, dB. */
+    phonesDb: number;
+    /** Hear the input straight from the interface too (its direct monitor). */
+    directMonitor: boolean;
+    /** Where presets expect the guitar's peaks, dBFS. */
+    targetDb: number;
+  };
+  midi: { device: string; channel: number | "Omni"; programChange: boolean; clock: "off" | "send" | "receive" };
+}
+
+/** What an interface offers — the choices its settings are made from. */
+export interface Interface {
+  name: string;
+  inputs: { name: string; kind: "Inst" | "Mic/Line" | "Line" }[];
+  outputs: string[];
+  phones: string[];
+  rates: number[];
+  buffers: number[];
+  /** The converters' own latency, both ways, ms. */
+  converterMs: number;
+}
+export const INTERFACES: Interface[] = [
+  {
+    name: "Arturia MiniFuse 4",
+    inputs: [
+      { name: "Input 1", kind: "Inst" },
+      { name: "Input 2", kind: "Inst" },
+      { name: "Input 3", kind: "Line" },
+      { name: "Input 4", kind: "Line" },
+    ],
+    outputs: ["Outputs 1–2", "Outputs 3–4"],
+    phones: ["Phones 1", "Phones 2"],
+    rates: [44100, 48000, 88200, 96000, 192000],
+    buffers: [32, 64, 128, 256, 512, 1024],
+    converterMs: 1.9,
+  },
+  {
+    name: "Focusrite Scarlett 2i2",
+    inputs: [
+      { name: "Input 1", kind: "Inst" },
+      { name: "Input 2", kind: "Inst" },
+    ],
+    outputs: ["Outputs 1–2"],
+    phones: ["Phones"],
+    rates: [44100, 48000, 88200, 96000, 176400, 192000],
+    buffers: [16, 32, 64, 128, 256, 512, 1024],
+    converterMs: 1.4,
+  },
+  {
+    name: "Built-in",
+    inputs: [{ name: "Microphone", kind: "Mic/Line" }],
+    outputs: ["Speakers"],
+    phones: ["Headphones"],
+    rates: [44100, 48000],
+    buffers: [128, 256, 512, 1024],
+    converterMs: 4,
+  },
+];
+/** MIDI controllers, and how each connects. */
+export const MIDI_DEVICES: { name: string; link: "USB" | "Bluetooth"; switches: number }[] = [
+  { name: "XSonic AIRSTEP", link: "Bluetooth", switches: 5 },
+  { name: "Morningstar MC8", link: "USB", switches: 8 },
+  { name: "Morningstar MC6", link: "USB", switches: 6 },
+];
+
+export function interfaceOf(r: Rig): Interface {
+  return INTERFACES.find((i) => i.name === r.audio.device) ?? INTERFACES[0];
+}
+
+/** Round-trip latency, ms: the buffer in and out, plus the converters. */
+export function latencyMs(r: Rig): number {
+  return (2 * r.audio.buffer * 1000) / r.audio.rate + interfaceOf(r).converterMs;
 }
 
 /** Gates set a step above a noise floor. */
@@ -942,21 +1032,20 @@ function seedRigs(): Rig[] {
   return [
     {
       id: "minifuse",
-      name: "MiniFuse 4 · Home",
-      audio: { device: "Arturia MiniFuse 4", input: "Input 1 · Inst (Hi-Z)", rate: "48 kHz", buffer: 128, house: "Outputs 1–2", phones: "Phones 1", targetDb: -15 },
-      midi: { device: "Morningstar MC8", channel: "Omni" },
+      name: "MiniFuse + AIRSTEP",
+      audio: { device: "Arturia MiniFuse 4", input: "Input 1", rate: 48000, buffer: 128, house: "Outputs 1–2", houseDb: -6, phones: "Phones 1", phonesDb: -12, directMonitor: false, targetDb: -15 },
+      midi: { device: "XSonic AIRSTEP", channel: "Omni", programChange: true, clock: "off" },
     },
     {
       id: "stage",
-      name: "Stage · Scarlett 2i2",
-      audio: { device: "Focusrite Scarlett 2i2", input: "Input 1 · Inst (Hi-Z)", rate: "48 kHz", buffer: 64, house: "Outputs 1–2", phones: "Phones 1", targetDb: -15 },
-      midi: { device: "Morningstar MC6", channel: 1 },
+      name: "Scarlett + MC6",
+      audio: { device: "Focusrite Scarlett 2i2", input: "Input 1", rate: 48000, buffer: 64, house: "Outputs 1–2", houseDb: 0, phones: "Phones", phonesDb: -18, directMonitor: false, targetDb: -15 },
+      midi: { device: "Morningstar MC6", channel: 1, programChange: true, clock: "off" },
     },
   ];
 }
 
 function seedGuitars(): Guitar[] {
-  const flat = { lowCut: 70, bass: 0, mid: 0, treble: 0 };
   return [
     {
       id: "strat",
@@ -968,11 +1057,8 @@ function seedGuitars(): Guitar[] {
         { position: "Middle", model: "Lawler Blonde" },
         { position: "Neck", model: "Lawler Blonde" },
       ],
-      eq: flat,
-      fits: {
-        minifuse: { trimDb: 0, gates: gatesAbove(-77), noisy: false },
-        stage: { trimDb: 2.5, gates: gatesAbove(-72), noisy: false },
-      },
+      tone: { trimDb: 0, gates: gatesAbove(-77), noisy: false, eq: { lowCut: 70, bass: 0, mid: 0, treble: 0 } },
+      overrides: { stage: { trimDb: 2.5, gates: gatesAbove(-72) } },
     },
     {
       id: "tele",
@@ -983,8 +1069,8 @@ function seedGuitars(): Guitar[] {
         { position: "Bridge", model: "Tele single-coil" },
         { position: "Neck", model: "Tele single-coil" },
       ],
-      eq: { lowCut: 80, bass: 1, mid: 0, treble: -1.5 },
-      fits: { minifuse: { trimDb: 3, gates: gatesAbove(-70), noisy: true } },
+      tone: { trimDb: 3, gates: gatesAbove(-70), noisy: true, eq: { lowCut: 80, bass: 1, mid: 0, treble: -1.5 } },
+      overrides: {},
     },
     {
       id: "es339",
@@ -995,8 +1081,8 @@ function seedGuitars(): Guitar[] {
         { position: "Bridge", model: "P-90" },
         { position: "Neck", model: "P-90" },
       ],
-      eq: { lowCut: 90, bass: -1, mid: 0, treble: 0.5 },
-      fits: { minifuse: { trimDb: 1.5, gates: gatesAbove(-68), noisy: true } },
+      tone: { trimDb: 1.5, gates: gatesAbove(-68), noisy: true, eq: { lowCut: 90, bass: -1, mid: 0, treble: 0.5 } },
+      overrides: { stage: { noisy: false } },
     },
     {
       id: "goldtop",
@@ -1007,19 +1093,16 @@ function seedGuitars(): Guitar[] {
         { position: "Bridge", model: "P-90" },
         { position: "Neck", model: "P-90" },
       ],
-      eq: { lowCut: 80, bass: -1.5, mid: 0, treble: 1 },
-      fits: {},
+      tone: { trimDb: 1, gates: gatesAbove(-69), noisy: false, eq: { lowCut: 80, bass: -1.5, mid: 0, treble: 1 } },
+      overrides: {},
     },
   ];
 }
 
-/** The fit to start a guitar on a rig it has not been set up on. */
-export const UNFIT: Fit = { trimDb: 0, gates: gatesAbove(-74), noisy: false };
-
 /** The gate a preset's level plays at. A noisy input lifts the light end
  *  only: Off plays Subtle, Subtle plays Default; the rest stay. */
-export function gateFor(fit: Fit, level: GateLevel): GateLevel {
-  if (!fit.noisy) return level;
+export function gateFor(tone: Tone, level: GateLevel): GateLevel {
+  if (!tone.noisy) return level;
   return level === "off" ? "subtle" : level === "subtle" ? "default" : level;
 }
 
@@ -1029,9 +1112,13 @@ export function currentGuitar(s: State): Guitar {
 export function currentRig(s: State): Rig {
   return s.rigs[s.rigIndex] ?? s.rigs[0];
 }
-/** The guitar in use on the rig in use: its fit, if it has one there. */
-export function currentFit(s: State): Fit | undefined {
-  return currentGuitar(s).fits[currentRig(s).id];
+/** A guitar's tone on a rig: its default with the rig's overrides over it. */
+export function toneOn(g: Guitar, rigId: string): Tone {
+  return { ...g.tone, ...g.overrides[rigId] };
+}
+/** The tone playing: the guitar in use on the rig in use. */
+export function currentTone(s: State): Tone {
+  return toneOn(currentGuitar(s), currentRig(s).id);
 }
 
 function mapAt<T>(xs: T[], i: number, f: (x: T) => T) {
@@ -1042,23 +1129,73 @@ function mapAt<T>(xs: T[], i: number, f: (x: T) => T) {
 export function editGuitar(label: string, f: (g: Guitar) => Guitar) {
   change(`Guitar · ${label}`, (s) => ({ ...s, guitars: mapAt(s.guitars, s.guitarIndex, f) }));
 }
-/** Turning a value continuously (a slider): no undo step per move. */
-export function tuneGuitar(f: (g: Guitar) => Guitar) {
-  move((s) => ({ ...s, guitars: mapAt(s.guitars, s.guitarIndex, f) }));
-}
-/** Edit the guitar in use's fit on the rig in use (made if it has none). */
-export function editFit(label: string, f: (x: Fit) => Fit) {
-  change(`Fit · ${label}`, (s) => fitting(s, f));
-}
-export function tuneFit(f: (x: Fit) => Fit) {
-  move((s) => fitting(s, f));
-}
-function fitting(s: State, f: (x: Fit) => Fit): State {
+
+/** Where a tone edit lands: the guitar's default, or the rig in use's
+ *  override. */
+export type ToneScope = "guitar" | "rig";
+
+function toning(s: State, scope: ToneScope, key: ToneKey, f: (t: Tone) => Tone): State {
   const rig = currentRig(s).id;
-  return { ...s, guitars: mapAt(s.guitars, s.guitarIndex, (g) => ({ ...g, fits: { ...g.fits, [rig]: f(g.fits[rig] ?? UNFIT) } })) };
+  return {
+    ...s,
+    guitars: mapAt(s.guitars, s.guitarIndex, (g) => {
+      if (scope === "guitar") {
+        // A default changed under an override stays under it.
+        return { ...g, tone: f(g.tone) };
+      }
+      const next = f(toneOn(g, rig));
+      return { ...g, overrides: { ...g.overrides, [rig]: { ...g.overrides[rig], [key]: next[key] } } };
+    }),
+  };
 }
+/** Change a part of the tone in a scope (an undoable change). */
+export function editTone(label: string, scope: ToneScope, key: ToneKey, f: (t: Tone) => Tone) {
+  change(`${scope === "rig" ? "Rig override" : "Guitar"} · ${label}`, (s) => toning(s, scope, key, f));
+}
+/** Turning a value continuously (a slider): no undo step per move. */
+export function tuneTone(scope: ToneScope, key: ToneKey, f: (t: Tone) => Tone) {
+  move((s) => toning(s, scope, key, f));
+}
+/** Write the rig's overrides of these parts back into the guitar's default. */
+export function saveToneOverrides(keys: ToneKey[]) {
+  change("Override saved to the guitar", (s) => {
+    const rig = currentRig(s).id;
+    return {
+      ...s,
+      guitars: mapAt(s.guitars, s.guitarIndex, (g) => {
+        const o = { ...g.overrides[rig] };
+        const tone = { ...g.tone };
+        for (const k of keys) if (k in o) Object.assign(tone, { [k]: o[k] }), delete o[k];
+        return { ...g, tone, overrides: { ...g.overrides, [rig]: o } };
+      }),
+    };
+  });
+}
+/** Drop the rig's overrides of these parts: the guitar's default plays. */
+export function discardToneOverrides(keys: ToneKey[]) {
+  change("Override discarded", (s) => {
+    const rig = currentRig(s).id;
+    return {
+      ...s,
+      guitars: mapAt(s.guitars, s.guitarIndex, (g) => {
+        const o = { ...g.overrides[rig] };
+        for (const k of keys) delete o[k];
+        return { ...g, overrides: { ...g.overrides, [rig]: o } };
+      }),
+    };
+  });
+}
+/** Which parts of a guitar's tone a rig overrides. */
+export function overriddenOn(g: Guitar, rigId: string): ToneKey[] {
+  return Object.keys(g.overrides[rigId] ?? {}) as ToneKey[];
+}
+
 export function editRig(label: string, f: (r: Rig) => Rig) {
   change(`Rig · ${label}`, (s) => ({ ...s, rigs: mapAt(s.rigs, s.rigIndex, f) }));
+}
+/** A rig level turned continuously: no undo step per move. */
+export function tuneRig(f: (r: Rig) => Rig) {
+  move((s) => ({ ...s, rigs: mapAt(s.rigs, s.rigIndex, f) }));
 }
 
 export function chooseGuitar(index: number) {
@@ -1071,7 +1208,10 @@ export function chooseRig(index: number) {
 export function newGuitar(name: string) {
   change(`New guitar ${name}`, (s) => ({
     ...s,
-    guitars: [...s.guitars, { id: `g${Date.now()}`, name, colour: "#71717a", pickups: [{ position: "Bridge", model: "" }], eq: { lowCut: 70, bass: 0, mid: 0, treble: 0 }, fits: {} }],
+    guitars: [
+      ...s.guitars,
+      { id: `g${Date.now()}`, name, colour: "#71717a", pickups: [{ position: "Bridge", model: "" }], tone: { trimDb: 0, gates: gatesAbove(-74), noisy: false, eq: { lowCut: 70, bass: 0, mid: 0, treble: 0 } }, overrides: {} },
+    ],
     guitarIndex: s.guitars.length,
   }));
 }
@@ -1090,8 +1230,8 @@ export function removeRig(index: number) {
     if (s.rigs.length <= 1) return s;
     const gone = s.rigs[index].id;
     const rigs = s.rigs.filter((_, i) => i !== index);
-    // Its fits go with it.
-    const guitars = s.guitars.map((g) => ({ ...g, fits: Object.fromEntries(Object.entries(g.fits).filter(([k]) => k !== gone)) }));
+    // Its overrides go with it.
+    const guitars = s.guitars.map((g) => ({ ...g, overrides: Object.fromEntries(Object.entries(g.overrides).filter(([k]) => k !== gone)) }));
     return { ...s, rigs, guitars, rigIndex: Math.min(s.rigIndex > index ? s.rigIndex - 1 : s.rigIndex, rigs.length - 1) };
   });
 }

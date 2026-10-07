@@ -1,17 +1,20 @@
-// Setup: what the rig plays through, as two things chosen apart —
+// Setup: choose a guitar, choose a rig — and it is set.
 //
-//   Guitars  each a profile of its own: its photo, its pickups, its own
-//            input EQ, and how it sits on each rig it has been set up on —
-//            the input trim (a level match measures your playing and trims
-//            it to the level presets expect) and the five gate presets
-//            (Off, Subtle, Default, Tight, Ultra) set above the noise this
-//            guitar makes into that interface, plus Noisy input (lifts Off
-//            to Subtle and Subtle to Default)
-//   Rigs     the audio interface (input, rate, buffer, outputs) and the
-//            MIDI controller
+//   Guitar  a profile of its own: its photo, its pickups, and its tone — the
+//           input trim (a level match measures your playing and trims it to
+//           the level presets expect), the five gate presets (Off, Subtle,
+//           Default, Tight, Ultra; Noisy input lifts Off to Subtle and Subtle
+//           to Default) and its input EQ. The tone is the guitar's default on
+//           every rig; any rig can override any part of it, marked with the
+//           override icon and saved back to the guitar or discarded — the
+//           same model as a section over its preset.
+//   Audio   the rig's interface: device, sample rate and buffer (with the
+//           round trip they make), the guitar's input, the house and phones
+//           outputs with their levels and a left/right check.
+//   MIDI    the rig's controller: its switches (press one to see what it
+//           sends), the channel, program changes, clock.
 //
-// Choose a guitar, choose a rig, and it is set. Levels are simulated
-// (ui/signal.ts); the rig measures them.
+// Levels and MIDI are simulated (ui/signal.ts); the rig measures them.
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -19,30 +22,43 @@ import {
   chooseRig,
   currentGuitar,
   currentRig,
-  editFit,
+  discardToneOverrides,
   editGuitar,
   editRig,
+  editTone,
   gateFor,
   gatesAbove,
   GATE_LEVELS,
+  interfaceOf,
+  INTERFACES,
+  latencyMs,
+  MIDI_DEVICES,
   newGuitar,
   newRig,
+  overriddenOn,
   removeGuitar,
   removeRig,
-  tuneFit,
-  tuneGuitar,
+  saveToneOverrides,
+  toneOn,
+  tuneRig,
+  tuneTone,
   useStore,
-  UNFIT,
-  type Fit,
   type GateLevel,
   type Guitar,
   type Rig,
+  type Tone,
+  type ToneKey,
+  type ToneScope,
 } from "../store";
 import { useSignal } from "../ui/signal";
 import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
+import { OverrideIcon } from "../ui/OverrideIcon";
 import { MACRO_BAR_H } from "../dock/MacroBar";
 
 const GATE_NAME: Record<GateLevel, string> = { off: "Off", subtle: "Subtle", default: "Default", tight: "Tight", ultra: "Ultra" };
+/** A rig's override of the guitar, in the rig's colour. */
+const RIG_COLOUR = "#38BDF8";
+const TONE_NAME: Record<ToneKey, string> = { trimDb: "Trim", gates: "Gate", noisy: "Noisy input", eq: "EQ" };
 
 /** The guitar's level in dBFS, after the trim (the simulation's 0–1 onto
  *  a −90…0 dB scale: a quiet string's hiss near −86, a strum near −18). */
@@ -50,13 +66,13 @@ function levelDb(input: number, trimDb: number) {
   return Math.min(0, -90 + 90 * input + trimDb);
 }
 
-type Focus = "guitar" | "rig";
+type Tab = "guitar" | "audio" | "midi";
 
 export function SetupView() {
   const ref = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(true);
   const [showList, setShowList] = useState(false);
-  const [focus, setFocus] = useState<Focus>("guitar");
+  const [tab, setTab] = useState<Tab>("guitar");
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -65,25 +81,24 @@ export function SetupView() {
     setWide(el.clientWidth >= 640);
     return () => ro.disconnect();
   }, []);
-  const onList = wide ? undefined : () => setShowList(true);
   return (
-    <div ref={ref} style={{ height: "100%", minHeight: 0, display: "flex", background: "var(--desk)" }}>
+    <div ref={ref} style={{ flex: 1, minWidth: 0, height: "100%", minHeight: 0, display: "flex", background: "var(--desk)" }}>
       {(wide || showList) && (
         <SetupList
           wide={wide}
-          focus={focus}
-          onPicked={(f) => {
-            setFocus(f);
+          tab={tab}
+          onPicked={(t) => {
+            setTab(t);
             setShowList(false);
           }}
         />
       )}
-      {(wide || !showList) && (focus === "guitar" ? <GuitarDetail onList={onList} onRig={() => setFocus("rig")} /> : <RigDetail onList={onList} onGuitar={() => setFocus("guitar")} />)}
+      {(wide || !showList) && <SetupDetail tab={tab} onTab={setTab} onList={wide ? undefined : () => setShowList(true)} />}
     </div>
   );
 }
 
-// ── The photo ──────────────────────────────────────────────────────
+// ── Choosing: a guitar, a rig ──────────────────────────────────────
 
 /** A guitar's photo, cropped to its body; its finish colour if the photo
  *  is missing (the photos are local, not committed). */
@@ -103,8 +118,6 @@ function GuitarPhoto({ g, size, radius = 8, style }: { g: Guitar; size?: number;
   return <img src={g.image} alt="" onError={() => setBroken(true)} draggable={false} style={{ ...box, display: "block", objectFit: "cover", objectPosition: "50% 62%" }} />;
 }
 
-// ── The list ───────────────────────────────────────────────────────
-
 function ListHead({ label, onAdd, addLabel }: { label: string; onAdd: (e: React.MouseEvent<HTMLButtonElement>) => void; addLabel: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", minHeight: 44, padding: "8px 4px 0 16px" }}>
@@ -120,32 +133,23 @@ function ListHead({ label, onAdd, addLabel }: { label: string; onAdd: (e: React.
   );
 }
 
-function SetupList({ wide, focus, onPicked }: { wide: boolean; focus: Focus; onPicked: (f: Focus) => void }) {
+function SetupList({ wide, tab, onPicked }: { wide: boolean; tab: Tab; onPicked: (t: Tab) => void }) {
   const s = useStore();
   const addGuitar = useMenu();
   const addRig = useMenu();
   const rig = currentRig(s);
   return (
-    <aside style={{ width: wide ? 300 : "100%", flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0, borderRight: wide ? "1px solid var(--rule)" : undefined, background: "var(--sheet)" }}>
-      <header style={{ flexShrink: 0, height: MACRO_BAR_H, display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, padding: "0 16px", borderBottom: "1px solid var(--rule)" }}>
-        <span className="t-marker" style={{ fontSize: 22 }}>
-          Setup
-        </span>
-        <span className="t-meta" style={{ fontSize: 13 }}>
-          A guitar, into a rig
-        </span>
-      </header>
+    <aside style={{ width: wide ? 290 : "100%", flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0, borderRight: wide ? "1px solid var(--rule)" : undefined, background: "var(--sheet)" }}>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        <ListHead label="Guitars" addLabel="New guitar" onAdd={addGuitar.fromButton} />
+        <ListHead label="Guitar" addLabel="New guitar" onAdd={addGuitar.fromButton} />
         {s.guitars.map((g, i) => (
           <GuitarRow
             key={g.id}
             g={g}
             index={i}
             inUse={i === s.guitarIndex}
-            shown={focus === "guitar" && i === s.guitarIndex}
-            fitted={!!g.fits[rig.id]}
-            rigName={rig.name}
+            shown={tab === "guitar" && i === s.guitarIndex}
+            rig={rig}
             onPick={() => {
               if (i !== s.guitarIndex) chooseGuitar(i);
               onPicked("guitar");
@@ -155,18 +159,18 @@ function SetupList({ wide, focus, onPicked }: { wide: boolean; focus: Focus; onP
         {addGuitar.open && (
           <Menu at={addGuitar.open.at} naming={0} items={[{ kind: "name", id: "add", label: "New guitar…", initial: "New guitar", confirm: "Add", taken: s.guitars.map((x) => x.name) }]} onPick={(p) => newGuitar(p.text)} onClose={addGuitar.close} />
         )}
-        <div style={{ height: 12 }} />
-        <ListHead label="Rigs · audio and MIDI" addLabel="New rig" onAdd={addRig.fromButton} />
+        <div style={{ height: 14 }} />
+        <ListHead label="Rig" addLabel="New rig" onAdd={addRig.fromButton} />
         {s.rigs.map((r, i) => (
           <RigRow
             key={r.id}
             r={r}
             index={i}
             inUse={i === s.rigIndex}
-            shown={focus === "rig" && i === s.rigIndex}
+            shown={tab !== "guitar" && i === s.rigIndex}
             onPick={() => {
               if (i !== s.rigIndex) chooseRig(i);
-              onPicked("rig");
+              onPicked(tab === "guitar" ? "audio" : tab);
             }}
           />
         ))}
@@ -177,6 +181,608 @@ function SetupList({ wide, focus, onPicked }: { wide: boolean; focus: Focus; onP
     </aside>
   );
 }
+
+function GuitarRow({ g, index, inUse, shown, rig, onPick }: { g: Guitar; index: number; inUse: boolean; shown: boolean; rig: Rig; onPick: () => void }) {
+  const s = useStore();
+  const menu = useMenu();
+  const over = overriddenOn(g, rig.id);
+  const items: MenuItem[] = [
+    { kind: "head", label: g.name },
+    { kind: "name", id: "rename", label: "Rename…", initial: g.name, confirm: "Rename", taken: s.guitars.map((x) => x.name) },
+    { kind: "sep" },
+    { kind: "delete", id: "delete", label: "Delete guitar", disabled: s.guitars.length <= 1 ? "The only guitar" : undefined },
+  ];
+  const onMenu = (p: Picked) => {
+    if (p.id === "rename") {
+      chooseGuitar(index);
+      editGuitar(`renamed ${p.text}`, (x) => ({ ...x, name: p.text }));
+    }
+    if (p.id === "delete") removeGuitar(index);
+  };
+  return (
+    <ListRow
+      inUse={inUse}
+      shown={shown}
+      onPick={onPick}
+      lead={<GuitarPhoto g={g} size={52} />}
+      title={g.name}
+      sub={
+        over.length ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <OverrideIcon colour={RIG_COLOUR} size={11} />
+            {over.map((k) => TONE_NAME[k]).join(", ")} on {rig.name}
+          </span>
+        ) : (
+          "Its defaults"
+        )
+      }
+      menu={
+        <>
+          <MoreButton label={`${g.name} actions`} onClick={menu.fromButton} />
+          {menu.open && <Menu at={menu.open.at} items={items} onPick={onMenu} onClose={menu.close} />}
+        </>
+      }
+    />
+  );
+}
+
+function RigRow({ r, index, inUse, shown, onPick }: { r: Rig; index: number; inUse: boolean; shown: boolean; onPick: () => void }) {
+  const s = useStore();
+  const menu = useMenu();
+  const items: MenuItem[] = [
+    { kind: "head", label: r.name },
+    { kind: "name", id: "rename", label: "Rename…", initial: r.name, confirm: "Rename", taken: s.rigs.map((x) => x.name) },
+    { kind: "sep" },
+    { kind: "delete", id: "delete", label: "Delete rig", disabled: s.rigs.length <= 1 ? "The only rig" : undefined },
+  ];
+  const onMenu = (p: Picked) => {
+    if (p.id === "rename") {
+      chooseRig(index);
+      editRig(`renamed ${p.text}`, (x) => ({ ...x, name: p.text }));
+    }
+    if (p.id === "delete") removeRig(index);
+  };
+  return (
+    <ListRow
+      inUse={inUse}
+      shown={shown}
+      onPick={onPick}
+      lead={<RigGlyph on={inUse} />}
+      title={r.name}
+      sub={`${khz(r.audio.rate)} · ${r.audio.buffer} · ${latencyMs(r).toFixed(1)} ms`}
+      menu={
+        <>
+          <MoreButton label={`${r.name} actions`} onClick={menu.fromButton} />
+          {menu.open && <Menu at={menu.open.at} items={items} onPick={onMenu} onClose={menu.close} />}
+        </>
+      }
+    />
+  );
+}
+
+const khz = (rate: number) => `${(rate / 1000).toLocaleString("en", { maximumFractionDigits: 1 })} kHz`;
+
+// ── The detail: guitar into rig, three tabs ────────────────────────
+
+function SetupDetail({ tab, onTab, onList }: { tab: Tab; onTab: (t: Tab) => void; onList?: () => void }) {
+  const s = useStore();
+  const g = currentGuitar(s);
+  const r = currentRig(s);
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "guitar", label: "Guitar" },
+    { id: "audio", label: "Audio" },
+    { id: "midi", label: "MIDI" },
+  ];
+  return (
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
+      <header style={{ flexShrink: 0, minHeight: MACRO_BAR_H, display: "flex", alignItems: "center", gap: 12, padding: "8px 16px", flexWrap: "wrap", borderBottom: "1px solid var(--rule)", background: "var(--sheet)" }}>
+        {onList && <BackButton onList={onList} />}
+        {/* What plays: this guitar, into this rig. */}
+        <span style={{ flex: "1 1 260px", minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
+          <GuitarPhoto g={g} size={44} />
+          <span style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 17, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.name}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden" }}>
+              <svg width="14" height="8" viewBox="0 0 14 8" aria-hidden style={{ flexShrink: 0 }}>
+                <path d="M0 4h12M9 1l3 3-3 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
+            </span>
+          </span>
+        </span>
+        {/* Guitar · Audio · MIDI */}
+        <span role="tablist" style={{ display: "flex", padding: 3, gap: 2, borderRadius: 10, background: "#0a0a0c", boxShadow: "inset 0 0 0 1px var(--rule)" }}>
+          {tabs.map((t) => {
+            const on = t.id === tab;
+            return (
+              <button
+                key={t.id}
+                role="tab"
+                aria-selected={on}
+                onClick={() => onTab(t.id)}
+                className={on ? "" : "pressable"}
+                style={{ height: 38, minWidth: 84, padding: "0 16px", borderRadius: 8, fontSize: 14, fontWeight: on ? 750 : 600, color: on ? "var(--ink)" : "var(--ink-3)", background: on ? "#26262c" : "transparent", boxShadow: on ? "0 1px 0 rgba(255,255,255,0.06) inset, 0 1px 3px rgba(0,0,0,0.5)" : undefined }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </span>
+      </header>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+        {tab === "guitar" && <GuitarTab g={g} rig={r} />}
+        {tab === "audio" && <AudioTab r={r} />}
+        {tab === "midi" && <MidiTab r={r} />}
+      </div>
+    </div>
+  );
+}
+
+// ── Guitar ─────────────────────────────────────────────────────────
+
+function GuitarTab({ g, rig }: { g: Guitar; rig: Rig }) {
+  const over = overriddenOn(g, rig.id);
+  // Where changes land: the guitar's default (every rig), or only this rig.
+  const [scope, setScope] = useState<ToneScope>("guitar");
+  useEffect(() => setScope("guitar"), [g.id]);
+  const tone = scope === "guitar" ? g.tone : toneOn(g, rig.id);
+  const add = useMenu();
+  return (
+    <>
+      {/* The guitar, large. */}
+      <div style={{ position: "relative", height: 200, overflow: "hidden", background: g.colour }}>
+        <GuitarPhoto g={g} radius={0} style={{ width: "100%", height: "100%" }} />
+        <span aria-hidden style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(10,10,12,0.94) 100%)" }} />
+        <div style={{ position: "absolute", left: 20, right: 20, bottom: 14, display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", color: "#fafafa", textShadow: "0 1px 12px rgba(0,0,0,0.6)" }}>{g.name}</span>
+          <span style={{ fontSize: 13.5, color: "rgba(250,250,250,0.78)" }}>{pickupLine(g)}</span>
+        </div>
+      </div>
+
+      {/* Where a change lands. */}
+      <div style={{ position: "sticky", top: 0, zIndex: 2, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minHeight: 60, padding: "8px 20px", background: "rgba(14,14,17,0.96)", borderBottom: "1px solid var(--rule)" }}>
+        <span style={{ fontSize: 13.5, fontWeight: 650, color: "var(--ink-2)" }}>Changes go to</span>
+        <span style={{ display: "flex", padding: 3, gap: 2, borderRadius: 10, background: "#0a0a0c", boxShadow: "inset 0 0 0 1px var(--rule)" }}>
+          {(["guitar", "rig"] as ToneScope[]).map((sc) => {
+            const on = sc === scope;
+            return (
+              <button
+                key={sc}
+                onClick={() => setScope(sc)}
+                aria-pressed={on}
+                className={on ? "" : "pressable"}
+                style={{ height: 38, padding: "0 14px", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, fontSize: 13.5, fontWeight: on ? 750 : 600, color: on ? "var(--ink)" : "var(--ink-3)", background: on ? (sc === "rig" ? `color-mix(in oklab, ${RIG_COLOUR} 22%, #1c1c21)` : "#26262c") : "transparent" }}
+              >
+                {sc === "rig" && <OverrideIcon colour={on ? RIG_COLOUR : "currentColor"} size={12} />}
+                {sc === "guitar" ? "The guitar · every rig" : `Only ${rig.name}`}
+              </button>
+            );
+          })}
+        </span>
+        {over.length > 0 && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 650, color: `color-mix(in oklab, ${RIG_COLOUR} 70%, var(--ink))` }}>
+            <OverrideIcon colour={RIG_COLOUR} size={12} />
+            {over.map((k) => TONE_NAME[k]).join(", ")}
+          </span>
+        )}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))" }}>
+      <ToneBlock title="Trim" keys={["trimDb"]} g={g} rig={rig} scope={scope} was={`${signed(g.tone.trimDb)} dB`}>
+        <LevelMatch tone={tone} scope={scope} rig={rig} />
+      </ToneBlock>
+      <ToneBlock title="Input EQ" keys={["eq"]} g={g} rig={rig} scope={scope} was={`Low cut ${g.tone.eq.lowCut} Hz`}>
+        <GuitarEq tone={tone} scope={scope} />
+      </ToneBlock>
+      </div>
+      <ToneBlock title="Gate" keys={["gates", "noisy"]} g={g} rig={rig} scope={scope} was={`Default ${g.tone.gates.default} dB${g.tone.noisy ? " · noisy" : ""}`}>
+        <Gates tone={tone} scope={scope} />
+      </ToneBlock>
+      
+
+      <Section title="Pickups">
+        {g.pickups.map((p, i) => (
+          <Field key={i} label={p.position}>
+            <Text value={p.model} placeholder="Pickup model" onCommit={(v) => editGuitar("pickup", (y) => ({ ...y, pickups: y.pickups.map((q, k) => (k === i ? { ...q, model: v } : q)) }))} />
+          </Field>
+        ))}
+        <button className="pressable" onClick={add.fromButton} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 44, color: "var(--ink-3)", fontSize: 14, fontWeight: 600, borderTop: "1px solid var(--rule)", width: "100%" }}>
+          <Plus />
+          Add a pickup
+        </button>
+        {add.open && (
+          <Menu at={add.open.at} naming={0} items={[{ kind: "name", id: "add", label: "Pickup position…", initial: "Middle", confirm: "Add" }]} onPick={(p) => editGuitar("pickup added", (y) => ({ ...y, pickups: [...y.pickups, { position: p.text, model: "" }] }))} onClose={add.close} />
+        )}
+      </Section>
+    </>
+  );
+}
+
+const signed = (v: number) => `${v > 0 ? "+" : ""}${v}`;
+
+function Plus() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+      <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** A part of the guitar's tone: its title, and whether the rig overrides
+ *  it — with Save to the guitar and Discard, as a section's override. */
+function ToneBlock({ title, keys, g, rig, scope, was, children }: { title: string; keys: ToneKey[]; g: Guitar; rig: Rig; scope: ToneScope; was: string; children: ReactNode }) {
+  const over = overriddenOn(g, rig.id).filter((k) => keys.includes(k));
+  const showing = scope === "rig" && over.length > 0;
+  return (
+    <section style={{ position: "relative", padding: "18px 20px 22px", borderBottom: "1px solid var(--rule)", background: showing ? `color-mix(in oklab, ${RIG_COLOUR} 5%, transparent)` : undefined }}>
+      {showing && <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: RIG_COLOUR }} />}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>{title}</h2>
+        {over.length > 0 ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 650, color: `color-mix(in oklab, ${RIG_COLOUR} 70%, var(--ink))` }}>
+            <OverrideIcon colour={RIG_COLOUR} size={13} />
+            {scope === "rig" ? `Override on ${rig.name} · guitar: ${was}` : `Overridden on ${rig.name} — showing the guitar's`}
+          </span>
+        ) : null}
+        <span style={{ flex: 1 }} />
+        {over.length > 0 && (
+          <span style={{ display: "flex", gap: 6 }}>
+            <button className="pressable" onClick={() => discardToneOverrides(over)} style={{ height: 36, padding: "0 12px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 650, color: "var(--ink-2)" }}>
+              Discard
+            </button>
+            <button className="pressable" onClick={() => saveToneOverrides(over)} title={`Make ${rig.name}'s ${title.toLowerCase()} the guitar's, on every rig`} style={{ height: 36, padding: "0 14px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 700, color: "var(--ink)", boxShadow: "inset 0 0 0 1px var(--rule-strong)" }}>
+              Save to guitar
+            </button>
+          </span>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+// ── Audio ──────────────────────────────────────────────────────────
+
+/** A dropdown: the value, and a chevron; it opens the choices as a menu. */
+function Select<T extends string | number>({ label, value, options, show = String, detail, onPick, width }: { label: string; value: T; options: T[]; show?: (v: T) => string; detail?: (v: T) => string | undefined; onPick: (v: T) => void; width?: number | string }) {
+  const menu = useMenu();
+  return (
+    <>
+      <button
+        className="pressable"
+        onClick={menu.fromButton}
+        aria-label={`${label}: ${show(value)}`}
+        aria-haspopup="menu"
+        style={{ width, minWidth: 0, height: 44, padding: "0 12px 0 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: "var(--r)", background: "#17171b", boxShadow: "inset 0 0 0 1px var(--rule-strong)", textAlign: "left" }}
+      >
+        <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 650, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{show(value)}</span>
+        <svg width="11" height="7" viewBox="0 0 11 7" aria-hidden style={{ flexShrink: 0, color: "var(--ink-3)" }}>
+          <path d="M1 1l4.5 4.5L10 1" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {menu.open && (
+        <Menu
+          at={menu.open.at}
+          items={[{ kind: "head", label }, ...options.map((o): MenuItem => ({ kind: "run", id: String(o), label: show(o), detail: detail?.(o), checked: o === value }))]}
+          onPick={(p) => {
+            const o = options.find((x) => String(x) === p.id);
+            if (o !== undefined) onPick(o);
+          }}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
+/** A labelled cell of the settings grid: a small label over its control. */
+function Cell({ label, children, foot }: { label: string; children: ReactNode; foot?: ReactNode }) {
+  return (
+    <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 8, padding: "14px 18px 16px" }}>
+      <span style={{ fontSize: 11.5, fontWeight: 750, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--ink-3)" }}>{label}</span>
+      {children}
+      {foot && <span style={{ fontSize: 12, color: "var(--ink-3)" }}>{foot}</span>}
+    </div>
+  );
+}
+
+function Toggle({ on, onFlip, label }: { on: boolean; onFlip: () => void; label: string }) {
+  return (
+    <button role="switch" aria-checked={on} aria-label={label} onClick={onFlip} className="pressable" style={{ width: 52, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <span aria-hidden style={{ width: 46, height: 28, borderRadius: 999, padding: 3, background: on ? "var(--live)" : "#2b2b31", display: "flex", justifyContent: on ? "flex-end" : "flex-start" }}>
+        <span style={{ width: 22, height: 22, borderRadius: 999, background: "#f4f4f5" }} />
+      </span>
+    </button>
+  );
+}
+
+function AudioTab({ r }: { r: Rig }) {
+  const a = r.audio;
+  const dev = interfaceOf(r);
+  const set = <K extends keyof Rig["audio"]>(label: string, k: K, v: Rig["audio"][K]) => editRig(label, (y) => ({ ...y, audio: { ...y.audio, [k]: v } }));
+  const lat = latencyMs(r);
+  const latColour = lat < 8 ? "var(--live)" : lat < 14 ? "#eab308" : "#f87171";
+  return (
+    <>
+      {/* The interface: the device, and the three numbers that decide feel. */}
+      <section style={{ borderBottom: "1px solid var(--rule)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "18px 20px 6px" }}>
+          <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>Interface</h2>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, color: "var(--ink-3)" }}>
+            <span style={{ width: 8, height: 8, borderRadius: 999, background: "var(--live)" }} />
+            Connected · {dev.inputs.length} in · {dev.outputs.length * 2 + dev.phones.length * 2} out
+          </span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) repeat(3, minmax(0, 1fr))" }}>
+          <Cell label="Device">
+            <Select
+              label="Interface"
+              value={a.device}
+              options={INTERFACES.map((i) => i.name)}
+              onPick={(v) => {
+                const d = INTERFACES.find((i) => i.name === v)!;
+                // A new device: keep what it can do, else its nearest.
+                editRig(`interface ${v}`, (y) => ({
+                  ...y,
+                  audio: {
+                    ...y.audio,
+                    device: v,
+                    input: d.inputs.find((i) => i.name === y.audio.input)?.name ?? d.inputs[0].name,
+                    rate: d.rates.includes(y.audio.rate) ? y.audio.rate : d.rates.includes(48000) ? 48000 : d.rates[0],
+                    buffer: d.buffers.includes(y.audio.buffer) ? y.audio.buffer : d.buffers.includes(128) ? 128 : d.buffers[0],
+                    house: d.outputs.includes(y.audio.house) ? y.audio.house : d.outputs[0],
+                    phones: d.phones.includes(y.audio.phones) ? y.audio.phones : d.phones[0],
+                  },
+                }));
+              }}
+            />
+          </Cell>
+          <Cell label="Sample rate">
+            <Select label="Sample rate" value={a.rate} options={dev.rates} show={khz} onPick={(v) => set("sample rate", "rate", v)} />
+          </Cell>
+          <Cell label="Buffer">
+            <Select label="Buffer size" value={a.buffer} options={dev.buffers} show={(b) => `${b} samples`} detail={(b) => `${((b * 1000) / a.rate).toFixed(1)} ms`} onPick={(v) => set("buffer", "buffer", v)} />
+          </Cell>
+          <Cell label="Round trip">
+            <span style={{ height: 44, display: "flex", alignItems: "baseline", gap: 5 }}>
+              <span className="num" style={{ fontSize: 30, fontWeight: 800, color: latColour, lineHeight: "44px" }}>
+                {lat.toFixed(1)}
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 650, color: "var(--ink-3)" }}>ms</span>
+            </span>
+          </Cell>
+        </div>
+      </section>
+
+      {/* The guitar's input: the interface's inputs, each with its level. */}
+      <section style={{ padding: "18px 20px 20px", borderBottom: "1px solid var(--rule)" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14 }}>
+          <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>Guitar input</h2>
+        </div>
+        <Inputs r={r} />
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, minHeight: 52, borderTop: "1px solid var(--rule)" }}>
+          <span style={{ flex: 1, fontSize: 15, fontWeight: 700 }}>Direct monitor</span>
+          <Toggle on={a.directMonitor} label="Direct monitor" onFlip={() => set(a.directMonitor ? "direct monitor off" : "direct monitor on", "directMonitor", !a.directMonitor)} />
+        </div>
+      </section>
+
+      {/* Outputs: the house and the phones, each with its level and a check. */}
+      <section style={{ borderBottom: "1px solid var(--rule)" }}>
+        <div style={{ padding: "18px 20px 4px" }}>
+          <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>Outputs</h2>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+          <OutputStrip kind="house" r={r} />
+          <OutputStrip kind="phones" r={r} />
+        </div>
+      </section>
+    </>
+  );
+}
+
+function Inputs({ r }: { r: Rig }) {
+  const sig = useSignal();
+  const dev = interfaceOf(r);
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(dev.inputs.length, 4)}, minmax(0, 1fr))`, gap: 8 }}>
+      {dev.inputs.map((inp, i) => {
+        const on = inp.name === r.audio.input;
+        // Only the guitar's input has signal; the rest sit at the floor.
+        const lvl = on ? sig.input : 0.02 + 0.01 * ((i * 7) % 3);
+        return (
+          <button
+            key={inp.name}
+            onClick={() => !on && editRig(`input ${inp.name}`, (y) => ({ ...y, audio: { ...y.audio, input: inp.name } }))}
+            className={on ? "" : "pressable"}
+            aria-pressed={on}
+            style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, minHeight: 72, padding: "10px 12px", borderRadius: "var(--r-md)", textAlign: "left", background: on ? "rgba(34,197,94,0.08)" : "#141418", boxShadow: on ? "inset 0 0 0 2px var(--live)" : "inset 0 0 0 1px var(--rule)" }}
+          >
+            {/* Its level, upright. */}
+            <span aria-hidden style={{ position: "relative", width: 8, height: 48, borderRadius: 3, background: "#08080a", overflow: "hidden", flexShrink: 0 }}>
+              <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: `${Math.min(100, lvl * 100)}%`, background: lvl > 0.9 ? "#f87171" : "var(--live)" }} />
+            </span>
+            <span style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+              <span style={{ fontSize: 15, fontWeight: on ? 750 : 600 }}>{inp.name}</span>
+              <span style={{ fontSize: 12, color: on ? "var(--live)" : "var(--ink-3)", fontWeight: on ? 650 : 500 }}>{on ? "Guitar" : inp.kind}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** One output: where it goes, its level over its meter, and a check that
+ *  plays left, right, then both — so a swapped cable or a dead side shows. */
+function OutputStrip({ kind, r }: { kind: "house" | "phones"; r: Rig }) {
+  const sig = useSignal();
+  const dev = interfaceOf(r);
+  const a = r.audio;
+  const db = kind === "house" ? a.houseDb : a.phonesDb;
+  const [check, setCheck] = useState<{ start: number } | null>(null);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!check) return;
+    const id = setInterval(() => {
+      if (performance.now() - check.start > 3600) setCheck(null);
+      tick((n) => n + 1);
+    }, 100);
+    return () => clearInterval(id);
+  }, [check]);
+  const phase = check ? Math.floor((performance.now() - check.start) / 1200) : -1;
+  const side: "L" | "R" | "LR" | null = phase === 0 ? "L" : phase === 1 ? "R" : phase === 2 ? "LR" : null;
+  const level = (kind === "house" ? sig.output : sig.phones) * Math.pow(10, db / 40);
+  const fill = (db + 60) / 66;
+  const setDb = (v: number) => tuneRig((y) => ({ ...y, audio: { ...y.audio, [kind === "house" ? "houseDb" : "phonesDb"]: v } }));
+  return (
+    <div style={{ padding: "12px 20px 20px", display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {kind === "house" ? <SpeakersGlyph side={side} /> : <PhonesGlyph side={side} />}
+        <span style={{ fontSize: 16, fontWeight: 750 }}>{kind === "house" ? "House" : "Phones"}</span>
+        <span style={{ flex: 1 }} />
+        <Select
+          label={kind === "house" ? "House output" : "Phones output"}
+          value={kind === "house" ? a.house : a.phones}
+          options={kind === "house" ? dev.outputs : dev.phones}
+          width={170}
+          onPick={(v) => editRig(`${kind} output`, (y) => ({ ...y, audio: { ...y.audio, [kind]: v } }))}
+        />
+      </div>
+      {/* The level: a wide touch fader, the signal moving under it. */}
+      <div style={{ position: "relative", height: 52, borderRadius: 10, background: "#0b0b0e", boxShadow: "inset 0 0 0 1px var(--rule)", overflow: "hidden" }}>
+        <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${fill * 100}%`, background: "linear-gradient(90deg, #1e1e24, #2a2a31)" }} />
+        <span aria-hidden style={{ position: "absolute", left: 0, bottom: 0, height: 4, width: `${Math.min(1, level) * fill * 100}%`, background: level > 0.95 ? "#f87171" : "var(--live)", transition: "width 60ms linear" }} />
+        <span aria-hidden style={{ position: "absolute", top: 8, bottom: 8, left: `calc(${fill * 100}% - 2px)`, width: 4, borderRadius: 2, background: "#f4f4f5" }} />
+        <span className="num" style={{ position: "absolute", left: 14, top: 0, bottom: 0, display: "flex", alignItems: "center", fontSize: 18, fontWeight: 800, pointerEvents: "none" }}>
+          {db <= -60 ? "−∞" : `${signed(db)} dB`}
+        </span>
+        <input type="range" min={-60} max={6} step={0.5} value={db} aria-label={`${kind === "house" ? "House" : "Phones"} level`} onChange={(e) => setDb(Number(e.target.value))} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "ew-resize", margin: 0 }} />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <button
+          className={check ? "" : "pressable"}
+          disabled={!!check}
+          onClick={() => setCheck({ start: performance.now() })}
+          style={{ flexShrink: 0, whiteSpace: "nowrap", height: 44, padding: "0 16px", display: "flex", alignItems: "center", gap: 8, borderRadius: "var(--r)", fontSize: 14, fontWeight: 700, color: check ? "#04210f" : "var(--ink)", background: check ? "var(--live)" : "transparent", boxShadow: check ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
+        >
+          {check ? (side === "L" ? "Left…" : side === "R" ? "Right…" : "Both…") : kind === "house" ? "Check speakers" : "Check phones"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PhonesGlyph({ side }: { side: "L" | "R" | "LR" | null }) {
+  const lit = (s: "L" | "R") => (side === s || side === "LR" ? "var(--live)" : "#3f3f46");
+  return (
+    <svg width="30" height="26" viewBox="0 0 30 26" aria-hidden style={{ flexShrink: 0 }}>
+      <path d="M4 16v-3a11 11 0 0 1 22 0v3" fill="none" stroke="#71717a" strokeWidth="2" strokeLinecap="round" />
+      <rect x="2" y="15" width="7" height="10" rx="2.5" fill={lit("L")} />
+      <rect x="21" y="15" width="7" height="10" rx="2.5" fill={lit("R")} />
+    </svg>
+  );
+}
+
+function SpeakersGlyph({ side }: { side: "L" | "R" | "LR" | null }) {
+  const lit = (s: "L" | "R") => (side === s || side === "LR" ? "var(--live)" : "#3f3f46");
+  return (
+    <svg width="30" height="26" viewBox="0 0 30 26" aria-hidden style={{ flexShrink: 0 }}>
+      {(["L", "R"] as const).map((s, i) => (
+        <g key={s} transform={`translate(${i * 16} 0)`}>
+          <rect x="1" y="2" width="12" height="22" rx="2.5" fill="none" stroke={lit(s)} strokeWidth="1.8" />
+          <circle cx="7" cy="16" r="3.6" fill={lit(s)} />
+          <circle cx="7" cy="7.5" r="1.8" fill={lit(s)} />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+// ── MIDI ───────────────────────────────────────────────────────────
+
+interface Heard {
+  at: number;
+  text: string;
+}
+
+function MidiTab({ r }: { r: Rig }) {
+  const m = r.midi;
+  const ctl = MIDI_DEVICES.find((d) => d.name === m.device);
+  const [pressed, setPressed] = useState<number | null>(null);
+  const [heard, setHeard] = useState<Heard[]>([]);
+  const set = <K extends keyof Rig["midi"]>(label: string, k: K, v: Rig["midi"][K]) => editRig(label, (y) => ({ ...y, midi: { ...y.midi, [k]: v } }));
+  const press = (i: number) => {
+    setPressed(i);
+    setTimeout(() => setPressed((p) => (p === i ? null : p)), 220);
+    const ch = m.channel === "Omni" ? 1 : m.channel;
+    setHeard((h) => [{ at: Date.now(), text: `Switch ${i + 1} · CC ${20 + i} · 127 · ch ${ch}` }, ...h].slice(0, 6));
+  };
+  return (
+    <>
+      <section style={{ borderBottom: "1px solid var(--rule)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "18px 20px 6px" }}>
+          <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>Controller</h2>
+          {ctl && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, color: "var(--ink-3)" }}>
+              <span style={{ width: 8, height: 8, borderRadius: 999, background: "var(--live)" }} />
+              {ctl.link === "Bluetooth" ? "Bluetooth MIDI · connected" : "USB · connected"}
+            </span>
+          )}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) repeat(2, minmax(0, 1fr))" }}>
+          <Cell label="Device">
+            <Select label="Controller" value={m.device} options={[...MIDI_DEVICES.map((d) => d.name), "None"]} detail={(v) => MIDI_DEVICES.find((d) => d.name === v)?.link} onPick={(v) => set(`controller ${v}`, "device", v)} />
+          </Cell>
+          <Cell label="Listens on">
+            <Select label="MIDI channel" value={m.channel} options={["Omni", ...Array.from({ length: 16 }, (_, i) => i + 1)] as (number | "Omni")[]} show={(c) => (c === "Omni" ? "Omni · all" : `Channel ${c}`)} onPick={(v) => set("channel", "channel", v)} />
+          </Cell>
+          <Cell label="Clock">
+            <Select label="MIDI clock" value={m.clock} options={["off", "send", "receive"] as Rig["midi"]["clock"][]} show={(c) => (c === "off" ? "Off" : c === "send" ? "Send tempo" : "Follow it")} onPick={(v) => set("clock", "clock", v)} />
+          </Cell>
+        </div>
+      </section>
+      {ctl && (
+        <section style={{ padding: "18px 20px 20px", borderBottom: "1px solid var(--rule)" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14 }}>
+            <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>Test it</h2>
+          </div>
+          {/* The controller, top down: its switches in a row. */}
+          <div style={{ display: "flex", gap: 10, padding: 14, borderRadius: 12, background: "linear-gradient(180deg, #1c1c21, #121215)", boxShadow: "inset 0 0 0 1px var(--rule-strong)" }}>
+            {Array.from({ length: ctl.switches }, (_, i) => {
+              const on = pressed === i;
+              return (
+                <button key={i} onClick={() => press(i)} aria-label={`Switch ${i + 1}`} className="pressable" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "8px 0" }}>
+                  <span aria-hidden style={{ width: 10, height: 10, borderRadius: 999, background: on ? "var(--live)" : "#2b2b31", boxShadow: on ? "0 0 10px var(--live)" : undefined }} />
+                  <span aria-hidden style={{ width: 44, height: 44, borderRadius: 999, background: on ? "#3a3a42" : "#2a2a30", boxShadow: "inset 0 -3px 0 rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.08)", transform: on ? "translateY(1px)" : undefined }} />
+                  <span className="num" style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-3)" }}>{i + 1}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 12, minHeight: 44, display: "flex", flexDirection: "column" }}>
+            {heard.length === 0 ? (
+              <span style={{ fontSize: 13, color: "var(--ink-3)", padding: "12px 0" }}>—</span>
+            ) : (
+              heard.map((h, i) => (
+                <span key={h.at + h.text} className="num" style={{ display: "flex", gap: 12, minHeight: 32, alignItems: "center", fontSize: 13.5, color: i === 0 ? "var(--ink)" : "var(--ink-3)", borderTop: i ? "1px solid var(--rule)" : undefined }}>
+                  {h.text}
+                </span>
+              ))
+            )}
+          </div>
+        </section>
+      )}
+      <section style={{ padding: "6px 20px 10px", borderBottom: "1px solid var(--rule)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 64 }}>
+          <span style={{ flex: 1, fontSize: 15, fontWeight: 700 }}>Program changes</span>
+          <Toggle on={m.programChange} label="Program changes" onFlip={() => set(m.programChange ? "program changes off" : "program changes on", "programChange", !m.programChange)} />
+        </div>
+      </section>
+    </>
+  );
+}
+
+// ── Pieces ─────────────────────────────────────────────────────────
 
 /** A row in the list: the one in use marked green; the one open on the
  *  right in a light wash. */
@@ -208,46 +814,6 @@ function pickupLine(g: Guitar) {
   return [...counts].map(([m, n]) => (n > 1 ? `${m} ×${n}` : m)).join(" · ") || "No pickups yet";
 }
 
-function GuitarRow({ g, index, inUse, shown, fitted, rigName, onPick }: { g: Guitar; index: number; inUse: boolean; shown: boolean; fitted: boolean; rigName: string; onPick: () => void }) {
-  const s = useStore();
-  const menu = useMenu();
-  const items: MenuItem[] = [
-    { kind: "head", label: g.name },
-    { kind: "name", id: "rename", label: "Rename…", initial: g.name, confirm: "Rename", taken: s.guitars.map((x) => x.name) },
-    { kind: "sep" },
-    { kind: "delete", id: "delete", label: "Delete guitar", disabled: s.guitars.length <= 1 ? "The only guitar" : undefined },
-  ];
-  const onMenu = (p: Picked) => {
-    if (p.id === "rename") {
-      chooseGuitar(index);
-      editGuitar(`renamed ${p.text}`, (x) => ({ ...x, name: p.text }));
-    }
-    if (p.id === "delete") removeGuitar(index);
-  };
-  return (
-    <ListRow
-      inUse={inUse}
-      shown={shown}
-      onPick={onPick}
-      lead={<GuitarPhoto g={g} size={52} />}
-      title={g.name}
-      sub={
-        fitted ? (
-          pickupLine(g)
-        ) : (
-          <span style={{ color: "#d4a24a" }}>Not set up on {rigName}</span>
-        )
-      }
-      menu={
-        <>
-          <MoreButton label={`${g.name} actions`} onClick={menu.fromButton} />
-          {menu.open && <Menu at={menu.open.at} items={items} onPick={onMenu} onClose={menu.close} />}
-        </>
-      }
-    />
-  );
-}
-
 function RigGlyph({ on }: { on: boolean }) {
   // An interface, front on: two inputs and a knob.
   return (
@@ -262,42 +828,6 @@ function RigGlyph({ on }: { on: boolean }) {
   );
 }
 
-function RigRow({ r, index, inUse, shown, onPick }: { r: Rig; index: number; inUse: boolean; shown: boolean; onPick: () => void }) {
-  const s = useStore();
-  const menu = useMenu();
-  const items: MenuItem[] = [
-    { kind: "head", label: r.name },
-    { kind: "name", id: "rename", label: "Rename…", initial: r.name, confirm: "Rename", taken: s.rigs.map((x) => x.name) },
-    { kind: "sep" },
-    { kind: "delete", id: "delete", label: "Delete rig", disabled: s.rigs.length <= 1 ? "The only rig" : undefined },
-  ];
-  const onMenu = (p: Picked) => {
-    if (p.id === "rename") {
-      chooseRig(index);
-      editRig(`renamed ${p.text}`, (x) => ({ ...x, name: p.text }));
-    }
-    if (p.id === "delete") removeRig(index);
-  };
-  return (
-    <ListRow
-      inUse={inUse}
-      shown={shown}
-      onPick={onPick}
-      lead={<RigGlyph on={inUse} />}
-      title={r.name}
-      sub={`${r.audio.device} · ${r.midi.device}`}
-      menu={
-        <>
-          <MoreButton label={`${r.name} actions`} onClick={menu.fromButton} />
-          {menu.open && <Menu at={menu.open.at} items={items} onPick={onMenu} onClose={menu.close} />}
-        </>
-      }
-    />
-  );
-}
-
-// ── A guitar ───────────────────────────────────────────────────────
-
 function BackButton({ onList }: { onList: () => void }) {
   return (
     <button className="pressable" onClick={onList} aria-label="Guitars and rigs" style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink)", borderRadius: "var(--r)", background: "rgba(0,0,0,0.45)" }}>
@@ -308,210 +838,11 @@ function BackButton({ onList }: { onList: () => void }) {
   );
 }
 
-function GuitarDetail({ onList, onRig }: { onList?: () => void; onRig: () => void }) {
-  const s = useStore();
-  const g = currentGuitar(s);
-  const rig = currentRig(s);
-  const fit = g.fits[rig.id];
-  const add = useMenu();
-  return (
-    <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto" }}>
-      {/* The guitar, large: its photo across the top, its name over it. */}
-      <div style={{ position: "relative", height: 230, overflow: "hidden", background: g.colour }}>
-        <GuitarPhoto g={g} radius={0} style={{ width: "100%", height: "100%" }} />
-        <span aria-hidden style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0) 35%, rgba(10,10,12,0.92) 100%)" }} />
-        {onList && (
-          <span style={{ position: "absolute", left: 10, top: 10 }}>
-            <BackButton onList={onList} />
-          </span>
-        )}
-        <div style={{ position: "absolute", left: 20, right: 20, bottom: 16, display: "flex", alignItems: "flex-end", gap: 12 }}>
-          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", color: "#fafafa", textShadow: "0 1px 12px rgba(0,0,0,0.6)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.name}</span>
-            <span style={{ fontSize: 13.5, color: "rgba(250,250,250,0.78)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pickupLine(g)}</span>
-          </span>
-          <span style={{ flexShrink: 0, height: 28, padding: "0 10px", borderRadius: 999, display: "flex", alignItems: "center", fontSize: 12.5, fontWeight: 700, color: "#04210f", background: "var(--live)" }}>In use</span>
-        </div>
-      </div>
-
-      <Section title="Pickups" note="What this guitar carries">
-        {g.pickups.map((p, i) => (
-          <Field key={i} label={p.position}>
-            <Text value={p.model} placeholder="Pickup model" onCommit={(v) => editGuitar("pickup", (y) => ({ ...y, pickups: y.pickups.map((q, k) => (k === i ? { ...q, model: v } : q)) }))} />
-          </Field>
-        ))}
-        <button className="pressable" onClick={add.fromButton} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 44, color: "var(--ink-3)", fontSize: 14, fontWeight: 600, borderTop: "1px solid var(--rule)", width: "100%" }}>
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
-            <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-          Add a pickup
-        </button>
-        {add.open && (
-          <Menu
-            at={add.open.at}
-            naming={0}
-            items={[{ kind: "name", id: "add", label: "Pickup position…", initial: "Middle", confirm: "Add" }]}
-            onPick={(p) => editGuitar("pickup added", (y) => ({ ...y, pickups: [...y.pickups, { position: p.text, model: "" }] }))}
-            onClose={add.close}
-          />
-        )}
-      </Section>
-
-      <Section title="Input EQ" note="This guitar's own — before anything else, on every preset and every rig">
-        <GuitarEq g={g} />
-      </Section>
-
-      <FitSection g={g} rig={rig} fit={fit} onRig={onRig} />
-    </div>
-  );
-}
-
-/** The guitar on the rig in use: its level and its gates there — and the
- *  other rigs it has been set up on, a tap away. */
-function FitSection({ g, rig, fit, onRig }: { g: Guitar; rig: Rig; fit: Fit | undefined; onRig: () => void }) {
-  const s = useStore();
-  return (
-    <section style={{ padding: "18px 20px 22px", borderBottom: "1px solid var(--rule)" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 6, flexWrap: "wrap" }}>
-        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>
-          On{" "}
-          <button className="pressable" onClick={onRig} style={{ font: "inherit", color: "inherit", textDecoration: "underline", textDecorationColor: "var(--rule-strong)", textUnderlineOffset: 4 }}>
-            {rig.name}
-          </button>
-        </h2>
-        <span style={{ fontSize: 13, color: "var(--ink-3)" }}>This guitar's level and gates into this interface</span>
-      </div>
-      {/* Every rig: set up there or not; a tap makes it the rig in use. */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "10px 0 14px" }}>
-        {s.rigs.map((r, i) => {
-          const on = r.id === rig.id;
-          const has = !!g.fits[r.id];
-          return (
-            <button
-              key={r.id}
-              onClick={() => !on && chooseRig(i)}
-              className={on ? "" : "pressable"}
-              aria-pressed={on}
-              style={{ height: 36, padding: "0 12px", display: "flex", alignItems: "center", gap: 7, borderRadius: "var(--r)", fontSize: 13.5, fontWeight: on ? 700 : 560, color: on ? "var(--ink)" : "var(--ink-3)", background: on ? "var(--pressed-bg)" : "transparent", boxShadow: on ? "var(--pressed-shadow)" : "inset 0 0 0 1px var(--rule-strong)" }}
-            >
-              <span aria-hidden style={{ width: 7, height: 7, borderRadius: 999, background: has ? "var(--live)" : "transparent", boxShadow: has ? undefined : "inset 0 0 0 1.5px #d4a24a" }} />
-              {r.name}
-            </button>
-          );
-        })}
-      </div>
-      {fit ? (
-        <>
-          <LevelMatch fit={fit} rig={rig} />
-          <Gates fit={fit} />
-        </>
-      ) : (
-        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: 16, borderRadius: "var(--r-md)", background: "rgba(212,162,74,0.08)", boxShadow: "inset 0 0 0 1px rgba(212,162,74,0.35)" }}>
-          <span style={{ flex: "1 1 240px", display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 15, fontWeight: 700 }}>
-              {g.name} isn't set up on {rig.name} yet
-            </span>
-            <span style={{ fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.4 }}>Its level and gates are measured per rig. Until then it plays at no trim with general gates.</span>
-          </span>
-          <button className="pressable" onClick={() => editFit(`${g.name} on ${rig.name}`, () => UNFIT)} style={{ height: 44, padding: "0 16px", borderRadius: "var(--r)", fontSize: 14, fontWeight: 700, color: "var(--ink)", boxShadow: "inset 0 0 0 1px var(--rule-strong)" }}>
-            Set up on this rig
-          </button>
-        </div>
-      )}
-    </section>
-  );
-}
-
-// ── A rig ──────────────────────────────────────────────────────────
-
-function RigDetail({ onList, onGuitar }: { onList?: () => void; onGuitar: () => void }) {
-  const s = useStore();
-  const r = currentRig(s);
-  const a = r.audio;
-  const set = <K extends keyof Rig["audio"]>(k: K, v: Rig["audio"][K]) => editRig(String(k), (y) => ({ ...y, audio: { ...y.audio, [k]: v } }));
-  const here = s.guitars.map((g, i) => ({ g, i })).filter(({ g }) => g.fits[r.id]);
-  return (
-    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
-      <header style={{ flexShrink: 0, height: MACRO_BAR_H, display: "flex", alignItems: "center", gap: 12, padding: "0 16px", borderBottom: "1px solid var(--rule)", background: "var(--sheet)" }}>
-        {onList && <BackButton onList={onList} />}
-        <RigGlyph on />
-        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-          <span className="t-marker" style={{ fontSize: 22, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {r.name}
-          </span>
-          <span className="t-meta" style={{ fontSize: 13 }}>
-            Audio · MIDI
-          </span>
-        </span>
-      </header>
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        <Section title="Audio" note="The interface the guitar comes in through">
-          <Field label="Interface">
-            <Choice options={["Arturia MiniFuse 4", "Focusrite Scarlett 2i2", "Built-in"]} value={a.device} onPick={(v) => set("device", v)} />
-          </Field>
-          <Field label="Guitar input">
-            <Choice options={["Input 1 · Inst (Hi-Z)", "Input 2 · Inst (Hi-Z)", "Input 3 · Line"]} value={a.input} onPick={(v) => set("input", v)} />
-          </Field>
-          <Field label="Sample rate">
-            <Choice options={["44.1 kHz", "48 kHz", "96 kHz"]} value={a.rate} onPick={(v) => set("rate", v)} />
-          </Field>
-          <Field label="Buffer">
-            <Choice options={[64, 128, 256, 512]} value={a.buffer} onPick={(v) => set("buffer", v)} />
-          </Field>
-          <Field label="House">
-            <Choice options={["Outputs 1–2", "Outputs 3–4"]} value={a.house} onPick={(v) => set("house", v)} />
-          </Field>
-          <Field label="Phones">
-            <Choice options={["Phones 1", "Phones 2", "Outputs 3–4"]} value={a.phones} onPick={(v) => set("phones", v)} />
-          </Field>
-        </Section>
-        <Section title="MIDI" note="The controller the switches come from">
-          <Field label="Controller">
-            <Choice options={["Morningstar MC8", "Morningstar MC6", "None"]} value={r.midi.device} onPick={(v) => editRig("MIDI device", (y) => ({ ...y, midi: { ...y.midi, device: v } }))} />
-          </Field>
-          <Field label="Listens on">
-            <Choice options={["Omni", 1, 2, 3, 4] as (number | "Omni")[]} value={r.midi.channel} onPick={(v) => editRig("MIDI channel", (y) => ({ ...y, midi: { ...y.midi, channel: v } }))} />
-          </Field>
-        </Section>
-        <Section title="Guitars set up here" note="Each carries its own level and gates for this rig">
-          {here.length === 0 && <span style={{ fontSize: 13, color: "var(--ink-3)" }}>None yet — open a guitar and set it up on this rig.</span>}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
-            {here.map(({ g, i }) => {
-              const fit = g.fits[r.id];
-              return (
-                <button
-                  key={g.id}
-                  className="pressable"
-                  onClick={() => {
-                    if (i !== s.guitarIndex) chooseGuitar(i);
-                    onGuitar();
-                  }}
-                  style={{ display: "flex", flexDirection: "column", borderRadius: "var(--r-md)", overflow: "hidden", textAlign: "left", background: "#141418", boxShadow: i === s.guitarIndex ? "inset 0 0 0 2px var(--live)" : "inset 0 0 0 1px var(--rule)" }}
-                >
-                  <GuitarPhoto g={g} radius={0} style={{ width: "100%", height: 96 }} />
-                  <span style={{ padding: "8px 10px 10px", display: "flex", flexDirection: "column", gap: 2 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.name}</span>
-                    <span className="num" style={{ fontSize: 12, color: "var(--ink-3)" }}>
-                      Trim {fit.trimDb > 0 ? "+" : ""}
-                      {fit.trimDb} dB · Gate {fit.gates.default} dB{fit.noisy ? " · Noisy" : ""}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </Section>
-      </div>
-    </div>
-  );
-}
-
-function Section({ title, note, children }: { title: string; note: string; children: ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section style={{ padding: "18px 20px 22px", borderBottom: "1px solid var(--rule)" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14 }}>
         <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>{title}</h2>
-        <span style={{ fontSize: 13, color: "var(--ink-3)" }}>{note}</span>
       </div>
       {children}
     </section>
@@ -542,28 +873,12 @@ function Text({ value, onCommit, placeholder }: { value: string; onCommit: (v: s
   );
 }
 
-function Choice<T extends string | number>({ options, value, onPick }: { options: T[]; value: T; onPick: (v: T) => void }) {
-  return (
-    <span style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-      {options.map((o) => (
-        <button
-          key={String(o)}
-          onClick={() => onPick(o)}
-          className={o === value ? "" : "pressable"}
-          style={{ height: 36, padding: "0 12px", borderRadius: "var(--r)", fontSize: 13.5, fontWeight: o === value ? 700 : 560, color: o === value ? "var(--ink)" : "var(--ink-3)", background: o === value ? "var(--pressed-bg)" : "transparent", boxShadow: o === value ? "var(--pressed-shadow)" : "inset 0 0 0 1px var(--rule-strong)" }}
-        >
-          {String(o)}
-        </button>
-      ))}
-    </span>
-  );
-}
 
-// ── Input EQ ───────────────────────────────────────────────────────
+// ── Tone: EQ, level, gates ─────────────────────────────────────────
 
-function GuitarEq({ g }: { g: Guitar }) {
-  const eq = g.eq;
-  const set = (k: keyof typeof eq, v: number) => tuneGuitar((y) => ({ ...y, eq: { ...y.eq, [k]: v } }));
+function GuitarEq({ tone, scope }: { tone: Tone; scope: ToneScope }) {
+  const eq = tone.eq;
+  const set = (k: keyof typeof eq, v: number) => tuneTone(scope, "eq", (t) => ({ ...t, eq: { ...t.eq, [k]: v } }));
   const bands: { k: keyof typeof eq; label: string; min: number; max: number; unit: string }[] = [
     { k: "lowCut", label: "Low cut", min: 20, max: 200, unit: "Hz" },
     { k: "bass", label: "Bass", min: -12, max: 12, unit: "dB" },
@@ -598,14 +913,12 @@ function GuitarEq({ g }: { g: Guitar }) {
   );
 }
 
-// ── Level and gates (per guitar, per rig) ─────────────────────────
-
 /** The input trim, and the level match: the guitar's level on a dBFS scale
  *  with the band the presets expect; play as you would and Match trims the
  *  peaks into it. */
-function LevelMatch({ fit, rig }: { fit: Fit; rig: Rig }) {
+function LevelMatch({ tone, scope, rig }: { tone: Tone; scope: ToneScope; rig: Rig }) {
   const sig = useSignal();
-  const a = { targetDb: rig.audio.targetDb, trimDb: fit.trimDb };
+  const a = { targetDb: rig.audio.targetDb, trimDb: tone.trimDb };
   const now = levelDb(sig.input, a.trimDb);
   const [peak, setPeak] = useState(-90);
   const [matching, setMatching] = useState<{ until: number; max: number } | null>(null);
@@ -615,7 +928,7 @@ function LevelMatch({ fit, rig }: { fit: Fit; rig: Rig }) {
       const max = Math.max(matching.max, now - a.trimDb);
       if (performance.now() > matching.until) {
         // Trim the measured peaks onto the target.
-        editFit("level matched", (y) => ({ ...y, trimDb: Math.round((a.targetDb - max) * 2) / 2 }));
+        editTone("level matched", scope, "trimDb", (y) => ({ ...y, trimDb: Math.round((a.targetDb - max) * 2) / 2 }));
         setMatching(null);
       } else if (max !== matching.max) setMatching({ ...matching, max });
     }
@@ -623,11 +936,7 @@ function LevelMatch({ fit, rig }: { fit: Fit; rig: Rig }) {
   const pos = (db: number) => `${((db + 60) / 60) * 100}%`;
   const inBand = Math.abs(peak - a.targetDb) <= 3;
   return (
-    <div style={{ marginTop: 16, padding: 14, borderRadius: "var(--r-md)", background: "#111114", boxShadow: "inset 0 0 0 1px var(--rule)" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10 }}>
-        <span style={{ fontSize: 15, fontWeight: 700 }}>Input level</span>
-        <span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>Presets expect the guitar's peaks around {a.targetDb} dBFS</span>
-      </div>
+    <div>
       {/* The meter: −60…0 dBFS, the target band, the level and its peak. */}
       <div style={{ position: "relative", height: 26, borderRadius: 6, background: "#08080a", overflow: "hidden" }}>
         <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: pos(a.targetDb - 3), width: `${(6 / 60) * 100}%`, background: "rgba(34,197,94,0.16)", boxShadow: "inset 0 0 0 1px rgba(34,197,94,0.5)" }} />
@@ -642,7 +951,7 @@ function LevelMatch({ fit, rig }: { fit: Fit; rig: Rig }) {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
         <span style={{ fontSize: 14, fontWeight: 600, color: "var(--ink-2)" }}>Trim</span>
-        <input type="range" min={-24} max={24} step={0.5} value={a.trimDb} onChange={(e) => tuneFit((y) => ({ ...y, trimDb: Number(e.target.value) }))} style={{ flex: "1 1 160px", accentColor: "#22C55E" }} aria-label="Input trim" />
+        <input type="range" min={-24} max={24} step={0.5} value={a.trimDb} onChange={(e) => tuneTone(scope, "trimDb", (y) => ({ ...y, trimDb: Number(e.target.value) }))} style={{ flex: "1 1 160px", accentColor: "#22C55E" }} aria-label="Input trim" />
         <span className="num" style={{ width: 64, fontSize: 15, fontWeight: 700 }}>
           {a.trimDb > 0 ? "+" : ""}
           {a.trimDb} dB
@@ -657,7 +966,7 @@ function LevelMatch({ fit, rig }: { fit: Fit; rig: Rig }) {
         </button>
       </div>
       <div style={{ marginTop: 8, fontSize: 12.5, color: inBand ? "var(--live)" : "var(--ink-3)" }}>
-        {matching ? "Listening for 4 seconds — strum as you would in the set." : inBand ? "In the band — presets will sound as they were dialled." : `Peaks at ${Math.round(peak)} dBFS — Match level trims them to ${a.targetDb}.`}
+        <span className="num">Peak {Math.round(peak)} · target {a.targetDb} dBFS</span>
       </div>
     </div>
   );
@@ -666,9 +975,9 @@ function LevelMatch({ fit, rig }: { fit: Fit; rig: Rig }) {
 /** The five gate presets for this rig: a measure of the noise floor sets
  *  them; each can be fine-tuned against the live level; Noisy input lifts
  *  the light end (Off → Subtle, Subtle → Default). */
-function Gates({ fit }: { fit: Fit }) {
+function Gates({ tone, scope }: { tone: Tone; scope: ToneScope }) {
   const sig = useSignal();
-  const now = levelDb(sig.input, fit.trimDb);
+  const now = levelDb(sig.input, tone.trimDb);
   const [measuring, setMeasuring] = useState<{ until: number; floor: number } | null>(null);
   useEffect(() => {
     if (!measuring) return;
@@ -676,17 +985,13 @@ function Gates({ fit }: { fit: Fit }) {
     const floor = Math.min(measuring.floor, now);
     if (performance.now() > measuring.until) {
       const f = Math.round(floor);
-      editFit("gates measured", (y) => ({ ...y, gates: gatesAbove(f) }));
+      editTone("gates measured", scope, "gates", (y) => ({ ...y, gates: gatesAbove(f) }));
       setMeasuring(null);
     } else if (floor !== measuring.floor) setMeasuring({ ...measuring, floor });
   });
   const pos = (db: number) => `${((db + 96) / 96) * 100}%`;
   return (
-    <div style={{ marginTop: 22 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
-        <span style={{ fontSize: 15, fontWeight: 700 }}>Gates</span>
-        <span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>Every preset's gate means the same with this guitar here</span>
-      </div>
+    <div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
         <button
           className={measuring ? "" : "pressable"}
@@ -696,12 +1001,9 @@ function Gates({ fit }: { fit: Fit }) {
         >
           {measuring ? "Hands off the strings…" : "Measure the noise floor"}
         </button>
-        <span style={{ flex: "1 1 200px", fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.4 }}>
-          {measuring ? "Listening for 3 seconds to what comes in with nothing played." : "Turn up as you play, mute the strings, and measure: the four gates are set above the noise this rig makes."}
-        </span>
       </div>
       {GATE_LEVELS.map((level) => {
-        const db = level === "off" ? null : fit.gates[level];
+        const db = level === "off" ? null : tone.gates[level];
         const open = db === null || now >= db;
         return (
           <div key={level} style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 56, borderTop: "1px solid var(--rule)" }}>
@@ -722,7 +1024,7 @@ function Gates({ fit }: { fit: Fit }) {
                   step={1}
                   value={db}
                   aria-label={`${GATE_NAME[level]} threshold`}
-                  onChange={(e) => tuneFit((y) => ({ ...y, gates: { ...y.gates, [level]: Number(e.target.value) } }))}
+                  onChange={(e) => tuneTone(scope, "gates", (y) => ({ ...y, gates: { ...y.gates, [level]: Number(e.target.value) } }))}
                   style={{ width: 140, accentColor: "#94A3B8" }}
                 />
                 <span className="num" style={{ width: 66, fontSize: 14, fontWeight: 700 }}>
@@ -737,20 +1039,18 @@ function Gates({ fit }: { fit: Fit }) {
       {/* Noisy input: every preset one step tighter. */}
       <button
         role="switch"
-        aria-checked={fit.noisy}
+        aria-checked={tone.noisy}
         className="pressable"
-        onClick={() => editFit(fit.noisy ? "noisy input off" : "noisy input on", (y) => ({ ...y, noisy: !y.noisy }))}
+        onClick={() => editTone(tone.noisy ? "noisy input off" : "noisy input on", scope, "noisy", (y) => ({ ...y, noisy: !y.noisy }))}
         style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", minHeight: 64, marginTop: 6, padding: "8px 0", borderTop: "1px solid var(--rule)", textAlign: "left" }}
       >
         <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 15, fontWeight: 700 }}>Noisy input</span>
-          <span style={{ fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.4 }}>
-            {fit.noisy
-              ? (["off", "subtle"] as GateLevel[]).map((l) => `${GATE_NAME[l]} → ${GATE_NAME[gateFor(fit, l)]}`).join(" · ") + " · the rest as they are"
-              : "For a noisy room or pickups: presets with no gate play Subtle, and Subtle plays Default."}
-          </span>
+          {tone.noisy && (
+            <span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>{(["off", "subtle"] as GateLevel[]).map((l) => `${GATE_NAME[l]} → ${GATE_NAME[gateFor(tone, l)]}`).join(" · ")}</span>
+          )}
         </span>
-        <span aria-hidden style={{ width: 46, height: 28, borderRadius: 999, padding: 3, flexShrink: 0, background: fit.noisy ? "var(--live)" : "#2b2b31", display: "flex", justifyContent: fit.noisy ? "flex-end" : "flex-start" }}>
+        <span aria-hidden style={{ width: 46, height: 28, borderRadius: 999, padding: 3, flexShrink: 0, background: tone.noisy ? "var(--live)" : "#2b2b31", display: "flex", justifyContent: tone.noisy ? "flex-end" : "flex-start" }}>
           <span style={{ width: 22, height: 22, borderRadius: 999, background: "#f4f4f5" }} />
         </span>
       </button>
