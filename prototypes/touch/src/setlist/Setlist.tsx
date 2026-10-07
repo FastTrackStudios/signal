@@ -65,6 +65,7 @@ import { SourceIcon, Strike, Tape, tapeFor } from "../ui/marks";
 import { MACRO_BAR_H } from "../dock/MacroBar";
 import { ProfileIcon } from "../ui/profileIcons";
 import { MODULE_COLOUR, ModuleIcon } from "../ui/moduleIcons";
+import { OverrideIcon } from "../ui/OverrideIcon";
 import { Button, KeyBox, Tabs } from "../ui/kit";
 import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
 import { nameColour, sectionColour, songColour, SONG_PALETTE } from "./colors";
@@ -351,7 +352,7 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
 }
 
 /** What a song (or one of its sections) carries of its own over its
- *  preset: the modules swapped in, and whether Edit has unsaved changes. */
+ *  preset: its module overrides, and whether Edit has unsaved changes. */
 function ownChanges(s: ReturnType<typeof useStore>, song: string, section?: number): { modules: string[]; edits: boolean } {
   const prefix = section === undefined ? `${song}|` : `${song}|${section}|`;
   const modules = new Set<string>();
@@ -364,22 +365,24 @@ function ownChanges(s: ReturnType<typeof useStore>, song: string, section?: numb
   return { modules: [...modules], edits };
 }
 
-/** Its own changes as icons beside a name: each module swapped in, by
+/** Its own changes as icons beside a name: each module override, by
  *  Signal's module glyph in that effect's colour, and amber EQ bars for
  *  unsaved edits. A song shows
  *  at most three, then a count. */
 function ChangeIcons({ song, section, max = 6 }: { song: string; section?: number; max?: number }) {
   const s = useStore();
   const { modules, edits } = ownChanges(s, song, section);
-  const marks = [...modules.map((m) => ({ kind: m, title: `${m} swapped in` })), ...(edits ? [{ kind: "edits", title: "Changes not saved to the preset" }] : [])];
+  const marks = [...modules.map((m) => ({ kind: m, title: `${m} override` })), ...(edits ? [{ kind: "edits", title: "Changes not saved to the preset" }] : [])];
   if (!marks.length) return null;
   const shown = marks.slice(0, max);
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 8, verticalAlign: "middle" }}>
+      {/* The override icon leads; then which effects. */}
+      <OverrideIcon colour="var(--ink-2)" size={11} title="Has overrides" />
       {shown.map((m) => (
         <ModuleIcon key={m.kind} kind={m.kind} size={12} colour={MODULE_COLOUR[m.kind] ?? "var(--modified)"} title={m.title} />
       ))}
-      {marks.length > shown.length && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--modified)" }}>+{marks.length - shown.length}</span>}
+      {marks.length > shown.length && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-2)" }}>+{marks.length - shown.length}</span>}
     </span>
   );
 }

@@ -5,7 +5,7 @@
 //
 // It reads like a library, not a form: a list of kinds down the left, the
 // kind's things on the right as large rows — a colour mark, the name, where
-// it comes from, and its state (playing, swapped in). Narrow (a sidebar, a
+// it comes from, and its state (playing, an override). Narrow (a sidebar, a
 // phone), the two become steps: the kinds, then a kind's things, with a
 // way back. Search looks through everything.
 //
@@ -48,6 +48,7 @@ import { ProfileIcon } from "../ui/profileIcons";
 import { MODULE_COLOUR } from "../ui/moduleIcons";
 import { MACRO_BAR_H } from "../dock/MacroBar";
 import { ModuleIcon } from "../ui/moduleIcons";
+import { OverrideIcon } from "../ui/OverrideIcon";
 import nam from "../data/nam.json";
 import algos from "../data/algos.json";
 import { SourceIcon, tapeFor } from "../ui/marks";
@@ -274,7 +275,7 @@ const KINDS: Kind[] = [
         const swapped = bt?.kind === "part" ? overrideOf(s, bt.t).modules[kind] : bt?.kind === "preset" ? s.presetPicks[`${bt.preset}/${bt.variation}/${kind}`] : undefined;
         const own = bt?.kind === "preset" ? "The preset's own" : "The patch's own";
         // Each module preset with all its variations (its snapshots), each
-        // under its preset: what's swapped in is a preset's variation.
+        // under its preset: an override is a preset's variation.
         return [
           ...(bt?.kind === "part" || bt?.kind === "preset" ? [{ id: "", name: own, from: "no swap", colour: "var(--dim)", state: !swapped ? ("picked" as const) : undefined }] : []),
           ...modulesOf(kind).flatMap((m) =>
@@ -481,7 +482,7 @@ export function Browser({ onClose }: { onClose?: () => void }) {
                       }}
                       className={on ? "" : "pressable"}
                       aria-current={on ? "true" : undefined}
-                      title={label ? `${swapped ? "Swapped in" : "Now"}: ${label}` : k.label}
+                      title={label ? `${swapped ? "Override" : "Now"}: ${label}` : k.label}
                       style={{
                         position: "relative",
                         width: "100%",
@@ -500,8 +501,8 @@ export function Browser({ onClose }: { onClose?: () => void }) {
                       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                         <span style={{ fontSize: 15, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)" }}>{k.label}</span>
                         {label && (
-                          <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, fontSize: 12, fontWeight: 600, color: swapped ? "var(--modified)" : "var(--ink-3)" }}>
-                            {swapped && <span style={{ width: 6, height: 6, borderRadius: 999, flexShrink: 0, background: "var(--modified)" }} />}
+                          <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, fontSize: 12, fontWeight: 600, color: swapped ? `color-mix(in oklab, ${k.colour} 70%, white)` : "var(--ink-3)" }}>
+                            {swapped && <OverrideMark colour={k.colour} />}
                             <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
                           </span>
                         )}
@@ -650,8 +651,9 @@ function PresetColumns({ items, onPick }: { items: Item[]; onPick?: (item: Item)
                 <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: p.colour, opacity: on || used ? 1 : 0.35 }} />
                 <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                   <span style={{ fontSize: 15, fontWeight: on ? 700 : 600, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
-                  {used && <span style={{ fontSize: 12, color: used ? (used.state === "swapped" ? "var(--modified)" : "var(--live)") : "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {used ? `${used.state === "swapped" ? "Swapped in" : "Playing"} · ${used.name}` : ""}
+                  {used && <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: used ? (used.state === "swapped" ? `color-mix(in oklab, ${p.colour} 70%, white)` : "var(--live)") : "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {used.state === "swapped" && <OverrideMark colour={p.colour} />}
+                    {used ? `${used.state === "swapped" ? "Override" : "Playing"} · ${used.name}` : ""}
                   </span>}
                 </span>
                 {narrow && (
@@ -699,7 +701,7 @@ function Variation({ item, colour, onPick }: { item: Item; colour: string; onPic
       className={onPick && !on ? "pressable" : ""}
       style={{ position: "relative", width: "100%", display: "flex", alignItems: "flex-start", gap: 12, minHeight: 52, padding: "10px 16px", textAlign: "left", borderBottom: "1px solid var(--rule)", background: on ? `color-mix(in oklab, ${colour} 12%, transparent)` : undefined, cursor: onPick ? "pointer" : "default" }}
     >
-      {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: item.state === "swapped" ? "var(--modified)" : "var(--live)" }} />}
+      {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: item.state === "swapped" ? colour : "var(--live)" }} />}
       <span style={{ width: 16, height: 16, marginTop: 2, borderRadius: 999, flexShrink: 0, boxShadow: `inset 0 0 0 1.5px ${on ? colour : "var(--ink-3)"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
         {on && <span style={{ width: 8, height: 8, borderRadius: 999, background: colour }} />}
       </span>
@@ -721,8 +723,9 @@ function Variation({ item, colour, onPick }: { item: Item; colour: string; onPic
         ))}
       </span>
       {item.state && (
-        <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, marginTop: 2, color: item.state === "swapped" ? "var(--modified)" : "var(--live)" }}>
-          {item.state === "swapped" ? "Swapped in" : item.state === "playing" ? "Playing" : "In use"}
+        <span style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, marginTop: 2, color: item.state === "swapped" ? `color-mix(in oklab, ${colour} 70%, white)` : "var(--live)" }}>
+          {item.state === "swapped" && <OverrideMark colour={colour} />}
+          {item.state === "swapped" ? "Override" : item.state === "playing" ? "Playing" : "In use"}
         </span>
       )}
     </button>
@@ -753,7 +756,7 @@ function Row({ item, sub, onPick }: { item: Item; sub?: string; onPick?: () => v
         cursor: onPick ? "pointer" : "default",
       }}
     >
-      {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2, background: item.state === "swapped" ? "var(--modified)" : "var(--live)" }} />}
+      {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2, background: item.state === "swapped" ? item.colour : "var(--live)" }} />}
       {nested && <span aria-hidden style={{ position: "absolute", left: 21, top: 0, bottom: 0, width: 1.5, background: `color-mix(in oklab, ${item.colour} 45%, transparent)` }} />}
       <span style={{ width: nested ? 10 : 18, display: "flex", justifyContent: "center", flexShrink: 0 }}>
         {nested ? (
@@ -767,8 +770,9 @@ function Row({ item, sub, onPick }: { item: Item; sub?: string; onPick?: () => v
         {sub && <span style={{ fontSize: 13, color: "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>}
       </span>
       {item.state && (
-        <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: item.state === "swapped" ? "var(--modified)" : "var(--live)" }}>
-          {item.state === "playing" ? "Playing" : item.state === "swapped" ? "Swapped in" : item.state === "in" ? "In" : "In use"}
+        <span style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, color: item.state === "swapped" ? `color-mix(in oklab, ${item.colour} 70%, white)` : "var(--live)" }}>
+          {item.state === "swapped" && <OverrideMark colour={item.colour} />}
+          {item.state === "playing" ? "Playing" : item.state === "swapped" ? "Override" : item.state === "in" ? "In" : "In use"}
         </span>
       )}
     </button>
@@ -812,7 +816,7 @@ function StepTarget({ t }: { t: Target }) {
   );
 }
 
-/** "Clear n": every module swapped in (and, for a part, Edit's unsaved
+/** "Clear n overrides": every override (and, for a part, Edit's unsaved
  *  changes) dropped at once — back to the preset as it is. Shown only when
  *  there is something to clear. */
 function ClearOwn({ bt }: { bt: BuildTarget }) {
@@ -832,8 +836,8 @@ function ClearOwn({ bt }: { bt: BuildTarget }) {
     <button
       className="pressable"
       onClick={clear}
-      title={bt?.kind === "part" ? "Drop every module swapped in and every unsaved change — back to its preset" : "Drop every module swapped into this variation"}
-      style={{ height: 32, padding: "0 10px", borderRadius: "var(--r)", display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap", color: "var(--modified)", boxShadow: "inset 0 0 0 1px color-mix(in oklab, var(--modified) 45%, transparent)" }}
+      title={bt?.kind === "part" ? "Clear every override and unsaved change — back to its preset" : "Clear every override in this variation"}
+      style={{ height: 32, padding: "0 10px", borderRadius: "var(--r)", display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap", color: "var(--ink-2)", boxShadow: "inset 0 0 0 1px var(--rule-strong)" }}
     >
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
         <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -965,4 +969,9 @@ function ProfileColumns() {
       )}
     </div>
   );
+}
+
+/** The override icon, at the size of the browser's state labels. */
+function OverrideMark({ colour }: { colour: string }) {
+  return <OverrideIcon colour={colour} size={11} />;
 }
