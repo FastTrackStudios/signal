@@ -463,7 +463,14 @@ export function moveSection(song: string, from: number, to: number) {
     if (to < 0 || to >= list.length) return s;
     const [x] = list.splice(from, 1);
     list.splice(to, 0, x);
-    return { ...s, sections: { ...s.sections, [song]: list } };
+    // The section playing keeps playing wherever it moves to.
+    let partIndex = s.partIndex;
+    if (currentSong(s)?.name === song) {
+      if (partIndex === from) partIndex = to;
+      else if (from < partIndex && to >= partIndex) partIndex--;
+      else if (from > partIndex && to <= partIndex) partIndex++;
+    }
+    return { ...s, partIndex, sections: { ...s.sections, [song]: list } };
   });
 }
 

@@ -472,15 +472,47 @@ function Sections({ songIndex, onPanel }: { songIndex: number; onPanel: (p: Pane
   const add = useMenu();
   const fit = useFit();
   const colour = songColour(song.name, s.songColours);
+  // Drag a section by its grip to move it.
+  const rows = useRef<(HTMLDivElement | null)[]>([]);
+  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
+  const onGrip = (j: number) => (e: React.PointerEvent) => {
+    e.stopPropagation();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    const at = (y: number) => {
+      let to = 0;
+      rows.current.forEach((el, k) => {
+        if (el && y > el.getBoundingClientRect().top + 20) to = k;
+      });
+      return to;
+    };
+    setDrag({ from: j, to: j });
+    const onMove = (ev: PointerEvent) => setDrag({ from: j, to: at(ev.clientY) });
+    const onUp = (ev: PointerEvent) => {
+      const to = at(ev.clientY);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setDrag(null);
+      if (to !== j) moveSection(song.name, j, to);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
   return (
     <div style={{ position: "relative", padding: "2px 0 10px", background: tint(colour, up ? 7 : 4) }}>
       {up && <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: colour }} />}
-      {/* The song's timeline: one line its sections sit on. */}
-      {sections.length > 0 && (
-        <span aria-hidden style={{ position: "absolute", left: fit === "narrow" ? 21 : 35, top: 18, bottom: 40, width: 1, background: "var(--rule-strong)" }} />
-      )}
       {sections.map((sec, j) => (
-        <SectionRow key={`${j}-${sec.name}`} song={song.name} songIndex={songIndex} index={j} count={sections.length} onPanel={onPanel} />
+        <div
+          key={`${j}-${sec.name}`}
+          ref={(el) => {
+            rows.current[j] = el;
+          }}
+          style={{
+            opacity: drag?.from === j ? 0.5 : 1,
+            boxShadow: drag && drag.to === j && drag.from !== j ? `inset 0 ${drag.to < drag.from ? 2 : -2}px 0 var(--ink-2)` : undefined,
+          }}
+        >
+          <SectionRow song={song.name} songIndex={songIndex} index={j} count={sections.length} onPanel={onPanel} onGrip={onGrip(j)} />
+        </div>
       ))}
       {/* No sections: the song itself is what plays, so its stacks sit under it. */}
       {up && sections.length === 0 && <Stacks left={fit === "narrow" ? 20 : 34} />}
@@ -520,7 +552,7 @@ function soundOf(sec: { parts: { sound: Sound | null }[] }): Sound | null {
   return sec.parts.length === 1 ? sec.parts[0].sound : null;
 }
 
-function SectionRow({ song, songIndex, index: j, count, onPanel }: { song: string; songIndex: number; index: number; count: number; onPanel: (p: Panel) => void }) {
+function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { song: string; songIndex: number; index: number; count: number; onPanel: (p: Panel) => void; onGrip: (e: React.PointerEvent) => void }) {
   const s = useStore();
   const sec = sectionsOf(s, song)[j];
   const menu = useMenu();
@@ -574,12 +606,28 @@ function SectionRow({ song, songIndex, index: j, count, onPanel }: { song: strin
   return (
     <>
       <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 50, background: state === "now" && !several ? tint(songColour(song, s.songColours), 18) : undefined }}>
+        {/* The grip: drag to move the section; it wears the section's colour. */}
+        <span
+          role="button"
+          aria-label={`Drag ${sec.name} to move it`}
+          onPointerDown={onGrip}
+          style={{ width: narrow ? 30 : 40, alignSelf: "stretch", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 6, cursor: "grab", touchAction: "none" }}
+        >
+          <svg width="14" height="12" viewBox="0 0 14 12" aria-hidden>
+            <path
+              d="M1.5 2h11M1.5 6h11M1.5 10h11"
+              stroke={sectionColour(sec.name)}
+              strokeOpacity={state === "done" ? 0.45 : 1}
+              strokeWidth="1.7"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
         <button
           className="pressable"
           onClick={go}
-          style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: narrow ? 8 : 12, minHeight: 50, padding: narrow ? "4px 2px 4px 14px" : "4px 4px 4px 28px", textAlign: "left" }}
+          style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: narrow ? 8 : 12, minHeight: 50, padding: "4px 4px 4px 6px", textAlign: "left" }}
         >
-          <Node state={state} colour={sectionColour(sec.name)} />
           <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
             <span
               style={{
@@ -718,35 +766,6 @@ function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: s
   );
 }
 
-/** Where a section sits in the song: played (a check), now (green), ahead. */
-function Node({ state, colour }: { state: "done" | "now" | "ahead"; colour: string }) {
-  const size = state === "now" ? 14 : 12;
-  return (
-    <span style={{ position: "relative", zIndex: 1, width: 16, display: "flex", justifyContent: "center", flexShrink: 0 }}>
-      <span
-        style={{
-          width: size,
-          height: size,
-          borderRadius: 999,
-          // The section's type colour: filled while it plays, a ring ahead,
-          // faded once played.
-          background: state === "now" ? colour : "var(--sheet)",
-          border: `2px solid ${state === "done" ? `color-mix(in srgb, ${colour} 40%, var(--sheet))` : colour}`,
-          boxShadow: state === "now" ? `0 0 0 4px color-mix(in srgb, ${colour} 30%, transparent)` : undefined,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {state === "done" && (
-          <svg width="7" height="6" viewBox="0 0 7 6" aria-hidden>
-            <path d="M1 3 L3 5 L6 1" fill="none" stroke={`color-mix(in srgb, ${colour} 60%, var(--ink-3))`} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </span>
-    </span>
-  );
-}
 
 /** A patch: its name on a tint of its stack's colour, with a swatch. */
 function PatchChip({ name, lit, small, borrowed }: { name: string; lit?: boolean; small?: boolean; borrowed?: string }) {
