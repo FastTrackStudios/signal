@@ -77,7 +77,7 @@ body {
   -webkit-font-smoothing: antialiased;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  overflow: hidden;
+  overflow: auto;
 }
 
 ::selection {
