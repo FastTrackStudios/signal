@@ -1,10 +1,19 @@
 // The macro bar, for fingers. The bank is the Signal app's
 // (features/rigs/guitar/src/macros.rs): built from the chain by block type,
 // in its order and colours — for this rig's chain, sixteen knobs (Input is
-// left out: the chain has no Input block). Each knob is RELATIVE to the
-// patch: it rests in the middle, where it changes nothing; right gives
-// more of what the patch does, left less. So the fill grows from the
-// centre and the number is the offset (+12, −8, 0 at rest).
+// left out: the chain has no Input block). A knob sits where the patch puts
+// it, so the bar shows what the patch is doing, and it reads one of three
+// ways:
+//
+//   level     0–100%. 0 is off (bypassed); the patch sets where it starts —
+//             a drive patch's Drive sits high, a clean one's at 0.
+//             Gate, Pre-Comp, Pitch, Drive, Comp, Mod, Motion, Boost, Clarity.
+//   wet       0–200%, 100% in the middle: up to the middle it brings the
+//             effect in to its normal level; past it the dry signal falls
+//             away until, at 200%, it is only the effect. Delay, Reverb,
+//             Space (which starts in the middle).
+//   relative  ± around the patch, resting in the middle where it changes
+//             nothing. Gain, Tone, Width (mono ← → wide), Output.
 //
 // Two rows of eight flush cells. Slide sideways anywhere on a cell to turn
 // it (relative to where the finger lands; a full sweep is 2.5 cells);
@@ -19,10 +28,15 @@ interface Child {
   label: string;
   colour: string;
 }
+type Scale = "level" | "wet" | "relative";
+
 interface Knob {
   id: string;
   label: string;
   colour: string;
+  scale: Scale;
+  /** Where the patch puts it (0–1 of the knob's travel). */
+  patch: number;
   /** Sub-macros, in rows (one row per block for Delay and Reverb). */
   rows?: { head?: string; kids: Child[] }[];
 }
@@ -30,18 +44,20 @@ interface Knob {
 const one = (kids: [string, string][]) => [{ kids: kids.map(([label, colour]) => ({ label, colour })) }];
 
 const BANK: Knob[] = [
-  { id: "gate", label: "Gate", colour: "#94A3B8", rows: one([["Threshold", "#CBD5E1"], ["Range", "#E2E8F0"], ["Attack", "#F1F5F9"], ["Release", "#CBD5E1"], ["Hold", "#CBD5E1"]]) },
-  { id: "pre-comp", label: "Pre-Comp", colour: "#E5E7EB", rows: one([["Threshold", "#F3F4F6"], ["Ratio", "#E5E7EB"], ["Attack", "#D1D5DB"], ["Release", "#F9FAFB"]]) },
-  { id: "pitch", label: "Pitch", colour: "#FACC15", rows: one([["Mix", "#FDE047"], ["Blend", "#FDE047"], ["Interval", "#FEF9C3"], ["Shimmer", "#FDE047"]]) },
-  { id: "drive", label: "Drive", colour: "#F97316", rows: one([["King of Tone Red", "#FB923C"], ["Drive 1", "#F97316"], ["Drive 2", "#EF4444"], ["Drive 3", "#DC2626"]]) },
-  { id: "gain", label: "Gain", colour: "#D6B36A" },
-  { id: "tone", label: "Tone", colour: "#22C55E", rows: one([["Low", "#4ADE80"], ["Mid", "#86EFAC"], ["High", "#BBF7D0"]]) },
-  { id: "comp", label: "Comp", colour: "#E5E7EB", rows: one([["Threshold", "#F3F4F6"], ["Ratio", "#E5E7EB"], ["Attack", "#D1D5DB"], ["Release", "#F9FAFB"]]) },
-  { id: "mod", label: "Mod", colour: "#7DD3FC" },
-  { id: "motion", label: "Motion", colour: "#EC4899" },
-  { id: "boost", label: "Boost", colour: "#FAFAF9" },
+  { id: "gate", scale: "level", patch: 0.4, label: "Gate", colour: "#94A3B8", rows: one([["Threshold", "#CBD5E1"], ["Range", "#E2E8F0"], ["Attack", "#F1F5F9"], ["Release", "#CBD5E1"], ["Hold", "#CBD5E1"]]) },
+  { id: "pre-comp", scale: "level", patch: 0.35, label: "Pre-Comp", colour: "#E5E7EB", rows: one([["Threshold", "#F3F4F6"], ["Ratio", "#E5E7EB"], ["Attack", "#D1D5DB"], ["Release", "#F9FAFB"]]) },
+  { id: "pitch", scale: "level", patch: 0, label: "Pitch", colour: "#FACC15", rows: one([["Mix", "#FDE047"], ["Blend", "#FDE047"], ["Interval", "#FEF9C3"], ["Shimmer", "#FDE047"]]) },
+  { id: "drive", scale: "level", patch: 0.62, label: "Drive", colour: "#F97316", rows: one([["King of Tone Red", "#FB923C"], ["Drive 1", "#F97316"], ["Drive 2", "#EF4444"], ["Drive 3", "#DC2626"]]) },
+  { id: "gain", scale: "relative", patch: 0.5, label: "Gain", colour: "#D6B36A" },
+  { id: "tone", scale: "relative", patch: 0.5, label: "Tone", colour: "#22C55E", rows: one([["Low", "#4ADE80"], ["Mid", "#86EFAC"], ["High", "#BBF7D0"]]) },
+  { id: "comp", scale: "level", patch: 0.45, label: "Comp", colour: "#E5E7EB", rows: one([["Threshold", "#F3F4F6"], ["Ratio", "#E5E7EB"], ["Attack", "#D1D5DB"], ["Release", "#F9FAFB"]]) },
+  { id: "mod", scale: "level", patch: 0.2, label: "Mod", colour: "#7DD3FC" },
+  { id: "motion", scale: "level", patch: 0, label: "Motion", colour: "#EC4899" },
+  { id: "boost", scale: "level", patch: 0, label: "Boost", colour: "#FAFAF9" },
   {
     id: "delay",
+    scale: "wet",
+    patch: 0.15,
     label: "Delay",
     colour: "#3B82F6",
     rows: ["DLY 1", "DLY 2"].map((head) => ({
@@ -57,6 +73,8 @@ const BANK: Knob[] = [
   },
   {
     id: "reverb",
+    scale: "wet",
+    patch: 0.25,
     label: "Reverb",
     colour: "#8B5CF6",
     rows: ["VERB 1", "VERB 2"].map((head) => ({
@@ -69,10 +87,10 @@ const BANK: Knob[] = [
       ],
     })),
   },
-  { id: "space", label: "Space", colour: "#6366F1" },
-  { id: "clarity", label: "Clarity", colour: "#2DD4BF", rows: one([["Duck", "#5EEAD4"], ["Thresh", "#2DD4BF"], ["Release", "#99F6E4"]]) },
-  { id: "width", label: "Width", colour: "#A3E635" },
-  { id: "output", label: "Output", colour: "#6B7280" },
+  { id: "space", scale: "wet", patch: 0.5, label: "Space", colour: "#6366F1" },
+  { id: "clarity", scale: "level", patch: 0.3, label: "Clarity", colour: "#2DD4BF", rows: one([["Duck", "#5EEAD4"], ["Thresh", "#2DD4BF"], ["Release", "#99F6E4"]]) },
+  { id: "width", scale: "relative", patch: 0.5, label: "Width", colour: "#A3E635" },
+  { id: "output", scale: "relative", patch: 0.5, label: "Output", colour: "#6B7280" },
 ];
 
 /** The bar's height with the rule under it: two 44pt rows and the hairline
@@ -83,7 +101,8 @@ export const MACRO_BAR_H = 44 * 2 + 1 + 1;
 type Values = Record<string, number>;
 
 export function MacroBar({ cols = 8, cellH = 44, fill, up }: { cols?: number; cellH?: number; fill?: boolean; up?: boolean }) {
-  const [values, setValues] = useState<Values>({ drive: 0.62, delay: 0.42, reverb: 0.58, width: 0.66 });
+  // Each knob starts where the patch puts it.
+  const [values, setValues] = useState<Values>(() => Object.fromEntries(BANK.map((k) => [k.id, k.patch])));
   const [open, setOpen] = useState<string | null>(null);
   const set = (id: string) => (v: number) => setValues((x) => ({ ...x, [id]: v }));
   const ref = useRef<HTMLDivElement>(null);
@@ -113,6 +132,8 @@ export function MacroBar({ cols = 8, cellH = 44, fill, up }: { cols?: number; ce
             open={open === k.id}
             onTap={k.rows ? () => setOpen(open === k.id ? null : k.id) : undefined}
             height={fill ? "100%" : cellH}
+            scale={k.scale}
+            rest={k.patch}
           />
         ))}
       </div>
@@ -166,24 +187,33 @@ function Panel({ knob, values, set, up, onClose }: { knob: Knob; values: Values;
   );
 }
 
-/** One macro: the whole cell is the control. The fill grows from the
- *  centre (rest) toward the value; the number is the offset. A tap that
- *  doesn't move opens its sub-macros, when it has them. */
-function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44 }: { label: string; colour: string; value: number; onValue: (v: number) => void; more?: boolean; open?: boolean; onTap?: () => void; height?: number | string }) {
+/** One macro: the whole cell is the control, drawn by its scale — a level
+ *  fills from the left (0 is off); a wet knob fills from the left with its
+ *  normal level marked in the middle and the stretch past it hatched (dry
+ *  falling away); a relative knob fills from the centre (its rest). A
+ *  double-tap goes back to where the patch put it. A tap that doesn't move
+ *  opens its sub-macros, when it has them. */
+function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44, scale = "relative", rest = 0.5 }: { label: string; colour: string; value: number; onValue: (v: number) => void; more?: boolean; open?: boolean; onTap?: () => void; height?: number | string; scale?: Scale; rest?: number }) {
   const [active, setActive] = useState(false);
   const from = useRef<{ x: number; v: number; w: number; moved: boolean } | null>(null);
   const lastTap = useRef(0);
   const offset = Math.round((v - 0.5) * 200);
-  const lo = Math.min(v, 0.5);
-  const hi = Math.max(v, 0.5);
+  // The readout, by scale.
+  const pct = Math.round(v * (scale === "wet" ? 200 : 100));
+  const readout = scale === "relative" ? (offset > 0 ? `+${offset}` : `${offset}`) : pct === 0 ? "off" : scale === "wet" && pct === 200 ? "wet" : `${pct}%`;
+  const quiet = scale === "relative" ? offset === 0 : pct === 0;
+  const from0 = scale !== "relative";
+  const lo = from0 ? 0 : Math.min(v, 0.5);
+  const hi = from0 ? v : Math.max(v, 0.5);
   const grey = /^#(?:6B7280|94A3B8|E5E7EB|FAFAF9|F3F4F6|D1D5DB|F9FAFB|E2E8F0|F1F5F9|CBD5E1)$/i.test(colour);
   return (
     <div
       role="slider"
       aria-label={label}
-      aria-valuemin={-100}
-      aria-valuemax={100}
-      aria-valuenow={offset}
+      aria-valuemin={scale === "relative" ? -100 : 0}
+      aria-valuemax={scale === "wet" ? 200 : 100}
+      aria-valuenow={scale === "relative" ? offset : pct}
+      aria-valuetext={readout}
       aria-expanded={more ? open : undefined}
       tabIndex={0}
       onKeyDown={(e) => {
@@ -194,7 +224,7 @@ function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44
       onPointerDown={(e) => {
         const now = performance.now();
         if (now - lastTap.current < 300) {
-          onValue(0.5);
+          onValue(rest);
           lastTap.current = 0;
           from.current = null;
           return;
@@ -221,7 +251,7 @@ function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44
         from.current = null;
         setActive(false);
       }}
-      title={`${label} — slide sideways; double-tap for rest${more ? "; tap for its sub-macros" : ""}`}
+      title={`${label} — slide sideways; double-tap for the patch's setting${more ? "; tap for its sub-macros" : ""}`}
       style={{
         position: "relative",
         height,
@@ -234,10 +264,24 @@ function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44
         outline: "none",
       }}
     >
-      {/* Rest, and the offset from it. */}
-      <span aria-hidden style={{ position: "absolute", top: 8, bottom: 8, left: "50%", width: 1, background: "#2b2b31" }} />
-      <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: `${lo * 100}%`, width: `${(hi - lo) * 100}%`, background: `color-mix(in oklab, ${colour} ${active ? 32 : 22}%, transparent)` }} />
-      {offset !== 0 && <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${v * 100}% - 1px)`, width: 2, background: colour }} />}
+      {/* The middle: rest for a relative knob, the normal level for a wet one. */}
+      {scale !== "level" && <span aria-hidden style={{ position: "absolute", top: scale === "wet" ? 4 : 8, bottom: scale === "wet" ? 4 : 8, left: "50%", width: 1, background: scale === "wet" ? "#45454d" : "#2b2b31" }} />}
+      <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: `${lo * 100}%`, width: `${(Math.min(hi, scale === "wet" ? 0.5 : 1) - lo) * 100}%`, background: `color-mix(in oklab, ${colour} ${active ? 32 : 22}%, transparent)` }} />
+      {/* A wet knob past its normal level: hatched, the dry falling away. */}
+      {scale === "wet" && v > 0.5 && (
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: "50%",
+            width: `${(v - 0.5) * 100}%`,
+            background: `repeating-linear-gradient(135deg, color-mix(in oklab, ${colour} ${active ? 46 : 36}%, transparent) 0 4px, color-mix(in oklab, ${colour} ${active ? 24 : 16}%, transparent) 4px 8px)`,
+          }}
+        />
+      )}
+      {!quiet && <span aria-hidden style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${v * 100}% - 1px)`, width: 2, background: colour }} />}
       <span style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, padding: "0 8px" }}>
         <span className="t-label" style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 3, fontSize: 10.5, letterSpacing: "0.06em", color: grey ? "var(--ink-2)" : colour, whiteSpace: "nowrap", overflow: "hidden" }}>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
@@ -247,8 +291,8 @@ function Cell({ label, colour, value: v, onValue, more, open, onTap, height = 44
             </svg>
           )}
         </span>
-        <span className="num" style={{ fontSize: active ? 16 : 13, lineHeight: 1, fontWeight: 700, color: offset === 0 ? "var(--ink-3)" : "var(--ink)", transition: "font-size 120ms var(--ease)" }}>
-          {offset > 0 ? `+${offset}` : offset}
+        <span className="num" style={{ fontSize: active ? 16 : 13, lineHeight: 1, fontWeight: 700, color: quiet ? "var(--ink-3)" : scale === "wet" && v > 0.5 ? colour : "var(--ink)", transition: "font-size 120ms var(--ease)" }}>
+          {readout}
         </span>
       </span>
     </div>
