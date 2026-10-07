@@ -407,6 +407,15 @@ export function setVariationPick(preset: string, variation: string, module: stri
   }));
 }
 
+/** Back to the preset's own pick for a module (or block) in a variation. */
+export function clearVariationPick(preset: string, variation: string, module: string) {
+  change(`${preset} · ${variation}: ${module} → its own`, (s) => {
+    const presetPicks = { ...s.presetPicks };
+    delete presetPicks[`${preset}/${variation}/${module}`];
+    return { ...s, presetPicks };
+  });
+}
+
 /** A block moved within its module (a drag in Routing). */
 export function moveBlock(module: string, ids: string[], from: number, to: number) {
   change(`Move a block in ${module}`, (s) => {

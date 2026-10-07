@@ -15,14 +15,61 @@
 // gives the song that profile. With nothing picked it just browses.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { blockPresetsByType, modulesOf, rig } from "../data/rig";
-import { songStacks, editParam, overrideOf, profileOf, sectionsOf, select, setModuleOverride, setSectionSound, setSongProfile, useStore, type State, type Target } from "../store";
+import { blockPresetsByType, modulesOf, rig, stackOf } from "../data/rig";
+import {
+  addSong,
+  addStackPatch,
+  clearVariationPick,
+  currentSet,
+  editParam,
+  overrideOf,
+  playing,
+  profileOf,
+  profileStacksOf,
+  removeStackPatch,
+  sectionsOf,
+  select,
+  setModuleOverride,
+  setSectionSound,
+  setSetProfile,
+  setSongProfile,
+  setVariationPick,
+  songStacks,
+  useStore,
+  type State,
+  type Target,
+} from "../store";
 import type { StackPatch } from "../setlist/stacks";
 import { nameColour, sectionColour, songColour } from "../setlist/colors";
 import { ProfileIcon } from "../ui/profileIcons";
 import { SourceIcon, tapeFor } from "../ui/marks";
 
-// ── What there is to browse ─────────────────────────────────────────
+// ── What there is to browse, and what it's for ─────────────────────
+
+/** What the browser builds into, by the footswitch mode: a section's part
+ *  (Setlist — picked in the setlist), the stack open in the Profile view
+ *  (Profile), the preset variation playing (Preset). Or nothing — then it
+ *  just browses (and, in Setlist mode, adds songs to the set). */
+type BuildTarget =
+  | { kind: "part"; t: Target }
+  | { kind: "stack"; profile: string; stack: string; index: number }
+  | { kind: "preset"; preset: string; variation: string }
+  | null;
+
+function targetOf(s: State): BuildTarget {
+  if (s.performMode === "setlist") {
+    const t = s.selection;
+    return t && sectionsOf(s, t.song)[t.section] ? { kind: "part", t } : null;
+  }
+  if (s.performMode === "profile") {
+    const profile = profileOf(s, undefined).name;
+    const defs = profileStacksOf(s, profile);
+    const now = playing(s);
+    const index = now ? defs.findIndex((d) => d.patches.includes(now)) : -1;
+    return index >= 0 ? { kind: "stack", profile, stack: defs[index].name, index } : null;
+  }
+  return s.presetUp ? { kind: "preset", preset: s.presetUp.preset, variation: s.presetUp.variation } : null;
+}
 
 interface Kind {
   id: string;
@@ -30,9 +77,9 @@ interface Kind {
   group: string;
   colour: string;
   /** The things of this kind, for the target (or none). */
-  items: (s: State, t: Target | null) => Item[];
-  /** Apply one to the target. */
-  apply?: (t: Target, item: Item) => void;
+  items: (s: State, bt: BuildTarget) => Item[];
+  /** Apply one to the target — or null when this kind can't build into it. */
+  apply: (s: State, bt: BuildTarget) => ((item: Item) => void) | null;
 }
 
 interface Item {
@@ -43,7 +90,7 @@ interface Item {
   colour: string;
   mark?: ReactNode;
   /** Its state for the target. */
-  state?: "playing" | "swapped" | "picked";
+  state?: "playing" | "swapped" | "picked" | "in";
   /** A heading it sits under (the stack, for patches). */
   group?: string;
 }
@@ -58,14 +105,58 @@ function partOf(s: State, t: Target | null) {
   return { sec, part: sec && t ? sec.parts[t.part] : undefined };
 }
 
+/** Every patch the rig knows, once: each profile's, and the songs' own. */
+function allPatches(): { name: string; stack: string; from: string }[] {
+  const seen = new Map<string, { name: string; stack: string; from: string }>();
+  for (const p of rig.library.profiles) for (const x of p.patch_list) if (x.stack && !seen.has(x.name)) seen.set(x.name, { name: x.name, stack: x.stack, from: p.name });
+  for (const x of rig.patches) if (!seen.has(x.name)) seen.set(x.name, { name: x.name, stack: stackOf(x.name) ?? "Special", from: `${x.stack}'s own` });
+  return [...seen.values()];
+}
+
 const KINDS: Kind[] = [
+  {
+    id: "songs",
+    label: "Songs",
+    group: "Library",
+    colour: "#f472b6",
+    items: (s) => {
+      const inSet = new Set(currentSet(s).songs.map((x) => x.name));
+      return [...rig.library.songs, ...s.newSongs].map((x) => ({
+        id: x.name,
+        name: x.name,
+        from: [x.key, x.bpm ? `${x.bpm} bpm` : "", x.parts.length ? plural(x.parts.length, "section") : ""].filter(Boolean).join(" · "),
+        colour: songColour(x.name, s.songColours),
+        state: inSet.has(x.name) ? ("in" as const) : undefined,
+      }));
+    },
+    // Building a set: a tap adds the song to the end of it.
+    apply: (s) => (s.performMode === "setlist" ? (item) => {
+      const song = [...rig.library.songs, ...s.newSongs].find((x) => x.name === item.name);
+      if (song) addSong({ name: song.name, key: song.key, bpm: song.bpm, start: "" });
+    } : null),
+  },
   {
     id: "patches",
     label: "Patches",
     group: "Sounds",
     colour: "#38bdf8",
-    items: (s, t) => {
-      const song = t?.song ?? s.setlists[s.setIndex]?.songs[s.songIndex]?.name;
+    items: (s, bt) => {
+      // Filling a stack: every patch there is, marked where it's already in.
+      if (bt?.kind === "stack") {
+        const def = profileStacksOf(s, bt.profile)[bt.index];
+        return allPatches()
+          .sort((a, b) => Number(b.stack === bt.stack) - Number(a.stack === bt.stack))
+          .map((p) => ({
+            id: `${p.stack}/${p.name}`,
+            name: p.name,
+            group: p.stack,
+            from: p.from,
+            colour: tapeFor(p.stack),
+            state: def?.patches.includes(p.name) ? ("in" as const) : undefined,
+          }));
+      }
+      const t = bt?.kind === "part" ? bt.t : null;
+      const song = t?.song ?? currentSet(s).songs[s.songIndex]?.name;
       const now = partOf(s, t).part?.sound?.name;
       const colour = song ? songColour(song, s.songColours) : "var(--ink-3)";
       return songStacks(s, song).flatMap((st) =>
@@ -80,14 +171,36 @@ const KINDS: Kind[] = [
         })),
       );
     },
-    apply: (t, item) => setSectionSound(t.song, t.section, { kind: "patch", name: item.name }, t.part),
+    apply: (s, bt) => {
+      if (bt?.kind === "part") return (item) => setSectionSound(bt.t.song, bt.t.section, { kind: "patch", name: item.name }, bt.t.part);
+      if (bt?.kind === "stack") {
+        const def = profileStacksOf(s, bt.profile)[bt.index];
+        // In the stack already: a tap takes it out; else in it goes.
+        return (item) => {
+          const at = def?.patches.indexOf(item.name) ?? -1;
+          if (at >= 0) removeStackPatch(bt.profile, bt.index, at);
+          else addStackPatch(bt.profile, bt.index, item.name);
+        };
+      }
+      return null;
+    },
   },
   {
     id: "presets",
     label: "Presets",
     group: "Sounds",
     colour: "#a1a1aa",
-    items: () => modulesOf("Preset").map((m) => ({ id: m.name, name: m.name, from: m.snapshots.length > 1 ? plural(m.snapshots.length, "variation") : undefined, colour: "#a1a1aa" })),
+    items: (s, bt) => {
+      const now = bt?.kind === "part" ? partOf(s, bt.t).part?.sound : undefined;
+      return modulesOf("Preset").map((m) => ({
+        id: m.name,
+        name: m.name,
+        from: m.snapshots.length > 1 ? plural(m.snapshots.length, "variation") : undefined,
+        colour: "#a1a1aa",
+        state: now?.kind === "preset" && now.name === m.name ? ("playing" as const) : undefined,
+      }));
+    },
+    apply: (_, bt) => (bt?.kind === "part" ? (item) => setSectionSound(bt.t.song, bt.t.section, { kind: "preset", name: item.name }, bt.t.part) : null),
   },
   ...(["Core", "Amp", "Drive", "Time", "Delay", "Reverb"] as const).map(
     (kind): Kind => ({
@@ -95,10 +208,11 @@ const KINDS: Kind[] = [
       label: kind,
       group: "Modules",
       colour: MODULE_COLOUR[kind],
-      items: (s, t) => {
-        const swapped = overrideOf(s, t).modules[kind];
+      items: (s, bt) => {
+        const swapped = bt?.kind === "part" ? overrideOf(s, bt.t).modules[kind] : bt?.kind === "preset" ? s.presetPicks[`${bt.preset}/${bt.variation}/${kind}`] : undefined;
+        const own = bt?.kind === "preset" ? "The preset's own" : "The patch's own";
         return [
-          { id: "", name: "The patch's own", from: "no swap — what the patch has", colour: "var(--dim)", state: t && !swapped ? ("picked" as const) : undefined },
+          ...(bt?.kind === "part" || bt?.kind === "preset" ? [{ id: "", name: own, from: "no swap", colour: "var(--dim)", state: !swapped ? ("picked" as const) : undefined }] : []),
           ...modulesOf(kind).map((m) => ({
             id: m.name,
             name: m.name,
@@ -108,7 +222,11 @@ const KINDS: Kind[] = [
           })),
         ];
       },
-      apply: (t, item) => setModuleOverride(t, kind, item.id || null),
+      apply: (_, bt) => {
+        if (bt?.kind === "part") return (item) => setModuleOverride(bt.t, kind, item.id || null);
+        if (bt?.kind === "preset") return (item) => (item.id ? setVariationPick(bt.preset, bt.variation, kind, item.id) : clearVariationPick(bt.preset, bt.variation, kind));
+        return null;
+      },
     }),
   ),
   ...[...blockPresetsByType()].map(
@@ -117,17 +235,22 @@ const KINDS: Kind[] = [
       label: type === "eq" ? "EQ" : cap(type),
       group: "Blocks",
       colour: BLOCK_COLOUR[type] ?? "#a1a1aa",
-      items: (s, t) => {
-        const picked = overrideOf(s, t).edits[`block:${type}`];
+      items: (s, bt) => {
+        const pickedPart = bt?.kind === "part" ? overrideOf(s, bt.t).edits[`block:${type}`] : undefined;
+        const pickedPreset = bt?.kind === "preset" ? s.presetPicks[`${bt.preset}/${bt.variation}/block:${type}`] : undefined;
         return list.map((b, i) => ({
           id: b.name,
           name: b.name,
           from: b.bypass ? "off" : b.used_by.length ? `in ${plural(b.used_by.length, "preset")}` : undefined,
           colour: BLOCK_COLOUR[type] ?? "#a1a1aa",
-          state: picked === i ? ("swapped" as const) : undefined,
+          state: pickedPart === i || pickedPreset === b.name ? ("swapped" as const) : undefined,
         }));
       },
-      apply: (t, item) => editParam(t, `block:${type}`, list.findIndex((b) => b.name === item.name)),
+      apply: (_, bt) => {
+        if (bt?.kind === "part") return (item) => editParam(bt.t, `block:${type}`, list.findIndex((b) => b.name === item.name));
+        if (bt?.kind === "preset") return (item) => setVariationPick(bt.preset, bt.variation, `block:${type}`, item.name);
+        return null;
+      },
     }),
   ),
   {
@@ -135,8 +258,8 @@ const KINDS: Kind[] = [
     label: "Profiles",
     group: "Rig",
     colour: "#a78bfa",
-    items: (s, t) => {
-      const on = profileOf(s, t?.song).name;
+    items: (s, bt) => {
+      const on = profileOf(s, bt?.kind === "part" ? bt.t.song : undefined).name;
       return rig.library.profiles.map((p) => ({
         id: p.name,
         name: p.name,
@@ -146,18 +269,33 @@ const KINDS: Kind[] = [
         state: on === p.name ? ("playing" as const) : undefined,
       }));
     },
-    apply: (t, item) => setSongProfile(t.song, item.name),
+    apply: (s, bt) => (bt?.kind === "part" ? (item) => setSongProfile(bt.t.song, item.name) : s.performMode !== "preset" ? (item) => setSetProfile(item.name) : null),
   },
 ];
+
+/** Where the browser opens for a mode: songs to build a set, patches to
+ *  fill a stack, modules to shape a preset. */
+function homeKind(s: State, bt: BuildTarget): string {
+  if (bt?.kind === "part" || bt?.kind === "stack") return "patches";
+  if (s.performMode === "preset") return "module:Core";
+  return s.performMode === "setlist" ? "songs" : "patches";
+}
 
 // ── The browser ─────────────────────────────────────────────────────
 
 export function Browser({ onClose }: { onClose?: () => void }) {
   const s = useStore();
-  const t = s.selection;
+  const bt = targetOf(s);
+  const t = bt?.kind === "part" ? bt.t : null;
   const { sec, part } = partOf(s, t);
-  const target = t && sec ? t : null;
-  const [kindId, setKindId] = useState("patches");
+  const [kindId, setKindId] = useState(() => homeKind(s, bt));
+  // A new kind of target (a part picked, a stack opened, a preset played)
+  // takes the browser to where it builds.
+  const targetKey = bt ? `${bt.kind}:${bt.kind === "part" ? `${bt.t.song}|${bt.t.section}|${bt.t.part}` : bt.kind === "stack" ? `${bt.profile}|${bt.stack}` : `${bt.preset}|${bt.variation}`}` : `none:${s.performMode}`;
+  useEffect(() => {
+    setKindId(homeKind(s, bt));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetKey.split(":")[0], s.performMode]);
   const [opened, setOpened] = useState(false); // narrow: inside a kind
   const [query, setQuery] = useState("");
   // It filters itself to what's being worked on (a block picked in Edit).
@@ -182,8 +320,9 @@ export function Browser({ onClose }: { onClose?: () => void }) {
   const q = query.trim().toLowerCase();
   // Searching looks through every kind at once.
   const results = useMemo(
-    () => (q ? KINDS.flatMap((k) => k.items(s, target).filter((i) => i.id && i.name.toLowerCase().includes(q)).map((i) => ({ ...i, kind: k }))) : []),
-    [q, s, target],
+    () => (q ? KINDS.flatMap((k) => k.items(s, bt).filter((i) => i.id && i.name.toLowerCase().includes(q)).map((i) => ({ ...i, kind: k }))) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [q, s, targetKey],
   );
   const showList = wide || opened || !!q;
 
@@ -200,18 +339,30 @@ export function Browser({ onClose }: { onClose?: () => void }) {
             </button>
           )}
           <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 7, whiteSpace: "nowrap", overflow: "hidden" }}>
-            {target && sec ? (
+            {t && sec ? (
               <>
                 <span style={{ fontSize: 13, color: "var(--ink-3)" }}>For</span>
-                <span style={{ fontSize: 15, fontWeight: 650, color: songColour(target.song, s.songColours) }}>{target.song}</span>
+                <span style={{ fontSize: 15, fontWeight: 650, color: songColour(t.song, s.songColours) }}>{t.song}</span>
                 <span style={{ fontSize: 15, fontWeight: 750, color: sectionColour(sec.name) }}>{sec.name}</span>
                 {sec.parts.length > 1 && <span style={{ fontSize: 14, fontWeight: 650 }}>{part?.name}</span>}
+              </>
+            ) : bt?.kind === "stack" ? (
+              <>
+                <span style={{ fontSize: 13, color: "var(--ink-3)" }}>Filling</span>
+                <span style={{ fontSize: 15, fontWeight: 650, color: nameColour(bt.profile) }}>{bt.profile}</span>
+                <span style={{ fontSize: 15, fontWeight: 750, color: tapeFor(bt.stack) === "var(--tape-gaffer)" ? "var(--ink)" : tapeFor(bt.stack) }}>{bt.stack}</span>
+              </>
+            ) : bt?.kind === "preset" ? (
+              <>
+                <span style={{ fontSize: 13, color: "var(--ink-3)" }}>Shaping</span>
+                <span style={{ fontSize: 15, fontWeight: 750 }}>{bt.preset}</span>
+                <span style={{ fontSize: 14, fontWeight: 650, color: "var(--ink-2)" }}>{bt.variation}</span>
               </>
             ) : (
               <span style={{ fontSize: 15, fontWeight: 700 }}>{!wide && opened ? kind.label : "Browser"}</span>
             )}
           </span>
-          {target && (
+          {t && (
             <button className="pressable" onClick={() => select(null)} title="Stop choosing for this part" style={{ height: 44, padding: "0 10px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 650, color: "var(--ink-3)" }}>
               Unpick
             </button>
@@ -251,7 +402,7 @@ export function Browser({ onClose }: { onClose?: () => void }) {
                 </div>
                 {kinds.map((k) => {
                   const on = wide && k.id === kindId && !q;
-                  const items = k.items(s, target);
+                  const items = k.items(s, bt);
                   const count = items.filter((i) => i.id).length;
                   const swapped = items.some((i) => i.state === "swapped");
                   return (
@@ -291,12 +442,15 @@ export function Browser({ onClose }: { onClose?: () => void }) {
           <div style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
             {q ? (
               results.length ? (
-                results.map((i) => <Row key={`${i.kind.id}/${i.id}`} item={i} sub={`${i.kind.label}${i.from ? ` · ${i.from}` : ""}`} onPick={target && i.kind.apply ? () => i.kind.apply!(target, i) : undefined} />)
+                results.map((i) => {
+                  const apply = i.kind.apply(s, bt);
+                  return <Row key={`${i.kind.id}/${i.id}`} item={i} sub={`${i.kind.label}${i.from ? ` · ${i.from}` : ""}`} onPick={apply ? () => apply(i) : undefined} />;
+                })
               ) : (
                 <Quiet>Nothing called “{query}”.</Quiet>
               )
             ) : (
-              <KindList kind={kind} items={kind.items(s, target)} target={target} />
+              <KindList kind={kind} items={kind.items(s, bt)} apply={kind.apply(s, bt)} hint={hintFor(s, bt, kind)} />
             )}
           </div>
         )}
@@ -315,13 +469,20 @@ function groupsOf(kinds: Kind[]): [string, Kind[]][] {
   return out;
 }
 
-function KindList({ kind, items, target }: { kind: Kind; items: Item[]; target: Target | null }) {
-  const onPick = (i: Item) => (target && kind.apply ? () => kind.apply!(target, i) : undefined);
+/** What to do to build with this kind, when nothing is being built into. */
+function hintFor(s: State, bt: BuildTarget, kind: Kind): string | null {
+  if (kind.apply(s, bt)) return null;
+  if (s.performMode === "setlist") return "Pick a section's patch in the setlist to choose for it.";
+  if (s.performMode === "profile") return kind.id === "patches" ? "Open a stack in the profile to fill it." : "Stacks hold patches — open one, then pick from Patches.";
+  return "Play a preset's variation to shape it.";
+}
+
+function KindList({ kind, items, apply, hint }: { kind: Kind; items: Item[]; apply: ((item: Item) => void) | null; hint: string | null }) {
   // Patches sit under their stacks.
   let last = "";
   return (
     <div style={{ paddingBottom: 16 }}>
-      {!target && kind.apply && <Quiet small>Pick a section's patch in the setlist to choose for it.</Quiet>}
+      {hint && <Quiet small>{hint}</Quiet>}
       {items.map((i) => {
         const head = i.group && i.group !== last ? i.group : null;
         if (i.group) last = i.group;
@@ -335,17 +496,18 @@ function KindList({ kind, items, target }: { kind: Kind; items: Item[]; target: 
                 </span>
               </div>
             )}
-            <Row item={i} sub={i.from} onPick={onPick(i)} />
+            <Row item={i} sub={i.from} onPick={apply ? () => apply(i) : undefined} />
           </div>
         );
       })}
+      {kind.id === "songs" && apply && <Quiet small>A tap adds the song to the end of the set.</Quiet>}
     </div>
   );
 }
 
 /** One thing: its mark, its name, where it comes from, its state. */
 function Row({ item, sub, onPick }: { item: Item; sub?: string; onPick?: () => void }) {
-  const on = item.state === "playing" || item.state === "picked" || item.state === "swapped";
+  const on = item.state === "playing" || item.state === "picked" || item.state === "swapped" || item.state === "in";
   return (
     <button
       onClick={onPick}
@@ -375,7 +537,7 @@ function Row({ item, sub, onPick }: { item: Item; sub?: string; onPick?: () => v
       </span>
       {item.state && (
         <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: item.state === "swapped" ? "var(--modified)" : "var(--live)" }}>
-          {item.state === "playing" ? "Playing" : item.state === "swapped" ? "Swapped in" : "In use"}
+          {item.state === "playing" ? "Playing" : item.state === "swapped" ? "Swapped in" : item.state === "in" ? "In" : "In use"}
         </span>
       )}
     </button>
