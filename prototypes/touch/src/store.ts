@@ -18,7 +18,9 @@ export type Setlist = RigSetlist & SetMeta & {
 
 /** What a section plays: a patch of the profile, or a preset. */
 export interface Sound {
-  kind: "patch" | "preset";
+  /** A patch, a preset's variation, or a whole stack (it plays the stack —
+   *  its first patch, then wherever the switch steps it). */
+  kind: "patch" | "preset" | "stack";
   name: string;
   /** Borrowed from this profile, not the one the song plays on. */
   profile?: string;
@@ -600,7 +602,13 @@ export function partPatch(s: State): string | null {
   for (let i = s.partIndex; i >= 0; i--) {
     const parts = secs[i]?.parts ?? [];
     const from = i === s.partIndex ? Math.min(s.subIndex, parts.length - 1) : parts.length - 1;
-    for (let k = from; k >= 0; k--) if (parts[k].sound) return parts[k].sound!.name;
+    for (let k = from; k >= 0; k--) {
+      const sound = parts[k].sound;
+      if (!sound) continue;
+      // A stack plays its first patch.
+      if (sound.kind === "stack") return profileStacksOf(s, sound.profile ?? profileOf(s, song).name).find((d) => d.name === sound.name)?.patches[0] ?? sound.name;
+      return sound.name;
+    }
   }
   return currentSong(s)?.start || null;
 }
@@ -631,7 +639,13 @@ export function borrowedOf(s: State, song?: string): Borrowed[] {
   if (!song) return [];
   const out: Borrowed[] = [];
   for (const sec of sectionsOf(s, song))
-    for (const p of sec.parts) if (p.sound?.profile) out.push({ name: p.sound.name, profile: p.sound.profile });
+    for (const p of sec.parts) {
+      const sound = p.sound;
+      if (!sound?.profile) continue;
+      // A stack from another profile lends all its patches.
+      if (sound.kind === "stack") for (const name of profileStacksOf(s, sound.profile).find((d) => d.name === sound.name)?.patches ?? []) out.push({ name, profile: sound.profile });
+      else out.push({ name: sound.name, profile: sound.profile });
+    }
   return out;
 }
 

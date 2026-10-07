@@ -221,6 +221,24 @@ const KINDS: Kind[] = [
     },
   },
   {
+    id: "profiles",
+    label: "Profiles",
+    group: "Sounds",
+    colour: "#a78bfa",
+    items: (s, bt) => {
+      const on = profileOf(s, bt?.kind === "part" ? bt.t.song : undefined).name;
+      return rig.library.profiles.map((p) => ({
+        id: p.name,
+        name: p.name,
+        from: p.stacks.filter((st) => p.patch_list.some((x) => x.stack === st)).join(" · "),
+        colour: nameColour(p.name),
+        mark: <ProfileIcon name={p.name} colour={nameColour(p.name)} size={16} />,
+        state: on === p.name ? ("playing" as const) : undefined,
+      }));
+    },
+    apply: (s, bt) => (bt?.kind === "part" ? (item) => setSongProfile(bt.t.song, item.name) : s.performMode !== "preset" ? (item) => setSetProfile(item.name) : null),
+  },
+  {
     id: "presets",
     label: "Presets",
     group: "Sounds",
@@ -311,24 +329,6 @@ const KINDS: Kind[] = [
       },
     }),
   ),
-  {
-    id: "profiles",
-    label: "Profiles",
-    group: "Rig",
-    colour: "#a78bfa",
-    items: (s, bt) => {
-      const on = profileOf(s, bt?.kind === "part" ? bt.t.song : undefined).name;
-      return rig.library.profiles.map((p) => ({
-        id: p.name,
-        name: p.name,
-        from: p.stacks.filter((st) => p.patch_list.some((x) => x.stack === st)).join(" · "),
-        colour: nameColour(p.name),
-        mark: <ProfileIcon name={p.name} colour={nameColour(p.name)} size={16} />,
-        state: on === p.name ? ("playing" as const) : undefined,
-      }));
-    },
-    apply: (s, bt) => (bt?.kind === "part" ? (item) => setSongProfile(bt.t.song, item.name) : s.performMode !== "preset" ? (item) => setSetProfile(item.name) : null),
-  },
 ];
 
 /** Where the browser opens for a mode: songs to build a set, patches to
@@ -544,6 +544,8 @@ function hintFor(s: State, bt: BuildTarget, kind: Kind): string | null {
 }
 
 function KindList({ kind, items, apply, hint }: { kind: Kind; items: Item[]; apply: ((item: Item) => void) | null; hint: string | null }) {
+  // Profiles open into their stacks and patches.
+  if (kind.id === "profiles") return <ProfileColumns />;
   const nested = items.filter((i) => i.nested);
   const plain = items.filter((i) => !i.nested);
   // Presets with variations: a column browser — presets, then the picked
@@ -820,5 +822,129 @@ function ClearOwn({ bt }: { bt: BuildTarget }) {
       </svg>
       Clear {n} override{n === 1 ? "" : "s"}
     </button>
+  );
+}
+
+/** Profiles on the left; the picked one's stacks and their patches on the
+ *  right. With a part picked, a stack row makes the part play that stack
+ *  and a patch row that patch — borrowed when the profile isn't the
+ *  song's; a button gives the whole song the profile. Filling a stack
+ *  (Profile mode), a patch row adds the patch to it or takes it out. */
+function ProfileColumns() {
+  const s = useStore();
+  const bt = targetOf(s);
+  const t = bt?.kind === "part" ? bt.t : null;
+  const songProfile = profileOf(s, t?.song ?? currentSet(s).songs[s.songIndex]?.name).name;
+  const [picked, setPicked] = useState(songProfile);
+  const [step, setStep] = useState<"profiles" | "stacks">("profiles");
+  const ref = useRef<HTMLDivElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setNarrow(el.clientWidth < 480));
+    ro.observe(el);
+    setNarrow(el.clientWidth < 480);
+    return () => ro.disconnect();
+  }, []);
+  const part = t ? partOf(s, t).part : undefined;
+  const sound = part?.sound;
+  const defs = profileStacksOf(s, picked);
+  const borrowed = picked !== songProfile ? picked : undefined;
+  const fill = bt?.kind === "stack" ? profileStacksOf(s, bt.profile)[bt.index] : null;
+  return (
+    <div ref={ref} style={{ height: "100%", display: "flex", minHeight: 0 }}>
+      {(!narrow || step === "profiles") && (
+        <div style={{ width: narrow ? "100%" : "38%", maxWidth: narrow ? undefined : 240, flexShrink: 0, overflowY: "auto", borderRight: narrow ? undefined : "1px solid var(--rule)" }}>
+          {rig.library.profiles.map((p) => {
+            const on = p.name === picked;
+            return (
+              <button
+                key={p.name}
+                onClick={() => {
+                  setPicked(p.name);
+                  setStep("stacks");
+                }}
+                className={on && !narrow ? "" : "pressable"}
+                style={{ position: "relative", width: "100%", minHeight: 52, display: "flex", alignItems: "center", gap: 10, padding: "6px 12px 6px 14px", textAlign: "left", background: on && !narrow ? "rgba(255,255,255,0.07)" : undefined }}
+              >
+                {on && !narrow && <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: nameColour(p.name) }} />}
+                <ProfileIcon name={p.name} colour={nameColour(p.name)} size={16} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: on ? 700 : 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                {p.name === songProfile && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--live)" }}>{t ? "The song's" : "Playing"}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {(!narrow || step === "stacks") && (
+        <div style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 52, padding: "8px 12px 8px 16px", borderBottom: "1px solid var(--rule)" }}>
+            {narrow && (
+              <button className="pressable" onClick={() => setStep("profiles")} aria-label="All profiles" style={{ width: 32, height: 44, marginLeft: -8, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", borderRadius: "var(--r)" }}>
+                <svg width="9" height="15" viewBox="0 0 9 15" aria-hidden>
+                  <path d="M7.5 1.5 1.5 7.5l6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
+            <ProfileIcon name={picked} colour={nameColour(picked)} size={18} />
+            <span style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{picked}</span>
+            {t && picked !== songProfile && (
+              <button className="pressable" onClick={() => setSongProfile(t.song, picked)} style={{ height: 36, padding: "0 12px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 700, boxShadow: "inset 0 0 0 1px var(--rule-strong)", whiteSpace: "nowrap" }}>
+                Play {t.song} on it
+              </button>
+            )}
+          </div>
+          {defs.map((d) => {
+            const tape = tapeFor(d.name) === "var(--tape-gaffer)" ? "var(--ink-3)" : tapeFor(d.name);
+            const stackOn = sound?.kind === "stack" && sound.name === d.name && (sound.profile ?? songProfile) === picked;
+            return (
+              <section key={d.name} style={{ borderBottom: "1px solid var(--rule)" }}>
+                {/* The stack itself: a part can play the whole stack. */}
+                <button
+                  onClick={t ? () => setSectionSound(t.song, t.section, { kind: "stack", name: d.name, ...(borrowed ? { profile: borrowed } : {}) }, t.part) : undefined}
+                  disabled={!t}
+                  className={t && !stackOn ? "pressable" : ""}
+                  style={{ position: "relative", width: "100%", minHeight: 48, display: "flex", alignItems: "center", gap: 10, padding: "6px 16px", textAlign: "left", background: stackOn ? `color-mix(in oklab, ${tape} 14%, transparent)` : undefined, cursor: t ? "pointer" : "default" }}
+                >
+                  {stackOn && <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: "var(--live)" }} />}
+                  <span style={{ width: 12, height: 12, borderRadius: 3, background: tape, flexShrink: 0 }} />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 750 }}>{d.name}</span>
+                  {t && <span style={{ fontSize: 12, fontWeight: 700, color: stackOn ? "var(--live)" : "var(--ink-3)" }}>{stackOn ? "Plays the stack" : "Whole stack"}</span>}
+                </button>
+                {/* Its patches. */}
+                {d.patches.map((name) => {
+                  const on = (sound?.kind === "patch" && sound.name === name) || !!fill?.patches.includes(name);
+                  const pick = t
+                    ? () => setSectionSound(t.song, t.section, { kind: "patch", name, ...(borrowed ? { profile: borrowed } : {}) }, t.part)
+                    : bt?.kind === "stack"
+                      ? () => {
+                          const at = fill?.patches.indexOf(name) ?? -1;
+                          if (at >= 0) removeStackPatch(bt.profile, bt.index, at);
+                          else addStackPatch(bt.profile, bt.index, name);
+                        }
+                      : undefined;
+                  return (
+                    <button
+                      key={name}
+                      onClick={pick}
+                      disabled={!pick}
+                      aria-pressed={on}
+                      className={pick && !on ? "pressable" : ""}
+                      style={{ position: "relative", width: "100%", minHeight: 44, display: "flex", alignItems: "center", gap: 10, padding: "4px 16px 4px 38px", textAlign: "left", background: on ? "rgba(255,255,255,0.06)" : undefined, cursor: pick ? "pointer" : "default" }}
+                    >
+                      <span aria-hidden style={{ position: "absolute", left: 21, top: 0, bottom: 0, width: 1.5, background: `color-mix(in oklab, ${tape} 45%, transparent)` }} />
+                      <span style={{ width: 8, height: 8, borderRadius: 999, flexShrink: 0, background: on ? tape : "transparent", boxShadow: on ? undefined : `inset 0 0 0 1.5px ${tape}` }} />
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: on ? 700 : 540, color: on ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+                      {on && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--live)" }}>{fill ? "In" : "Playing"}</span>}
+                    </button>
+                  );
+                })}
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

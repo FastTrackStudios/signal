@@ -767,7 +767,7 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
       {sec.parts.length} parts
     </span>
   ) : sound ? (
-    <PatchChip name={sound.name} borrowed={sound.profile} lit={state === "now"} small={narrow} />
+    <PatchChip name={sound.kind === "stack" ? `${sound.name} stack` : sound.name} borrowed={sound.profile} lit={state === "now"} small={narrow} />
   ) : (
     <span className="t-meta" style={{ fontSize: 13, padding: "0 4px" }}>
       keeps
@@ -916,7 +916,7 @@ function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: s
     if (p.id === "later") movePart(song, j, k, k + 1);
     if (p.id === "delete") removePart(song, j, k);
   };
-  const chip = part.sound ? <PatchChip name={part.sound.name} borrowed={part.sound.profile} lit={state === "now"} small /> : <span className="t-meta" style={{ fontSize: 12, padding: "0 4px" }}>keeps</span>;
+  const chip = part.sound ? <PatchChip name={part.sound.kind === "stack" ? `${part.sound.name} stack` : part.sound.name} borrowed={part.sound.profile} lit={state === "now"} small /> : <span className="t-meta" style={{ fontSize: 12, padding: "0 4px" }}>keeps</span>;
   return (
     <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 44, background: state === "now" ? tint(songColour(song, s.songColours), 18) : undefined }}>
       <button className="pressable" onClick={() => (compose?.pickRows ? pick(song, j, k) : goToSub(j, k))} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: `2px 4px 2px ${left}px`, textAlign: "left" }}>
