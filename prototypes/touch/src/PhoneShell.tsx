@@ -222,7 +222,7 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
           <path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
         </svg>
       </button>
-      <ModeButton height={30} />
+      <ModeButton />
       <span style={{ flex: 1 }} />
       <span style={{ display: "flex", alignItems: "center" }}>
         <PanicButton size={30} />

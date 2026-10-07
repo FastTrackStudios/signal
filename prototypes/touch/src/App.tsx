@@ -296,9 +296,8 @@ function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => voi
         </BarButton>
         <Rule />
         {/* The footswitch mode: one button, its menu picks. */}
-        <div style={{ display: "flex", alignItems: "center", padding: "0 10px" }}>
-          <ModeButton wide />
-        </div>
+        <ModeButton wide />
+        <Rule />
         <span style={{ flex: 1 }} />
         {/* Undo and Redo, for the whole app: every edit anywhere is one step. */}
         <UndoRedo />
