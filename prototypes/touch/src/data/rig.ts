@@ -1,7 +1,8 @@
 // The rig as the prototype reads it: the real fixture exported from the
 // engine (`cargo run -p signal-guitar --example export_fixture`), typed to
 // the shapes the Dioxus remote reads over the wire, plus the few joins every
-// screen needs. Nothing here invents data; edits live in the store.
+// screen needs. Nothing here invents data except the example profiles
+// marked below; edits live in the store.
 
 import raw from "./fixture.json";
 
@@ -130,6 +131,54 @@ interface Fixture {
 }
 
 export const rig = raw as unknown as Fixture;
+
+// Example profiles, for the prototype only — not in the rig's fixture. They
+// give the profile picker a realistic spread: few stacks or many, thin
+// stacks and full ones.
+const EXAMPLE_PROFILES: Record<string, Record<string, string[]>> = {
+  Funk: {
+    Clean: ["Spank Clean", "Quack Clean", "Chicken Scratch"],
+    Crunch: ["Edge Crunch", "Fat Crunch"],
+    Lead: ["Funk Lead", "Octave Lead"],
+    Special: ["Envelope Filter", "Talk Box"],
+  },
+  Jazz: {
+    Clean: ["Archtop", "Warm Neck", "Bright Bridge"],
+    Lead: ["Horn Lead", "Octave Lead"],
+    Ambient: ["Room", "Hall"],
+  },
+  MkGee: {
+    Clean: ["Tape Clean", "Chorus Crush", "Wobble"],
+    Crunch: ["Blown Combo", "Cassette Crunch"],
+    Drive: ["Fuzz Smear"],
+    Ambient: ["Warble Wash", "Reverse Bloom"],
+    Special: ["Bit Crush", "Ring Mod"],
+  },
+  Indie: {
+    Clean: ["Jangle", "Tremolo Clean"],
+    Crunch: ["Jazzmaster Crunch", "Edge of Breakup"],
+    Drive: ["Big Muff", "Shoegaze Wall"],
+    Lead: ["Fuzz Lead"],
+    Ambient: ["Shimmer"],
+  },
+  Experimental: {
+    Clean: ["Prepared"],
+    Drive: ["Gated Fuzz", "Octave Fuzz", "Bit Fuzz"],
+    Ambient: ["Granular", "Freeze", "Reverse"],
+    Special: ["Glitch", "Ring Mod", "Pitch Chaos", "Feedback Loop"],
+  },
+  Soundscape: {
+    Clean: ["Volume Swell", "Ebow Clean"],
+    Ambient: ["Swell Pad", "Shimmer Pad", "Infinite Hold", "Cloud", "Tape Drift"],
+    Special: ["Freeze", "Drone"],
+  },
+};
+
+for (const [name, stacks] of Object.entries(EXAMPLE_PROFILES)) {
+  if (rig.library.profiles.some((p) => p.name === name)) continue;
+  const patch_list = Object.entries(stacks).flatMap(([stack, patches]) => patches.map((p) => ({ name: p, stack })));
+  rig.library.profiles.push({ name, active: false, stacks: Object.keys(stacks), patches: patch_list.length, patch_list });
+}
 
 /** The modules a sound is made of, in the order a player thinks of them. */
 export const MODULE_KINDS = ["Preset", "Core", "Amp", "Drive", "Time", "Delay", "Reverb"] as const;
