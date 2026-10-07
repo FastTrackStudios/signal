@@ -39,9 +39,17 @@ import {
   setVariationPick,
   songStacks,
   useStore,
+  GENRES,
+  newCollection,
+  removeCollection,
+  renameCollection,
+  setSongInfo,
+  songInfoOf,
+  toggleInCollection,
   type State,
   type Target,
 } from "../store";
+import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
 import type { StackPatch } from "../setlist/stacks";
 import { nameColour, sectionColour, songColour } from "../setlist/colors";
 import { ProfileIcon } from "../ui/profileIcons";
@@ -133,6 +141,8 @@ interface Item {
   algos?: AlgoLine[];
   /** Chosen by a preset higher up (the patch, the Core…): who chose it. */
   inherited?: string;
+  /** More it can be found by in a search (a song's artist, genre…). */
+  search?: string;
 }
 
 const BLOCK_COLOUR: Record<string, string> = { compressor: "#E5E7EB", gate: "#94A3B8", eq: "#22C55E", delay: "#3B82F6", reverb: "#8B5CF6", chorus: "#7DD3FC" };
@@ -225,7 +235,8 @@ const KINDS: Kind[] = [
       return [...rig.library.songs, ...s.newSongs].map((x) => ({
         id: x.name,
         name: x.name,
-        from: [x.key, x.bpm ? `${x.bpm} bpm` : "", x.parts.length ? plural(x.parts.length, "section") : ""].filter(Boolean).join(" · "),
+        from: [songInfoOf(s, x.name).artist, x.key, x.bpm ? `${x.bpm} bpm` : ""].filter(Boolean).join(" · "),
+        search: [songInfoOf(s, x.name).artist, songInfoOf(s, x.name).genre, ...s.collections.filter((c) => c.songs.includes(x.name)).map((c) => c.name)].join(" ").toLowerCase(),
         colour: songColour(x.name, s.songColours),
         state: inSet.has(x.name) ? ("in" as const) : undefined,
       }));
@@ -451,7 +462,7 @@ export function Browser({ onClose }: { onClose?: () => void }) {
   const q = query.trim().toLowerCase();
   // Searching looks through every kind at once.
   const results = useMemo(
-    () => (q ? KINDS.flatMap((k) => k.items(s, bt).filter((i) => i.id && (i.name.toLowerCase().includes(q) || i.group?.toLowerCase().includes(q))).map((i) => ({ ...i, kind: k }))) : []),
+    () => (q ? KINDS.flatMap((k) => k.items(s, bt).filter((i) => i.id && (i.name.toLowerCase().includes(q) || i.group?.toLowerCase().includes(q) || i.search?.includes(q))).map((i) => ({ ...i, kind: k }))) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [q, s, targetKey],
   );
@@ -657,6 +668,8 @@ function hintFor(s: State, bt: BuildTarget, kind: Kind): string | null {
 function KindList({ kind, items, apply, hint }: { kind: Kind; items: Item[]; apply: ((item: Item) => void) | null; hint: string | null }) {
   // Profiles open into their stacks and patches.
   if (kind.id === "profiles") return <ProfileColumns />;
+  // Songs: by collection, artist, key and genre.
+  if (kind.id === "songs") return <SongList items={items} apply={apply} hint={hint} />;
   const nested = items.filter((i) => i.nested);
   const plain = items.filter((i) => !i.nested);
   // Presets with variations: a column browser — presets, then the picked
@@ -932,6 +945,227 @@ function Row({ item, sub, onPick }: { item: Item; sub?: string; onPick?: () => v
         </span>
       )}
     </button>
+  );
+}
+
+// ── Songs ──────────────────────────────────────────────────────────
+
+const KEY_ORDER = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"];
+
+/** The library's songs, found fast: a collection along the top (All, or
+ *  one of the user's — Church, Contemporary…), then artist, key and genre
+ *  to narrow it; each song's ⋯ puts it in collections and sets its
+ *  artist and genre. */
+function SongList({ items, apply, hint }: { items: Item[]; apply: ((item: Item) => void) | null; hint: string | null }) {
+  const s = useStore();
+  const [collection, setCollection] = useState<string | null>(null);
+  const [artist, setArtist] = useState<string | null>(null);
+  const [key, setKey] = useState<string | null>(null);
+  const [genre, setGenre] = useState<string | null>(null);
+  const addMenu = useMenu();
+  const colMenu = useMenu();
+  const songs = [...rig.library.songs, ...s.newSongs];
+  const keyOf = (name: string) => songs.find((x) => x.name === name)?.key ?? "";
+  // The facets offer only what the library has.
+  const artists = [...new Set(items.map((i) => songInfoOf(s, i.name).artist).filter(Boolean))].sort();
+  const keys = [...new Set(items.map((i) => keyOf(i.name)).filter(Boolean))].sort((a, b) => KEY_ORDER.indexOf(a) - KEY_ORDER.indexOf(b));
+  const genres = [...new Set(items.map((i) => songInfoOf(s, i.name).genre).filter(Boolean))].sort();
+  const col = s.collections.find((c) => c.name === collection);
+  const shown = items.filter((i) => {
+    const info = songInfoOf(s, i.name);
+    return (!col || col.songs.includes(i.name)) && (!artist || info.artist === artist) && (!key || keyOf(i.name) === key) && (!genre || info.genre === genre);
+  });
+  const filtered = !!(col || artist || key || genre);
+  const clear = () => {
+    setCollection(null);
+    setArtist(null);
+    setKey(null);
+    setGenre(null);
+  };
+  return (
+    <div style={{ paddingBottom: 16 }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 2, background: "#0f0f12", borderBottom: "1px solid var(--rule)" }}>
+        {/* Collections. */}
+        <div role="tablist" aria-label="Collections" style={{ display: "flex", alignItems: "stretch", height: 46, overflowX: "auto", scrollbarWidth: "none", padding: "0 6px" }}>
+          {[{ name: null as string | null, colour: "var(--ink-2)" }, ...s.collections.map((c) => ({ name: c.name as string | null, colour: c.colour }))].map((c) => {
+            const on = c.name === collection;
+            return (
+              <button
+                key={c.name ?? "all"}
+                role="tab"
+                aria-selected={on}
+                onClick={() => setCollection(c.name)}
+                className="pressable"
+                style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 7, padding: "0 12px", fontSize: 14.5, fontWeight: on ? 750 : 600, whiteSpace: "nowrap", color: on ? "var(--ink)" : "var(--ink-3)", boxShadow: on ? `inset 0 -2px 0 ${c.colour}` : undefined }}
+              >
+                {c.name && <span aria-hidden style={{ width: 8, height: 8, borderRadius: 999, background: c.colour }} />}
+                {c.name ?? "All songs"}
+              </button>
+            );
+          })}
+          <button className="pressable" onClick={addMenu.fromButton} aria-label="New collection" style={{ flexShrink: 0, width: 44, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)" }}>
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+              <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+          {addMenu.open && (
+            <Menu
+              at={addMenu.open.at}
+              naming={0}
+              items={[{ kind: "name", id: "add", label: "New collection…", initial: "", confirm: "Add", taken: s.collections.map((c) => c.name) }]}
+              onPick={(p) => {
+                newCollection(p.text);
+                setCollection(p.text);
+              }}
+              onClose={addMenu.close}
+            />
+          )}
+        </div>
+        {/* Narrow it: artist, key, genre. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 52, padding: "4px 8px 6px 10px", flexWrap: "wrap" }}>
+          <Facet label="Artist" value={artist} options={artists} onPick={setArtist} />
+          <Facet label="Key" value={key} options={keys} onPick={setKey} />
+          <Facet label="Genre" value={genre} options={genres} onPick={setGenre} />
+          <span style={{ flex: 1 }} />
+          {col && (
+            <>
+              <MoreButton label={`${col.name} actions`} onClick={colMenu.fromButton} />
+              {colMenu.open && (
+                <Menu
+                  at={colMenu.open.at}
+                  items={[
+                    { kind: "head", label: col.name },
+                    { kind: "name", id: "rename", label: "Rename…", initial: col.name, confirm: "Rename", taken: s.collections.map((c) => c.name) },
+                    { kind: "sep" },
+                    { kind: "delete", id: "delete", label: "Delete collection" },
+                  ]}
+                  onPick={(p) => {
+                    if (p.id === "rename") {
+                      renameCollection(col.name, p.text);
+                      setCollection(p.text);
+                    }
+                    if (p.id === "delete") {
+                      removeCollection(col.name);
+                      setCollection(null);
+                    }
+                  }}
+                  onClose={colMenu.close}
+                />
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      {hint && <Quiet small>{hint}</Quiet>}
+      {shown.map((i) => (
+        <SongRow key={i.id} item={i} onPick={apply ? () => apply(i) : undefined} />
+      ))}
+      {shown.length === 0 && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "32px 16px" }}>
+          <span style={{ fontSize: 14, color: "var(--ink-3)" }}>{col && !artist && !key && !genre ? `${col.name} is empty` : "No songs match"}</span>
+          {filtered && (
+            <button className="pressable" onClick={clear} style={{ height: 44, padding: "0 16px", borderRadius: "var(--r)", fontSize: 14, fontWeight: 700, color: "var(--ink)", boxShadow: "inset 0 0 0 1px var(--rule-strong)" }}>
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A filter: its name when open to anything, its value (and a clear)
+ *  when set; the choices open as a menu. */
+function Facet({ label, value, options, onPick }: { label: string; value: string | null; options: string[]; onPick: (v: string | null) => void }) {
+  const menu = useMenu();
+  const on = value !== null;
+  return (
+    <span style={{ display: "flex", alignItems: "center", borderRadius: "var(--r)", background: on ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)" }}>
+      <button
+        className="pressable"
+        onClick={menu.fromButton}
+        aria-haspopup="menu"
+        aria-label={on ? `${label}: ${value}` : `Filter by ${label.toLowerCase()}`}
+        style={{ height: 44, display: "flex", alignItems: "center", gap: 7, padding: on ? "0 6px 0 12px" : "0 10px 0 12px", fontSize: 14, fontWeight: on ? 700 : 600, color: on ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap" }}
+      >
+        {on ? value : label}
+        {!on && (
+          <svg width="10" height="6" viewBox="0 0 11 7" aria-hidden style={{ color: "var(--ink-3)" }}>
+            <path d="M1 1l4.5 4.5L10 1" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </button>
+      {on && (
+        <button className="pressable" onClick={() => onPick(null)} aria-label={`Clear ${label.toLowerCase()}`} style={{ width: 36, height: 44, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)" }}>
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
+            <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
+      {menu.open && (
+        <Menu
+          at={menu.open.at}
+          items={[{ kind: "head", label }, { kind: "run", id: "__any", label: `Any ${label.toLowerCase()}`, checked: !on }, ...options.map((o): MenuItem => ({ kind: "run", id: o, label: o, checked: o === value }))]}
+          onPick={(p) => onPick(p.id === "__any" ? null : p.id)}
+          onClose={menu.close}
+        />
+      )}
+    </span>
+  );
+}
+
+/** A song: its colour, name, who it's by with key and tempo, the
+ *  collections it's in as dots; ⋯ puts it in collections, sets its artist
+ *  and genre. */
+function SongRow({ item, onPick }: { item: Item; onPick?: () => void }) {
+  const s = useStore();
+  const menu = useMenu();
+  const info = songInfoOf(s, item.name);
+  const ins = s.collections.filter((c) => c.songs.includes(item.name));
+  const on = item.state === "in";
+  const items: MenuItem[] = [
+    { kind: "head", label: item.name },
+    ...s.collections.map((c): MenuItem => ({ kind: "run", id: `col:${c.name}`, label: c.name, checked: c.songs.includes(item.name) })),
+    { kind: "name", id: "newcol", label: "New collection…", initial: "", confirm: "Add", taken: s.collections.map((c) => c.name) },
+    { kind: "sep" },
+    { kind: "name", id: "artist", label: info.artist ? `Artist · ${info.artist}` : "Artist…", initial: info.artist, confirm: "Set" },
+    { kind: "head", label: "Genre" },
+    ...GENRES.map((g): MenuItem => ({ kind: "run", id: `genre:${g}`, label: g, checked: info.genre === g })),
+  ];
+  const onMenu = (p: Picked) => {
+    if (p.id.startsWith("col:")) toggleInCollection(p.id.slice(4), item.name);
+    else if (p.id === "newcol") newCollection(p.text, [item.name]);
+    else if (p.id === "artist") setSongInfo(item.name, { artist: p.text });
+    else if (p.id.startsWith("genre:")) setSongInfo(item.name, { genre: p.id.slice(6) });
+  };
+  return (
+    <div style={{ position: "relative", display: "flex", alignItems: "center", background: on ? "rgba(255,255,255,0.06)" : undefined }}>
+      {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2, background: "var(--live)" }} />}
+      <button
+        onClick={onPick}
+        disabled={!onPick}
+        className={onPick ? "pressable" : ""}
+        aria-pressed={on}
+        data-current={on ? "true" : undefined}
+        style={{ flex: 1, minWidth: 0, minHeight: 56, display: "flex", alignItems: "center", gap: 12, padding: "6px 4px 6px 16px", textAlign: "left", cursor: onPick ? "pointer" : "default" }}
+      >
+        <span aria-hidden style={{ width: 10, height: 10, borderRadius: 3, flexShrink: 0, background: item.colour }} />
+        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ fontSize: 16, fontWeight: on ? 700 : 560, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</span>
+          {item.from && <span style={{ fontSize: 13, color: "var(--ink-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.from}</span>}
+        </span>
+        {ins.length > 0 && (
+          <span aria-label={`In ${ins.map((c) => c.name).join(", ")}`} style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            {ins.map((c) => (
+              <span key={c.name} title={c.name} style={{ width: 7, height: 7, borderRadius: 999, background: c.colour }} />
+            ))}
+          </span>
+        )}
+        {on && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--live)" }}>In</span>}
+      </button>
+      <MoreButton label={`${item.name} actions`} onClick={menu.fromButton} />
+      {menu.open && <Menu at={menu.open.at} items={items} onPick={onMenu} onClose={menu.close} />}
+    </div>
   );
 }
 

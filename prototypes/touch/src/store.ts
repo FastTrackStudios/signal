@@ -72,6 +72,12 @@ export interface State {
   side: Record<string, "L" | "R" | null>;
   /** Songs made in this session, beside the rig's library. */
   newSongs: SongEntry[];
+  /** What the library knows of each song beyond the rig's file: who
+   *  it's by, and its genre. */
+  songInfo: Record<string, SongInfo>;
+  /** Song collections — named groups a song can be in any number of
+   *  ("Church", "Contemporary"…), for finding songs faster. */
+  collections: Collection[];
   /** Colours set by hand, by song name (the rest are their names'). */
   songColours: Record<string, string>;
   /** A song's own profile, picked by the player (over the set's default). */
@@ -171,6 +177,8 @@ function seed(): State {
     order: {},
     side: {},
     newSongs: [],
+    songInfo: seedSongInfo(),
+    collections: seedCollections(),
     songColours: {},
     songProfiles: {},
     live: null,
@@ -1262,4 +1270,86 @@ export function removeRig(index: number) {
     const guitars = s.guitars.map((g) => ({ ...g, overrides: Object.fromEntries(Object.entries(g.overrides).filter(([k]) => k !== gone)) }));
     return { ...s, rigs, guitars, rigIndex: Math.min(s.rigIndex > index ? s.rigIndex - 1 : s.rigIndex, rigs.length - 1) };
   });
+}
+
+// ── Songs: who they're by, their genre, and collections ─────────────────
+
+export interface SongInfo {
+  artist: string;
+  genre: string;
+}
+
+export interface Collection {
+  name: string;
+  colour: string;
+  songs: string[];
+}
+
+// Read after the seed, so a const is fine here.
+export const GENRES = ["Worship", "Gospel", "Hymn", "Pop", "Rock", "Country", "R&B"];
+// A function, hoisted: the store's seed needs them before this point.
+function collectionColours() {
+  return ["#f472b6", "#a78bfa", "#38bdf8", "#34d399", "#fbbf24", "#fb923c", "#f87171"];
+}
+
+// Sample data: artists only where the song is known; the rest left blank
+// for the user to fill. Hoisted: the store seeds itself before this.
+function seedSongInfo(): Record<string, SongInfo> {
+  const w = (artist: string, genre = "Worship"): SongInfo => ({ artist, genre });
+  return {
+    "What a God": w(""),
+    "No Other Name": w("Hillsong Worship"),
+    "Owe You Praise": w(""),
+    WASHED: w(""),
+    "Who Else": w("Gateway Worship"),
+    "Build My Life / With Everything": w("Housefires · Hillsong Worship"),
+    "Reckless Love": w("Cory Asbury"),
+    "Great Are You Lord": w("All Sons & Daughters"),
+    "AMAZING!": w("", "Gospel"),
+    TAKEOVER: w("", "Gospel"),
+    "Thank God I'm Free": w("", "Gospel"),
+    "Always on Time": w(""),
+    "Give Me Jesus": w("UPPERROOM", "Hymn"),
+    "Keep On Finding More": w(""),
+    "On And On": w(""),
+    "I Thank God": w("Maverick City Music", "Gospel"),
+    Praise: w("Elevation Worship"),
+    "GOODBYE YESTERDAY": w("Elevation Rhythm", "Gospel"),
+  };
+}
+
+function seedCollections(): Collection[] {
+  return [
+    { name: "Church", colour: collectionColours()[0], songs: ["What a God", "No Other Name", "Owe You Praise", "Who Else", "Build My Life / With Everything", "Reckless Love", "Great Are You Lord", "Give Me Jesus", "Always on Time", "Praise"] },
+    { name: "Contemporary", colour: collectionColours()[1], songs: ["WASHED", "AMAZING!", "TAKEOVER", "Thank God I'm Free", "I Thank God", "Praise", "GOODBYE YESTERDAY", "Keep On Finding More", "On And On"] },
+    { name: "Openers", colour: collectionColours()[4], songs: ["AMAZING!", "TAKEOVER", "GOODBYE YESTERDAY", "Owe You Praise", "Thank God I'm Free"] },
+  ];
+}
+
+export function songInfoOf(s: State, song: string): SongInfo {
+  return s.songInfo[song] ?? { artist: "", genre: "" };
+}
+
+export function setSongInfo(song: string, patch: Partial<SongInfo>) {
+  change(`${song} · ${Object.keys(patch).join(", ")}`, (s) => ({ ...s, songInfo: { ...s.songInfo, [song]: { ...songInfoOf(s, song), ...patch } } }));
+}
+
+/** Put a song in a collection, or take it out. */
+export function toggleInCollection(collection: string, song: string) {
+  change(`${song} · ${collection}`, (s) => ({
+    ...s,
+    collections: s.collections.map((c) => (c.name !== collection ? c : { ...c, songs: c.songs.includes(song) ? c.songs.filter((x) => x !== song) : [...c.songs, song] })),
+  }));
+}
+
+export function newCollection(name: string, songs: string[] = []) {
+  change(`New collection ${name}`, (s) => ({ ...s, collections: [...s.collections, { name, colour: collectionColours()[s.collections.length % collectionColours().length], songs }] }));
+}
+
+export function renameCollection(from: string, to: string) {
+  change(`Collection renamed ${to}`, (s) => ({ ...s, collections: s.collections.map((c) => (c.name === from ? { ...c, name: to } : c)) }));
+}
+
+export function removeCollection(name: string) {
+  change(`Collection ${name} deleted`, (s) => ({ ...s, collections: s.collections.filter((c) => c.name !== name) }));
 }
