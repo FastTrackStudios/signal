@@ -456,6 +456,7 @@ export function Browser({ onClose }: { onClose?: () => void }) {
     [q, s, targetKey],
   );
   const showList = wide || opened || !!q;
+  const listRef = useScrollToCurrent(`${kind.id}|${targetKey}|${q ? "q" : ""}|${opened}`);
 
   return (
     <div ref={ref} style={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column", background: "#0f0f12" }}>
@@ -596,7 +597,7 @@ export function Browser({ onClose }: { onClose?: () => void }) {
 
         {/* The things. */}
         {showList && (
-          <div style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
+          <div ref={listRef} style={{ position: "relative", flex: 1, minWidth: 0, overflowY: "auto" }}>
             {q ? (
               results.length ? (
                 results.map((i) => {
@@ -616,6 +617,23 @@ export function Browser({ onClose }: { onClose?: () => void }) {
       </div>
     </div>
   );
+}
+
+/** Scroll the current one (marked data-current) into the middle of a
+ *  scrolling list, whenever `key` changes — open a kind or a preset and
+ *  what's in use is in view, no hunting. */
+function useScrollToCurrent(key: string) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current?.querySelector<HTMLElement>('[data-current="true"]');
+    const box = ref.current;
+    if (!el || !box) return;
+    // In the list's own pixels (the stage may be scaled).
+    const k = box.getBoundingClientRect().height / box.offsetHeight || 1;
+    const within = (el.getBoundingClientRect().top - box.getBoundingClientRect().top) / k + box.scrollTop;
+    box.scrollTop = Math.max(0, within - box.clientHeight / 2 + el.offsetHeight / 2);
+  }, [key]);
+  return ref;
 }
 
 function groupsOf(kinds: Kind[]): [string, Kind[]][] {
@@ -702,12 +720,14 @@ function PresetColumns({ items, onPick }: { items: Item[]; onPick?: (item: Item)
     return () => ro.disconnect();
   }, []);
   const preset = presets.find((p) => p.name === picked) ?? presets[0];
+  const presetsRef = useScrollToCurrent(`p|${picked}|${step}`);
+  const variationsRef = useScrollToCurrent(`v|${picked}|${step}`);
   const showPresets = !narrow || step === "presets";
   const showVariations = !narrow || step === "variations";
   return (
     <div ref={ref} style={{ flex: 1, minHeight: 0, display: "flex", borderTop: "1px solid var(--rule)" }}>
       {showPresets && (
-        <div style={{ width: narrow ? "100%" : "38%", maxWidth: narrow ? undefined : 240, flexShrink: 0, overflowY: "auto", borderRight: narrow ? undefined : "1px solid var(--rule)" }}>
+        <div ref={presetsRef} style={{ position: "relative", width: narrow ? "100%" : "38%", maxWidth: narrow ? undefined : 240, flexShrink: 0, overflowY: "auto", borderRight: narrow ? undefined : "1px solid var(--rule)" }}>
           {presets.map((p) => {
             const on = p.name === preset?.name;
             const used = p.items.find((i) => i.state) ?? p.items.find((i) => i.inherited);
@@ -720,6 +740,7 @@ function PresetColumns({ items, onPick }: { items: Item[]; onPick?: (item: Item)
                 }}
                 className={on && !narrow ? "" : "pressable"}
                 aria-current={on ? "true" : undefined}
+                data-current={on ? "true" : undefined}
                 style={{ position: "relative", width: "100%", minHeight: 52, display: "flex", alignItems: "center", gap: 10, padding: "6px 12px 6px 14px", textAlign: "left", background: on && !narrow ? "rgba(255,255,255,0.07)" : undefined }}
               >
                 <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: p.colour, opacity: on || used ? 1 : 0.35 }} />
@@ -742,7 +763,7 @@ function PresetColumns({ items, onPick }: { items: Item[]; onPick?: (item: Item)
         </div>
       )}
       {showVariations && preset && (
-        <div style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
+        <div ref={variationsRef} style={{ position: "relative", flex: 1, minWidth: 0, overflowY: "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 48, padding: "8px 16px 6px", borderBottom: "1px solid var(--rule)" }}>
             {narrow && (
               <button className="pressable" onClick={() => setStep("presets")} aria-label="All presets" style={{ width: 32, height: 44, marginLeft: -8, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", borderRadius: "var(--r)" }}>
@@ -775,6 +796,7 @@ function Variation({ item, colour, onPick }: { item: Item; colour: string; onPic
       onClick={onPick}
       disabled={!onPick}
       aria-pressed={on}
+      data-current={on || underneath ? "true" : undefined}
       className={onPick && !on ? "pressable" : ""}
       style={{ position: "relative", width: "100%", display: "flex", alignItems: "flex-start", gap: 12, minHeight: 52, padding: "10px 16px", textAlign: "left", borderBottom: "1px solid var(--rule)", background: on ? `color-mix(in oklab, ${colour} 12%, transparent)` : undefined, cursor: onPick ? "pointer" : "default" }}
     >
@@ -826,6 +848,7 @@ function Row({ item, sub, onPick }: { item: Item; sub?: string; onPick?: () => v
       disabled={!onPick}
       className={onPick && !on ? "pressable" : ""}
       aria-pressed={on}
+      data-current={on || !!item.inherited ? "true" : undefined}
       style={{
         position: "relative",
         width: "100%",
