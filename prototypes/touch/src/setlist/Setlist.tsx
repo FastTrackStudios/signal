@@ -15,6 +15,7 @@ import {
   addPart,
   addSection,
   backToPart,
+  borrowedOf,
   keepLive,
   playing,
   tapStack,
@@ -48,11 +49,11 @@ import {
   useUndo,
   type Sound,
 } from "../store";
-import { Strike, Tape, tapeFor } from "../ui/marks";
+import { SourceIcon, Strike, Tape, tapeFor } from "../ui/marks";
 import { Button, KeyBox, Tabs } from "../ui/kit";
 import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
 import { nameColour, sectionColour, songColour, SONG_PALETTE } from "./colors";
-import { findPatch, profileFor, stacksFor } from "./stacks";
+import { borrowable, findPatch, profileFor, stacksFor, type StackPatch } from "./stacks";
 import { addDays, dateLabel, isoOf, MONTHS, nextDateFor, setHeading, setName, WEEKDAYS, whenLabel, type SetMeta } from "./sets";
 
 const KEYS = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
@@ -532,7 +533,7 @@ function SectionRow({ song, songIndex, index: j, count, onPanel }: { song: strin
       {sec.parts.length} parts
     </span>
   ) : sound ? (
-    <PatchChip name={sound.name} lit={state === "now"} small={narrow} />
+    <PatchChip name={sound.name} borrowed={sound.profile} lit={state === "now"} small={narrow} />
   ) : (
     <span className="t-meta" style={{ fontSize: 13, padding: "0 4px" }}>
       keeps
@@ -646,7 +647,7 @@ function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: s
     if (p.id === "later") movePart(song, j, k, k + 1);
     if (p.id === "delete") removePart(song, j, k);
   };
-  const chip = part.sound ? <PatchChip name={part.sound.name} lit={state === "now"} small /> : <span className="t-meta" style={{ fontSize: 12, padding: "0 4px" }}>keeps</span>;
+  const chip = part.sound ? <PatchChip name={part.sound.name} borrowed={part.sound.profile} lit={state === "now"} small /> : <span className="t-meta" style={{ fontSize: 12, padding: "0 4px" }}>keeps</span>;
   return (
     <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 44, background: state === "now" ? "var(--live-bg)" : undefined }}>
       <button className="pressable" onClick={() => goToSub(j, k)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: `2px 4px 2px ${left}px`, textAlign: "left" }}>
@@ -716,7 +717,7 @@ function Node({ state, colour }: { state: "done" | "now" | "ahead"; colour: stri
 }
 
 /** A patch: its name on a tint of its stack's colour, with a swatch. */
-function PatchChip({ name, lit, small }: { name: string; lit?: boolean; small?: boolean }) {
+function PatchChip({ name, lit, small, borrowed }: { name: string; lit?: boolean; small?: boolean; borrowed?: string }) {
   const colour = tapeFor(stackOf(name));
   return (
     <span
@@ -737,6 +738,11 @@ function PatchChip({ name, lit, small }: { name: string; lit?: boolean; small?: 
     >
       <span style={{ width: 7, height: 7, borderRadius: 2, background: colour, flexShrink: 0 }} />
       <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+      {borrowed && (
+        <span title={`Borrowed from ${borrowed}`} style={{ display: "inline-flex", marginLeft: 1 }}>
+          <SourceIcon from="other" colour={nameColour(borrowed)} size={small ? 10 : 11} />
+        </span>
+      )}
     </span>
   );
 }
@@ -770,8 +776,9 @@ function Badge({ children, tone }: { children: ReactNode; tone?: "live" }) {
 function Stacks({ left }: { left: number }) {
   const s = useStore();
   const song = currentSong(s)?.name;
-  const stacks = stacksFor(song);
+  const stacks = stacksFor(song, borrowedOf(s, song));
   const profile = profileFor(song);
+  const others = [...new Set(stacks.flatMap((st) => st.patches).filter((p) => p.from === "other").map((p) => p.profile!))];
   const now = playing(s);
   const at = now ? findPatch(stacks, now) : null;
   const colour = song ? songColour(song, s.songColours) : "var(--ink-3)";
@@ -788,14 +795,20 @@ function Stacks({ left }: { left: number }) {
             Stacks
           </span>
           <span style={{ flex: 1 }} />
-          <span className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5 }}>
-            <span style={{ width: 6, height: 6, borderRadius: 999, background: colour }} />
-            song
+          <span className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5 }}>
+            <SourceIcon from="song" colour={colour} size={11} />
+            Song
           </span>
-          <span className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5 }}>
-            <span style={{ width: 6, height: 6, borderRadius: 999, border: "1.5px solid var(--ink-3)" }} />
+          <span className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5 }}>
+            <SourceIcon from="profile" colour="var(--ink-3)" size={11} />
             {profile.name}
           </span>
+          {others.map((o) => (
+            <span key={o} className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, color: nameColour(o) }}>
+              <SourceIcon from="other" colour={nameColour(o)} size={11} />
+              {o}
+            </span>
+          ))}
         </div>
         {stacks.map((st, i) => {
           const on = at?.stack === i;
@@ -831,6 +844,16 @@ function partLabel(s: ReturnType<typeof useStore>): string {
   const sec = song ? sectionsOf(s, song)[s.partIndex] : undefined;
   const saved = sec?.parts[s.subIndex]?.sound?.name;
   return saved && saved !== s.live ? saved : "what came before";
+}
+
+/** Where a patch comes from, in words, for its tooltip. */
+function fromLabel(p: StackPatch): string {
+  return p.from === "song" ? "the song's own" : p.from === "other" ? `borrowed from ${p.profile}` : `from ${p.profile}, passed through`;
+}
+
+/** The colour of a patch's source mark. */
+function markColour(p: StackPatch, songColour: string): string {
+  return p.from === "song" ? songColour : p.from === "other" ? nameColour(p.profile!) : "var(--ink-3)";
 }
 
 /** One stack: its name, the patch a tap plays, its rotation as dots (the
@@ -880,15 +903,15 @@ function StackRow({ stack, on, pos, songColour: colour }: { stack: ReturnType<ty
               return (
                 <span
                   key={p.name}
-                  title={`${p.name} — ${song ? "the song's" : "from the profile"}`}
+                  title={`${p.name} — ${fromLabel(p)}`}
                   style={{
                     width: lit ? 12 : 5,
                     height: 5,
                     borderRadius: 999,
                     flexShrink: 0,
                     transition: "width 160ms var(--ease)",
-                    background: song ? colour : lit ? "var(--ink-2)" : "transparent",
-                    boxShadow: song ? undefined : `inset 0 0 0 1.25px ${lit ? "var(--ink-2)" : "var(--ink-3)"}`,
+                    background: song ? colour : p.from === "other" ? nameColour(p.profile!) : lit ? "var(--ink-2)" : "transparent",
+                    boxShadow: song || p.from === "other" ? undefined : `inset 0 0 0 1.25px ${lit ? "var(--ink-2)" : "var(--ink-3)"}`,
                     opacity: song && !lit ? 0.55 : 1,
                   }}
                 />
@@ -897,20 +920,11 @@ function StackRow({ stack, on, pos, songColour: colour }: { stack: ReturnType<ty
           </span>
         )}
       </span>
-      <span
-        style={{
-          flexShrink: 0,
-          fontSize: 10,
-          fontWeight: 700,
-          letterSpacing: "0.06em",
-          padding: "2px 6px",
-          borderRadius: 3,
-          color: patch.from === "song" ? colour : "var(--ink-3)",
-          background: patch.from === "song" ? `color-mix(in srgb, ${colour} 14%, transparent)` : "transparent",
-          boxShadow: patch.from === "song" ? undefined : "inset 0 0 0 1px var(--rule-strong)",
-        }}
-      >
-        {patch.from === "song" ? "SONG" : "PROFILE"}
+      <span title={fromLabel(patch)} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
+        {patch.from === "other" && (
+          <span style={{ fontSize: 11, fontWeight: 650, color: nameColour(patch.profile!) }}>{patch.profile}</span>
+        )}
+        <SourceIcon from={patch.from} colour={markColour(patch, colour)} size={13} />
       </span>
       <span style={{ width: 16, flexShrink: 0, display: "flex", justifyContent: "center", color: "var(--live)" }}>
         {on && many && (
@@ -1013,7 +1027,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
       const song = set.songs[panel.song];
       title = song.name;
       sub = "The patch it starts on";
-      body = <PatchList song={song.name} current={song.start || null} defaultLabel="The profile's default" onPick={(p) => setStart(panel.song, p ?? "")} />;
+      body = <PatchList song={song.name} current={song.start || null} defaultLabel="The profile's default" onPick={(p) => setStart(panel.song, p?.name ?? "")} />;
       break;
     }
     case "colour": {
@@ -1063,7 +1077,7 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
           song={panel.song}
           current={part?.sound?.name ?? null}
           defaultLabel="Keep what plays"
-          onPick={(p) => setSectionSound(panel.song, panel.section, p ? { kind: "patch", name: p } : null, k)}
+          onPick={(p) => setSectionSound(panel.song, panel.section, p ? { kind: "patch", ...p } : null, k)}
         />
       );
       break;
@@ -1106,40 +1120,93 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
   );
 }
 
-function PatchList({ song, current, defaultLabel, onPick }: { song?: string; current: string | null; defaultLabel: string; onPick: (p: string | null) => void }) {
+type Pick = { name: string; profile?: string } | null;
+
+function PatchList({ song, current, defaultLabel, onPick }: { song?: string; current: string | null; defaultLabel: string; onPick: (p: Pick) => void }) {
   // Every stack of the song's profile, the song's own patches first in
-  // each: what its sections were dialled in with, then what passes through.
+  // each: what its sections were dialled in with, then what passes through,
+  // then what its parts borrow. Other profiles' patches wait below.
   const s = useStore();
-  const colour = song ? songColour(song, s.songColours) : undefined;
+  const colour = song ? songColour(song, s.songColours) : "var(--ink-3)";
+  const profile = profileFor(song);
+  const others = borrowable(song);
+  const [showOthers, setShowOthers] = useState(false);
   return (
     <div style={{ padding: "10px 14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
       <Cell title={defaultLabel} on={current === null} onClick={() => onPick(null)} />
-      {stacksFor(song).map((st) => (
+      {stacksFor(song, borrowedOf(s, song)).map((st) => (
         <div key={st.name}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
             <Tape colour={tapeFor(st.name)}>{st.name}</Tape>
-            {st.song && <span className="t-meta" style={{ fontSize: 12 }}>song + {profileFor(song).name}</span>}
           </div>
-          {st.patches.length === 0 ? (
-            <div className="t-meta" style={{ fontSize: 13, padding: "4px 2px" }}>
-              Nothing in {st.name} yet.
-            </div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 6 }}>
-              {st.patches.map((p) => (
-                <Cell key={p.name} title={p.name} swatch={p.from === "song" ? colour : undefined} tag={p.from === "song" ? "Song" : undefined} on={current === p.name} onClick={() => onPick(p.name)} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 6 }}>
+            {st.patches.map((p) => (
+              <Cell
+                key={p.name}
+                title={p.name}
+                mark={<SourceIcon from={p.from} colour={markColour(p, colour)} size={13} />}
+                hint={fromLabel(p)}
+                on={current === p.name}
+                onClick={() => onPick(p.from === "other" ? { name: p.name, profile: p.profile } : { name: p.name })}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+      {others.length > 0 && (
+        <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 10 }}>
+          <button
+            className="pressable"
+            onClick={() => setShowOthers(!showOthers)}
+            aria-expanded={showOthers}
+            style={{ width: "100%", minHeight: 44, display: "flex", alignItems: "center", gap: 10, padding: "0 4px", borderRadius: "var(--r)", textAlign: "left" }}
+          >
+            <SourceIcon from="profile" colour="var(--ink-2)" size={14} />
+            <span style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>From another profile</span>
+            <span className="t-meta" style={{ fontSize: 13 }}>
+              {others.map((o) => o.profile).join(" · ")}
+            </span>
+            <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden style={{ transform: showOthers ? "rotate(180deg)" : undefined, color: "var(--ink-3)" }}>
+              <path d="M1 1 L5 5 L9 1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          {showOthers && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 8 }}>
+              <p className="t-meta" style={{ margin: 0, fontSize: 13, lineHeight: 1.4 }}>
+                {song ?? "The song"} plays on {profile.name}. A patch from another profile is borrowed: it joins the stack it sits in there.
+              </p>
+              {others.map((g) => (
+                <div key={g.profile}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, color: nameColour(g.profile) }}>
+                    <SourceIcon from="other" colour={nameColour(g.profile)} size={12} />
+                    <span className="t-label">{g.profile}</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 6 }}>
+                    {g.patches.map((p) => (
+                      <Cell
+                        key={p.name}
+                        title={p.name}
+                        mark={<span style={{ width: 7, height: 7, borderRadius: 2, background: tapeFor(p.stack), flexShrink: 0 }} />}
+                        hint={`${p.stack} in ${g.profile}`}
+                        on={current === p.name}
+                        onClick={() => onPick({ name: p.name, profile: g.profile })}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           )}
         </div>
-      ))}
+      )}
     </div>
   );
 }
 
-function Cell({ title, on, onClick, swatch, tag }: { title: string; on: boolean; onClick: () => void; swatch?: string; tag?: string }) {
+function Cell({ title, on, onClick, mark, hint }: { title: string; on: boolean; onClick: () => void; mark?: ReactNode; hint?: string }) {
   return (
     <button
+      title={hint}
       className={on ? "" : "pressable"}
       onClick={onClick}
       style={{
@@ -1156,11 +1223,8 @@ function Cell({ title, on, onClick, swatch, tag }: { title: string; on: boolean;
         gap: 8,
       }}
     >
-      {swatch && <span style={{ width: 7, height: 7, borderRadius: 999, background: swatch, flexShrink: 0 }} />}
       <span style={{ flex: 1, minWidth: 0 }}>{title}</span>
-      {tag && (
-        <span style={{ fontSize: 10.5, fontWeight: 650, letterSpacing: "0.04em", color: swatch ?? "var(--ink-3)" }}>{tag.toUpperCase()}</span>
-      )}
+      {mark}
     </button>
   );
 }

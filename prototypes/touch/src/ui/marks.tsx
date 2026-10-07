@@ -98,3 +98,25 @@ export function Tape({
     </span>
   );
 }
+
+/** Where a patch comes from, as a mark the size of a letter: a note for the
+ *  song's own, a stack of layers for a profile's (quiet for the profile the
+ *  song plays on, in its own colour for one it borrows from). */
+export function SourceIcon({ from, colour, size = 12 }: { from: "song" | "profile" | "other"; colour: string; size?: number }) {
+  if (from === "song")
+    return (
+      <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden style={{ flexShrink: 0, display: "block" }}>
+        <path d="M4.6 2.2 10 1v6.6" fill="none" stroke={colour} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M4.6 2.2v6.6" fill="none" stroke={colour} strokeWidth="1.4" strokeLinecap="round" />
+        <ellipse cx="3.1" cy="9.2" rx="1.9" ry="1.5" fill={colour} />
+        <ellipse cx="8.5" cy="8" rx="1.9" ry="1.5" fill={colour} />
+      </svg>
+    );
+  return (
+    <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden style={{ flexShrink: 0, display: "block" }}>
+      <path d="M6 1.2 11 3.8 6 6.4 1 3.8Z" fill={from === "other" ? colour : "none"} stroke={colour} strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M1 6.2 6 8.8l5-2.6" fill="none" stroke={colour} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M1 8.4 6 11l5-2.6" fill="none" stroke={colour} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
+    </svg>
+  );
+}

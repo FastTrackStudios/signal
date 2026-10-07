@@ -4,6 +4,7 @@
 // purge; a played song is struck, not removed.
 
 import { useSyncExternalStore } from "react";
+import { stacksFor, type Borrowed } from "./setlist/stacks";
 import { chain, rig, modulesOf, type ModulePreset, type Setlist as RigSetlist, type SongEntry, type SongSlot } from "./data/rig";
 import { parseSetName, setName, type SetMeta } from "./setlist/sets";
 
@@ -16,6 +17,8 @@ export type Setlist = RigSetlist & SetMeta;
 export interface Sound {
   kind: "patch" | "preset";
   name: string;
+  /** Borrowed from this profile, not the one the song plays on. */
+  profile?: string;
 }
 
 /** A part: the smallest step through a song, and the patch it plays. */
@@ -551,11 +554,24 @@ export function backToPart() {
   move((s) => ({ ...s, live: null }));
 }
 
+/** The patches a song's parts borrow from other profiles. */
+export function borrowedOf(s: State, song?: string): Borrowed[] {
+  if (!song) return [];
+  const out: Borrowed[] = [];
+  for (const sec of sectionsOf(s, song))
+    for (const p of sec.parts) if (p.sound?.profile) out.push({ name: p.sound.name, profile: p.sound.profile });
+  return out;
+}
+
 /** Keep the hand-picked patch: the part up plays it from now on. */
 export function keepLive() {
   const song = currentSong(state)?.name;
   const name = state.live;
   if (!song || !name) return;
-  setSectionSound(song, state.partIndex, { kind: "patch", name }, state.subIndex);
+  const hit = stacksFor(song, borrowedOf(state, song))
+    .flatMap((st) => st.patches)
+    .find((p) => p.name === name);
+  const profile = hit?.from === "other" ? hit.profile : undefined;
+  setSectionSound(song, state.partIndex, { kind: "patch", name, ...(profile ? { profile } : {}) }, state.subIndex);
   move((s) => ({ ...s, live: null }));
 }
