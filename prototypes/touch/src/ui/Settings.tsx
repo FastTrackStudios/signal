@@ -7,10 +7,16 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useStage } from "./stage";
+import { currentController, currentRig, useStore, type State } from "../store";
 
 type Kind = "midi" | "audio";
 
-const DETAIL: Record<Kind, string> = { midi: "Morningstar MC8 · in", audio: "voyager · 48 kHz · 128" };
+/** What the link is: the chosen controller, or the audio rig's numbers. */
+export function linkDetail(s: State, kind: Kind): string {
+  if (kind === "midi") return currentController(s).device;
+  const r = currentRig(s);
+  return `${r.name} · ${r.audio.rate / 1000} kHz · ${r.audio.buffer}`;
+}
 
 export type Health = "ok" | "warn" | "down";
 const TONE: Record<Health, string> = { ok: "var(--live)", warn: "#eab308", down: "var(--void)" };
@@ -20,13 +26,14 @@ const SAYS: Record<Health, string> = { ok: "connected", warn: "struggling", down
  *  press away from its settings. */
 export function Indicator({ kind, health = "ok" }: { kind: Kind; health?: Health; compact?: boolean }) {
   const [open, setOpen] = useState(false);
+  const s = useStore();
   const label = kind === "midi" ? "MIDI" : "Audio";
   return (
     <>
       <button
         className="pressable"
         onClick={() => setOpen(true)}
-        title={`${label} ${SAYS[health]}: ${DETAIL[kind]} — settings`}
+        title={`${label} ${SAYS[health]}: ${linkDetail(s, kind)} — settings`}
         aria-label={`${label} ${SAYS[health]} — open ${label} settings`}
         style={{ alignSelf: "stretch", padding: "0 7px", display: "flex", alignItems: "center", color: TONE[health] }}
       >

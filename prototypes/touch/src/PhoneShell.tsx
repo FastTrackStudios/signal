@@ -26,7 +26,7 @@ import { MacroBar } from "./dock/MacroBar";
 import { Switches } from "./dock/Switches";
 import { redo, setPerformMode, undo, useStore, useUndo } from "./store";
 import { MuteButton, PanicButton } from "./ui/Safety";
-import { Indicator, SettingsSheet } from "./ui/Settings";
+import { Indicator, linkDetail, SettingsSheet } from "./ui/Settings";
 import { ModeButton } from "./ui/ModeButton";
 import { SetlistStrip } from "./setlist/SetlistStrip";
 import { Cpu, FootButton, Meters, MODES, Rule, type Dock, type View } from "./App";
@@ -389,8 +389,8 @@ function SideMenu({ offset, view, onView, onClose, docks }: { offset: number; vi
         </div>
         {(
           [
-            ["midi", "MIDI", "Morningstar MC8 · in"],
-            ["audio", "Audio", "48 kHz · 128 samples"],
+            ["midi", "MIDI", linkDetail(s, "midi")],
+            ["audio", "Audio", linkDetail(s, "audio")],
           ] as const
         ).map(([kind, k, v]) => (
           <button key={k} className="pressable" onClick={() => setSettings(kind)} style={{ ...row, minHeight: 44, fontSize: 14 }}>

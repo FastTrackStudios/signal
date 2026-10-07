@@ -107,9 +107,12 @@ export interface State {
    *  rig it has been set up on. */
   guitars: Guitar[];
   guitarIndex: number;
-  /** The audio + MIDI rigs — the interface and controller. */
+  /** The audio rigs — the interface and its settings. */
   rigs: Rig[];
   rigIndex: number;
+  /** The MIDI controllers — chosen apart from the audio rig. */
+  controllers: Controller[];
+  controllerIndex: number;
   /** In Preset mode, the preset and variation playing. */
   presetUp: { preset: string; variation: string } | null;
 }
@@ -185,6 +188,8 @@ function seed(): State {
     guitarIndex: 0,
     rigs: seedRigs(),
     rigIndex: 0,
+    controllers: seedControllers(),
+    controllerIndex: 0,
   };
 }
 
@@ -955,7 +960,17 @@ export interface Rig {
     /** Where presets expect the guitar's peaks, dBFS. */
     targetDb: number;
   };
-  midi: { device: string; channel: number | "Omni"; programChange: boolean; clock: "off" | "send" | "receive" };
+}
+
+/** A MIDI controller and how the rig listens to it. */
+export interface Controller {
+  id: string;
+  name: string;
+  /** Which device it is (its link and switches). */
+  device: string;
+  channel: number | "Omni";
+  programChange: boolean;
+  clock: "off" | "send" | "receive";
 }
 
 /** What an interface offers — the choices its settings are made from. */
@@ -1009,7 +1024,6 @@ export const INTERFACES: Interface[] = [
 /** MIDI controllers, and how each connects. */
 export const MIDI_DEVICES: { name: string; link: "USB" | "Bluetooth"; switches: number }[] = [
   { name: "XSonic AIRSTEP", link: "Bluetooth", switches: 5 },
-  { name: "Morningstar MC8", link: "USB", switches: 8 },
   { name: "Morningstar MC6", link: "USB", switches: 6 },
 ];
 
@@ -1032,16 +1046,21 @@ function seedRigs(): Rig[] {
   return [
     {
       id: "minifuse",
-      name: "MiniFuse + AIRSTEP",
+      name: "MiniFuse 4",
       audio: { device: "Arturia MiniFuse 4", input: "Input 1", rate: 48000, buffer: 128, house: "Outputs 1–2", houseDb: -6, phones: "Phones 1", phonesDb: -12, directMonitor: false, targetDb: -15 },
-      midi: { device: "XSonic AIRSTEP", channel: "Omni", programChange: true, clock: "off" },
     },
     {
       id: "stage",
-      name: "Scarlett + MC6",
+      name: "Scarlett 2i2",
       audio: { device: "Focusrite Scarlett 2i2", input: "Input 1", rate: 48000, buffer: 64, house: "Outputs 1–2", houseDb: 0, phones: "Phones", phonesDb: -18, directMonitor: false, targetDb: -15 },
-      midi: { device: "Morningstar MC6", channel: 1, programChange: true, clock: "off" },
     },
+  ];
+}
+
+function seedControllers(): Controller[] {
+  return [
+    { id: "airstep", name: "AIRSTEP", device: "XSonic AIRSTEP", channel: "Omni", programChange: true, clock: "off" },
+    { id: "mc6", name: "MC6", device: "Morningstar MC6", channel: 1, programChange: true, clock: "off" },
   ];
 }
 
@@ -1108,6 +1127,15 @@ export function gateFor(tone: Tone, level: GateLevel): GateLevel {
 
 export function currentGuitar(s: State): Guitar {
   return s.guitars[s.guitarIndex] ?? s.guitars[0];
+}
+export function currentController(s: State): Controller {
+  return s.controllers[s.controllerIndex] ?? s.controllers[0];
+}
+export function editController(label: string, f: (c: Controller) => Controller) {
+  change(`MIDI · ${label}`, (s) => ({ ...s, controllers: mapAt(s.controllers, s.controllerIndex, f) }));
+}
+export function chooseController(index: number) {
+  change("Controller chosen", (s) => ({ ...s, controllerIndex: index }));
 }
 export function currentRig(s: State): Rig {
   return s.rigs[s.rigIndex] ?? s.rigs[0];

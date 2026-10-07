@@ -19,11 +19,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   chooseGuitar,
+  chooseController,
   chooseRig,
+  currentController,
   currentGuitar,
   currentRig,
   discardToneOverrides,
   editGuitar,
+  editController,
   editRig,
   editTone,
   gateFor,
@@ -43,6 +46,7 @@ import {
   tuneTone,
   useStore,
   type GateLevel,
+  type Controller,
   type Guitar,
   type Rig,
   type Tone,
@@ -117,17 +121,17 @@ function GuitarPhoto({ g, size, radius = 8, style }: { g: Guitar; size?: number;
   return <img src={g.image} alt="" onError={() => setBroken(true)} draggable={false} style={{ ...box, display: "block", objectFit: "cover", objectPosition: "50% 62%" }} />;
 }
 
-function ListHead({ label, onAdd, addLabel }: { label: string; onAdd: (e: React.MouseEvent<HTMLButtonElement>) => void; addLabel: string }) {
+function ListHead({ label, onAdd, addLabel }: { label: string; onAdd?: (e: React.MouseEvent<HTMLButtonElement>) => void; addLabel?: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", minHeight: 44, padding: "8px 4px 0 16px" }}>
       <span className="t-label" style={{ flex: 1, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ink-3)", fontWeight: 700 }}>
         {label}
       </span>
-      <button className="pressable" onClick={onAdd} aria-label={addLabel} style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", borderRadius: "var(--r)" }}>
+      {onAdd && <button className="pressable" onClick={onAdd} aria-label={addLabel} style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", borderRadius: "var(--r)" }}>
         <svg width="13" height="13" viewBox="0 0 12 12" aria-hidden>
           <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
-      </button>
+      </button>}
     </div>
   );
 }
@@ -159,23 +163,43 @@ function SetupList({ wide, tab, onPicked }: { wide: boolean; tab: Tab; onPicked:
           <Menu at={addGuitar.open.at} naming={0} items={[{ kind: "name", id: "add", label: "New guitar…", initial: "New guitar", confirm: "Add", taken: s.guitars.map((x) => x.name) }]} onPick={(p) => newGuitar(p.text)} onClose={addGuitar.close} />
         )}
         <div style={{ height: 14 }} />
-        <ListHead label="Rig" addLabel="New rig" onAdd={addRig.fromButton} />
+        <ListHead label="Audio" addLabel="New audio rig" onAdd={addRig.fromButton} />
         {s.rigs.map((r, i) => (
           <RigRow
             key={r.id}
             r={r}
             index={i}
             inUse={i === s.rigIndex}
-            shown={tab !== "guitar" && i === s.rigIndex}
+            shown={tab === "audio" && i === s.rigIndex}
             onPick={() => {
               if (i !== s.rigIndex) chooseRig(i);
-              onPicked(tab === "guitar" ? "audio" : tab);
+              onPicked("audio");
             }}
           />
         ))}
         {addRig.open && (
-          <Menu at={addRig.open.at} naming={0} items={[{ kind: "name", id: "add", label: "New rig — a copy of this one…", initial: "New rig", confirm: "Add", taken: s.rigs.map((x) => x.name) }]} onPick={(p) => newRig(p.text)} onClose={addRig.close} />
+          <Menu at={addRig.open.at} naming={0} items={[{ kind: "name", id: "add", label: "New audio rig — a copy of this one…", initial: "New rig", confirm: "Add", taken: s.rigs.map((x) => x.name) }]} onPick={(p) => newRig(p.text)} onClose={addRig.close} />
         )}
+        <div style={{ height: 14 }} />
+        <ListHead label="MIDI" />
+        {s.controllers.map((c, i) => {
+          const dev = MIDI_DEVICES.find((d) => d.name === c.device);
+          return (
+            <ListRow
+              key={c.id}
+              inUse={i === s.controllerIndex}
+              shown={tab === "midi" && i === s.controllerIndex}
+              onPick={() => {
+                if (i !== s.controllerIndex) chooseController(i);
+                onPicked("midi");
+              }}
+              lead={<ControllerGlyph switches={dev?.switches ?? 4} on={i === s.controllerIndex} />}
+              title={c.name}
+              sub={`${c.device} · ${dev?.link ?? "USB"}`}
+              menu={<span style={{ width: 44 }} />}
+            />
+          );
+        })}
       </div>
     </aside>
   );
@@ -265,6 +289,7 @@ function SetupDetail({ tab, onTab, onList }: { tab: Tab; onTab: (t: Tab) => void
   const s = useStore();
   const g = currentGuitar(s);
   const r = currentRig(s);
+  const c = currentController(s);
   const tabs: { id: Tab; label: string }[] = [
     { id: "guitar", label: "Guitar" },
     { id: "audio", label: "Audio" },
@@ -283,12 +308,14 @@ function SetupDetail({ tab, onTab, onList }: { tab: Tab; onTab: (t: Tab) => void
               <svg width="14" height="8" viewBox="0 0 14 8" aria-hidden style={{ flexShrink: 0 }}>
                 <path d="M0 4h12M9 1l3 3-3 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                {r.name} · {c.name}
+              </span>
             </span>
           </span>
         </span>
         {/* Guitar · Audio · MIDI */}
-        <span role="tablist" style={{ display: "flex", padding: 3, gap: 2, borderRadius: 10, background: "#0a0a0c", boxShadow: "inset 0 0 0 1px var(--rule)" }}>
+        <span role="tablist" style={{ display: "flex", alignSelf: "stretch", margin: "-8px 0" }}>
           {tabs.map((t) => {
             const on = t.id === tab;
             return (
@@ -298,7 +325,7 @@ function SetupDetail({ tab, onTab, onList }: { tab: Tab; onTab: (t: Tab) => void
                 aria-selected={on}
                 onClick={() => onTab(t.id)}
                 className={on ? "" : "pressable"}
-                style={{ height: 38, minWidth: 84, padding: "0 16px", borderRadius: 8, fontSize: 14, fontWeight: on ? 750 : 600, color: on ? "var(--ink)" : "var(--ink-3)", background: on ? "#26262c" : "transparent", boxShadow: on ? "0 1px 0 rgba(255,255,255,0.06) inset, 0 1px 3px rgba(0,0,0,0.5)" : undefined }}
+                style={{ minWidth: 88, padding: "0 18px", fontSize: 15, fontWeight: on ? 750 : 600, color: on ? "var(--ink)" : "var(--ink-3)", boxShadow: on ? "inset 0 -2px 0 var(--ink)" : undefined }}
               >
                 {t.label}
               </button>
@@ -309,7 +336,7 @@ function SetupDetail({ tab, onTab, onList }: { tab: Tab; onTab: (t: Tab) => void
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         {tab === "guitar" && <GuitarTab g={g} rig={r} />}
         {tab === "audio" && <AudioTab r={r} />}
-        {tab === "midi" && <MidiTab r={r} />}
+        {tab === "midi" && <MidiTab c={c} />}
       </div>
     </div>
   );
@@ -350,7 +377,7 @@ function GuitarTab({ g, rig }: { g: Guitar; rig: Rig }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Where a change lands. */}
         <div style={{ position: "sticky", top: 0, zIndex: 2, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minHeight: 60, padding: "8px 20px", background: "rgba(14,14,17,0.97)", borderBottom: "1px solid var(--rule)" }}>
-          <span style={{ display: "flex", padding: 3, gap: 2, borderRadius: 10, background: "#0a0a0c", boxShadow: "inset 0 0 0 1px var(--rule)" }}>
+          <span style={{ display: "flex", gap: 4 }}>
             {(["guitar", "rig"] as ToneScope[]).map((sc) => {
               const on = sc === scope;
               return (
@@ -359,7 +386,7 @@ function GuitarTab({ g, rig }: { g: Guitar; rig: Rig }) {
                   onClick={() => setScope(sc)}
                   aria-pressed={on}
                   className={on ? "" : "pressable"}
-                  style={{ height: 38, padding: "0 14px", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, fontSize: 13.5, fontWeight: on ? 750 : 600, whiteSpace: "nowrap", color: on ? "var(--ink)" : "var(--ink-3)", background: on ? (sc === "rig" ? `color-mix(in oklab, ${RIG_COLOUR} 22%, #1c1c21)` : "#26262c") : "transparent" }}
+                  style={{ height: 44, padding: "0 14px", display: "flex", alignItems: "center", gap: 8, borderRadius: "var(--r)", fontSize: 14, fontWeight: on ? 750 : 600, whiteSpace: "nowrap", color: on ? "var(--ink)" : "var(--ink-3)", background: on ? (sc === "rig" ? `color-mix(in oklab, ${RIG_COLOUR} 20%, transparent)` : "rgba(255,255,255,0.08)") : "transparent" }}
                 >
                   {sc === "rig" && <OverrideIcon colour={on ? RIG_COLOUR : "currentColor"} size={12} />}
                   {sc === "guitar" ? "Guitar default" : `Only on ${rig.name}`}
@@ -443,7 +470,7 @@ function Select<T extends string | number>({ label, value, options, show = Strin
         onClick={menu.fromButton}
         aria-label={`${label}: ${show(value)}`}
         aria-haspopup="menu"
-        style={{ width, minWidth: 0, height: 44, padding: "0 12px 0 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: "var(--r)", background: "#17171b", boxShadow: "inset 0 0 0 1px var(--rule-strong)", textAlign: "left" }}
+        style={{ width, minWidth: 0, height: 44, padding: "0 12px 0 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: "var(--r)", background: "rgba(255,255,255,0.06)", textAlign: "left" }}
       >
         <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 650, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{show(value)}</span>
         <svg width="11" height="7" viewBox="0 0 11 7" aria-hidden style={{ flexShrink: 0, color: "var(--ink-3)" }}>
@@ -549,8 +576,10 @@ function AudioTab({ r }: { r: Rig }) {
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14 }}>
           <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>Guitar input</h2>
         </div>
-        <Inputs r={r} />
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, minHeight: 52, borderTop: "1px solid var(--rule)" }}>
+        <div style={{ margin: "0 -20px" }}>
+          <Inputs r={r} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6, minHeight: 52 }}>
           <span style={{ flex: 1, fontSize: 15, fontWeight: 700 }}>Direct monitor</span>
           <Toggle on={a.directMonitor} label="Direct monitor" onFlip={() => set(a.directMonitor ? "direct monitor off" : "direct monitor on", "directMonitor", !a.directMonitor)} />
         </div>
@@ -574,7 +603,7 @@ function Inputs({ r }: { r: Rig }) {
   const sig = useSignal();
   const dev = interfaceOf(r);
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(dev.inputs.length, 4)}, minmax(0, 1fr))`, gap: 8 }}>
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(dev.inputs.length, 4)}, minmax(0, 1fr))`, borderTop: "1px solid var(--rule)", borderBottom: "1px solid var(--rule)" }}>
       {dev.inputs.map((inp, i) => {
         const on = inp.name === r.audio.input;
         // Only the guitar's input has signal; the rest sit at the floor.
@@ -585,10 +614,11 @@ function Inputs({ r }: { r: Rig }) {
             onClick={() => !on && editRig(`input ${inp.name}`, (y) => ({ ...y, audio: { ...y.audio, input: inp.name } }))}
             className={on ? "" : "pressable"}
             aria-pressed={on}
-            style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, minHeight: 72, padding: "10px 12px", borderRadius: "var(--r-md)", textAlign: "left", background: on ? "rgba(34,197,94,0.08)" : "#141418", boxShadow: on ? "inset 0 0 0 2px var(--live)" : "inset 0 0 0 1px var(--rule)" }}
+            style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, minHeight: 68, padding: "10px 14px", textAlign: "left", borderLeft: i ? "1px solid var(--rule)" : undefined, background: on ? "rgba(34,197,94,0.07)" : undefined }}
           >
+            {on && <span aria-hidden style={{ position: "absolute", left: 0, right: 0, top: 0, height: 3, background: "var(--live)" }} />}
             {/* Its level, upright. */}
-            <span aria-hidden style={{ position: "relative", width: 8, height: 48, borderRadius: 3, background: "#08080a", overflow: "hidden", flexShrink: 0 }}>
+            <span aria-hidden style={{ position: "relative", width: 6, height: 40, borderRadius: 2, background: "#08080a", overflow: "hidden", flexShrink: 0 }}>
               <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: `${Math.min(100, lvl * 100)}%`, background: lvl > 0.9 ? "#f87171" : "var(--live)" }} />
             </span>
             <span style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
@@ -638,7 +668,9 @@ function OutputStrip({ kind, r }: { kind: "house" | "phones"; r: Rig }) {
           onPick={(v) => editRig(`${kind} output`, (y) => ({ ...y, audio: { ...y.audio, [kind]: v } }))}
         />
       </div>
-      <Fader value={db} min={-60} max={6} step={0.5} label={`${kind === "house" ? "House" : "Phones"} level`} level={Math.min(1, level) * fill} hot={level > 0.95} show={(v) => (v <= -60 ? "−∞" : `${signed(v)} dB`)} onChange={setDb} />
+      <div style={{ display: "flex" }}>
+        <Fader value={db} min={-60} max={6} step={0.5} label={`${kind === "house" ? "House" : "Phones"} level`} level={Math.min(1, level) * fill} hot={level > 0.95} show={(v) => (v <= -60 ? "−∞" : `${signed(v)} dB`)} onChange={setDb} />
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <button
           className={check ? "" : "pressable"}
@@ -658,7 +690,7 @@ function OutputStrip({ kind, r }: { kind: "house" | "phones"; r: Rig }) {
 function Fader({ value, min, max, step, label, level, hot, show, onChange }: { value: number; min: number; max: number; step: number; label: string; level?: number; hot?: boolean; show: (v: number) => string; onChange: (v: number) => void }) {
   const fill = (value - min) / (max - min);
   return (
-    <div style={{ position: "relative", flex: 1, minWidth: 0, height: 52, borderRadius: 10, background: "#0b0b0e", boxShadow: "inset 0 0 0 1px var(--rule)", overflow: "hidden" }}>
+    <div style={{ position: "relative", flex: 1, minWidth: 0, height: 52, borderRadius: 6, background: "#0b0b0e", overflow: "hidden" }}>
       <span aria-hidden style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${fill * 100}%`, background: "linear-gradient(90deg, #1e1e24, #2a2a31)" }} />
       {level !== undefined && <span aria-hidden style={{ position: "absolute", left: 0, bottom: 0, height: 4, width: `${Math.max(0, Math.min(1, level)) * 100}%`, background: hot ? "#f87171" : "var(--live)" }} />}
       <span aria-hidden style={{ position: "absolute", top: 8, bottom: 8, left: `calc(${fill * 100}% - 2px)`, width: 4, borderRadius: 2, background: "#f4f4f5" }} />
@@ -703,77 +735,70 @@ interface Heard {
   text: string;
 }
 
-function MidiTab({ r }: { r: Rig }) {
-  const m = r.midi;
-  const ctl = MIDI_DEVICES.find((d) => d.name === m.device);
+function MidiTab({ c }: { c: Controller }) {
+  const dev = MIDI_DEVICES.find((d) => d.name === c.device);
   const [pressed, setPressed] = useState<number | null>(null);
   const [heard, setHeard] = useState<Heard[]>([]);
-  const set = <K extends keyof Rig["midi"]>(label: string, k: K, v: Rig["midi"][K]) => editRig(label, (y) => ({ ...y, midi: { ...y.midi, [k]: v } }));
+  useEffect(() => setHeard([]), [c.id]);
+  const set = <K extends keyof Controller>(label: string, k: K, v: Controller[K]) => editController(label, (y) => ({ ...y, [k]: v }));
   const press = (i: number) => {
     setPressed(i);
     setTimeout(() => setPressed((p) => (p === i ? null : p)), 220);
-    const ch = m.channel === "Omni" ? 1 : m.channel;
+    const ch = c.channel === "Omni" ? 1 : c.channel;
     setHeard((h) => [{ at: Date.now(), text: `Switch ${i + 1} · CC ${20 + i} · 127 · ch ${ch}` }, ...h].slice(0, 6));
   };
   return (
     <>
       <section style={{ borderBottom: "1px solid var(--rule)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "18px 20px 6px" }}>
-          <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>Controller</h2>
-          {ctl && (
+          <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>{c.device}</h2>
+          {dev && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, color: "var(--ink-3)" }}>
               <span style={{ width: 8, height: 8, borderRadius: 999, background: "var(--live)" }} />
-              {ctl.link === "Bluetooth" ? "Bluetooth MIDI · connected" : "USB · connected"}
+              {dev.link === "Bluetooth" ? "Bluetooth MIDI · connected" : "USB · connected"}
             </span>
           )}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) repeat(2, minmax(0, 1fr))" }}>
-          <Cell label="Device">
-            <Select label="Controller" value={m.device} options={[...MIDI_DEVICES.map((d) => d.name), "None"]} detail={(v) => MIDI_DEVICES.find((d) => d.name === v)?.link} onPick={(v) => set(`controller ${v}`, "device", v)} />
-          </Cell>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
           <Cell label="Listens on">
-            <Select label="MIDI channel" value={m.channel} options={["Omni", ...Array.from({ length: 16 }, (_, i) => i + 1)] as (number | "Omni")[]} show={(c) => (c === "Omni" ? "Omni · all" : `Channel ${c}`)} onPick={(v) => set("channel", "channel", v)} />
+            <Select label="MIDI channel" value={c.channel} options={["Omni", ...Array.from({ length: 16 }, (_, i) => i + 1)] as (number | "Omni")[]} show={(v) => (v === "Omni" ? "Omni · all" : `Channel ${v}`)} onPick={(v) => set("channel", "channel", v)} />
           </Cell>
           <Cell label="Clock">
-            <Select label="MIDI clock" value={m.clock} options={["off", "send", "receive"] as Rig["midi"]["clock"][]} show={(c) => (c === "off" ? "Off" : c === "send" ? "Send tempo" : "Follow it")} onPick={(v) => set("clock", "clock", v)} />
+            <Select label="MIDI clock" value={c.clock} options={["off", "send", "receive"] as Controller["clock"][]} show={(v) => (v === "off" ? "Off" : v === "send" ? "Send tempo" : "Follow it")} onPick={(v) => set("clock", "clock", v)} />
           </Cell>
         </div>
       </section>
-      {ctl && (
-        <section style={{ padding: "18px 20px 20px", borderBottom: "1px solid var(--rule)" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14 }}>
-            <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>Test it</h2>
+      {dev && (
+        <section style={{ borderBottom: "1px solid var(--rule)" }}>
+          <div style={{ padding: "18px 20px 12px" }}>
+            <h2 style={{ margin: 0, fontSize: 19, fontWeight: 750, letterSpacing: "-0.01em" }}>Switches</h2>
           </div>
-          {/* The controller, top down: its switches in a row. */}
-          <div style={{ display: "flex", gap: 10, padding: 14, borderRadius: 12, background: "linear-gradient(180deg, #1c1c21, #121215)", boxShadow: "inset 0 0 0 1px var(--rule-strong)" }}>
-            {Array.from({ length: ctl.switches }, (_, i) => {
+          {/* Its switches in a row, flush: each lights when pressed. */}
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${dev.switches}, minmax(0, 1fr))`, borderTop: "1px solid var(--rule)", borderBottom: "1px solid var(--rule)" }}>
+            {Array.from({ length: dev.switches }, (_, i) => {
               const on = pressed === i;
               return (
-                <button key={i} onClick={() => press(i)} aria-label={`Switch ${i + 1}`} className="pressable" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "8px 0" }}>
+                <button key={i} onClick={() => press(i)} aria-label={`Switch ${i + 1}`} className="pressable" style={{ position: "relative", minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "14px 0 12px", borderLeft: i ? "1px solid var(--rule)" : undefined, background: on ? "rgba(34,197,94,0.1)" : undefined }}>
                   <span aria-hidden style={{ width: 10, height: 10, borderRadius: 999, background: on ? "var(--live)" : "#2b2b31", boxShadow: on ? "0 0 10px var(--live)" : undefined }} />
-                  <span aria-hidden style={{ width: 44, height: 44, borderRadius: 999, background: on ? "#3a3a42" : "#2a2a30", boxShadow: "inset 0 -3px 0 rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.08)", transform: on ? "translateY(1px)" : undefined }} />
-                  <span className="num" style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-3)" }}>{i + 1}</span>
+                  <span aria-hidden style={{ width: 40, height: 40, borderRadius: 999, background: on ? "#3a3a42" : "#26262b", boxShadow: "inset 0 -3px 0 rgba(0,0,0,0.45)" }} />
+                  <span className="num" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-3)" }}>{i + 1}</span>
                 </button>
               );
             })}
           </div>
-          <div style={{ marginTop: 12, minHeight: 44, display: "flex", flexDirection: "column" }}>
-            {heard.length === 0 ? (
-              <span style={{ fontSize: 13, color: "var(--ink-3)", padding: "12px 0" }}>—</span>
-            ) : (
-              heard.map((h, i) => (
-                <span key={h.at + h.text} className="num" style={{ display: "flex", gap: 12, minHeight: 32, alignItems: "center", fontSize: 13.5, color: i === 0 ? "var(--ink)" : "var(--ink-3)", borderTop: i ? "1px solid var(--rule)" : undefined }}>
-                  {h.text}
-                </span>
-              ))
-            )}
+          <div style={{ padding: "4px 20px 12px", minHeight: 44, display: "flex", flexDirection: "column" }}>
+            {heard.map((h, i) => (
+              <span key={h.at + h.text} className="num" style={{ display: "flex", minHeight: 36, alignItems: "center", fontSize: 14, color: i === 0 ? "var(--ink)" : "var(--ink-3)", borderTop: i ? "1px solid var(--rule)" : undefined }}>
+                {h.text}
+              </span>
+            ))}
           </div>
         </section>
       )}
       <section style={{ padding: "6px 20px 10px", borderBottom: "1px solid var(--rule)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 64 }}>
           <span style={{ flex: 1, fontSize: 15, fontWeight: 700 }}>Program changes</span>
-          <Toggle on={m.programChange} label="Program changes" onFlip={() => set(m.programChange ? "program changes off" : "program changes on", "programChange", !m.programChange)} />
+          <Toggle on={c.programChange} label="Program changes" onFlip={() => set(c.programChange ? "program changes off" : "program changes on", "programChange", !c.programChange)} />
         </div>
       </section>
     </>
@@ -808,12 +833,27 @@ function ListRow({ inUse, shown, onPick, lead, title, sub, menu }: { inUse: bool
 function RigGlyph({ on }: { on: boolean }) {
   // An interface, front on: two inputs and a knob.
   return (
-    <span aria-hidden style={{ width: 52, height: 52, flexShrink: 0, borderRadius: 8, background: "#17171b", boxShadow: "inset 0 0 0 1px var(--rule-strong)", display: "flex", alignItems: "center", justifyContent: "center", color: on ? "var(--ink-2)" : "var(--ink-3)" }}>
-      <svg width="30" height="18" viewBox="0 0 30 18" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <span aria-hidden style={{ width: 52, height: 52, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: on ? "var(--ink-2)" : "var(--ink-3)" }}>
+      <svg width="34" height="20" viewBox="0 0 30 18" fill="none" stroke="currentColor" strokeWidth="1.5">
         <rect x="1" y="1" width="28" height="16" rx="3" />
         <circle cx="8" cy="9" r="3" />
         <circle cx="16" cy="9" r="3" />
         <circle cx="24" cy="9" r="2" fill="currentColor" stroke="none" />
+      </svg>
+    </span>
+  );
+}
+
+function ControllerGlyph({ switches, on }: { switches: number; on: boolean }) {
+  // A floor controller, top down: its switches in a row.
+  const w = 6 + switches * 6;
+  return (
+    <span aria-hidden style={{ width: 52, height: 52, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: on ? "var(--ink-2)" : "var(--ink-3)" }}>
+      <svg width={Math.min(40, w * 1.2)} height="16" viewBox={`0 0 ${w} 12`} fill="none" stroke="currentColor" strokeWidth="1.2">
+        <rect x="0.6" y="0.6" width={w - 1.2} height="10.8" rx="2" />
+        {Array.from({ length: switches }, (_, i) => (
+          <circle key={i} cx={6 + i * 6} cy="6" r="1.8" fill="currentColor" stroke="none" />
+        ))}
       </svg>
     </span>
   );
@@ -866,13 +906,13 @@ function GuitarEq({ tone, scope }: { tone: Tone; scope: ToneScope }) {
   const path = `M0 ${H - 4} C ${cut * 0.6} ${H - 4}, ${cut} ${y(eq.bass)}, ${cut + 30} ${y(eq.bass)} S ${W * 0.45} ${y(eq.mid)}, ${W * 0.55} ${y(eq.mid)} S ${W * 0.85} ${y(eq.treble)}, ${W} ${y(eq.treble)}`;
   return (
     <div style={{ display: "flex", gap: 16, alignItems: "stretch", flexWrap: "wrap" }}>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ flex: "1 1 260px", height: 110, borderRadius: "var(--r-md)", background: "#0b0b0e", boxShadow: "inset 0 0 0 1px var(--rule)" }} aria-label="The input EQ's curve">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ flex: "1 1 260px", height: 110, borderRadius: 6, background: "#0b0b0e" }} aria-label="The input EQ's curve">
         <line x1="0" x2={W} y1={H / 2} y2={H / 2} stroke="#2b2b31" strokeDasharray="3 4" />
         <path d={path} fill="none" stroke="#22C55E" strokeWidth="2.2" vectorEffect="non-scaling-stroke" />
       </svg>
-      <div style={{ flex: "1 1 260px", display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
-        {bands.map((b) => (
-          <label key={b.k} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "8px 0", borderRadius: "var(--r)", background: "#141418" }}>
+      <div style={{ flex: "1 1 260px", display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+        {bands.map((b, i) => (
+          <label key={b.k} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "4px 0", borderLeft: i ? "1px solid var(--rule)" : undefined }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-3)" }}>{b.label}</span>
             <input type="range" min={b.min} max={b.max} step={b.k === "lowCut" ? 5 : 0.5} value={eq[b.k]} onChange={(e) => set(b.k, Number(e.target.value))} style={{ writingMode: "vertical-lr", direction: "rtl", height: 70, accentColor: "#22C55E" }} />
             <span className="num" style={{ fontSize: 13, fontWeight: 700 }}>
@@ -937,7 +977,7 @@ function LevelMatch({ tone, scope, rig }: { tone: Tone; scope: ToneScope; rig: R
           className={matching ? "" : "pressable"}
           disabled={!!matching}
           onClick={() => setMatching({ until: performance.now() + 4000, max: -90 })}
-          style={{ flexShrink: 0, height: 52, minWidth: 128, padding: "0 16px", borderRadius: 10, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", color: matching ? "#04210f" : "var(--ink)", background: matching ? "var(--live)" : "transparent", boxShadow: matching ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
+          style={{ flexShrink: 0, height: 52, minWidth: 128, padding: "0 16px", borderRadius: 6, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", color: matching ? "#04210f" : "var(--ink)", background: matching ? "var(--live)" : "transparent", boxShadow: matching ? undefined : "inset 0 0 0 1px var(--rule-strong)" }}
         >
           {matching ? "Play…" : "Match level"}
         </button>
@@ -1003,7 +1043,7 @@ function Gates({ tone, scope }: { tone: Tone; scope: ToneScope }) {
         }}
         onPointerUp={() => (drag.current = null)}
         onPointerCancel={() => (drag.current = null)}
-        style={{ position: "relative", height: 64, borderRadius: 10, background: "#08080a", boxShadow: "inset 0 0 0 1px var(--rule)", touchAction: "none", cursor: "ew-resize", overflow: "hidden" }}
+        style={{ position: "relative", height: 64, borderRadius: 6, background: "#08080a", touchAction: "none", cursor: "ew-resize", overflow: "hidden" }}
       >
         <span aria-hidden style={{ position: "absolute", left: 0, top: 26, bottom: 10, width: pct(now), borderRadius: "0 3px 3px 0", background: now >= tone.gates.default ? "rgba(34,197,94,0.55)" : "#3f3f46" }} />
         {THRESHOLDS.map((t) => {
@@ -1017,9 +1057,9 @@ function Gates({ tone, scope }: { tone: Tone; scope: ToneScope }) {
         })}
       </div>
       {/* Each threshold, to step. */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
-        {THRESHOLDS.map((t) => (
-          <div key={t} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 4px 6px 12px", borderRadius: 8, background: "#141418" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+        {THRESHOLDS.map((t, i) => (
+          <div key={t} style={{ display: "flex", alignItems: "center", gap: 2, padding: "2px 2px 2px 12px", borderLeft: i ? "1px solid var(--rule)" : undefined }}>
             <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
               <span style={{ fontSize: 11.5, fontWeight: 750, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-3)" }}>{GATE_NAME[t]}</span>
               <span className="num" style={{ fontSize: 16, fontWeight: 800 }}>{tone.gates[t]}</span>
