@@ -18,9 +18,18 @@ export interface Sound {
   name: string;
 }
 
-export interface Section {
+/** A part: the smallest step through a song, and the patch it plays. */
+export interface Part {
   name: string;
   sound: Sound | null;
+}
+
+/** A section — Verse 1, Chorus 2 — and the parts it runs through, in order.
+ *  Most sections are one part; a section that changes sound partway (a
+ *  build, a tag) has several. */
+export interface Section {
+  name: string;
+  parts: Part[];
 }
 
 export interface PresetState {
@@ -40,6 +49,8 @@ export interface State {
   sections: Record<string, Section[]>;
   /** The section playing in the song up. */
   partIndex: number;
+  /** The part playing within that section. */
+  subIndex: number;
   presets: PresetState[];
   /** Bypass by chain block id. */
   bypass: Record<string, boolean>;
@@ -55,7 +66,14 @@ export interface State {
   newSongs: SongEntry[];
   /** Colours set by hand, by song name (the rest are their names'). */
   songColours: Record<string, string>;
+  /** What the player switched to by hand, over what the part plays; null
+   *  when the part's own patch is playing. */
+  live: string | null;
+  /** Where each stack's rotation is: the patch a tap on it plays. */
+  stackAt: Record<string, number>;
 }
+
+let seedAt = { section: 0, part: 0 };
 
 function seed(): State {
   const perf = rig.perf;
@@ -68,14 +86,24 @@ function seed(): State {
   }
   const sections: Record<string, Section[]> = {};
   for (const song of rig.library.songs) {
-    sections[song.name] = song.parts.map((p) => ({ name: p, sound: null }));
+    sections[song.name] = song.parts.map((p) => ({ name: p, parts: [{ name: p, sound: null }] }));
   }
   const up = perf.songs[perf.song_index]?.name;
   if (up) {
-    sections[up] = perf.parts.map((p) => ({
-      name: p.section || p.name,
-      sound: p.patch ? { kind: "patch", name: p.patch } : null,
-    }));
+    // The rig's parts, grouped into their sections (runs of one section
+    // name), each keeping its own patch.
+    const grouped: Section[] = [];
+    let at = { section: 0, part: 0 };
+    perf.parts.forEach((p, i) => {
+      const name = p.section || p.name;
+      const last = grouped[grouped.length - 1];
+      const part: Part = { name: p.name, sound: p.patch ? { kind: "patch", name: p.patch } : null };
+      if (last && last.name === name) last.parts.push(part);
+      else grouped.push({ name, parts: [part] });
+      if (i === perf.part_index) at = { section: grouped.length - 1, part: grouped[grouped.length - 1].parts.length - 1 };
+    });
+    sections[up] = grouped;
+    seedAt = at;
   }
   const presets = modulesOf("Preset").map((m) => ({
     name: m.name,
@@ -90,7 +118,8 @@ function seed(): State {
     setIndex,
     songIndex: perf.song_index,
     sections,
-    partIndex: perf.part_index,
+    partIndex: seedAt.section,
+    subIndex: seedAt.part,
     presets,
     bypass,
     blockPick: {},
@@ -99,6 +128,8 @@ function seed(): State {
     side: {},
     newSongs: [],
     songColours: {},
+    live: null,
+    stackAt: {},
   };
 }
 
@@ -160,13 +191,18 @@ export function sectionsOf(s: State, song: string): Section[] {
   return s.sections[song] ?? [];
 }
 
-export function setSectionSound(song: string, index: number, sound: Sound | null) {
-  const label = `${song} · ${sectionsOfName(song, index)} → ${sound ? sound.name : "keeps what plays"}`;
-  change(label, (s) => ({
+/** What part `part` of section `index` plays (a one-part section: the
+ *  section's sound). */
+export function setSectionSound(song: string, index: number, sound: Sound | null, part = 0) {
+  const sec = state.sections[song]?.[index];
+  const where = sec && sec.parts.length > 1 ? `${sec.name} · ${sec.parts[part]?.name}` : sectionsOfName(song, index);
+  change(`${song} · ${where} → ${sound ? sound.name : "keeps what plays"}`, (s) => ({
     ...s,
     sections: {
       ...s.sections,
-      [song]: sectionsOf(s, song).map((x, i) => (i === index ? { ...x, sound } : x)),
+      [song]: sectionsOf(s, song).map((x, i) =>
+        i === index ? { ...x, parts: x.parts.map((p, j) => (j === part ? { ...p, sound } : p)) } : x,
+      ),
     },
   }));
 }
@@ -220,15 +256,15 @@ export function setSongField(index: number, field: "key" | "bpm", value: string 
 }
 
 export function goToSong(index: number) {
-  move((s) => ({ ...s, songIndex: index, partIndex: 0 }));
+  move((s) => ({ ...s, songIndex: index, partIndex: 0, subIndex: 0, live: null, stackAt: {} }));
 }
 
 export function goToPart(index: number) {
-  move((s) => ({ ...s, partIndex: index }));
+  move((s) => ({ ...s, partIndex: index, subIndex: 0, live: null }));
 }
 
 export function chooseSet(index: number) {
-  move((s) => ({ ...s, setIndex: index, songIndex: 0, partIndex: 0 }));
+  move((s) => ({ ...s, setIndex: index, songIndex: 0, partIndex: 0, subIndex: 0, live: null, stackAt: {} }));
 }
 
 export function newSetlist(meta: SetMeta, songs: SongSlot[] = []) {
@@ -301,7 +337,7 @@ export function pickBlockPreset(id: string, block: string, preset: string) {
 export function addSection(song: string, name: string) {
   change(`${song}: add ${name}`, (s) => ({
     ...s,
-    sections: { ...s.sections, [song]: [...sectionsOf(s, song), { name, sound: null }] },
+    sections: { ...s.sections, [song]: [...sectionsOf(s, song), { name, parts: [{ name, sound: null }] }] },
   }));
 }
 
@@ -394,7 +430,12 @@ export function newSong(name: string, key: string, bpm: number) {
 export function renameSection(song: string, index: number, name: string) {
   change(`${song}: rename section → ${name}`, (s) => ({
     ...s,
-    sections: { ...s.sections, [song]: sectionsOf(s, song).map((x, i) => (i === index ? { ...x, name } : x)) },
+    sections: {
+      ...s.sections,
+      [song]: sectionsOf(s, song).map((x, i) =>
+        i === index ? { ...x, name, parts: x.parts.length === 1 && x.parts[0].name === x.name ? [{ ...x.parts[0], name }] : x.parts } : x,
+      ),
+    },
   }));
 }
 
@@ -425,4 +466,96 @@ export function setSongColour(name: string, colour: string | null) {
     else delete songColours[name];
     return { ...s, songColours };
   });
+}
+
+// ── Parts within a section ───────────────────────────────────────────
+
+/** Play part `part` of section `section` (of the song up). */
+export function goToSub(section: number, part: number) {
+  move((s) => ({ ...s, partIndex: section, subIndex: part, live: null }));
+}
+
+function editParts(s: State, song: string, index: number, f: (parts: Part[]) => Part[]): State {
+  return {
+    ...s,
+    sections: { ...s.sections, [song]: sectionsOf(s, song).map((x, i) => (i === index ? { ...x, parts: f(x.parts) } : x)) },
+  };
+}
+
+/** A new part at the end of a section — it plays what the last one did,
+ *  until it's given its own. */
+export function addPart(song: string, index: number, name: string) {
+  change(`${song}: add part ${name}`, (s) =>
+    editParts(s, song, index, (parts) => [...parts, { name, sound: parts[parts.length - 1]?.sound ?? null }]),
+  );
+}
+
+export function renamePart(song: string, index: number, part: number, name: string) {
+  change(`${song}: rename part → ${name}`, (s) => editParts(s, song, index, (parts) => parts.map((p, j) => (j === part ? { ...p, name } : p))));
+}
+
+export function removePart(song: string, index: number, part: number) {
+  change(`${song}: delete a part`, (s) => {
+    const next = editParts(s, song, index, (parts) => parts.filter((_, j) => j !== part));
+    const sub = index === s.partIndex && part <= s.subIndex ? Math.max(0, s.subIndex - 1) : s.subIndex;
+    return { ...next, subIndex: sub };
+  });
+}
+
+export function movePart(song: string, index: number, from: number, to: number) {
+  change(`${song}: move a part`, (s) =>
+    editParts(s, song, index, (parts) => {
+      if (to < 0 || to >= parts.length) return parts;
+      const list = [...parts];
+      const [x] = list.splice(from, 1);
+      list.splice(to, 0, x);
+      return list;
+    }),
+  );
+}
+
+// ── Playing a stack by hand ──────────────────────────────────────────
+
+/** The patch the part up plays: its own, else the last one before it in
+ *  the song that sets one (a part that "keeps" plays on). */
+export function partPatch(s: State): string | null {
+  const song = currentSong(s)?.name;
+  if (!song) return null;
+  const secs = sectionsOf(s, song);
+  for (let i = s.partIndex; i >= 0; i--) {
+    const parts = secs[i]?.parts ?? [];
+    const from = i === s.partIndex ? Math.min(s.subIndex, parts.length - 1) : parts.length - 1;
+    for (let k = from; k >= 0; k--) if (parts[k].sound) return parts[k].sound!.name;
+  }
+  return currentSong(s)?.start || null;
+}
+
+/** What is playing: the hand-picked patch, else the part's. */
+export function playing(s: State): string | null {
+  return s.live ?? partPatch(s);
+}
+
+/** Tap a stack: play the patch its rotation is on — or, when it is the
+ *  stack already playing, step to its next one. */
+export function tapStack(stack: string, patches: string[], playingIndex: number | null) {
+  if (patches.length === 0) return;
+  move((s) => {
+    const at = playingIndex !== null ? (playingIndex + 1) % patches.length : (s.stackAt[stack] ?? 0) % patches.length;
+    const name = patches[at];
+    return { ...s, live: name === partPatch(s) ? null : name, stackAt: { ...s.stackAt, [stack]: at } };
+  });
+}
+
+/** Back to what the part plays. */
+export function backToPart() {
+  move((s) => ({ ...s, live: null }));
+}
+
+/** Keep the hand-picked patch: the part up plays it from now on. */
+export function keepLive() {
+  const song = currentSong(state)?.name;
+  const name = state.live;
+  if (!song || !name) return;
+  setSectionSound(song, state.partIndex, { kind: "patch", name }, state.subIndex);
+  move((s) => ({ ...s, live: null }));
 }

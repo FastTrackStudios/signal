@@ -12,19 +12,29 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { rig, stackOf } from "../data/rig";
 import {
+  addPart,
   addSection,
+  backToPart,
+  keepLive,
+  playing,
+  tapStack,
   addSong,
   chooseSet,
   currentSet,
+  currentSong,
   deleteSet,
   duplicateSet,
   goToPart,
   goToSong,
+  goToSub,
+  movePart,
   moveSection,
   moveSong,
   newSetlist,
   newSong,
+  removePart,
   removeSection,
+  renamePart,
   removeSong,
   renameSection,
   setDetails,
@@ -36,11 +46,13 @@ import {
   undo,
   useStore,
   useUndo,
+  type Sound,
 } from "../store";
 import { Strike, Tape, tapeFor } from "../ui/marks";
 import { Button, KeyBox, Tabs } from "../ui/kit";
 import { Menu, MoreButton, useMenu, type MenuItem, type Picked } from "../ui/Menu";
 import { nameColour, sectionColour, songColour, SONG_PALETTE } from "./colors";
+import { findPatch, profileFor, stacksFor } from "./stacks";
 import { addDays, dateLabel, isoOf, MONTHS, nextDateFor, setHeading, setName, WEEKDAYS, whenLabel, type SetMeta } from "./sets";
 
 const KEYS = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
@@ -60,7 +72,7 @@ type Panel =
   | { kind: "start"; song: number }
   | { kind: "colour"; song: number }
   | { kind: "details"; mode: "new" | "edit" | "duplicate" }
-  | { kind: "patch"; song: string; section: number };
+  | { kind: "patch"; song: string; section: number; part?: number };
 
 export function Setlist() {
   const s = useStore();
@@ -148,6 +160,18 @@ export function Setlist() {
             {!reordering && (i === s.songIndex || open.has(i)) && <Sections songIndex={i} onPanel={setPanel} />}
           </div>
         ))}
+        {set.songs.length > 0 && !reordering && (
+          <button
+            className="pressable"
+            onClick={() => setPanel({ kind: "add" })}
+            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", minHeight: 52, padding: "0 18px", color: "var(--ink-3)", fontSize: 15, fontWeight: 600, borderTop: "1px solid var(--rule)" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 12 12" aria-hidden>
+              <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+            Add songs
+          </button>
+        )}
         {set.songs.length === 0 && (
           <div style={{ padding: "28px 20px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 10 }}>
             <div style={{ fontSize: 18, fontWeight: 700 }}>No songs yet</div>
@@ -160,7 +184,6 @@ export function Setlist() {
           </div>
         )}
       </div>
-      <Footer onPanel={setPanel} />
       {panel && <PanelView panel={panel} onClose={() => setPanel(null)} />}
     </section>
     </FitCtx.Provider>
@@ -176,6 +199,7 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
   const fit = useFit();
   const items: MenuItem[] = [
     { kind: "head", label: set.name },
+    { kind: "run", id: "add", label: "Add songs…" },
     { kind: "run", id: "edit", label: "Edit details…", detail: "event · date · title" },
     { kind: "run", id: "new", label: "New set…" },
     { kind: "run", id: "duplicate", label: "Duplicate for next week" },
@@ -185,6 +209,7 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
     { kind: "delete", id: "delete", label: "Delete set", disabled: s.setlists.length <= 1 ? "The only set — make another first" : undefined },
   ];
   const onPick = (p: Picked) => {
+    if (p.id === "add") onPanel({ kind: "add" });
     if (p.id === "edit") onPanel({ kind: "details", mode: "edit" });
     if (p.id === "new") onPanel({ kind: "details", mode: "new" });
     if (p.id === "duplicate") onPanel({ kind: "details", mode: "duplicate" });
@@ -227,6 +252,7 @@ function SetHeader({ onPanel, reordering, onReorder }: { onPanel: (p: Panel) => 
           Done
         </Button>
       ) : null}
+      {!reordering && <UndoButton />}
       {!reordering && <MoreButton label="Set actions" onClick={menu.fromButton} />}
       {menu.open && <Menu at={menu.open.at} items={items} onPick={onPick} onClose={menu.close} />}
     </header>
@@ -429,6 +455,8 @@ function Sections({ songIndex, onPanel }: { songIndex: number; onPanel: (p: Pane
       {sections.map((sec, j) => (
         <SectionRow key={`${j}-${sec.name}`} song={song.name} songIndex={songIndex} index={j} count={sections.length} onPanel={onPanel} />
       ))}
+      {/* No sections: the song itself is what plays, so its stacks sit under it. */}
+      {up && sections.length === 0 && <Stacks left={fit === "narrow" ? 20 : 34} />}
       <button
         className="pressable"
         onClick={add.fromButton}
@@ -454,6 +482,11 @@ function Sections({ songIndex, onPanel }: { songIndex: number; onPanel: (p: Pane
   );
 }
 
+/** A section's sound when it is one part; null when it has several. */
+function soundOf(sec: { parts: { sound: Sound | null }[] }): Sound | null {
+  return sec.parts.length === 1 ? sec.parts[0].sound : null;
+}
+
 function SectionRow({ song, songIndex, index: j, count, onPanel }: { song: string; songIndex: number; index: number; count: number; onPanel: (p: Panel) => void }) {
   const s = useStore();
   const sec = sectionsOf(s, song)[j];
@@ -462,10 +495,15 @@ function SectionRow({ song, songIndex, index: j, count, onPanel }: { song: strin
   const state: "done" | "now" | "ahead" = !up ? (songIndex < s.songIndex ? "done" : "ahead") : j < s.partIndex ? "done" : j === s.partIndex ? "now" : "ahead";
   const names = sectionsOf(s, song).map((x) => x.name);
   const narrow = useFit() === "narrow";
+  const sound = soundOf(sec);
+  const several = sec.parts.length > 1;
   const items: MenuItem[] = [
     { kind: "head", label: sec.name },
     { kind: "run", id: "go", label: "Play from here", disabled: state === "now" ? "It's playing" : undefined },
-    { kind: "run", id: "patch", label: "Patch…", detail: sec.sound?.name ?? "keeps" },
+    several
+      ? { kind: "run", id: "parts", label: "Its parts", detail: `${sec.parts.length}` }
+      : { kind: "run", id: "patch", label: "Patch…", detail: sound?.name ?? "keeps" },
+    { kind: "name", id: "part", label: "Add a part…", initial: `${sec.name} · ${sec.parts.length + 1}`, confirm: "Add", taken: sec.parts.map((x) => x.name) },
     { kind: "name", id: "rename", label: "Rename…", initial: sec.name, confirm: "Rename", taken: names },
     { kind: "sep" },
     { kind: "run", id: "earlier", label: "Move earlier", disabled: j === 0 ? "Already first" : undefined },
@@ -473,54 +511,175 @@ function SectionRow({ song, songIndex, index: j, count, onPanel }: { song: strin
     { kind: "sep" },
     { kind: "delete", id: "delete", label: "Delete section" },
   ];
+  const go = () => {
+    if (!up) goToSong(songIndex);
+    goToPart(j);
+  };
   const onPick = (p: Picked) => {
-    if (p.id === "go") {
-      if (!up) goToSong(songIndex);
-      goToPart(j);
-    }
+    if (p.id === "go" || p.id === "parts") go();
     if (p.id === "patch") onPanel({ kind: "patch", song, section: j });
+    if (p.id === "part") {
+      addPart(song, j, p.text);
+      go();
+    }
     if (p.id === "rename") renameSection(song, j, p.text);
     if (p.id === "earlier") moveSection(song, j, j - 1);
     if (p.id === "later") moveSection(song, j, j + 1);
     if (p.id === "delete") removeSection(song, j);
   };
+  const chip = several ? (
+    <span className="t-meta" style={{ fontSize: 13, padding: "3px 8px", borderRadius: 4, background: "rgba(255,255,255,0.06)", color: "var(--ink-2)", fontWeight: 600 }}>
+      {sec.parts.length} parts
+    </span>
+  ) : sound ? (
+    <PatchChip name={sound.name} lit={state === "now"} small={narrow} />
+  ) : (
+    <span className="t-meta" style={{ fontSize: 13, padding: "0 4px" }}>
+      keeps
+    </span>
+  );
   return (
-    <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 50, background: state === "now" ? "var(--live-bg)" : undefined }}>
+    <>
+      <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 50, background: state === "now" && !several ? "var(--live-bg)" : undefined }}>
+        <button
+          className="pressable"
+          onClick={go}
+          style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: narrow ? 8 : 12, minHeight: 50, padding: narrow ? "4px 2px 4px 14px" : "4px 4px 4px 28px", textAlign: "left" }}
+        >
+          <Node state={state} colour={sectionColour(sec.name)} />
+          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+            <span
+              style={{
+                minWidth: 0,
+                fontSize: 15,
+                fontWeight: state === "now" ? 700 : 520,
+                color: state === "done" ? "var(--ink-3)" : state === "now" ? "var(--ink)" : "var(--ink-2)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {sec.name}
+            </span>
+            {narrow && <span style={{ alignSelf: "flex-start", maxWidth: "100%", display: "flex" }}>{chip}</span>}
+          </span>
+        </button>
+        {!narrow && (
+          <button
+            className="pressable"
+            onClick={() => (several ? go() : onPanel({ kind: "patch", song, section: j }))}
+            title={several ? "Show its parts" : "Change the patch"}
+            style={{ width: 178, flexShrink: 0, minHeight: 44, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", justifyContent: "flex-start", borderRadius: "var(--r)" }}
+          >
+            {chip}
+          </button>
+        )}
+        {narrow && <MoreButton label={`${sec.name} actions`} onClick={menu.fromButton} />}
+        {menu.open && <Menu at={menu.open.at} items={items} onPick={onPick} onClose={menu.close} />}
+      </div>
+      {/* The section playing opens into its parts, when it has more than one. */}
+      {up && state === "now" && several && <Parts song={song} index={j} onPanel={onPanel} />}
+      {up && state === "now" && <Stacks left={narrow ? 34 : 50} />}
+    </>
+  );
+}
+
+/** The parts of the section playing: where in it you are, and what each
+ *  part plays — the section's own little timeline. */
+function Parts({ song, index: j, onPanel }: { song: string; index: number; onPanel: (p: Panel) => void }) {
+  const s = useStore();
+  const sec = sectionsOf(s, song)[j];
+  const narrow = useFit() === "narrow";
+  const add = useMenu();
+  const left = narrow ? 34 : 50;
+  return (
+    <div style={{ position: "relative", paddingBottom: 4 }}>
+      <span aria-hidden style={{ position: "absolute", left: left + 3, top: 0, bottom: 26, width: 1, background: "color-mix(in srgb, var(--live) 40%, var(--rule-strong))" }} />
+      {sec.parts.map((part, k) => (
+        <PartRow key={`${k}-${part.name}`} song={song} section={j} index={k} count={sec.parts.length} left={left} onPanel={onPanel} />
+      ))}
       <button
         className="pressable"
-        onClick={() => {
-          if (!up) goToSong(songIndex);
-          goToPart(j);
-        }}
-        style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: narrow ? 8 : 12, minHeight: 50, padding: narrow ? "4px 2px 4px 14px" : "4px 4px 4px 28px", textAlign: "left" }}
+        onClick={add.fromButton}
+        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", minHeight: 36, padding: `0 14px 0 ${left - 2}px`, color: "var(--ink-3)", fontSize: 13, fontWeight: 600 }}
       >
-        <Node state={state} colour={sectionColour(sec.name)} />
-        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+          <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+        Add a part
+      </button>
+      {add.open && (
+        <Menu
+          at={add.open.at}
+          naming={0}
+          items={[{ kind: "name", id: "add", label: "New part…", initial: `${sec.name} · ${sec.parts.length + 1}`, confirm: "Add", taken: sec.parts.map((x) => x.name) }]}
+          onPick={(p) => addPart(song, j, p.text)}
+          onClose={add.close}
+        />
+      )}
+    </div>
+  );
+}
+
+function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: string; section: number; index: number; count: number; left: number; onPanel: (p: Panel) => void }) {
+  const s = useStore();
+  const part = sectionsOf(s, song)[j].parts[k];
+  const menu = useMenu();
+  const narrow = useFit() === "narrow";
+  const state = k < s.subIndex ? "done" : k === s.subIndex ? "now" : "ahead";
+  const items: MenuItem[] = [
+    { kind: "head", label: part.name },
+    { kind: "run", id: "go", label: "Play from here", disabled: state === "now" ? "It's playing" : undefined },
+    { kind: "run", id: "patch", label: "Patch…", detail: part.sound?.name ?? "keeps" },
+    { kind: "name", id: "rename", label: "Rename…", initial: part.name, confirm: "Rename" },
+    { kind: "sep" },
+    { kind: "run", id: "earlier", label: "Move earlier", disabled: k === 0 ? "Already first" : undefined },
+    { kind: "run", id: "later", label: "Move later", disabled: k === count - 1 ? "Already last" : undefined },
+    { kind: "sep" },
+    { kind: "delete", id: "delete", label: "Delete part", disabled: count <= 1 ? "A section keeps at least one part" : undefined },
+  ];
+  const onPick = (p: Picked) => {
+    if (p.id === "go") goToSub(j, k);
+    if (p.id === "patch") onPanel({ kind: "patch", song, section: j, part: k });
+    if (p.id === "rename") renamePart(song, j, k, p.text);
+    if (p.id === "earlier") movePart(song, j, k, k - 1);
+    if (p.id === "later") movePart(song, j, k, k + 1);
+    if (p.id === "delete") removePart(song, j, k);
+  };
+  const chip = part.sound ? <PatchChip name={part.sound.name} lit={state === "now"} small /> : <span className="t-meta" style={{ fontSize: 12, padding: "0 4px" }}>keeps</span>;
+  return (
+    <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 44, background: state === "now" ? "var(--live-bg)" : undefined }}>
+      <button className="pressable" onClick={() => goToSub(j, k)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: `2px 4px 2px ${left}px`, textAlign: "left" }}>
         <span
           style={{
-            minWidth: 0,
-            fontSize: 15,
-            fontWeight: state === "now" ? 700 : 520,
-            color: state === "done" ? "var(--ink-3)" : state === "now" ? "var(--ink)" : "var(--ink-2)",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
+            position: "relative",
+            zIndex: 1,
+            width: 8,
+            height: 8,
+            borderRadius: 999,
+            flexShrink: 0,
+            background: state === "now" ? "var(--live)" : "var(--sheet)",
+            border: `1.5px solid ${state === "now" ? "var(--live)" : state === "done" ? "var(--ink-3)" : "var(--dim)"}`,
           }}
-        >
-          {sec.name}
-        </span>
-        {narrow && (sec.sound ? <span style={{ alignSelf: "flex-start", maxWidth: "100%", display: "flex" }}><PatchChip name={sec.sound.name} lit={state === "now"} small /></span> : <span className="t-meta" style={{ fontSize: 12 }}>keeps</span>)}
+        />
+        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontSize: 14, fontWeight: state === "now" ? 650 : 500, color: state === "done" ? "var(--ink-3)" : state === "now" ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {part.name}
+          </span>
+          {narrow && <span style={{ alignSelf: "flex-start", display: "flex", maxWidth: "100%" }}>{chip}</span>}
         </span>
       </button>
-      {!narrow && <button
-        className="pressable"
-        onClick={() => onPanel({ kind: "patch", song, section: j })}
-        title="Change the patch"
-        style={{ width: 178, flexShrink: 0, minHeight: 44, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", justifyContent: "flex-start", borderRadius: "var(--r)" }}
-      >
-        {sec.sound ? <PatchChip name={sec.sound.name} lit={state === "now"} /> : <span className="t-meta" style={{ fontSize: 13, padding: "0 4px" }}>keeps</span>}
-      </button>}
-      {narrow && <MoreButton label={`${sec.name} actions`} onClick={menu.fromButton} />}
+      {!narrow && (
+        <button
+          className="pressable"
+          onClick={() => onPanel({ kind: "patch", song, section: j, part: k })}
+          title="Change the patch"
+          style={{ width: 178, flexShrink: 0, minHeight: 40, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", borderRadius: "var(--r)" }}
+        >
+          {chip}
+        </button>
+      )}
+      {narrow && <MoreButton label={`${part.name} actions`} onClick={menu.fromButton} />}
       {menu.open && <Menu at={menu.open.at} items={items} onPick={onPick} onClose={menu.close} />}
     </div>
   );
@@ -601,19 +760,188 @@ function Badge({ children, tone }: { children: ReactNode; tone?: "live" }) {
   );
 }
 
-// ── The foot ─────────────────────────────────────────────────────────
+// ── The stacks: every one of the profile's, under what is playing ──
 
-function Footer({ onPanel }: { onPanel: (p: Panel) => void }) {
+/** The song's stacks, indented under the section playing (under the song
+ *  when it has no sections). Every top-level stack of the profile is here,
+ *  so any patch is always in reach: a tap plays a stack, a tap on the one
+ *  playing steps through it. Each patch shows where it came from — the
+ *  song put it there, or the profile passes it through. */
+function Stacks({ left }: { left: number }) {
+  const s = useStore();
+  const song = currentSong(s)?.name;
+  const stacks = stacksFor(song);
+  const profile = profileFor(song);
+  const now = playing(s);
+  const at = now ? findPatch(stacks, now) : null;
+  const colour = song ? songColour(song, s.songColours) : "var(--ink-3)";
+  const where = (() => {
+    const sec = song ? sectionsOf(s, song)[s.partIndex] : undefined;
+    if (!sec) return song ?? "this song";
+    return sec.parts.length > 1 ? (sec.parts[s.subIndex]?.name ?? sec.name) : sec.name;
+  })();
+  return (
+    <div style={{ position: "relative", padding: `2px 8px 8px ${left}px` }}>
+      <div style={{ borderRadius: "var(--r-md)", background: "rgba(0,0,0,0.22)", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 30, padding: "0 10px" }}>
+          <span className="t-label" style={{ fontSize: 10.5, color: "var(--ink-3)" }}>
+            Stacks
+          </span>
+          <span style={{ flex: 1 }} />
+          <span className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: colour }} />
+            song
+          </span>
+          <span className="t-meta" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, border: "1.5px solid var(--ink-3)" }} />
+            {profile.name}
+          </span>
+        </div>
+        {stacks.map((st, i) => {
+          const on = at?.stack === i;
+          const pos = on ? at!.index : (s.stackAt[st.name] ?? 0) % Math.max(1, st.patches.length);
+          return <StackRow key={st.name} stack={st} on={on} pos={pos} songColour={colour} />;
+        })}
+        {s.live && (
+          <div style={{ display: "flex", alignItems: "center", gap: 4, minHeight: 40, padding: "0 4px 0 10px", borderTop: "1px solid var(--rule)" }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--ink-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={`${where} plays ${partLabel(s)}`}>
+              <b style={{ color: "var(--modified)", fontWeight: 650 }}>By hand</b> · {where} has {partLabel(s)}
+            </span>
+            <button className="pressable" onClick={backToPart} style={{ minHeight: 34, padding: "0 10px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 650, color: "var(--ink-2)" }}>
+              Back
+            </button>
+            <button
+              className="pressable"
+              onClick={keepLive}
+              title={`${where} plays ${s.live} from now on`}
+              style={{ minHeight: 34, padding: "0 12px", borderRadius: "var(--r)", fontSize: 13, fontWeight: 650, border: "1px solid var(--rule-strong)" }}
+            >
+              Keep
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** What the part up has saved, for the "by hand" note. */
+function partLabel(s: ReturnType<typeof useStore>): string {
+  const song = currentSong(s)?.name;
+  const sec = song ? sectionsOf(s, song)[s.partIndex] : undefined;
+  const saved = sec?.parts[s.subIndex]?.sound?.name;
+  return saved && saved !== s.live ? saved : "what came before";
+}
+
+/** One stack: its name, the patch a tap plays, its rotation as dots (the
+ *  song's filled in the song's colour, the profile's open), and whose that
+ *  patch is. */
+function StackRow({ stack, on, pos, songColour: colour }: { stack: ReturnType<typeof stacksFor>[number]; on: boolean; pos: number; songColour: string }) {
+  const tape = tapeFor(stack.name);
+  const patch = stack.patches[pos];
+  const many = stack.patches.length > 1;
+  const next = many ? stack.patches[(pos + 1) % stack.patches.length] : undefined;
+  const narrow = useFit() === "narrow";
+  return (
+    <button
+      className="pressable"
+      onClick={() => tapStack(stack.name, stack.patches.map((p) => p.name), on ? pos : null)}
+      title={on && next ? `Tap again for ${next.name}` : `Play ${patch.name}`}
+      aria-pressed={on}
+      style={{
+        position: "relative",
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        minHeight: 44,
+        padding: "0 10px",
+        textAlign: "left",
+        borderTop: "1px solid var(--rule)",
+        background: on ? `color-mix(in srgb, ${tape} 22%, transparent)` : undefined,
+      }}
+    >
+      {on && <span aria-hidden style={{ position: "absolute", left: 0, top: 6, bottom: 6, width: 3, borderRadius: 2, background: "var(--live)" }} />}
+      <span style={{ width: narrow ? 58 : 70, flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: tape }} />
+        <span className="t-label" style={{ fontSize: 10.5, letterSpacing: "0.08em", color: on ? "var(--ink)" : "var(--ink-3)" }}>
+          {stack.name}
+        </span>
+      </span>
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 14, fontWeight: on ? 700 : 560, color: on ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {patch.name}
+        </span>
+        {many && (
+          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {stack.patches.map((p, k) => {
+              const lit = k === pos;
+              const song = p.from === "song";
+              return (
+                <span
+                  key={p.name}
+                  title={`${p.name} — ${song ? "the song's" : "from the profile"}`}
+                  style={{
+                    width: lit ? 12 : 5,
+                    height: 5,
+                    borderRadius: 999,
+                    flexShrink: 0,
+                    transition: "width 160ms var(--ease)",
+                    background: song ? colour : lit ? "var(--ink-2)" : "transparent",
+                    boxShadow: song ? undefined : `inset 0 0 0 1.25px ${lit ? "var(--ink-2)" : "var(--ink-3)"}`,
+                    opacity: song && !lit ? 0.55 : 1,
+                  }}
+                />
+              );
+            })}
+          </span>
+        )}
+      </span>
+      <span
+        style={{
+          flexShrink: 0,
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          padding: "2px 6px",
+          borderRadius: 3,
+          color: patch.from === "song" ? colour : "var(--ink-3)",
+          background: patch.from === "song" ? `color-mix(in srgb, ${colour} 14%, transparent)` : "transparent",
+          boxShadow: patch.from === "song" ? undefined : "inset 0 0 0 1px var(--rule-strong)",
+        }}
+      >
+        {patch.from === "song" ? "SONG" : "PROFILE"}
+      </span>
+      <span style={{ width: 16, flexShrink: 0, display: "flex", justifyContent: "center", color: "var(--live)" }}>
+        {on && many && (
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-label="tap again to step">
+            <path d="M11.5 5.5A5 5 0 1 0 12 9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <path d="M12 2.2v3.6H8.4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/** Undo, as the header's own button: what it would undo, in its title. */
+function UndoButton() {
   const { depth, label } = useUndo();
   return (
-    <footer style={{ flexShrink: 0, display: "flex", gap: 8, padding: 10, borderTop: "1px solid var(--rule)" }}>
-      <Button primary onClick={() => onPanel({ kind: "add" })} style={{ flex: 1 }}>
-        Add songs
-      </Button>
-      <Button onClick={undo} disabled={depth === 0} title={label ? `Undo ${label}` : "Nothing to undo"}>
-        Undo
-      </Button>
-    </footer>
+    <button
+      className={depth ? "pressable" : ""}
+      onClick={undo}
+      disabled={depth === 0}
+      aria-label={label ? `Undo ${label}` : "Nothing to undo"}
+      title={label ? `Undo ${label}` : "Nothing to undo"}
+      onPointerDown={(e) => e.stopPropagation()}
+      style={{ width: 48, height: 48, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--r)", color: depth ? "var(--ink-2)" : "var(--dim)" }}
+    >
+      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+        <path d="M7 4.5 3.5 8 7 11.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M4 8h7.5a4.5 4.5 0 0 1 0 9H9" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      </svg>
+    </button>
   );
 }
 
@@ -726,14 +1054,16 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
     }
     case "patch": {
       const sec = sectionsOf(s, panel.song)[panel.section];
-      title = `${panel.song} · ${sec?.name ?? ""}`;
-      sub = "The patch this section plays";
+      const k = panel.part ?? 0;
+      const part = sec?.parts[k];
+      title = sec && sec.parts.length > 1 ? `${sec.name} · ${part?.name ?? ""}` : `${panel.song} · ${sec?.name ?? ""}`;
+      sub = sec && sec.parts.length > 1 ? `The patch this part plays — ${panel.song}` : "The patch this section plays";
       body = (
         <PatchList
           song={panel.song}
-          current={sec?.sound?.name ?? null}
+          current={part?.sound?.name ?? null}
           defaultLabel="Keep what plays"
-          onPick={(p) => setSectionSound(panel.song, panel.section, p ? { kind: "patch", name: p } : null)}
+          onPick={(p) => setSectionSound(panel.song, panel.section, p ? { kind: "patch", name: p } : null, k)}
         />
       );
       break;
@@ -777,41 +1107,37 @@ function PanelView({ panel: initial, onClose }: { panel: NonNullable<Panel>; onC
 }
 
 function PatchList({ song, current, defaultLabel, onPick }: { song?: string; current: string | null; defaultLabel: string; onPick: (p: string | null) => void }) {
-  // The song's own versions of patches come first: they are what its
-  // sections were dialled in with.
-  const own = song ? rig.patches.filter((p) => p.stack.toLowerCase() === song.toLowerCase()).map((p) => p.name) : [];
+  // Every stack of the song's profile, the song's own patches first in
+  // each: what its sections were dialled in with, then what passes through.
+  const s = useStore();
+  const colour = song ? songColour(song, s.songColours) : undefined;
   return (
     <div style={{ padding: "10px 14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
       <Cell title={defaultLabel} on={current === null} onClick={() => onPick(null)} />
-      {own.length > 0 && (
-        <div>
-          <div className="t-label" style={{ marginBottom: 6, color: "var(--ink-2)" }}>
-            {song}'s own
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 6 }}>
-            {own.map((p) => (
-              <Cell key={p} title={p} swatch={tapeFor(stackOf(p))} on={current === p} onClick={() => onPick(p)} />
-            ))}
-          </div>
-        </div>
-      )}
-      {rig.perf.stacks.filter((st) => st.patches.length > 0).map((st) => (
+      {stacksFor(song).map((st) => (
         <div key={st.name}>
-          <Tape colour={tapeFor(st.name)} style={{ marginBottom: 6 }}>
-            {st.name}
-          </Tape>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 6 }}>
-            {st.patches.map((p) => (
-              <Cell key={p} title={p} on={current === p} onClick={() => onPick(p)} />
-            ))}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <Tape colour={tapeFor(st.name)}>{st.name}</Tape>
+            {st.song && <span className="t-meta" style={{ fontSize: 12 }}>song + {profileFor(song).name}</span>}
           </div>
+          {st.patches.length === 0 ? (
+            <div className="t-meta" style={{ fontSize: 13, padding: "4px 2px" }}>
+              Nothing in {st.name} yet.
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 6 }}>
+              {st.patches.map((p) => (
+                <Cell key={p.name} title={p.name} swatch={p.from === "song" ? colour : undefined} tag={p.from === "song" ? "Song" : undefined} on={current === p.name} onClick={() => onPick(p.name)} />
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>
   );
 }
 
-function Cell({ title, on, onClick, swatch }: { title: string; on: boolean; onClick: () => void; swatch?: string }) {
+function Cell({ title, on, onClick, swatch, tag }: { title: string; on: boolean; onClick: () => void; swatch?: string; tag?: string }) {
   return (
     <button
       className={on ? "" : "pressable"}
@@ -830,8 +1156,11 @@ function Cell({ title, on, onClick, swatch }: { title: string; on: boolean; onCl
         gap: 8,
       }}
     >
-      {swatch && <span style={{ width: 7, height: 7, borderRadius: 2, background: swatch, flexShrink: 0 }} />}
-      {title}
+      {swatch && <span style={{ width: 7, height: 7, borderRadius: 999, background: swatch, flexShrink: 0 }} />}
+      <span style={{ flex: 1, minWidth: 0 }}>{title}</span>
+      {tag && (
+        <span style={{ fontSize: 10.5, fontWeight: 650, letterSpacing: "0.04em", color: swatch ?? "var(--ink-3)" }}>{tag.toUpperCase()}</span>
+      )}
     </button>
   );
 }
