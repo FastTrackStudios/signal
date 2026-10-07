@@ -10,7 +10,9 @@ import { sectionColour, songColour } from "./colors";
 import { tapeFor } from "../ui/marks";
 import { stackOf } from "../data/rig";
 
-export function SetlistStrip() {
+/** `fill`: the strip takes the room it is given (the landscape phone's
+ *  stage, between the bars and the docks), its chips growing to touch size. */
+export function SetlistStrip({ fill }: { fill?: boolean } = {}) {
   const s = useStore();
   const set = currentSet(s);
   const song = set.songs[s.songIndex];
@@ -21,7 +23,7 @@ export function SetlistStrip() {
   const now = playing(s);
   const tape = now ? tapeFor(stackOf(now)) : undefined;
   return (
-    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 8, padding: "8px 0 8px", background: `color-mix(in oklab, ${colour} 7%, var(--sheet))`, borderBottom: "1px solid #000", minWidth: 0 }}>
+    <div style={{ flex: fill ? 1 : undefined, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: fill ? 10 : 8, padding: "8px 0 8px", background: `color-mix(in oklab, ${colour} 7%, var(--sheet))`, borderBottom: "1px solid #000", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 6px 0 10px", minWidth: 0 }}>
         <Step dir={-1} disabled={s.songIndex === 0} onClick={() => goToSong(s.songIndex - 1)} />
         <span className="num" style={{ width: 26, height: 26, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 750, background: colour, color: "#0b0b0e" }}>
@@ -58,7 +60,7 @@ export function SetlistStrip() {
                 onClick={() => goToPart(j)}
                 style={{
                   flexShrink: 0,
-                  height: 34,
+                  height: fill ? 44 : 34,
                   padding: "0 12px",
                   borderRadius: 6,
                   display: "flex",

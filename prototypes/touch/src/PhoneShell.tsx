@@ -110,13 +110,10 @@ export function PhoneShell({ page: firstPage = "setlist", menuOpen = false }: { 
         </Tab>
           </Rail>
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative", paddingRight: safe.right }}>
-        {/* The stage: where you are in the set along the top — the song,
-            its sections, the part — the view in the middle, and the macros
-            sitting on the switches at the foot, at the iPad's sizes. */}
-        <SetlistStrip />
-        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <Placeholder title={view} note="Main area" />
-        </div>
+        {/* The stage: the macros sitting on the switches at the foot, at the
+            iPad's sizes, and all the room above them for where you are in
+            the set — the song, its sections, the part. No view of its own. */}
+        <SetlistStrip fill />
         {macros && (
           <div style={{ flexShrink: 0, position: "relative", zIndex: 4, borderTop: "1px solid #000" }}>
             <MacroBar cols={8} up />
