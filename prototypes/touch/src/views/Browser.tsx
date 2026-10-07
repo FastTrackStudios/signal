@@ -223,15 +223,24 @@ const KINDS: Kind[] = [
       items: (s, bt) => {
         const swapped = bt?.kind === "part" ? overrideOf(s, bt.t).modules[kind] : bt?.kind === "preset" ? s.presetPicks[`${bt.preset}/${bt.variation}/${kind}`] : undefined;
         const own = bt?.kind === "preset" ? "The preset's own" : "The patch's own";
+        // Each module preset with all its variations (its snapshots), each
+        // under its preset: what's swapped in is a preset's variation.
         return [
           ...(bt?.kind === "part" || bt?.kind === "preset" ? [{ id: "", name: own, from: "no swap", colour: "var(--dim)", state: !swapped ? ("picked" as const) : undefined }] : []),
-          ...modulesOf(kind).map((m) => ({
-            id: m.name,
-            name: m.name,
-            from: m.used_by.length ? `in ${plural(m.used_by.length, "preset")}` : undefined,
-            colour: MODULE_COLOUR[kind],
-            state: swapped === m.name ? ("swapped" as const) : undefined,
-          })),
+          ...modulesOf(kind).flatMap((m) =>
+            (m.snapshots.length ? m.snapshots : [m.name]).map((v, n) => {
+              const id = `${m.name} · ${v}`;
+              return {
+                id,
+                name: v,
+                group: m.name,
+                groupColour: MODULE_COLOUR[kind],
+                from: n === 0 && m.used_by.length ? `${m.name} · in ${plural(m.used_by.length, "preset")}` : m.name,
+                colour: MODULE_COLOUR[kind],
+                state: swapped === id ? ("swapped" as const) : undefined,
+              };
+            }),
+          ),
         ];
       },
       apply: (_, bt) => {
@@ -460,7 +469,7 @@ export function Browser({ onClose }: { onClose?: () => void }) {
                 results.map((i) => {
                   const apply = i.kind.apply(s, bt);
                   // A variation found by search says whose it is.
-                  const shown = i.kind.id === "presets" ? { ...i, name: i.id } : i;
+                  const shown = i.group && (i.kind.id === "presets" || i.kind.id.startsWith("module:")) ? { ...i, name: i.id } : i;
                   return <Row key={`${i.kind.id}/${i.id}`} item={shown} sub={`${i.kind.label}${i.from ? ` · ${i.from}` : ""}`} onPick={apply ? () => apply(i) : undefined} />;
                 })
               ) : (
