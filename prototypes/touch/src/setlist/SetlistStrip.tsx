@@ -186,11 +186,14 @@ function nextStep(
   return { label: n.name, detail: `Next song · ${songIndex + 2}`, patch: soundOf(first), colour: colourOf(n.name), go: () => goToSong(songIndex + 1) };
 }
 
+/** A patch with the stack it lands on, the stack named in its colour. */
 function Patch({ name, lit }: { name: string; lit?: boolean }) {
-  const t = tapeFor(stackOf(name));
+  const stack = stackOf(name);
+  const t = tapeFor(stack);
+  const gaffer = t === "var(--tape-gaffer)";
   return (
-    <span style={{ alignSelf: "flex-start", maxWidth: "100%", display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 8px", borderRadius: 4, background: lit ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.05)", fontSize: 12.5, fontWeight: 650, color: lit ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap", overflow: "hidden" }}>
-      <span style={{ width: 7, height: 7, borderRadius: 2, flexShrink: 0, background: t === "var(--tape-gaffer)" ? "var(--ink-3)" : t }} />
+    <span style={{ alignSelf: "flex-start", maxWidth: "100%", display: "inline-flex", alignItems: "center", gap: 7, padding: "2px 8px", borderRadius: 4, background: lit ? "var(--fill-on)" : "var(--fill)", fontSize: 12.5, fontWeight: 650, color: lit ? "var(--ink)" : "var(--ink-2)", whiteSpace: "nowrap", overflow: "hidden" }}>
+      {stack && <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 750, letterSpacing: "0.07em", textTransform: "uppercase", color: gaffer ? "var(--ink-3)" : `color-mix(in oklab, ${t} 80%, white)` }}>{stack}</span>}
       <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
     </span>
   );

@@ -5,7 +5,7 @@
 //   top bar     status only: the menu, the mode the footswitches are in,
 //               health, the meters, the house mute's state
 //   side menu   swipe in from the left edge (or tap ☰): the footswitch
-//               mode, Undo / Redo, the house mute, the rig's health, the
+//               mode, the house mute, the rig's health, the
 //               tuner and the library — what the iPad's top bar holds
 //   foot        the views and the docks, a tab bar
 //
@@ -24,7 +24,7 @@ import { EditView } from "./views/Edit";
 import { OpenSetup, SetupView, useOpenSetup, type SetupTab } from "./views/Setup";
 import { MacroBar } from "./dock/MacroBar";
 import { Switches } from "./dock/Switches";
-import { redo, setPerformMode, undo, useStore, useUndo } from "./store";
+import { setPerformMode, useStore } from "./store";
 import { MuteButton, PanicButton } from "./ui/Safety";
 import { Indicator, linkDetail } from "./ui/Settings";
 import { ModeButton } from "./ui/ModeButton";
@@ -272,7 +272,6 @@ function Rail({ onMenu, children }: { onMenu: () => void; children: ReactNode })
 function SideMenu({ offset, view, onView, onClose, docks }: { offset: number; view: View; onView: (v: View) => void; onClose: () => void; docks?: { macros: boolean; dock: Dock; onMacros: () => void; onSwitches: () => void } }) {
   const s = useStore();
   const safe = useSafe();
-  const { depth, label, redoDepth, redoLabel } = useUndo();
   const openSetup = useOpenSetup();
   const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 12, width: "100%", minHeight: 52, padding: "0 16px", textAlign: "left", fontSize: 16, fontWeight: 600 };
   return (
@@ -379,14 +378,6 @@ function SideMenu({ offset, view, onView, onClose, docks }: { offset: number; vi
           </>
         )}
         <div style={{ height: 1, background: "var(--rule)", margin: "8px 0" }} />
-        <div style={{ display: "flex", padding: "0 8px", gap: 4 }}>
-          <button className={depth ? "pressable" : ""} disabled={!depth} onClick={undo} title={label ? `Undo ${label}` : undefined} style={{ ...row, flex: 1, padding: "0 10px", justifyContent: "center", borderRadius: "var(--r)", color: depth ? "var(--ink)" : "var(--dim)" }}>
-            Undo
-          </button>
-          <button className={redoDepth ? "pressable" : ""} disabled={!redoDepth} onClick={redo} title={redoLabel ? `Redo ${redoLabel}` : undefined} style={{ ...row, flex: 1, padding: "0 10px", justifyContent: "center", borderRadius: "var(--r)", color: redoDepth ? "var(--ink)" : "var(--dim)" }}>
-            Redo
-          </button>
-        </div>
         <div style={{ padding: "8px 12px" }}>
           <div style={{ display: "flex" }}>
             <MuteButton size={48} label />

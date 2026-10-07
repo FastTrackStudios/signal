@@ -28,7 +28,7 @@ import { OpenSetup, SetupView, type SetupTab } from "./views/Setup";
 import { MacroBar } from "./dock/MacroBar";
 import { Phone } from "./Phone";
 import { PhoneShell } from "./PhoneShell";
-import { currentSong, redo, undo, useUndo, useStore, type PerformMode } from "./store";
+import { currentSong, useStore, type PerformMode } from "./store";
 
 const SIDEBAR = 402;
 const TOP = 48;
@@ -309,7 +309,7 @@ function Device({ scale, w: W, h: H, corner }: { scale: number; w: number; h: nu
                   </div>
                 )}
                 {/* The middle: the browser when it's asked for, else nothing. */}
-                <div style={{ flex: 1, minHeight: 0 }}>{browser ? <Browser onClose={() => setBrowser(false)} /> : <Quiet />}</div>
+                <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>{browser ? <Browser onClose={() => setBrowser(false)} /> : null}</div>
                 {dock && <div style={{ flexShrink: 0 }}>{dock === "switches" && <Switches />}</div>}
               </>
             )}
@@ -362,10 +362,6 @@ function LeftSwitch({ value, onChange }: { value: "browser" | "sidebar"; onChang
   );
 }
 
-/** The main area with nothing in it yet: quiet, no instructions. */
-function Quiet() {
-  return <div style={{ height: "100%" }} />;
-}
 
 // ── Top: the rig ─────────────────────────────────────────────────────
 
@@ -391,8 +387,6 @@ function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => voi
         <ModeButton wide />
         <Rule />
         <span style={{ flex: 1 }} />
-        {/* Undo and Redo, for the whole app: every edit anywhere is one step. */}
-        <UndoRedo />
       </div>
 
       <span style={{ flex: 1 }} />
@@ -413,30 +407,6 @@ function TopBar({ sidebar, onSidebar }: { sidebar: boolean; onSidebar: () => voi
   );
 }
 
-export function UndoRedo({ compact }: { compact?: boolean } = {}) {
-  const { depth, label, redoDepth, redoLabel } = useUndo();
-  const btn = (on: boolean, title: string, onClick: () => void, flip: boolean) => (
-    <button
-      onClick={onClick}
-      disabled={!on}
-      aria-label={title}
-      title={title}
-      className={on ? "pressable" : ""}
-      style={{ width: compact ? 34 : 48, display: "flex", alignItems: "center", justifyContent: "center", color: on ? "var(--ink-2)" : "var(--dim)" }}
-    >
-      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden style={{ transform: flip ? "scaleX(-1)" : undefined }}>
-        <path d="M7 4.5 3.5 8 7 11.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M4 8h7.5a4.5 4.5 0 0 1 0 9H9" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      </svg>
-    </button>
-  );
-  return (
-    <div style={{ display: "flex", alignItems: "stretch", paddingLeft: compact ? 0 : 4 }}>
-      {btn(depth > 0, label ? `Undo ${label}` : "Nothing to undo", undo, false)}
-      {btn(redoDepth > 0, redoLabel ? `Redo ${redoLabel}` : "Nothing to redo", redo, true)}
-    </div>
-  );
-}
 
 /** CPU, as a number that jitters the way a real one does. */
 export function Cpu() {
@@ -580,20 +550,21 @@ function BottomBar({ view, onView, dock, onDock, macros, onMacros, browser, onBr
         </>
       )}
       <span style={{ flex: 1 }} />
-      <FootButton label="Setup" on={view === "setup"} onClick={() => onView("setup")}>
-        <>
-          <circle cx="9" cy="9" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M9 1.8v2M9 14.2v2M1.8 9h2M14.2 9h2M3.9 3.9l1.4 1.4M12.7 12.7l1.4 1.4M3.9 14.1l1.4-1.4M12.7 5.3l1.4-1.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </>
-      </FootButton>
-      <FootButton label="Tuner" onClick={() => {}}>
+      <FootButton label="Tuner" pin onClick={() => {}}>
         <path d="M3 13a6 6 0 0 1 12 0M9 13l3-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </FootButton>
+      <Rule />
+      <FootButton label="Setup" on={view === "setup"} onClick={() => onView("setup")}>
+        <GearIcon />
       </FootButton>
     </footer>
   );
 }
 
 /** A bar button in the foot: an icon, its word under it (Session's foot). */
+/** A foot-bar button. A view (Perform, Build, Edit, Setup) is a tab: the
+ *  one open is bright with a bar along its top edge. A dock (`pin`:
+ *  Browser, Macros, Switches) is a toggle: on, it sits in a fill. */
 export function FootButton({ label, on, pin, off, onClick, children }: { label: string; on?: boolean; pin?: boolean; off?: string; onClick: () => void; children: ReactNode }) {
   return (
     <button
@@ -601,27 +572,45 @@ export function FootButton({ label, on, pin, off, onClick, children }: { label: 
       disabled={!!off}
       title={off ?? label}
       aria-pressed={on}
-      className={on || off ? "" : "pressable"}
+      className={off ? "" : "pressable"}
       style={{
+        position: "relative",
         minWidth: 64,
-        margin: "5px 2px",
+        margin: pin ? "6px 2px" : "0 2px",
         padding: "0 10px",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: 3,
-        borderRadius: "var(--r)",
+        gap: 4,
+        borderRadius: pin ? 8 : 0,
         color: off ? "var(--dim)" : on ? "var(--ink)" : "var(--ink-3)",
-        background: on ? "var(--pressed-bg)" : "transparent",
-        boxShadow: on ? `var(--pressed-shadow)${pin ? ", inset 0 -2px 0 var(--ink-2)" : ""}` : undefined,
+        background: pin && on ? "var(--fill-on)" : "transparent",
       }}
     >
-      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
+      {!pin && on && <span aria-hidden style={{ position: "absolute", top: 0, left: 12, right: 12, height: 3, borderRadius: "0 0 3px 3px", background: "var(--ink)" }} />}
+      <svg width="20" height="20" viewBox="0 0 18 18" aria-hidden>
         {children}
       </svg>
-      <span style={{ fontSize: 11, fontWeight: on ? 700 : 600, letterSpacing: "0.02em" }}>{label}</span>
+      <span style={{ fontSize: 11, fontWeight: on ? 700 : 600, letterSpacing: "0.01em" }}>{label}</span>
     </button>
+  );
+}
+
+/** A gear: teeth around a hub. */
+export function GearIcon() {
+  const teeth = 8;
+  const pts: string[] = [];
+  for (let i = 0; i < teeth * 4; i++) {
+    const a = (i / (teeth * 4)) * Math.PI * 2 - Math.PI / 2;
+    const r = i % 4 === 1 || i % 4 === 2 ? 7.6 : 5.9;
+    pts.push(`${(9 + r * Math.cos(a)).toFixed(2)},${(9 + r * Math.sin(a)).toFixed(2)}`);
+  }
+  return (
+    <>
+      <polygon points={pts.join(" ")} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <circle cx="9" cy="9" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </>
   );
 }
 

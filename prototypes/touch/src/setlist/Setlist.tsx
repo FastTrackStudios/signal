@@ -806,7 +806,9 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
           className="pressable"
           // Building (pickRows): a tap picks the section to build into; else it plays there.
           onClick={() => (compose?.pickRows && !several ? pick(song, j) : go())}
-          style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: narrow ? 8 : 12, minHeight: 50, padding: "4px 4px 4px 6px", textAlign: "left" }}
+          // The part being built into (Build) is ringed.
+          aria-pressed={!several && isPicked(s.selection, song, j)}
+          style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: narrow ? 8 : 12, minHeight: 50, padding: "4px 4px 4px 6px", textAlign: "left", borderRadius: "var(--r)", boxShadow: !several && isPicked(s.selection, song, j) ? "inset 0 0 0 1.5px var(--focus-fg)" : undefined }}
         >
           <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
             <span
@@ -825,19 +827,10 @@ function SectionRow({ song, songIndex, index: j, count, onPanel, onGrip }: { son
             <Changes song={song} section={j} />
             {narrow && <span style={{ alignSelf: "flex-start", maxWidth: "100%", display: "flex" }}>{chip}</span>}
           </span>
+          {/* What it plays — set from a stack's ⋯ (Make default). */}
+          {!narrow && <span style={{ flex: "0 1 auto", maxWidth: "64%", minWidth: 0, display: "flex", paddingRight: 10 }}>{chip}</span>}
         </button>
-        {!narrow && (
-          <button
-            className="pressable"
-            onClick={() => (several ? go() : pick(song, j))}
-            title={several ? "Show its parts" : "Change the patch"}
-            aria-pressed={!several && isPicked(s.selection, song, j)}
-            style={{ flex: "0 1 auto", maxWidth: "64%", minWidth: 0, minHeight: 44, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", justifyContent: "flex-start", borderRadius: "var(--r)", boxShadow: !several && isPicked(s.selection, song, j) ? "inset 0 0 0 1.5px var(--focus-fg)" : undefined }}
-          >
-            {chip}
-          </button>
-        )}
-        {narrow && <MoreButton label={`${sec.name} actions`} onClick={menu.fromButton} />}
+        <MoreButton label={`${sec.name} actions`} onClick={menu.fromButton} />
         {menu.open && <Menu at={menu.open.at} items={items} onPick={onPick} onClose={menu.close} />}
       </div>
       {/* The section playing opens into its parts, when it has more than one. */}
@@ -914,7 +907,7 @@ function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: s
   const chip = part.sound ? <PatchChip name={part.sound.kind === "stack" ? `${part.sound.name} stack` : part.sound.name} borrowed={part.sound.profile} lit={state === "now"} small /> : <span className="t-meta" style={{ fontSize: 12, padding: "0 4px" }}>keeps</span>;
   return (
     <div {...menu.longPress()} style={{ position: "relative", display: "flex", alignItems: "center", minHeight: 44, background: state === "now" ? tint(songColour(song, s.songColours), 18) : undefined }}>
-      <button className="pressable" onClick={() => (compose?.pickRows ? pick(song, j, k) : goToSub(j, k))} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: `2px 4px 2px ${left}px`, textAlign: "left" }}>
+      <button className="pressable" onClick={() => (compose?.pickRows ? pick(song, j, k) : goToSub(j, k))} aria-pressed={isPicked(s.selection, song, j, k)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: `2px 4px 2px ${left}px`, textAlign: "left", borderRadius: "var(--r)", boxShadow: isPicked(s.selection, song, j, k) ? "inset 0 0 0 1.5px var(--focus-fg)" : undefined }}>
         <span
           style={{
             position: "relative",
@@ -933,19 +926,10 @@ function PartRow({ song, section: j, index: k, count, left, onPanel }: { song: s
           </span>
           {narrow && <span style={{ alignSelf: "flex-start", display: "flex", maxWidth: "100%" }}>{chip}</span>}
         </span>
+        {!narrow && <span style={{ flex: "0 1 auto", maxWidth: "64%", minWidth: 0, display: "flex", paddingRight: 10 }}>{chip}</span>}
       </button>
-      {!narrow && (
-        <button
-          className="pressable"
-          onClick={() => pick(song, j, k)}
-          title="Change the patch"
-          aria-pressed={isPicked(s.selection, song, j, k)}
-          style={{ flex: "0 1 auto", maxWidth: "64%", minWidth: 0, minHeight: 40, padding: "0 10px 0 4px", marginRight: 6, display: "flex", alignItems: "center", borderRadius: "var(--r)", boxShadow: isPicked(s.selection, song, j, k) ? "inset 0 0 0 1.5px var(--focus-fg)" : undefined }}
-        >
-          {chip}
-        </button>
-      )}
-      {narrow && <MoreButton label={`${part.name} actions`} onClick={menu.fromButton} />}
+
+      <MoreButton label={`${part.name} actions`} onClick={menu.fromButton} />
       {menu.open && <Menu at={menu.open.at} items={items} onPick={onPick} onClose={menu.close} />}
     </div>
   );
@@ -1076,7 +1060,7 @@ export function Stacks({ left, profile: only, reorder }: { left: number; profile
               }}
               style={{ opacity: drag?.from === i ? 0.5 : 1, boxShadow: drag && drag.to === i && drag.from !== i ? `inset 0 ${drag.to < drag.from ? 2 : -2}px 0 var(--ink-2)` : undefined }}
             >
-              <StackRow stack={st} index={i} count={stacks.length} profile={profile} on={on} home={home !== null} where={where} pos={pos} songColour={colour} onGrip={reorder ? onGrip(i) : undefined} />
+              <StackRow stack={st} index={i} count={stacks.length} profile={profile} on={on} home={home !== null} where={where} pos={pos} songColour={colour} onGrip={reorder ? onGrip(i) : undefined} song={song} isDefault={!!saved && saved.stack === i && saved.index === pos} />
               {/* The Profile view opens the stack playing into all its patches. */}
               {reorder && on && <StackPatches profile={profile} stack={st} index={i} pos={pos} />}
             </div>
@@ -1257,7 +1241,7 @@ function markColour(p: StackPatch, songColour: string): string {
 /** One stack: its name, the patch a tap plays, its rotation as dots (the
  *  song's filled in the song's colour, the profile's open), and whose that
  *  patch is. */
-function StackRow({ stack, index: i, count, profile, on, home, where, pos, songColour: colour, onGrip }: { stack: ReturnType<typeof stacksFor>[number]; index: number; count: number; profile: string; on: boolean; home: boolean; where: string; pos: number; songColour: string; onGrip?: (e: React.PointerEvent) => void }) {
+function StackRow({ stack, index: i, count, profile, on, home, where, pos, songColour: colour, onGrip, song, isDefault }: { stack: ReturnType<typeof stacksFor>[number]; index: number; count: number; profile: string; on: boolean; home: boolean; where: string; pos: number; songColour: string; onGrip?: (e: React.PointerEvent) => void; song?: string; isDefault?: boolean }) {
   const s = useStore();
   const menu = useMenu();
   const byHand = on && !!s.live;
@@ -1273,6 +1257,10 @@ function StackRow({ stack, index: i, count, profile, on, home, where, pos, songC
     ...(byHand
       ? [{ kind: "sep" as const }, { kind: "run" as const, id: "keep", label: `Keep for ${where}` }, { kind: "run" as const, id: "back", label: `Back to ${where}'s patch` }]
       : []),
+    // The section (or part) playing gets this patch as its own.
+    ...(song && showing && sectionsOf(s, song).length
+      ? [{ kind: "sep" as const }, { kind: "run" as const, id: "default", label: `Make “${showing.name}” default for ${where}`, disabled: isDefault ? `It's ${where}'s already` : undefined }]
+      : []),
     { kind: "sep" },
     { kind: "name", id: "add", label: "Add a patch…", initial: `${stack.name} ${stack.patches.length + 1}`, confirm: "Add", taken: stack.patches.map((p) => p.name) },
     ...(mine >= 0 ? [{ kind: "name" as const, id: "renamePatch", label: `Rename “${showing.name}”…`, initial: showing.name, confirm: "Rename", taken: stack.patches.map((p) => p.name) }] : []),
@@ -1282,7 +1270,8 @@ function StackRow({ stack, index: i, count, profile, on, home, where, pos, songC
     ...(mine >= 0 ? [{ kind: "sep" as const }, { kind: "delete" as const, id: "removePatch", label: `Remove “${showing.name}”`, disabled: stack.patches.length <= 1 ? "A stack keeps at least one patch" : undefined }] : []),
   ];
   const onPick = (p: Picked) => {
-    if (p.id === "keep") keepLive();
+    if (p.id === "default" && song && showing) setSectionSound(song, s.partIndex, { kind: "patch", name: showing.name, profile: showing.from === "other" ? showing.profile : undefined }, s.subIndex);
+    else if (p.id === "keep") keepLive();
     else if (p.id === "back") backToPart();
     else if (p.id === "add") addStackPatch(profile, def, p.text);
     else if (p.id === "renamePatch") renameStackPatch(profile, def, mine, p.text);
@@ -1384,6 +1373,7 @@ function StackRow({ stack, index: i, count, profile, on, home, where, pos, songC
           </span>
         )}
       </span>
+      {isDefault && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 650, color: "var(--ink-3)" }}>Default</span>}
       {/* Borrowed from another profile: that profile, by name. */}
       {patch.from === "other" && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 650, color: nameColour(patch.profile!) }}>{patch.profile}</span>}
     </button>
