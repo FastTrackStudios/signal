@@ -569,9 +569,6 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
                 if songs.is_empty() {
                     div { style: "padding: 28px 20px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px;",
                         div { style: "font-size: 18px; font-weight: 700;", "No songs yet" }
-                        p { style: "margin: 0; font-size: 14px; font-weight: 500; color: {INK_3}; line-height: 1.45;",
-                            "Add the songs you're playing, in order. Each keeps its own key, tempo and the patch every section plays."
-                        }
                         PrimaryButton { label: "Add songs", onclick: move |()| panel.set(Some(Panel::Add)) }
                     }
                 }
