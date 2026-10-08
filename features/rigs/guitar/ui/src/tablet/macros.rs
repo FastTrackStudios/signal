@@ -207,7 +207,6 @@ fn Cell(
     let label_ink = if greyish(&colour) { INK_2.to_string() } else { lift(&colour) };
     let value_ink = if quiet { INK_3.to_string() } else if wet && v > 0.5 { lift(&colour) } else { INK.to_string() };
     let bg = if open { "#1c1c22" } else if active() { "#18181d" } else { "#111114" };
-    let underline = if open { format!("box-shadow: inset 0 -2px 0 {colour};") } else { String::new() };
     let fill = format!("color-mix(in oklab, {colour} {}%, transparent)", if active() { 32 } else { 22 });
     let hatch = format!(
         "repeating-linear-gradient(135deg, color-mix(in oklab, {colour} {a}%, transparent) 0px, color-mix(in oklab, {colour} {a}%, transparent) 4px, color-mix(in oklab, {colour} {b}%, transparent) 4px, color-mix(in oklab, {colour} {b}%, transparent) 8px)",
@@ -233,7 +232,7 @@ fn Cell(
             role: "slider",
             "aria-label": "{label}",
             "aria-valuetext": "{readout}",
-            style: "position: relative; height: 44px; overflow: hidden; background: {bg}; {underline} touch-action: none; user-select: none; cursor: ew-resize;",
+            style: "position: relative; height: 44px; overflow: hidden; background: {bg}; touch-action: none; user-select: none; cursor: ew-resize;",
             onmounted: move |e| {
                 let el = e.data();
                 spawn(async move {
@@ -304,6 +303,10 @@ fn Cell(
                     });
                 }
             },
+            // Open: its colour along the foot (a bar — Blitz draws no inset shadow).
+            if open {
+                span { style: "position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: {colour};" }
+            }
             // Its effect at work: a glow that rises and falls with it.
             if glow > 0.01 {
                 span { style: "position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: {glow_bg};" }

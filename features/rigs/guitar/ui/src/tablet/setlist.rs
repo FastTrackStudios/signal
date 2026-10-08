@@ -178,7 +178,7 @@ fn SetHeader(perf: PerformanceModel, lib: LibraryModel) -> Element {
                         }
                     },
                     span { style: "display: flex; align-items: center; gap: 8px; min-width: 0;",
-                        span { style: "min-width: 0; font-size: 21px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{heading}" }
+                        span { style: "min-width: 0; font-size: 22px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{heading}" }
                         svg { width: "10", height: "6", view_box: "0 0 10 6", style: "flex-shrink: 0;",
                             path { d: "M1 1 L5 5 L9 1", fill: "none", stroke: INK_3, stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round" }
                         }
@@ -317,7 +317,7 @@ fn SongRow(perf: PerformanceModel, lib: LibraryModel, index: usize) -> Element {
                     }
                 }
                 if !song.key.is_empty() {
-                    span { style: "flex-shrink: 0; min-width: 28px; height: 28px; padding: 0 6px; box-sizing: border-box; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: {INK_2}; box-shadow: inset 0 0 0 1px {RULE_STRONG};",
+                    span { style: "flex-shrink: 0; min-width: 30px; height: 28px; padding: 0 6px; box-sizing: border-box; border: 1px solid {RULE_STRONG}; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 650; color: {INK_2}; font-variant-numeric: tabular-nums;",
                         "{song.key}"
                     }
                 }
@@ -648,7 +648,7 @@ fn Stacks(perf: PerformanceModel, section: String) -> Element {
 
 /// A rotation dot: the patch a tap plays, and the others.
 const DOT_ON: &str = "background: #a1a1aa;";
-const DOT_OFF: &str = "box-shadow: inset 0 0 0 1.25px #8e8e98;";
+const DOT_OFF: &str = "border: 1.25px solid #8e8e98;";
 
 #[component]
 fn StackRow(stack: PerfStack, index: usize, part: PerfPart, where_: String) -> Element {

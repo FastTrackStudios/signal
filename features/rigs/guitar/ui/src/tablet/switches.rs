@@ -45,8 +45,12 @@ const COLUMN: &str = "column";
 const TAP_FLASH: &str = "#52525b";
 const TAP_BG: &str = "#3f3f46";
 
-/// The lit switch's ring, inside the tile: flush tiles have no room outside.
-const LIT_RING: &str = "box-shadow: inset 0 0 0 2px rgba(255,255,255,0.85);";
+/// The lit switch's ring, inside the tile (flush tiles have no room
+/// outside) — an overlay with a border: Blitz draws no inset shadow.
+#[component]
+fn LitRing() -> Element {
+    rsx! { span { style: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; border: 2px solid rgba(255,255,255,0.85); box-sizing: border-box; pointer-events: none;" } }
+}
 
 macro_rules! call {
     ($rig:expr, |$r:ident| $body:expr) => {{
@@ -111,13 +115,13 @@ fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element 
     let pos = stack.position as usize;
     let tile_bg = if lit { bg.to_string() } else { dim(bg, 0.24) };
     let ink = if lit { fg.to_string() } else { dim(fg, 0.35) };
-    let ring = if lit { LIT_RING } else { NOTHING };
     let dot = if compact { 5 } else { 6 };
     rsx! {
         button {
             "aria-pressed": "{lit}",
-            style: "position: relative; min-width: 0; overflow: hidden; border: none; border-radius: 0; padding: 0 8px; display: flex; flex-direction: {pick(compact, ROW, COLUMN)}; align-items: center; justify-content: center; gap: {pick(compact, 8, 4)}px; background: {tile_bg}; color: {ink}; {ring} font-family: {FONT}; cursor: pointer;",
+            style: "position: relative; min-width: 0; overflow: hidden; border: none; border-radius: 0; padding: 0 8px; display: flex; flex-direction: {pick(compact, ROW, COLUMN)}; align-items: center; justify-content: center; gap: {pick(compact, 8, 4)}px; background: {tile_bg}; color: {ink}; font-family: {FONT}; cursor: pointer;",
             onclick: move |_| call!(rig, |r| r.press_stack(index as u32)),
+            if lit { LitRing {} }
             SwitchNo { no, ink: ink.clone() }
             span { style: "font-size: {pick(compact, 14, 24)}px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; color: {ink};", "{stack.name}" }
             if let Some(v) = variation {
@@ -139,12 +143,12 @@ fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element 
 fn FnTile(no: u32, title: &'static str, subtitle: String, bg: &'static str, text: &'static str, lit: bool, onclick: EventHandler<MouseEvent>) -> Element {
     let tile_bg = if lit { bg.to_string() } else { dim(bg, 0.3) };
     let ink = if lit { text.to_string() } else { dim(text, 0.45) };
-    let ring = if lit { LIT_RING } else { NOTHING };
     rsx! {
         button {
             "aria-pressed": "{lit}",
-            style: "position: relative; min-width: 0; overflow: hidden; border: none; border-radius: 0; padding: 0 8px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px; background: {tile_bg}; color: {ink}; {ring} font-family: {FONT}; cursor: pointer;",
+            style: "position: relative; min-width: 0; overflow: hidden; border: none; border-radius: 0; padding: 0 8px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px; background: {tile_bg}; color: {ink}; font-family: {FONT}; cursor: pointer;",
             onclick: move |e| onclick.call(e),
+            if lit { LitRing {} }
             SwitchNo { no, ink: ink.clone() }
             span { style: "font-size: 14px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; color: {ink};", "{title}" }
             span { style: "font-size: 11px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {ink};", "{subtitle}" }
