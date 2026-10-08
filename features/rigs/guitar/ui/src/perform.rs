@@ -53,20 +53,36 @@ fn job_title(job: &str) -> &'static str {
 /// Tile background + text color for a folder (footswitch), by name. Also
 /// tints the header's active-patch lens, so "where you are in the set" reads
 /// at a glance from anywhere in the UI.
+///
+/// The usual names have their colours; any other stack (an amp's name — a
+/// Dumble, a Two-Rock) takes one of a vivid set, picked by its name so it is
+/// the same everywhere. Text is dark on the bright tiles: white on orange or
+/// red reads at under 4:1.
 pub fn folder_color(name: &str) -> (&'static str, &'static str) {
-    match name.to_ascii_lowercase().as_str() {
-        "clean" => ("#38bdf8", "#082f49"),   // light blue / dark text
-        "crunch" => ("#2563eb", "#ffffff"),  // darker blue / white
-        "drive" => ("#f97316", "#ffffff"),   // orange / white
-        "lead" => ("#ef4444", "#ffffff"),    // red / white
-        "ambient" => ("#06b6d4", "#04222a"), // cyan / dark text
-        _ => ("#3f3f46", "#e4e4e7"),         // zinc fallback
+    match name.trim().to_ascii_lowercase().as_str() {
+        "clean" => ("#38bdf8", "#082f49"),
+        "crunch" => ("#2563eb", "#ffffff"),
+        "drive" | "rhythm" => ("#f97316", "#1c0d02"),
+        "lead" => ("#ef4444", "#1f0606"),
+        "ambient" => ("#06b6d4", "#04222a"),
+        "" | "none" | "—" => ("#3f3f46", "#e4e4e7"),
+        other => {
+            const SET: [(&str, &str); 8] = [
+                ("#a78bfa", "#1e1b4b"), // violet
+                ("#f59e0b", "#1c1002"), // amber
+                ("#10b981", "#022c22"), // emerald
+                ("#ec4899", "#2a0616"), // pink
+                ("#6366f1", "#ffffff"), // indigo
+                ("#84cc16", "#1a2e05"), // lime
+                ("#14b8a6", "#042f2e"), // teal
+                ("#e11d48", "#ffffff"), // rose
+            ];
+            // FNV-1a: stable across runs and builds.
+            let h = other.bytes().fold(0x811c_9dc5_u32, |h, b| (h ^ u32::from(b)).wrapping_mul(0x0100_0193));
+            SET[h as usize % SET.len()]
+        }
     }
 }
-
-
-
-
 
 /// Perform-mode footswitch grid — see the module docs for the layout.
 #[component]

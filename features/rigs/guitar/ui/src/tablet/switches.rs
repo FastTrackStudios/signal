@@ -15,17 +15,9 @@ use signal_guitar_proto::{PerfStack, PerformanceModel};
 
 use super::tokens::*;
 
-/// perform::folder_color: a stack's tile and its text — dark on the bright
-/// tiles (white on orange or red reads at under 4:1).
+/// A stack's tile and its text — `perform::folder_color`, the one table.
 fn folder(name: &str) -> (&'static str, &'static str) {
-    match name.to_ascii_lowercase().as_str() {
-        "clean" => ("#38bdf8", "#082f49"),
-        "crunch" => ("#2563eb", "#ffffff"),
-        "drive" | "rhythm" => ("#f97316", "#1c0d02"),
-        "lead" => ("#ef4444", "#1f0606"),
-        "ambient" => ("#06b6d4", "#04222a"),
-        _ => ("#3f3f46", "#e4e4e7"),
-    }
+    crate::perform::folder_color(name)
 }
 
 /// switches::dim — a colour darkened toward the grid's ground.

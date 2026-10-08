@@ -5697,6 +5697,20 @@ impl Rig for GuitarRigBackend {
                 |prig| build_perf_model(prig, &def),
             )
         };
+        // No stack pressed yet — a patch recalled by name (the rig opening,
+        // a section, a program change): the stack holding the patch playing
+        // is the one playing, pointed at it.
+        if !m.stacks.iter().any(|st| st.is_active)
+            && let Some(live) = self.live_patch_name()
+            && let Some((st, at)) = m.stacks.iter_mut().find_map(|st| {
+                let at = st.patches.iter().position(|p| p.eq_ignore_ascii_case(&live))?;
+                Some((st, at))
+            })
+        {
+            st.is_active = true;
+            st.position = at as u32;
+            st.current_patch = patch_display(&st.name, &live);
+        }
         m.boost_db = self.current_boost_db();
         m.tempo_bpm = self.tempo_bpm().round() as u32;
         {
