@@ -178,19 +178,42 @@ fn Panel(knob: MacroKnobView, on_close: EventHandler<()>) -> Element {
     }
 }
 
-/// A level knob's level, 0..1: where its first param sits now along the
-/// knob's sweep (where the param lands with the knob down, and up) — so a
-/// patch that dials its drive low reads low, and the bottom is off.
+/// A level knob's level, 0..1 — what the patch sets, not the knob's
+/// offset from rest:
+///
+///   a knob that sweeps its param from off to full (Drive, Mod, Motion…):
+///     where the param sits along that sweep
+///   a knob that moves its param around the patch's own (Gate, Pre-Comp,
+///     Comp, Boost — the patch sits mid-sweep whatever it is): where the
+///     param sits in its whole range, in the knob's direction
+///
+/// 0 when the knob's blocks are all off.
 fn level_of(k: &MacroKnobView) -> Option<f64> {
     if k.scale != "level" {
         return None;
     }
+    if !k.children.is_empty() && k.children.iter().all(|c| c.bypassed) {
+        return Some(0.0);
+    }
     let t = k.tune.iter().find(|t| !t.off)?;
-    let (lo, hi, x) = (f64::from(t.lo), f64::from(t.hi), f64::from(t.live));
+    let (lo, hi, x, base) = (f64::from(t.lo), f64::from(t.hi), f64::from(t.live), f64::from(t.base));
     if (hi - lo).abs() < 1e-6 {
         return None;
     }
-    let n = if t.log && lo > 0.0 && hi > 0.0 && x > 0.0 { (x / lo).ln() / (hi / lo).ln() } else { (x - lo) / (hi - lo) };
+    let along = |from: f64, to: f64| {
+        if t.log && from > 0.0 && to > 0.0 && x > 0.0 { (x / from).ln() / (to / from).ln() } else { (x - from) / (to - from) }
+    };
+    // Around the patch: the sweep is centred on its own value.
+    let centred = ((lo + hi) / 2.0 - base).abs() < (hi - lo).abs() * 0.05;
+    let n = if centred {
+        let (min, max) = (f64::from(t.min), f64::from(t.max));
+        if (max - min).abs() < 1e-6 {
+            return None;
+        }
+        if hi >= lo { along(min, max) } else { along(max, min) }
+    } else {
+        along(lo, hi)
+    };
     Some(n.clamp(0.0, 1.0))
 }
 

@@ -183,6 +183,28 @@ fn default_switch_actions(song_is_up: bool) -> Vec<String> {
 
 /// Part `name`'s recall entry, made if it has none — its source's when it
 /// repeats another part, so an edit to either is an edit to both.
+/// Drop a section's pick of `kind` — its marker and the overrides on the
+/// blocks it set.
+fn drop_pick(list: &mut Vec<crate::profiles::OverrideDef>, kind: &str) {
+    let is_marker = |o: &crate::profiles::OverrideDef| match kind.strip_prefix("block:") {
+        Some(b) => o.op == "block_pick" && o.block.eq_ignore_ascii_case(b),
+        None => o.op == "module" && o.module.eq_ignore_ascii_case(kind),
+    };
+    if !list.iter().any(is_marker) {
+        return;
+    }
+    let comp = RigLibrary::load_compositions();
+    let blocks: Vec<String> = list
+        .iter()
+        .filter(|o| is_marker(o))
+        .flat_map(|o| match o.op.as_str() {
+            "module" => crate::compose::blocks_set_by(&comp, &o.module, &o.param, &o.text),
+            _ => vec![o.block.clone()],
+        })
+        .collect();
+    list.retain(|o| !is_marker(o) && !(matches!(o.op.as_str(), "set" | "bypass") && blocks.iter().any(|b| b.eq_ignore_ascii_case(&o.block))));
+}
+
 fn part_recall_mut<'a>(
     song: &'a mut crate::profiles::SongDef,
     name: &str,
@@ -3658,6 +3680,11 @@ impl GuitarRigBackend {
             return;
         }
         for ov in overrides {
+            // A section's pick marker (which module or block preset it took
+            // its overrides from) — a label, nothing to play.
+            if matches!(ov.op.as_str(), "module" | "block_pick") {
+                continue;
+            }
             let id = {
                 let blocks = self.blocks.lock_ok();
                 blocks
@@ -3682,6 +3709,54 @@ impl GuitarRigBackend {
             }
         }
         tracing::info!(count = overrides.len(), "section overrides applied");
+    }
+
+    /// Give section `part` a pick of its own (`kind`: a module kind, or
+    /// `block:<name>`): the marker naming it and the overrides it sets, in
+    /// place of the section's earlier pick of that kind and of any override
+    /// of its own on the same blocks.
+    fn set_section_pick(&self, part: &str, kind: &str, marker: crate::profiles::OverrideDef, ovs: Vec<crate::profiles::OverrideDef>) {
+        let kind = kind.to_string();
+        self.edit_section_overrides(part, move |list| {
+            drop_pick(list, &kind);
+            list.retain(|o| !ovs.iter().any(|n| n.block.eq_ignore_ascii_case(&o.block) && n.param.eq_ignore_ascii_case(&o.param) && n.op == o.op));
+            list.push(marker);
+            list.extend(ovs);
+        });
+    }
+
+    /// Change section `part`'s overrides in the song that is up, save, and
+    /// play them when the section is the one playing.
+    fn edit_section_overrides(&self, part: &str, edit: impl FnOnce(&mut Vec<crate::profiles::OverrideDef>)) {
+        let song_name = {
+            let i = *self.song_index.lock_ok();
+            self.resolved_setlist().get(i).map(|(name, ..)| name.clone())
+        };
+        let Some(song_name) = song_name else {
+            refuse("No song is up");
+            return;
+        };
+        {
+            let mut songs = self.songs_lib.lock_ok();
+            let Some(song) = songs.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&song_name)) else {
+                refuse(format!("{song_name} is not in the library"));
+                return;
+            };
+            edit(&mut part_recall_mut(song, part).overrides);
+            RigLibrary::save_songs(&songs);
+        }
+        tracing::info!(song = %song_name, %part, "guitar: section pick");
+        // The section playing takes it now.
+        let playing = {
+            let perf = Rig::perf(self);
+            perf.parts.get(perf.part_index as usize).is_some_and(|p| p.name.eq_ignore_ascii_case(part))
+        };
+        if playing {
+            let index = *self.part_index.lock_ok() as u32;
+            let _ = Rig::select_part(self, index);
+        } else {
+            self.events.publish(RigEvent::Perf(Rig::perf(self)));
+        }
     }
 
     /// Edit the song that is currently up, save, and publish.
@@ -3908,8 +3983,17 @@ impl GuitarRigBackend {
                                 },
                                 name,
                                 patch,
+                                picks: overrides
+                                    .iter()
+                                    .filter_map(|o| match o.op.as_str() {
+                                        "module" => Some(signal_guitar_proto::PartPick { kind: o.module.clone(), preset: o.param.clone(), snapshot: o.text.clone() }),
+                                        "block_pick" => Some(signal_guitar_proto::PartPick { kind: format!("block:{}", o.block), preset: o.param.clone(), snapshot: String::new() }),
+                                        _ => None,
+                                    })
+                                    .collect(),
                                 overrides: overrides
                                     .iter()
+                                    .filter(|o| !matches!(o.op.as_str(), "module" | "block_pick"))
                                     .map(|o| signal_guitar_proto::PartOverride {
                                         block: o.block.clone(),
                                         param: o.param.clone(),
@@ -5902,7 +5986,12 @@ impl Rig for GuitarRigBackend {
 
             // What it CHANGES; the patch it recalls, its section and its
             // switches stay (and a repeat's changes are its source's).
-            part_recall_mut(song, &part).overrides = defs;
+            // A remote edits the overrides it is shown; the section's pick
+            // markers (not shown as overrides) stay.
+            let recall = part_recall_mut(song, &part);
+            let mut kept: Vec<crate::profiles::OverrideDef> = recall.overrides.iter().filter(|o| matches!(o.op.as_str(), "module" | "block_pick")).cloned().collect();
+            kept.extend(defs);
+            recall.overrides = kept;
             tracing::info!(
                 song = %song_name,
                 %part,
@@ -5912,6 +6001,68 @@ impl Rig for GuitarRigBackend {
             RigLibrary::save_songs(&songs);
         }
         self.events.publish(RigEvent::Perf(Rig::perf(self)));
+    }
+
+    fn choose_part_module(&self, part: String, module: String, preset: String, snapshot: String) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            let comp = RigLibrary::load_compositions();
+            let Some(found) = comp.module(&module, &preset) else {
+                refuse(format!("No {module} preset named {preset}"));
+                return;
+            };
+            let snapshot = if snapshot.is_empty() { found.snapshots.first().map(|s| s.name.clone()).unwrap_or_default() } else { snapshot };
+            // An amp, a capture, a pedal: the chain is rebuilt for it, so the
+            // section's patch takes it — in this song, the song's version of
+            // that patch (every section playing it hears it).
+            if crate::compose::module_swaps_gear(&comp, &found.module, &found.name, &snapshot) {
+                let index = Rig::perf(self).parts.iter().position(|p| p.name.eq_ignore_ascii_case(&part));
+                let Some(index) = index else {
+                    refuse(format!("No section {part} in this song"));
+                    return;
+                };
+                let _ = Rig::select_part(self, index as u32);
+                let _ = Rig::choose_module(self, found.module.clone(), found.name.clone(), snapshot);
+                return;
+            }
+            let ovs = crate::compose::module_overrides(&comp, &found.module, &found.name, &snapshot);
+            if ovs.is_empty() {
+                refuse(format!("{} · {snapshot} sets nothing a section can take", found.name));
+                return;
+            }
+            let marker = crate::profiles::OverrideDef {
+                module: found.module.clone(),
+                block: String::new(),
+                param: found.name.clone(),
+                op: "module".into(),
+                value: 0.0,
+                text: snapshot,
+            };
+            self.set_section_pick(&part, &found.module, marker, ovs);
+        })
+    }
+
+    fn choose_part_block(&self, part: String, block: String, preset: String) -> signal_guitar_proto::Applied {
+        attempt(|| {
+            let comp = RigLibrary::load_compositions();
+            let Some(found) = comp.block_preset(&preset) else {
+                refuse(format!("No block preset named {preset}"));
+                return;
+            };
+            let ovs = comp.block_overrides(&crate::compose::BlockChoiceDef { block: block.clone(), preset: found.name.clone() });
+            let marker = crate::profiles::OverrideDef {
+                module: String::new(),
+                block: block.clone(),
+                param: found.name.clone(),
+                op: "block_pick".into(),
+                value: 0.0,
+                text: String::new(),
+            };
+            self.set_section_pick(&part, &format!("block:{block}"), marker, ovs);
+        })
+    }
+
+    fn clear_part_pick(&self, part: String, kind: String) {
+        self.edit_section_overrides(&part, |list| drop_pick(list, &kind));
     }
 
     fn replace_node(&self, node: String, with: String) {

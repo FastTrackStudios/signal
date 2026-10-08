@@ -538,6 +538,49 @@ pub fn blocks_set_by(
     out
 }
 
+/// What a module snapshot sets, as overrides: its block presets and its own
+/// overrides, and those of the modules it plays (a Time snapshot's Delay
+/// and Reverb) — the sound a section takes on when it picks the module.
+#[must_use]
+pub fn module_overrides(comp: &Compositions, module: &str, preset: &str, snapshot_name: &str) -> Vec<OverrideDef> {
+    fn walk(comp: &Compositions, m: &str, p: &str, s: &str, depth: u8, out: &mut Vec<OverrideDef>) {
+        if depth > 4 {
+            return;
+        }
+        let Some(snap) = comp.module(m, p).and_then(|mp| snapshot(&mp.snapshots, s, |x| &x.name)) else {
+            return;
+        };
+        // The modules it plays first: its own word on a block comes after.
+        for sub in &snap.modules {
+            walk(comp, &sub.module, &sub.preset, &sub.snapshot, depth + 1, out);
+        }
+        for choice in &snap.blocks {
+            out.extend(comp.block_overrides(choice));
+        }
+        out.extend(snap.overrides.iter().cloned());
+    }
+    let mut out = Vec::new();
+    walk(comp, module, preset, snapshot_name, 0, &mut out);
+    out
+}
+
+/// Whether a module snapshot changes gear — a capture, a cab, a pedal —
+/// anywhere under it: what overrides alone cannot play (the chain is
+/// rebuilt for it).
+#[must_use]
+pub fn module_swaps_gear(comp: &Compositions, module: &str, preset: &str, snapshot_name: &str) -> bool {
+    fn walk(comp: &Compositions, m: &str, p: &str, s: &str, depth: u8) -> bool {
+        if depth > 4 {
+            return false;
+        }
+        let Some(snap) = comp.module(m, p).and_then(|mp| snapshot(&mp.snapshots, s, |x| &x.name)) else {
+            return false;
+        };
+        !snap.nam.is_empty() || !snap.nam2.is_empty() || !snap.cab.is_empty() || !snap.cab2.is_empty() || !snap.drives.is_empty() || snap.modules.iter().any(|sub| walk(comp, &sub.module, &sub.preset, &sub.snapshot, depth + 1))
+    }
+    walk(comp, module, preset, snapshot_name, 0)
+}
+
 /// A layer of module picks with the picks their snapshots play added (a
 /// Time snapshot's Delay and Reverb), except for modules the layer picks
 /// itself — an explicit pick at the same level wins.
@@ -1131,6 +1174,20 @@ mod tests {
         p.snapshot = snapshot.into();
         p.overrides.clear();
         def
+    }
+
+    /// A section's module pick is the snapshot's overrides (and its
+    /// modules'); one that changes gear says so.
+    #[test]
+    fn a_module_pick_as_a_sections_overrides() {
+        let c = comp();
+        let ovs = module_overrides(&c, "Time", "Plate", "Short");
+        assert_eq!(ovs.len(), 1);
+        assert_eq!((ovs[0].block.as_str(), ovs[0].param.as_str(), ovs[0].value), ("VERB 1", "mix", 0.2));
+        assert!(!module_swaps_gear(&c, "Time", "Plate", "Short"));
+        assert!(module_swaps_gear(&c, "Amp", "Deluxe", "Clean"));
+        assert!(module_swaps_gear(&c, "Drive", "Klon", "On"));
+        assert!(module_overrides(&c, "Amp", "Nothing", "Here").is_empty());
     }
 
     /// A Time snapshot plays the Delay and Reverb picks it references; a

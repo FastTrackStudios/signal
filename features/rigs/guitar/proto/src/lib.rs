@@ -887,6 +887,16 @@ pub struct ControllerEntry {
     pub clock: String,
 }
 
+/// A section's own pick: `kind` is a module kind (`Amp`, `Time`…) or
+/// `block:<block name>`; the preset, and the snapshot for a module.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct PartPick {
+    pub kind: String,
+    pub preset: String,
+    #[facet(default)]
+    pub snapshot: String,
+}
+
 /// A named group of songs, for finding them faster.
 #[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct CollectionEntry {
@@ -1029,6 +1039,10 @@ pub struct PerfPart {
     /// its own.
     #[facet(default)]
     pub repeat_of: String,
+    /// The section's own picks over its patch: module presets and block
+    /// presets it plays (their overrides are in `overrides`).
+    #[facet(default)]
+    pub picks: Vec<PartPick>,
 }
 
 /// One parameter a section changes.
@@ -1696,6 +1710,14 @@ pub mod rig {
         /// a partial-update protocol for it would be more moving parts than
         /// the thing it edits.
         fn set_part_overrides(&self, part: String, overrides: Vec<PartOverride>);
+        /// Section `part` plays a module preset's snapshot over its patch —
+        /// the section's own (its overrides), not the patch's.
+        fn choose_part_module(&self, part: String, module: String, preset: String, snapshot: String) -> Applied;
+        /// Section `part` plays a block preset on `block`, its own.
+        fn choose_part_block(&self, part: String, block: String, preset: String) -> Applied;
+        /// Drop section `part`'s own pick of `kind` (a module kind, or
+        /// `block:<name>`): it plays its patch's again.
+        fn clear_part_pick(&self, part: String, kind: String);
         /// Add a song to the library with default key + tempo.
         fn add_song(&self, name: String, key: String, bpm: u32);
         /// Create an empty setlist.

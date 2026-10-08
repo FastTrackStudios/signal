@@ -331,6 +331,10 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
             .collect(),
         Kind::Module(kind) => {
             let colour = module_colour(kind);
+            let part_pick = match target {
+                Target::Part(k) => d.perf.parts.get(*k).and_then(|p| p.picks.iter().find(|x| x.kind.eq_ignore_ascii_case(kind)).cloned()),
+                _ => None,
+            };
             let from = inherited_from(d);
             let active = d.comp.active_modules.iter().find(|m| m.module == *kind);
             let overridden = active_patch.is_some_and(|p| p.override_modules.iter().any(|m| m == kind));
@@ -341,6 +345,7 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
                 .flat_map(|m| {
                     let snaps: Vec<String> = if m.snapshots.is_empty() { vec![m.name.clone()] } else { m.snapshots.clone() };
                     let from = from.clone();
+                    let part_pick = part_pick.clone();
                     snaps.into_iter().enumerate().map(move |(k, v)| {
                         let mut t = Thing::new(format!("{} · {}", m.name, v), &v, colour);
                         t.group = m.name.clone();
@@ -361,7 +366,13 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
                             }
                         }
                         let is_active = active.is_some_and(|a| a.preset == m.name && a.snapshot == v);
-                        if is_active && overridden {
+                        let picked_here = part_pick.as_ref().is_some_and(|p| p.preset == m.name && (p.snapshot == v || p.snapshot.is_empty()));
+                        if part_pick.is_some() {
+                            // The section's own pick: that, and nothing else, is its.
+                            if picked_here {
+                                t.state = Some(State::Swapped);
+                            }
+                        } else if is_active && overridden {
                             t.state = Some(State::Swapped);
                         } else if let Some(f) = from.iter().find(|f| f.0 == *kind && f.1 == m.name && f.2 == v) {
                             t.inherited = f.3.clone();
@@ -391,7 +402,13 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
                     } else {
                         format!("in {} preset{}", b.used_by.len(), if b.used_by.len() == 1 { "" } else { "s" })
                     };
-                    if let Some(p) = d.comp.active_blocks.iter().find(|p| p.preset == b.name) {
+                    let picked = match target {
+                        Target::Part(k) => d.perf.parts.get(*k).is_some_and(|p| p.picks.iter().any(|x| x.kind.starts_with("block:") && x.preset == b.name)),
+                        _ => false,
+                    };
+                    if picked {
+                        t.state = Some(State::Swapped);
+                    } else if let Some(p) = d.comp.active_blocks.iter().find(|p| p.preset == b.name) {
                         t.inherited = p.block.clone();
                     }
                     t
@@ -490,6 +507,21 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>) -> Eleme
         }
     };
     let song_things = things(&Kind::Songs, &d, &target, &set_songs);
+    // The picked section's own pick of this kind, to clear.
+    let rig_clear = use_hook(try_consume_context::<RigClient>);
+    let own_pick: Option<(String, String)> = match (&target, &kind) {
+        (Target::Part(k), Kind::Module(_) | Kind::Block(_)) => d.perf.parts.get(*k).and_then(|p| {
+            p.picks
+                .iter()
+                .find(|x| match &kind {
+                    Kind::Module(m) => x.kind.eq_ignore_ascii_case(m),
+                    Kind::Block(t) => x.kind.starts_with("block:") && d.comp.block_presets.iter().any(|b| b.name == x.preset && b.block_type.eq_ignore_ascii_case(t)),
+                    _ => false,
+                })
+                .map(|x| (p.name.clone(), x.kind.clone()))
+        }),
+        _ => None,
+    };
     let pick_part = build.part;
 
     rsx! {
@@ -505,6 +537,17 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>) -> Eleme
                     }
                     if titled || (!search_open && !filters) {
                         span { style: "flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 7px; white-space: nowrap; overflow: hidden;", {title} }
+                    }
+                    if let Some((part, pick_kind)) = own_pick.clone() {
+                        button {
+                            style: "height: 44px; padding: 0 12px; border: none; background: transparent; border-radius: {R}; font-size: 13px; font-weight: 700; color: {INK_2}; font-family: {FONT}; cursor: pointer; display: flex; align-items: center; gap: 6px;",
+                            onclick: move |_| {
+                                let (part, pick_kind) = (part.clone(), pick_kind.clone());
+                                call!(rig_clear, |r| r.clear_part_pick(part, pick_kind));
+                            },
+                            OverrideIcon { colour: kind.colour(), size: 11 }
+                            "Clear"
+                        }
                     }
                     if let Target::Part(_) = target {
                         button {
@@ -618,7 +661,15 @@ fn apply(rig: Option<RigClient>, kind: &Kind, target: &Target, d: &Data, t: &Thi
         }
         Kind::Module(m) => {
             let (m, p, v) = ((*m).to_string(), t.group.clone(), t.name.clone());
-            call!(rig, |r| r.choose_module(m, p, v));
+            match target {
+                // A section picked: the section's own, over its patch.
+                Target::Part(k) => {
+                    if let Some(part) = d.perf.parts.get(*k).map(|x| x.name.clone()) {
+                        call!(rig, |r| r.choose_part_module(part, m, p, v));
+                    }
+                }
+                _ => call!(rig, |r| r.choose_module(m, p, v)),
+            }
         }
         Kind::Block(b) => {
             // The chain's block of this type (its first, when there are several).
@@ -630,7 +681,14 @@ fn apply(rig: Option<RigClient>, kind: &Kind, target: &Target, d: &Data, t: &Thi
                 .find(|p| d.comp.block_presets.iter().any(|bp| bp.name == p.preset && bp.block_type.eq_ignore_ascii_case(&ty)))
                 .map(|p| p.block.clone());
             if let Some(block) = block {
-                call!(rig, |r| r.choose_block(block, preset));
+                match target {
+                    Target::Part(k) => {
+                        if let Some(part) = d.perf.parts.get(*k).map(|x| x.name.clone()) {
+                            call!(rig, |r| r.choose_part_block(part, block, preset));
+                        }
+                    }
+                    _ => call!(rig, |r| r.choose_block(block, preset)),
+                }
             }
         }
     }
