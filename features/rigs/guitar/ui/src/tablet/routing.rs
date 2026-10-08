@@ -118,7 +118,7 @@ pub fn Routing(state: RigViewState) -> Element {
     let chip = "height: 30px; padding: 0 11px; border-radius: 15px; border: 1px solid #3f3f46; background: rgba(11,11,14,0.86); color: #d4d4d8; font-size: 12.5px; font-weight: 650; display: flex; align-items: center; cursor: pointer;";
     rsx! {
         div { style: "position: relative; height: 100%; min-height: 0; background: {DESK}; overflow: hidden;",
-            super::routing_canvas::RoutingCanvas { modules, selected, fold: false, fit: fit(), focus: ("Amp".to_string(), "Reverb".to_string()), on_pick }
+            super::routing_canvas::RoutingCanvas { modules, selected, fold: false, fit: fit(), focus: ("Drive".to_string(), "Reverb".to_string()), on_pick }
             div { style: "position: absolute; bottom: 8px; right: 8px; display: flex; gap: 6px;",
                 div { style: "{chip}", onclick: move |_| fit += 1, "Fit" }
             }
@@ -185,7 +185,8 @@ fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
     runs.into_iter()
         .map(|(name, cells)| {
             let items = match name.as_str() {
-                "Pre" => cells.into_iter().map(|c| CanvasItem::Col(vec![c])).collect(),
+                // The pre effects down one column: the grid is four rows.
+                "Pre" => cells.chunks(4).map(|c| CanvasItem::Col(c.to_vec())).collect(),
                 "Delay" | "Reverb" => cells.chunks(2).map(|c| CanvasItem::Split(c.to_vec())).collect(),
                 "Amp" => amp_items(cells),
                 _ => cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect(),

@@ -169,12 +169,12 @@ mod native {
     const CELL: f64 = 92.0;
     // Every column one pitch apart, a module's edge or not: two pads and the
     // gap between modules make one gap inside one.
-    const GAP: f64 = 34.0;
-    const PAD: f64 = 8.0;
-    const HEAD: f64 = 28.0;
+    const GAP: f64 = 16.0;
+    const PAD: f64 = 5.0;
+    const HEAD: f64 = 22.0;
     const MOD_GAP: f64 = GAP - 2.0 * PAD;
     const ROW_GAP: f64 = 36.0;
-    const EDGE: f64 = 22.0;
+    const EDGE: f64 = 6.0;
     const END: f64 = 40.0;
     const PORT: f64 = 5.0;
     /// The navigator along the top: the whole graph, thin, as a scrollbar.
@@ -209,7 +209,9 @@ mod native {
             CanvasItem::Col(c) => match c.len() {
                 0 | 1 => vec![0],
                 2 => vec![0, 1],
-                _ => vec![-1, 0, 1],
+                3 => vec![-1, 0, 1],
+                // Four rows: the line the second.
+                _ => vec![-1, 0, 1, 2],
             },
             CanvasItem::Split(c) if c.len() < 2 => vec![-1],
             CanvasItem::Split(_) => vec![-1, 1],
@@ -693,7 +695,7 @@ mod native {
             if s.fitted {
                 let tall = gh / natural.2;
                 let wide = span.map_or(f64::INFINITY, |(a, b)| view.0 / (b - a + 2.0 * EDGE));
-                s.zoom = if s.fold { 1.0 } else { tall.min(wide).clamp(0.35, 0.9) };
+                s.zoom = if s.fold { 1.0 } else { tall.min(wide).clamp(0.35, 1.25) };
             }
             let wrap = s.fold.then(|| view.0 / s.zoom);
             let (pieces, cw, ch) = layout(&s.modules, wrap);
@@ -915,17 +917,17 @@ mod native {
         scene.fill(Fill::NonZero, t, mix(colour, Color::from_rgba8(0x14, 0x14, 0x18, 0xff), if on { 0.16 } else { 0.07 }), None, &rr);
         let edge = if on { colour } else { Color::from_rgba8(0x2a, 0x2a, 0x31, 0xff) };
         scene.stroke(&Stroke::new(if on { 2.0 } else { 1.0 }), t, edge, None, &rr);
-        glyph(scene, t, &m.name.to_lowercase(), r.x0 + PAD - 1.0, r.y0 + 6.0, 14.0, colour);
+        glyph(scene, t, &m.name.to_lowercase(), r.x0 + PAD - 1.0, r.y0 + 4.0, 13.0, colour);
         let name = if first { m.name.to_uppercase() } else { format!("{} ›", m.name.to_uppercase()) };
         let room = r.width() - PAD * 2.0 - 14.0;
-        let nw = text(scene, st, t, &name, 10.5, 800.0, lift(colour), r.x0 + PAD + 14.0, r.y0 + 17.5, room, false);
+        let nw = text(scene, st, t, &name, 10.5, 800.0, lift(colour), r.x0 + PAD + 14.0, r.y0 + 15.0, room, false);
         if first && !m.label.is_empty() {
-            text(scene, st, t, &m.label, 10.5, 600.0, Color::from_rgba8(0xa1, 0xa1, 0xaa, 0xff), r.x0 + PAD + 22.0 + nw, r.y0 + 17.5, (room - 8.0 - nw).max(0.0), false);
+            text(scene, st, t, &m.label, 10.5, 600.0, Color::from_rgba8(0xa1, 0xa1, 0xaa, 0xff), r.x0 + PAD + 22.0 + nw, r.y0 + 15.0, (room - 8.0 - nw).max(0.0), false);
         }
         // Anywhere in its box that isn't a block picks the module.
         hits.push((r, Hit::Module(m.name.clone(), m.ids())));
         if m.core {
-            core_tag(scene, st, t, Point::new(r.x1 - PAD - 8.0, r.y0 + 13.0), hits);
+            core_tag(scene, st, t, Point::new(r.x1 - PAD - 8.0, r.y0 + 11.0), hits);
         }
     }
 
