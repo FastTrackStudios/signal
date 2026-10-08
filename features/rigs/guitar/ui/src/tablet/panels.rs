@@ -14,9 +14,10 @@ use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{LibraryModel, PerformanceModel, ProfileEntry};
 
-use super::colors::{add_days, date_label, date_parts, name_colour, next_date_for, set_heading, set_meta, set_name, song_colour, today_iso, when_label, SetMeta, SONG_PALETTE};
-use super::marks::ProfileIcon;
-use super::setlist::{call, PrimaryButton};
+use super::colors::{add_days, date_label, date_parts, name_colour, next_date_for, set_heading, set_meta, set_name, song_colour, tape_for, tape_mark, today_iso, when_label, SetMeta, SONG_PALETTE, TAPE_GAFFER};
+use super::marks::{ProfileIcon, SourceIcon};
+use super::setlist::{call, give_part, sections_of, song_stacks, sound_of, PrimaryButton, Src};
+use signal_widgets::drag_bus::{DragBus, DragEvent};
 use super::tokens::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -40,6 +41,9 @@ pub enum Panel {
     /// What part `index` of the song up plays.
     Patch(usize),
 }
+
+/// The picked swatch's double ring: the sheet, then the focus ink.
+const SWATCH_RING: &str = "0 0 0 2px #141418, 0 0 0 4px #d4d4d8";
 
 const KEYS: [&str; 12] = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
@@ -77,14 +81,19 @@ pub fn PanelView(panel: Panel, perf: PerformanceModel, lib: LibraryModel, on_clo
         Panel::Add => ("Add songs".to_string(), format!("To {set_name_now}")),
         Panel::Key(i) => (song_at(*i).name, "Key in this set".to_string()),
         Panel::Tempo(i) => (song_at(*i).name, "Tempo in this set".to_string()),
-        Panel::Start(i) => (song_at(*i).name, "The part it starts on".to_string()),
+        Panel::Start(i) => (song_at(*i).name, "The patch it starts on".to_string()),
         Panel::Colour(i) => (song_at(*i).name, "Its colour — every set and device shows it".to_string()),
         Panel::Profile(Some(i)) => (song_at(*i).name, String::new()),
         Panel::Profile(None) => ("Default profile".to_string(), String::new()),
         Panel::Patch(k) => {
             let part = perf.parts.get(*k).cloned().unwrap_or_default();
             let song = song_at(perf.song_index as usize).name;
-            (format!("{song} · {}", part.name), "The patch it plays".to_string())
+            let sec = sections_of(&perf.parts).into_iter().find(|s| s.parts.contains(k));
+            match sec {
+                Some(sec) if sec.parts.len() > 1 => (format!("{} · {}", sec.name, part.name), format!("The patch this part plays — {song}")),
+                Some(sec) => (format!("{song} · {}", sec.name), "The patch this section plays".to_string()),
+                None => (format!("{song} · {}", part.name), "The patch this section plays".to_string()),
+            }
         }
     };
     let top = p == Panel::Sets;
@@ -99,11 +108,14 @@ pub fn PanelView(panel: Panel, perf: PerformanceModel, lib: LibraryModel, on_clo
         Panel::Profile(song) => rsx! { ProfileBody { song, perf: perf.clone(), lib: lib.clone(), on_done: on_close } },
         Panel::Patch(k) => rsx! { PatchBody { part: k, perf: perf.clone(), lib: lib.clone(), on_done: on_close } },
     };
-    let (justify, radius, edge) = if top {
-        ("flex-start", "0 0 14px 14px", format!("border-bottom: 1px solid {RULE_STRONG};"))
+    let (justify, radius, edge, shadow) = if top {
+        ("flex-start", "0 0 14px 14px", format!("border-bottom: 1px solid {RULE_STRONG};"), "0 16px 40px rgba(0,0,0,0.55)")
     } else {
-        ("flex-end", "12px 12px 0 0", "border-top: 1px solid #3a3a42;".to_string())
+        ("flex-end", "12px 12px 0 0", "border-top: 1px solid #3a3a42;".to_string(), "0 -16px 40px rgba(0,0,0,0.5)")
     };
+    // Pull a sheet down by its grabber or its title to close it.
+    let bus = DragBus::try_use();
+    let pull = use_signal(|| 0.0_f64);
     rsx! {
         div { style: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 20; display: flex; flex-direction: column; justify-content: {justify};",
             button {
@@ -111,15 +123,38 @@ pub fn PanelView(panel: Panel, perf: PerformanceModel, lib: LibraryModel, on_clo
                 style: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; border: none; background: rgba(0,0,0,0.66); cursor: default;",
                 onclick: move |_| on_close.call(()),
             }
-            div { style: "position: relative; max-height: {pick(top, 92, 95)}%; display: flex; flex-direction: column; background: #18181c; {edge} border-radius: {radius}; box-shadow: 0 16px 40px rgba(0,0,0,0.55);",
-                if !top {
-                    span { style: "align-self: center; width: 36px; height: 4px; border-radius: 2px; background: {DIM}; margin-top: 8px;" }
-                }
-                header { style: "display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 18px 10px; border-bottom: 1px solid {RULE}; box-sizing: border-box;",
-                    div { style: "flex: 1; min-width: 0;",
-                        div { style: "font-size: 18px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{title}" }
-                        if !sub.is_empty() {
-                            div { style: "font-size: 13px; color: {INK_3};", "{sub}" }
+            div { style: "position: relative; top: {pull}px; max-height: {pick(top, 92, 95)}%; display: flex; flex-direction: column; background: #18181c; {edge} border-radius: {radius}; box-shadow: {shadow};",
+                div {
+                    style: "display: flex; flex-direction: column; touch-action: none;",
+                    onpointerdown: move |e: PointerEvent| {
+                        if top {
+                            return;
+                        }
+                        let Some(bus) = bus else { return };
+                        let y0 = e.client_coordinates().y;
+                        bus.begin(move |ev| {
+                            let mut pull = pull;
+                            match ev {
+                                DragEvent::Move { y, .. } => pull.set((y - y0).max(0.0)),
+                                DragEvent::End => {
+                                    if *pull.peek() > 80.0 {
+                                        on_close.call(());
+                                    } else {
+                                        pull.set(0.0);
+                                    }
+                                }
+                            }
+                        });
+                    },
+                    if !top {
+                        span { style: "align-self: center; width: 36px; height: 4px; border-radius: 2px; background: {DIM}; margin-top: 8px;" }
+                    }
+                    header { style: "display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 18px 10px; border-bottom: 1px solid {RULE}; box-sizing: border-box;",
+                        div { style: "flex: 1; min-width: 0;",
+                            div { style: "font-size: 18px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{title}" }
+                            if !sub.is_empty() {
+                                div { style: "font-size: 13px; color: {INK_3};", "{sub}" }
+                            }
                         }
                     }
                 }
@@ -337,17 +372,13 @@ fn DetailsBody(mode: DetailsMode, perf: PerformanceModel, lib: LibraryModel, on_
                         }
                     }
                 }
-                // The date, a day or a week at a time.
-                div { style: "display: flex; align-items: center; gap: 6px;",
-                    for (lbl, days) in [("−7", -7_i64), ("−1", -1)] {
-                        DateStep { key: "{lbl}", label: lbl, days, m }
-                    }
-                    span { style: "flex: 1; min-height: 48px; display: flex; align-items: center; justify-content: center; border: 1px solid {RULE_STRONG}; border-radius: {R}; font-size: 16px; font-weight: 650;",
-                        if cur.date.is_empty() { "No date" } else { "{date_label(&cur.date)}" }
-                    }
-                    for (lbl, days) in [("+1", 1_i64), ("+7", 7)] {
-                        DateStep { key: "{lbl}", label: lbl, days, m }
-                    }
+                DateField {
+                    value: cur.date.clone(),
+                    on_change: move |d: String| {
+                        let mut x = m();
+                        x.date = d;
+                        m.set(x);
+                    },
                 }
             }
             div {
@@ -415,18 +446,92 @@ fn DetailsBody(mode: DetailsMode, perf: PerformanceModel, lib: LibraryModel, on_
     }
 }
 
+/// The date as a field, the way a native date input is: tap it for a
+/// month to pick a day from, with Clear and Today at its foot.
 #[component]
-fn DateStep(label: &'static str, days: i64, m: Signal<SetMeta>) -> Element {
+fn DateField(value: String, on_change: EventHandler<String>) -> Element {
+    use chrono::Datelike;
+    let mut open = use_signal(|| false);
+    let today = chrono::Local::now().date_naive();
+    let picked = chrono::NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok();
+    let start = picked.unwrap_or(today);
+    let mut month = use_signal(|| (start.year(), start.month()));
+    let (y, mo) = month();
+    let first = chrono::NaiveDate::from_ymd_opt(y, mo, 1).unwrap_or(today);
+    let lead = first.weekday().num_days_from_sunday() as usize;
+    let next_first = if mo == 12 { chrono::NaiveDate::from_ymd_opt(y + 1, 1, 1) } else { chrono::NaiveDate::from_ymd_opt(y, mo + 1, 1) };
+    let days = next_first.map_or(30, |n| (n - first).num_days() as u32);
+    let title = format!("{} {y}", first.format("%B"));
+    let shown = if value.is_empty() { "No date".to_string() } else { date_label(&value) };
+    let mut step = move |d: i32| {
+        let (y, mo) = *month.peek();
+        let k = y * 12 + mo as i32 - 1 + d;
+        month.set((k.div_euclid(12), (k.rem_euclid(12) + 1) as u32));
+    };
+    let field = format!("width: 100%; min-height: 48px; padding: 0 12px; border: 1px solid {RULE_STRONG}; border-radius: {R}; background: #0a0a0d; font-size: 16px; font-family: {FONT}; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-start; text-align: left; cursor: pointer;");
+    let nav = format!("width: 44px; height: 40px; border: none; border-radius: {R}; background: transparent; color: {INK_2}; font-size: 18px; font-family: {FONT}; cursor: pointer;");
+    let foot = format!("min-height: 40px; padding: 0 12px; border: none; border-radius: {R}; background: transparent; color: {INK_2}; font-size: 14px; font-weight: 600; font-family: {FONT}; cursor: pointer;");
     rsx! {
-        button {
-            style: "width: 52px; min-height: 48px; border-radius: {R}; border: 1px solid {RULE_STRONG}; background: transparent; color: {INK_2}; font-size: 15px; font-weight: 650; font-family: {FONT}; cursor: pointer;",
-            onclick: move |_| {
-                let mut x = m();
-                x.date = add_days(&x.date, days);
-                let mut m = m;
-                m.set(x);
-            },
-            "{label}"
+        div { style: "display: flex; flex-direction: column; gap: 8px;",
+            button {
+                style: "{field} color: {pick(value.is_empty(), INK_3, INK)};",
+                onclick: move |_| open.toggle(),
+                "{shown}"
+            }
+            if open() {
+                div { style: "padding: 8px; border: 1px solid {RULE_STRONG}; border-radius: {R_MD}; background: #0d0d10; display: flex; flex-direction: column; gap: 4px;",
+                    div { style: "display: flex; align-items: center;",
+                        button { style: "{nav}", onclick: move |_| step(-1), "‹" }
+                        span { style: "flex: 1; text-align: center; font-size: 15px; font-weight: 700;", "{title}" }
+                        button { style: "{nav}", onclick: move |_| step(1), "›" }
+                    }
+                    div { style: "display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px;",
+                        for (k, w) in ["S", "M", "T", "W", "T", "F", "S"].into_iter().enumerate() {
+                            span { key: "w{k}", style: "text-align: center; font-size: 11px; font-weight: 700; color: {INK_3}; padding: 4px 0;", "{w}" }
+                        }
+                        for k in 0..lead {
+                            span { key: "b{k}" }
+                        }
+                        for d in 1..=days {
+                            {
+                                let date = chrono::NaiveDate::from_ymd_opt(y, mo, d);
+                                let on = date.is_some() && date == picked;
+                                let is_today = date == Some(today);
+                                let iso = date.map(|x| x.format("%Y-%m-%d").to_string()).unwrap_or_default();
+                                rsx! {
+                                    button {
+                                        key: "d{d}",
+                                        style: "min-height: 40px; border-radius: {R}; border: {pick(on, \"2px solid #d4d4d8\", \"none\")}; background: {pick(on, UP, CLEAR)}; color: {pick(is_today, LIVE, INK)}; font-size: 15px; font-weight: {pick(on || is_today, 750, 560)}; font-family: {FONT}; box-sizing: border-box; cursor: pointer;",
+                                        onclick: move |_| {
+                                            on_change.call(iso.clone());
+                                            open.set(false);
+                                        },
+                                        "{d}"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    div { style: "display: flex; justify-content: space-between;",
+                        button {
+                            style: "{foot}",
+                            onclick: move |_| {
+                                on_change.call(String::new());
+                                open.set(false);
+                            },
+                            "Clear"
+                        }
+                        button {
+                            style: "{foot}",
+                            onclick: move |_| {
+                                on_change.call(today.format("%Y-%m-%d").to_string());
+                                open.set(false);
+                            },
+                            "Today"
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -458,12 +563,12 @@ fn AddBody(perf: PerformanceModel, lib: LibraryModel) -> Element {
                         KeyGrid { value: key(), on_pick: move |k: String| key.set(k) }
                         div { style: "display: flex; align-items: center; gap: 8px;",
                             span { style: "flex: 1; font-size: 13px; color: {INK_3};", "Tempo" }
-                            StepButton { label: "−", onclick: move |()| bpm.set(bpm().saturating_sub(1).max(30)) }
+                            KitButton { label: "−", pad: "0; width: 48px", onclick: move |()| bpm.set(bpm().saturating_sub(1).max(30)) }
                             span { style: "min-width: 48px; text-align: center; font-size: 18px; font-weight: 700;", "{bpm}" }
-                            StepButton { label: "+", onclick: move |()| bpm.set(bpm() + 1) }
+                            KitButton { label: "+", pad: "0; width: 48px", onclick: move |()| bpm.set(bpm() + 1) }
                         }
                         div { style: "display: flex; gap: 8px; justify-content: flex-end;",
-                            StepButton { label: "Cancel", onclick: move |()| making.set(false) }
+                            KitButton { label: "Cancel", pad: "0 18px", onclick: move |()| making.set(false) }
                             PrimaryButton {
                                 label: "Create and add",
                                 onclick: {
@@ -517,11 +622,12 @@ fn AddBody(perf: PerformanceModel, lib: LibraryModel) -> Element {
     }
 }
 
+/// The kit's plain `Button`; `pad` is its padding (and anything after).
 #[component]
-fn StepButton(label: &'static str, onclick: EventHandler<()>) -> Element {
+fn KitButton(label: &'static str, pad: &'static str, onclick: EventHandler<()>) -> Element {
     rsx! {
         button {
-            style: "min-width: 48px; min-height: 48px; padding: 0 12px; border-radius: {R}; border: 1px solid {RULE_STRONG}; background: transparent; color: {INK}; font-size: 17px; font-weight: 650; font-family: {FONT}; cursor: pointer;",
+            style: "min-height: {HIT}px; padding: {pad}; border-radius: {R}; border: 1px solid {RULE_STRONG}; background: transparent; color: {INK}; font-size: 15px; font-weight: 650; font-family: {FONT}; white-space: nowrap; cursor: pointer;",
             onclick: move |_| onclick.call(()),
             "{label}"
         }
@@ -550,7 +656,7 @@ fn KeyGrid(value: String, on_pick: EventHandler<String>) -> Element {
                     }
                 }
             }
-            div { style: "display: flex; padding: 2px; border-radius: {R}; background: {FILL};",
+            div { style: "display: flex; gap: 4px;",
                 for (lbl, is_minor) in [("Major", false), ("Minor", true)] {
                     {
                         let on = minor == is_minor;
@@ -558,7 +664,7 @@ fn KeyGrid(value: String, on_pick: EventHandler<String>) -> Element {
                         rsx! {
                             button {
                                 key: "{lbl}",
-                                style: "flex: 1; min-height: 40px; border: none; border-radius: 4px; background: {pick(on, FILL_ON, CLEAR)}; color: {pick(on, INK, INK_3)}; font-size: 14px; font-weight: {pick(on, 750, 600)}; font-family: {FONT}; cursor: pointer;",
+                                style: "min-height: 40px; padding: 0 13px; border: none; border-radius: {R}; background: {pick(on, \"rgba(0,0,0,0.5)\", CLEAR)}; color: {pick(on, \"#fafafa\", INK_2)}; font-size: 15px; font-weight: {pick(on, 700, 560)}; font-family: {FONT}; white-space: nowrap; cursor: pointer;",
                                 onclick: move |_| on_pick.call(if is_minor { format!("{root}m") } else { root.clone() }),
                                 "{lbl}"
                             }
@@ -628,32 +734,21 @@ fn TempoBody(index: usize, perf: PerformanceModel) -> Element {
 
 #[component]
 fn StartBody(index: usize, perf: PerformanceModel, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
-    let song = perf.songs.get(index).cloned().unwrap_or_default();
-    let lib_song = lib.songs.iter().find(|s| s.name.eq_ignore_ascii_case(&song.name)).cloned().unwrap_or_default();
-    let current = lib_song.start_part.clone();
-    rsx! {
-        div { style: "padding: 10px 14px 16px; display: flex; flex-direction: column; gap: 6px;",
-            Cell { title: "The profile's default".to_string(), on: current.is_empty(), song: song.name.clone(), part: String::new(), on_done }
-            for p in lib_song.parts.iter().cloned() {
-                Cell { key: "{p}", title: p.clone(), on: p.eq_ignore_ascii_case(&current), song: song.name.clone(), part: p.clone(), on_done }
-            }
-        }
-    }
-}
-
-/// A choice in a list of them: the one on is ringed.
-#[component]
-fn Cell(title: String, on: bool, song: String, part: String, on_done: EventHandler<()>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let song = perf.songs.get(index).cloned().unwrap_or_default();
+    let current = (!song.start.is_empty()).then(|| song.start.clone());
     rsx! {
-        button {
-            style: "min-height: 48px; padding: 6px 12px; text-align: left; border-radius: {R}; background: {pick(on, UP, SHEET)}; border: {ring(on, 1.5)}; color: {INK}; font-size: 15px; font-weight: {pick(on, 700, 560)}; font-family: {FONT}; cursor: pointer;",
-            onclick: move |_| {
-                let (song, part) = (song.clone(), part.clone());
-                call!(rig, |r| r.set_song_start_part(song, part));
+        PatchList {
+            song: song.name.clone(),
+            perf,
+            lib,
+            current,
+            default_label: "The profile's default",
+            on_pick: move |p: Option<(String, Option<String>)>| {
+                let name = p.map(|x| x.0).unwrap_or_default();
+                call!(rig, |r| r.set_setlist_entry_start(index as u32, name));
                 on_done.call(());
             },
-            "{title}"
         }
     }
 }
@@ -693,7 +788,7 @@ fn ColourBody(index: usize, perf: PerformanceModel, on_done: EventHandler<()>) -
                             button {
                                 key: "{c}",
                                 "aria-label": "Colour {c}",
-                                style: "height: 44px; border-radius: 10px; border: {pick(on, ring(true, 3.0), NO_SHADOW.to_string())}; background: {c}; box-sizing: border-box; cursor: pointer;",
+                                style: "aspect-ratio: 1; min-height: 44px; border-radius: 10px; border: none; background: {c}; box-shadow: {pick(on, SWATCH_RING, NO_SHADOW)}; cursor: pointer;",
                                 onclick: move |_| {
                                     let name = name.clone();
                                     call!(rig, |r| r.set_song_colour(name, c.to_string()));
@@ -810,7 +905,7 @@ fn ProfileCell(name: String, of: String, inherit: bool, profile: Option<ProfileE
             span { style: "display: flex; align-items: flex-end; justify-content: flex-end; gap: 3px; width: 45px; height: {most * 5}px; flex-shrink: 0;",
                 for (st, n) in stacks {
                     {
-                        let (tape, _) = crate::perform::folder_color(&st);
+                        let tape = tape_mark(&st);
                         rsx! {
                             span { key: "{st}", style: "display: flex; flex-direction: column; gap: 1px;",
                                 for k in 0..n {
@@ -827,40 +922,128 @@ fn ProfileCell(name: String, of: String, inherit: bool, profile: Option<ProfileE
 
 // ── A part's patch ─────────────────────────────────────────────────────────
 
-/// Every stack of the part's profile and its patches; "Keep what plays"
-/// clears the part's own.
+/// What a part plays: "Keep what plays", then the song's stacks, each with
+/// the song's own patches first.
 #[component]
 fn PatchBody(part: usize, perf: PerformanceModel, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let p = perf.parts.get(part).cloned().unwrap_or_default();
-    let profile_name = if p.profile.is_empty() { perf.profile_name.clone() } else { p.profile.clone() };
-    let profile = lib.profiles.iter().find(|x| x.name.eq_ignore_ascii_case(&profile_name)).cloned().unwrap_or_default();
-    let set = move |rig: Option<RigClient>, part: String, patch: String| call!(rig, |r| r.set_part_patch(part, patch));
+    let song = perf.songs.get(perf.song_index as usize).map(|s| s.name.clone()).unwrap_or_default();
+    rsx! {
+        PatchList {
+            song,
+            perf,
+            lib,
+            current: sound_of(&p),
+            default_label: "Keep what plays",
+            on_pick: move |pick: Option<(String, Option<String>)>| {
+                let (name, borrowed) = pick.unwrap_or_default();
+                give_part(rig.clone(), &p, name, borrowed);
+                on_done.call(());
+            },
+        }
+    }
+}
+
+/// Every stack of the song's profile, the song's own patches first in
+/// each, then what passes through, then what its parts borrow; other
+/// profiles' patches wait below. A pick is the patch, and the profile it is
+/// borrowed from.
+#[component]
+fn PatchList(song: String, perf: PerformanceModel, lib: LibraryModel, current: Option<String>, default_label: &'static str, on_pick: EventHandler<Option<(String, Option<String>)>>) -> Element {
+    let mut show_others = use_signal(|| false);
+    let colour = perf.songs.iter().find(|s| s.name.eq_ignore_ascii_case(&song)).map_or_else(|| INK_3.to_string(), |s| song_colour(&s.name, &s.colour));
+    // A song's own patches are in the stacks only while it is up.
+    let up = perf.songs.get(perf.song_index as usize).is_some_and(|s| s.name.eq_ignore_ascii_case(&song));
+    let stacks: Vec<(String, Vec<(String, Src)>)> = song_stacks(&perf, &lib)
+        .into_iter()
+        .map(|v| {
+            let mut patches: Vec<(String, Src)> = v.patches.into_iter().filter(|(_, src)| up || *src != Src::Song).collect();
+            patches.sort_by_key(|(_, src)| src.rank());
+            (v.name, patches)
+        })
+        .filter(|(_, p)| !p.is_empty())
+        .collect();
+    let own = lib.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(&perf.profile_name)).cloned().unwrap_or_default();
+    let others: Vec<(String, Vec<(String, String)>)> = lib
+        .profiles
+        .iter()
+        .filter(|p| !p.name.eq_ignore_ascii_case(&own.name))
+        .map(|p| {
+            let patches = p
+                .patch_list
+                .iter()
+                .filter(|x| !x.stack.is_empty() && x.song.is_empty() && !own.patch_list.iter().any(|o| o.name.eq_ignore_ascii_case(&x.name)))
+                .map(|x| (x.name.clone(), x.stack.clone()))
+                .collect::<Vec<_>>();
+            (p.name.clone(), patches)
+        })
+        .filter(|(_, x)| !x.is_empty())
+        .collect();
+    let other_names = others.iter().map(|o| o.0.clone()).collect::<Vec<_>>().join(" · ");
+    let is = |name: &str| current.as_deref().is_some_and(|c| c.eq_ignore_ascii_case(name));
+    let grid = "display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px;";
+    let open = show_others();
     rsx! {
         div { style: "padding: 10px 14px 16px; display: flex; flex-direction: column; gap: 12px;",
-            PatchCell { title: "Keep what plays".to_string(), on: p.patch.is_empty(), onclick: {
-                let (rig, name) = (rig.clone(), p.name.clone());
-                move |()| { set(rig.clone(), name.clone(), String::new()); on_done.call(()); }
-            } }
-            for st in profile.stacks.iter().filter(|st| profile.patch_list.iter().any(|x| &x.stack == *st)).cloned() {
-                {
-                    let (tape, _) = crate::perform::folder_color(&st);
-                    let patches: Vec<String> = profile.patch_list.iter().filter(|x| x.stack == st).map(|x| x.name.clone()).collect();
-                    rsx! {
-                        div { key: "{st}",
-                            div { style: "display: flex; align-items: center; gap: 8px; margin-bottom: 6px;",
-                                span { style: "width: 10px; height: 10px; border-radius: 3px; background: {tape};" }
-                                span { style: "font-size: 11px; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; color: {lift(tape)};", "{st}" }
+            Cell { title: default_label.to_string(), on: current.is_none(), onclick: move |()| on_pick.call(None) }
+            for (st, patches) in stacks {
+                div { key: "{st}",
+                    div { style: "display: flex; align-items: center; gap: 8px; margin-bottom: 6px;",
+                        Tape { stack: st.clone() }
+                    }
+                    div { style: "{grid}",
+                        for (name, src) in patches {
+                            {
+                                let pick = (name.clone(), match &src { Src::Other(p) => Some(p.clone()), _ => None });
+                                rsx! {
+                                    Cell {
+                                        key: "{name}",
+                                        title: name.clone(),
+                                        on: is(&name),
+                                        onclick: move |()| on_pick.call(Some(pick.clone())),
+                                        SourceIcon { from: src.from(), profile: src.profile(), colour: src.colour(&colour), size: 13 }
+                                    }
+                                }
                             }
-                            div { style: "display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px;",
-                                for name in patches {
-                                    {
-                                        let (rig, part_name, patch) = (rig.clone(), p.name.clone(), name.clone());
-                                        rsx! {
-                                            PatchCell { key: "{name}", title: name.clone(), on: p.patch.eq_ignore_ascii_case(&name), onclick: move |()| {
-                                                set(rig.clone(), part_name.clone(), patch.clone());
-                                                on_done.call(());
-                                            } }
+                        }
+                    }
+                }
+            }
+            if !others.is_empty() {
+                div { style: "border-top: 1px solid {RULE}; padding-top: 10px;",
+                    button {
+                        style: "width: 100%; min-height: 44px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 0 4px; border: none; border-radius: {R}; background: transparent; color: {INK}; text-align: left; font-family: {FONT}; cursor: pointer;",
+                        onclick: move |_| show_others.toggle(),
+                        SourceIcon { from: "profile", colour: INK_2.to_string(), size: 14 }
+                        span { style: "flex: 1; font-size: 15px; font-weight: 600;", "From another profile" }
+                        span { style: "font-size: 13px; color: {INK_3}; font-weight: 500;", "{other_names}" }
+                        svg { key: "{open}", width: "10", height: "6", view_box: "0 0 10 6",
+                            path { d: pick(open, "M1 5 L5 1 L9 5", "M1 1 L5 5 L9 1"), fill: "none", stroke: INK_3, stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round" }
+                        }
+                    }
+                    if open {
+                        div { style: "display: flex; flex-direction: column; gap: 12px; margin-top: 8px;",
+                            for (profile, patches) in others {
+                                div { key: "{profile}",
+                                    div { style: "display: flex; align-items: center; gap: 6px; margin-bottom: 6px;",
+                                        SourceIcon { from: "other", profile: profile.clone(), colour: name_colour(&profile).to_string(), size: 12 }
+                                        span { style: "font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {name_colour(&profile)};", "{profile}" }
+                                    }
+                                    div { style: "{grid}",
+                                        for (name, stack) in patches {
+                                            {
+                                                let pick = (name.clone(), Some(profile.clone()));
+                                                rsx! {
+                                                    Cell {
+                                                        key: "{name}",
+                                                        title: name.clone(),
+                                                        on: is(&name),
+                                                        onclick: move |()| on_pick.call(Some(pick.clone())),
+                                                        span { style: "width: 7px; height: 7px; border-radius: 2px; background: {tape_for(&stack)}; flex-shrink: 0;" }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -873,13 +1056,32 @@ fn PatchBody(part: usize, perf: PerformanceModel, lib: LibraryModel, on_done: Ev
     }
 }
 
+/// A stack's name on its tape (the prototype's `Tape`): gaffer pressed
+/// dark, any other a wash of its colour with a swatch.
 #[component]
-fn PatchCell(title: String, on: bool, onclick: EventHandler<()>) -> Element {
+fn Tape(stack: String) -> Element {
+    let tape = tape_for(&stack);
+    let pressed = tape == TAPE_GAFFER;
+    let bg = if pressed { "rgba(0,0,0,0.5)".to_string() } else { format!("color-mix(in srgb, {tape} 20%, transparent)") };
+    rsx! {
+        span { style: "display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; color: {pick(pressed, \"#fafafa\", INK)}; background: {bg};",
+            if !pressed {
+                span { style: "width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; background: {tape};" }
+            }
+            "{stack}"
+        }
+    }
+}
+
+/// A choice in a list of them: the one on is ringed; `children` is its mark.
+#[component]
+fn Cell(title: String, on: bool, onclick: EventHandler<()>, children: Element) -> Element {
     rsx! {
         button {
-            style: "min-height: 48px; padding: 6px 12px; text-align: left; border-radius: {R}; background: {pick(on, UP, SHEET)}; border: {ring(on, 1.5)}; color: {INK}; font-size: 15px; font-weight: {pick(on, 700, 560)}; font-family: {FONT}; cursor: pointer;",
+            style: "min-height: 48px; padding: 6px 12px; text-align: left; border-radius: {R}; background: {pick(on, UP, SHEET)}; border: {ring(on, 1.5)}; color: {INK}; font-size: 15px; font-weight: {pick(on, 700, 560)}; font-family: {FONT}; display: flex; align-items: center; justify-content: flex-start; gap: 8px; box-sizing: border-box; cursor: pointer;",
             onclick: move |_| onclick.call(()),
-            "{title}"
+            span { style: "flex: 1; min-width: 0;", "{title}" }
+            {children}
         }
     }
 }

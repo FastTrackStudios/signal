@@ -167,12 +167,15 @@ pub fn date_label(iso: &str) -> String {
         p.get(1).and_then(|x| x.parse::<u32>().ok()),
         p.get(2).and_then(|x| x.parse::<u32>().ok()),
     ) else {
-        return String::new();
+        return "No date".to_string();
     };
     if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
-        return String::new();
+        return "No date".to_string();
     }
-    format!("{} {d} {}", WEEKDAYS[weekday(y, m, d)], MONTHS[(m - 1) as usize])
+    // The year, when it is not this one.
+    let this_year = today_iso().get(..4).and_then(|x| x.parse::<i32>().ok());
+    let year = if this_year == Some(y) { String::new() } else { format!(" {y}") };
+    format!("{} {d} {}{year}", WEEKDAYS[weekday(y, m, d)], MONTHS[(m - 1) as usize])
 }
 
 fn ymd(iso: &str) -> Option<chrono::NaiveDate> {
@@ -291,7 +294,35 @@ mod tests {
     fn set_names_read_into_parts() {
         let m = parse_set_name("HSM 10-6-26 Worship Night");
         assert_eq!(m, SetMeta { event: "HSM".into(), date: "2026-10-06".into(), title: "Worship Night".into() });
-        assert_eq!(date_label("2026-10-06"), "Tue 6 Oct");
+        assert_eq!(date_label("2026-10-06"), if today_iso().starts_with("2026") { "Tue 6 Oct" } else { "Tue 6 Oct 2026" });
+        assert_eq!(date_label(""), "No date");
         assert_eq!(set_heading(&parse_set_name("CYA 7-9-26")), "CYA");
+    }
+}
+
+/// The special stack's tape (the prototype's `--tape-special`).
+pub const TAPE_SPECIAL: &str = "#3f3f46";
+/// Gaffer tape: a stack with no colour of its own (`--tape-gaffer`).
+pub const TAPE_GAFFER: &str = "#1d1d22";
+
+/// A stack's tape colour (the prototype's `tapeFor`): the five stack
+/// colours, Special's grey, and gaffer black for anything else.
+pub fn tape_for(stack: &str) -> &'static str {
+    match stack.trim().to_ascii_lowercase().as_str() {
+        "clean" => "#38bdf8",
+        "crunch" => "#2563eb",
+        "drive" | "rhythm" => "#f97316",
+        "lead" => "#ef4444",
+        "ambient" => "#06b6d4",
+        "special" => TAPE_SPECIAL,
+        _ => TAPE_GAFFER,
+    }
+}
+
+/// A tape as a mark or a label: gaffer reads as quiet ink.
+pub fn tape_mark(stack: &str) -> &'static str {
+    match tape_for(stack) {
+        TAPE_GAFFER => super::tokens::INK_3,
+        t => t,
     }
 }

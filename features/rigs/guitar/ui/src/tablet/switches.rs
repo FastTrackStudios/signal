@@ -63,7 +63,8 @@ pub fn TouchSwitches(perf: PerformanceModel) -> Element {
     let song = perf.songs.get(perf.song_index as usize).map(|s| s.name.clone()).unwrap_or_else(|| "—".to_string());
     let fx = !perf.fx_bypass;
     let boost = perf.boost_db.abs() > 0.01;
-    let boost_label = format!("{:+.0} dB", if boost { perf.boost_db } else { 3.0 });
+    // Off: the level it switches on at, as the rig keeps it.
+    let boost_label = format!("{:+.0} dB", if boost { perf.boost_db } else { perf.boost_level });
     rsx! {
         div { style: "display: flex; flex-direction: column; background: #0a0a0c;",
             // One grid, two rows of five, the same columns: the hold layer
@@ -113,11 +114,32 @@ fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element 
     let tile_bg = if lit { bg.to_string() } else { dim(bg, 0.24) };
     let ink = if lit { fg.to_string() } else { dim(fg, 0.35) };
     let dot = if compact { 5 } else { 6 };
+    // A momentary switch plays while held: pressed on the way down,
+    // released on the way up.
+    let momentary = stack.momentary;
+    let mut down = use_signal(|| false);
+    let (r_click, r_down, r_up, r_leave, r_cancel) = (rig.clone(), rig.clone(), rig.clone(), rig.clone(), rig);
     rsx! {
         button {
             "aria-pressed": "{lit}",
             style: "position: relative; min-width: 0; overflow: hidden; border: none; border-radius: 0; padding: 0 8px; display: flex; flex-direction: {pick(compact, ROW, COLUMN)}; align-items: center; justify-content: center; gap: {pick(compact, 8, 4)}px; background: {tile_bg}; color: {ink}; font-family: {FONT}; cursor: pointer;",
-            onclick: move |_| call!(rig, |r| r.press_stack(index as u32)),
+            onclick: move |_| if !momentary { call!(r_click, |r| r.press_stack(index as u32)) },
+            onpointerdown: move |_| if momentary {
+                down.set(true);
+                call!(r_down, |r| r.press_stack(index as u32));
+            },
+            onpointerup: move |_| if momentary && down() {
+                down.set(false);
+                call!(r_up, |r| r.release_stack(index as u32));
+            },
+            onpointerleave: move |_| if momentary && down() {
+                down.set(false);
+                call!(r_leave, |r| r.release_stack(index as u32));
+            },
+            onpointercancel: move |_| if momentary && down() {
+                down.set(false);
+                call!(r_cancel, |r| r.release_stack(index as u32));
+            },
             if lit { LitRing {} }
             SwitchNo { no, ink: ink.clone() }
             span { style: "font-size: {pick(compact, 14, 24)}px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; color: {ink};", "{stack.name}" }
@@ -157,7 +179,7 @@ fn FnTile(no: u32, title: &'static str, subtitle: String, bg: &'static str, text
 fn Empty(no: u32) -> Element {
     rsx! {
         div { style: "position: relative; background: #0e0e11;",
-            SwitchNo { no, ink: INK_3.to_string() }
+            SwitchNo { no, ink: INK.to_string() }
         }
     }
 }

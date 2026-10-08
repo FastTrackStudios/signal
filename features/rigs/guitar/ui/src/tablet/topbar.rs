@@ -15,7 +15,7 @@ use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::PerformanceModel;
 use signal_widgets::PopupHost;
 
-use super::menu::{open_menu, open_menu_closing, Item, Picked};
+use super::menu::{open_menu, open_menu_closing, Item, Picked, MENU_W};
 use super::tokens::*;
 use crate::state::RigViewState;
 
@@ -34,7 +34,8 @@ pub fn TopBar(model: PerformanceModel, state: RigViewState, sidebar: bool, on_si
     let (mix_l, mix_r) = *state.mix_db.read();
     let mix = crate::meters::meter_level(10f32.powf(mix_l.max(mix_r) / 20.0));
     let phones = (output * f64::from(hp.self_mix)).max(mix * f64::from(hp.mix_level)) * f64::from(hp.volume);
-    let flat = resetting();
+    // Resetting here, or anywhere: the rig says so to every remote.
+    let flat = resetting() || model.panicking;
     rsx! {
         header { style: "height: {TOP_H}px; flex-shrink: 0; display: flex; align-items: stretch; border-bottom: 1px solid {RULE}; background: {SHEET}; box-sizing: border-box; font-family: {FONT};",
             // Over the sidebar: its toggle and the mode the footswitches are in.
@@ -92,7 +93,8 @@ fn ModeButton(mode: u32) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let host = PopupHost::try_use();
     let mut open = use_signal(|| false);
-    let label = MODES.iter().find(|m| m.0 == mode).map_or("Profile", |m| m.1);
+    // 0 Preset, 1 Profile, anything else Setlist — as the sidebar reads it.
+    let label = MODES[(mode as usize).min(MODES.len() - 1)].1;
     let bg = if open() { "rgba(255,255,255,0.05)" } else { CLEAR };
     let mut items = vec![Item::head("Footswitches play")];
     for (m, l, d) in MODES {
@@ -106,7 +108,7 @@ fn ModeButton(mode: u32) -> Element {
                 let (c, el) = (e.client_coordinates(), e.element_coordinates());
                 let rig = rig.clone();
                 open.set(true);
-                open_menu_closing(host, c.x - el.x, c.y - el.y + f64::from(TOP_H) - 1.0, items.clone(), EventHandler::new(move |p: Picked| {
+                open_menu_closing(host, c.x - el.x, c.y - el.y + f64::from(TOP_H), items.clone(), EventHandler::new(move |p: Picked| {
                     if let Ok(m) = p.id.parse::<u32>() && let Some(r) = rig.clone() {
                         let _ = dioxus_core::spawn_forever(async move { let _ = r.set_perform_mode(m).await; });
                     }
@@ -135,7 +137,7 @@ fn PanicButton(busy: Signal<bool>) -> Element {
     let (ink, bg) = if busy() { ("#1a1205", "#fbbf24") } else { ("#fbbf24", CLEAR) };
     rsx! {
         button {
-            "aria-label": "Panic — everything silent, then back",
+            "aria-label": "Panic — all notes off, reset audio and MIDI",
             style: "align-self: stretch; min-width: 48px; flex-shrink: 0; padding: 0 12px; display: flex; align-items: center; justify-content: center; border: none; background: {bg}; cursor: pointer;",
             onclick: move |_| {
                 if busy() { return; }
@@ -144,7 +146,8 @@ fn PanicButton(busy: Signal<bool>) -> Element {
                     let _ = dioxus_core::spawn_forever(async move { let _ = r.panic().await; });
                 }
                 spawn(async move {
-                    for _ in 0..30 {
+                    // 1.2 s, the arrow turning once every 0.8 s.
+                    for _ in 0..24 {
                         architect::platform::sleep(Duration::from_millis(50)).await;
                         turn.set((turn() + 22) % 360);
                     }
@@ -170,9 +173,10 @@ fn PanicButton(busy: Signal<bool>) -> Element {
 #[component]
 fn Indicator(kind: &'static str, tone: &'static str, onclick: EventHandler<MouseEvent>) -> Element {
     let label = if kind == "midi" { "MIDI" } else { "Audio" };
+    let says = if tone == VOID { "down" } else { "connected" };
     rsx! {
         button {
-            "aria-label": "{label} — open {label} in Setup",
+            "aria-label": "{label} {says} — open {label} in Setup",
             style: "align-self: stretch; min-width: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer;",
             onclick: move |e| onclick.call(e),
             svg { key: "{tone}", width: "17", height: "17", view_box: "0 0 16 16",
@@ -260,6 +264,8 @@ fn MuteButton(house: bool, phones: bool) -> Element {
     let host = PopupHost::try_use();
     let mut held = use_signal(|| false);
     let mut fired = use_signal(|| false);
+    // Each press its own: a hold timer from an earlier press never fires.
+    let mut press = use_signal(|| 0u32);
     let full = house && phones;
     let any = house || phones;
     let items = vec![
@@ -269,11 +275,7 @@ fn MuteButton(house: bool, phones: bool) -> Element {
         Item::Sep,
         Item::run("none", "Unmute").unless((!any).then(|| "Nothing is muted".to_string())),
     ];
-    let set = move |rig: Option<RigClient>, h: bool, p: bool| {
-        if let Some(r) = rig {
-            let _ = dioxus_core::spawn_forever(async move { let _ = r.set_mutes(h, p).await; });
-        }
-    };
+    let set = set_mutes;
     let (ink, bg) = if any { (DANGER_INK, VOID) } else { (INK_2, CLEAR) };
     // Lit, it breathes: a shade over it rising and falling every 1.6 s.
     let mut lit = use_signal(|| any);
@@ -293,10 +295,17 @@ fn MuteButton(house: bool, phones: bool) -> Element {
             }
         })
     });
+    let aria = if full {
+        "Fully muted — tap to unmute, hold for more"
+    } else if any {
+        "House muted — tap to unmute, hold for more"
+    } else {
+        "Mute house — tap to mute the house, hold to mute fully"
+    };
     let shade = if any { (1.0 - (phase() * std::f64::consts::TAU).cos()) / 2.0 * 0.18 } else { 0.0 };
     rsx! {
         button {
-            "aria-label": if any { "Muted — tap to unmute, hold for more" } else { "Mute house — tap to mute the house, hold to mute fully" },
+            "aria-label": "{aria}",
             "aria-pressed": "{any}",
             style: "align-self: stretch; min-width: 48px; flex-shrink: 0; padding: 0 12px; display: flex; align-items: center; justify-content: center; border: none; background: {bg}; touch-action: none; cursor: pointer; position: relative;",
             onpointerdown: {
@@ -307,18 +316,15 @@ fn MuteButton(house: bool, phones: bool) -> Element {
                     let (left, bottom) = (c.x - el.x, c.y - el.y + f64::from(TOP_H));
                     held.set(true);
                     fired.set(false);
+                    let mine = press() + 1;
+                    press.set(mine);
                     let rig = rig.clone();
                     let items = items.clone();
                     spawn(async move {
                         architect::platform::sleep(Duration::from_millis(500)).await;
-                        if held() {
+                        if held() && press() == mine {
                             fired.set(true);
-                            open_menu(host, left - 240.0, bottom + 4.0, items, EventHandler::new(move |p: Picked| match p.id.as_str() {
-                                "house" => set(rig.clone(), true, false),
-                                "full" => set(rig.clone(), true, true),
-                                "none" => set(rig.clone(), false, false),
-                                _ => {}
-                            }));
+                            open_menu(host, left - MENU_W, bottom + 4.0, items, mute_pick(rig));
                         }
                     });
                 }
@@ -326,13 +332,26 @@ fn MuteButton(house: bool, phones: bool) -> Element {
             onpointerup: {
                 let rig = rig.clone();
                 move |_| {
+                    let was = held();
                     held.set(false);
-                    if !fired() {
+                    if was && !fired() {
                         if any { set(rig.clone(), false, false) } else { set(rig.clone(), true, phones) }
                     }
                 }
             },
+            onpointerleave: move |_| held.set(false),
             onpointercancel: move |_| held.set(false),
+            oncontextmenu: {
+                let rig = rig.clone();
+                let items = items.clone();
+                move |e: MouseEvent| {
+                    e.prevent_default();
+                    let (c, el) = (e.client_coordinates(), e.element_coordinates());
+                    let (left, bottom) = (c.x - el.x, c.y - el.y + f64::from(TOP_H));
+                    held.set(false);
+                    open_menu(host, left - MENU_W, bottom + 4.0, items.clone(), mute_pick(rig.clone()));
+                }
+            },
             if shade > 0.0 {
                 span { style: "position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,{shade});" }
             }
@@ -351,12 +370,27 @@ fn MuteButton(house: bool, phones: bool) -> Element {
 
 const ROTATED: &str = "transform: rotate(180deg);";
 
+fn set_mutes(rig: Option<RigClient>, house: bool, phones: bool) {
+    if let Some(r) = rig {
+        let _ = dioxus_core::spawn_forever(async move { let _ = r.set_mutes(house, phones).await; });
+    }
+}
+
+/// The mute menu's picks.
+fn mute_pick(rig: Option<RigClient>) -> EventHandler<Picked> {
+    EventHandler::new(move |p: Picked| match p.id.as_str() {
+        "house" => set_mutes(rig.clone(), true, false),
+        "full" => set_mutes(rig.clone(), true, true),
+        "none" => set_mutes(rig.clone(), false, false),
+        _ => {}
+    })
+}
+
 /// The MIDI light: green while the controller chosen in Setup is plugged in
-/// (or, with none chosen, while any input is), red when the chosen one is
-/// missing, quiet when there is no MIDI at all.
+/// (or with none chosen), red when the chosen one is missing.
 fn use_midi_health() -> &'static str {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let mut tone = use_signal(|| INK_3);
+    let mut tone = use_signal(|| LIVE);
     use_hook(move || {
         spawn(async move {
             let Some(r) = rig else { return };
@@ -368,8 +402,7 @@ fn use_midi_health() -> &'static str {
                 let next = match wanted.filter(|d| !d.is_empty()) {
                     Some(d) if ports.iter().any(|p| p.eq_ignore_ascii_case(&d) || p.contains(&d)) => LIVE,
                     Some(_) => VOID,
-                    None if !ports.is_empty() => LIVE,
-                    None => INK_3,
+                    None => LIVE,
                 };
                 if tone() != next {
                     tone.set(next);

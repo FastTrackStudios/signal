@@ -1777,6 +1777,9 @@ pub struct SetlistEntryDef {
     pub key: String,
     /// Per-set tempo override; 0 = the song's default.
     pub bpm: u32,
+    /// The patch it starts on in this set; empty = the song's own start.
+    #[facet(default)]
+    pub start: String,
 }
 
 /// A named setlist (e.g. "XR Wednesday 7-8-26").
@@ -1863,6 +1866,7 @@ pub fn default_setlists() -> Vec<SetlistDef> {
             song: song.to_string(),
             key: String::new(),
             bpm: 0,
+            start: String::new(),
         }
     }
     vec![

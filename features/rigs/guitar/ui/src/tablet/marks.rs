@@ -26,7 +26,7 @@ pub fn block_colour(kind: &str) -> &'static str {
         "eq" => "#22C55E",
         "delay" => "#3B82F6",
         "reverb" => "#8B5CF6",
-        "chorus" | "modulation" => "#7DD3FC",
+        "chorus" => "#7DD3FC",
         _ => "#a1a1aa",
     }
 }
@@ -93,6 +93,7 @@ pub fn ProfileIcon(name: String, colour: String, size: u32) -> Element {
                 "Rock" => rsx! {
                     rect { x: "2.5", y: "2", width: "11", height: "12", rx: "1.5", fill: "none", stroke: "{colour}", stroke_width: "1.5" }
                     circle { cx: "8", cy: "9", r: "3", fill: "none", stroke: "{colour}", stroke_width: "1.5" }
+                    path { d: "M5 4.5h1", fill: "none", stroke: "{colour}", stroke_width: "1.5", stroke_linecap: "round" }
                 },
                 "Jazz" => rsx! {
                     path { d: "M5.5 11.5v-8l7-1.5v8", fill: "none", stroke: "{colour}", stroke_width: "1.5", stroke_linecap: "round", stroke_linejoin: "round" }
@@ -102,6 +103,24 @@ pub fn ProfileIcon(name: String, colour: String, size: u32) -> Element {
                 "Indie" => rsx! {
                     circle { cx: "8", cy: "8", r: "6.2", fill: "none", stroke: "{colour}", stroke_width: "1.5" }
                     circle { cx: "8", cy: "8", r: "2", fill: "none", stroke: "{colour}", stroke_width: "1.5" }
+                    path { d: "M8 3.6a4.4 4.4 0 0 1 4.4 4.4", fill: "none", stroke: "{colour}", stroke_width: "1.5", stroke_linecap: "round", opacity: "0.6" }
+                },
+                // A cassette.
+                "MkGee" => rsx! {
+                    rect { x: "1.5", y: "3.5", width: "13", height: "9", rx: "1.5", fill: "none", stroke: "{colour}", stroke_width: "1.5" }
+                    circle { cx: "5.5", cy: "7.5", r: "1.3", fill: "none", stroke: "{colour}", stroke_width: "1.5" }
+                    circle { cx: "10.5", cy: "7.5", r: "1.3", fill: "none", stroke: "{colour}", stroke_width: "1.5" }
+                    path { d: "M4.5 12.5 5.5 10.5h5l1 2", fill: "none", stroke: "{colour}", stroke_width: "1.5", stroke_linecap: "round", stroke_linejoin: "round" }
+                },
+                // A flask.
+                "Experimental" => rsx! {
+                    path { d: "M6 1.8h4M6.7 1.8v4.4L2.9 12.6a1.2 1.2 0 0 0 1 1.9h8.2a1.2 1.2 0 0 0 1-1.9L9.3 6.2V1.8", fill: "none", stroke: "{colour}", stroke_width: "1.5", stroke_linecap: "round", stroke_linejoin: "round" }
+                    path { d: "M4.6 10h6.8", fill: "none", stroke: "{colour}", stroke_width: "1.5", stroke_linecap: "round" }
+                },
+                // Waves.
+                "Soundscape" => rsx! {
+                    path { d: "M1.5 6c1.6-1.4 3.2-1.4 4.8 0s3.2 1.4 4.8 0 2.6-1.1 3.4-.6", fill: "none", stroke: "{colour}", stroke_width: "1.5", stroke_linecap: "round" }
+                    path { d: "M1.5 10.5c1.6-1.4 3.2-1.4 4.8 0s3.2 1.4 4.8 0 2.6-1.1 3.4-.6", fill: "none", stroke: "{colour}", stroke_width: "1.5", stroke_linecap: "round", opacity: "0.6" }
                 },
                 _ => rsx! {
                     path { d: "M8 1.6 14.4 5 8 8.4 1.6 5Z", fill: "none", stroke: "{colour}", stroke_width: "1.5", stroke_linejoin: "round" }
@@ -109,6 +128,44 @@ pub fn ProfileIcon(name: String, colour: String, size: u32) -> Element {
                     path { d: "M1.6 11.2 8 14.6l6.4-3.4", fill: "none", stroke: "{colour}", stroke_width: "1.5", stroke_linecap: "round", stroke_linejoin: "round", opacity: "0.6" }
                 },
             }
+        }
+    }
+}
+
+/// Where a patch comes from, a letter's size (the prototype's
+/// `SourceIcon`): a note for the song's own (`from` "song"), else the
+/// profile's own icon — quiet for the profile the song plays on
+/// ("profile"), in its colour for one it borrows from ("other").
+#[component]
+pub fn SourceIcon(from: &'static str, colour: String, size: u32, profile: Option<String>) -> Element {
+    if from != "song" && let Some(p) = profile {
+        return rsx! { ProfileIcon { name: p, colour, size } };
+    }
+    let fill = if from == "other" { colour.clone() } else { "none".to_string() };
+    rsx! {
+        svg { width: "{size}", height: "{size}", view_box: "0 0 12 12", style: "flex-shrink: 0; display: block;",
+            if from == "song" {
+                path { d: "M4.6 2.2 10 1v6.6", fill: "none", stroke: "{colour}", stroke_width: "1.4", stroke_linecap: "round", stroke_linejoin: "round" }
+                path { d: "M4.6 2.2v6.6", fill: "none", stroke: "{colour}", stroke_width: "1.4", stroke_linecap: "round" }
+                ellipse { cx: "3.1", cy: "9.2", rx: "1.9", ry: "1.5", fill: "{colour}" }
+                ellipse { cx: "8.5", cy: "8", rx: "1.9", ry: "1.5", fill: "{colour}" }
+            } else {
+                path { d: "M6 1.2 11 3.8 6 6.4 1 3.8Z", fill: "{fill}", stroke: "{colour}", stroke_width: "1.2", stroke_linejoin: "round" }
+                path { d: "M1 6.2 6 8.8l5-2.6", fill: "none", stroke: "{colour}", stroke_width: "1.2", stroke_linecap: "round", stroke_linejoin: "round" }
+                path { d: "M1 8.4 6 11l5-2.6", fill: "none", stroke: "{colour}", stroke_width: "1.2", stroke_linecap: "round", stroke_linejoin: "round", opacity: "0.6" }
+            }
+        }
+    }
+}
+
+/// A marker line through its parent's content (the prototype's `Strike`):
+/// a played song, a bypassed block. The parent must be `position: relative`.
+#[component]
+pub fn Strike(width: f64) -> Element {
+    rsx! {
+        svg { view_box: "0 0 100 10", preserve_aspect_ratio: "none",
+            style: "position: absolute; left: -4px; top: 50%; height: 12px; margin-top: -6px; width: calc(100% + 8px);",
+            path { d: "M1 6 C 20 4.5, 40 6.8, 60 5.2 S 90 4.6, 99 5.6", fill: "none", stroke: "#a1a1aa", stroke_width: "{width}", vector_effect: "non-scaling-stroke" }
         }
     }
 }

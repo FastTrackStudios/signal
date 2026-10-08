@@ -83,11 +83,30 @@ pub fn open_naming(host: Option<PopupHost>, x: f64, y: f64, item: Item, on_pick:
     open_at(host, x, y, vec![item], Some(0), on_pick, || {});
 }
 
+/// Open straight into naming, anchored under `el` as a ⋯ menu is: its
+/// right edge at the element's, 4pt below it — a "+ Add…" row's field.
+pub fn open_naming_under(host: Option<PopupHost>, el: Option<std::rc::Rc<MountedData>>, item: Item, on_pick: EventHandler<Picked>) {
+    let Some(el) = el else { return };
+    spawn(async move {
+        if let Ok(r) = el.get_client_rect().await {
+            open_naming(host, r.max_x() - MENU_W, r.max_y() + 4.0, item, on_pick);
+        }
+    });
+}
+
+/// The window's size in points, when the host says (0 when it does not).
+fn window_size() -> (f64, f64) {
+    try_consume_context::<crate::control::WindowSize>().map_or((0.0, 0.0), |s| *s.0.peek())
+}
+
 fn open_at(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picked>, on_close: impl Fn() + 'static) {
     let Some(host) = host else { return };
     if items.is_empty() {
         return;
     }
+    // Keep it on screen: left of the point when it would run off the right.
+    let (w, _) = window_size();
+    let x = if w > 0.0 && x + MENU_W > w - 8.0 { (x - MENU_W).max(8.0) } else { x };
     host.open(
         x,
         y,
@@ -144,8 +163,29 @@ fn MenuPanel(items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picke
     let mut naming = use_signal(|| start);
     let mut armed = use_signal(|| None::<usize>);
     let mut text = use_signal(|| initial.unwrap_or_default());
+    // Kept on screen: measured once drawn, and lifted when it would run
+    // off the bottom (again when it turns into the name field).
+    let (_, win_h) = window_size();
+    let mut lift = use_signal(|| 0.0_f64);
+    let place = move |e: MountedEvent| {
+        let el = e.data();
+        spawn(async move {
+            let Ok(r) = el.get_client_rect().await else { return };
+            if win_h <= 0.0 {
+                return;
+            }
+            let top = r.min_y() + *lift.peek();
+            let bottom = top + r.height();
+            let up = if bottom > win_h - 8.0 { (bottom - (win_h - 8.0)).min(top - 8.0).max(0.0) } else { 0.0 };
+            if (*lift.peek() - up).abs() > 0.5 {
+                lift.set(up);
+            }
+        });
+    };
+    let max_h = if win_h > 0.0 { format!("{}px", win_h - 16.0) } else { "70vh".to_string() };
     let panel = format!(
-        "width: {MENU_W}px; max-height: 70vh; overflow-y: auto; padding: 4px; box-sizing: border-box; background: #0d0d10; border: 1px solid {RULE_STRONG}; border-radius: {R_MD}; box-shadow: 0 16px 40px rgba(0,0,0,0.7); font-family: {FONT}; color: {INK};"
+        "position: relative; top: {}px; width: {MENU_W}px; max-height: {max_h}; overflow-y: auto; padding: 4px; box-sizing: border-box; background: #0d0d10; border: 1px solid {RULE_STRONG}; border-radius: {R_MD}; box-shadow: 0 16px 40px rgba(0,0,0,0.7); font-family: {FONT}; color: {INK};",
+        -lift()
     );
     if let Some(i) = naming()
         && let Some(Item::Name { id, label, initial, confirm, taken }) = items.get(i).cloned()
@@ -167,7 +207,7 @@ fn MenuPanel(items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picke
         };
         let commit2 = commit.clone();
         return rsx! {
-            div { style: "{panel}",
+            div { style: "{panel}", onmounted: place,
                 div { style: "padding: 10px; display: flex; flex-direction: column; gap: 10px;",
                     div { style: "font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_3};", "{title}" }
                     input {
@@ -194,7 +234,7 @@ fn MenuPanel(items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picke
                         }
                         button {
                             disabled: !ok,
-                            style: "min-height: 44px; padding: 0 18px; border-radius: {R}; border: 1px solid {pick(ok, DIM, RULE_STRONG)}; background: {pick(ok, DIM, CLEAR)}; color: {pick(ok, INK, INK_3)}; font-weight: 650; font-size: 15px; font-family: {FONT}; cursor: pointer;",
+                            style: "min-height: 44px; padding: 0 18px; border-radius: {R}; border: 1px solid {pick(ok, DIM, RULE_STRONG)}; background: {pick(ok, DIM, CLEAR)}; color: {pick(ok, \"#ffffff\", INK_3)}; font-weight: 650; font-size: 15px; font-family: {FONT}; cursor: pointer;",
                             onclick: move |_| if ok { commit2() },
                             "{confirm}"
                         }
@@ -204,7 +244,7 @@ fn MenuPanel(items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picke
         };
     }
     rsx! {
-        div { role: "menu", style: "{panel}", tabindex: "-1",
+        div { role: "menu", style: "{panel}", tabindex: "-1", onmounted: place,
             onkeydown: move |e: KeyboardEvent| if e.key() == Key::Escape { on_close.call(()) },
             for (i, it) in items.iter().cloned().enumerate() {
                 match it {
@@ -287,19 +327,24 @@ fn row(armed: bool) -> String {
 }
 
 /// A row that opens its menu on a long press, as its ⋯ does: hold still
-/// for half a second and the menu opens at the finger. Moving (a scroll,
-/// a drag) or lifting first lets the press be an ordinary tap.
+/// for half a second and the menu opens at the finger (a right-click opens
+/// it at once). Moving more than 10pt or lifting first lets the press be an
+/// ordinary tap. `off`: no long press (a list being reordered).
 #[component]
-pub fn PressMenu(items: Vec<Item>, on_pick: EventHandler<Picked>, style: String, children: Element) -> Element {
+pub fn PressMenu(items: Vec<Item>, on_pick: EventHandler<Picked>, style: String, #[props(default)] off: bool, children: Element) -> Element {
     let host = PopupHost::try_use();
     // Bumped on every press and every release: a press's timer opens the
     // menu only if nothing came after it.
     let mut press = use_signal(|| 0_u64);
     let mut at = use_signal(|| (0.0_f64, 0.0_f64));
+    let menu = items.clone();
     rsx! {
         div {
             style: "{style}",
             onpointerdown: move |e: PointerEvent| {
+                if off {
+                    return;
+                }
                 let c = e.client_coordinates();
                 at.set((c.x, c.y));
                 let n = *press.peek() + 1;
@@ -310,20 +355,28 @@ pub fn PressMenu(items: Vec<Item>, on_pick: EventHandler<Picked>, style: String,
                     if *press.peek() == n {
                         press.set(n + 1);
                         let (x, y) = *at.peek();
-                        open_menu(host, x - MENU_W / 2.0, y + 12.0, items, on_pick);
+                        open_menu(host, x, y, items, on_pick);
                     }
                 });
             },
             onpointermove: move |e: PointerEvent| {
                 let c = e.client_coordinates();
                 let (x, y) = *at.peek();
-                if (c.x - x).abs() > 8.0 || (c.y - y).abs() > 8.0 {
+                if (c.x - x).hypot(c.y - y) > 10.0 {
                     press += 1;
                 }
             },
             onpointerup: move |_| press += 1,
             onpointercancel: move |_| press += 1,
-            onpointerleave: move |_| press += 1,
+            oncontextmenu: move |e: MouseEvent| {
+                if off {
+                    return;
+                }
+                e.prevent_default();
+                press += 1;
+                let c = e.client_coordinates();
+                open_menu(host, c.x, c.y, menu.clone(), on_pick);
+            },
             {children}
         }
     }

@@ -72,12 +72,17 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
             }
         }),
     });
+    // A press anywhere outside the macro bar and its panel closes the panel
+    // (the press still lands where it was meant).
+    let away = use_context_provider(macros::MacroAway::new);
     use_effect(move || {
         let mut b = pick.building;
         b.set(view() == View::Build);
     });
     rsx! {
-        div { style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; background: {DESK}; color: {INK}; font-family: {FONT}; overflow: hidden;",
+        div {
+            style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; background: {DESK}; color: {INK}; font-family: {FONT}; font-weight: 500; overflow: hidden;",
+            onpointerdown: move |_| away.press(),
             topbar::TopBar {
                 model: model.clone(),
                 state,

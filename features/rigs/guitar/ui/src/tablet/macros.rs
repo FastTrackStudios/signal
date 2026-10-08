@@ -14,7 +14,9 @@
 //! A glow rises behind a knob while its effect works, and the gate shows
 //! the guitar's level against its threshold.
 
+use std::cell::Cell as Flag;
 use std::collections::BTreeMap;
+use std::rc::Rc;
 use std::time::Duration;
 
 use dioxus::prelude::*;
@@ -71,10 +73,38 @@ fn greyish(colour: &str) -> bool {
     )
 }
 
+/// The open sub-macro panel, and the way a press outside it closes it: the
+/// bar marks a press as its own on the way up; the app's root, which every
+/// press reaches after, closes the panel for any other.
+#[derive(Clone)]
+pub struct MacroAway {
+    open: Signal<Option<String>>,
+    inside: Rc<Flag<bool>>,
+}
+
+impl MacroAway {
+    pub fn new() -> Self {
+        Self { open: Signal::new(None), inside: Rc::new(Flag::new(false)) }
+    }
+
+    /// A press reached the app's root.
+    pub fn press(&self) {
+        if self.inside.replace(false) {
+            return;
+        }
+        if self.open.peek().is_some() {
+            let mut open = self.open;
+            open.set(None);
+        }
+    }
+}
+
 #[component]
 pub fn TouchMacroBar(state: RigViewState) -> Element {
     let knobs = state.macros.read().clone();
-    let mut open = use_signal(|| None::<String>);
+    let away = use_hook(|| try_consume_context::<MacroAway>().unwrap_or_else(MacroAway::new));
+    let mut open = away.open;
+    let inside = away.inside.clone();
     let fx = state.fx.read().clone();
     let heard = Heard {
         input: *state.in_level.read(),
@@ -87,13 +117,10 @@ pub fn TouchMacroBar(state: RigViewState) -> Element {
     };
     let shown = open().and_then(|id| knobs.iter().find(|k| k.id == id).cloned());
     rsx! {
-        div { style: "position: relative;",
+        div {
+            style: "position: relative;",
+            onpointerdown: move |_| inside.set(true),
             if let Some(k) = shown.filter(|k| !k.children.is_empty()) {
-                // A press anywhere below or beside the bar closes the panel.
-                div {
-                    style: "position: absolute; top: 100%; left: -2000px; right: -2000px; height: 3000px; z-index: 4;",
-                    onpointerdown: move |_| open.set(None),
-                }
                 Panel { knob: k, on_close: move |()| open.set(None) }
             }
             div { style: "display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 1px; background: #000;",
@@ -137,7 +164,7 @@ fn Panel(knob: MacroKnobView, on_close: EventHandler<()>) -> Element {
         }
         rows.entry(c.group.clone()).or_default().push(c.clone());
     }
-    let heads = order.len() > 1 && order.iter().any(|g| !g.is_empty());
+    let heads = order.iter().any(|g| !g.is_empty());
     let cols = rows.values().map(Vec::len).max().unwrap_or(1);
     let template = if heads { format!("64px repeat({cols}, minmax(0, 1fr))") } else { format!("repeat({cols}, minmax(0, 1fr))") };
     let label_ink = lift(&knob.color);
@@ -250,7 +277,10 @@ fn Cell(
     // answers a moment later).
     let mut live = use_signal(|| None::<f64>);
     let mut width = use_signal(|| 120.0_f64);
-    let mut last_tap = use_signal(|| false);
+    // A press came down in the last 300 ms: the next is a double-tap. Each
+    // press its own window (a later one's timer leaves it be).
+    let mut recent = use_signal(|| false);
+    let mut presses = use_signal(|| 0u32);
     // A level reads what the patch sets: its first param's live value
     // (0 when its block is off), not the knob's offset from rest.
     let v = match (scale == "level", live(), level) {
@@ -320,9 +350,11 @@ fn Cell(
                     // The press is the cell's to drag: no panning under it.
                     e.prevent_default();
                     e.stop_propagation();
-                    // A second tap within 300 ms: back to rest.
-                    if last_tap() {
-                        last_tap.set(false);
+                    // A second press within 300 ms of the last: back to rest.
+                    let mine = presses() + 1;
+                    presses.set(mine);
+                    if recent() {
+                        recent.set(false);
                         live.set(None);
                         if let Some(r) = rig.clone() {
                             let id = id.clone();
@@ -332,8 +364,17 @@ fn Cell(
                         }
                         return;
                     }
+                    recent.set(true);
+                    spawn(async move {
+                        architect::platform::sleep(Duration::from_millis(300)).await;
+                        if presses() == mine {
+                            recent.set(false);
+                        }
+                    });
                     let x0 = e.client_coordinates().x;
-                    let v0 = v;
+                    // From the knob's own value (a level knob shows its
+                    // param's level, but turns the knob).
+                    let v0 = live().unwrap_or(value).clamp(0.0, 1.0);
                     let span = width() * 2.5;
                     let send = send.clone();
                     let Some(bus) = bus else { return };
@@ -341,7 +382,7 @@ fn Cell(
                     let flag = moved_cell.clone();
                     bus.begin(move |ev| {
                     // Signals are handles: copied in, set through the copy.
-                    let (mut active, mut live, mut last_tap) = (active, live, last_tap);
+                    let (mut active, mut live) = (active, live);
                     match ev {
                         DragEvent::Move { x, .. } => {
                             if !flag.get() && (x - x0).abs() < 4.0 {
@@ -359,15 +400,8 @@ fn Cell(
                             active.set(false);
                             live.set(None);
                             if !flag.get() {
-                                // A tap: wait out a second one before it opens.
-                                last_tap.set(true);
-                                spawn(async move {
-                                    architect::platform::sleep(Duration::from_millis(300)).await;
-                                    if last_tap() {
-                                        last_tap.set(false);
-                                        on_tap.call(());
-                                    }
-                                });
+                                // A tap: its sub-macros, at once.
+                                on_tap.call(());
                             }
                         }
                     }

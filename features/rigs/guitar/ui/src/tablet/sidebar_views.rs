@@ -11,13 +11,13 @@
 use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{CompositionModel, PerformanceModel};
-use signal_widgets::drag_bus::{DragBus, DragEvent};
+use signal_widgets::drag_bus::DragBus;
 use signal_widgets::PopupHost;
 
-use super::colors::name_colour;
+use super::colors::{name_colour, tape_mark};
 use super::marks::ProfileIcon;
-use super::menu::{open_naming, Item, MoreButton, Picked};
-use super::setlist::{call, play_patch, use_library, Plus, StackRow};
+use super::menu::{open_naming_under, Item, MoreButton, Picked, PressMenu};
+use super::setlist::{begin_row_drag, call, is_live, keep_row, part_patch, profile_stacks, stack_for, use_library, Plus, Rows, StackRow, StackView};
 use super::tokens::*;
 use crate::state::RigViewState;
 
@@ -60,6 +60,9 @@ pub fn PresetView(state: RigViewState) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let comp = use_compositions(state);
     let c = comp.read().clone();
+    let lib = use_library(state);
+    let l = lib.read().clone();
+    let perf: PerformanceModel = state.perf.read().clone();
     let mut open = use_signal(|| None::<String>);
     let playing = c.active_preset.clone();
     let opened = open().or_else(|| (!playing.is_empty()).then(|| playing.clone()));
@@ -72,7 +75,8 @@ pub fn PresetView(state: RigViewState) -> Element {
                     {
                         let is_playing = p.name == playing;
                         let is_open = opened.as_deref() == Some(p.name.as_str());
-                        let (tape, _) = crate::perform::folder_color(&p.name);
+                        // The swatch: the tape of the stack it plays in.
+                        let swatch = tape_mark(&stack_for(&perf, &l, &perf.profile_name, &p.name));
                         let first = p.snapshots.first().map(|s| s.name.clone()).unwrap_or_default();
                         let rig = rig.clone();
                         let name = p.name.clone();
@@ -91,7 +95,7 @@ pub fn PresetView(state: RigViewState) -> Element {
                                     if is_playing {
                                         span { style: "position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: {LIVE};" }
                                     }
-                                    span { style: "width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; background: {pick(tape == \"#3f3f46\", INK_3, tape)};" }
+                                    span { style: "width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; background: {swatch};" }
                                     span { style: "flex: 1; min-width: 0; font-size: 16px; font-weight: {pick(is_playing, 700, 600)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
                                     span { style: "font-size: 13px; color: {INK_3};", "{n} {pick(n == 1, \"variation\", \"variations\")}" }
                                     svg { key: "{is_open}", width: "10", height: "6", view_box: "0 0 10 6",
@@ -115,6 +119,7 @@ fn Variations(preset: String, variations: Vec<String>, playing: (String, String)
     let rig = use_hook(try_consume_context::<RigClient>);
     let host = PopupHost::try_use();
     let n = variations.len();
+    let mut add_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
     rsx! {
         div { style: "background: rgba(0,0,0,0.25); padding-bottom: 2px;",
             for v in variations.iter().cloned() {
@@ -138,12 +143,12 @@ fn Variations(preset: String, variations: Vec<String>, playing: (String, String)
             }
             button {
                 style: "display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 16px 0 36px; border: none; background: transparent; color: {INK_3}; font-size: 14px; font-weight: 600; font-family: {FONT}; text-align: left; justify-content: flex-start; cursor: pointer;",
+                onmounted: move |e| add_el.set(Some(e.data())),
                 onclick: {
                     let (rig, preset, variations) = (rig.clone(), preset.clone(), variations.clone());
-                    move |e: MouseEvent| {
-                        let (c, el) = (e.client_coordinates(), e.element_coordinates());
+                    move |_| {
                         let (rig, preset) = (rig.clone(), preset.clone());
-                        open_naming(host, c.x - el.x + 20.0, c.y - el.y + 44.0, Item::name("add", format!("New variation of {preset}…"), format!("Variation {}", n + 1), "Add", variations.clone()), EventHandler::new(move |p: Picked| {
+                        open_naming_under(host, add_el.peek().clone(), Item::name("add", format!("New variation of {preset}…"), format!("Variation {}", n + 1), "Add", variations.clone()), EventHandler::new(move |p: Picked| {
                             let (preset, name) = (preset.clone(), p.text.clone());
                             call!(rig, |r| r.save_core_snapshot(preset, name));
                         }));
@@ -158,6 +163,9 @@ fn Variations(preset: String, variations: Vec<String>, playing: (String, String)
 
 // ── The profile's stacks ───────────────────────────────────────────────────
 
+/// The profile's stacks on their own — the same rows the setlist shows
+/// under a section, with grips to drag them into order; the stack playing
+/// opens into all its patches.
 #[component]
 pub fn ProfileView(state: RigViewState) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -166,66 +174,63 @@ pub fn ProfileView(state: RigViewState) -> Element {
     let perf: PerformanceModel = state.perf.read().clone();
     let l = lib.read().clone();
     let profile = perf.profile_name.clone();
-    let patches: usize = perf.stacks.iter().map(|s| s.patches.len()).sum();
-    // The stacks the profile fills (not an empty slot like Special).
-    let count = perf.stacks.iter().filter(|s| !s.patches.is_empty()).count();
+    let views = profile_stacks(&perf, &l);
+    let patches: usize = views.iter().map(|v| v.patches.len()).sum();
+    let count = views.len();
     let drag = use_signal(|| None::<(usize, usize)>);
+    let rows: Rows = use_signal(Vec::new);
     let colour = name_colour(&profile).to_string();
+    let own = part_patch(&perf);
+    let live = is_live(&perf, own.as_deref());
+    let full: Vec<usize> = views.iter().map(|v| v.index).collect();
     rsx! {
         section { style: "height: 100%; display: flex; flex-direction: column; min-height: 0; background: {SHEET}; font-family: {FONT}; color: {INK};",
             Header { title: profile.clone(), sub: format!("{count} stacks · {patches} patches"), icon: Some(profile.clone()) }
-            div { style: "flex: 1; min-height: 0; overflow-y: auto; padding: 8px 0 0 8px;",
-                div { style: "background: rgba(0,0,0,0.18); display: flex; flex-direction: column; border-bottom: 1px solid {RULE};",
-                    for (i, st) in perf.stacks.iter().cloned().enumerate().filter(|(_, s)| !s.patches.is_empty()) {
-                        {
-                            let (dragging, drop_at) = match drag() {
-                                Some((from, to)) => (from == i, to == i && from != i),
-                                None => (false, false),
-                            };
-                            let (tape, _) = crate::perform::folder_color(&st.name);
-                            let rig = rig.clone();
-                            rsx! {
-                                div { key: "{st.name}", style: "display: flex; flex-direction: column; opacity: {pick(dragging, 0.5, 1.0)}; {drop_line(drop_at)}",
-                                    div { style: "display: flex; align-items: stretch;",
-                                        // The grip: drag the stack into its place.
-                                        span {
-                                            "aria-label": "Drag {st.name} to move it",
-                                            style: "width: 36px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-top: 1px solid {RULE}; cursor: grab; touch-action: none;",
-                                            onpointerdown: move |e: PointerEvent| {
-                                                e.prevent_default();
-                                                e.stop_propagation();
-                                                let y0 = e.client_coordinates().y;
-                                                let mut drag = drag;
-                                                drag.set(Some((i, i)));
-                                                let Some(bus) = bus else { return };
-                                                let rig = rig.clone();
-                                                bus.begin(move |ev| {
-                                                    let mut drag = drag;
-                                                    match ev {
-                                                        DragEvent::Move { y, .. } => {
-                                                            let to = (i as i64 + ((y - y0) / 45.0).round() as i64).clamp(0, count as i64 - 1) as usize;
-                                                            drag.set(Some((i, to)));
-                                                        }
-                                                        DragEvent::End => {
-                                                            let to = drag.peek().map_or(i, |d| d.1);
-                                                            drag.set(None);
-                                                            if to != i {
-                                                                call!(rig, |r| r.move_stack(i as u32, to as u32));
-                                                            }
-                                                        }
-                                                    }
+            div { style: "flex: 1; min-height: 0; overflow-y: auto; padding-top: 8px;",
+                div { style: "position: relative; padding: 2px 0 8px 8px;",
+                    div { style: "background: rgba(0,0,0,0.18); display: flex; flex-direction: column; border-bottom: 1px solid {RULE};",
+                        for (k, v) in views.iter().cloned().enumerate() {
+                            {
+                                let (lifted, line) = match drag() {
+                                    Some((from, to)) if to == k && from != k => (false, Some(to < from)),
+                                    Some((from, _)) => (from == k, None),
+                                    None => (false, None),
+                                };
+                                let rig = rig.clone();
+                                let full = full.clone();
+                                rsx! {
+                                    div {
+                                        key: "{v.name}",
+                                        style: "position: relative; display: flex; flex-direction: column; opacity: {pick(lifted, 0.5, 1.0)};",
+                                        onmounted: move |e| keep_row(rows, k, &e),
+                                        StackRow {
+                                            view: v.clone(),
+                                            shown: k,
+                                            count,
+                                            prev: k.checked_sub(1).map(|p| full[p]),
+                                            next: full.get(k + 1).copied(),
+                                            lib: l.clone(),
+                                            profile: profile.clone(),
+                                            part: perf.parts.get(perf.part_index as usize).cloned().unwrap_or_default(),
+                                            own: own.clone(),
+                                            live,
+                                            where_: "this song".to_string(),
+                                            song_colour: colour.clone(),
+                                            in_song: false,
+                                            grip: move |_: PointerEvent| {
+                                                let (rig, full) = (rig.clone(), full.clone());
+                                                begin_row_drag(bus, drag, rows, count, k, 16.0, move |from, to| {
+                                                    let (a, b) = (full[from], full[to]);
+                                                    call!(rig, |r| r.move_stack(a as u32, b as u32));
                                                 });
                                             },
-                                            svg { width: "14", height: "12", view_box: "0 0 14 12",
-                                                path { d: "M1.5 2h11M1.5 6h11M1.5 10h11", stroke: pick(tape == "#3f3f46", INK_3, tape), stroke_width: "1.7", stroke_linecap: "round" }
-                                            }
                                         }
-                                        div { style: "flex: 1; min-width: 0;",
-                                            StackRow { stack: st.clone(), index: i, count, lib: l.clone(), profile: profile.clone(), part: Default::default(), where_: String::new(), song_colour: colour.clone(), in_song: false }
+                                        if v.on {
+                                            StackPatches { view: v.clone() }
                                         }
-                                    }
-                                    if st.is_active {
-                                        StackPatches { stack: st.name.clone(), patches: st.patches.clone(), pos: st.position as usize }
+                                        if let Some(above) = line {
+                                            span { style: "position: absolute; left: 0; right: 0; {pick(above, \"top\", \"bottom\")}: 0px; height: 2px; background: {INK_2}; z-index: 4; pointer-events: none;" }
+                                        }
                                     }
                                 }
                             }
@@ -237,21 +242,26 @@ pub fn ProfileView(state: RigViewState) -> Element {
     }
 }
 
-/// Every patch in the stack playing: tap one to play it, ⋯ to rename,
-/// move or remove it; "Add a patch" at the foot.
+/// Every patch in the stack playing: tap one to play it; ⋯ (or a
+/// long-press) to rename, move or remove it; "Add a patch" at the foot.
 #[component]
-fn StackPatches(stack: String, patches: Vec<String>, pos: usize) -> Element {
+fn StackPatches(view: StackView) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let host = PopupHost::try_use();
-    let (tape, _) = crate::perform::folder_color(&stack);
+    let tape = tape_mark(&view.name);
+    let stack = view.name.clone();
+    let patches: Vec<String> = view.patches.iter().map(|p| p.0.clone()).collect();
     let n = patches.len();
+    let index = view.index;
+    let mut add_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
     rsx! {
         div { style: "background: rgba(0,0,0,0.25); padding-bottom: 2px;",
             for (k, p) in patches.iter().cloned().enumerate() {
                 {
-                    let on = k == pos;
+                    let on = k == view.cursor;
+                    let at = view.at.get(k).copied().unwrap_or(k);
                     let (rig, stack_name, name) = (rig.clone(), stack.clone(), p.clone());
-                    let (rig_tap, name_tap) = (rig.clone(), name.clone());
+                    let rig_tap = rig.clone();
                     let items = vec![
                         Item::head(p.clone()),
                         Item::name("rename", "Rename…", p.clone(), "Rename", patches.clone()),
@@ -260,43 +270,47 @@ fn StackPatches(stack: String, patches: Vec<String>, pos: usize) -> Element {
                         Item::Sep,
                         Item::delete("remove", "Remove from the stack").unless((n <= 1).then(|| "A stack keeps at least one patch".to_string())),
                     ];
+                    let to_up = k.checked_sub(1).and_then(|j| view.at.get(j).copied()).unwrap_or(at);
+                    let to_down = view.at.get(k + 1).copied().unwrap_or(at);
+                    let on_pick = EventHandler::new(move |x: Picked| {
+                        let (stack_name, name) = (stack_name.clone(), name.clone());
+                        match x.id.as_str() {
+                            "rename" => {
+                                let new_name = x.text.clone();
+                                call!(rig, |r| r.rename_patch(name, new_name));
+                            }
+                            "up" => call!(rig, |r| r.move_stack_patch(stack_name, at as u32, to_up as u32)),
+                            "down" => call!(rig, |r| r.move_stack_patch(stack_name, at as u32, to_down as u32)),
+                            "remove" => call!(rig, |r| r.set_stack_patch(stack_name, name, false)),
+                            _ => {}
+                        }
+                    });
                     rsx! {
-                        div { key: "{p}", style: "position: relative; display: flex; align-items: center; min-height: 44px; background: {pick(on, \"rgba(255,255,255,0.06)\", CLEAR)};",
+                        PressMenu {
+                            key: "{p}",
+                            items: items.clone(),
+                            on_pick,
+                            style: "position: relative; display: flex; align-items: center; min-height: 44px; background: {pick(on, \"rgba(255,255,255,0.06)\", CLEAR)};",
                             button {
-                                style: "flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px 0 52px; text-align: left; border: none; background: transparent; color: {INK}; font-family: {FONT}; cursor: pointer;",
-                                onclick: move |_| play_patch(rig_tap.clone(), name_tap.clone()),
-                                span { style: "width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; box-sizing: border-box; {state_dot(on, tape_ink(tape))}" }
+                                style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-height: 44px; padding: 0 4px 0 52px; text-align: left; border: none; background: transparent; color: {INK}; font-family: {FONT}; cursor: pointer;",
+                                // Play this one: the stack lands on it.
+                                onclick: move |_| call!(rig_tap, |r| r.play_stack_patch(index as u32, at as u32)),
+                                span { style: "width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; box-sizing: border-box; {state_dot(on, tape)}" }
                                 span { style: "flex: 1; min-width: 0; font-size: 15px; font-weight: {pick(on, 700, 560)}; color: {pick(on, INK, INK_2)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p}" }
                             }
-                            MoreButton {
-                                label: format!("{p} actions"),
-                                items,
-                                on_pick: move |x: Picked| {
-                                    let (stack_name, name) = (stack_name.clone(), name.clone());
-                                    match x.id.as_str() {
-                                        "rename" => {
-                                            let new_name = x.text.clone();
-                                            call!(rig, |r| r.rename_patch(name, new_name));
-                                        }
-                                        "up" => call!(rig, |r| r.move_stack_patch(stack_name, k as u32, k as u32 - 1)),
-                                        "down" => call!(rig, |r| r.move_stack_patch(stack_name, k as u32, k as u32 + 1)),
-                                        "remove" => call!(rig, |r| r.set_stack_patch(stack_name, name, false)),
-                                        _ => {}
-                                    }
-                                },
-                            }
+                            MoreButton { label: format!("{p} actions"), items, on_pick }
                         }
                     }
                 }
             }
             button {
                 style: "display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 12px 0 52px; border: none; background: transparent; color: {INK_3}; font-size: 14px; font-weight: 600; font-family: {FONT}; text-align: left; justify-content: flex-start; cursor: pointer;",
+                onmounted: move |e| add_el.set(Some(e.data())),
                 onclick: {
                     let (rig, stack, patches) = (rig.clone(), stack.clone(), patches.clone());
-                    move |e: MouseEvent| {
-                        let (c, el) = (e.client_coordinates(), e.element_coordinates());
+                    move |_| {
                         let (rig, stack) = (rig.clone(), stack.clone());
-                        open_naming(host, c.x - el.x + 40.0, c.y - el.y + 44.0, Item::name("add", format!("New patch in {stack}…"), format!("{stack} {}", n + 1), "Add", patches.clone()), EventHandler::new(move |p: Picked| {
+                        open_naming_under(host, add_el.peek().clone(), Item::name("add", format!("New patch in {stack}…"), format!("{stack} {}", n + 1), "Add", patches.clone()), EventHandler::new(move |p: Picked| {
                             let (name, stack) = (p.text.clone(), stack.clone());
                             call!(rig, |r| r.set_stack_patch(stack, name, true));
                         }));

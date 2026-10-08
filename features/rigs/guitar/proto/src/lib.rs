@@ -314,6 +314,12 @@ pub struct PerformanceModel {
     pub fx_bypass: bool,
     /// Boost pedal level in dB (`0.0` = off; cycles +1 → +2 → +3 → −1).
     pub boost_db: f32,
+    /// The level Boost switches on at (dB) — its own while it is off.
+    #[facet(default)]
+    pub boost_level: f32,
+    /// Panic is resetting everything: every remote's meters go flat.
+    #[facet(default)]
+    pub panicking: bool,
     /// Current tempo (BPM) — drives the tap-tempo blink.
     pub tempo_bpm: u32,
     /// Setlist song names, in order.
@@ -866,8 +872,9 @@ pub struct AudioRigEntry {
     /// Hear the input straight from the interface too.
     #[facet(default)]
     pub direct_monitor: bool,
-    /// Where presets expect the guitar's peaks, dBFS.
-    #[facet(default)]
+    /// Where presets expect the guitar's peaks, dBFS (−15 when a setup
+    /// file has none).
+    #[facet(default = -15.0_f32)]
     pub target_db: f32,
 }
 
@@ -937,13 +944,17 @@ pub struct ProfilePatch {
 }
 
 /// One song in the library, with its defaults.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct SongEntry {
     pub name: String,
     pub key: String,
     pub bpm: u32,
     /// Section names, in order.
     pub parts: Vec<String>,
+    /// Its parts as the setlist shows them (what each plays, its section,
+    /// its changes) — for a song that is not up.
+    #[facet(default)]
+    pub part_list: Vec<PerfPart>,
     /// Names of the setlists it appears in — why it cannot be deleted.
     pub setlists: Vec<String>,
     /// The profile it is played on; empty keeps whatever is loaded.
@@ -1725,6 +1736,9 @@ pub mod rig {
         /// copy — from another profile or a song — or, named fresh, as a
         /// copy of the stack's first patch.
         fn set_stack_patch(&self, stack: String, patch: String, on: bool);
+        /// Play stack `index`'s patch at `position` in its rotation: the
+        /// switch lands there, and steps on from it.
+        fn play_stack_patch(&self, index: u32, position: u32) -> Applied;
         /// Name a new section on the current song, appended at the end.
         ///
         /// Sections are the song's structure, so they are ordered and named
@@ -1748,6 +1762,10 @@ pub mod rig {
         /// a partial-update protocol for it would be more moving parts than
         /// the thing it edits.
         fn set_part_overrides(&self, part: String, overrides: Vec<PartOverride>);
+        /// Write section `part`'s own changes into the patch it plays,
+        /// everywhere it plays (they leave the section). The answer, in
+        /// words.
+        fn save_part_changes(&self, part: String) -> String;
         /// Section `part` plays a module preset's snapshot over its patch —
         /// the section's own (its overrides), not the patch's.
         fn choose_part_module(&self, part: String, module: String, preset: String, snapshot: String) -> Applied;
@@ -1767,6 +1785,9 @@ pub mod rig {
         /// Set the ACTIVE setlist entry's per-set overrides: empty key /
         /// zero bpm fall back to the song's defaults.
         fn set_setlist_entry(&self, entry: u32, key: String, bpm: u32);
+        /// The patch setlist entry `entry` (of the active set) starts on in
+        /// this set; empty: the song's own start.
+        fn set_setlist_entry_start(&self, entry: u32, patch: String);
         /// Load a custom IR wav into a reverb block (Convolution engine);
         /// auto-saves as a patch override.
         fn set_block_ir(&self, id: String, path: String);

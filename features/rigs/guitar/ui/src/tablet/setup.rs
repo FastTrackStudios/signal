@@ -23,7 +23,7 @@ use signal_widgets::drag_bus::{DragBus, DragEvent};
 use signal_widgets::PopupHost;
 
 use super::marks::OverrideIcon;
-use super::menu::{open_menu, Item, MoreButton, Picked};
+use super::menu::{open_menu, open_naming, Item, MoreButton, Picked, MENU_W};
 use super::tokens::*;
 use crate::state::RigViewState;
 
@@ -79,19 +79,19 @@ const INTERFACES: &[Interface] = &[
 /// MIDI controllers, how each connects, and its switches.
 const MIDI_DEVICES: &[(&str, &str, u32)] = &[("XSonic AIRSTEP", "Bluetooth", 5), ("Morningstar MC6", "USB", 6)];
 
-/// What any other interface offers, as far as the rig asks of it.
-const GENERIC: Interface = Interface {
-    name: "",
-    inputs: &[("Input 1", "Inst"), ("Input 2", "Inst")],
-    outputs: &["Outputs 1–2"],
-    phones: &["Phones"],
-    rates: &[44_100, 48_000, 96_000],
-    buffers: &[32, 64, 128, 256, 512, 1024],
-    converter_ms: 2.0,
-};
-
 fn interface_of(r: &AudioRigEntry) -> &'static Interface {
-    INTERFACES.iter().find(|i| i.name == r.device).unwrap_or(&GENERIC)
+    INTERFACES.iter().find(|i| i.name == r.device).unwrap_or(&INTERFACES[0])
+}
+
+/// A fresh id's stamp: the time, in milliseconds.
+fn stamp() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
+/// Where a "+" button's naming opens: its right edge under it.
+fn naming_at(e: &MouseEvent, width: f64, height: f64) -> (f64, f64) {
+    let (c, el) = (e.client_coordinates(), e.element_coordinates());
+    (c.x - el.x + width - MENU_W, c.y - el.y + height + 4.0)
 }
 
 fn latency_ms(r: &AudioRigEntry) -> f64 {
@@ -107,6 +107,7 @@ fn khz(rate: u32) -> String {
 const LIVE_WASH: &str = "rgba(34,197,94,0.08)";
 const LEVEL_OPEN: &str = "rgba(34,197,94,0.55)";
 const KEY_DOWN: &str = "#3a3a42";
+const SWITCH_ON: &str = "rgba(34,197,94,0.1)";
 const GUITAR: &str = "Guitar";
 const END: &str = "flex-end";
 const START: &str = "flex-start";
@@ -123,30 +124,27 @@ fn outline(on: bool) -> String {
 fn tick(d: i32) -> String {
     if d == 0 { "0".to_string() } else { format!("−{}", -d) }
 }
-fn link_label(link: &str) -> &'static str {
-    if link == "Bluetooth" { "Bluetooth MIDI" } else { "USB" }
+/// A scale tick's label on −60…0: the ends flush, the rest centred on it.
+fn tick_place(d: i32) -> String {
+    match d {
+        -60 => "position: absolute; left: 0px;".to_string(),
+        0 => "position: absolute; right: 0px;".to_string(),
+        _ => format!("position: absolute; left: {}%; width: 40px; margin-left: -20px; text-align: center;", f64::from(d + 60) / 60.0 * 100.0),
+    }
 }
-fn running_label(on: bool) -> &'static str {
-    if on { "Connected" } else { "Not connected" }
+fn link_label(link: &str) -> &'static str {
+    if link == "Bluetooth" { "Bluetooth MIDI · connected" } else { "USB · connected" }
 }
 
-/// The device choices: the known interfaces, the devices the system has,
-/// and the one chosen (whatever it is).
-fn device_options(present: &[String], chosen: &str) -> Vec<(String, String, String)> {
-    let mut out: Vec<(String, String, String)> = Vec::new();
-    let mut add = |name: &str, detail: &str| {
-        if !name.is_empty() && !out.iter().any(|o| o.0 == name) {
-            out.push((name.to_string(), name.to_string(), detail.to_string()));
+/// The lines of `log` that came after `prev` — where the end of the one
+/// meets the start of the other (the rig keeps only its latest).
+fn after<'a>(prev: &[String], log: &'a [String]) -> &'a [String] {
+    for o in (0..=prev.len().min(log.len())).rev() {
+        if prev[prev.len() - o..] == log[..o] {
+            return &log[o..];
         }
-    };
-    for p in present {
-        add(p, "Connected");
     }
-    for i in INTERFACES {
-        add(i.name, "");
-    }
-    add(chosen, "");
-    out
+    log
 }
 
 fn signed(v: f64) -> String {
@@ -443,7 +441,9 @@ fn SetupList(tab: SetupTab, on_picked: EventHandler<()>) -> Element {
                                         sub,
                                         sub_mark: !over.is_empty(),
                                         on_pick: move |()| {
-                                            setup.edit(|m| m.guitar_index = i as u32);
+                                            if i != setup.model.peek().guitar_index as usize {
+                                                setup.edit(|m| m.guitar_index = i as u32);
+                                            }
                                             on_picked.call(());
                                         },
                                         items: vec![
@@ -486,7 +486,9 @@ fn SetupList(tab: SetupTab, on_picked: EventHandler<()>) -> Element {
                                         sub: format!("{} · {} · {:.1} ms", khz(x.rate), x.buffer, latency_ms(&x)),
                                         sub_mark: false,
                                         on_pick: move |()| {
-                                            setup.edit(|m| m.rig_index = i as u32);
+                                            if i != setup.model.peek().rig_index as usize {
+                                                setup.edit(|m| m.rig_index = i as u32);
+                                            }
                                             on_picked.call(());
                                         },
                                         items: vec![
@@ -532,7 +534,9 @@ fn SetupList(tab: SetupTab, on_picked: EventHandler<()>) -> Element {
                                         sub: format!("{} · {}", c.device, dev.map_or("USB", |d| d.1)),
                                         sub_mark: false,
                                         on_pick: move |()| {
-                                            setup.edit(|m| m.controller_index = i as u32);
+                                            if i != setup.model.peek().controller_index as usize {
+                                                setup.edit(|m| m.controller_index = i as u32);
+                                            }
                                             on_picked.call(());
                                         },
                                         items: Vec::new(),
@@ -548,18 +552,18 @@ fn SetupList(tab: SetupTab, on_picked: EventHandler<()>) -> Element {
                     button {
                         style: "display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 0 16px; border: none; border-top: 1px solid {RULE}; background: transparent; color: {INK_3}; font-size: 14px; font-weight: 600; font-family: {FONT}; text-align: left; cursor: pointer;",
                         onclick: move |e: MouseEvent| {
-                            let (c, el) = (e.client_coordinates(), e.element_coordinates());
+                            let (x, y) = naming_at(&e, 320.0, 52.0);
                             let item = if tab == SetupTab::Guitar {
                                 Item::name("add", "New guitar…", "New guitar", "Add", taken_g.clone())
                             } else {
                                 Item::name("add", "New audio rig — a copy of this one…", "New rig", "Add", taken_r.clone())
                             };
-                            open_menu(host, c.x - el.x + 12.0, c.y - el.y + 48.0, vec![item], EventHandler::new(move |p: Picked| {
-                                let id = format!("x{}", setup.model.peek().guitars.len() + setup.model.peek().rigs.len() + 1);
+                            open_naming(host, x, y, item, EventHandler::new(move |p: Picked| {
+                                let id = stamp();
                                 if tab == SetupTab::Guitar {
                                     setup.edit(|m| {
                                         m.guitars.push(GuitarEntry {
-                                            id: format!("g-{id}-{}", p.text.to_lowercase()),
+                                            id: format!("g{id}"),
                                             name: p.text.clone(),
                                             colour: "#71717a".into(),
                                             pickups: vec![Pickup { position: "Bridge".into(), model: String::new() }],
@@ -571,7 +575,7 @@ fn SetupList(tab: SetupTab, on_picked: EventHandler<()>) -> Element {
                                 } else {
                                     setup.edit(|m| {
                                         let mut r = audio_rig(m);
-                                        r.id = format!("r-{id}-{}", p.text.to_lowercase());
+                                        r.id = format!("r{id}");
                                         r.name = p.text.clone();
                                         m.rigs.push(r);
                                         m.rig_index = (m.rigs.len() - 1) as u32;
@@ -641,11 +645,11 @@ fn GuitarTab(state: RigViewState) -> Element {
     let over_ink = format!("color-mix(in oklab, {RIG} 70%, {INK})");
     let gates_was = format!("Default {} dB{}", trim0(f64::from(g.tone.gates.get(1).copied().unwrap_or(-70.0))), if g.tone.noisy { " · noisy" } else { "" });
     rsx! {
-        div { style: "display: flex; align-items: stretch; min-height: 100%;",
+        div { style: "display: flex; align-items: flex-start; min-height: 100%;",
             // The guitar: its photo, upright, and its pickups.
-            aside { style: "width: 232px; flex-shrink: 0; padding: 16px; display: flex; flex-direction: column; gap: 14px; border-right: 1px solid {RULE}; box-sizing: border-box;",
+            aside { style: "position: sticky; top: 0px; align-self: stretch; width: 232px; flex-shrink: 0; padding: 16px; display: flex; flex-direction: column; gap: 14px; border-right: 1px solid {RULE}; box-sizing: border-box;",
                 GuitarPhoto { image: g.image.clone(), colour: g.colour.clone(), size: 0 }
-                span { style: "font-size: 20px; font-weight: 800; line-height: 1.15;", "{g.name}" }
+                span { style: "font-size: 20px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.15;", "{g.name}" }
                 div { style: "display: flex; flex-direction: column;",
                     for (i, p) in g.pickups.iter().cloned().enumerate() {
                         div { key: "{i}", style: "display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px solid {RULE};",
@@ -659,8 +663,8 @@ fn GuitarTab(state: RigViewState) -> Element {
                     button {
                         style: "display: flex; align-items: center; gap: 8px; min-height: 44px; width: 100%; border: none; border-top: 1px solid {RULE}; background: transparent; color: {INK_3}; font-size: 14px; font-weight: 600; font-family: {FONT}; cursor: pointer;",
                         onclick: move |e: MouseEvent| {
-                            let (c, el) = (e.client_coordinates(), e.element_coordinates());
-                            open_menu(host, c.x - el.x, c.y - el.y + 44.0, vec![Item::name("add", "Pickup position…", "Middle", "Add", Vec::new())], EventHandler::new(move |p: Picked| setup.edit(|m| {
+                            let (x, y) = naming_at(&e, 200.0, 44.0);
+                            open_naming(host, x, y, Item::name("add", "Pickup position…", "Middle", "Add", Vec::new()), EventHandler::new(move |p: Picked| setup.edit(|m| {
                                 let k = m.guitar_index as usize;
                                 if let Some(g) = m.guitars.get_mut(k) { g.pickups.push(Pickup { position: p.text.clone(), model: String::new() }) }
                             })));
@@ -672,7 +676,7 @@ fn GuitarTab(state: RigViewState) -> Element {
             }
             div { style: "flex: 1; min-width: 0;",
                 // Where a change lands.
-                div { style: "position: sticky; top: 0px; z-index: 2; display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 20px; background: {SHEET}; border-bottom: 1px solid {RULE}; box-sizing: border-box;",
+                div { style: "position: sticky; top: 0px; z-index: 2; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 60px; padding: 8px 20px; background: rgba(14,14,17,0.97); border-bottom: 1px solid {RULE}; box-sizing: border-box;",
                     span { style: "display: flex; gap: 4px;",
                         for s in [Scope::Guitar, Scope::Rig] {
                             {
@@ -731,10 +735,10 @@ fn ToneBlock(title: &'static str, parts: Vec<String>, over: Vec<String>, scope: 
             if showing {
                 span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: {RIG};" }
             }
-            div { style: "display: flex; align-items: center; gap: 12px; margin-bottom: 14px; min-height: 36px;",
-                span { style: "font-size: 19px; font-weight: 750;", "{title}" }
+            div { style: "display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; min-height: 36px;",
+                span { style: "font-size: 19px; font-weight: 750; letter-spacing: -0.01em;", "{title}" }
                 if !mine.is_empty() {
-                    span { style: "display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 650; color: color-mix(in oklab, {RIG} 70%, {INK}); white-space: nowrap; overflow: hidden;",
+                    span { style: "display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 650; color: color-mix(in oklab, {RIG} 70%, {INK});",
                         OverrideIcon { colour: RIG.to_string(), size: 13 }
                         "{note}"
                     }
@@ -800,13 +804,13 @@ fn LevelMatch(state: RigViewState, tone: GuitarTone, scope: Scope, target: f64) 
                         span { style: "position: absolute; top: 5px; bottom: 5px; left: 0; width: {pos(now.max(-60.0))}%; border-radius: 3px; background: linear-gradient(90deg, #15803d, #22c55e 70%, #eab308 90%, #f87171);" }
                         span { style: "position: absolute; top: 2px; bottom: 2px; left: calc({pos(peak.max(-60.0))}% - 1px); width: 2px; background: {pick(in_band, LIVE, THUMB)};" }
                     }
-                    div { style: "position: relative; height: 14px; margin-top: 3px; font-size: 11px; color: {INK_3};",
+                    div { style: "position: relative; height: 14px; margin-top: 3px; font-size: 11px; color: {INK_3}; font-variant-numeric: tabular-nums;",
                         for d in [-60, -45, -30, -15, 0] {
-                            span { key: "{d}", style: "position: absolute; left: {pos(f64::from(d))}%; margin-left: {pick(d == -60, 0, pick(d == 0, -8, -10))}px;", "{tick(d)}" }
+                            span { key: "{d}", style: "{tick_place(d)}", "{tick(d)}" }
                         }
                     }
                 }
-                span { style: "width: 92px; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px;",
+                span { style: "width: 92px; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-variant-numeric: tabular-nums;",
                     span { style: "font-size: 17px; font-weight: 800; color: {pick(in_band, LIVE, INK)};", "{peak.round()}" }
                     span { style: "font-size: 11px; color: {INK_3};", "peak · {trim0(target)}" }
                 }
@@ -913,7 +917,7 @@ fn Gates(state: RigViewState, tone: GuitarTone, scope: Scope) -> Element {
                     div { key: "{i}", style: "display: flex; align-items: center; gap: 2px; padding: 2px 2px 2px 12px; {left_rule(i > 0)}",
                         span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px;",
                             span { style: "font-size: 11.5px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; color: {INK_3};", "{GATE_NAMES[i]}" }
-                            span { style: "font-size: 16px; font-weight: 800;", "{trim0(g)}" }
+                            span { style: "font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums;", "{trim0(g)}" }
                         }
                         for d in [-1.0_f64, 1.0] {
                             button {
@@ -987,10 +991,10 @@ fn GuitarEq(tone: GuitarTone, scope: Scope) -> Element {
         ("treble", "Treble", -12.0, 12.0, 0.5, f64::from(tone.treble_db)),
     ];
     rsx! {
-        div { style: "display: flex; gap: 16px; align-items: stretch;",
+        div { style: "display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap;",
             svg { view_box: "0 0 {w} {h}", preserve_aspect_ratio: "none", style: "flex: 1 1 260px; min-width: 0; height: 110px; border-radius: 6px; background: {WELL};",
                 line { x1: "0", x2: "{w}", y1: "{h / 2.0}", y2: "{h / 2.0}", stroke: RULE_STRONG, stroke_dasharray: "3 4" }
-                path { d: "{path}", fill: "none", stroke: LIVE, stroke_width: "2.2" }
+                path { d: "{path}", fill: "none", stroke: LIVE, stroke_width: "2.2", vector_effect: "non-scaling-stroke" }
             }
             div { style: "flex: 1 1 260px; min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));",
                 for (i, (k, label, min, max, step, v)) in bands.into_iter().enumerate() {
@@ -1005,7 +1009,7 @@ fn GuitarEq(tone: GuitarTone, scope: Scope) -> Element {
                             })),
                             on_end: move |()| setup.save(),
                         }
-                        span { style: "font-size: 13px; font-weight: 700;",
+                        span { style: "font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;",
                             if k == "lowcut" { "{trim0(v)} Hz" } else { "{signed(v)} dB" }
                         }
                     }
@@ -1020,22 +1024,6 @@ fn GuitarEq(tone: GuitarTone, scope: Scope) -> Element {
 #[component]
 fn AudioTab(state: RigViewState) -> Element {
     let setup = use_context::<Setup>();
-    // The devices the system has now — a choice beside the known interfaces.
-    let settings = use_hook(try_consume_context::<signal_guitar_proto::audio::AudioSettingsClient>);
-    let mut present = use_signal(Vec::<String>::new);
-    use_hook(move || {
-        if let Some(s) = settings.clone() {
-            spawn(async move {
-                if let Ok(d) = s.devices().await {
-                    let mut names: Vec<String> = d.inputs.iter().chain(d.outputs.iter()).map(|x| x.name.clone()).collect();
-                    names.dedup();
-                    let mut seen = Vec::new();
-                    names.retain(|n| if seen.contains(n) { false } else { seen.push(n.clone()); true });
-                    present.set(names);
-                }
-            });
-        }
-    });
     let m = setup.model.read().clone();
     let r = audio_rig(&m);
     let dev = interface_of(&r);
@@ -1051,22 +1039,20 @@ fn AudioTab(state: RigViewState) -> Element {
     };
     let rate = r.rate;
     let outs = dev.outputs.len() * 2 + dev.phones.len() * 2;
-    // The device is there: the system lists it (the built-in one whenever
-    // the rig plays through the system's own).
-    let connected = present().iter().any(|n| *n == r.device) || (r.device == "Built-in" && *state.running.read());
+    let devices: Vec<(String, String, String)> = INTERFACES.iter().map(|i| (i.name.to_string(), i.name.to_string(), String::new())).collect();
     rsx! {
         // The interface: the device, and the three numbers that decide feel.
         section { style: "border-bottom: 1px solid {RULE};",
-            div { style: "display: flex; align-items: center; gap: 14px; padding: 18px 20px 6px;",
-                span { style: "font-size: 19px; font-weight: 750;", "Interface" }
+            div { style: "display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 18px 20px 6px;",
+                span { style: "font-size: 19px; font-weight: 750; letter-spacing: -0.01em;", "Interface" }
                 span { style: "display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: {INK_3};",
-                    span { style: "width: 8px; height: 8px; border-radius: 999px; background: {pick(connected, LIVE, DIM)};" }
-                    "{running_label(connected)} · {dev.inputs.len()} in · {outs} out"
+                    span { style: "width: 8px; height: 8px; border-radius: 999px; background: {LIVE};" }
+                    "Connected · {dev.inputs.len()} in · {outs} out"
                 }
             }
             div { style: "display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));",
                 Cell { label: "Device",
-                    Select { label: "Interface", value: r.device.clone(), options: device_options(&present(), &r.device),
+                    Select { label: "Interface", value: r.device.clone(), options: devices,
                         on_pick: move |v: String| set(Box::new(move |y| {
                             // A new device: keep what it can do, else its nearest.
                             y.device = v.clone();
@@ -1089,7 +1075,7 @@ fn AudioTab(state: RigViewState) -> Element {
                 }
                 Cell { label: "Round trip",
                     span { style: "height: 44px; display: flex; align-items: baseline; gap: 5px;",
-                        span { style: "font-size: 30px; font-weight: 800; color: {lat_ink}; line-height: 44px;", "{lat:.1}" }
+                        span { style: "font-size: 30px; font-weight: 800; color: {lat_ink}; line-height: 44px; font-variant-numeric: tabular-nums;", "{lat:.1}" }
                         span { style: "font-size: 14px; font-weight: 650; color: {INK_3};", "ms" }
                     }
                 }
@@ -1097,7 +1083,7 @@ fn AudioTab(state: RigViewState) -> Element {
         }
         // The guitar's input: the interface's inputs, each with its level.
         section { style: "padding: 18px 20px 20px; border-bottom: 1px solid {RULE};",
-            div { style: "font-size: 19px; font-weight: 750; margin-bottom: 14px;", "Guitar input" }
+            div { style: "font-size: 19px; font-weight: 750; letter-spacing: -0.01em; margin-bottom: 14px;", "Guitar input" }
             div { style: "margin: 0 -20px; display: grid; grid-template-columns: repeat({dev.inputs.len().min(4)}, minmax(0, 1fr)); border-top: 1px solid {RULE}; border-bottom: 1px solid {RULE};",
                 for (i, (name, kind)) in dev.inputs.iter().copied().enumerate() {
                     {
@@ -1131,8 +1117,8 @@ fn AudioTab(state: RigViewState) -> Element {
         }
         // Outputs: the house and the phones, each with its level and a check.
         section { style: "border-bottom: 1px solid {RULE};",
-            div { style: "padding: 18px 20px 4px; font-size: 19px; font-weight: 750;", "Outputs" }
-            div { style: "display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));",
+            div { style: "padding: 18px 20px 4px; font-size: 19px; font-weight: 750; letter-spacing: -0.01em;", "Outputs" }
+            div { style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));",
                 OutputStrip { state, house: true }
                 OutputStrip { state, house: false }
             }
@@ -1149,13 +1135,25 @@ fn OutputStrip(state: RigViewState, house: bool) -> Element {
     let r = audio_rig(&m);
     let dev = interface_of(&r);
     let db = f64::from(if house { r.house_db } else { r.phones_db });
-    let level = state.out_level.read().clamp(0.0, 1.0) * 10f64.powf(db / 40.0);
+    // What each hears: the house the rig's output; the phones the guitar
+    // at its own level and the band's mix at its, under the phones fader.
+    let output = *state.out_level.read();
+    let heard = if house {
+        output
+    } else {
+        let perf = state.perf.read();
+        let hp = &perf.headphone;
+        let (mix_l, mix_r) = *state.mix_db.read();
+        let mix = crate::meters::meter_level(10f32.powf(mix_l.max(mix_r) / 20.0));
+        (output * f64::from(hp.self_mix)).max(mix * f64::from(hp.mix_level)) * f64::from(hp.volume)
+    };
+    let level = heard.clamp(0.0, 1.0) * 10f64.powf(db / 40.0);
     let fill = (db + 60.0) / 66.0;
     // The check: left, right, then both, 1.2 s each — a swapped cable or a
-    // dead side shows. Otherwise the glyph lights while the rig plays.
+    // dead side shows.
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut check = use_signal(|| None::<u8>);
-    let side = check().or((level > 0.02).then_some(2u8));
+    let side = check();
     let options: Vec<(String, String, String)> = if house { dev.outputs } else { dev.phones }.iter().map(|o| (o.to_string(), o.to_string(), String::new())).collect();
     let label = if house { "House" } else { "Phones" };
     let out_label: &'static str = if house { "House output" } else { "Phones output" };
@@ -1166,13 +1164,11 @@ fn OutputStrip(state: RigViewState, house: bool) -> Element {
                 SideGlyph { house, side }
                 span { style: "font-size: 16px; font-weight: 750;", "{label}" }
                 span { style: "flex: 1;" }
-                span { style: "width: 170px;",
-                    Select { label: out_label, value: out_value, options,
-                        on_pick: move |v: String| setup.edit(|m| {
-                            let k = m.rig_index as usize;
-                            if let Some(r) = m.rigs.get_mut(k) { if house { r.house = v.clone() } else { r.phones = v.clone() } }
-                        }) }
-                }
+                Select { label: out_label, value: out_value, options, width: 170,
+                    on_pick: move |v: String| setup.edit(|m| {
+                        let k = m.rig_index as usize;
+                        if let Some(r) = m.rigs.get_mut(k) { if house { r.house = v.clone() } else { r.phones = v.clone() } }
+                    }) }
             }
             Fader { value: db, min: -60.0, max: 6.0, step: 0.5, level: Some((level.min(1.0) * fill).clamp(0.0, 1.0)), hot: level > 0.95, unit: "dB", signed_value: true,
                 on_change: move |v: f64| setup.tune(|m| {
@@ -1184,7 +1180,7 @@ fn OutputStrip(state: RigViewState, house: bool) -> Element {
             div { style: "display: flex; align-items: center; gap: 12px;",
                 button {
                     disabled: check().is_some(),
-                    style: "flex-shrink: 0; white-space: nowrap; height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-radius: {R}; font-size: 14px; font-weight: 700; font-family: {FONT}; cursor: pointer; box-sizing: border-box; color: {pick(check().is_some(), ON_LIVE, INK)}; background: {pick(check().is_some(), LIVE, CLEAR)}; border: 1px solid {pick(check().is_some(), LIVE, RULE_STRONG)};",
+                    style: "flex-shrink: 0; white-space: nowrap; height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-radius: {R}; font-size: 14px; font-weight: 700; font-family: {FONT}; cursor: pointer; box-sizing: border-box; color: {pick(check().is_some(), ON_LIVE, INK)}; background: {pick(check().is_some(), LIVE, CLEAR)}; border: {outline(check().is_none())};",
                     onclick: move |_| {
                         let output = if house { "house" } else { "phones" }.to_string();
                         let rig = rig.clone();
@@ -1224,44 +1220,61 @@ fn MidiTab() -> Element {
     let m = setup.model.read().clone();
     let c = controller(&m);
     let dev = MIDI_DEVICES.iter().find(|d| d.0 == c.device).copied();
-    // What the rig hears, newest first — polled while the tab is open.
+    // What the rig hears and the switches tapped here, newest first —
+    // the rig's polled while the tab is open.
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut heard = use_signal(Vec::<String>::new);
     // The switch just pressed, lit for a moment.
     let mut pressed = use_signal(|| None::<usize>);
+    let mut light = move |i: usize| {
+        pressed.set(Some(i));
+        spawn(async move {
+            architect::platform::sleep(std::time::Duration::from_millis(220)).await;
+            if *pressed.peek() == Some(i) {
+                pressed.set(None);
+            }
+        });
+    };
+    // Another controller: its log starts empty.
+    let mut shown_for = use_signal(|| c.id.clone());
+    if *shown_for.peek() != c.id {
+        shown_for.set(c.id.clone());
+        heard.set(Vec::new());
+    }
     use_hook(move || {
         if let Some(r) = rig.clone() {
             spawn(async move {
-                let mut seen: Option<(usize, String)> = None;
-                let mut first = true;
+                let mut seen: Option<Vec<String>> = None;
                 loop {
                     if let Ok(log) = r.midi_recent().await {
-                        let newest = log.last().cloned().map(|l| (log.len(), l));
-                        // Something new from a switch the map knows: light it.
-                        if !first && newest != seen
-                            && let Some((_, line)) = &newest
-                            && let Some(n) = line.strip_prefix("Switch ").and_then(|x| x.split(' ').next()).and_then(|x| x.parse::<usize>().ok())
-                        {
-                            pressed.set(Some(n - 1));
-                            spawn(async move {
-                                architect::platform::sleep(std::time::Duration::from_millis(220)).await;
-                                if pressed() == Some(n - 1) {
-                                    pressed.set(None);
+                        match &seen {
+                            None => heard.set(log.iter().rev().take(6).cloned().collect()),
+                            Some(prev) => {
+                                let fresh = after(prev, &log);
+                                if !fresh.is_empty() {
+                                    // Something new from a switch the map knows: light it.
+                                    if let Some(n) = fresh.last().and_then(|l| l.strip_prefix("Switch ")).and_then(|x| x.split(' ').next()).and_then(|x| x.parse::<usize>().ok())
+                                        && n > 0
+                                    {
+                                        light(n - 1);
+                                    }
+                                    let mut h = heard.peek().clone();
+                                    for line in fresh {
+                                        h.insert(0, line.clone());
+                                    }
+                                    h.truncate(6);
+                                    heard.set(h);
                                 }
-                            });
+                            }
                         }
-                        seen = newest.or(seen);
-                        first = false;
-                        let recent: Vec<String> = log.into_iter().rev().take(6).collect();
-                        if *heard.peek() != recent {
-                            heard.set(recent);
-                        }
+                        seen = Some(log);
                     }
                     architect::platform::sleep(std::time::Duration::from_millis(400)).await;
                 }
             });
         }
     });
+    let channel = if c.channel == 0 { 1 } else { c.channel };
     let set = move |f: Box<dyn FnOnce(&mut ControllerEntry)>| {
         setup.edit(move |m| {
             let k = m.controller_index as usize;
@@ -1279,8 +1292,8 @@ fn MidiTab() -> Element {
     ];
     rsx! {
         section { style: "border-bottom: 1px solid {RULE};",
-            div { style: "display: flex; align-items: center; gap: 14px; padding: 18px 20px 6px;",
-                span { style: "font-size: 19px; font-weight: 750;", "{c.device}" }
+            div { style: "display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 18px 20px 6px;",
+                span { style: "font-size: 19px; font-weight: 750; letter-spacing: -0.01em;", "{c.device}" }
                 if let Some(d) = dev {
                     span { style: "display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: {INK_3};",
                         span { style: "width: 8px; height: 8px; border-radius: 999px; background: {LIVE};" }
@@ -1299,22 +1312,28 @@ fn MidiTab() -> Element {
         }
         if let Some(d) = dev {
             section { style: "border-bottom: 1px solid {RULE};",
-                div { style: "padding: 18px 20px 12px; font-size: 19px; font-weight: 750;", "Switches" }
+                div { style: "padding: 18px 20px 12px; font-size: 19px; font-weight: 750; letter-spacing: -0.01em;", "Switches" }
                 // Its switches in a row, flush: each lights when pressed.
                 div { style: "display: grid; grid-template-columns: repeat({d.2}, minmax(0, 1fr)); border-top: 1px solid {RULE}; border-bottom: 1px solid {RULE};",
                     for i in 0..d.2 {
                         {
                             let on = pressed() == Some(i as usize);
+                            let glow = if on { format!("0 0 10px {LIVE}") } else { NO_SHADOW.to_string() };
                             rsx! {
-                                div {
+                                button {
                                     key: "{i}",
-                                    style: "position: relative; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 0 12px; {left_rule(i > 0)}",
-                                    if on {
-                                        span { style: "position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: rgba(34,197,94,0.1);" }
-                                    }
-                                    span { style: "width: 10px; height: 10px; border-radius: 999px; background: {pick(on, LIVE, RULE_STRONG)};" }
+                                    style: "position: relative; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; padding: 14px 0 12px; border: none; {left_rule(i > 0)} background: {pick(on, SWITCH_ON, CLEAR)}; font-family: {FONT}; cursor: pointer;",
+                                    onclick: move |_| {
+                                        light(i as usize);
+                                        let line = format!("Switch {} · CC {} · 127 · ch {channel}", i + 1, 20 + i);
+                                        let mut h = heard.peek().clone();
+                                        h.insert(0, line);
+                                        h.truncate(6);
+                                        heard.set(h);
+                                    },
+                                    span { style: "width: 10px; height: 10px; border-radius: 999px; background: {pick(on, LIVE, RULE_STRONG)}; box-shadow: {glow};" }
                                     span { style: "width: 40px; height: 40px; border-radius: 999px; background: {pick(on, KEY_DOWN, UP)}; border-bottom: 3px solid rgba(0,0,0,0.45); box-sizing: border-box;" }
-                                    span { style: "font-size: 13px; font-weight: 700; color: {INK_3};", "{i + 1}" }
+                                    span { style: "font-size: 13px; font-weight: 700; color: {INK_3}; font-variant-numeric: tabular-nums;", "{i + 1}" }
                                 }
                             }
                         }
@@ -1322,7 +1341,7 @@ fn MidiTab() -> Element {
                 }
                 div { style: "padding: 4px 20px 12px; min-height: 44px; display: flex; flex-direction: column;",
                     for (i, h) in heard().into_iter().enumerate() {
-                        span { key: "{i}-{h}", style: "display: flex; min-height: 36px; align-items: center; font-size: 14px; color: {pick(i == 0, INK, INK_3)}; {top_rule(i > 0)}", "{h}" }
+                        span { key: "{i}-{h}", style: "display: flex; min-height: 36px; align-items: center; font-size: 14px; font-variant-numeric: tabular-nums; color: {pick(i == 0, INK, INK_3)}; {top_rule(i > 0)}", "{h}" }
                     }
                 }
             }
@@ -1352,12 +1371,13 @@ fn Cell(label: &'static str, children: Element) -> Element {
 /// A dropdown: the value and a chevron; it opens the choices as a menu.
 /// `options`: (id, shown, detail).
 #[component]
-fn Select(label: &'static str, value: String, options: Vec<(String, String, String)>, on_pick: EventHandler<String>) -> Element {
+fn Select(label: &'static str, value: String, options: Vec<(String, String, String)>, #[props(default)] width: Option<u32>, on_pick: EventHandler<String>) -> Element {
     let host = PopupHost::try_use();
+    let sized = width.map_or(String::new(), |w| format!("width: {w}px;"));
     let shown = options.iter().find(|o| o.0 == value).map_or(value.clone(), |o| o.1.clone());
     rsx! {
         button {
-            style: "width: 100%; min-width: 0; height: 44px; padding: 0 12px 0 14px; display: flex; align-items: center; gap: 10px; border: none; border-radius: {R}; background: {FILL}; color: {INK}; text-align: left; font-family: {FONT}; cursor: pointer;",
+            style: "{sized} min-width: 0; height: 44px; padding: 0 12px 0 14px; display: flex; align-items: center; gap: 10px; border: none; border-radius: {R}; background: {FILL}; color: {INK}; text-align: left; font-family: {FONT}; cursor: pointer;",
             onclick: move |e: MouseEvent| {
                 let (c, el) = (e.client_coordinates(), e.element_coordinates());
                 let mut items = vec![Item::head(label)];
@@ -1471,25 +1491,35 @@ fn VFader(value: f64, min: f64, max: f64, step: f64, on_change: EventHandler<f64
     }
 }
 
-/// A text field that commits on change (Blitz has no blur event to wait for).
+/// A text field: typed freely, committed on Enter or when focus leaves —
+/// trimmed, and only when it is something and has changed.
 #[component]
 fn TextField(value: String, placeholder: &'static str, on_commit: EventHandler<String>) -> Element {
+    let mut draft = use_signal(|| value.clone());
+    let mut was = use_signal(|| value.clone());
+    if *was.peek() != value {
+        was.set(value.clone());
+        draft.set(value.clone());
+    }
+    let commit = move || {
+        let v = draft.peek().trim().to_string();
+        if !v.is_empty() && v != *was.peek() {
+            on_commit.call(v);
+        }
+    };
     rsx! {
         input {
-            value: "{value}",
+            value: "{draft}",
             placeholder,
             style: "width: 100%; min-width: 0; height: 40px; flex-shrink: 0; padding: 0 12px; border-radius: {R}; border: 1px solid {RULE_STRONG}; background: transparent; color: {INK}; font-size: 15px; font-family: {FONT}; box-sizing: border-box;",
-            onchange: move |e| {
-                let v = e.value().trim().to_string();
-                if !v.is_empty() {
-                    on_commit.call(v);
-                }
-            },
+            oninput: move |e| draft.set(e.value()),
+            onkeydown: move |e: KeyboardEvent| if e.key() == Key::Enter { commit() },
+            onblur: move |_| commit(),
         }
     }
 }
 
-/// A guitar's photo, cropped to its body — fetched once from the rig; its
+/// A guitar's photo, cropped to its body — fetched from the rig; its
 /// finish behind a guitar glyph when it has none. `size` 0: the sidebar's
 /// tall picture.
 #[component]
@@ -1501,8 +1531,8 @@ fn GuitarPhoto(image: String, colour: String, size: u32) -> Element {
             return;
         }
         let mut photos = setup.photos;
-        photos.write().insert(wanted.clone(), String::new());
         if let Some(r) = setup.rig.peek().clone() {
+            photos.write().insert(wanted.clone(), String::new());
             spawn(async move {
                 let bytes = r.guitar_photo(wanted.clone()).await.unwrap_or_default();
                 if !bytes.is_empty() {
@@ -1514,6 +1544,9 @@ fn GuitarPhoto(image: String, colour: String, size: u32) -> Element {
                     };
                     let url = format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes));
                     photos.write().insert(wanted, url);
+                } else {
+                    // Failed: fetched again when the guitar's image changes.
+                    photos.write().remove(&wanted);
                 }
             });
         }
@@ -1529,8 +1562,8 @@ fn GuitarPhoto(image: String, colour: String, size: u32) -> Element {
     rsx! {
         span { style: "width: {w}; height: {h}; flex-shrink: 0; border-radius: {r}px; background: {colour}; border: 1px solid rgba(255,255,255,0.12); box-sizing: border-box; display: flex; align-items: center; justify-content: center;",
             svg { width: "45%", height: "45%", view_box: "0 0 24 24",
-                path { d: "M19 2l3 3-6.5 6.5M15.5 11.5 12.5 8.5", fill: "none", stroke: "rgba(128,128,128,0.8)", stroke_width: "1.6", stroke_linecap: "round", stroke_linejoin: "round" }
-                path { d: "M12.5 8.5c-2-1.2-4.6-.6-5.4 1.4-.3.8-1 1.3-1.9 1.4-2.3.3-3.6 3.2-1.9 5.3l2.9 2.9c2.1 1.7 5 .4 5.3-1.9.1-.9.6-1.6 1.4-1.9 2-.8 2.6-3.4 1.4-5.4", fill: "none", stroke: "rgba(128,128,128,0.8)", stroke_width: "1.6", stroke_linecap: "round", stroke_linejoin: "round" }
+                path { d: "M19 2l3 3-6.5 6.5M15.5 11.5 12.5 8.5", fill: "none", stroke: "rgba(255,255,255,0.55)", stroke_width: "1.6", stroke_linecap: "round", stroke_linejoin: "round" }
+                path { d: "M12.5 8.5c-2-1.2-4.6-.6-5.4 1.4-.3.8-1 1.3-1.9 1.4-2.3.3-3.6 3.2-1.9 5.3l2.9 2.9c2.1 1.7 5 .4 5.3-1.9.1-.9.6-1.6 1.4-1.9 2-.8 2.6-3.4 1.4-5.4", fill: "none", stroke: "rgba(255,255,255,0.55)", stroke_width: "1.6", stroke_linecap: "round", stroke_linejoin: "round" }
             }
         }
     }

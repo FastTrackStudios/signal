@@ -4,11 +4,11 @@
 //!   Header   the set's name (a tap opens the sets), event · date · profile
 //!            in words, the set as a bar of song colours; ⋯ manages the set.
 //!   Songs    number on the song's colour, name, Now / Next, key, tempo, ⋯.
-//!            The song up opens into its sections (a tap on it folds them).
+//!            The song up is open on its sections; a tap on another plays it.
 //!            Reorder mode grows handles to drag songs into order.
 //!   Sections a part's `section` groups consecutive parts; each shows the
 //!            patch it plays, its changes in words, and a ⋯; its grip drags
-//!            it. The section playing opens into its parts and the stacks.
+//!            it. The section playing opens into the stacks.
 //!   Stacks   name in its colour, the patch a tap plays, its rotation as
 //!            dots (where each patch comes from), what the next tap plays;
 //!            ⋯ jumps to a patch, keeps or drops a by-hand pick, makes the
@@ -17,15 +17,18 @@
 //! The pickers (sets, details, add songs, key, tempo, profile, colour, the
 //! start, a section's patch) slide over the list — see `panels`.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
-use signal_guitar_proto::{LibraryModel, PerfPart, PerfStack, PerformanceModel};
+use signal_guitar_proto::{LibraryModel, PerfPart, PerformanceModel};
 use signal_widgets::drag_bus::{DragBus, DragEvent};
 use signal_widgets::PopupHost;
 
-use super::colors::{date_label, name_colour, section_colour, set_heading, set_meta, song_colour, suggest_section, when_label};
-use super::marks::{module_colour, OverrideIcon};
-use super::menu::{open_naming, Item, MoreButton, Picked, PressMenu};
+use super::colors::{date_label, name_colour, section_colour, set_heading, set_meta, song_colour, suggest_section, tape_for, when_label, TAPE_GAFFER};
+use super::marks::{module_colour, OverrideIcon, Strike};
+use super::menu::{open_naming_under, Item, MoreButton, Picked, PressMenu};
 use super::panels::{Panel, PanelView};
 use super::tokens::*;
 use crate::state::RigViewState;
@@ -73,23 +76,27 @@ pub fn stack_of(lib: &LibraryModel, profile: &str, patch: &str) -> String {
         .unwrap_or_default()
 }
 
-/// The stack a patch plays from: the switches' rotations as the song has
-/// tuned them (a song's own patches live only there), else the profile's.
+/// The stack a patch plays from (the prototype's `stackOf`): the switch
+/// whose rotation holds it, else the stack the library files it under —
+/// when that is a stack (a song's own patch files under the song) — else
+/// the stack its name says ("Ambient Delay Flute" → Ambient).
 pub fn stack_for(perf: &PerformanceModel, lib: &LibraryModel, profile: &str, patch: &str) -> String {
+    let real = |st: String| perf.stacks.iter().find(|s| s.name.eq_ignore_ascii_case(&st)).map(|s| s.name.clone());
     perf.stacks
         .iter()
         .find(|s| s.patches.iter().any(|p| p.eq_ignore_ascii_case(patch)))
         .map(|s| s.name.clone())
-        .unwrap_or_else(|| stack_of(lib, profile, patch))
+        .or_else(|| real(stack_of(lib, profile, patch)))
+        .or_else(|| {
+            let words: Vec<String> = patch.split_whitespace().map(str::to_lowercase).collect();
+            perf.stacks.iter().find(|s| words.contains(&s.name.to_lowercase())).map(|s| s.name.clone())
+        })
+        .unwrap_or_default()
 }
 
-/// The profile a patch belongs to, when it is another than `profile`'s:
-/// a borrowed patch says from where.
-fn borrowed_from(lib: &LibraryModel, profile: &str, patch: &str) -> Option<String> {
-    if patch.is_empty() || lib.profiles.iter().any(|p| p.name.eq_ignore_ascii_case(profile) && p.patch_list.iter().any(|x| x.name.eq_ignore_ascii_case(patch))) {
-        return None;
-    }
-    lib.profiles.iter().find(|p| p.patch_list.iter().any(|x| x.name.eq_ignore_ascii_case(patch))).map(|p| p.name.clone())
+/// The profile the rig has active (the one a set without its own plays).
+pub fn active_profile(perf: &PerformanceModel, lib: &LibraryModel) -> String {
+    lib.profiles.iter().find(|p| p.active).map_or_else(|| perf.profile_name.clone(), |p| p.name.clone())
 }
 
 /// A section: consecutive parts that share a `section` name (a part with
@@ -140,41 +147,352 @@ fn section_moved(sections: &[Section], from: usize, to: usize) -> Vec<usize> {
     order.into_iter().flat_map(|s| s.parts).collect()
 }
 
-// ── The sidebar ────────────────────────────────────────────────────────────
+/// Rows a list keeps measured handles to, by position.
+pub type Rows = Signal<Vec<Option<Rc<MountedData>>>>;
 
-/// Where a dragged row lands: rows of `row` pt from `from`, moved `dy`.
-fn drop_index(from: usize, dy: f64, row: f64, count: usize) -> usize {
-    let moved = (dy / row).round() as i64;
-    (from as i64 + moved).clamp(0, count.saturating_sub(1) as i64) as usize
+/// Remember row `i`'s element (its `onmounted`).
+pub fn keep_row(rows: Rows, i: usize, e: &MountedEvent) {
+    let mut rows = rows;
+    let mut r = rows.write();
+    if r.len() <= i {
+        r.resize(i + 1, None);
+    }
+    r[i] = Some(e.data());
 }
+
+/// Drag row `from` by its grip: the rows' tops are measured as it starts,
+/// and it lands on the last row whose top (plus `grace`) the pointer is
+/// below — the prototype's measured drop.
+pub fn begin_row_drag(bus: Option<DragBus>, drag: Signal<Option<(usize, usize)>>, rows: Rows, count: usize, from: usize, grace: f64, on_drop: impl Fn(usize, usize) + 'static) {
+    let tops: Rc<RefCell<Vec<f64>>> = Rc::default();
+    let els: Vec<Option<Rc<MountedData>>> = rows.peek().iter().take(count).cloned().collect();
+    {
+        let tops = Rc::clone(&tops);
+        spawn(async move {
+            let mut out = Vec::with_capacity(els.len());
+            for e in els {
+                out.push(match e {
+                    Some(e) => e.get_client_rect().await.map_or(f64::INFINITY, |r| r.min_y()),
+                    None => f64::INFINITY,
+                });
+            }
+            *tops.borrow_mut() = out;
+        });
+    }
+    let mut d = drag;
+    d.set(Some((from, from)));
+    let Some(bus) = bus else {
+        d.set(None);
+        return;
+    };
+    bus.begin(move |ev| {
+        let mut d = drag;
+        match ev {
+            DragEvent::Move { y, .. } => {
+                let t = tops.borrow();
+                if t.is_empty() {
+                    return;
+                }
+                let mut to = 0;
+                for (k, top) in t.iter().enumerate() {
+                    if y > top + grace {
+                        to = k;
+                    }
+                }
+                d.set(Some((from, to)));
+            }
+            DragEvent::End => {
+                let to = d.peek().map_or(from, |x| x.1);
+                d.set(None);
+                if to != from {
+                    on_drop(from, to);
+                }
+            }
+        }
+    });
+}
+
+// ── What plays ─────────────────────────────────────────────────────────────
+
+/// Where a patch in a stack comes from: the song put it there, the profile
+/// passes it through, or it is borrowed from another profile.
+#[derive(Clone, PartialEq, Debug)]
+pub enum Src {
+    Song,
+    Profile(String),
+    Other(String),
+}
+
+impl Src {
+    /// `SourceIcon`'s `from`.
+    pub fn from(&self) -> &'static str {
+        match self {
+            Self::Song => "song",
+            Self::Profile(_) => "profile",
+            Self::Other(_) => "other",
+        }
+    }
+    pub fn profile(&self) -> Option<String> {
+        match self {
+            Self::Song => None,
+            Self::Profile(p) | Self::Other(p) => Some(p.clone()),
+        }
+    }
+    /// Where it comes from, in words.
+    pub fn label(&self) -> String {
+        match self {
+            Self::Song => "the song's own".to_string(),
+            Self::Other(p) => format!("borrowed from {p}"),
+            Self::Profile(p) => format!("from {p}, passed through"),
+        }
+    }
+    /// The colour of its source mark.
+    pub fn colour(&self, song_colour: &str) -> String {
+        match self {
+            Self::Song => song_colour.to_string(),
+            Self::Other(p) => name_colour(p).to_string(),
+            Self::Profile(_) => INK_3.to_string(),
+        }
+    }
+    /// Song's own first, then the profile's, then the borrowed.
+    pub fn rank(&self) -> u8 {
+        match self {
+            Self::Song => 0,
+            Self::Profile(_) => 1,
+            Self::Other(_) => 2,
+        }
+    }
+}
+
+/// Where `patch` in a stack of `profile` comes from.
+pub fn source_of(lib: &LibraryModel, profile: &str, patch: &str) -> Src {
+    let own = lib.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(profile));
+    if let Some((p, x)) = own.and_then(|p| p.patch_list.iter().find(|x| x.name.eq_ignore_ascii_case(patch)).map(|x| (p, x))) {
+        return if x.song.is_empty() { Src::Profile(p.name.clone()) } else { Src::Song };
+    }
+    lib.profiles
+        .iter()
+        .find(|p| p.patch_list.iter().any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch)))
+        .map_or(Src::Song, |p| Src::Other(p.name.clone()))
+}
+
+/// What a part plays, in words: its patch, `Clean stack`, or a preset's
+/// variation; `None` when it keeps what plays.
+pub fn sound_of(part: &PerfPart) -> Option<String> {
+    if !part.stack.is_empty() {
+        Some(format!("{} stack", part.stack))
+    } else if !part.preset.is_empty() {
+        Some(part.preset.clone())
+    } else if !part.patch.is_empty() {
+        Some(part.patch.clone())
+    } else {
+        None
+    }
+}
+
+/// The patch the part up plays (the prototype's `partPatch`): its own,
+/// else the last one before it in the song that sets one (a part that
+/// keeps plays on), else the song's start.
+pub fn part_patch(perf: &PerformanceModel) -> Option<String> {
+    if !perf.parts.is_empty() {
+        let at = (perf.part_index as usize).min(perf.parts.len() - 1);
+        for p in perf.parts[..=at].iter().rev() {
+            if !p.stack.is_empty() {
+                // A stack plays its first patch.
+                let first = perf.stacks.iter().find(|s| s.name.eq_ignore_ascii_case(&p.stack)).and_then(|s| s.patches.first().cloned());
+                return Some(first.unwrap_or_else(|| p.stack.clone()));
+            }
+            if !p.preset.is_empty() {
+                return Some(p.preset.clone());
+            }
+            if !p.patch.is_empty() {
+                return Some(p.patch.clone());
+            }
+        }
+    }
+    let start = perf.songs.get(perf.song_index as usize).map(|s| s.start.clone()).unwrap_or_default();
+    (!start.is_empty()).then_some(start)
+}
+
+/// The patch playing: the active switch's.
+fn playing(perf: &PerformanceModel) -> Option<String> {
+    perf.stacks.iter().find(|s| s.is_active).map(|s| s.patches.get(s.position as usize).cloned().unwrap_or_else(|| s.current_patch.clone()))
+}
+
+/// Something other than the part's patch plays — picked by hand.
+pub fn is_live(perf: &PerformanceModel, own: Option<&str>) -> bool {
+    matches!((own, playing(perf)), (Some(o), Some(p)) if !o.eq_ignore_ascii_case(&p))
+}
+
+/// The section (or, in one of several parts, the part) playing, by name:
+/// what "Keep for …" and "Make … default for …" speak of.
+pub fn where_label(perf: &PerformanceModel) -> String {
+    let now = perf.part_index as usize;
+    let song = perf.songs.get(perf.song_index as usize).map(|s| s.name.clone());
+    match sections_of(&perf.parts).into_iter().find(|s| s.parts.contains(&now)) {
+        None => song.unwrap_or_else(|| "this song".to_string()),
+        Some(sec) if sec.parts.len() > 1 => perf.parts.get(now).map_or(sec.name.clone(), |p| p.name.clone()),
+        Some(sec) => sec.name,
+    }
+}
+
+/// One stack as a list shows it: its patches and where each comes from,
+/// whether it plays, and where its rotation is.
+#[derive(Clone, PartialEq, Debug)]
+pub struct StackView {
+    /// Its index in the profile's stacks (what `press_stack` takes).
+    pub index: usize,
+    pub name: String,
+    pub patches: Vec<(String, Src)>,
+    /// Each patch's place in the rig's rotation (what `play_stack_patch`
+    /// takes).
+    pub at: Vec<usize>,
+    pub on: bool,
+    /// The rotation's place among `patches`.
+    pub cursor: usize,
+}
+
+/// The song's stacks: every stack the profile fills, with what the song
+/// put in them.
+pub fn song_stacks(perf: &PerformanceModel, lib: &LibraryModel) -> Vec<StackView> {
+    perf.stacks
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| !s.patches.is_empty())
+        .map(|(i, s)| StackView {
+            index: i,
+            name: s.name.clone(),
+            patches: s.patches.iter().map(|p| (p.clone(), source_of(lib, &perf.profile_name, p))).collect(),
+            at: (0..s.patches.len()).collect(),
+            on: s.is_active,
+            cursor: s.position as usize % s.patches.len(),
+        })
+        .collect()
+}
+
+/// The profile's stacks on their own — no song's patches in them.
+pub fn profile_stacks(perf: &PerformanceModel, lib: &LibraryModel) -> Vec<StackView> {
+    song_stacks(perf, lib)
+        .into_iter()
+        .zip(perf.stacks.iter().filter(|s| !s.patches.is_empty()))
+        .filter_map(|(v, s)| {
+            let at = s.patches.get(s.position as usize).cloned().unwrap_or_default();
+            let (patches, at_pos): (Vec<(String, Src)>, Vec<usize>) = v.patches.into_iter().zip(v.at).filter(|((_, src), _)| *src != Src::Song).unzip();
+            if patches.is_empty() {
+                return None;
+            }
+            let found = patches.iter().position(|(p, _)| p.eq_ignore_ascii_case(&at));
+            Some(StackView { on: v.on && found.is_some(), cursor: found.unwrap_or(0), patches, at: at_pos, ..v })
+        })
+        .collect()
+}
+
+/// Give the part up `patch` as its own — keeping where it is borrowed
+/// from, or dropping a borrowed profile it no longer needs.
+pub fn give_part(rig: Option<RigClient>, part: &PerfPart, patch: String, borrowed: Option<String>) {
+    let Some(r) = rig else { return };
+    let (name, had) = (part.name.clone(), !part.profile.is_empty());
+    let _ = dioxus_core::spawn_forever(async move {
+        let _ = r.set_part_patch(name.clone(), patch).await;
+        match borrowed {
+            Some(p) => {
+                let _ = r.set_part_profile(name, p).await;
+            }
+            None if had => {
+                let _ = r.set_part_profile(name, String::new()).await;
+            }
+            None => {}
+        }
+    });
+}
+
+/// Play `patch` by name: the rig's patch list says its index.
+pub fn play_patch(rig: Option<RigClient>, patch: String) {
+    let Some(r) = rig else { return };
+    let _ = dioxus_core::spawn_forever(async move {
+        if let Ok(list) = r.patches().await
+            && let Some(i) = list.iter().position(|p| p.name.eq_ignore_ascii_case(&patch))
+        {
+            let _ = r.select_patch(i as u32).await;
+        }
+    });
+}
+
+/// The modules some parts pick of their own, once each.
+fn part_modules(all: &[PerfPart], parts: &[usize]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for &k in parts {
+        let Some(p) = all.get(k) else { continue };
+        for pk in &p.picks {
+            let kind = pk.kind.strip_prefix("block:").unwrap_or(&pk.kind).to_string();
+            if !out.contains(&kind) {
+                out.push(kind);
+            }
+        }
+        if p.picks.is_empty() {
+            for o in &p.overrides {
+                if !out.iter().any(|b| b.eq_ignore_ascii_case(&o.block)) {
+                    out.push(o.block.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Song `i` of the set's parts: the live ones for the song up, else the
+/// library's.
+fn song_parts(perf: &PerformanceModel, lib: &LibraryModel, i: usize) -> Vec<PerfPart> {
+    if i == perf.song_index as usize {
+        return perf.parts.clone();
+    }
+    let name = perf.songs.get(i).map(|s| s.name.clone()).unwrap_or_default();
+    lib.songs.iter().find(|s| s.name.eq_ignore_ascii_case(&name)).map(|s| s.part_list.clone()).unwrap_or_default()
+}
+
+// ── The sidebar ────────────────────────────────────────────────────────────
 
 #[component]
 pub fn TabletSetlist(state: RigViewState) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let bus = DragBus::try_use();
     let lib = use_library(state);
     let perf = state.perf.read().clone();
     let lib_now = lib.read().clone();
     let songs = perf.songs.clone();
     let mut panel = use_signal(|| None::<Panel>);
     let reordering = use_signal(|| false);
-    // The song up folds its sections away on a tap.
-    let mut folded = use_signal(|| false);
+    // Songs opened on their sections, beside the one up (always open).
+    let mut open = use_signal(std::collections::BTreeSet::<usize>::new);
     let at = perf.song_index as usize;
-    let mut last_at = use_signal(|| at);
-    if *last_at.peek() != at {
-        last_at.set(at);
-        folded.set(false);
-    }
+    let set_index = perf.setlist_index;
     // A song being dragged into order: (from, to).
     let drag = use_signal(|| None::<(usize, usize)>);
-    // The list and the song up, measured on a scroll: whether the song up
-    // is scrolled out of it, and which way.
-    let mut list_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
-    let mut up_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    // The list and its songs, measured: whether the song up is scrolled
+    // out of the list, and which way.
+    let mut list_el = use_signal(|| None::<Rc<MountedData>>);
+    let rows: Rows = use_signal(Vec::new);
     let mut away = use_signal(|| None::<bool>);
+    let perf_sig = state.perf;
     let measure = move || {
-        let (Some(list), Some(up)) = (list_el.peek().clone(), up_el.peek().clone()) else { return };
+        let at = perf_sig.peek().song_index as usize;
+        let up = rows.peek().get(at).cloned().flatten();
+        let (Some(list), Some(up)) = (list_el.peek().clone(), up) else { return };
         spawn(async move {
+            // Mounted before laid out: wait for a layout to measure.
+            for _ in 0..10 {
+                if let (Ok(l), Ok(u)) = (list.get_client_rect().await, up.get_client_rect().await)
+                    && l.height() > 1.0
+                    && u.height() > 1.0
+                {
+                    break;
+                }
+                architect::platform::sleep(std::time::Duration::from_millis(50)).await;
+            }
             let (Ok(l), Ok(u)) = (list.get_client_rect().await, up.get_client_rect().await) else { return };
+            if l.height() <= 1.0 || u.height() <= 1.0 {
+                return;
+            }
             let now = if u.max_y() < l.min_y() + 1.0 {
                 Some(true)
             } else if u.min_y() > l.max_y() - 1.0 {
@@ -187,6 +505,12 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
             }
         });
     };
+    // The song up moves on: measure where the new one is.
+    use_effect(move || {
+        let _song = perf_sig.read().song_index;
+        measure();
+    });
+    let count = songs.len();
     rsx! {
         section { style: "position: relative; height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: {SHEET}; font-family: {FONT}; color: {INK};",
             SetHeader { perf: perf.clone(), lib: lib_now.clone(), panel, reordering }
@@ -198,19 +522,39 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
                 for (i, song) in songs.iter().enumerate() {
                     div {
                         key: "{i}-{song.name}",
-                        onmounted: move |e| if i == at { up_el.set(Some(e.data())) },
+                        onmounted: move |e| {
+                            keep_row(rows, i, &e);
+                            if i == perf_sig.peek().song_index as usize {
+                                measure();
+                            }
+                        },
                         SongRow {
                             perf: perf.clone(),
                             lib: lib_now.clone(),
                             index: i,
-                            open: i == at && !folded() && !reordering(),
+                            open: !reordering() && (i == at || open.read().contains(&i)),
                             reordering: reordering(),
                             drag,
                             panel,
-                            on_toggle: move |()| folded.toggle(),
+                            on_toggle: move |()| {
+                                let mut o = open.write();
+                                if !o.remove(&i) {
+                                    o.insert(i);
+                                }
+                            },
+                            on_grip: {
+                                let rig = rig.clone();
+                                move |_: PointerEvent| {
+                                    let rig = rig.clone();
+                                    begin_row_drag(bus, drag, rows, count, i, 24.0, move |from, to| {
+                                        call!(rig, |r| r.move_setlist_entry(set_index, from as u32, to as u32));
+                                    });
+                                }
+                            },
                         }
-                        if i == at && !folded() && !reordering() {
-                            Sections { perf: perf.clone(), lib: lib_now.clone(), panel }
+                        // The song up is open on its sections; others when opened.
+                        if !reordering() && (i == at || open.read().contains(&i)) {
+                            Sections { perf: perf.clone(), lib: lib_now.clone(), song: i, panel }
                         }
                     }
                 }
@@ -223,8 +567,11 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
                     }
                 }
                 if songs.is_empty() {
-                    div { style: "padding: 28px 20px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px;",
+                    div { style: "padding: 28px 20px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px;",
                         div { style: "font-size: 18px; font-weight: 700;", "No songs yet" }
+                        p { style: "margin: 0; font-size: 14px; font-weight: 500; color: {INK_3}; line-height: 1.45;",
+                            "Add the songs you're playing, in order. Each keeps its own key, tempo and the patch every section plays."
+                        }
                         PrimaryButton { label: "Add songs", onclick: move |()| panel.set(Some(Panel::Add)) }
                     }
                 }
@@ -232,12 +579,12 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
             // Scrolled away from the song up: where it is, and a way back.
             if let Some(above) = away() {
                 NowBar { perf: perf.clone(), above, on_back: move |()| {
-                    if let Some(up) = up_el.peek().clone() {
+                    let at = perf_sig.peek().song_index as usize;
+                    if let Some(up) = rows.peek().get(at).cloned().flatten() {
                         spawn(async move {
-                            let _ = up.scroll_to(ScrollBehavior::Instant).await;
+                            let _ = up.scroll_to(ScrollBehavior::Smooth).await;
                         });
                     }
-                    away.set(None);
                 } }
             }
             }
@@ -285,14 +632,15 @@ pub fn Plus(size: u32) -> Element {
     }
 }
 
-/// The primary button: the one thing to do here.
+/// The primary button: the one thing to do here (the kit's `Button
+/// primary`).
 #[component]
 pub fn PrimaryButton(label: String, onclick: EventHandler<()>, disabled: Option<bool>) -> Element {
     let off = disabled.unwrap_or(false);
     rsx! {
         button {
             disabled: off,
-            style: "min-height: 48px; padding: 0 18px; border-radius: {R}; border: 1px solid {pick(off, RULE_STRONG, DIM)}; background: {pick(off, CLEAR, DIM)}; color: {pick(off, INK_3, \"#ffffff\")}; font-size: 15px; font-weight: 650; font-family: {FONT}; white-space: nowrap; cursor: pointer;",
+            style: "min-height: {HIT}px; padding: 0 18px; border-radius: {R}; border: 1px solid {pick(off, RULE_STRONG, DIM)}; background: {pick(off, CLEAR, DIM)}; color: {pick(off, INK_3, \"#ffffff\")}; font-size: 15px; font-weight: 650; font-family: {FONT}; white-space: nowrap; cursor: pointer;",
             onclick: move |_| if !off { onclick.call(()) },
             "{label}"
         }
@@ -313,13 +661,14 @@ fn SetHeader(perf: PerformanceModel, lib: LibraryModel, panel: Signal<Option<Pan
     let when = when_label(&meta.date);
     // Only today and tomorrow are worth a word beside the date.
     let soon = (when == "Today" || when == "Tomorrow").then(|| when.clone());
-    let profile = if entry.profile.is_empty() { perf.profile_name.clone() } else { entry.profile.clone() };
+    // The set's profile, else the rig's.
+    let profile = if entry.profile.is_empty() { active_profile(&perf, &lib) } else { entry.profile.clone() };
     let count = perf.songs.len();
     let at = perf.song_index as usize;
     let sets = perf.setlists.len();
 
     let actions = vec![
-        Item::head(heading.clone()),
+        Item::head(name.clone()),
         Item::run("add", "Add songs…"),
         Item::run("edit", "Edit details…").detail("event · date · title"),
         Item::run("profile", "Default profile…").detail(if entry.profile.is_empty() { "the rig's".to_string() } else { entry.profile.clone() }),
@@ -340,20 +689,20 @@ fn SetHeader(perf: PerformanceModel, lib: LibraryModel, panel: Signal<Option<Pan
                 button {
                     style: "flex: 1; min-width: 0; min-height: 44px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 3px; text-align: left; padding: 0 8px; margin: 0 0 0 -8px; border: none; border-radius: {R_MD}; background: transparent; color: {INK}; font-family: {FONT}; cursor: pointer;",
                     onclick: move |_| panel_w.set(Some(Panel::Sets)),
-                    span { style: "display: flex; align-items: center; gap: 8px; min-width: 0;",
+                    span { style: "display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%;",
                         span { style: "min-width: 0; font-size: 21px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{heading}" }
                         svg { width: "10", height: "6", view_box: "0 0 10 6", style: "flex-shrink: 0;",
                             path { d: "M1 1 L5 5 L9 1", fill: "none", stroke: INK_3, stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round" }
                         }
                     }
                     // Event · date · profile — words, no chips.
-                    div { style: "display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 560; color: {INK_3}; white-space: nowrap; overflow: hidden;",
+                    div { style: "display: flex; align-items: center; gap: 6px; max-width: 100%; font-size: 13px; font-weight: 560; color: {INK_3}; white-space: nowrap; overflow: hidden;",
                         if !meta.title.is_empty() && !meta.event.is_empty() {
                             span { style: "width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; background: {name_colour(&meta.event)};" }
                             span { style: "color: {INK_2}; font-weight: 650;", "{meta.event}" }
                             span { "·" }
                         }
-                        span { if date.is_empty() { "No date" } else { "{date}" } }
+                        span { "{date}" }
                         if let Some(w) = soon.clone() {
                             span { style: "color: {pick(w == \"Today\", LIVE, INK_2)}; font-weight: 650;", "{w}" }
                         }
@@ -416,9 +765,6 @@ const STICK_SECTION: &str = "position: sticky; top: 64px; z-index: 2;";
 
 const UNSTUCK: &str = "position: relative;";
 
-/// A song row's height (reorder drags count in it).
-const SONG_ROW_H: f64 = 65.0;
-
 #[component]
 fn SongRow(
     perf: PerformanceModel,
@@ -429,9 +775,9 @@ fn SongRow(
     drag: Signal<Option<(usize, usize)>>,
     panel: Signal<Option<Panel>>,
     on_toggle: EventHandler<()>,
+    on_grip: EventHandler<PointerEvent>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let bus = DragBus::try_use();
     let Some(song) = perf.songs.get(index).cloned() else { return rsx! {} };
     let at = perf.song_index as usize;
     let up = index == at;
@@ -441,13 +787,21 @@ fn SongRow(
     let last = count.saturating_sub(1);
     let colour = song_colour(&song.name, &song.colour);
     let lib_song = lib.songs.iter().find(|s| s.name.eq_ignore_ascii_case(&song.name)).cloned();
-    let sections = lib_song.as_ref().map_or(0, |s| s.parts.len());
+    let parts = song_parts(&perf, &lib, index);
+    let sections = sections_of(&parts).len();
     let own_profile = lib_song.as_ref().map(|s| s.profile.clone()).unwrap_or_default();
     let set_profile = lib.setlists.get(perf.setlist_index as usize).map(|s| s.profile.clone()).unwrap_or_default();
-    let shown_profile = if own_profile.is_empty() { if set_profile.is_empty() { perf.profile_name.clone() } else { set_profile.clone() } } else { own_profile.clone() };
-    let start = lib_song.as_ref().map(|s| s.start_part.clone()).unwrap_or_default();
+    let shown_profile = if !own_profile.is_empty() {
+        own_profile.clone()
+    } else if !set_profile.is_empty() {
+        set_profile.clone()
+    } else {
+        active_profile(&perf, &lib)
+    };
+    let start = song.start.clone();
+    let start_stack = stack_for(&perf, &lib, &shown_profile, &start);
     let set_index = perf.setlist_index;
-    let (dragging, drop_above) = match drag() {
+    let (lifted, drop_above) = match drag() {
         Some((from, to)) => (from == index, to == index && from != index),
         None => (false, false),
     };
@@ -467,80 +821,83 @@ fn SongRow(
         Item::Sep,
         Item::delete("remove", "Remove from this set"),
     ];
-    // Its changes over its patches: the module kinds its sections pick, and
-    // whether it has settings changed and not saved to the profile.
-    let (modules, unsaved) = if up {
-        let mut m: Vec<String> = Vec::new();
-        for p in &perf.parts {
-            for pk in &p.picks {
-                if !pk.kind.starts_with("block:") && !m.contains(&pk.kind) {
-                    m.push(pk.kind.clone());
-                }
-            }
-        }
-        (m, !perf.song_changes.is_empty())
-    } else {
-        (Vec::new(), false)
-    };
+    // Its own changes over its patches: the modules its sections pick.
+    let modules = part_modules(&parts, &(0..parts.len()).collect::<Vec<_>>());
     let mut panel_w = panel;
-    let bg = if dragging { SHEET_2.to_string() } else if up { tint(&colour, 7) } else { CLEAR.to_string() };
+    let bg = if lifted {
+        SHEET_2.to_string()
+    } else if open {
+        tint(&colour, pick(up, 7, 4))
+    } else {
+        CLEAR.to_string()
+    };
     // The song up stays at the top while you scroll through it.
     let pin = if up && !reordering { STICK_SONG } else { UNSTUCK };
     let top_rule = if drop_above { format!("border-top: 3px solid {FOCUS_FG};") } else { format!("border-top: 1px solid {RULE};") };
+    let number_bg = if played { format!("color-mix(in srgb, {colour} 35%, {SHEET})") } else { colour.clone() };
 
     let pick_handler = EventHandler::new({
-                            let rig = rig.clone();
-                            move |p: Picked| match p.id.as_str() {
-                                "go" => call!(rig, |r| r.select_song(index as u32)),
-                                "key" => panel_w.set(Some(Panel::Key(index))),
-                                "tempo" => panel_w.set(Some(Panel::Tempo(index))),
-                                "start" => panel_w.set(Some(Panel::Start(index))),
-                                "profile" => panel_w.set(Some(Panel::Profile(Some(index)))),
-                                "colour" => panel_w.set(Some(Panel::Colour(index))),
-                                "up" => call!(rig, |r| r.move_setlist_entry(set_index, index as u32, index as u32 - 1)),
-                                "down" => call!(rig, |r| r.move_setlist_entry(set_index, index as u32, index as u32 + 1)),
-                                "remove" => call!(rig, |r| r.remove_setlist_entry(set_index, index as u32)),
-                                _ => {}
-                            }
-                        });
+        let rig = rig.clone();
+        move |p: Picked| match p.id.as_str() {
+            "go" => call!(rig, |r| r.select_song(index as u32)),
+            "key" => panel_w.set(Some(Panel::Key(index))),
+            "tempo" => panel_w.set(Some(Panel::Tempo(index))),
+            "start" => panel_w.set(Some(Panel::Start(index))),
+            "profile" => panel_w.set(Some(Panel::Profile(Some(index)))),
+            "colour" => panel_w.set(Some(Panel::Colour(index))),
+            "up" => call!(rig, |r| r.move_setlist_entry(set_index, index as u32, index as u32 - 1)),
+            "down" => call!(rig, |r| r.move_setlist_entry(set_index, index as u32, index as u32 + 1)),
+            "remove" => call!(rig, |r| r.remove_setlist_entry(set_index, index as u32)),
+            _ => {}
+        }
+    });
     rsx! {
-PressMenu {
+        PressMenu {
             items: items.clone(),
             on_pick: pick_handler,
-            style: "{pin} display: flex; align-items: stretch; min-height: 64px; {top_rule} background: {bg}; opacity: {pick(dragging, 0.6, 1.0)};",
+            off: reordering,
+            style: "{pin} display: flex; align-items: stretch; min-height: 64px; {top_rule} background: {bg};",
             if up {
                 span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: {colour};" }
             }
             button {
-                style: "flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 10px 2px 10px 14px; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;",
+                style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 10px 2px 10px 14px; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;",
                 onclick: {
                     let rig = rig.clone();
                     move |_| {
+                        // The song up stays open (a tap keeps it open after it);
+                        // another is played.
                         if reordering {
-                            return;
+                        } else if up {
+                            on_toggle.call(());
+                        } else {
+                            call!(rig, |r| r.select_song(index as u32));
                         }
-                        if up { on_toggle.call(()) } else { call!(rig, |r| r.select_song(index as u32)) }
                     }
                 },
-                span { style: "width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 750; color: #0b0b0e; background: {pick(played, tint(&colour, 35), colour.clone())};",
+                span { style: "width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 750; color: #0b0b0e; background: {number_bg};",
                     "{index + 1}"
                 }
                 span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;",
                     span { style: "display: flex; align-items: center; gap: 8px; min-width: 0;",
-                        span { style: "min-width: 0; font-size: 17px; font-weight: {pick(up, 750, 600)}; color: {pick(played, INK_3, INK)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; {pick(played, STRIKE, NOTHING)}",
+                        span { style: "position: relative; min-width: 0; font-size: 17px; font-weight: {pick(up, 750, 600)}; color: {pick(played, INK_3, INK)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
                             "{song.name}"
+                            if played {
+                                Strike { width: 1.6 }
+                            }
                         }
                         if up { Badge { live: true, "Now" } }
                         if next { Badge { live: false, "Next" } }
                     }
-                    span { style: "display: flex; align-items: center; gap: 6px; font-size: 13px; color: {INK_3}; min-width: 0; white-space: nowrap; overflow: hidden;",
+                    span { style: "display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: {INK_3}; min-width: 0; white-space: nowrap; overflow: hidden;",
                         if !start.is_empty() {
-                            span { style: "flex-shrink: 0; color: {INK_2}; font-weight: 600;", "from {start}" }
+                            PatchChip { patch: start.clone(), stack: start_stack.clone(), small: true, lit: false }
                         }
+                        // Its own profile, in words — only when it isn't the set's.
                         if !own_profile.is_empty() {
                             span { style: "flex-shrink: 0; color: {INK_2}; font-weight: 650;", "{own_profile}" }
                         }
-                        Changes { modules: modules.clone(), unsaved, max: 2 }
+                        Changes { modules: modules.clone(), max: 2 }
                         if !open && sections > 0 {
                             span { style: "flex-shrink: 0;", "{sections} sections" }
                         }
@@ -551,40 +908,21 @@ PressMenu {
                         "{song.key}"
                     }
                 }
-                span { style: "width: 34px; text-align: right; font-size: 14px; font-weight: 600; color: {INK_2}; flex-shrink: 0; font-variant-numeric: tabular-nums;",
+                span { style: "width: 30px; text-align: right; font-size: 14px; font-weight: 600; color: {INK_2}; flex-shrink: 0; font-variant-numeric: tabular-nums;",
                     if song.bpm > 0 { "{song.bpm}" }
                 }
             }
-            div { style: "display: flex; align-items: center; padding-right: 2px;",
+            div { style: "display: flex; align-items: center;",
                 if reordering {
                     // The handle: drag the song into its place.
                     span {
                         "aria-label": "Drag {song.name}",
                         style: "width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none;",
-                        onpointerdown: {
-                            let rig = rig.clone();
-                            move |e: PointerEvent| {
+                        onpointerdown: move |e: PointerEvent| {
                             e.prevent_default();
                             e.stop_propagation();
-                            let y0 = e.client_coordinates().y;
-                            let mut drag = drag;
-                            drag.set(Some((index, index)));
-                            let Some(bus) = bus else { return };
-                            let rig = rig.clone();
-                            bus.begin(move |ev| {
-                                let mut drag = drag;
-                                match ev {
-                                    DragEvent::Move { y, .. } => drag.set(Some((index, drop_index(index, y - y0, SONG_ROW_H, count)))),
-                                    DragEvent::End => {
-                                        let to = drag.peek().map_or(index, |d| d.1);
-                                        drag.set(None);
-                                        if to != index {
-                                            call!(rig, |r| r.move_setlist_entry(set_index, index as u32, to as u32));
-                                        }
-                                    }
-                                }
-                            });
-                        }},
+                            on_grip.call(e);
+                        },
                         svg { width: "14", height: "10", view_box: "0 0 14 10",
                             path { d: "M1 1h12M1 5h12M1 9h12", stroke: INK_2, stroke_width: "1.8", stroke_linecap: "round" }
                         }
@@ -601,11 +939,11 @@ PressMenu {
     }
 }
 
-/// Its own changes, in words: the override icon, each module it picks in
-/// that module's colour; "Unsaved" in amber for changes not saved.
+/// Its own changes, in words: the override icon, then each module it
+/// picks by name in that module's colour. A song shows a few, then a count.
 #[component]
-fn Changes(modules: Vec<String>, unsaved: bool, max: usize) -> Element {
-    if modules.is_empty() && !unsaved {
+fn Changes(modules: Vec<String>, max: usize) -> Element {
+    if modules.is_empty() {
         return rsx! {};
     }
     let shown: Vec<String> = modules.iter().take(max).cloned().collect();
@@ -613,19 +951,14 @@ fn Changes(modules: Vec<String>, unsaved: bool, max: usize) -> Element {
     let n = shown.len();
     rsx! {
         span { style: "display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; font-weight: 650; white-space: nowrap; overflow: hidden;",
-            if !modules.is_empty() {
-                OverrideIcon { colour: INK_2.to_string(), size: 11 }
-                for (k, m) in shown.into_iter().enumerate() {
-                    span { key: "{m}", style: "color: {lift(module_colour(&m))};",
-                        "{m}"
-                        if k + 1 < n { span { style: "color: {INK_3};", " ·" } }
-                    }
+            OverrideIcon { colour: INK_2.to_string(), size: 11 }
+            for (k, m) in shown.into_iter().enumerate() {
+                span { key: "{m}", style: "color: {lift(module_colour(&m))};",
+                    "{m}"
+                    if k + 1 < n { span { style: "color: {INK_3};", " ·" } }
                 }
-                if more > 0 { span { style: "color: {INK_3};", "+{more}" } }
             }
-            if unsaved {
-                span { style: "color: {MODIFIED};", "Unsaved" }
-            }
+            if more > 0 { span { style: "color: {INK_3};", "+{more}" } }
         }
     }
 }
@@ -644,9 +977,8 @@ fn Badge(live: bool, children: Element) -> Element {
 /// patch borrowed from another profile says from where.
 #[component]
 pub fn PatchChip(patch: String, stack: String, small: bool, lit: bool, borrowed: Option<String>) -> Element {
-    let (tape, _) = crate::perform::folder_color(&stack);
-    let gaffer = stack.is_empty() || tape == "#3f3f46";
-    let stack_ink = if gaffer { INK_3.to_string() } else { lift(tape) };
+    let tape = tape_for(&stack);
+    let stack_ink = if tape == TAPE_GAFFER { INK_3.to_string() } else { format!("color-mix(in oklab, {tape} 80%, white)") };
     let (pad, size, stack_size) = if small { ("2px 8px 2px 7px", 12, 10.5) } else { ("5px 9px 5px 8px", 13, 11.0) };
     rsx! {
         span { style: "display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; padding: {pad}; border-radius: 4px; background: {pick(lit, FILL_ON, FILL)}; color: {pick(lit, INK, INK_2)}; font-size: {size}px; font-weight: 600; white-space: nowrap; box-sizing: border-box;",
@@ -663,44 +995,88 @@ pub fn PatchChip(patch: String, stack: String, small: bool, lit: bool, borrowed:
 
 // ── Its sections ───────────────────────────────────────────────────────────
 
-/// A section row's height (drags count in it).
-const SECTION_ROW_H: f64 = 50.0;
-
 #[component]
-fn Sections(perf: PerformanceModel, lib: LibraryModel, panel: Signal<Option<Panel>>) -> Element {
+fn Sections(perf: PerformanceModel, lib: LibraryModel, song: usize, panel: Signal<Option<Panel>>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let host = PopupHost::try_use();
-    let sections = sections_of(&perf.parts);
-    let colour = perf.songs.get(perf.song_index as usize).map(|s| song_colour(&s.name, &s.colour)).unwrap_or_default();
-    let now = perf.part_index as usize;
+    let bus = DragBus::try_use();
+    let parts = song_parts(&perf, &lib, song);
+    let sections = sections_of(&parts);
+    let up = song == perf.song_index as usize;
+    let colour = perf.songs.get(song).map(|s| song_colour(&s.name, &s.colour)).unwrap_or_default();
+    let now = if up { perf.part_index as usize } else { usize::MAX };
     let drag = use_signal(|| None::<(usize, usize)>);
+    let rows: Rows = use_signal(Vec::new);
+    let mut add_el = use_signal(|| None::<Rc<MountedData>>);
     let names: Vec<String> = sections.iter().map(|s| s.name.clone()).collect();
-    let part_names: Vec<String> = perf.parts.iter().map(|p| p.name.clone()).collect();
+    let count = sections.len();
     rsx! {
-        div { style: "position: relative; padding: 2px 0 10px; background: {tint(&colour, 7)};",
-            span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: {colour};" }
+        div { style: "position: relative; padding: 2px 0 10px; background: {tint(&colour, pick(up, 7, 4))};",
+            if up {
+                span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: {colour};" }
+            }
             // One box per section: its pinned row stays inside it, so the
-            // row lets go once its parts and stacks have scrolled past.
+            // row lets go once its stacks have scrolled past.
             for (j, sec) in sections.iter().enumerate() {
-                div { key: "{j}-{sec.name}",
-                    SectionRow { perf: perf.clone(), lib: lib.clone(), section: sec.clone(), index: j, sections: sections.clone(), drag, panel }
-                    // The section playing opens into the stacks, each one
-                    // its own to override here.
-                    if sec.parts.contains(&now) {
-                        Stacks { perf: perf.clone(), lib: lib.clone(), section: sec.name.clone() }
+                {
+                    let (lifted, line) = match drag() {
+                        Some((from, to)) if to == j && from != j => (false, Some(to < from)),
+                        Some((from, _)) => (from == j, None),
+                        None => (false, None),
+                    };
+                    let rig = rig.clone();
+                    let order = sections.clone();
+                    rsx! {
+                        div {
+                            key: "{j}-{sec.name}",
+                            style: "position: relative; opacity: {pick(lifted, 0.5, 1.0)};",
+                            onmounted: move |e| keep_row(rows, j, &e),
+                            SectionRow {
+                                perf: perf.clone(),
+                                lib: lib.clone(),
+                                parts: parts.clone(),
+                                song,
+                                section: sec.clone(),
+                                index: j,
+                                count,
+                                names: names.clone(),
+                                panel,
+                                on_grip: move |_: PointerEvent| {
+                                    if !up {
+                                        return;
+                                    }
+                                    let (rig, order) = (rig.clone(), order.clone());
+                                    begin_row_drag(bus, drag, rows, count, j, 20.0, move |from, to| {
+                                        reorder_parts(rig.clone(), section_moved(&order, from, to));
+                                    });
+                                },
+                            }
+                            // The section playing opens into the stacks.
+                            if sec.parts.contains(&now) {
+                                Stacks { perf: perf.clone(), lib: lib.clone(), left: 46 }
+                            }
+                            // Where the dragged section lands: a line on the
+                            // side it comes from.
+                            if let Some(above) = line {
+                                span { style: "position: absolute; left: 0; right: 0; {pick(above, \"top\", \"bottom\")}: 0px; height: 2px; background: {INK_2}; z-index: 4; pointer-events: none;" }
+                            }
+                        }
                     }
                 }
             }
-            if sections.is_empty() {
-                Stacks { perf: perf.clone(), lib: lib.clone(), section: String::new() }
+            // No sections: the song itself is what plays, so its stacks sit
+            // under it.
+            if up && sections.is_empty() {
+                Stacks { perf: perf.clone(), lib: lib.clone(), left: 34 }
             }
+            // The rig adds sections to the song up.
+            if up {
             button {
                 style: "display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 14px 0 28px; border: none; background: transparent; color: {INK_2}; font-size: 14px; font-weight: 600; font-family: {FONT}; text-align: left; justify-content: flex-start; cursor: pointer;",
-                onclick: move |e: MouseEvent| {
-                    let (c, el) = (e.client_coordinates(), e.element_coordinates());
+                onmounted: move |e| add_el.set(Some(e.data())),
+                onclick: move |_| {
                     let rig = rig.clone();
-                    let taken: Vec<String> = names.iter().chain(part_names.iter()).cloned().collect();
-                    open_naming(host, c.x - el.x + 20.0, c.y - el.y + 44.0, Item::name("add", "New section…", suggest_section(&names), "Add", taken), EventHandler::new(move |p: Picked| {
+                    open_naming_under(host, add_el.peek().clone(), Item::name("add", "New section…", suggest_section(&names), "Add", names.clone()), EventHandler::new(move |p: Picked| {
                         let name = p.text.clone();
                         call!(rig, |r| r.add_part(name));
                     }));
@@ -712,27 +1088,18 @@ fn Sections(perf: PerformanceModel, lib: LibraryModel, panel: Signal<Option<Pane
                 }
                 "Add a section"
             }
+            }
         }
     }
 }
 
-/// The modules a section's parts pick of their own, once each.
-fn section_modules(perf: &PerformanceModel, sec: &Section) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for &k in &sec.parts {
-        for pk in perf.parts.get(k).map(|p| p.picks.as_slice()).unwrap_or_default() {
-            let kind = pk.kind.strip_prefix("block:").unwrap_or(&pk.kind).to_string();
-            if !out.contains(&kind) {
-                out.push(kind);
-            }
-        }
-        for o in perf.parts.get(k).map(|p| p.overrides.as_slice()).unwrap_or_default() {
-            if !out.iter().any(|b| b.eq_ignore_ascii_case(&o.block)) && perf.parts[k].picks.is_empty() {
-                out.push(o.block.clone());
-            }
-        }
-    }
-    out
+/// Play song `song` of the set from part `part`.
+fn go_to(rig: Option<RigClient>, song: usize, part: usize) {
+    let Some(r) = rig else { return };
+    let _ = dioxus_core::spawn_forever(async move {
+        let _ = r.select_song(song as u32).await;
+        let _ = r.select_part(part as u32).await;
+    });
 }
 
 /// Pick a part: in Build (or with the browser on call), it is what the
@@ -743,50 +1110,56 @@ pub struct PickPart {
 }
 
 #[component]
-fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index: usize, sections: Vec<Section>, drag: Signal<Option<(usize, usize)>>, panel: Signal<Option<Panel>>) -> Element {
+fn SectionRow(perf: PerformanceModel, lib: LibraryModel, parts: Vec<PerfPart>, song: usize, section: Section, index: usize, count: usize, names: Vec<String>, panel: Signal<Option<Panel>>, on_grip: EventHandler<PointerEvent>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let bus = DragBus::try_use();
     let build_pick = try_use_context::<super::BuildPick>();
     let pick_part = try_use_context::<PickPart>();
-    let count = sections.len();
-    let picked = build_pick.is_some_and(|b| (b.building)() && (b.part)().is_some_and(|k| section.parts.contains(&k)));
+    let at = perf.song_index as usize;
+    let up = song == at;
     let now = perf.part_index as usize;
     let first = section.parts.first().copied().unwrap_or(0);
-    let state = if section.parts.contains(&now) { "now" } else if first < now { "done" } else { "ahead" };
+    let state = if !up {
+        if song < at { "done" } else { "ahead" }
+    } else if section.parts.contains(&now) {
+        "now"
+    } else if first < now {
+        "done"
+    } else {
+        "ahead"
+    };
     let is_now = state == "now";
     let several = section.parts.len() > 1;
-    let part = perf.parts.get(first).cloned().unwrap_or_default();
-    let colour = perf.songs.get(perf.song_index as usize).map(|s| song_colour(&s.name, &s.colour)).unwrap_or_default();
+    // The part being built into is ringed (a one-part section's).
+    let picked = up && !several && build_pick.is_some_and(|b| (b.part)() == Some(first));
+    let part = parts.get(first).cloned().unwrap_or_default();
+    let colour = perf.songs.get(song).map(|s| song_colour(&s.name, &s.colour)).unwrap_or_default();
     let profile = if part.profile.is_empty() { perf.profile_name.clone() } else { part.profile.clone() };
     let stack = stack_for(&perf, &lib, &profile, &part.patch);
-    let borrowed = borrowed_from(&lib, &perf.profile_name, &part.patch);
-    let modules = section_modules(&perf, &section);
-    let unsaved = perf.song_changes.iter().any(|c| c.patch.eq_ignore_ascii_case(&part.patch)) && !part.patch.is_empty();
-    let names: Vec<String> = section.parts.iter().filter_map(|&k| perf.parts.get(k).map(|p| p.name.clone())).collect();
-    let section_names: Vec<String> = sections.iter().map(|s| s.name.clone()).filter(|n| *n != section.name).collect();
+    let borrowed = (!part.profile.is_empty()).then(|| part.profile.clone());
+    let modules = part_modules(&parts, &section.parts);
+    let part_names: Vec<String> = section.parts.iter().filter_map(|&k| parts.get(k).map(|p| p.name.clone())).collect();
     let grouped = !part.section.is_empty();
-    let (dragging, drop_at) = match drag() {
-        Some((from, to)) => (from == index, to == index && from != index),
-        None => (false, false),
-    };
 
     let mut items = vec![
         Item::head(section.name.clone()),
         Item::run("go", "Play from here").unless(is_now.then(|| "It's playing".to_string())),
     ];
+    // The rig edits the song up's sections; another song's play from here.
+    if up {
     items.push(if several {
         Item::run("parts", "Its parts").detail(format!("{}", section.parts.len()))
     } else {
         Item::run("patch", "Patch…").detail(sound_of(&part).unwrap_or_else(|| "keeps".to_string()))
     });
     items.extend([
-        Item::name("rename", "Rename…", section.name.clone(), "Rename", section_names),
+        Item::name("rename", "Rename…", section.name.clone(), "Rename", names.clone()),
         Item::Sep,
         Item::run("earlier", "Move earlier").unless((index == 0).then(|| "Already first".to_string())),
         Item::run("later", "Move later").unless((index + 1 == count).then(|| "Already last".to_string())),
         Item::Sep,
         Item::delete("delete", "Delete section"),
     ]);
+    }
     let ink = match state {
         "done" => INK_3,
         "now" => INK,
@@ -794,123 +1167,115 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index
     };
     let grip = section_colour(&section.name);
     let row_bg = pick(is_now, tint(&colour, pick(several, 10, 18)), CLEAR.to_string());
-    let drop_line = if drop_at { format!("border-top: 2px solid {INK_2};") } else { String::new() };
+    // The section playing stays under the song while its stacks scroll.
+    let pin = if is_now { format!("{STICK_SECTION} box-shadow: 0 1px 0 {RULE};") } else { UNSTUCK.to_string() };
+    let order: Vec<Section> = {
+        let mut v = sections_of(&parts);
+        v.truncate(count);
+        v
+    };
 
+    // Pick the part and open the browser on it (the patch picker when
+    // there is no browser here).
+    let choose = move || {
+        if let (Some(b), Some(pp)) = (build_pick, pick_part) {
+            let mut part = b.part;
+            part.set(Some(first));
+            pp.open.call(());
+        } else {
+            let mut panel = panel;
+            panel.set(Some(Panel::Patch(first)));
+        }
+    };
     let pick_handler = EventHandler::new({
-                    let rig = rig.clone();
-                    let names = names.clone();
-                    let sections = sections.clone();
-                    move |p: Picked| {
-                        let names = names.clone();
-                        match p.id.as_str() {
-                            "go" | "parts" => call!(rig, |r| r.select_part(first as u32)),
-                            "patch" => {
-                                // Pick the part and open the browser on it (the
-                                // patch picker when there is no browser here).
-                                if let (Some(b), Some(pp)) = (build_pick, pick_part) {
-                                    let mut part = b.part;
-                                    part.set(Some(first));
-                                    pp.open.call(());
-                                } else {
-                                    let mut panel = panel;
-                                    panel.set(Some(Panel::Patch(first)));
-                                }
-                            }
-                            "rename" => {
-                                let new_name = p.text.clone();
-                                if grouped {
-                                    for n in names {
-                                        let new_name = new_name.clone();
-                                        call!(rig, |r| r.set_part_section(n, new_name));
-                                    }
-                                } else if let Some(n) = names.first().cloned() {
-                                    call!(rig, |r| r.rename_part(n, new_name));
-                                }
-                            }
-                            "earlier" => reorder_parts(rig.clone(), section_moved(&sections, index, index - 1)),
-                            "later" => reorder_parts(rig.clone(), section_moved(&sections, index, index + 1)),
-                            "delete" => {
-                                for n in names {
-                                    call!(rig, |r| r.remove_part(n));
-                                }
-                            }
-                            _ => {}
+        let rig = rig.clone();
+        let part_names = part_names.clone();
+        move |p: Picked| {
+            let part_names = part_names.clone();
+            match p.id.as_str() {
+                "go" if !up => go_to(rig.clone(), song, first),
+                "go" | "parts" => call!(rig, |r| r.select_part(first as u32)),
+                "patch" => choose(),
+                "rename" => {
+                    let new_name = p.text.clone();
+                    if grouped {
+                        for n in part_names {
+                            let new_name = new_name.clone();
+                            call!(rig, |r| r.set_part_section(n, new_name));
                         }
+                    } else if let Some(n) = part_names.first().cloned() {
+                        call!(rig, |r| r.rename_part(n, new_name));
                     }
-                });
+                }
+                "earlier" => reorder_parts(rig.clone(), section_moved(&order, index, index - 1)),
+                "later" => reorder_parts(rig.clone(), section_moved(&order, index, index + 1)),
+                "delete" => {
+                    for n in part_names {
+                        call!(rig, |r| r.remove_part(n));
+                    }
+                }
+                _ => {}
+            }
+        }
+    });
     rsx! {
-PressMenu {
+        PressMenu {
             items: items.clone(),
             on_pick: pick_handler,
-            style: "{pick(is_now, STICK_SECTION, UNSTUCK)} display: flex; align-items: center; min-height: 50px; background: {row_bg}; opacity: {pick(dragging, 0.5, 1.0)}; {drop_line}",
-            if picked {
-                span { style: "position: absolute; left: 0; top: 0; bottom: 0; right: 0; border: 2px solid {FOCUS_FG}; border-radius: {R}; box-sizing: border-box; pointer-events: none;" }
-            }
+            style: "{pin} display: flex; align-items: center; min-height: 50px; background: {row_bg};",
             // The grip, in the section's colour: drag to move the section.
             span {
                 "aria-label": "Drag {section.name} to move it",
                 style: "width: 40px; align-self: stretch; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; box-sizing: border-box; cursor: grab; touch-action: none;",
-                onpointerdown: {
-                    let rig = rig.clone();
-                    let sections = sections.clone();
-                    move |e: PointerEvent| {
-                        e.prevent_default();
-                        e.stop_propagation();
-                        let y0 = e.client_coordinates().y;
-                        let mut drag = drag;
-                        drag.set(Some((index, index)));
-                        let Some(bus) = bus else { return };
-                        let (rig, sections) = (rig.clone(), sections.clone());
-                        bus.begin(move |ev| {
-                            let mut drag = drag;
-                            match ev {
-                                DragEvent::Move { y, .. } => drag.set(Some((index, drop_index(index, y - y0, SECTION_ROW_H, count)))),
-                                DragEvent::End => {
-                                    let to = drag.peek().map_or(index, |d| d.1);
-                                    drag.set(None);
-                                    if to != index {
-                                        reorder_parts(rig.clone(), section_moved(&sections, index, to));
-                                    }
-                                }
-                            }
-                        });
-                    }
+                onpointerdown: move |e: PointerEvent| {
+                    e.prevent_default();
+                    e.stop_propagation();
+                    on_grip.call(e);
                 },
                 svg { width: "14", height: "12", view_box: "0 0 14 12",
                     path { d: "M1.5 2h11M1.5 6h11M1.5 10h11", stroke: "{grip}", stroke_opacity: if state == "done" { "0.45" } else { "1" }, stroke_width: "1.7", stroke_linecap: "round" }
                 }
             }
             button {
-                style: "flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 50px; padding: 4px 4px 4px 6px; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;",
+                style: "position: relative; flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-start; gap: 12px; min-height: 50px; padding: 4px 4px 4px 6px; text-align: left; background: transparent; border: none; border-radius: {R}; color: inherit; font: inherit; cursor: pointer;",
                 onclick: {
                     let rig = rig.clone();
                     move |_| {
                         // Building: a tap picks the section to build into (one
                         // with several parts plays — its parts are picked).
+                        if !up {
+                            go_to(rig.clone(), song, first);
+                            return;
+                        }
                         if let Some(b) = build_pick
                             && *b.building.peek()
                             && !several
                         {
-                            let mut p = b.part;
-                            p.set(Some(first));
+                            choose();
                             return;
                         }
                         call!(rig, |r| r.select_part(first as u32))
                     }
                 },
+                if picked {
+                    span { style: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; border: 1.5px solid {FOCUS_FG}; border-radius: {R}; box-sizing: border-box; pointer-events: none;" }
+                }
                 span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
                     span { style: "min-width: 0; font-size: 15px; font-weight: {pick(is_now, 700, 520)}; color: {ink}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
                         "{section.name}"
                     }
-                    Changes { modules: modules.clone(), unsaved, max: 4 }
+                    Changes { modules: modules.clone(), max: 4 }
                 }
                 // What it plays.
                 span { style: "flex: 0 1 auto; max-width: 64%; min-width: 0; display: flex; padding-right: 10px;",
                     if several {
                         span { style: "font-size: 13px; padding: 3px 8px; border-radius: 4px; background: {FILL}; color: {INK_2}; font-weight: 600;", "{section.parts.len()} parts" }
-                    } else if !part.stack.is_empty() || !part.preset.is_empty() {
-                        // A whole stack, or a preset's variation.
-                        PatchChip { patch: sound_of(&part).unwrap_or_default(), stack: String::new(), small: false, lit: is_now, borrowed: (!part.profile.is_empty()).then(|| part.profile.clone()) }
+                    } else if !part.stack.is_empty() {
+                        // A whole stack.
+                        PatchChip { patch: "the stack".to_string(), stack: part.stack.clone(), small: false, lit: is_now, borrowed: borrowed.clone() }
+                    } else if !part.preset.is_empty() {
+                        // A preset's variation.
+                        PatchChip { patch: part.preset.clone(), stack: String::new(), small: false, lit: is_now, borrowed: borrowed.clone() }
                     } else if !part.patch.is_empty() {
                         PatchChip { patch: part.patch.clone(), stack: stack.clone(), small: false, lit: is_now, borrowed: borrowed.clone() }
                     } else {
@@ -927,197 +1292,237 @@ PressMenu {
     }
 }
 
-/// The profile's stacks under the section playing (or the Profile view):
-/// a tap plays a stack (a tap on the one playing steps it); each shows the
-/// patch a tap plays, its rotation, and what the next tap plays.
+// ── The stacks ─────────────────────────────────────────────────────────────
+
+/// The song's stacks under the section playing (under the song when it has
+/// none): a tap plays a stack (a tap on the one playing steps it); each
+/// shows the patch a tap plays, its rotation, and what the next tap plays.
 #[component]
-pub fn Stacks(perf: PerformanceModel, lib: LibraryModel, section: String) -> Element {
-    let part = perf.parts.get(perf.part_index as usize).cloned();
-    let where_ = part.as_ref().map(|p| if p.section.is_empty() || p.name == section { section.clone() } else { p.name.clone() }).unwrap_or_default();
-    let song = perf.songs.get(perf.song_index as usize).cloned();
-    let colour = song.as_ref().map(|s| song_colour(&s.name, &s.colour)).unwrap_or_else(|| name_colour(&perf.profile_name).to_string());
-    // The stacks the profile fills — an empty slot (Worship's Special) is
-    // not a stack you can play.
-    let count = perf.stacks.iter().filter(|s| !s.patches.is_empty()).count();
+pub fn Stacks(perf: PerformanceModel, lib: LibraryModel, left: u32) -> Element {
+    let views = song_stacks(&perf, &lib);
+    let own = part_patch(&perf);
+    let live = is_live(&perf, own.as_deref());
+    let where_ = where_label(&perf);
+    let colour = perf.songs.get(perf.song_index as usize).map_or_else(|| name_colour(&perf.profile_name).to_string(), |s| song_colour(&s.name, &s.colour));
+    let part = perf.parts.get(perf.part_index as usize).cloned().unwrap_or_default();
+    let in_song = !perf.parts.is_empty();
+    let count = views.len();
     rsx! {
-        div { style: "padding: 2px 0 8px 46px;",
+        div { style: "position: relative; padding: 2px 0 8px {left}px;",
             div { style: "background: rgba(0,0,0,0.18); display: flex; flex-direction: column; border-bottom: 1px solid {RULE};",
-                for (i, st) in perf.stacks.iter().enumerate().filter(|(_, s)| !s.patches.is_empty()) {
-                    StackRow { key: "{st.name}", stack: st.clone(), index: i, count, lib: lib.clone(), profile: perf.profile_name.clone(), part: part.clone().unwrap_or_default(), where_: where_.clone(), song_colour: colour.clone(), in_song: !perf.parts.is_empty() }
+                for (k, v) in views.iter().enumerate() {
+                    StackRow {
+                        key: "{v.name}",
+                        view: v.clone(),
+                        shown: k,
+                        count,
+                        prev: k.checked_sub(1).map(|p| views[p].index),
+                        next: views.get(k + 1).map(|n| n.index),
+                        lib: lib.clone(),
+                        profile: perf.profile_name.clone(),
+                        part: part.clone(),
+                        own: own.clone(),
+                        live,
+                        where_: where_.clone(),
+                        song_colour: colour.clone(),
+                        in_song,
+                    }
                 }
             }
         }
     }
 }
 
-/// What a part plays, in words: its patch, `Clean stack`, or a preset's
-/// variation; `None` when it keeps what plays.
-pub fn sound_of(part: &PerfPart) -> Option<String> {
-    if !part.stack.is_empty() {
-        Some(format!("{} stack", part.stack))
-    } else if !part.preset.is_empty() {
-        Some(part.preset.clone())
-    } else if !part.patch.is_empty() {
-        Some(part.patch.clone())
-    } else {
-        None
-    }
-}
-
-/// A patch's source: the profile's own, the song's own, or borrowed.
-fn source_of(lib: &LibraryModel, profile: &str, patch: &str) -> (bool, Option<String>) {
-    // A song's own patch is merged into the profile while it plays: not
-    // the profile's own.
-    let mine = lib.profiles.iter().any(|p| p.name.eq_ignore_ascii_case(profile) && p.patch_list.iter().any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch)));
-    if mine {
-        return (true, None);
-    }
-    (false, lib.profiles.iter().find(|p| p.patch_list.iter().any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch))).map(|p| p.name.clone()))
-}
-
-/// Play `patch` by name: the rig's patch list says its index.
-pub fn play_patch(rig: Option<RigClient>, patch: String) {
-    let Some(r) = rig else { return };
-    let _ = dioxus_core::spawn_forever(async move {
-        if let Ok(list) = r.patches().await
-            && let Some(i) = list.iter().position(|p| p.name.eq_ignore_ascii_case(&patch))
-        {
-            let _ = r.select_patch(i as u32).await;
-        }
-    });
-}
-
 #[component]
-pub fn StackRow(stack: PerfStack, index: usize, count: usize, lib: LibraryModel, profile: String, part: PerfPart, where_: String, song_colour: String, in_song: bool) -> Element {
+pub fn StackRow(
+    view: StackView,
+    /// Its place among the stacks shown, of `count`; the stacks shown either
+    /// side of it, by index — where Move up / down take it.
+    shown: usize,
+    count: usize,
+    prev: Option<usize>,
+    next: Option<usize>,
+    lib: LibraryModel,
+    profile: String,
+    /// The part up, and the patch it plays.
+    part: PerfPart,
+    own: Option<String>,
+    /// Something else plays by hand.
+    live: bool,
+    where_: String,
+    song_colour: String,
+    in_song: bool,
+    /// Drag the stack into order (the Profile view).
+    grip: Option<EventHandler<PointerEvent>>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let on = stack.is_active;
-    let (tape, _) = crate::perform::folder_color(&stack.name);
-    let n = stack.patches.len().max(stack.patch_count as usize);
-    let pos = stack.position as usize;
-    // The patch a tap plays, by its own name.
-    let showing = stack.patches.get(pos).cloned().unwrap_or_else(|| stack.current_patch.clone());
-    let next = if stack.patches.len() > 1 { stack.patches.get((pos + 1) % stack.patches.len()).cloned() } else { None };
-    // The part's own patch: home, while something else plays by hand.
-    let part_patch = part.patch.clone();
-    let home = !on && !part_patch.is_empty() && stack.patches.iter().any(|p| p.eq_ignore_ascii_case(&part_patch));
-    let by_hand = on && !part_patch.is_empty() && !showing.eq_ignore_ascii_case(&part_patch);
-    let is_default = !part_patch.is_empty() && part_patch.eq_ignore_ascii_case(&showing);
-    let (mine, borrowed) = source_of(&lib, &profile, &showing);
+    let index = view.index;
+    let on = view.on;
+    let n = view.patches.len();
+    // The part's own patch, while something else plays by hand: home.
+    let saved = own.as_ref().and_then(|o| view.patches.iter().position(|(p, _)| p.eq_ignore_ascii_case(o)));
+    let home = live && saved.is_some();
+    let by_hand = on && live;
+    let pos = if on { view.cursor } else { saved.filter(|_| home).unwrap_or(view.cursor) };
+    let showing = view.patches.get(pos).cloned();
+    let showing_name = showing.as_ref().map(|s| s.0.clone()).unwrap_or_default();
+    let is_default = saved.is_some_and(|s| s == pos);
+    let next_patch = (n > 1).then(|| view.patches[(pos + 1) % n].0.clone());
+    let tape = tape_for(&view.name);
+    // Only the profile's own patches are the profile's to rename or remove.
+    let mine = showing.as_ref().is_some_and(|(_, src)| matches!(src, Src::Profile(_)));
+    let names: Vec<String> = view.patches.iter().map(|p| p.0.clone()).collect();
     let stack_names: Vec<String> = lib.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(&profile)).map(|p| p.stacks.clone()).unwrap_or_default();
 
-    let mut items = vec![Item::head(format!("{} · {}", stack.name, showing))];
-    for (k, p) in stack.patches.iter().enumerate() {
-        let (own, from) = source_of(&lib, &profile, p);
-        let detail = if own { String::new() } else { from.map_or_else(|| "the song's own".to_string(), |f| format!("from {f}")) };
-        items.push(Item::run(format!("p{k}"), p.clone()).detail(detail).checked(k == pos && on));
+    let head = if showing.is_some() { format!("{} · {showing_name}", view.name) } else { format!("{} · empty", view.name) };
+    let mut items = vec![Item::head(head)];
+    for (k, (p, src)) in view.patches.iter().enumerate() {
+        items.push(Item::run(format!("p{k}"), p.clone()).detail(src.label()).checked(k == pos && on));
     }
-    if by_hand && !where_.is_empty() {
+    if by_hand {
         items.push(Item::Sep);
         items.push(Item::run("keep", format!("Keep for {where_}")));
         items.push(Item::run("back", format!("Back to {where_}'s patch")));
     }
-    if in_song && !part.name.is_empty() && !where_.is_empty() {
+    // The section (or part) playing gets this patch as its own.
+    if in_song && showing.is_some() {
         items.push(Item::Sep);
-        items.push(Item::run("default", format!("Make “{showing}” default for {where_}")).unless(is_default.then(|| format!("It's {where_}'s already"))));
+        items.push(Item::run("default", format!("Make “{showing_name}” default for {where_}")).unless(is_default.then(|| format!("It's {where_}'s already"))));
     }
     items.push(Item::Sep);
-    items.push(Item::name("add", "Add a patch…", format!("{} {}", stack.name, stack.patches.len() + 1), "Add", stack.patches.clone()));
+    items.push(Item::name("add", "Add a patch…", format!("{} {}", view.name, n + 1), "Add", names.clone()));
     if mine {
-        items.push(Item::name("rename_patch", format!("Rename “{showing}”…"), showing.clone(), "Rename", stack.patches.clone()));
+        items.push(Item::name("rename_patch", format!("Rename “{showing_name}”…"), showing_name.clone(), "Rename", names.clone()));
     }
-    items.push(Item::name("rename", "Rename stack…", stack.name.clone(), "Rename", stack_names));
-    items.push(Item::run("up", "Move up").unless((index == 0).then(|| "Already first".to_string())));
-    items.push(Item::run("down", "Move down").unless((index + 1 == count).then(|| "Already last".to_string())));
+    items.push(Item::name("rename", "Rename stack…", view.name.clone(), "Rename", stack_names));
+    items.push(Item::run("up", "Move up").unless((shown == 0).then(|| "Already first".to_string())));
+    items.push(Item::run("down", "Move down").unless((shown + 1 == count).then(|| "Already last".to_string())));
     if mine {
         items.push(Item::Sep);
-        items.push(Item::delete("remove_patch", format!("Remove “{showing}”")).unless((stack.patches.len() <= 1).then(|| "A stack keeps at least one patch".to_string())));
+        items.push(Item::delete("remove_patch", format!("Remove “{showing_name}”")).unless((n <= 1).then(|| "A stack keeps at least one patch".to_string())));
     }
 
-    let bar = if on {
-        let c = if by_hand { MODIFIED } else { LIVE };
-        format!("background: {c};")
-    } else if home {
-        format!("border: 1.25px solid {LIVE}; box-sizing: border-box;")
-    } else {
-        String::new()
-    };
-    let part_name = part.name.clone();
-    let stack_name = stack.name.clone();
-    let patches = stack.patches.clone();
-    let part_index_now = part.name.clone();
+    // Green bar: what plays (amber when picked by hand). A ring: the part's
+    // own patch, while something else plays — tap it to go back.
+    let fill = if on { format!("background: {};", pick(by_hand, MODIFIED, LIVE)) } else { String::new() };
+    let ring = if home { format!("border: 1.25px solid {LIVE}; box-sizing: border-box;") } else { String::new() };
     let pick_handler = EventHandler::new({
-                    let rig = rig.clone();
-                    let showing = showing.clone();
-                    move |p: Picked| {
-                        let (part_name, stack_name, showing) = (part_name.clone(), stack_name.clone(), showing.clone());
-                        match p.id.as_str() {
-                            "keep" => call!(rig, |r| r.set_part_patch(part_name, showing)),
-                            "back" => {
-                                let _ = &part_index_now;
-                                play_patch(rig.clone(), part.patch.clone());
-                            }
-                            "default" => call!(rig, |r| r.set_part_patch(part_name, showing)),
-                            "add" => {
-                                let name = p.text.clone();
-                                call!(rig, |r| r.add_patch(name, stack_name, String::new()));
-                            }
-                            "rename_patch" => {
-                                let new_name = p.text.clone();
-                                call!(rig, |r| r.rename_patch(showing, new_name));
-                            }
-                            "rename" => {
-                                let new_name = p.text.clone();
-                                call!(rig, |r| r.rename_stack(stack_name, new_name));
-                            }
-                            "up" => call!(rig, |r| r.move_stack(index as u32, index as u32 - 1)),
-                            "down" => call!(rig, |r| r.move_stack(index as u32, index as u32 + 1)),
-                            "remove_patch" => call!(rig, |r| r.delete_patch(showing)),
-                            other => {
-                                if let Some(k) = other.strip_prefix('p').and_then(|k| k.parse::<usize>().ok())
-                                    && let Some(name) = patches.get(k).cloned()
-                                {
-                                    play_patch(rig.clone(), name);
-                                }
-                            }
-                        }
+        let rig = rig.clone();
+        let (part, own, showing, rig_at) = (part.clone(), own.clone(), showing.clone(), view.at.clone());
+        let stack_name = view.name.clone();
+        move |p: Picked| {
+            let stack_name = stack_name.clone();
+            match p.id.as_str() {
+                "keep" | "default" => {
+                    if let Some((name, src)) = showing.clone() {
+                        let borrowed = match src {
+                            Src::Other(p) => Some(p),
+                            _ => None,
+                        };
+                        give_part(rig.clone(), &part, name, borrowed);
                     }
-                });
+                }
+                "back" => {
+                    if let Some(o) = own.clone() {
+                        play_patch(rig.clone(), o);
+                    }
+                }
+                "add" => {
+                    let name = p.text.clone();
+                    call!(rig, |r| r.set_stack_patch(stack_name, name, true));
+                }
+                "rename_patch" => {
+                    if let Some((old, _)) = showing.clone() {
+                        let new_name = p.text.clone();
+                        call!(rig, |r| r.rename_patch(old, new_name));
+                    }
+                }
+                "rename" => {
+                    let new_name = p.text.clone();
+                    call!(rig, |r| r.rename_stack(stack_name, new_name));
+                }
+                "up" => {
+                    if let Some(to) = prev {
+                        call!(rig, |r| r.move_stack(index as u32, to as u32));
+                    }
+                }
+                "down" => {
+                    if let Some(to) = next {
+                        call!(rig, |r| r.move_stack(index as u32, to as u32));
+                    }
+                }
+                "remove_patch" => {
+                    if let Some((name, _)) = showing.clone() {
+                        call!(rig, |r| r.set_stack_patch(stack_name, name, false));
+                    }
+                }
+                other => {
+                    // Land the stack on that patch and play it.
+                    if let Some(k) = other.strip_prefix('p').and_then(|k| k.parse::<usize>().ok())
+                        && let Some(&at) = rig_at.get(k)
+                    {
+                        call!(rig, |r| r.play_stack_patch(index as u32, at as u32));
+                    }
+                }
+            }
+        }
+    });
+    let label = if showing.is_some() { showing_name.clone() } else { "Empty".to_string() };
+    let grip_ink = super::colors::tape_mark(&view.name);
     rsx! {
-PressMenu {
+        PressMenu {
             items: items.clone(),
             on_pick: pick_handler,
             style: "display: flex; align-items: stretch; border-top: 1px solid {RULE}; background: {pick(on, tint(&song_colour, 18), CLEAR.to_string())};",
+            if let Some(g) = grip {
+                span {
+                    "aria-label": "Drag {view.name} to move it",
+                    style: "width: 36px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none;",
+                    onpointerdown: move |e: PointerEvent| {
+                        e.prevent_default();
+                        e.stop_propagation();
+                        g.call(e);
+                    },
+                    svg { width: "14", height: "12", view_box: "0 0 14 12",
+                        path { d: "M1.5 2h11M1.5 6h11M1.5 10h11", stroke: grip_ink, stroke_width: "1.7", stroke_linecap: "round" }
+                    }
+                }
+            }
             button {
-                style: "position: relative; flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px 0 10px; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;",
+                disabled: n == 0,
+                style: "position: relative; flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-height: 44px; padding: {pick(grip.is_some(), \"0 4px 0 2px\", \"0 4px 0 10px\")}; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;",
                 onclick: {
                     let rig = rig.clone();
-                    let part_patch = part_patch.clone();
+                    let own = own.clone();
                     move |_| {
                         // Home: back to the part's own patch. Else: play the stack.
                         if home {
-                            play_patch(rig.clone(), part_patch.clone());
+                            if let Some(o) = own.clone() {
+                                play_patch(rig.clone(), o);
+                            }
                         } else {
                             call!(rig, |r| r.press_stack(index as u32));
                         }
                     }
                 },
                 if on || home {
-                    span { style: "position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; {bar}" }
+                    span { style: "position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; {fill} {ring}" }
                 }
                 span { style: "width: 70px; flex-shrink: 0; display: flex; align-items: center; gap: 6px;",
                     span { style: "width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; background: {tape};" }
-                    span { style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; color: {pick(on, INK, INK_3)};", "{stack.name}" }
+                    span { style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; color: {pick(on, INK, INK_3)};", "{view.name}" }
                 }
                 span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;",
                     span { style: "font-size: 14px; font-weight: {pick(on, 700, 560)}; color: {pick(on, INK, INK_2)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
-                        "{showing}"
+                        "{label}"
                     }
                     if n > 1 {
                         span { style: "display: flex; align-items: center; gap: 4px; min-width: 0;",
-                            for k in 0..n {
-                                RotationDot { key: "{k}", lit: k == pos, source: stack.patches.get(k).map(|p| source_of(&lib, &profile, p)).unwrap_or((true, None)), song_colour: song_colour.clone() }
+                            for (k, (p, src)) in view.patches.iter().enumerate() {
+                                RotationDot { key: "{p}", lit: k == pos, source: src.clone(), song_colour: song_colour.clone() }
                             }
-                            if on && let Some(nx) = next.clone() {
+                            // What the next tap plays, on the stack that's playing.
+                            if on && let Some(nx) = next_patch.clone() {
                                 span { style: "margin-left: 6px; min-width: 0; font-size: 12px; font-weight: 600; color: {INK_3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
                                     "next › "
                                     span { style: "color: {INK_2};", "{nx}" }
@@ -1127,15 +1532,16 @@ PressMenu {
                     }
                 }
                 if is_default {
-                    span { style: "flex-shrink: 0; font-size: 12px; font-weight: 650; color: {INK_3}; padding-right: 4px;", "Default" }
+                    span { style: "flex-shrink: 0; font-size: 12px; font-weight: 650; color: {INK_3};", "Default" }
                 }
-                if let Some(b) = borrowed.clone() {
-                    span { style: "flex-shrink: 0; font-size: 12px; font-weight: 650; color: {name_colour(&b)}; padding-right: 4px;", "{b}" }
+                // Borrowed from another profile: that profile, by name.
+                if let Some((_, Src::Other(b))) = showing.clone() {
+                    span { style: "flex-shrink: 0; font-size: 12px; font-weight: 650; color: {name_colour(&b)};", "{b}" }
                 }
             }
             MoreButton {
                 items: items.clone(),
-                label: format!("{} actions", stack.name),
+                label: format!("{} actions", view.name),
                 on_pick: pick_handler,
             }
         }
@@ -1145,12 +1551,12 @@ PressMenu {
 /// A patch in a stack's rotation: the song's own filled in the song's
 /// colour, one borrowed in its profile's, the profile's own open.
 #[component]
-fn RotationDot(lit: bool, source: (bool, Option<String>), song_colour: String) -> Element {
+fn RotationDot(lit: bool, source: Src, song_colour: String) -> Element {
     let style = match &source {
-        (false, None) => format!("background: {song_colour}; opacity: {};", pick(lit, 1.0, 0.55)),
-        (false, Some(p)) => format!("background: {};", name_colour(p)),
-        (true, _) if lit => format!("background: {INK_2};"),
-        (true, _) => format!("border: 1.25px solid {INK_3}; box-sizing: border-box;"),
+        Src::Song => format!("background: {song_colour}; opacity: {};", pick(lit, 1.0, 0.55)),
+        Src::Other(p) => format!("background: {};", name_colour(p)),
+        Src::Profile(_) if lit => format!("background: {INK_2};"),
+        Src::Profile(_) => format!("border: 1.25px solid {INK_3}; box-sizing: border-box;"),
     };
     rsx! {
         span { style: "width: {pick(lit, 12, 5)}px; height: 5px; border-radius: 999px; flex-shrink: 0; {style}" }
