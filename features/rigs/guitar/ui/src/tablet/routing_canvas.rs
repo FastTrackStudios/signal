@@ -56,9 +56,13 @@ pub enum CanvasItem {
     /// Effects in parallel with the dry: one above the line, one below,
     /// the dry straight through the middle.
     Split(Vec<CanvasCell>),
-    /// Two lanes side by side, each its own (a stereo pair: Amp L over
-    /// Amp R), one above the line and one below.
-    Pair(Vec<CanvasCell>),
+    /// Blocks in parallel, each on the lane it names (the line 0, one
+    /// above −1, one below 1): Amp L over Amp R; a block alone off the line
+    /// (the amps' EQ on the bottom row).
+    Lanes(Vec<(i32, CanvasCell)>),
+    /// Blocks in parallel on their lanes, into one block under them in the
+    /// same column (the amps into their EQ on the third row).
+    Merge(Vec<(i32, CanvasCell)>, (i32, CanvasCell)),
     Sub(CanvasModule),
 }
 
@@ -68,8 +72,14 @@ pub fn core_ids(modules: &[CanvasModule]) -> Vec<String> {
     fn walk(items: &[CanvasItem], all: bool, out: &mut Vec<String>) {
         for i in items {
             match i {
-                CanvasItem::Col(c) | CanvasItem::Split(c) | CanvasItem::Pair(c) => {
+                CanvasItem::Col(c) | CanvasItem::Split(c) => {
                     out.extend(c.iter().filter(|c| all || c.core).map(|c| c.id.clone()));
+                }
+                CanvasItem::Lanes(c) => {
+                    out.extend(c.iter().filter(|(_, c)| all || c.core).map(|(_, c)| c.id.clone()));
+                }
+                CanvasItem::Merge(c, into) => {
+                    out.extend(c.iter().chain([into]).filter(|(_, c)| all || c.core).map(|(_, c)| c.id.clone()));
                 }
                 CanvasItem::Sub(m) => walk(&m.items, all || m.core, out),
             }
@@ -88,7 +98,9 @@ impl CanvasModule {
         self.items
             .iter()
             .flat_map(|i| match i {
-                CanvasItem::Col(c) | CanvasItem::Split(c) | CanvasItem::Pair(c) => c.iter().map(|c| c.id.clone()).collect(),
+                CanvasItem::Col(c) | CanvasItem::Split(c) => c.iter().map(|c| c.id.clone()).collect(),
+                CanvasItem::Lanes(c) => c.iter().map(|(_, c)| c.id.clone()).collect(),
+                CanvasItem::Merge(c, into) => c.iter().chain([into]).map(|(_, c)| c.id.clone()).collect(),
                 CanvasItem::Sub(m) => m.ids(),
             })
             .collect()
@@ -121,15 +133,17 @@ pub fn RoutingCanvas(
     fold: bool,
     /// Bumped to fit again (the zoom back to the view).
     fit: u32,
+    /// The modules it opens (and fits again) on, first and last.
+    focus: (String, String),
     on_pick: EventHandler<CanvasPick>,
 ) -> Element {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        native::canvas(modules, selected, fold, fit, on_pick)
+        native::canvas(modules, selected, fold, fit, focus, on_pick)
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let _ = (modules, selected, fold, fit, on_pick);
+        let _ = (modules, selected, fold, fit, focus, on_pick);
         rsx! { div {} }
     }
 }
@@ -182,7 +196,7 @@ mod native {
 
     fn item_w(i: &CanvasItem) -> f64 {
         match i {
-            CanvasItem::Col(_) | CanvasItem::Split(_) | CanvasItem::Pair(_) => CELL,
+            CanvasItem::Col(_) | CanvasItem::Split(_) | CanvasItem::Lanes(_) | CanvasItem::Merge(..) => CELL,
             CanvasItem::Sub(m) => box_w(&m.items),
         }
     }
@@ -190,15 +204,18 @@ mod native {
     /// 0, with one above and one below. A column's blocks take them from
     /// the line down (three: from above it); a split or a pair the outer
     /// two.
-    fn lanes(i: &CanvasItem) -> &'static [i32] {
+    fn lanes(i: &CanvasItem) -> Vec<i32> {
         match i {
             CanvasItem::Col(c) => match c.len() {
-                0 | 1 => &[0],
-                2 => &[0, 1],
-                _ => &[-1, 0, 1],
+                0 | 1 => vec![0],
+                2 => vec![0, 1],
+                _ => vec![-1, 0, 1],
             },
-            CanvasItem::Split(c) | CanvasItem::Pair(c) if c.len() < 2 => &[-1],
-            _ => &[-1, 1],
+            CanvasItem::Split(c) if c.len() < 2 => vec![-1],
+            CanvasItem::Split(_) => vec![-1, 1],
+            CanvasItem::Lanes(c) => c.iter().map(|(l, _)| *l).collect(),
+            CanvasItem::Merge(c, (l, _)) => c.iter().map(|(l, _)| *l).chain([*l]).collect(),
+            CanvasItem::Sub(_) => vec![0],
         }
     }
     const LANE: f64 = CELL + GAP;
@@ -207,7 +224,7 @@ mod native {
     /// a module's box round its own.
     fn ext(i: &CanvasItem) -> (f64, f64) {
         match i {
-            CanvasItem::Col(_) | CanvasItem::Split(_) | CanvasItem::Pair(_) => {
+            CanvasItem::Col(_) | CanvasItem::Split(_) | CanvasItem::Lanes(_) | CanvasItem::Merge(..) => {
                 let l = lanes(i);
                 let lo = l.iter().copied().min().unwrap_or(0).min(0);
                 let hi = l.iter().copied().max().unwrap_or(0).max(0);
@@ -327,15 +344,26 @@ mod native {
             match it {
                 CanvasItem::Col(col) => {
                     for (c, l) in col.iter().zip(lanes(it)) {
-                        out.stages.push(Stage::Block(cell(*l)));
-                        out.cells.push((cell(*l), c.clone()));
+                        out.stages.push(Stage::Block(cell(l)));
+                        out.cells.push((cell(l), c.clone()));
                     }
                 }
-                CanvasItem::Split(cells) | CanvasItem::Pair(cells) => {
-                    let rects: Vec<Rect> = lanes(it).iter().take(cells.len()).map(|l| cell(*l)).collect();
+                CanvasItem::Split(cells) => {
+                    let rects: Vec<Rect> = lanes(it).into_iter().take(cells.len()).map(cell).collect();
                     out.cells.extend(rects.iter().copied().zip(cells.iter().cloned()));
-                    let dry = matches!(it, CanvasItem::Split(_)).then_some((x, x + CELL, line));
-                    out.stages.push(Stage::Split(rects, dry));
+                    out.stages.push(Stage::Split(rects, Some((x, x + CELL, line))));
+                }
+                CanvasItem::Merge(cells, (il, into)) => {
+                    let rects: Vec<Rect> = cells.iter().map(|(l, _)| cell(*l)).collect();
+                    out.cells.extend(rects.iter().copied().zip(cells.iter().map(|(_, c)| c.clone())));
+                    out.stages.push(Stage::Split(rects, None));
+                    out.stages.push(Stage::Block(cell(*il)));
+                    out.cells.push((cell(*il), into.clone()));
+                }
+                CanvasItem::Lanes(cells) => {
+                    let rects: Vec<Rect> = cells.iter().map(|(l, _)| cell(*l)).collect();
+                    out.cells.extend(rects.iter().copied().zip(cells.iter().map(|(_, c)| c.clone())));
+                    out.stages.push(if rects.len() == 1 { Stage::Block(rects[0]) } else { Stage::Split(rects, None) });
                 }
                 CanvasItem::Sub(m) => {
                     let (a, b) = exts(&m.items);
@@ -372,6 +400,8 @@ mod native {
         selected: Option<CanvasSel>,
         fold: bool,
         fit: u32,
+        /// The modules it opens on, first and last.
+        focus: (String, String),
         /// The zoom and pan; `fitted` while the zoom follows the view.
         zoom: f64,
         pan: (f64, f64),
@@ -446,13 +476,14 @@ mod native {
 
     type Shared = Rc<RefCell<State>>;
 
-    pub(super) fn canvas(modules: Vec<CanvasModule>, selected: Option<CanvasSel>, fold: bool, fit: u32, on_pick: EventHandler<CanvasPick>) -> Element {
+    pub(super) fn canvas(modules: Vec<CanvasModule>, selected: Option<CanvasSel>, fold: bool, fit: u32, focus: (String, String), on_pick: EventHandler<CanvasPick>) -> Element {
         let state: Shared = use_hook(|| {
             Rc::new(RefCell::new(State {
                 modules: Vec::new(),
                 selected: None,
                 fold,
                 fit,
+                focus,
                 zoom: 1.0,
                 pan: (0.0, 0.0),
                 fitted: true,
@@ -573,6 +604,7 @@ mod native {
                     match s.gesture {
                         Gesture::Nav => nav_to(&mut s, p.0),
                         Gesture::Pan { at, pan0 } => {
+                            s.reset_pan = false;
                             s.pan = (pan0.0 + p.0 - at.0, pan0.1 + p.1 - at.1);
                             s.dirty = true;
                         }
@@ -584,6 +616,7 @@ mod native {
                                 // The content under the fingers stays under them.
                                 let c = ((mid0.0 - pan0.0) / z0, (mid0.1 - pan0.1) / z0);
                                 s.zoom = z;
+                                s.reset_pan = false;
                                 s.pan = (mid.0 - c.0 * z, mid.1 - c.1 * z);
                                 s.fitted = false;
                                 s.dirty = true;
@@ -622,6 +655,7 @@ mod native {
                         BlitzWheelDelta::Lines(x, y) => (x * 30.0, y * 30.0),
                         BlitzWheelDelta::Pixels(x, y) => (x, y),
                     };
+                    s.reset_pan = false;
                     s.pan = (s.pan.0 + dx, s.pan.1 + dy);
                     s.dirty = true;
                 }
@@ -647,14 +681,26 @@ mod native {
             let gh = (view.1 - NAV_H).max(1.0);
             // Unfolded and fitted: the row as tall as the view.
             let natural = layout(&s.modules, None);
+            // The span it opens on: from the focus's first module to its
+            // last (the Amp through the Reverb), else the whole chain.
+            let span = {
+                let (pieces, _, _) = &natural;
+                let (from, to) = &s.focus;
+                let x0 = pieces.iter().find(|p| s.modules[p.module].name == *from).map(|p| p.x);
+                let x1 = pieces.iter().rev().find(|p| s.modules[p.module].name == *to).map(|p| p.x + p.w);
+                x0.zip(x1).filter(|(a, b)| b > a)
+            };
             if s.fitted {
-                s.zoom = if s.fold { 1.0 } else { (gh / natural.2).clamp(0.45, 0.9) };
+                let tall = gh / natural.2;
+                let wide = span.map_or(f64::INFINITY, |(a, b)| view.0 / (b - a + 2.0 * EDGE));
+                s.zoom = if s.fold { 1.0 } else { tall.min(wide).clamp(0.35, 0.9) };
             }
             let wrap = s.fold.then(|| view.0 / s.zoom);
             let (pieces, cw, ch) = layout(&s.modules, wrap);
+            // On the focus until a finger moves it: the chain comes in
+            // stages, and each must land on it too.
             if s.reset_pan {
-                s.reset_pan = false;
-                s.pan = (0.0, 0.0);
+                s.pan = (span.map_or(0.0, |(a, _)| -(a - EDGE) * s.zoom), 0.0);
             }
             // Panning stops at the content's edges; content shorter than
             // the view sits centred in it.
@@ -682,6 +728,16 @@ mod native {
                 let m = st.modules[p.module].clone();
                 let r = Rect::new(p.x, p.y, p.x + p.w, p.y + p.h);
                 draw_box(&mut scene, st, t, r, &m, p.first, &mut hits);
+                // A module of mixed effects (the Pre-FX): each block's own
+                // colour behind it, so its delay reads blue and its reverb
+                // violet.
+                if m.name == "Pre-FX" {
+                    let base = Color::from_rgba8(0x14, 0x14, 0x18, 0xff);
+                    for (cr, c) in &pl.cells {
+                        let band = RoundedRect::new((cr.x0 - GAP / 2.0 + 3.0).max(r.x0 + 3.0), r.y0 + HEAD - 2.0, (cr.x1 + GAP / 2.0 - 3.0).min(r.x1 - 3.0), r.y1 - 3.0, 8.0);
+                        scene.fill(Fill::NonZero, t, mix(hex(&c.colour), base, 0.16), None, &band);
+                    }
+                }
                 for (r, inner) in &pl.boxes {
                     draw_box(&mut scene, st, t, *r, inner, true, &mut hits);
                 }
@@ -713,6 +769,17 @@ mod native {
             }
             for w in stages.windows(2) {
                 match (&w[0], &w[1]) {
+                    // Parallel lanes into the block under them: each out along
+                    // the gap at its right, down, along the gap above the
+                    // block, and into its top.
+                    (Stage::Split(rs, None), Stage::Block(b)) if rs.first().is_some_and(|r| (r.x0 - b.x0).abs() < 0.5) => {
+                        let gx = b.x1 + GAP / 2.0;
+                        let gy = b.y0 - GAP / 2.0;
+                        for r in rs {
+                            let pts = [Point::new(r.x1, r.center().y), Point::new(gx, r.center().y), Point::new(gx, gy), Point::new(b.center().x, gy), Point::new(b.center().x, b.y0)];
+                            scene.stroke(&stroke, t, cable, None, &rounded_path(&pts, 6.0));
+                        }
+                    }
                     (Stage::Block(a), Stage::Block(b)) if (a.x0 - b.x0).abs() < 0.5 && b.y0 > a.y0 => {
                         // Down the column.
                         scene.stroke(&stroke, t, cable, None, &kurbo::Line::new((a.center().x, a.y1), (b.center().x, b.y0)));
@@ -796,28 +863,46 @@ mod native {
             return;
         }
         let at = (x - x0) / m;
+        s.reset_pan = false;
         s.pan.0 = s.view.0 / 2.0 - at * s.zoom;
         s.dirty = true;
     }
 
-    /// A cable from an out port to an in port: a curve along a row, or down
-    /// round the row's foot and back for a fold.
+    /// A cable from an out port to an in port, square: along the out
+    /// port's lane to the middle of the gap before the in port's column,
+    /// up or down it, and along into the port — every turn in a gap, so
+    /// the routing reads as a diagram. The corners are softly rounded.
     fn wire(a: Point, b: Point, row_gap: f64) -> BezPath {
-        let mut p = BezPath::new();
-        p.move_to((a.x, a.y));
-        if b.x >= a.x {
-            let dx = ((b.x - a.x) / 2.0).max(10.0);
-            p.curve_to((a.x + dx, a.y), (b.x - dx, b.y), (b.x, b.y));
+        let mid = if b.x >= a.x { (b.x - GAP / 2.0).max(a.x + 4.0).min(b.x) } else { a.x + 11.0 };
+        let pts: Vec<Point> = if b.x >= a.x {
+            vec![a, Point::new(mid, a.y), Point::new(mid, b.y), b]
         } else {
             // Folded: out, down to the gap under the row, back, down, in.
-            let out = a.x + 11.0;
             let back = b.x - 11.0;
-            let mid = b.y - CELL / 2.0 - HEAD - row_gap / 2.0;
-            p.line_to((out, a.y));
-            p.line_to((out, mid));
-            p.line_to((back, mid));
-            p.line_to((back, b.y));
-            p.line_to((b.x, b.y));
+            let low = b.y - CELL / 2.0 - HEAD - row_gap / 2.0;
+            vec![a, Point::new(mid, a.y), Point::new(mid, low), Point::new(back, low), Point::new(back, b.y), b]
+        };
+        rounded_path(&pts, 6.0)
+    }
+
+    /// A polyline through `pts`, its corners rounded by up to `r`.
+    fn rounded_path(pts: &[Point], r: f64) -> BezPath {
+        let mut p = BezPath::new();
+        let Some(first) = pts.first() else { return p };
+        p.move_to(*first);
+        for w in pts.windows(3) {
+            let (a, c, d) = (w[0], w[1], w[2]);
+            let (l1, l2) = ((c - a).hypot(), (d - c).hypot());
+            if l1 < 0.01 || l2 < 0.01 {
+                p.line_to(c);
+                continue;
+            }
+            let k = r.min(l1 / 2.0).min(l2 / 2.0);
+            p.line_to(c - (c - a) * (k / l1));
+            p.quad_to(c, c + (d - c) * (k / l2));
+        }
+        if let Some(last) = pts.last() {
+            p.line_to(*last);
         }
         p
     }

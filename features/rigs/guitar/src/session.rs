@@ -3611,7 +3611,7 @@ impl GuitarRigBackend {
                 .map(|own| crate::compose::block_picks(&comp, own))
                 .unwrap_or_default()
         };
-        let mut blocks: Vec<LiveBlock> = patch
+        patch
             .chain
             .iter()
             .filter(|b| b.has_backend())
@@ -3697,9 +3697,7 @@ impl GuitarRigBackend {
                     empty: false,
                 }
             })
-            .collect();
-        with_cab_slots(&patch.chain, &mut blocks);
-        blocks
+            .collect()
     }
 
     /// Activate a footswitch stack and re-sync everything that activation
@@ -4857,9 +4855,6 @@ impl GuitarRigBackend {
                     }
                 }
             }
-        }
-        if let Some(patch) = self.rig.lock_ok().as_ref().and_then(|r| r.active_patch()) {
-            with_cab_slots(&patch.chain, &mut out);
         }
         *self.blocks.lock_ok() = out;
         self.apply_song_patch_overrides();
@@ -11111,37 +11106,6 @@ fn knob_title(knob: &str) -> String {
     let mut c = knob.chars();
     c.next()
         .map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
-}
-
-/// The amp's cab slots with nothing loaded (an amp capture that is a full
-/// rig plays no IR): no engine block, but the Amp module is two amps and
-/// two cabs, so each shows as an empty slot after its amp.
-fn with_cab_slots(chain: &[RigBlock], blocks: &mut Vec<LiveBlock>) {
-    for cab in chain.iter().filter(|b| b.block_type == BlockType::Cabinet && !b.has_backend()) {
-        let Some(side) = cab.name.strip_prefix("Cab ") else { continue };
-        if blocks.iter().any(|b| b.name.eq_ignore_ascii_case(&cab.name)) {
-            continue;
-        }
-        let Some(at) = blocks.iter().position(|b| b.name.eq_ignore_ascii_case(&format!("Amp {side}"))) else {
-            continue;
-        };
-        let mut slot = blocks[at].clone();
-        slot.id = format!("slot:{}", cab.name);
-        slot.block_type = BlockType::Cabinet;
-        slot.name = cab.name.clone();
-        slot.bypassed = true;
-        slot.param_name = None;
-        slot.params = Vec::new();
-        slot.preset = String::new();
-        slot.options = Vec::new();
-        slot.option = 0;
-        slot.overridden = false;
-        slot.output_level_db = None;
-        slot.detail = String::new();
-        slot.asset = String::new();
-        slot.empty = true;
-        blocks.insert(at + 1, slot);
-    }
 }
 
 /// A built chain as live blocks, straight from its definition — ids
