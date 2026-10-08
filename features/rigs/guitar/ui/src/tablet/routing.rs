@@ -85,7 +85,6 @@ pub fn Routing(state: RigViewState) -> Element {
         }
     });
     let blocks = state.blocks.read().clone();
-    let mut fold = use_signal(|| false);
     let mut fit = use_signal(|| 0u32);
     let modules = canvas_modules(&blocks);
     let selected = sel().map(|s| match s {
@@ -116,13 +115,11 @@ pub fn Routing(state: RigViewState) -> Element {
         let mut sel = sel;
         sel.set(s);
     };
-    let fold_on = if fold() { "border-color: #a1a1aa; color: #fafafa;" } else { "" };
     let chip = "height: 30px; padding: 0 11px; border-radius: 15px; border: 1px solid #3f3f46; background: rgba(11,11,14,0.86); color: #d4d4d8; font-size: 12.5px; font-weight: 650; display: flex; align-items: center; cursor: pointer;";
     rsx! {
         div { style: "position: relative; height: 100%; min-height: 0; background: {DESK}; overflow: hidden;",
-            super::routing_canvas::RoutingCanvas { modules, selected, fold: fold(), fit: fit(), on_pick }
-            div { style: "position: absolute; top: 8px; right: 8px; display: flex; gap: 6px;",
-                div { style: "{chip} {fold_on}", onclick: move |_| fold.toggle(), "Fold" }
+            super::routing_canvas::RoutingCanvas { modules, selected, fold: false, fit: fit(), on_pick }
+            div { style: "position: absolute; bottom: 8px; right: 8px; display: flex; gap: 6px;",
                 div { style: "{chip}", onclick: move |_| fit += 1, "Fit" }
             }
         }
@@ -143,6 +140,7 @@ fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
             id: b.id.clone(),
             name: b.name.clone(),
             sub: if b.preset.is_empty() || b.preset == b.name { b.detail.clone() } else { b.preset.clone() },
+            kind: b.block_type.as_str().to_lowercase(),
             colour: type_colour(b.block_type).to_string(),
             lit: !b.bypassed,
             edited: b.overridden,
@@ -158,36 +156,47 @@ fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
             "Delay" | "Reverb" => cells.chunks(2).map(|c| CanvasItem::Split(c.to_vec())).collect(),
             _ => cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect(),
         };
-        CanvasModule { colour: super::marks::module_colour(&name).to_string(), label: String::new(), items, name }
+        let name = if name == "Pre" { "Pre-FX".to_string() } else { name };
+        CanvasModule { colour: module_colour(&name).to_string(), label: String::new(), items, name }
     };
-    let mut out: Vec<CanvasModule> = Vec::new();
-    let mut runs = runs.into_iter().peekable();
-    while let Some((name, cells)) = runs.next() {
-        if name != "Amp" {
-            out.push(module(name, cells));
-            continue;
-        }
-        // The Core round the Amp: the Core's blocks either side of it.
-        let mut items: Vec<CanvasItem> = Vec::new();
-        if out.last().is_some_and(|m| m.name == "Core") {
-            items = out.pop().map(|m| m.items).unwrap_or_default();
-        }
-        items.push(CanvasItem::Sub(module(name, cells)));
-        if runs.peek().is_some_and(|(n, _)| n == "Core")
-            && let Some((n, c)) = runs.next()
-        {
-            items.extend(module(n, c).items);
-        }
-        out.push(CanvasModule { colour: super::marks::module_colour("Core").to_string(), label: String::new(), items, name: "Core".into() });
+    let mut out: Vec<CanvasModule> = runs.into_iter().map(|(n, c)| module(n, c)).collect();
+    // The Core round everything from its first block to its last: its own
+    // blocks in place, the drives and amps it controls (and what sits
+    // between them, the Pre-FX) as modules inside it.
+    let core_family = |m: &CanvasModule| matches!(m.name.as_str(), "Core" | "Drive" | "Amp");
+    if let (Some(i), Some(j)) = (out.iter().position(core_family), out.iter().rposition(core_family)) {
+        let inner: Vec<CanvasModule> = out.drain(i..=j).collect();
+        let items = inner
+            .into_iter()
+            .flat_map(|m| if m.name == "Core" { m.items } else { vec![CanvasItem::Sub(m)] })
+            .collect();
+        out.insert(i, CanvasModule { colour: module_colour("Core").to_string(), label: String::new(), items, name: "Core".into() });
     }
     out
 }
 
+const GREY: &str = "#a1a1aa";
+
+/// A module's colour on the grid: drives orange, amps yellow, modulation
+/// cyan, delays blue, reverbs violet; everything else grey.
+fn module_colour(name: &str) -> &'static str {
+    match name {
+        "Drive" => "#f97316",
+        "Amp" => "#eab308",
+        "Modulation" => "#22d3ee",
+        "Delay" => "#3b82f6",
+        "Reverb" => "#8b5cf6",
+        _ => GREY,
+    }
+}
+
 fn type_colour(t: BlockType) -> &'static str {
     match t {
-        BlockType::Amp => "#f97316",
-        BlockType::Drive | BlockType::Boost => "#ef4444",
-        BlockType::Cabinet => "#D6B36A",
-        t => super::marks::block_colour(&t.as_str().to_lowercase()),
+        BlockType::Drive | BlockType::Boost | BlockType::Saturator => "#f97316",
+        BlockType::Amp | BlockType::Cabinet => "#eab308",
+        BlockType::Chorus | BlockType::Flanger | BlockType::Phaser | BlockType::Vibrato => "#22d3ee",
+        BlockType::Delay => "#3b82f6",
+        BlockType::Reverb => "#8b5cf6",
+        _ => GREY,
     }
 }

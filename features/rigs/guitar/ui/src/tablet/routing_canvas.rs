@@ -19,6 +19,8 @@ pub struct CanvasCell {
     pub id: String,
     pub name: String,
     pub sub: String,
+    /// Its block type, lower case: its glyph.
+    pub kind: String,
     /// Its type's colour, `#rrggbb`.
     pub colour: String,
     pub lit: bool,
@@ -125,8 +127,11 @@ mod native {
     const EDGE: f64 = 22.0;
     const END: f64 = 40.0;
     const PORT: f64 = 5.0;
+    /// The navigator along the top: the whole graph, thin, as a scrollbar.
+    const NAV_H: f64 = 44.0;
 
     /// A piece of a module on the grid (a long one folds into several).
+    /// `line` is where the chain's line runs, down from its top.
     #[derive(Clone)]
     struct Piece {
         module: usize,
@@ -135,6 +140,7 @@ mod native {
         y: f64,
         w: f64,
         h: f64,
+        line: f64,
         first: bool,
     }
 
@@ -144,43 +150,49 @@ mod native {
             CanvasItem::Sub(m) => box_w(&m.items),
         }
     }
-    fn item_h(i: &CanvasItem) -> f64 {
+    /// How far an item reaches above and below the chain's line: a column
+    /// and a split centred on it, a module's box round its own.
+    fn ext(i: &CanvasItem) -> (f64, f64) {
         match i {
             CanvasItem::Col(c) => {
                 let l = c.len().max(1) as f64;
-                l * CELL + (l - 1.0) * GAP
+                let half = (l * CELL + (l - 1.0) * GAP) / 2.0;
+                (half, half)
             }
-            CanvasItem::Split(_) => 3.0 * CELL + 2.0 * GAP,
-            CanvasItem::Sub(m) => box_h(&m.items),
+            CanvasItem::Split(_) => (1.5 * CELL + GAP, 1.5 * CELL + GAP),
+            CanvasItem::Sub(m) => {
+                let (a, b) = exts(&m.items);
+                (a + HEAD, b + PAD)
+            }
         }
+    }
+    fn exts(items: &[CanvasItem]) -> (f64, f64) {
+        items.iter().map(ext).fold((CELL / 2.0, CELL / 2.0), |(a, b), (x, y)| (a.max(x), b.max(y)))
     }
     /// A module's box round `items`, side by side.
     fn box_w(items: &[CanvasItem]) -> f64 {
         PAD * 2.0 + items.iter().map(item_w).sum::<f64>() + items.len().saturating_sub(1) as f64 * GAP
     }
-    fn content_h(items: &[CanvasItem]) -> f64 {
-        items.iter().map(item_h).fold(CELL, f64::max)
-    }
-    fn box_h(items: &[CanvasItem]) -> f64 {
-        HEAD + content_h(items) + PAD
-    }
 
     /// Lay the modules out at zoom 1: in rows `width` wide (fold), or one
-    /// row. The pieces, and the content's size.
+    /// row, every module on the row's line. The pieces, and the content's
+    /// size.
     fn layout(mods: &[CanvasModule], width: Option<f64>) -> (Vec<Piece>, f64, f64) {
         let mut pieces: Vec<Piece> = Vec::new();
         let start = EDGE + END + MOD_GAP;
-        let (mut x, mut row_top, mut row_h) = (start, EDGE, 0.0_f64);
+        let (mut x, mut row_top) = (start, EDGE);
+        // The row's reach above and below its line.
+        let (mut above, mut below) = (0.0_f64, 0.0_f64);
         let mut max_x = x;
         let mut row_from = 0;
-        // A row's modules sit centred on its line.
-        let centre = |pieces: &mut Vec<Piece>, from: usize, top: f64, h: f64| {
+        let settle = |pieces: &mut Vec<Piece>, from: usize, top: f64, above: f64| {
             for p in &mut pieces[from..] {
-                p.y = top + (h - p.h) / 2.0;
+                p.y = top + above - p.line;
             }
         };
         for (mi, m) in mods.iter().enumerate() {
-            let h = box_h(&m.items);
+            let (a, b) = exts(&m.items);
+            let (line, h) = (HEAD + a, HEAD + a + b + PAD);
             let mut c = 0;
             while c < m.items.len() {
                 let room = width.map_or(f64::INFINITY, |w| w - EDGE - x);
@@ -194,24 +206,25 @@ mod native {
                 // when nothing fits here.
                 let fits_fresh = width.is_some_and(|w| box_w(&m.items[c..]) <= w - EDGE - start);
                 if x > start && (n == 0 || (!all && c == 0 && fits_fresh)) {
-                    centre(&mut pieces, row_from, row_top, row_h);
+                    settle(&mut pieces, row_from, row_top, above);
                     row_from = pieces.len();
-                    row_top += row_h + ROW_GAP;
-                    row_h = 0.0;
+                    row_top += above + below + ROW_GAP;
+                    (above, below) = (0.0, 0.0);
                     x = start;
                     continue;
                 }
                 let n = n.max(1);
                 let w = box_w(&m.items[c..c + n]);
-                pieces.push(Piece { module: mi, items: c..c + n, x, y: row_top, w, h, first: c == 0 });
-                row_h = row_h.max(h);
+                pieces.push(Piece { module: mi, items: c..c + n, x, y: row_top, w, h, line, first: c == 0 });
+                above = above.max(line);
+                below = below.max(h - line);
                 x += w + MOD_GAP;
                 max_x = max_x.max(x);
                 c += n;
             }
         }
-        centre(&mut pieces, row_from, row_top, row_h);
-        (pieces, max_x + END + EDGE, row_top + row_h + EDGE)
+        settle(&mut pieces, row_from, row_top, above);
+        (pieces, max_x + END + EDGE, row_top + above + below + EDGE)
     }
 
     /// A step of the chain: a block, or effects in parallel with the dry
@@ -246,11 +259,11 @@ mod native {
         boxes: Vec<(Rect, CanvasModule)>,
     }
 
-    /// Place `items` from `x0`, each centred on a band `h` tall from `y0`.
-    fn place(items: &[CanvasItem], x0: f64, y0: f64, h: f64, out: &mut Placed) {
+    /// Place `items` from `x0`, on the chain's line at `line`.
+    fn place(items: &[CanvasItem], x0: f64, line: f64, out: &mut Placed) {
         let mut x = x0;
         for it in items {
-            let top = y0 + (h - item_h(it)) / 2.0;
+            let top = line - ext(it).0;
             let cell = |lane: usize| {
                 let y = top + lane as f64 * (CELL + GAP);
                 Rect::new(x, y, x + CELL, y + CELL)
@@ -265,11 +278,12 @@ mod native {
                 CanvasItem::Split(cells) => {
                     let rects: Vec<Rect> = (0..cells.len()).map(|i| cell(if i == 0 { 0 } else { 2 })).collect();
                     out.cells.extend(rects.iter().copied().zip(cells.iter().cloned()));
-                    out.stages.push(Stage::Split(rects, (x, x + CELL, cell(1).center().y)));
+                    out.stages.push(Stage::Split(rects, (x, x + CELL, line)));
                 }
                 CanvasItem::Sub(m) => {
-                    out.boxes.push((Rect::new(x, top, x + box_w(&m.items), top + box_h(&m.items)), m.clone()));
-                    place(&m.items, x + PAD, top + HEAD, content_h(&m.items), out);
+                    let (a, b) = exts(&m.items);
+                    out.boxes.push((Rect::new(x, line - a - HEAD, x + box_w(&m.items), line + b + PAD), m.clone()));
+                    place(&m.items, x + PAD, line, out);
                 }
             }
             x += item_w(it) + GAP;
@@ -290,6 +304,8 @@ mod native {
         Pending { at: (f64, f64), pan0: (f64, f64) },
         Pan { at: (f64, f64), pan0: (f64, f64) },
         Pinch { d0: f64, z0: f64, mid0: (f64, f64), pan0: (f64, f64) },
+        /// A finger on the navigator: the view follows it.
+        Nav,
     }
 
     struct State {
@@ -306,6 +322,8 @@ mod native {
         /// The view's size, pt (from the last paint).
         view: (f64, f64),
         fingers: HashMap<u64, (f64, f64)>,
+        /// The navigator's left edge and scale (from the last paint).
+        nav: (f64, f64),
         gesture: Gesture,
         hits: Vec<(Rect, Hit)>,
         picks: Vec<CanvasPick>,
@@ -330,6 +348,7 @@ mod native {
                 reset_pan: true,
                 view: (0.0, 0.0),
                 fingers: HashMap::new(),
+                nav: (0.0, 0.0),
                 gesture: Gesture::Idle,
                 hits: Vec::new(),
                 picks: Vec::new(),
@@ -418,6 +437,10 @@ mod native {
                             mid0: ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0),
                             pan0: s.pan,
                         },
+                        None if at.1 < NAV_H => {
+                            nav_to(&mut s, at.0);
+                            Gesture::Nav
+                        }
                         None => Gesture::Pending { at, pan0: s.pan },
                     };
                 }
@@ -435,6 +458,7 @@ mod native {
                         _ => {}
                     }
                     match s.gesture {
+                        Gesture::Nav => nav_to(&mut s, p.0),
                         Gesture::Pan { at, pan0 } => {
                             s.pan = (pan0.0 + p.0 - at.0, pan0.1 + p.1 - at.1);
                             s.dirty = true;
@@ -460,7 +484,7 @@ mod native {
                     s.fingers.remove(&pointer_key(e.id));
                     if let Gesture::Pending { .. } = s.gesture {
                         // A tap: what is under it.
-                        let at = Point::new((p.0 - s.pan.0) / s.zoom, (p.1 - s.pan.1) / s.zoom);
+                        let at = Point::new((p.0 - s.pan.0) / s.zoom, (p.1 - NAV_H - s.pan.1) / s.zoom);
                         let hit = s.hits.iter().rev().find(|(r, _)| r.contains(at)).map(|(_, h)| h.clone());
                         let pick = match hit {
                             Some(Hit::Light(id)) => CanvasPick::Toggle(id),
@@ -504,10 +528,12 @@ mod native {
             s.dirty = false;
             let view = (f64::from(width) / scale, f64::from(height) / scale);
             s.view = view;
+            // The graph's part of the view, under the navigator.
+            let gh = (view.1 - NAV_H).max(1.0);
             // Unfolded and fitted: the row as tall as the view.
             let natural = layout(&s.modules, None);
             if s.fitted {
-                s.zoom = if s.fold { 1.0 } else { (view.1 / natural.2).clamp(0.45, 0.9) };
+                s.zoom = if s.fold { 1.0 } else { (gh / natural.2).clamp(0.45, 0.9) };
             }
             let wrap = s.fold.then(|| view.0 / s.zoom);
             let (pieces, cw, ch) = layout(&s.modules, wrap);
@@ -518,10 +544,10 @@ mod native {
             // Panning stops at the content's edges; content shorter than
             // the view sits centred in it.
             let min_x = (view.0 - cw * s.zoom).min(0.0);
-            let spare_y = view.1 - ch * s.zoom;
+            let spare_y = gh - ch * s.zoom;
             let pan_y = if spare_y >= 0.0 { spare_y / 2.0 } else { s.pan.1.clamp(spare_y, 0.0) };
             s.pan = (s.pan.0.clamp(min_x, 0.0), pan_y);
-            let t = Affine::scale(scale) * Affine::translate((s.pan.0, s.pan.1)) * Affine::scale(s.zoom);
+            let t = Affine::scale(scale) * Affine::translate((s.pan.0, NAV_H + s.pan.1)) * Affine::scale(s.zoom);
             let mut hits: Vec<(Rect, Hit)> = Vec::new();
             let st = &mut *s;
 
@@ -531,13 +557,21 @@ mod native {
                 .iter()
                 .map(|p| {
                     let mut out = Placed::default();
-                    let m = &st.modules[p.module];
-                    place(&m.items[p.items.clone()], p.x + PAD, p.y + HEAD, content_h(&m.items), &mut out);
+                    place(&st.modules[p.module].items[p.items.clone()], p.x + PAD, p.y + p.line, &mut out);
                     (p.clone(), out)
                 })
                 .collect();
 
-            // Cables first, under everything, through the chain's stages:
+            // The modules' boxes, then the cables over them, then the cells.
+            for (p, pl) in &placed {
+                let m = st.modules[p.module].clone();
+                let r = Rect::new(p.x, p.y, p.x + p.w, p.y + p.h);
+                draw_box(&mut scene, st, t, r, &m, p.first, &mut hits);
+                for (r, inner) in &pl.boxes {
+                    draw_box(&mut scene, st, t, *r, inner, true, &mut hits);
+                }
+            }
+            // The cables, through the chain's stages:
             // down a column, on to the next, out to parallel effects and
             // back.
             let stages: Vec<Stage> = placed.iter().flat_map(|(_, pl)| pl.stages.iter().cloned()).collect();
@@ -590,13 +624,7 @@ mod native {
                 }
             }
 
-            for (p, pl) in &placed {
-                let m = st.modules[p.module].clone();
-                let r = Rect::new(p.x, p.y, p.x + p.w, p.y + p.h);
-                draw_box(&mut scene, st, t, r, &m, p.first, &mut hits);
-                for (r, inner) in &pl.boxes {
-                    draw_box(&mut scene, st, t, *r, inner, true, &mut hits);
-                }
+            for (_, pl) in &placed {
                 for (rect, c) in &pl.cells {
                     draw_cell(&mut scene, st, t, *rect, c);
                     hits.push((*rect, Hit::Cell(c.id.clone())));
@@ -604,8 +632,48 @@ mod native {
                 }
             }
             st.hits = hits;
+
+            // The navigator: every module and block, small, the whole width;
+            // the part in view framed.
+            let ts = Affine::scale(scale);
+            let bar = Rect::new(0.0, 0.0, view.0, NAV_H);
+            scene.fill(Fill::NonZero, ts, Color::from_rgba8(0x0b, 0x0b, 0x0e, 0xff), None, &bar);
+            scene.fill(Fill::NonZero, ts, Color::from_rgba8(0x27, 0x27, 0x2a, 0xff), None, &Rect::new(0.0, NAV_H - 1.0, view.0, NAV_H));
+            // Stretched to the bar: the whole width, the bar's height.
+            let m = (view.0 - 24.0) / cw;
+            let my = (NAV_H - 10.0) / ch;
+            let x0 = 12.0;
+            st.nav = (x0, m);
+            let mini = Affine::translate((x0, 5.0)) * Affine::scale_non_uniform(m, my);
+            for (p, pl) in &placed {
+                let colour = hex(&st.modules[p.module].colour);
+                let dark = Color::from_rgba8(0x14, 0x14, 0x18, 0xff);
+                scene.fill(Fill::NonZero, ts * mini, mix(colour, dark, 0.22), None, &RoundedRect::new(p.x, p.y, p.x + p.w, p.y + p.h, 4.0));
+                for (r, inner) in &pl.boxes {
+                    scene.fill(Fill::NonZero, ts * mini, mix(hex(&inner.colour), dark, 0.3), None, &RoundedRect::from_rect(*r, 4.0));
+                }
+                for (r, c) in &pl.cells {
+                    let fill = if c.lit { hex(&c.colour) } else { Color::from_rgba8(0x3f, 0x3f, 0x46, 0xff) };
+                    scene.fill(Fill::NonZero, ts * mini, fill, None, &r.inset(-4.0));
+                }
+            }
+            let (vx0, vx1) = (-st.pan.0 / st.zoom, (view.0 - st.pan.0) / st.zoom);
+            let frame = RoundedRect::new(x0 + vx0 * m, 3.0, (x0 + vx1 * m).min(view.0 - 2.0), NAV_H - 4.0, 5.0);
+            scene.fill(Fill::NonZero, ts, Color::from_rgba8(0xff, 0xff, 0xff, 0x14), None, &frame);
+            scene.stroke(&Stroke::new(1.5), ts, Color::from_rgba8(0xe4, 0xe4, 0xe7, 0xff), None, &frame);
             scene
         }
+    }
+
+    /// The view centred on the navigator's `x`.
+    fn nav_to(s: &mut State, x: f64) {
+        let (x0, m) = s.nav;
+        if m <= 0.0 {
+            return;
+        }
+        let at = (x - x0) / m;
+        s.pan.0 = s.view.0 / 2.0 - at * s.zoom;
+        s.dirty = true;
     }
 
     /// A cable from an out port to an in port: a curve along a row, or down
@@ -638,7 +706,7 @@ mod native {
         scene.fill(Fill::NonZero, t, mix(colour, Color::from_rgba8(0x14, 0x14, 0x18, 0xff), if on { 0.16 } else { 0.07 }), None, &rr);
         let edge = if on { colour } else { Color::from_rgba8(0x2a, 0x2a, 0x31, 0xff) };
         scene.stroke(&Stroke::new(if on { 2.0 } else { 1.0 }), t, edge, None, &rr);
-        scene.fill(Fill::NonZero, t, colour, None, &RoundedRect::new(r.x0 + PAD, r.y0 + 9.0, r.x0 + PAD + 8.0, r.y0 + 17.0, 2.0));
+        glyph(scene, t, &m.name.to_lowercase(), r.x0 + PAD - 1.0, r.y0 + 6.0, 14.0, colour);
         let name = if first { m.name.to_uppercase() } else { format!("{} ›", m.name.to_uppercase()) };
         let room = r.width() - PAD * 2.0 - 14.0;
         let nw = text(scene, st, t, &name, 10.5, 800.0, lift(colour), r.x0 + PAD + 14.0, r.y0 + 17.5, room, false);
@@ -667,6 +735,8 @@ mod native {
         for x in [r.x0, r.x1] {
             scene.fill(Fill::NonZero, t, port, None, &Circle::new((x, r.center().y), PORT));
         }
+        // What it is.
+        glyph(scene, t, &c.kind, r.x0 + 9.0, r.y0 + 8.0, 15.0, if c.lit { colour } else { Color::from_rgba8(0x52, 0x52, 0x5b, 0xff) });
         // Its light.
         let light = if c.lit { Color::from_rgba8(0x22, 0xc5, 0x5e, 0xff) } else { Color::from_rgba8(0x3f, 0x3f, 0x46, 0xff) };
         scene.fill(Fill::NonZero, t, light, None, &Circle::new((r.x1 - 13.0, r.y0 + 13.0), 4.5));
@@ -733,6 +803,42 @@ mod native {
             }
         }
         w.min(max_w)
+    }
+
+    /// A glyph's strokes, on a 24 grid: a module's by its name, a block's
+    /// by its type.
+    fn glyph_paths(key: &str) -> &'static [&'static str] {
+        const WAVE: &[&str] = &["M2 12c2.5-6 5-6 7.5 0s5 6 7.5 0 3.5-4 5-2"];
+        const SPIN: &[&str] = &["M20 12a8 8 0 1 1-2.3-5.6", "M20 4v4h-4"];
+        const DYN: &[&str] = &["M4 5v14h16", "M4 19l6-6 10-4"];
+        match key {
+            "core" => &["M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z", "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z"],
+            "drive" | "boost" | "saturator" => &["M13 2 4 14h7l-1 8 9-12h-7z"],
+            "amp" => &["M3 7h18v12H3z", "M3 11h18", "M7 15h.01", "M11 15h.01"],
+            "cabinet" => &["M4 4h16v16H4z", "M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z"],
+            "pre-fx" => &["M6 20V10", "M12 20V4", "M18 20v-6"],
+            "delay" => &["M21 12a9 9 0 1 1-3-6.7", "M21 4v5h-5"],
+            "reverb" => &["M12 3v4", "M12 17v4", "M3 12h4", "M17 12h4", "M6 6l2.5 2.5", "M15.5 15.5 18 18", "M18 6l-2.5 2.5", "M8.5 15.5 6 18"],
+            "modulation" | "chorus" | "flanger" | "phaser" | "vibrato" => WAVE,
+            "motion" | "trem" | "tremolo" | "rotary" => SPIN,
+            "dynamics" | "compressor" | "limiter" | "gate" => DYN,
+            "eq" | "filter" => &["M3 17c4 0 5-10 9-10s5 10 9 10"],
+            "wah" => &["M4 6c0 9 4 12 8 12s8-3 8-12"],
+            "utility" => &["M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"],
+            "volume" => &["M11 5 6 9H3v6h3l5 4z", "M15.5 8.5a5 5 0 0 1 0 7"],
+            "special" | "pitch" | "doubler" => &["M9 18V5l11-2v13", "M9 18a3 3 0 1 1-6 0a3 3 0 1 1 6 0z", "M20 16a3 3 0 1 1-6 0a3 3 0 1 1 6 0z"],
+            _ => &["M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z"],
+        }
+    }
+
+    fn glyph(scene: &mut Scene, t: Affine, key: &str, x: f64, y: f64, size: f64, colour: Color) {
+        let at = t * Affine::translate((x, y)) * Affine::scale(size / 24.0);
+        let stroke = Stroke::new(2.2).with_caps(kurbo::Cap::Round).with_join(kurbo::Join::Round);
+        for d in glyph_paths(key) {
+            if let Ok(path) = BezPath::from_svg(d) {
+                scene.stroke(&stroke, at, colour, None, &path);
+            }
+        }
     }
 
     fn hex(s: &str) -> Color {
