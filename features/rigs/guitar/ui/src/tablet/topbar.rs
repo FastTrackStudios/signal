@@ -54,6 +54,11 @@ pub fn TopBar(model: PerformanceModel, state: RigViewState, sidebar: bool, on_si
                 span { style: "flex: 1;" }
             }
             span { style: "flex: 1;" }
+            // Audio not running: a badge that starts it (or, after a
+            // failure, restarts it).
+            if !*state.running.read() {
+                AudioBadge { failed: !state.audio_error.read().is_empty() }
+            }
             Rule {}
             PanicButton { busy: resetting }
             Rule {}
@@ -375,3 +380,46 @@ fn use_midi_health() -> &'static str {
     });
     tone()
 }
+
+/// Audio is not running: tap to start it — or, once it has failed, restart
+/// it. Says it is working until the rig answers.
+#[component]
+fn AudioBadge(failed: bool) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut starting = use_signal(|| false);
+    let label = if starting() {
+        "Starting audio…"
+    } else if failed {
+        "Restart audio"
+    } else {
+        "Start audio"
+    };
+    let (ink, bg, edge) = if failed && !starting() { (DANGER_INK, VOID, VOID) } else { (AMBER, CLEAR, AMBER) };
+    rsx! {
+        div { style: "align-self: stretch; display: flex; align-items: center; padding: 0 10px; flex-shrink: 0;",
+            button {
+                disabled: starting(),
+                style: "height: 34px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-radius: 999px; border: 1.5px solid {edge}; background: {bg}; color: {ink}; font-family: {FONT}; font-size: 13px; font-weight: 750; white-space: nowrap; cursor: pointer; box-sizing: border-box;",
+                onclick: move |_| {
+                    starting.set(true);
+                    if let Some(r) = rig.clone() {
+                        let _ = dioxus_core::spawn_forever(async move {
+                            let _ = if failed { r.restart().await } else { r.start().await };
+                        });
+                    }
+                    // The rig answers through `running`; the badge goes with it.
+                    spawn(async move {
+                        architect::platform::sleep(Duration::from_secs(6)).await;
+                        starting.set(false);
+                    });
+                },
+                svg { key: "{ink}", width: "14", height: "14", view_box: "0 0 16 16",
+                    path { d: "M1.5 8h2l1.5-4 2.5 8 2-6 1.5 4 1-2h2.5", fill: "none", stroke: ink, stroke_width: "1.6", stroke_linecap: "round", stroke_linejoin: "round" }
+                }
+                "{label}"
+            }
+        }
+    }
+}
+
+const AMBER: &str = "#fbbf24";
