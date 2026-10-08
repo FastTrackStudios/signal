@@ -653,6 +653,13 @@ pub struct PresetSnapshotEntry {
     pub modules: Vec<ModulePick>,
     /// How many overrides it layers on top of its modules.
     pub overrides: u32,
+    /// The picks put over it (module kind or `block:<block>`), as they
+    /// play now.
+    #[facet(default)]
+    pub picks: Vec<PartPick>,
+    /// Its block presets, by block.
+    #[facet(default)]
+    pub blocks: Vec<BlockPick>,
 }
 
 /// A preset: a composition of module presets, with snapshots.
@@ -1774,6 +1781,13 @@ pub mod rig {
         /// Drop section `part`'s own pick of `kind` (a module kind, or
         /// `block:<name>`): it plays its patch's again.
         fn clear_part_pick(&self, part: String, kind: String);
+        /// Put a pick over preset `preset`'s variation `variation`: `kind`
+        /// a module (`Amp`) with `value` `Preset · Variation`, or
+        /// `block:<block>` with a block preset. An empty `value` clears it:
+        /// back to what the variation chose.
+        fn set_variation_pick(&self, preset: String, variation: String, kind: String, value: String);
+        /// Clear every pick put over a variation.
+        fn clear_variation_picks(&self, preset: String, variation: String);
         /// Add a song to the library with default key + tempo.
         fn add_song(&self, name: String, key: String, bpm: u32);
         /// Create an empty setlist.

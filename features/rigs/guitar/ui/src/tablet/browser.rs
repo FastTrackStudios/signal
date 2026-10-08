@@ -365,6 +365,14 @@ fn inherited(d: &Data, target: &Target) -> (Vec<(String, Chosen)>, Vec<(String, 
     let at = root.snapshots.iter().position(|s| s.name == variation).unwrap_or(0);
     let mut queue: Vec<(String, String, String, String)> =
         root.snapshots.get(at).map(|s| s.modules.iter().map(|m| (m.module.clone(), m.preset.clone(), m.snapshot.clone(), root.name.clone())).collect()).unwrap_or_default();
+    // The variation's own block picks come first.
+    for b in root.snapshots.get(at).map(|s| s.blocks.clone()).unwrap_or_default() {
+        let Some(ty) = d.comp.block_presets.iter().find(|p| p.name == b.preset).map(|p| p.block_type.to_lowercase()) else { continue };
+        match blocks.iter_mut().find(|x| x.0 == ty) {
+            Some(x) => x.1.push(ChosenBlock { preset: b.preset.clone(), block: b.block.clone(), from: root.name.clone() }),
+            None => blocks.push((ty, vec![ChosenBlock { preset: b.preset.clone(), block: b.block.clone(), from: root.name.clone() }])),
+        }
+    }
     while !queue.is_empty() {
         let (module, preset, snapshot, from) = queue.remove(0);
         if modules.iter().any(|o| o.0 == module) {
@@ -544,7 +552,9 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
             let colour = module_colour(kind);
             // The part's own pick here. (A preset variation's picks are not
             // on the wire.)
-            let swapped = part.and_then(|p| p.picks.iter().find(|x| x.kind.eq_ignore_ascii_case(kind)).cloned());
+            let swapped = part
+                .and_then(|p| p.picks.iter().find(|x| x.kind.eq_ignore_ascii_case(kind)).cloned())
+                .or_else(|| variation_picks(d, target).into_iter().find(|x| x.kind.eq_ignore_ascii_case(kind)));
             // What a preset higher up chose here — shown with an override
             // too, so clearing one shows what comes back.
             let chosen = inherited(d, target).0.into_iter().find(|c| c.0 == *kind).map(|c| c.1);
@@ -603,7 +613,8 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
                     } else {
                         format!("in {}", plural(b.used_by.len(), "preset"))
                     };
-                    if part.is_some_and(|p| p.picks.iter().any(|x| x.kind.starts_with("block:") && x.preset == b.name)) {
+                    let picked = |x: &signal_guitar_proto::PartPick| x.kind.starts_with("block:") && x.preset == b.name;
+                    if part.is_some_and(|p| p.picks.iter().any(picked)) || variation_picks(d, target).iter().any(picked) {
                         t.state = Some(State::Swapped);
                     }
                     t.inherited = chosen.iter().filter(|c| c.preset == b.name).map(|c| format!("{} · {}", c.from, c.block)).collect::<Vec<_>>().join(", ");
@@ -761,10 +772,16 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
     };
     let song_things = things(&Kind::Songs, &d, &target, &set_songs);
     let rig_clear = use_hook(try_consume_context::<RigClient>);
+    let rig_clear_variation = rig_clear.clone();
     // Everything the picked part carries of its own — its picks and its
     // overrides — to clear at once.
     let own: Option<(String, Vec<String>, bool, usize)> = match &target {
         Target::Part(k) => d.perf.parts.get(*k).map(|p| (p.name.clone(), p.picks.iter().map(|x| x.kind.clone()).collect(), !p.overrides.is_empty(), p.picks.len() + p.overrides.len())).filter(|o| o.3 > 0),
+        _ => None,
+    };
+    // The playing variation's picks, to clear at once.
+    let own_variation: Option<(String, String, usize)> = match &target {
+        Target::Preset(p, v) => Some((p.clone(), v.clone(), variation_picks(&d, &target).len())).filter(|o| o.2 > 0),
         _ => None,
     };
     // ‹ › through the song's parts.
@@ -818,6 +835,19 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
                                     let part = part.clone();
                                     call!(rig_clear, |r| r.set_part_overrides(part, Vec::new()));
                                 }
+                            },
+                            svg { width: "12", height: "12", view_box: "0 0 12 12",
+                                path { d: "M2 2l8 8M10 2l-8 8", stroke: INK_2, stroke_width: "1.6", stroke_linecap: "round" }
+                            }
+                            "Clear {kinds_label(n)}"
+                        }
+                    }
+                    if let Some((p, v, n)) = own_variation.clone() {
+                        button {
+                            style: "height: 32px; padding: 0 10px; border: 1px solid {RULE_STRONG}; background: transparent; border-radius: {R}; font-size: 12.5px; font-weight: 700; color: {INK_2}; font-family: {FONT}; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; box-sizing: border-box;",
+                            onclick: move |_| {
+                                let (p, v) = (p.clone(), v.clone());
+                                call!(rig_clear_variation, |r| r.clear_variation_picks(p, v));
                             },
                             svg { width: "12", height: "12", view_box: "0 0 12 12",
                                 path { d: "M2 2l8 8M10 2l-8 8", stroke: INK_2, stroke_width: "1.6", stroke_linecap: "round" }
@@ -1001,6 +1031,13 @@ fn apply(rig: Option<RigClient>, kind: &Kind, target: &Target, d: &Data, t: &Thi
                         }
                     }
                 }
+                // The playing variation's pick (tapping what it chose itself
+                // clears it).
+                Target::Preset(pp, vv) => {
+                    let (pp, vv) = (pp.clone(), vv.clone());
+                    let value = if t.inherited.is_empty() { format!("{p} · {v}") } else { String::new() };
+                    call!(rig, |r| r.set_variation_pick(pp, vv, m, value));
+                }
                 _ => call!(rig, |r| r.choose_module(m, p, v)),
             }
         }
@@ -1012,6 +1049,12 @@ fn apply(rig: Option<RigClient>, kind: &Kind, target: &Target, d: &Data, t: &Thi
                     if let Some(part) = d.perf.parts.get(*k).map(|x| x.name.clone()) {
                         call!(rig, |r| r.choose_part_block(part, block, preset));
                     }
+                }
+                Target::Preset(pp, vv) => {
+                    let (pp, vv) = (pp.clone(), vv.clone());
+                    let value = if t.inherited.is_empty() { preset } else { String::new() };
+                    let kind = format!("block:{block}");
+                    call!(rig, |r| r.set_variation_pick(pp, vv, kind, value));
                 }
                 _ => call!(rig, |r| r.choose_block(block, preset)),
             }
@@ -1943,3 +1986,15 @@ const FLIPPED: &str = "transform: scaleX(-1);";
 
 /// The rail's right-hand rule.
 const RULE_LINE: &str = "1px solid #222228";
+
+/// The picks put over the playing variation (a preset target).
+fn variation_picks(d: &Data, target: &Target) -> Vec<signal_guitar_proto::PartPick> {
+    let Target::Preset(p, v) = target else { return Vec::new() };
+    d.comp
+        .presets
+        .iter()
+        .find(|x| x.name == *p)
+        .and_then(|x| x.snapshots.iter().find(|s| s.name == *v))
+        .map(|s| s.picks.clone())
+        .unwrap_or_default()
+}

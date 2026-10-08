@@ -210,6 +210,13 @@ pub struct PresetSnapshotDef {
     pub blocks: Vec<BlockChoiceDef>,
     #[facet(default)]
     pub overrides: Vec<OverrideDef>,
+    /// A module pick put over this variation: what it chose before (an
+    /// empty preset: it chose none), to go back to on clearing.
+    #[facet(default)]
+    pub picked: Vec<ModuleChoiceDef>,
+    /// The same for block picks.
+    #[facet(default)]
+    pub picked_blocks: Vec<BlockChoiceDef>,
     /// The loudness calibration, dB — what [`level_presets`] measured this
     /// snapshot needs to sit at the target. A patch playing it takes this as
     /// its calibration (its own `trim_db` stays on top), so every preset and

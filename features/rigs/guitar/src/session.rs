@@ -2785,6 +2785,31 @@ impl GuitarRigBackend {
         self.events.publish(RigEvent::Perf(Rig::perf(self)));
     }
 
+    /// Edit preset `preset`'s variation `variation` in the composition
+    /// library, save it, and rebuild what plays it.
+    fn edit_variation(&self, preset: &str, variation: &str, edit: impl FnOnce(&mut crate::compose::PresetSnapshotDef)) {
+        let mut comp = RigLibrary::load_compositions();
+        let Some(snap) = comp
+            .presets
+            .iter_mut()
+            .find(|p| p.name.eq_ignore_ascii_case(preset))
+            .and_then(|p| p.snapshots.iter_mut().find(|s| s.name.eq_ignore_ascii_case(variation)))
+        else {
+            tracing::warn!(%preset, %variation, "variation pick: no such variation");
+            return;
+        };
+        edit(snap);
+        RigLibrary::save_compositions(&comp);
+        tracing::info!(%preset, %variation, "variation picks changed");
+        // Heard at once: the audition replayed, else every patch on it rebuilt.
+        let auditioning = self.audition.lock_ok().clone();
+        match auditioning {
+            Some((p, v)) if p.eq_ignore_ascii_case(preset) && v.eq_ignore_ascii_case(variation) => Rig::choose_preset(self, p, v),
+            _ => self.reload_def(),
+        }
+        self.publish_state();
+    }
+
     /// The patch setlist entry `idx` of the active set starts on there
     /// (empty: the song's own start).
     fn set_entry_start(&self, idx: usize) -> String {
@@ -6661,6 +6686,65 @@ impl Rig for GuitarRigBackend {
         self.discard_song_changes_impl(&patch)
     }
 
+    fn set_variation_pick(&self, preset: String, variation: String, kind: String, value: String) {
+        self.edit_variation(&preset, &variation, |snap| {
+            if let Some(block) = kind.strip_prefix("block:") {
+                let was = snap.blocks.iter().find(|b| b.block.eq_ignore_ascii_case(block)).cloned();
+                let picked = snap.picked_blocks.iter().position(|b| b.block.eq_ignore_ascii_case(block));
+                if value.is_empty() {
+                    // Back to what the variation chose (or nothing).
+                    let Some(at) = picked else { return };
+                    let orig = snap.picked_blocks.remove(at);
+                    snap.blocks.retain(|b| !b.block.eq_ignore_ascii_case(block));
+                    if !orig.preset.is_empty() {
+                        snap.blocks.push(orig);
+                    }
+                    return;
+                }
+                if picked.is_none() {
+                    snap.picked_blocks.push(was.unwrap_or(crate::compose::BlockChoiceDef { block: block.to_string(), preset: String::new() }));
+                }
+                snap.blocks.retain(|b| !b.block.eq_ignore_ascii_case(block));
+                snap.blocks.push(crate::compose::BlockChoiceDef { block: block.to_string(), preset: value.clone() });
+            } else {
+                let was = snap.modules.iter().find(|m| m.module.eq_ignore_ascii_case(&kind)).cloned();
+                let picked = snap.picked.iter().position(|m| m.module.eq_ignore_ascii_case(&kind));
+                if value.is_empty() {
+                    let Some(at) = picked else { return };
+                    let orig = snap.picked.remove(at);
+                    snap.modules.retain(|m| !m.module.eq_ignore_ascii_case(&kind));
+                    if !orig.preset.is_empty() {
+                        snap.modules.push(orig);
+                    }
+                    return;
+                }
+                if picked.is_none() {
+                    snap.picked.push(was.unwrap_or(crate::profiles::ModuleChoiceDef { module: kind.clone(), preset: String::new(), snapshot: String::new() }));
+                }
+                let (p, v) = value.split_once(" · ").map_or((value.clone(), String::new()), |(p, v)| (p.to_string(), v.to_string()));
+                snap.modules.retain(|m| !m.module.eq_ignore_ascii_case(&kind));
+                snap.modules.push(crate::profiles::ModuleChoiceDef { module: kind.clone(), preset: p, snapshot: v });
+            }
+        });
+    }
+
+    fn clear_variation_picks(&self, preset: String, variation: String) {
+        self.edit_variation(&preset, &variation, |snap| {
+            for orig in std::mem::take(&mut snap.picked) {
+                snap.modules.retain(|m| !m.module.eq_ignore_ascii_case(&orig.module));
+                if !orig.preset.is_empty() {
+                    snap.modules.push(orig);
+                }
+            }
+            for orig in std::mem::take(&mut snap.picked_blocks) {
+                snap.blocks.retain(|b| !b.block.eq_ignore_ascii_case(&orig.block));
+                if !orig.preset.is_empty() {
+                    snap.blocks.push(orig);
+                }
+            }
+        });
+    }
+
     fn save_part_changes(&self, part: String) -> String {
         let Some(song) = self.current_song_name() else {
             return "No song is up (Setlist mode).".into();
@@ -8615,8 +8699,39 @@ impl Rig for GuitarRigBackend {
                         .iter()
                         .map(|s| PresetSnapshotEntry {
                             name: s.name.clone(),
-                            modules: s.modules.iter().map(pick).collect(),
+                            // What the variation chose itself: a pick put
+                            // over it shows as one (`picks`), not here.
+                            modules: s
+                                .modules
+                                .iter()
+                                .filter_map(|m| match s.picked.iter().find(|w| w.module.eq_ignore_ascii_case(&m.module)) {
+                                    Some(w) if w.preset.is_empty() => None,
+                                    Some(w) => Some(w),
+                                    None => Some(m),
+                                })
+                                .map(pick)
+                                .collect(),
                             overrides: s.overrides.len() as u32,
+                            // The picks put over it, as they play now.
+                            picks: s
+                                .picked
+                                .iter()
+                                .filter_map(|was| s.modules.iter().find(|m| m.module.eq_ignore_ascii_case(&was.module)))
+                                .map(|m| signal_guitar_proto::PartPick { kind: m.module.clone(), preset: m.preset.clone(), snapshot: m.snapshot.clone() })
+                                .chain(s.picked_blocks.iter().filter_map(|was| s.blocks.iter().find(|b| b.block.eq_ignore_ascii_case(&was.block))).map(|b| {
+                                    signal_guitar_proto::PartPick { kind: format!("block:{}", b.block), preset: b.preset.clone(), snapshot: String::new() }
+                                }))
+                                .collect(),
+                            blocks: s
+                                .blocks
+                                .iter()
+                                .filter_map(|b| match s.picked_blocks.iter().find(|w| w.block.eq_ignore_ascii_case(&b.block)) {
+                                    Some(w) if w.preset.is_empty() => None,
+                                    Some(w) => Some(w),
+                                    None => Some(b),
+                                })
+                                .map(|b| signal_guitar_proto::BlockPick { block: b.block.clone(), preset: b.preset.clone() })
+                                .collect(),
                         })
                         .collect(),
                 })
