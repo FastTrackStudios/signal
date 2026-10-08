@@ -930,6 +930,10 @@ pub struct ProfileEntry {
 pub struct ProfilePatch {
     pub name: String,
     pub stack: String,
+    /// The song whose own patch it is (merged into the profile while the
+    /// song plays); empty for the profile's own.
+    #[facet(default)]
+    pub song: String,
 }
 
 /// One song in the library, with its defaults.
@@ -1190,6 +1194,9 @@ pub struct MacroKnobView {
     /// `relative` (± around its rest — Gain, Tone, Width, Output).
     #[facet(default)]
     pub scale: String,
+    /// Every block the knob drives is bypassed: a level knob reads `off`.
+    #[facet(default)]
+    pub off: bool,
     pub children: Vec<MacroChildView>,
 }
 
@@ -1584,6 +1591,11 @@ pub mod rig {
         /// The most recent MIDI events seen by the core (newest last),
         /// formatted for the monitor.
         fn midi_recent(&self) -> Vec<String>;
+        /// The MIDI inputs the rig can see now, by name.
+        fn midi_ports(&self) -> Vec<String>;
+        /// The output check's tone: `output` `house` or `phones`, `side` 0
+        /// off, 1 left, 2 right, 3 both.
+        fn test_tone(&self, output: String, side: u32);
         /// Switch the active setlist (recalls its first song).
         fn select_setlist(&self, index: u32) -> Applied;
         /// Select a block preset's NAM option (e.g. a pedal's gain capture).
@@ -1693,6 +1705,11 @@ pub mod rig {
         fn move_stack_patch(&self, stack: String, from: u32, to: u32);
         /// Delete a stack (its patches stay in the pool).
         fn delete_stack(&self, name: String);
+        /// Put `patch` in stack `stack`'s rotation (`on`), or take it out
+        /// (it stays in the pool). A patch the profile lacks comes in as a
+        /// copy — from another profile or a song — or, named fresh, as a
+        /// copy of the stack's first patch.
+        fn set_stack_patch(&self, stack: String, patch: String, on: bool);
         /// Name a new section on the current song, appended at the end.
         ///
         /// Sections are the song's structure, so they are ordered and named

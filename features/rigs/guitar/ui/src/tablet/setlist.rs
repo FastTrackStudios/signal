@@ -25,7 +25,7 @@ use signal_widgets::PopupHost;
 
 use super::colors::{date_label, name_colour, section_colour, set_heading, set_meta, song_colour, suggest_section, when_label};
 use super::marks::{module_colour, OverrideIcon};
-use super::menu::{open_naming, Item, MoreButton, Picked};
+use super::menu::{open_naming, Item, MoreButton, Picked, PressMenu};
 use super::panels::{Panel, PanelView};
 use super::tokens::*;
 use crate::state::RigViewState;
@@ -71,6 +71,16 @@ pub fn stack_of(lib: &LibraryModel, profile: &str, patch: &str) -> String {
         .and_then(in_profile)
         .or_else(|| lib.profiles.iter().find_map(in_profile))
         .unwrap_or_default()
+}
+
+/// The stack a patch plays from: the switches' rotations as the song has
+/// tuned them (a song's own patches live only there), else the profile's.
+pub fn stack_for(perf: &PerformanceModel, lib: &LibraryModel, profile: &str, patch: &str) -> String {
+    perf.stacks
+        .iter()
+        .find(|s| s.patches.iter().any(|p| p.eq_ignore_ascii_case(patch)))
+        .map(|s| s.name.clone())
+        .unwrap_or_else(|| stack_of(lib, profile, patch))
 }
 
 /// The profile a patch belongs to, when it is another than `profile`'s:
@@ -156,12 +166,39 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
     }
     // A song being dragged into order: (from, to).
     let drag = use_signal(|| None::<(usize, usize)>);
+    // The list and the song up, measured on a scroll: whether the song up
+    // is scrolled out of it, and which way.
+    let mut list_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    let mut up_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    let mut away = use_signal(|| None::<bool>);
+    let measure = move || {
+        let (Some(list), Some(up)) = (list_el.peek().clone(), up_el.peek().clone()) else { return };
+        spawn(async move {
+            let (Ok(l), Ok(u)) = (list.get_client_rect().await, up.get_client_rect().await) else { return };
+            let now = if u.max_y() < l.min_y() + 1.0 {
+                Some(true)
+            } else if u.min_y() > l.max_y() - 1.0 {
+                Some(false)
+            } else {
+                None
+            };
+            if *away.peek() != now {
+                away.set(now);
+            }
+        });
+    };
     rsx! {
         section { style: "position: relative; height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: {SHEET}; font-family: {FONT}; color: {INK};",
             SetHeader { perf: perf.clone(), lib: lib_now.clone(), panel, reordering }
-            div { style: "position: relative; flex: 1; min-height: 0; overflow-y: auto;",
+            div { style: "position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column;",
+            div {
+                style: "position: relative; flex: 1; min-height: 0; overflow-y: auto;",
+                onmounted: move |e| list_el.set(Some(e.data())),
+                onscroll: move |_| measure(),
                 for (i, song) in songs.iter().enumerate() {
-                    div { key: "{i}-{song.name}",
+                    div {
+                        key: "{i}-{song.name}",
+                        onmounted: move |e| if i == at { up_el.set(Some(e.data())) },
                         SongRow {
                             perf: perf.clone(),
                             lib: lib_now.clone(),
@@ -192,8 +229,48 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
                     }
                 }
             }
+            // Scrolled away from the song up: where it is, and a way back.
+            if let Some(above) = away() {
+                NowBar { perf: perf.clone(), above, on_back: move |()| {
+                    if let Some(up) = up_el.peek().clone() {
+                        spawn(async move {
+                            let _ = up.scroll_to(ScrollBehavior::Instant).await;
+                        });
+                    }
+                    away.set(None);
+                } }
+            }
+            }
             if let Some(p) = panel() {
                 PanelView { panel: p, perf: perf.clone(), lib: lib_now.clone(), on_close: move |()| panel.set(None) }
+            }
+        }
+    }
+}
+
+/// Pinned over the list while the song up is scrolled out of it: the song
+/// and the section playing, and a tap back to them.
+#[component]
+fn NowBar(perf: PerformanceModel, above: bool, on_back: EventHandler<()>) -> Element {
+    let Some(song) = perf.songs.get(perf.song_index as usize).cloned() else { return rsx! {} };
+    let colour = song_colour(&song.name, &song.colour);
+    let section = perf.parts.get(perf.part_index as usize).map(|p| if p.section.is_empty() { p.name.clone() } else { p.section.clone() }).unwrap_or_default();
+    let edge = if above { "top: 0px; box-shadow: 0 6px 16px rgba(0,0,0,0.45);" } else { "bottom: 0px; box-shadow: 0 -6px 16px rgba(0,0,0,0.45);" };
+    rsx! {
+        button {
+            style: "position: absolute; left: 0px; right: 0px; {edge} z-index: 5; height: 44px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 0 14px; border: none; text-align: left; background: {tint(&colour, 16)}; color: {INK}; font-family: {FONT}; cursor: pointer;",
+            onclick: move |_| on_back.call(()),
+            span { style: "width: 22px; height: 22px; border-radius: 5px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 750; background: {colour}; color: #0b0b0e;", "{perf.song_index + 1}" }
+            span { style: "font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{song.name}" }
+            if !section.is_empty() {
+                span { style: "font-size: 14px; font-weight: 650; color: {section_colour(&section)}; white-space: nowrap;", "{section}" }
+            }
+            span { style: "flex: 1;" }
+            span { style: "display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: {INK_2}; white-space: nowrap;",
+                svg { key: "{above}", width: "10", height: "12", view_box: "0 0 10 12",
+                    path { d: pick(above, "M5 11V1.5M1 5.5 5 1.5l4 4", "M5 1V10.5M1 6.5 5 10.5l4-4"), fill: "none", stroke: INK_2, stroke_width: "1.7", stroke_linecap: "round", stroke_linejoin: "round" }
+                }
+                "Now"
             }
         }
     }
@@ -332,6 +409,13 @@ fn SetHeader(perf: PerformanceModel, lib: LibraryModel, panel: Signal<Option<Pan
 
 // ── A song ─────────────────────────────────────────────────────────────────
 
+/// The song up, pinned to the top of the list while its sections scroll.
+const STICK_SONG: &str = "position: sticky; top: 0px; z-index: 3;";
+/// The section playing, pinned under the song while its stacks scroll.
+const STICK_SECTION: &str = "position: sticky; top: 64px; z-index: 2;";
+
+const UNSTUCK: &str = "position: relative;";
+
 /// A song row's height (reorder drags count in it).
 const SONG_ROW_H: f64 = 65.0;
 
@@ -400,11 +484,30 @@ fn SongRow(
     };
     let mut panel_w = panel;
     let bg = if dragging { SHEET_2.to_string() } else if up { tint(&colour, 7) } else { CLEAR.to_string() };
+    // The song up stays at the top while you scroll through it.
+    let pin = if up && !reordering { STICK_SONG } else { UNSTUCK };
     let top_rule = if drop_above { format!("border-top: 3px solid {FOCUS_FG};") } else { format!("border-top: 1px solid {RULE};") };
 
+    let pick_handler = EventHandler::new({
+                            let rig = rig.clone();
+                            move |p: Picked| match p.id.as_str() {
+                                "go" => call!(rig, |r| r.select_song(index as u32)),
+                                "key" => panel_w.set(Some(Panel::Key(index))),
+                                "tempo" => panel_w.set(Some(Panel::Tempo(index))),
+                                "start" => panel_w.set(Some(Panel::Start(index))),
+                                "profile" => panel_w.set(Some(Panel::Profile(Some(index)))),
+                                "colour" => panel_w.set(Some(Panel::Colour(index))),
+                                "up" => call!(rig, |r| r.move_setlist_entry(set_index, index as u32, index as u32 - 1)),
+                                "down" => call!(rig, |r| r.move_setlist_entry(set_index, index as u32, index as u32 + 1)),
+                                "remove" => call!(rig, |r| r.remove_setlist_entry(set_index, index as u32)),
+                                _ => {}
+                            }
+                        });
     rsx! {
-        div {
-            style: "position: relative; display: flex; align-items: stretch; min-height: 64px; {top_rule} background: {bg}; opacity: {pick(dragging, 0.6, 1.0)};",
+PressMenu {
+            items: items.clone(),
+            on_pick: pick_handler,
+            style: "{pin} display: flex; align-items: stretch; min-height: 64px; {top_rule} background: {bg}; opacity: {pick(dragging, 0.6, 1.0)};",
             if up {
                 span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: {colour};" }
             }
@@ -488,23 +591,9 @@ fn SongRow(
                     }
                 } else {
                     MoreButton {
-                        items,
+                        items: items.clone(),
                         label: format!("{} actions", song.name),
-                        on_pick: {
-                            let rig = rig.clone();
-                            move |p: Picked| match p.id.as_str() {
-                                "go" => call!(rig, |r| r.select_song(index as u32)),
-                                "key" => panel_w.set(Some(Panel::Key(index))),
-                                "tempo" => panel_w.set(Some(Panel::Tempo(index))),
-                                "start" => panel_w.set(Some(Panel::Start(index))),
-                                "profile" => panel_w.set(Some(Panel::Profile(Some(index)))),
-                                "colour" => panel_w.set(Some(Panel::Colour(index))),
-                                "up" => call!(rig, |r| r.move_setlist_entry(set_index, index as u32, index as u32 - 1)),
-                                "down" => call!(rig, |r| r.move_setlist_entry(set_index, index as u32, index as u32 + 1)),
-                                "remove" => call!(rig, |r| r.remove_setlist_entry(set_index, index as u32)),
-                                _ => {}
-                            }
-                        },
+                        on_pick: pick_handler,
                     }
                 }
             }
@@ -590,13 +679,16 @@ fn Sections(perf: PerformanceModel, lib: LibraryModel, panel: Signal<Option<Pane
     rsx! {
         div { style: "position: relative; padding: 2px 0 10px; background: {tint(&colour, 7)};",
             span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: {colour};" }
+            // One box per section: its pinned row stays inside it, so the
+            // row lets go once its parts and stacks have scrolled past.
             for (j, sec) in sections.iter().enumerate() {
-                SectionRow { key: "{j}-{sec.name}", perf: perf.clone(), lib: lib.clone(), section: sec.clone(), index: j, sections: sections.clone(), drag, panel }
-                if sec.parts.contains(&now) {
-                    if sec.parts.len() > 1 {
-                        Parts { perf: perf.clone(), lib: lib.clone(), section: sec.clone(), panel }
+                div { key: "{j}-{sec.name}",
+                    SectionRow { perf: perf.clone(), lib: lib.clone(), section: sec.clone(), index: j, sections: sections.clone(), drag, panel }
+                    // The section playing opens into the stacks, each one
+                    // its own to override here.
+                    if sec.parts.contains(&now) {
+                        Stacks { perf: perf.clone(), lib: lib.clone(), section: sec.name.clone() }
                     }
-                    Stacks { perf: perf.clone(), lib: lib.clone(), section: sec.name.clone() }
                 }
             }
             if sections.is_empty() {
@@ -666,13 +758,12 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index
     let part = perf.parts.get(first).cloned().unwrap_or_default();
     let colour = perf.songs.get(perf.song_index as usize).map(|s| song_colour(&s.name, &s.colour)).unwrap_or_default();
     let profile = if part.profile.is_empty() { perf.profile_name.clone() } else { part.profile.clone() };
-    let stack = stack_of(&lib, &profile, &part.patch);
+    let stack = stack_for(&perf, &lib, &profile, &part.patch);
     let borrowed = borrowed_from(&lib, &perf.profile_name, &part.patch);
     let modules = section_modules(&perf, &section);
     let unsaved = perf.song_changes.iter().any(|c| c.patch.eq_ignore_ascii_case(&part.patch)) && !part.patch.is_empty();
     let names: Vec<String> = section.parts.iter().filter_map(|&k| perf.parts.get(k).map(|p| p.name.clone())).collect();
     let section_names: Vec<String> = sections.iter().map(|s| s.name.clone()).filter(|n| *n != section.name).collect();
-    let all_parts: Vec<String> = perf.parts.iter().map(|p| p.name.clone()).collect();
     let grouped = !part.section.is_empty();
     let (dragging, drop_at) = match drag() {
         Some((from, to)) => (from == index, to == index && from != index),
@@ -689,7 +780,6 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index
         Item::run("patch", "Patch…").detail(if part.patch.is_empty() { "keeps".to_string() } else { part.patch.clone() })
     });
     items.extend([
-        Item::name("part", "Add a part…", format!("{} · {}", section.name, section.parts.len() + 1), "Add", all_parts.clone()),
         Item::name("rename", "Rename…", section.name.clone(), "Rename", section_names),
         Item::Sep,
         Item::run("earlier", "Move earlier").unless((index == 0).then(|| "Already first".to_string())),
@@ -705,12 +795,54 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index
     let grip = section_colour(&section.name);
     let row_bg = pick(is_now, tint(&colour, pick(several, 10, 18)), CLEAR.to_string());
     let drop_line = if drop_at { format!("border-top: 2px solid {INK_2};") } else { String::new() };
-    let last_part = section.parts.last().copied().unwrap_or(first);
-    let parts_now = perf.parts.len();
 
+    let pick_handler = EventHandler::new({
+                    let rig = rig.clone();
+                    let names = names.clone();
+                    let sections = sections.clone();
+                    move |p: Picked| {
+                        let names = names.clone();
+                        match p.id.as_str() {
+                            "go" | "parts" => call!(rig, |r| r.select_part(first as u32)),
+                            "patch" => {
+                                // Pick the part and open the browser on it (the
+                                // patch picker when there is no browser here).
+                                if let (Some(b), Some(pp)) = (build_pick, pick_part) {
+                                    let mut part = b.part;
+                                    part.set(Some(first));
+                                    pp.open.call(());
+                                } else {
+                                    let mut panel = panel;
+                                    panel.set(Some(Panel::Patch(first)));
+                                }
+                            }
+                            "rename" => {
+                                let new_name = p.text.clone();
+                                if grouped {
+                                    for n in names {
+                                        let new_name = new_name.clone();
+                                        call!(rig, |r| r.set_part_section(n, new_name));
+                                    }
+                                } else if let Some(n) = names.first().cloned() {
+                                    call!(rig, |r| r.rename_part(n, new_name));
+                                }
+                            }
+                            "earlier" => reorder_parts(rig.clone(), section_moved(&sections, index, index - 1)),
+                            "later" => reorder_parts(rig.clone(), section_moved(&sections, index, index + 1)),
+                            "delete" => {
+                                for n in names {
+                                    call!(rig, |r| r.remove_part(n));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                });
     rsx! {
-        div {
-            style: "position: relative; display: flex; align-items: center; min-height: 50px; background: {row_bg}; opacity: {pick(dragging, 0.5, 1.0)}; {drop_line}",
+PressMenu {
+            items: items.clone(),
+            on_pick: pick_handler,
+            style: "{pick(is_now, STICK_SECTION, UNSTUCK)} display: flex; align-items: center; min-height: 50px; background: {row_bg}; opacity: {pick(dragging, 0.5, 1.0)}; {drop_line}",
             if picked {
                 span { style: "position: absolute; left: 0; top: 0; bottom: 0; right: 0; border: 2px solid {FOCUS_FG}; border-radius: {R}; box-sizing: border-box; pointer-events: none;" }
             }
@@ -784,211 +916,13 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index
                 }
             }
             MoreButton {
-                items,
+                items: items.clone(),
                 label: format!("{} actions", section.name),
-                on_pick: {
-                    let rig = rig.clone();
-                    let names = names.clone();
-                    let sections = sections.clone();
-                    let sec_name = section.name.clone();
-                    move |p: Picked| {
-                        let names = names.clone();
-                        match p.id.as_str() {
-                            "go" | "parts" => call!(rig, |r| r.select_part(first as u32)),
-                            "patch" => {
-                                // Pick the part and open the browser on it (the
-                                // patch picker when there is no browser here).
-                                if let (Some(b), Some(pp)) = (build_pick, pick_part) {
-                                    let mut part = b.part;
-                                    part.set(Some(first));
-                                    pp.open.call(());
-                                } else {
-                                    let mut panel = panel;
-                                    panel.set(Some(Panel::Patch(first)));
-                                }
-                            }
-                            "rename" => {
-                                let new_name = p.text.clone();
-                                if grouped {
-                                    for n in names {
-                                        let new_name = new_name.clone();
-                                        call!(rig, |r| r.set_part_section(n, new_name));
-                                    }
-                                } else if let Some(n) = names.first().cloned() {
-                                    call!(rig, |r| r.rename_part(n, new_name));
-                                }
-                            }
-                            "part" => {
-                                // A new part, in this section, after its last.
-                                let (new_part, sec_name, first_name) = (p.text.clone(), sec_name.clone(), names.first().cloned().unwrap_or_default());
-                                if let Some(r) = rig.clone() {
-                                    let _ = dioxus_core::spawn_forever(async move {
-                                        if !grouped {
-                                            let _ = r.set_part_section(first_name, sec_name.clone()).await;
-                                        }
-                                        let _ = r.add_part(new_part.clone()).await;
-                                        let _ = r.set_part_section(new_part, sec_name).await;
-                                        let _ = r.move_part(parts_now as u32, last_part as u32 + 1).await;
-                                    });
-                                }
-                            }
-                            "earlier" => reorder_parts(rig.clone(), section_moved(&sections, index, index - 1)),
-                            "later" => reorder_parts(rig.clone(), section_moved(&sections, index, index + 1)),
-                            "delete" => {
-                                for n in names {
-                                    call!(rig, |r| r.remove_part(n));
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                },
+                on_pick: pick_handler,
             }
         }
     }
 }
-
-/// The parts of the section playing: where in it you are, what each plays,
-/// and a way to add another — the section's own little timeline.
-#[component]
-fn Parts(perf: PerformanceModel, lib: LibraryModel, section: Section, panel: Signal<Option<Panel>>) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
-    let host = PopupHost::try_use();
-    let names: Vec<String> = perf.parts.iter().map(|p| p.name.clone()).collect();
-    let last = section.parts.last().copied().unwrap_or(0);
-    let parts_now = perf.parts.len();
-    let sec_name = section.name.clone();
-    let count = section.parts.len();
-    rsx! {
-        div { style: "position: relative; padding-bottom: 4px;",
-            span { style: "position: absolute; left: 49px; top: 0; bottom: 26px; width: 1px; background: color-mix(in oklab, {LIVE} 40%, {RULE_STRONG});" }
-            for (k, i) in section.parts.iter().copied().enumerate() {
-                PartRow { key: "p{i}", perf: perf.clone(), lib: lib.clone(), index: i, first: k == 0, last: k + 1 == count, only: count == 1, panel }
-            }
-            button {
-                style: "display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 0 14px 0 44px; border: none; background: transparent; color: {INK_3}; font-size: 13px; font-weight: 600; font-family: {FONT}; text-align: left; justify-content: flex-start; cursor: pointer;",
-                onclick: move |e: MouseEvent| {
-                    let (c, el) = (e.client_coordinates(), e.element_coordinates());
-                    let (rig, sec_name) = (rig.clone(), sec_name.clone());
-                    open_naming(host, c.x - el.x + 20.0, c.y - el.y + 36.0, Item::name("add", "New part…", format!("{} · {}", section.name, count + 1), "Add", names.clone()), EventHandler::new(move |p: Picked| {
-                        let (new_part, sec_name) = (p.text.clone(), sec_name.clone());
-                        if let Some(r) = rig.clone() {
-                            let _ = dioxus_core::spawn_forever(async move {
-                                let _ = r.add_part(new_part.clone()).await;
-                                let _ = r.set_part_section(new_part, sec_name).await;
-                                let _ = r.move_part(parts_now as u32, last as u32 + 1).await;
-                            });
-                        }
-                    }));
-                },
-                Plus { size: 12 }
-                "Add a part"
-            }
-        }
-    }
-}
-
-#[component]
-fn PartRow(perf: PerformanceModel, lib: LibraryModel, index: usize, first: bool, last: bool, only: bool, panel: Signal<Option<Panel>>) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
-    let build_pick = try_use_context::<super::BuildPick>();
-    let pick_part = try_use_context::<PickPart>();
-    let picked = build_pick.is_some_and(|b| (b.building)() && (b.part)() == Some(index));
-    let Some(part) = perf.parts.get(index).cloned() else { return rsx! {} };
-    let now = perf.part_index as usize;
-    let state = if index == now { "now" } else if index < now { "done" } else { "ahead" };
-    let (is_now, is_done) = (state == "now", state == "done");
-    let colour = perf.songs.get(perf.song_index as usize).map(|s| song_colour(&s.name, &s.colour)).unwrap_or_default();
-    let profile = if part.profile.is_empty() { perf.profile_name.clone() } else { part.profile.clone() };
-    let stack = stack_of(&lib, &profile, &part.patch);
-    let borrowed = borrowed_from(&lib, &perf.profile_name, &part.patch);
-    let dot = match state {
-        "now" => format!("background: {LIVE}; border: 1.5px solid {LIVE};"),
-        "done" => format!("background: {SHEET}; border: 1.5px solid {INK_3};"),
-        _ => format!("background: {SHEET}; border: 1.5px solid {DIM};"),
-    };
-    let others: Vec<String> = perf.parts.iter().map(|p| p.name.clone()).filter(|n| *n != part.name).collect();
-    let items = vec![
-        Item::head(part.name.clone()),
-        Item::run("go", "Play from here").unless(is_now.then(|| "It's playing".to_string())),
-        Item::run("patch", "Patch…").detail(if part.patch.is_empty() { "keeps".to_string() } else { part.patch.clone() }),
-        Item::name("rename", "Rename…", part.name.clone(), "Rename", others),
-        Item::Sep,
-        Item::run("earlier", "Move earlier").unless(first.then(|| "Already first".to_string())),
-        Item::run("later", "Move later").unless(last.then(|| "Already last".to_string())),
-        Item::Sep,
-        Item::delete("delete", "Delete part").unless(only.then(|| "A section keeps at least one part".to_string())),
-    ];
-    let name = part.name.clone();
-    rsx! {
-        div { style: "position: relative; display: flex; align-items: center; min-height: 44px; background: {pick(is_now, tint(&colour, 18), CLEAR.to_string())};",
-            if picked {
-                span { style: "position: absolute; left: 0; top: 0; bottom: 0; right: 0; border: 2px solid {FOCUS_FG}; border-radius: {R}; box-sizing: border-box; pointer-events: none;" }
-            }
-            button {
-                style: "flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 2px 4px 2px 46px; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;",
-                onclick: {
-                    let rig = rig.clone();
-                    move |_| {
-                        // Building: a tap picks the part to build into; else it plays it.
-                        if let Some(b) = build_pick
-                            && *b.building.peek()
-                        {
-                            let mut p = b.part;
-                            p.set(Some(index));
-                            return;
-                        }
-                        call!(rig, |r| r.select_part(index as u32))
-                    }
-                },
-                span { style: "position: relative; width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; box-sizing: border-box; {dot}" }
-                span { style: "flex: 1; min-width: 0; font-size: 14px; font-weight: {pick(is_now, 650, 500)}; color: {pick(is_done, INK_3, pick(is_now, INK, INK_2))}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
-                    "{part.name}"
-                }
-                span { style: "flex: 0 1 auto; max-width: 64%; min-width: 0; display: flex; padding-right: 10px;",
-                    if part.patch.is_empty() {
-                        span { style: "font-size: 12px; color: {INK_3}; padding: 0 4px;", "keeps" }
-                    } else {
-                        PatchChip { patch: part.patch.clone(), stack, small: true, lit: is_now, borrowed }
-                    }
-                }
-            }
-            MoreButton {
-                items,
-                label: format!("{} actions", part.name),
-                on_pick: {
-                    let rig = rig.clone();
-                    move |p: Picked| {
-                        let name = name.clone();
-                        match p.id.as_str() {
-                            "go" => call!(rig, |r| r.select_part(index as u32)),
-                            "patch" => {
-                                if let (Some(b), Some(pp)) = (build_pick, pick_part) {
-                                    let mut part = b.part;
-                                    part.set(Some(index));
-                                    pp.open.call(());
-                                } else {
-                                    let mut panel = panel;
-                                    panel.set(Some(Panel::Patch(index)));
-                                }
-                            }
-                            "rename" => {
-                                let new_name = p.text.clone();
-                                call!(rig, |r| r.rename_part(name, new_name));
-                            }
-                            "earlier" => call!(rig, |r| r.move_part(index as u32, index as u32 - 1)),
-                            "later" => call!(rig, |r| r.move_part(index as u32, index as u32 + 1)),
-                            "delete" => call!(rig, |r| r.remove_part(name)),
-                            _ => {}
-                        }
-                    }
-                },
-            }
-        }
-    }
-}
-
-// ── The stacks ─────────────────────────────────────────────────────────────
 
 /// The profile's stacks under the section playing (or the Profile view):
 /// a tap plays a stack (a tap on the one playing steps it); each shows the
@@ -1013,11 +947,13 @@ pub fn Stacks(perf: PerformanceModel, lib: LibraryModel, section: String) -> Ele
 
 /// A patch's source: the profile's own, the song's own, or borrowed.
 fn source_of(lib: &LibraryModel, profile: &str, patch: &str) -> (bool, Option<String>) {
-    let mine = lib.profiles.iter().any(|p| p.name.eq_ignore_ascii_case(profile) && p.patch_list.iter().any(|x| x.name.eq_ignore_ascii_case(patch)));
+    // A song's own patch is merged into the profile while it plays: not
+    // the profile's own.
+    let mine = lib.profiles.iter().any(|p| p.name.eq_ignore_ascii_case(profile) && p.patch_list.iter().any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch)));
     if mine {
         return (true, None);
     }
-    (false, lib.profiles.iter().find(|p| p.patch_list.iter().any(|x| x.name.eq_ignore_ascii_case(patch))).map(|p| p.name.clone()))
+    (false, lib.profiles.iter().find(|p| p.patch_list.iter().any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch))).map(|p| p.name.clone()))
 }
 
 /// Play `patch` by name: the rig's patch list says its index.
@@ -1090,8 +1026,48 @@ pub fn StackRow(stack: PerfStack, index: usize, count: usize, lib: LibraryModel,
     let stack_name = stack.name.clone();
     let patches = stack.patches.clone();
     let part_index_now = part.name.clone();
+    let pick_handler = EventHandler::new({
+                    let rig = rig.clone();
+                    let showing = showing.clone();
+                    move |p: Picked| {
+                        let (part_name, stack_name, showing) = (part_name.clone(), stack_name.clone(), showing.clone());
+                        match p.id.as_str() {
+                            "keep" => call!(rig, |r| r.set_part_patch(part_name, showing)),
+                            "back" => {
+                                let _ = &part_index_now;
+                                play_patch(rig.clone(), part.patch.clone());
+                            }
+                            "default" => call!(rig, |r| r.set_part_patch(part_name, showing)),
+                            "add" => {
+                                let name = p.text.clone();
+                                call!(rig, |r| r.add_patch(name, stack_name, String::new()));
+                            }
+                            "rename_patch" => {
+                                let new_name = p.text.clone();
+                                call!(rig, |r| r.rename_patch(showing, new_name));
+                            }
+                            "rename" => {
+                                let new_name = p.text.clone();
+                                call!(rig, |r| r.rename_stack(stack_name, new_name));
+                            }
+                            "up" => call!(rig, |r| r.move_stack(index as u32, index as u32 - 1)),
+                            "down" => call!(rig, |r| r.move_stack(index as u32, index as u32 + 1)),
+                            "remove_patch" => call!(rig, |r| r.delete_patch(showing)),
+                            other => {
+                                if let Some(k) = other.strip_prefix('p').and_then(|k| k.parse::<usize>().ok())
+                                    && let Some(name) = patches.get(k).cloned()
+                                {
+                                    play_patch(rig.clone(), name);
+                                }
+                            }
+                        }
+                    }
+                });
     rsx! {
-        div { style: "display: flex; align-items: stretch; border-top: 1px solid {RULE}; background: {pick(on, tint(&song_colour, 18), CLEAR.to_string())};",
+PressMenu {
+            items: items.clone(),
+            on_pick: pick_handler,
+            style: "display: flex; align-items: stretch; border-top: 1px solid {RULE}; background: {pick(on, tint(&song_colour, 18), CLEAR.to_string())};",
             button {
                 style: "position: relative; flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px 0 10px; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;",
                 onclick: {
@@ -1139,45 +1115,9 @@ pub fn StackRow(stack: PerfStack, index: usize, count: usize, lib: LibraryModel,
                 }
             }
             MoreButton {
-                items,
+                items: items.clone(),
                 label: format!("{} actions", stack.name),
-                on_pick: {
-                    let rig = rig.clone();
-                    let showing = showing.clone();
-                    move |p: Picked| {
-                        let (part_name, stack_name, showing) = (part_name.clone(), stack_name.clone(), showing.clone());
-                        match p.id.as_str() {
-                            "keep" => call!(rig, |r| r.set_part_patch(part_name, showing)),
-                            "back" => {
-                                let _ = &part_index_now;
-                                play_patch(rig.clone(), part.patch.clone());
-                            }
-                            "default" => call!(rig, |r| r.set_part_patch(part_name, showing)),
-                            "add" => {
-                                let name = p.text.clone();
-                                call!(rig, |r| r.add_patch(name, stack_name, String::new()));
-                            }
-                            "rename_patch" => {
-                                let new_name = p.text.clone();
-                                call!(rig, |r| r.rename_patch(showing, new_name));
-                            }
-                            "rename" => {
-                                let new_name = p.text.clone();
-                                call!(rig, |r| r.rename_stack(stack_name, new_name));
-                            }
-                            "up" => call!(rig, |r| r.move_stack(index as u32, index as u32 - 1)),
-                            "down" => call!(rig, |r| r.move_stack(index as u32, index as u32 + 1)),
-                            "remove_patch" => call!(rig, |r| r.delete_patch(showing)),
-                            other => {
-                                if let Some(k) = other.strip_prefix('p').and_then(|k| k.parse::<usize>().ok())
-                                    && let Some(name) = patches.get(k).cloned()
-                                {
-                                    play_patch(rig.clone(), name);
-                                }
-                            }
-                        }
-                    }
-                },
+                on_pick: pick_handler,
             }
         }
     }

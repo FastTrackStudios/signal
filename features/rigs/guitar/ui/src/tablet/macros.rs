@@ -44,6 +44,8 @@ struct Heard {
 
 /// A knob's glow while its effect works, and the gate's meter.
 fn reaction(id: &str, v: f64, h: Heard) -> (f64, Option<(f64, f64)>) {
+    // A wet knob's normal level sits at the middle.
+    let wet = (v * 2.0).min(1.0);
     match id {
         "gate" => (0.0, Some((h.input, v))),
         "pre-comp" | "comp" => (h.squash * v, None),
@@ -51,11 +53,12 @@ fn reaction(id: &str, v: f64, h: Heard) -> (f64, Option<(f64, f64)>) {
         "boost" | "pitch" => (if v > 0.0 { h.input * 0.7 } else { 0.0 }, None),
         "gain" => (h.input * 0.35, None),
         "output" => (h.output * 0.3, None),
-        "delay" => (h.delay, None),
-        "reverb" => (h.reverb, None),
-        "space" => (h.delay.max(h.reverb), None),
-        "mod" => (h.modulation, None),
-        "motion" => (h.tremolo.max(h.modulation), None),
+        "delay" => (h.delay * wet, None),
+        "reverb" => (h.reverb * wet, None),
+        "space" => (h.reverb * 0.6 * wet, None),
+        "clarity" => (h.delay * v, None),
+        "mod" => (if v > 0.0 { h.modulation * wet * 0.7 } else { 0.0 }, None),
+        "motion" => (if v > 0.0 { h.tremolo * v } else { 0.0 }, None),
         _ => (0.0, None),
     }
 }
@@ -86,6 +89,11 @@ pub fn TouchMacroBar(state: RigViewState) -> Element {
     rsx! {
         div { style: "position: relative;",
             if let Some(k) = shown.filter(|k| !k.children.is_empty()) {
+                // A press anywhere below or beside the bar closes the panel.
+                div {
+                    style: "position: absolute; top: 100%; left: -2000px; right: -2000px; height: 3000px; z-index: 4;",
+                    onpointerdown: move |_| open.set(None),
+                }
                 Panel { knob: k, on_close: move |()| open.set(None) }
             }
             div { style: "display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 1px; background: #000;",
@@ -192,7 +200,7 @@ fn level_of(k: &MacroKnobView) -> Option<f64> {
     if k.scale != "level" {
         return None;
     }
-    if !k.children.is_empty() && k.children.iter().all(|c| c.bypassed) {
+    if k.off || !k.children.is_empty() && k.children.iter().all(|c| c.bypassed) {
         return Some(0.0);
     }
     let t = k.tune.iter().find(|t| !t.off)?;

@@ -1,8 +1,9 @@
 //! Merge a rig library into the app's shipped default config: every module,
 //! preset, block preset, tone, drive pedal, song and setlist the shipped
 //! files do not have yet is added (by name); what they have stays exactly as
-//! it is. Profiles the shipped config does not have are added, and the ones
-//! named with `--take` replace the shipped copy.
+//! it is — except songs, whose library version (its sections, its patches)
+//! replaces the shipped one. Profiles the shipped config does not have are
+//! added, and the ones named with `--take` replace the shipped copy.
 //!
 //! Run by `default-config/ship-library.sh`, which then copies the captures
 //! the result references and makes their paths relative.
@@ -82,7 +83,24 @@ fn main() {
     merge!(BlockLib, "blocks.styx", presets, |p: &signal_guitar::compose::BlockPresetDef| format!("{}\t{}", p.block_type, p.name), src, dst);
     merge!(ToneLib, "tones.styx", tones, |t: &signal_guitar::compose::ToneDef| t.name.clone(), src, dst);
     merge!(DrivePresetLib, "drive-presets.styx", presets, |p: &signal_guitar::profiles::DrivePresetDef| p.name.clone(), src, dst);
-    merge!(SongLib, "songs.styx", songs, |s: &signal_guitar::profiles::SongDef| s.name.clone(), src, dst);
+    // Songs: the library's are the player's own — their sections and the
+    // patches they play — so its version of a song replaces the shipped one.
+    {
+        let from: Option<SongLib> = read(&src.join("songs.styx"));
+        let to_path = dst.join("songs.styx");
+        if let (Some(from), Some(mut to)) = (from, read::<SongLib>(&to_path)) {
+            let mut taken = 0;
+            for song in &from.songs {
+                match to.songs.iter_mut().find(|x| x.name.eq_ignore_ascii_case(&song.name)) {
+                    Some(x) => *x = song.clone(),
+                    None => to.songs.push(song.clone()),
+                }
+                taken += 1;
+            }
+            write(&to_path, &to);
+            println!("{:<20} {taken} from the library", "songs.styx");
+        }
+    }
     merge!(SetlistLib, "setlists.styx", setlists, |s: &signal_guitar::profiles::SetlistDef| s.name.clone(), src, dst);
 
     // Profiles: new ones added; `--take` ones replace the shipped copy.

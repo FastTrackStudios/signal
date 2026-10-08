@@ -2742,6 +2742,30 @@ impl MacroEngine {
         out
     }
 
+    /// Every block the knob turns — its own targets and its children's —
+    /// is bypassed (and it turns some): a level knob reads `off`.
+    fn knob_off(&self, k: &MacroKnob, blocks: &[LiveBlock]) -> bool {
+        let ids: Vec<&str> = std::iter::once(&k.id)
+            .chain(k.children.iter().map(|c| &c.id))
+            .filter_map(|id| self.built.meta.get(id))
+            .flat_map(|m| {
+                m.targets
+                    .iter()
+                    .map(|t| t.block.as_str())
+                    .chain(m.select.iter().map(|s| s.block.as_str()))
+                    .chain(m.show.iter().map(|s| s.0.as_str()))
+                    .chain(m.pad_block.as_deref())
+            })
+            .collect();
+        !ids.is_empty()
+            && ids.iter().all(|id| {
+                blocks
+                    .iter()
+                    .find(|b| b.id == *id)
+                    .is_some_and(|b| b.bypassed)
+            })
+    }
+
     /// The bar as the UI draws it; `blocks` is the live chain (values with
     /// the macros applied) for the readouts.
     #[must_use]
@@ -2773,6 +2797,7 @@ impl MacroEngine {
                 } else {
                     k.format_value()
                 };
+                let tune = self.tune_views(k, blocks);
                 MacroKnobView {
                     id: k.id.clone(),
                     label: k.label.clone(),
@@ -2785,10 +2810,11 @@ impl MacroEngine {
                     layout: panel.layout.to_string(),
                     headers: panel.headers.clone(),
                     anchor: panel.anchor.clone(),
-                    tune: self.tune_views(k, blocks),
                     tuned: self.has_edits(&k.id),
                     snapshot: self.snapshot.clone(),
                     scale: knob_scale(&k.id).to_string(),
+                    off: self.knob_off(k, blocks),
+                    tune,
                     children: k
                         .children
                         .iter()
@@ -2832,6 +2858,7 @@ impl MacroEngine {
             .collect()
     }
 }
+
 
 /// A selector's knob position for the choice `v`.
 fn select_position(s: &Select, v: f32) -> f32 {

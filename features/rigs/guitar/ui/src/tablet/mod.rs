@@ -59,6 +59,8 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut macros = use_signal(|| true);
     let mut docked = use_signal(|| true);
     let mut browser = use_signal(|| false);
+    // Edit's left pane: the browser, or the sidebar a tap away.
+    let mut left_browser = use_signal(|| true);
     let setup_tab = use_signal(|| setup::SetupTab::Guitar);
     let pick = use_context_provider(|| BuildPick { part: Signal::new(None), building: Signal::new(false) });
     // "Patch…" on a section or part: pick it and bring the browser up for
@@ -93,12 +95,23 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                 } else {
                     if sidebar() {
                         aside { style: "width: {SIDEBAR_W}px; flex-shrink: 0; height: 100%; border-right: 1px solid {RULE}; box-sizing: border-box; display: flex; flex-direction: column; min-height: 0;",
-                            // The sidebar for the footswitch mode: the set, the
-                            // profile's stacks, or the presets.
-                            match model.perform_mode {
-                                0 => rsx! { sidebar_views::PresetView { state } },
-                                1 => rsx! { sidebar_views::ProfileView { state } },
-                                _ => rsx! { setlist::TabletSetlist { state } },
+                            // In Edit, where routing and the FX row hold the
+                            // main area: the browser, the sidebar a tap away.
+                            if view() == View::Edit {
+                                LeftSwitch { browser: left_browser(), mode: model.perform_mode, on_change: move |b| left_browser.set(b) }
+                            }
+                            div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+                                if view() == View::Edit && left_browser() {
+                                    browser::Browser { state, narrow: true }
+                                } else {
+                                    // The sidebar for the footswitch mode: the set,
+                                    // the profile's stacks, or the presets.
+                                    match model.perform_mode {
+                                        0 => rsx! { sidebar_views::PresetView { state } },
+                                        1 => rsx! { sidebar_views::ProfileView { state } },
+                                        _ => rsx! { setlist::TabletSetlist { state } },
+                                    }
+                                }
                             }
                         }
                     }
@@ -144,6 +157,32 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                 tuner: model.tuner_visible,
             }
             signal_widgets::PopupLayer {}
+        }
+    }
+}
+
+/// Edit's left-pane tabs: the browser, or the sidebar named for the mode.
+#[component]
+fn LeftSwitch(browser: bool, mode: u32, on_change: EventHandler<bool>) -> Element {
+    let name = match mode {
+        0 => "Presets",
+        1 => "Profile",
+        _ => "Setlist",
+    };
+    rsx! {
+        div { role: "tablist", style: "flex-shrink: 0; display: flex; border-bottom: 1px solid {RULE}; background: {SHEET};",
+            for (is_browser, label) in [(true, "Browser"), (false, name)] {
+                button {
+                    key: "{label}",
+                    role: "tab",
+                    style: "position: relative; flex: 1; height: 44px; border: none; background: transparent; font-family: {FONT}; font-size: 14px; font-weight: {pick(browser == is_browser, 700, 560)}; color: {pick(browser == is_browser, INK, INK_3)}; cursor: pointer;",
+                    onclick: move |_| on_change.call(is_browser),
+                    "{label}"
+                    if browser == is_browser {
+                        span { style: "position: absolute; left: 16px; right: 16px; bottom: 0; height: 2px; border-radius: 1px; background: {INK_2};" }
+                    }
+                }
+            }
         }
     }
 }

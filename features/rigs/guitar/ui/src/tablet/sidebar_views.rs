@@ -279,7 +279,7 @@ fn StackPatches(stack: String, patches: Vec<String>, pos: usize) -> Element {
                                         }
                                         "up" => call!(rig, |r| r.move_stack_patch(stack_name, k as u32, k as u32 - 1)),
                                         "down" => call!(rig, |r| r.move_stack_patch(stack_name, k as u32, k as u32 + 1)),
-                                        "remove" => call!(rig, |r| r.delete_patch(name)),
+                                        "remove" => call!(rig, |r| r.set_stack_patch(stack_name, name, false)),
                                         _ => {}
                                     }
                                 },
@@ -297,7 +297,7 @@ fn StackPatches(stack: String, patches: Vec<String>, pos: usize) -> Element {
                         let (rig, stack) = (rig.clone(), stack.clone());
                         open_naming(host, c.x - el.x + 40.0, c.y - el.y + 44.0, Item::name("add", format!("New patch in {stack}…"), format!("{stack} {}", n + 1), "Add", patches.clone()), EventHandler::new(move |p: Picked| {
                             let (name, stack) = (p.text.clone(), stack.clone());
-                            call!(rig, |r| r.add_patch(name, stack, String::new()));
+                            call!(rig, |r| r.set_stack_patch(stack, name, true));
                         }));
                     }
                 },

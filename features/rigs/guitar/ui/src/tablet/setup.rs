@@ -453,7 +453,11 @@ fn SetupList(tab: SetupTab, on_picked: EventHandler<()>) -> Element {
                                             Item::delete("delete", "Delete guitar").unless(only.then(|| "The only guitar".to_string())),
                                         ],
                                         on_menu: move |p: Picked| match p.id.as_str() {
-                                            "rename" => setup.edit(|m| if let Some(g) = m.guitars.get_mut(i) { g.name = p.text.clone() }),
+                                            "rename" => setup.edit(|m| if let Some(g) = m.guitars.get_mut(i) {
+                                                // Renamed is chosen: the one you named is the one in use.
+                                                g.name = p.text.clone();
+                                                m.guitar_index = i as u32;
+                                            }),
                                             "delete" => setup.edit(|m| {
                                                 if m.guitars.len() > 1 {
                                                     m.guitars.remove(i);
@@ -492,7 +496,10 @@ fn SetupList(tab: SetupTab, on_picked: EventHandler<()>) -> Element {
                                             Item::delete("delete", "Delete rig").unless(only.then(|| "The only rig".to_string())),
                                         ],
                                         on_menu: move |p: Picked| match p.id.as_str() {
-                                            "rename" => setup.edit(|m| if let Some(r) = m.rigs.get_mut(i) { r.name = p.text.clone() }),
+                                            "rename" => setup.edit(|m| if let Some(r) = m.rigs.get_mut(i) {
+                                                r.name = p.text.clone();
+                                                m.rig_index = i as u32;
+                                            }),
                                             "delete" => setup.edit(|m| {
                                                 if m.rigs.len() > 1 {
                                                     let gone = m.rigs.remove(i).id;
@@ -665,7 +672,7 @@ fn GuitarTab(state: RigViewState) -> Element {
             }
             div { style: "flex: 1; min-width: 0;",
                 // Where a change lands.
-                div { style: "display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 20px; background: {SHEET}; border-bottom: 1px solid {RULE}; box-sizing: border-box;",
+                div { style: "position: sticky; top: 0px; z-index: 2; display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 20px; background: {SHEET}; border-bottom: 1px solid {RULE}; box-sizing: border-box;",
                     span { style: "display: flex; gap: 4px;",
                         for s in [Scope::Guitar, Scope::Rig] {
                             {
@@ -1144,8 +1151,11 @@ fn OutputStrip(state: RigViewState, house: bool) -> Element {
     let db = f64::from(if house { r.house_db } else { r.phones_db });
     let level = state.out_level.read().clamp(0.0, 1.0) * 10f64.powf(db / 40.0);
     let fill = (db + 60.0) / 66.0;
-    // Its glyph lights while the rig plays through it.
-    let side = (level > 0.02).then_some(2u8);
+    // The check: left, right, then both, 1.2 s each — a swapped cable or a
+    // dead side shows. Otherwise the glyph lights while the rig plays.
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut check = use_signal(|| None::<u8>);
+    let side = check().or((level > 0.02).then_some(2u8));
     let options: Vec<(String, String, String)> = if house { dev.outputs } else { dev.phones }.iter().map(|o| (o.to_string(), o.to_string(), String::new())).collect();
     let label = if house { "House" } else { "Phones" };
     let out_label: &'static str = if house { "House output" } else { "Phones output" };
@@ -1171,6 +1181,37 @@ fn OutputStrip(state: RigViewState, house: bool) -> Element {
                 }),
                 on_end: move |()| setup.save(),
             }
+            div { style: "display: flex; align-items: center; gap: 12px;",
+                button {
+                    disabled: check().is_some(),
+                    style: "flex-shrink: 0; white-space: nowrap; height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-radius: {R}; font-size: 14px; font-weight: 700; font-family: {FONT}; cursor: pointer; box-sizing: border-box; color: {pick(check().is_some(), ON_LIVE, INK)}; background: {pick(check().is_some(), LIVE, CLEAR)}; border: 1px solid {pick(check().is_some(), LIVE, RULE_STRONG)};",
+                    onclick: move |_| {
+                        let output = if house { "house" } else { "phones" }.to_string();
+                        let rig = rig.clone();
+                        spawn(async move {
+                            // Left (0), right (1), both (2).
+                            for (shown, side) in [(0u8, 1u32), (1, 2), (2, 3)] {
+                                check.set(Some(shown));
+                                if let Some(r) = rig.clone() {
+                                    let _ = r.test_tone(output.clone(), side).await;
+                                }
+                                architect::platform::sleep(std::time::Duration::from_millis(1200)).await;
+                            }
+                            if let Some(r) = rig.clone() {
+                                let _ = r.test_tone(output.clone(), 0).await;
+                            }
+                            check.set(None);
+                        });
+                    },
+                    match check() {
+                        Some(0) => "Left…",
+                        Some(1) => "Right…",
+                        Some(_) => "Both…",
+                        None if house => "Check speakers",
+                        None => "Check phones",
+                    }
+                }
+            }
         }
     }
 }
@@ -1186,11 +1227,31 @@ fn MidiTab() -> Element {
     // What the rig hears, newest first — polled while the tab is open.
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut heard = use_signal(Vec::<String>::new);
+    // The switch just pressed, lit for a moment.
+    let mut pressed = use_signal(|| None::<usize>);
     use_hook(move || {
         if let Some(r) = rig.clone() {
             spawn(async move {
+                let mut seen: Option<(usize, String)> = None;
+                let mut first = true;
                 loop {
                     if let Ok(log) = r.midi_recent().await {
+                        let newest = log.last().cloned().map(|l| (log.len(), l));
+                        // Something new from a switch the map knows: light it.
+                        if !first && newest != seen
+                            && let Some((_, line)) = &newest
+                            && let Some(n) = line.strip_prefix("Switch ").and_then(|x| x.split(' ').next()).and_then(|x| x.parse::<usize>().ok())
+                        {
+                            pressed.set(Some(n - 1));
+                            spawn(async move {
+                                architect::platform::sleep(std::time::Duration::from_millis(220)).await;
+                                if pressed() == Some(n - 1) {
+                                    pressed.set(None);
+                                }
+                            });
+                        }
+                        seen = newest.or(seen);
+                        first = false;
                         let recent: Vec<String> = log.into_iter().rev().take(6).collect();
                         if *heard.peek() != recent {
                             heard.set(recent);
@@ -1243,11 +1304,14 @@ fn MidiTab() -> Element {
                 div { style: "display: grid; grid-template-columns: repeat({d.2}, minmax(0, 1fr)); border-top: 1px solid {RULE}; border-bottom: 1px solid {RULE};",
                     for i in 0..d.2 {
                         {
-                            let on = false;
+                            let on = pressed() == Some(i as usize);
                             rsx! {
                                 div {
                                     key: "{i}",
                                     style: "position: relative; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 0 12px; {left_rule(i > 0)}",
+                                    if on {
+                                        span { style: "position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: rgba(34,197,94,0.1);" }
+                                    }
                                     span { style: "width: 10px; height: 10px; border-radius: 999px; background: {pick(on, LIVE, RULE_STRONG)};" }
                                     span { style: "width: 40px; height: 40px; border-radius: 999px; background: {pick(on, KEY_DOWN, UP)}; border-bottom: 3px solid rgba(0,0,0,0.45); box-sizing: border-box;" }
                                     span { style: "font-size: 13px; font-weight: 700; color: {INK_3};", "{i + 1}" }

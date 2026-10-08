@@ -68,16 +68,22 @@ pub struct Picked {
 
 /// Open `items` with the menu's top-left at client `(x, y)`.
 pub fn open_menu(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, on_pick: EventHandler<Picked>) {
-    open_at(host, x, y, items, None, on_pick);
+    open_at(host, x, y, items, None, on_pick, || {});
+}
+
+/// As [`open_menu`], with `on_close` run however it closes — for an opener
+/// that shows itself open while its menu is.
+pub fn open_menu_closing(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, on_pick: EventHandler<Picked>, on_close: impl Fn() + 'static) {
+    open_at(host, x, y, items, None, on_pick, on_close);
 }
 
 /// Open straight into naming: a "+ Add…" button's field, its name filled
 /// in, without the one-item menu in front of it.
 pub fn open_naming(host: Option<PopupHost>, x: f64, y: f64, item: Item, on_pick: EventHandler<Picked>) {
-    open_at(host, x, y, vec![item], Some(0), on_pick);
+    open_at(host, x, y, vec![item], Some(0), on_pick, || {});
 }
 
-fn open_at(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picked>) {
+fn open_at(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picked>, on_close: impl Fn() + 'static) {
     let Some(host) = host else { return };
     if items.is_empty() {
         return;
@@ -98,7 +104,7 @@ fn open_at(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, start: Opt
                 }
             }
         },
-        || {},
+        on_close,
     );
 }
 
@@ -278,4 +284,47 @@ fn row(armed: bool) -> String {
         "display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 0 14px; border: none; border-radius: {R}; text-align: left; font-size: 16px; font-weight: 560; font-family: {FONT}; cursor: pointer; background: {};",
         if armed { VOID } else { CLEAR }
     )
+}
+
+/// A row that opens its menu on a long press, as its ⋯ does: hold still
+/// for half a second and the menu opens at the finger. Moving (a scroll,
+/// a drag) or lifting first lets the press be an ordinary tap.
+#[component]
+pub fn PressMenu(items: Vec<Item>, on_pick: EventHandler<Picked>, style: String, children: Element) -> Element {
+    let host = PopupHost::try_use();
+    // Bumped on every press and every release: a press's timer opens the
+    // menu only if nothing came after it.
+    let mut press = use_signal(|| 0_u64);
+    let mut at = use_signal(|| (0.0_f64, 0.0_f64));
+    rsx! {
+        div {
+            style: "{style}",
+            onpointerdown: move |e: PointerEvent| {
+                let c = e.client_coordinates();
+                at.set((c.x, c.y));
+                let n = *press.peek() + 1;
+                press.set(n);
+                let items = items.clone();
+                spawn(async move {
+                    architect::platform::sleep(std::time::Duration::from_millis(500)).await;
+                    if *press.peek() == n {
+                        press.set(n + 1);
+                        let (x, y) = *at.peek();
+                        open_menu(host, x - MENU_W / 2.0, y + 12.0, items, on_pick);
+                    }
+                });
+            },
+            onpointermove: move |e: PointerEvent| {
+                let c = e.client_coordinates();
+                let (x, y) = *at.peek();
+                if (c.x - x).abs() > 8.0 || (c.y - y).abs() > 8.0 {
+                    press += 1;
+                }
+            },
+            onpointerup: move |_| press += 1,
+            onpointercancel: move |_| press += 1,
+            onpointerleave: move |_| press += 1,
+            {children}
+        }
+    }
 }

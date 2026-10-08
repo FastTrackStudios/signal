@@ -205,6 +205,9 @@ struct Thing {
     inherited: String,
     search: String,
     profile_mark: bool,
+    /// A patch not the profile's own: its source's colour (the song's, or
+    /// the profile it is borrowed from) for its mark.
+    source: String,
 }
 
 impl Thing {
@@ -221,6 +224,7 @@ impl Thing {
             inherited: String::new(),
             search: String::new(),
             profile_mark: false,
+            source: String::new(),
         }
     }
 }
@@ -278,28 +282,59 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
             })
             .collect(),
         Kind::Patches => {
-            let profile = d.lib.profiles.iter().find(|p| p.active).or_else(|| d.lib.profiles.first());
-            profile
-                .map(|p| {
-                    p.patch_list
-                        .iter()
-                        .map(|x| {
-                            let (tape, _) = crate::perform::folder_color(&x.stack);
-                            let mut t = Thing::new(&x.name, &x.name, tape);
-                            t.group = x.stack.clone();
-                            t.from = p.name.clone();
-                            let on = match &part_patch {
-                                Some(pp) => pp.eq_ignore_ascii_case(&x.name),
-                                None => active_patch.is_some_and(|a| a.name.eq_ignore_ascii_case(&x.name)),
-                            };
-                            if on {
-                                t.state = Some(State::Playing);
-                            }
-                            t
-                        })
-                        .collect()
+            if let Target::Stack(i) = target {
+                // Filling a stack: every patch there is, this stack's first,
+                // marked where it is in already.
+                let Some(st) = d.perf.stacks.get(*i) else { return Vec::new() };
+                let mut all = all_patches(d);
+                all.sort_by_key(|p| !p.1.eq_ignore_ascii_case(&st.name));
+                return all
+                    .into_iter()
+                    .map(|(name, stack, from)| {
+                        let (tape, _) = crate::perform::folder_color(&stack);
+                        let mut t = Thing::new(format!("{stack}/{name}"), &name, tape);
+                        t.group = stack;
+                        t.from = from;
+                        if st.patches.iter().any(|p| p.eq_ignore_ascii_case(&name)) {
+                            t.state = Some(State::In);
+                        }
+                        t
+                    })
+                    .collect();
+            }
+            // The song's stacks as they play it: the profile's patches, the
+            // song's own, and those it borrows, each saying whose it is.
+            let song = d.perf.songs.get(d.perf.song_index as usize).map(|s| s.name.clone()).unwrap_or_default();
+            let song_ink = d.perf.songs.get(d.perf.song_index as usize).map(|s| song_colour(&s.name, &s.colour)).unwrap_or_else(|| INK_3.to_string());
+            d.perf
+                .stacks
+                .iter()
+                .filter(|st| st.available || !st.patches.is_empty())
+                .flat_map(|st| {
+                    let (tape, _) = crate::perform::folder_color(&st.name);
+                    let song = song.clone();
+                    let song_ink = song_ink.clone();
+                    let part_patch = part_patch.clone();
+                    st.patches.iter().map(move |name| {
+                        let mut t = Thing::new(format!("{}/{name}", st.name), name, tape);
+                        t.group = st.name.clone();
+                        let (mine, borrowed) = source_of(&d.lib, &d.perf.profile_name, name);
+                        (t.from, t.source) = match (mine, borrowed) {
+                            (true, _) => (d.perf.profile_name.clone(), String::new()),
+                            (false, Some(p)) => (format!("from {p}"), name_colour(&p).to_string()),
+                            (false, None) => (format!("{song}'s own"), song_ink.clone()),
+                        };
+                        let on = match &part_patch {
+                            Some(pp) => pp.eq_ignore_ascii_case(name),
+                            None => active_patch.is_some_and(|a| a.name.eq_ignore_ascii_case(name)),
+                        };
+                        if on {
+                            t.state = Some(State::Playing);
+                        }
+                        t
+                    })
                 })
-                .unwrap_or_default()
+                .collect()
         }
         Kind::Profiles => d
             .lib
@@ -369,6 +404,11 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
                         }
                         let is_active = active.is_some_and(|a| a.preset == m.name && a.snapshot == v);
                         let picked_here = part_pick.as_ref().is_some_and(|p| p.preset == m.name && (p.snapshot == v || p.snapshot.is_empty()));
+                        // What a preset higher up chose here — shown with an
+                        // override too, so clearing one shows what comes back.
+                        if let Some(f) = from.iter().find(|f| f.0 == *kind && f.1 == m.name && f.2 == v) {
+                            t.inherited = f.3.clone();
+                        }
                         if part_pick.is_some() {
                             // The section's own pick: that, and nothing else, is its.
                             if picked_here {
@@ -376,9 +416,7 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
                             }
                         } else if is_active && overridden {
                             t.state = Some(State::Swapped);
-                        } else if let Some(f) = from.iter().find(|f| f.0 == *kind && f.1 == m.name && f.2 == v) {
-                            t.inherited = f.3.clone();
-                        } else if is_active {
+                        } else if is_active && t.inherited.is_empty() {
                             t.state = Some(State::Playing);
                         }
                         if k == 0 && !m.used_by.is_empty() {
@@ -431,7 +469,10 @@ struct SongFilter {
 }
 
 #[component]
-pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>) -> Element {
+pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: Option<bool>) -> Element {
+    // Narrow (a sidebar): the kinds, then a kind's things, as steps.
+    let narrow = narrow.unwrap_or(false);
+    let mut opened = use_signal(|| false);
     let build = use_context::<BuildPick>();
     let data = use_data(state);
     use_context_provider(|| BrowserCtx { data });
@@ -444,6 +485,23 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>) -> Eleme
         _ => "patches",
     };
     let mut kind_id = use_signal(|| home.to_string());
+    // A new kind of target, or a new mode, takes the browser to where it
+    // builds (a part or a stack: patches; Preset: Core; Setlist: songs).
+    let home_key = format!(
+        "{}:{}",
+        match &target {
+            Target::Part(_) => "part",
+            Target::Stack(_) => "stack",
+            Target::Preset(..) => "preset",
+            Target::None => "none",
+        },
+        d.perf.perform_mode
+    );
+    let mut last_home = use_signal(|| home_key.clone());
+    if *last_home.peek() != home_key {
+        last_home.set(home_key.clone());
+        kind_id.set(home.to_string());
+    }
     let mut query = use_signal(String::new);
     let mut searching = use_signal(|| false);
     let filter = use_signal(SongFilter::default);
@@ -453,7 +511,8 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>) -> Eleme
     let q = query().trim().to_lowercase();
     let search_open = searching() || !q.is_empty();
     let titled = target != Target::None;
-    let filters = kind == Kind::Songs;
+    // The song filters, with Songs open (narrow: once inside it).
+    let filters = kind == Kind::Songs && (!narrow || opened());
 
     // The target, in words.
     let title = match &target {
@@ -509,19 +568,15 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>) -> Eleme
         }
     };
     let song_things = things(&Kind::Songs, &d, &target, &set_songs);
-    // The picked section's own pick of this kind, to clear.
     let rig_clear = use_hook(try_consume_context::<RigClient>);
-    let own_pick: Option<(String, String)> = match (&target, &kind) {
-        (Target::Part(k), Kind::Module(_) | Kind::Block(_)) => d.perf.parts.get(*k).and_then(|p| {
-            p.picks
-                .iter()
-                .find(|x| match &kind {
-                    Kind::Module(m) => x.kind.eq_ignore_ascii_case(m),
-                    Kind::Block(t) => x.kind.starts_with("block:") && d.comp.block_presets.iter().any(|b| b.name == x.preset && b.block_type.eq_ignore_ascii_case(t)),
-                    _ => false,
-                })
-                .map(|x| (p.name.clone(), x.kind.clone()))
-        }),
+    // Everything the picked part carries of its own, to clear at once.
+    let own: Option<(String, Vec<String>)> = match &target {
+        Target::Part(k) => d.perf.parts.get(*k).filter(|p| !p.picks.is_empty()).map(|p| (p.name.clone(), p.picks.iter().map(|x| x.kind.clone()).collect())),
+        _ => None,
+    };
+    // ‹ › through the song's parts.
+    let step = match &target {
+        Target::Part(k) => Some((*k, d.perf.parts.len())),
         _ => None,
     };
     let pick_part = build.part;
@@ -531,6 +586,17 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>) -> Eleme
             // What it's for, the filters, the search — the macro bar's height.
             div { style: "flex-shrink: 0; height: {HEADER_H}px; display: flex; flex-direction: column; justify-content: center; border-bottom: 1px solid {RULE}; box-sizing: border-box;",
                 div { style: "display: flex; align-items: center; gap: 8px; height: {pick(titled, 42, 48)}px; padding: {pick(titled, \"0 4px 0 14px\", \"0 4px 0 12px\")};",
+                    // Narrow, inside a kind: back to them all.
+                    if narrow && opened() && q.is_empty() {
+                        button {
+                            "aria-label": "All kinds",
+                            style: "width: 44px; height: 44px; margin-left: -12px; flex-shrink: 0; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;",
+                            onclick: move |_| opened.set(false),
+                            svg { width: "9", height: "15", view_box: "0 0 9 15",
+                                path { d: "M7.5 1.5 1.5 7.5l6 6", fill: "none", stroke: INK_2, stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round" }
+                            }
+                        }
+                    }
                     if !titled && search_open {
                         span { style: "flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;", {search_field.clone()} }
                     }
@@ -540,15 +606,29 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>) -> Eleme
                     if titled || (!search_open && !filters) {
                         span { style: "flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 7px; white-space: nowrap; overflow: hidden;", {title} }
                     }
-                    if let Some((part, pick_kind)) = own_pick.clone() {
+                    // Clear what the part carries of its own, in one go.
+                    if let Some((part, kinds)) = own.clone() {
                         button {
-                            style: "height: 44px; padding: 0 12px; border: none; background: transparent; border-radius: {R}; font-size: 13px; font-weight: 700; color: {INK_2}; font-family: {FONT}; cursor: pointer; display: flex; align-items: center; gap: 6px;",
+                            style: "height: 32px; padding: 0 10px; border: 1px solid {RULE_STRONG}; background: transparent; border-radius: {R}; font-size: 12.5px; font-weight: 700; color: {INK_2}; font-family: {FONT}; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; box-sizing: border-box;",
                             onclick: move |_| {
-                                let (part, pick_kind) = (part.clone(), pick_kind.clone());
-                                call!(rig_clear, |r| r.clear_part_pick(part, pick_kind));
+                                for k in kinds.clone() {
+                                    let part = part.clone();
+                                    call!(rig_clear, |r| r.clear_part_pick(part, k));
+                                }
                             },
-                            OverrideIcon { colour: kind.colour(), size: 11 }
-                            "Clear"
+                            svg { width: "12", height: "12", view_box: "0 0 12 12",
+                                path { d: "M2 2l8 8M10 2l-8 8", stroke: INK_2, stroke_width: "1.6", stroke_linecap: "round" }
+                            }
+                            "Clear {kinds_label(own.as_ref().map_or(0, |o| o.1.len()))}"
+                        }
+                    }
+                    // Step the part through the song — set a whole song
+                    // without going back to the setlist.
+                    if let Some((at, n)) = step {
+                        span { style: "display: flex; align-items: center;",
+                            StepButton { back: true, to: at.checked_sub(1), part: pick_part }
+                            span { style: "font-size: 12px; color: {INK_3}; min-width: 34px; text-align: center; font-variant-numeric: tabular-nums;", "{at + 1}/{n}" }
+                            StepButton { back: false, to: (at + 1 < n).then_some(at + 1), part: pick_part }
                         }
                     }
                     if let Target::Part(_) = target {
@@ -591,16 +671,18 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>) -> Eleme
             }
 
             div { style: "flex: 1; min-height: 0; display: flex;",
-                // The kinds.
-                nav { style: "width: 188px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid {RULE}; padding-bottom: 12px;",
+                // The kinds (narrow: the first step, the whole width).
+                if !narrow || (!opened() && q.is_empty()) {
+                nav { style: "width: {pick(narrow, \"100%\", \"188px\")}; flex-shrink: 0; overflow-y: auto; border-right: {pick(narrow, \"none\", RULE_LINE)}; padding-bottom: 12px; box-sizing: border-box;",
                     for (gi, group) in ["Library", "Sounds", "Modules", "Blocks"].iter().enumerate() {
                         div { key: "{gi}",
                             div { style: "padding: 14px 16px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_3};", "{group}" }
                             for k in all.iter().filter(|k| k.group() == *group).cloned() {
-                                KindRow { key: "{k.id()}", kind: k.clone(), on: q.is_empty() && k.id() == kind_id(), items: things(&k, &d, &target, &set_songs), onclick: {
+                                KindRow { key: "{k.id()}", kind: k.clone(), on: !narrow && q.is_empty() && k.id() == kind_id(), chevron: narrow, items: things(&k, &d, &target, &set_songs), onclick: {
                                     let id = k.id();
                                     move |_| {
                                         kind_id.set(id.clone());
+                                        opened.set(true);
                                         query.set(String::new());
                                     }
                                 } }
@@ -608,7 +690,9 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>) -> Eleme
                         }
                     }
                 }
+                }
                 // The things.
+                if !narrow || opened() || !q.is_empty() {
                 div { style: "position: relative; flex: 1; min-width: 0; overflow-y: auto; display: flex; flex-direction: column;",
                     if !q.is_empty() {
                         SearchResults { d: d.clone(), target: target.clone(), set_songs: set_songs.clone(), q: q.clone() }
@@ -621,6 +705,7 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>) -> Eleme
                         }
                     }
                 }
+                }
             }
         }
     }
@@ -630,7 +715,7 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>) -> Eleme
 fn applies(kind: &Kind, target: &Target, d: &Data) -> bool {
     match kind {
         Kind::Songs => d.perf.perform_mode == 2,
-        Kind::Patches => matches!(target, Target::Part(_)),
+        Kind::Patches => matches!(target, Target::Part(_) | Target::Stack(_)),
         Kind::Profiles => true,
         Kind::Presets => !matches!(target, Target::Part(_)),
         Kind::Module(_) | Kind::Block(_) => *target != Target::None,
@@ -645,14 +730,22 @@ fn apply(rig: Option<RigClient>, kind: &Kind, target: &Target, d: &Data, t: &Thi
             let name = t.name.clone();
             call!(rig, |r| r.add_setlist_entry(set, name));
         }
-        Kind::Patches => {
-            if let Target::Part(k) = target
-                && let Some(part) = d.perf.parts.get(*k)
-            {
-                let (part, patch) = (part.name.clone(), t.name.clone());
-                call!(rig, |r| r.set_part_patch(part, patch));
+        Kind::Patches => match target {
+            Target::Part(k) => {
+                if let Some(part) = d.perf.parts.get(*k) {
+                    let (part, patch) = (part.name.clone(), t.name.clone());
+                    call!(rig, |r| r.set_part_patch(part, patch));
+                }
             }
-        }
+            // In the stack already: a tap takes it out; else in it goes.
+            Target::Stack(i) => {
+                if let Some(st) = d.perf.stacks.get(*i) {
+                    let (stack, patch, on) = (st.name.clone(), t.name.clone(), t.state != Some(State::In));
+                    call!(rig, |r| r.set_stack_patch(stack, patch, on));
+                }
+            }
+            _ => {}
+        },
         Kind::Profiles => {
             let name = t.name.clone();
             call!(rig, |r| r.select_profile(name));
@@ -667,7 +760,12 @@ fn apply(rig: Option<RigClient>, kind: &Kind, target: &Target, d: &Data, t: &Thi
                 // A section picked: the section's own, over its patch.
                 Target::Part(k) => {
                     if let Some(part) = d.perf.parts.get(*k).map(|x| x.name.clone()) {
-                        call!(rig, |r| r.choose_part_module(part, m, p, v));
+                        // Picking what is inherited anyway clears the override.
+                        if !t.inherited.is_empty() {
+                            call!(rig, |r| r.clear_part_pick(part, m));
+                        } else {
+                            call!(rig, |r| r.choose_part_module(part, m, p, v));
+                        }
                     }
                 }
                 _ => call!(rig, |r| r.choose_module(m, p, v)),
@@ -718,7 +816,7 @@ fn SearchGlyph(size: u32, colour: &'static str) -> Element {
 /// A kind in the rail: tinted by its colour (stronger when open), and what
 /// is in use there now — an override, or what a preset higher up chose.
 #[component]
-fn KindRow(kind: Kind, on: bool, items: Vec<Thing>, onclick: EventHandler<MouseEvent>) -> Element {
+fn KindRow(kind: Kind, on: bool, chevron: bool, items: Vec<Thing>, onclick: EventHandler<MouseEvent>) -> Element {
     let colour = kind.colour();
     let cur = items.iter().find(|i| matches!(i.state, Some(State::Playing | State::Swapped))).or_else(|| items.iter().find(|i| !i.inherited.is_empty()));
     let swapped = cur.is_some_and(|c| c.state == Some(State::Swapped));
@@ -741,6 +839,11 @@ fn KindRow(kind: Kind, on: bool, items: Vec<Thing>, onclick: EventHandler<MouseE
                         if inherited_only { InheritIcon { colour: INK_3.to_string(), size: 11 } }
                         span { style: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{l}" }
                     }
+                }
+            }
+            if chevron {
+                svg { width: "7", height: "12", view_box: "0 0 7 12", style: "flex-shrink: 0;",
+                    path { d: "M1 1l5 5-5 5", fill: "none", stroke: INK_3, stroke_width: "1.5", stroke_linecap: "round", stroke_linejoin: "round" }
                 }
             }
         }
@@ -805,6 +908,8 @@ fn Row(kind: Kind, item: Thing, sub: String, applies: bool) -> Element {
             span { style: "width: 18px; display: flex; justify-content: center; flex-shrink: 0;",
                 if item.profile_mark {
                     ProfileIcon { name: item.name.clone(), colour: item.colour.clone(), size: 16 }
+                } else if !item.source.is_empty() {
+                    span { style: "width: 10px; height: 10px; border-radius: 999px; background: {item.source};" }
                 } else {
                     span { style: "width: 10px; height: 10px; border-radius: 3px; background: {item.colour};" }
                 }
@@ -979,6 +1084,11 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
         _ => None,
     };
     let song = d.perf.songs.get(d.perf.song_index as usize).map(|s| s.name.clone()).unwrap_or_default();
+    // Filling a stack (Profile mode): a patch row puts it in or takes it out.
+    let fill = match &target {
+        Target::Stack(i) => d.perf.stacks.get(*i).cloned(),
+        _ => None,
+    };
     rsx! {
         div { style: "height: 100%; display: flex; min-height: 0;",
             div { style: "width: 38%; max-width: 240px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid {RULE};",
@@ -998,7 +1108,7 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
                                 ProfileIcon { name: p.name.clone(), colour: name_colour(&p.name).to_string(), size: 16 }
                                 span { style: "flex: 1; min-width: 0; font-size: 15px; font-weight: {pick(on, 700, 600)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
                                 if p.active {
-                                    span { style: "font-size: 12px; font-weight: 700; color: {LIVE};", "Playing" }
+                                    span { style: "font-size: 12px; font-weight: 700; color: {LIVE};", if part.is_some() { "The song's" } else { "Playing" } }
                                 }
                             }
                         }
@@ -1010,7 +1120,7 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
                     div { style: "display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 12px 8px 16px; border-bottom: 1px solid {RULE}; box-sizing: border-box;",
                         ProfileIcon { name: p.name.clone(), colour: name_colour(&p.name).to_string(), size: 18 }
                         span { style: "flex: 1; min-width: 0; font-size: 17px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
-                        if !song.is_empty() && !p.active {
+                        if part.is_some() && !song.is_empty() && !p.active {
                             button {
                                 style: "height: 36px; padding: 0 12px; border-radius: {R}; border: 1px solid {RULE_STRONG}; background: transparent; color: {INK}; font-size: 13px; font-weight: 700; font-family: {FONT}; white-space: nowrap; cursor: pointer;",
                                 onclick: {
@@ -1028,16 +1138,42 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
                         {
                             let (tape, _) = crate::perform::folder_color(&st);
                             let patches: Vec<String> = p.patch_list.iter().filter(|x| x.stack == st).map(|x| x.name.clone()).collect();
+                            // A part can play the whole stack: it opens on the
+                            // stack's first patch, the switch rotating on.
+                            let first = patches.first().cloned();
+                            let stack_on = part.as_ref().zip(first.as_ref()).is_some_and(|(pp, f)| pp.patch.eq_ignore_ascii_case(f));
+                            let stack_click = {
+                                let (rig, part_name, borrowed) = (rig.clone(), part.as_ref().map(|pp| pp.name.clone()), (!p.active).then(|| p.name.clone()));
+                                let first = first.clone();
+                                move |_| {
+                                    let (Some(pn), Some(f)) = (part_name.clone(), first.clone()) else { return };
+                                    call!(rig, |r| r.set_part_patch(pn, f));
+                                    if let (Some(b), Some(pn)) = (borrowed.clone(), part_name.clone()) {
+                                        call!(rig, |r| r.set_part_profile(pn, b));
+                                    }
+                                }
+                            };
                             rsx! {
                                 section { key: "{st}", style: "border-bottom: 1px solid {RULE};",
-                                    div { style: "display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 16px;",
+                                    button {
+                                        disabled: part.is_none(),
+                                        style: "position: relative; width: 100%; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 16px; border: none; text-align: left; background: {pick(stack_on, tint(tape, 14), CLEAR.to_string())}; color: {INK}; font-family: {FONT}; cursor: {pick(part.is_some(), \"pointer\", \"default\")};",
+                                        onclick: stack_click,
+                                        if stack_on {
+                                            span { style: "position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 2px 2px 0; background: {LIVE};" }
+                                        }
                                         span { style: "width: 12px; height: 12px; border-radius: 3px; background: {tape}; flex-shrink: 0;" }
                                         span { style: "flex: 1; min-width: 0; font-size: 16px; font-weight: 750;", "{st}" }
+                                        if part.is_some() {
+                                            span { style: "font-size: 12px; font-weight: 700; color: {pick(stack_on, LIVE, INK_3)};", if stack_on { "Plays the stack" } else { "Whole stack" } }
+                                        }
                                     }
                                     for name in patches {
                                         {
-                                            let on = part.as_ref().is_some_and(|pp| pp.patch.eq_ignore_ascii_case(&name));
-                                            let can = part.is_some();
+                                            let in_fill = fill.as_ref().is_some_and(|f| f.patches.iter().any(|x| x.eq_ignore_ascii_case(&name)));
+                                            let on = part.as_ref().is_some_and(|pp| pp.patch.eq_ignore_ascii_case(&name)) || in_fill;
+                                            let can = part.is_some() || fill.is_some();
+                                            let fill_stack = fill.as_ref().map(|f| f.name.clone());
                                             let (rig, part_name, patch, borrowed) = (rig.clone(), part.as_ref().map(|pp| pp.name.clone()).unwrap_or_default(), name.clone(), (!p.active).then(|| p.name.clone()));
                                             rsx! {
                                                 button {
@@ -1045,6 +1181,11 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
                                                     disabled: !can,
                                                     style: "position: relative; width: 100%; min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 4px 16px 4px 38px; border: none; text-align: left; background: {pick(on, \"rgba(255,255,255,0.06)\", CLEAR)}; color: {INK}; font-family: {FONT}; cursor: {pick(can, \"pointer\", \"default\")};",
                                                     onclick: move |_| {
+                                                        if let Some(stack) = fill_stack.clone() {
+                                                            let pa = patch.clone();
+                                                            call!(rig, |r| r.set_stack_patch(stack, pa, !in_fill));
+                                                            return;
+                                                        }
                                                         let (pn, pa) = (part_name.clone(), patch.clone());
                                                         call!(rig, |r| r.set_part_patch(pn, pa));
                                                         if let Some(b) = borrowed.clone() {
@@ -1055,7 +1196,7 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
                                                     span { style: "position: absolute; left: 21px; top: 0; bottom: 0; width: 1.5px; background: color-mix(in oklab, {tape} 45%, transparent);" }
                                                     span { style: "width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; box-sizing: border-box; background: {pick(on, tape, CLEAR)}; border: 1.5px solid {tape};" }
                                                     span { style: "flex: 1; min-width: 0; font-size: 15px; font-weight: {pick(on, 700, 540)}; color: {pick(on, INK, INK_2)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{name}" }
-                                                    if on { span { style: "font-size: 12px; font-weight: 700; color: {LIVE};", "Playing" } }
+                                                    if on { span { style: "font-size: 12px; font-weight: 700; color: {LIVE};", if in_fill { "In" } else { "Playing" } } }
                                                 }
                                             }
                                         }
@@ -1374,3 +1515,68 @@ fn SongRow(d: Data, item: Thing, add: bool) -> Element {
         }
     }
 }
+
+/// Every patch the rig knows, once, as `(name, stack, from)`: each
+/// profile's, then the songs' own.
+fn all_patches(d: &Data) -> Vec<(String, String, String)> {
+    let mut out: Vec<(String, String, String)> = Vec::new();
+    for p in &d.lib.profiles {
+        for x in &p.patch_list {
+            if !x.stack.is_empty() && !out.iter().any(|o| o.0.eq_ignore_ascii_case(&x.name)) {
+                let from = if x.song.is_empty() { p.name.clone() } else { format!("{}'s own", x.song) };
+                out.push((x.name.clone(), x.stack.clone(), from));
+            }
+        }
+    }
+    for x in &d.patches {
+        if !out.iter().any(|o| o.0.eq_ignore_ascii_case(&x.name)) {
+            let stack = if x.stack.is_empty() { "Special".to_string() } else { x.stack.clone() };
+            out.push((x.name.clone(), stack, "a song's own".to_string()));
+        }
+    }
+    out
+}
+
+/// A patch's source for `profile`: its own (`true`), borrowed from another
+/// profile, or (neither) a song's own.
+fn source_of(lib: &LibraryModel, profile: &str, patch: &str) -> (bool, Option<String>) {
+    // A song's own patch is merged into the profile while it plays: not
+    // the profile's own.
+    let mine = lib.profiles.iter().any(|p| p.name.eq_ignore_ascii_case(profile) && p.patch_list.iter().any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch)));
+    if mine {
+        return (true, None);
+    }
+    (false, lib.profiles.iter().find(|p| p.patch_list.iter().any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch))).map(|p| p.name.clone()))
+}
+
+/// "n overrides".
+fn kinds_label(n: usize) -> String {
+    format!("{n} override{}", if n == 1 { "" } else { "s" })
+}
+
+/// ‹ or ›: pick the part before or after; dim at the ends.
+#[component]
+fn StepButton(back: bool, to: Option<usize>, part: Signal<Option<usize>>) -> Element {
+    let ink = if to.is_some() { INK_2 } else { DIM };
+    rsx! {
+        button {
+            disabled: to.is_none(),
+            "aria-label": if back { "Previous section" } else { "Next section" },
+            style: "width: 40px; height: 44px; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;",
+            onclick: move |_| {
+                if let Some(k) = to {
+                    let mut p = part;
+                    p.set(Some(k));
+                }
+            },
+            svg { key: "{ink}", width: "9", height: "15", view_box: "0 0 9 15", style: "{pick(back, NOTHING, FLIPPED)}",
+                path { d: "M7.5 1.5 1.5 7.5l6 6", fill: "none", stroke: ink, stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round" }
+            }
+        }
+    }
+}
+
+const FLIPPED: &str = "transform: scaleX(-1);";
+
+/// The rail's right-hand rule.
+const RULE_LINE: &str = "1px solid #222228";

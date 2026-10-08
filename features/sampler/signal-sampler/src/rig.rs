@@ -2255,6 +2255,15 @@ impl GuitarRig {
         let _ = on;
     }
 
+    /// The output check: a tone on `output` (1 main, 2 phones), on its
+    /// `left` and/or `right` side; neither stops it.
+    pub fn set_test_tone(output: u32, left: bool, right: bool) {
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
+        daw::standalone::audio_engine::PhonesBus::shared().set_test_tone(output, left, right);
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
+        let _ = (output, left, right);
+    }
+
     /// Mute the main output pair only (routed interfaces): the phones keep
     /// the signal.
     pub fn set_main_pair_mute(on: bool) {

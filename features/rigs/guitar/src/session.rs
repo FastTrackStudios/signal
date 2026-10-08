@@ -390,6 +390,9 @@ pub struct GuitarRigBackend {
     switch_actions: Arc<Mutex<Vec<String>>>,
     /// Stacks the part that is up tunes, in stack order.
     part_tuned: Arc<Mutex<Vec<bool>>>,
+    /// The song's switch rotations (stack, patches) as last tuned — what
+    /// the perf model shows before the engine is open to hold them.
+    song_rotations: Arc<Mutex<Vec<(String, Vec<String>)>>>,
     /// Where a held momentary switch goes back to on release.
     momentary_return: Arc<Mutex<Option<String>>>,
     /// The patch the last switch landed on (the drop log's "from").
@@ -564,6 +567,7 @@ impl GuitarRigBackend {
             switch_modes: Arc::new(Mutex::new(Vec::new())),
             switch_actions: Arc::new(Mutex::new(default_switch_actions(false))),
             part_tuned: Arc::new(Mutex::new(Vec::new())),
+            song_rotations: Arc::new(Mutex::new(Vec::new())),
             momentary_return: Arc::new(Mutex::new(None)),
             last_switched: Arc::new(Mutex::new(String::new())),
             open_prefs: Arc::new(Mutex::new(None)),
@@ -765,6 +769,12 @@ impl GuitarRigBackend {
                 setup.controllers.get(setup.controller_index as usize).map_or((0, false), |c| (c.channel, c.program_change))
             };
             let mut programs: Vec<u8> = Vec::new();
+            // Which switch a CC or note is (the log names it, for Setup's
+            // switches to light) — read before the log is locked.
+            let (tap_ccs, tap_notes) = {
+                let m = self.midi_map.lock_ok();
+                (m.tap_ccs.clone(), m.tap_notes.clone())
+            };
             {
                 let mut log = self.midi_log.lock_ok();
                 for msg in stream.drain() {
@@ -824,7 +834,16 @@ impl GuitarRigBackend {
                         }
                         _ => {}
                     }
-                    log.push(format!("{msg:?}"));
+                    let [status, d1, _] = msg.bytes();
+                    let switch = match status & 0xF0 {
+                        0xB0 => tap_ccs.iter().position(|c| *c == u32::from(d1)),
+                        0x80 | 0x90 => tap_notes.iter().position(|n| *n == u32::from(d1)),
+                        _ => None,
+                    };
+                    log.push(match switch {
+                        Some(i) => format!("Switch {} · {msg:?}", i + 1),
+                        None => format!("{msg:?}"),
+                    });
                     let len = log.len();
                     if len > 128 {
                         log.drain(0..len - 128);
@@ -2365,6 +2384,14 @@ impl GuitarRigBackend {
     /// Mark the last-active position (setlist/song/part/patch/tempo) for
     /// the pump's debounced flush to `last-state.styx`.
     fn mark_state_dirty(&self) {
+        // With no engine open the pump does not tick (a device with no
+        // interface yet): save now, or the position is never kept.
+        // `try_lock`: a caller may hold the rig — and then there is one.
+        let no_engine = self.rig.try_lock().is_ok_and(|g| g.is_none());
+        if no_engine && !crate::library::rig_is_design() {
+            RigLibrary::save_last_state(&self.snapshot_last_state());
+            return;
+        }
         self.state_dirty
             .store(true, std::sync::atomic::Ordering::Relaxed);
     }
@@ -2378,15 +2405,26 @@ impl GuitarRigBackend {
             .as_ref()
             .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
             .unwrap_or_default();
+        // One lock at a time, each released before the next: guards taken
+        // inside the struct literal would all live until it is built, and
+        // holding `song_index` while waiting on `profile_def` deadlocks
+        // against `design_profile`, which takes them the other way round.
+        let setlist_index = *self.setlist_index.lock_ok() as u32;
+        let song_index = *self.song_index.lock_ok() as u32;
+        let part_index = *self.part_index.lock_ok() as u32;
+        let tempo_bpm = self.tempo.lock_ok().unwrap_or(0.0);
+        let profile = self.profile_def.lock_ok().name.clone();
+        let perform_mode = *self.perform_mode.lock_ok();
+        let master_trim_db = *self.master_trim.lock_ok();
         crate::library::LastState {
-            setlist_index: *self.setlist_index.lock_ok() as u32,
-            song_index: *self.song_index.lock_ok() as u32,
-            part_index: *self.part_index.lock_ok() as u32,
+            setlist_index,
+            song_index,
+            part_index,
             active_patch,
-            tempo_bpm: self.tempo.lock_ok().unwrap_or(0.0),
-            profile: self.profile_def.lock_ok().name.clone(),
-            perform_mode: *self.perform_mode.lock_ok(),
-            master_trim_db: *self.master_trim.lock_ok(),
+            tempo_bpm,
+            profile,
+            perform_mode,
+            master_trim_db,
             phones_volume: hp.volume,
             phones_guitar: hp.self_mix,
             phones_mix: hp.mix_level,
@@ -3424,7 +3462,13 @@ impl GuitarRigBackend {
                     // distinction is audible.
                     // Except an amp slot with nothing loaded: lit, it reads
                     // as a second amp that is playing.
-                    bypassed: block.block_type == BlockType::Amp && block.asset_path().is_empty(),
+                    //
+                    // With no interface on a real run (a phone or iPad with
+                    // nothing plugged in) the patch's own bypass shows: the
+                    // macro bar reads Pitch and Motion as off, as it will
+                    // play.
+                    bypassed: (block.block_type == BlockType::Amp && block.asset_path().is_empty())
+                        || (!crate::library::rig_is_design() && block.bypassed),
                     param_name,
                     param_value,
                     param_min,
@@ -3635,14 +3679,15 @@ impl GuitarRigBackend {
                 (mode, tuned)
             })
             .unzip();
+        let rotations: Vec<(String, Vec<String>)> = defaults
+            .iter()
+            .filter(|d| !d.patches.is_empty())
+            .map(|d| (d.stack.clone(), d.patches.clone()))
+            .collect();
+        *self.song_rotations.lock_ok() = rotations.clone();
         if let Some(prig) = self.rig.lock_ok().as_mut() {
             // A stack whose rotation is unchanged keeps its cursor — after a
             // reload this is the same tuning again, and no switch moves.
-            let rotations: Vec<(String, Vec<String>)> = defaults
-                .iter()
-                .filter(|d| !d.patches.is_empty())
-                .map(|d| (d.stack.clone(), d.patches.clone()))
-                .collect();
             prig.retune_stacks(&rotations);
             let no_rotate: Vec<bool> = modes.iter().map(|m| m.no_rotate).collect();
             prig.set_no_rotate(&no_rotate);
@@ -4654,6 +4699,11 @@ impl GuitarRigBackend {
     /// marked as not playing, every patch choosable and editable. The device
     /// opens on the same patch when [`start`](RigBackend::start) runs.
     pub fn show_without_audio(&self) {
+        // Where the player was is library data, not the device's: the set,
+        // song, part and mode come back whether or not an interface is in.
+        self.restore_last_state();
+        self.open_todays_setlist();
+        self.apply_song_stacks();
         self.show_chain_offline(signal_guitar_proto::BlockEngine::NO_AUDIO);
         self.publish_state();
     }
@@ -5730,7 +5780,22 @@ impl Rig for GuitarRigBackend {
             let rig = self.rig.lock_ok();
             let def = self.profile_def.lock_ok();
             rig.as_ref().map_or_else(
-                || build_perf_model_static(&def, &live),
+                || {
+                    // No engine to hold the song's rotations: lay them over
+                    // the profile's here, as the engine would.
+                    let mut m = build_perf_model_static(&def, &live);
+                    for (stack, patches) in self.song_rotations.lock_ok().iter() {
+                        if let Some(st) = m.stacks.iter_mut().find(|s| s.name.eq_ignore_ascii_case(stack)) {
+                            let at = patches.iter().position(|p| !live.is_empty() && p.eq_ignore_ascii_case(&live));
+                            st.patches = patches.clone();
+                            st.patch_count = patches.len() as u32;
+                            st.position = at.unwrap_or(0) as u32;
+                            st.is_active = at.is_some();
+                            st.current_patch = patch_display(&st.name, patches.get(st.position as usize).map_or("", String::as_str));
+                        }
+                    }
+                    m
+                },
                 |prig| build_perf_model(prig, &def),
             )
         };
@@ -7222,6 +7287,64 @@ impl Rig for GuitarRigBackend {
         self.reload_rebuilt(rebuilt);
     }
 
+    fn set_stack_patch(&self, stack: String, patch: String, on: bool) {
+        let patch = patch.trim().to_string();
+        if patch.is_empty() {
+            return;
+        }
+        // A patch from elsewhere, found before the profile is locked.
+        let elsewhere = {
+            let others = self.other_profiles.lock_ok();
+            others
+                .iter()
+                .flat_map(|p| p.patches.iter())
+                .find(|p| p.name.eq_ignore_ascii_case(&patch))
+                .cloned()
+        }
+        .or_else(|| {
+            self.songs_lib
+                .lock_ok()
+                .iter()
+                .flat_map(|s| s.patches.iter())
+                .find(|p| p.name.eq_ignore_ascii_case(&patch))
+                .cloned()
+        });
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let Some(at) = def.stacks.iter().position(|s| s.name.eq_ignore_ascii_case(&stack)) else {
+                tracing::warn!("set_stack_patch: no stack '{stack}'");
+                return;
+            };
+            let has = def.stacks[at].patches.iter().any(|p| p.eq_ignore_ascii_case(&patch));
+            if on == has {
+                return;
+            }
+            if on {
+                if !def.patches.iter().any(|p| p.name.eq_ignore_ascii_case(&patch)) {
+                    let first = def.stacks[at].patches.first().cloned();
+                    let copy = elsewhere.or_else(|| {
+                        first.and_then(|f| def.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&f)).cloned())
+                    });
+                    let Some(mut copy) = copy else {
+                        tracing::warn!("set_stack_patch: nothing to make '{patch}' from");
+                        return;
+                    };
+                    copy.name = patch.clone();
+                    copy.song = String::new();
+                    def.patches.push(copy);
+                }
+                def.stacks[at].patches.push(patch.clone());
+            } else {
+                def.stacks[at].patches.retain(|p| !p.eq_ignore_ascii_case(&patch));
+            }
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&self.effective_def(&def), &dps)
+        };
+        tracing::info!(stack = %stack, patch = %patch, on, "stack patch set");
+        self.reload_rebuilt(rebuilt);
+    }
+
     fn rename_stack(&self, old: String, new_name: String) {
         if new_name.trim().is_empty() {
             return;
@@ -7776,6 +7899,16 @@ impl Rig for GuitarRigBackend {
 
     fn midi_recent(&self) -> Vec<String> {
         self.midi_log.lock_ok().clone()
+    }
+
+    fn midi_ports(&self) -> Vec<String> {
+        architect::rig::RigBackend::midi_ports(self)
+    }
+
+    fn test_tone(&self, output: String, side: u32) {
+        let which = if output == "phones" { 2 } else { 1 };
+        GuitarRig::set_test_tone(which, side & 1 != 0, side & 2 != 0);
+        tracing::info!(audio.test_output = %output, audio.test_side = side, "output check");
     }
 
     fn toggle_fx(&self) {
@@ -8490,6 +8623,7 @@ impl Rig for GuitarRigBackend {
                         })
                         .map(|st| st.name.clone())
                         .unwrap_or_default(),
+                    song: patch.song.clone(),
                 })
                 .collect(),
             default_patch: p.default_patch.clone(),
@@ -10035,7 +10169,7 @@ impl signal_rigs_proto::rig_core::RigCore for GuitarRigBackend {
         Rig::select_patch(self, index);
     }
     fn midi_ports(&self) -> Vec<String> {
-        architect::rig::RigBackend::midi_ports(self)
+        Rig::midi_ports(self)
     }
     fn set_midi_port(&self, _name: String) {
         // The guitar rig is omni (all footswitch ports merged) — no port
