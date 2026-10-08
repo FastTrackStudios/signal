@@ -1,0 +1,192 @@
+//! The switches — the prototype's `dock/Switches.tsx` on the rig: the
+//! footswitch grid, flush, two rows of five.
+//!
+//!   row A   switches 6–10, the hold layer (a foot's hold lives "up" from
+//!           the toe): Ambient · FX Toggle · Song · Boost · Tuner
+//!   row B   switches 1–5: the profile's first four stacks, then Tap Tempo
+//!
+//! A stack switch plays its stack; pressed again it steps through it. Its
+//! tile is the stack's colour, lit when it plays, dimmed toward the grid
+//! when not.
+
+use dioxus::prelude::*;
+use signal_guitar_proto::rig::RigClient;
+use signal_guitar_proto::{PerfStack, PerformanceModel};
+
+use super::tokens::*;
+
+/// perform::folder_color: a stack's tile and its text — dark on the bright
+/// tiles (white on orange or red reads at under 4:1).
+fn folder(name: &str) -> (&'static str, &'static str) {
+    match name.to_ascii_lowercase().as_str() {
+        "clean" => ("#38bdf8", "#082f49"),
+        "crunch" => ("#2563eb", "#ffffff"),
+        "drive" | "rhythm" => ("#f97316", "#1c0d02"),
+        "lead" => ("#ef4444", "#1f0606"),
+        "ambient" => ("#06b6d4", "#04222a"),
+        _ => ("#3f3f46", "#e4e4e7"),
+    }
+}
+
+/// switches::dim — a colour darkened toward the grid's ground.
+fn dim(hex: &str, amount: f64) -> String {
+    let ch = |i: usize| f64::from(u8::from_str_radix(hex.get(1 + i..3 + i).unwrap_or("00"), 16).unwrap_or(0));
+    let base = [10.0, 10.0, 12.0];
+    let c: Vec<String> = [0usize, 2, 4]
+        .iter()
+        .enumerate()
+        .map(|(k, &i)| format!("{}", (base[k] + (ch(i) - base[k]) * amount).round() as i32))
+        .collect();
+    format!("rgb({})", c.join(","))
+}
+
+const ROW: &str = "row";
+const COLUMN: &str = "column";
+const TAP_FLASH: &str = "#52525b";
+const TAP_BG: &str = "#3f3f46";
+
+/// The lit switch's ring, inside the tile: flush tiles have no room outside.
+const LIT_RING: &str = "box-shadow: inset 0 0 0 2px rgba(255,255,255,0.85);";
+
+macro_rules! call {
+    ($rig:expr, |$r:ident| $body:expr) => {{
+        if let Some($r) = $rig.clone() {
+            spawn(async move {
+                let _ = $body.await;
+            });
+        }
+    }};
+}
+
+#[component]
+pub fn TouchSwitches(perf: PerformanceModel) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let stacks = perf.stacks.clone();
+    let song = perf.songs.get(perf.song_index as usize).map(|s| s.name.clone()).unwrap_or_else(|| "—".to_string());
+    let fx = !perf.fx_bypass;
+    let boost = perf.boost_db.abs() > 0.01;
+    let boost_label = format!("{:+.0} dB", if boost { perf.boost_db } else { 3.0 });
+    rsx! {
+        div { style: "display: flex; flex-direction: column; background: #0a0a0c;",
+            // One grid, two rows of five, the same columns: the hold layer
+            // slim above, the switches under the feet tall below. Flush: a
+            // hairline of the ground between.
+            div { style: "display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: 44px 124px; gap: 1px; background: #000; border-top: 1px solid #000;",
+                if let Some(st) = stacks.get(4).cloned() {
+                    StackTile { no: 6, stack: st, index: 4, compact: true }
+                } else {
+                    Empty { no: 6 }
+                }
+                FnTile { no: 7, title: "FX Toggle", subtitle: if fx { "Time FX on".to_string() } else { "Time FX off".to_string() }, bg: "#ec4899", text: "#22050f", lit: fx,
+                    onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_fx()) } }
+                FnTile { no: 8, title: "Song", subtitle: song, bg: "#a78bfa", text: "#1e1b4b", lit: perf.perform_mode == 2,
+                    onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.next_song()) } }
+                FnTile { no: 9, title: "Boost", subtitle: if boost { boost_label.clone() } else { format!("{boost_label} · off") }, bg: "#fafafa", text: "#0a0a0a", lit: boost,
+                    onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_boost()) } }
+                FnTile { no: 10, title: "Tuner", subtitle: "A 440".to_string(), bg: "#3f3f46", text: "#e4e4e7", lit: perf.tuner_visible,
+                    onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_tuner()) } }
+                for i in 0..4usize {
+                    if let Some(st) = stacks.get(i).cloned() {
+                        StackTile { key: "m{i}", no: i as u32 + 1, stack: st, index: i, compact: false }
+                    } else {
+                        Empty { key: "m{i}", no: i as u32 + 1 }
+                    }
+                }
+                TapTempo { bpm: perf.tempo_bpm }
+            }
+        }
+    }
+}
+
+/// A stack's switch: lit in its folder colour when it plays, dark when not.
+/// The stack's name is the main sound; a variation gets a sub-label; dots
+/// say where the next press lands.
+#[component]
+fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let (bg, fg) = folder(&stack.name);
+    let lit = stack.is_active;
+    let variation = (!stack.current_patch.eq_ignore_ascii_case(&stack.name) && !stack.current_patch.is_empty()).then(|| stack.current_patch.clone());
+    let count = stack.patches.len().max(stack.patch_count as usize);
+    let pos = stack.position as usize;
+    let tile_bg = if lit { bg.to_string() } else { dim(bg, 0.24) };
+    let ink = if lit { fg.to_string() } else { dim(fg, 0.35) };
+    let ring = if lit { LIT_RING } else { NOTHING };
+    let dot = if compact { 5 } else { 6 };
+    rsx! {
+        button {
+            "aria-pressed": "{lit}",
+            style: "position: relative; min-width: 0; overflow: hidden; border: none; border-radius: 0; padding: 0 8px; display: flex; flex-direction: {pick(compact, ROW, COLUMN)}; align-items: center; justify-content: center; gap: {pick(compact, 8, 4)}px; background: {tile_bg}; color: {ink}; {ring} font-family: {FONT}; cursor: pointer;",
+            onclick: move |_| call!(rig, |r| r.press_stack(index as u32)),
+            SwitchNo { no, ink: ink.clone() }
+            span { style: "font-size: {pick(compact, 14, 24)}px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; color: {ink};", "{stack.name}" }
+            if let Some(v) = variation {
+                span { style: "font-size: {pick(compact, 11, 14)}px; font-weight: 600; opacity: {pick(compact, 0.8, 0.9)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: {ink};", "{v}" }
+            }
+            if count > 1 {
+                span { style: "display: flex; align-items: center; gap: {pick(compact, 4, 6)}px; margin-top: {pick(compact, 0, 4)}px;",
+                    for k in 0..count {
+                        span { key: "{k}", style: "width: {dot}px; height: {dot}px; border-radius: 999px; background: {ink}; opacity: {pick(k == pos, 0.95, 0.35)};" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A function switch: a title and what it is doing, lit in its colour.
+#[component]
+fn FnTile(no: u32, title: &'static str, subtitle: String, bg: &'static str, text: &'static str, lit: bool, onclick: EventHandler<MouseEvent>) -> Element {
+    let tile_bg = if lit { bg.to_string() } else { dim(bg, 0.3) };
+    let ink = if lit { text.to_string() } else { dim(text, 0.45) };
+    let ring = if lit { LIT_RING } else { NOTHING };
+    rsx! {
+        button {
+            "aria-pressed": "{lit}",
+            style: "position: relative; min-width: 0; overflow: hidden; border: none; border-radius: 0; padding: 0 8px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px; background: {tile_bg}; color: {ink}; {ring} font-family: {FONT}; cursor: pointer;",
+            onclick: move |e| onclick.call(e),
+            SwitchNo { no, ink: ink.clone() }
+            span { style: "font-size: 14px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; color: {ink};", "{title}" }
+            span { style: "font-size: 11px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {ink};", "{subtitle}" }
+        }
+    }
+}
+
+#[component]
+fn Empty(no: u32) -> Element {
+    rsx! {
+        div { style: "position: relative; background: #0e0e11;",
+            SwitchNo { no, ink: INK_3.to_string() }
+        }
+    }
+}
+
+#[component]
+fn TapTempo(bpm: u32) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut flash = use_signal(|| false);
+    let tempo = if bpm == 0 { 120 } else { bpm };
+    rsx! {
+        button {
+            style: "position: relative; border: none; border-radius: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: {pick(flash(), TAP_FLASH, TAP_BG)}; color: #e4e4e7; font-family: {FONT}; cursor: pointer;",
+            onclick: move |_| {
+                call!(rig, |r| r.tap_tempo());
+                flash.set(true);
+                spawn(async move {
+                    architect::platform::sleep(std::time::Duration::from_millis(90)).await;
+                    flash.set(false);
+                });
+            },
+            SwitchNo { no: 5, ink: "#e4e4e7".to_string() }
+            span { style: "font-size: 20px; font-weight: 700;", "Tap Tempo" }
+            span { style: "font-size: 14px; font-weight: 600; opacity: 0.8; font-variant-numeric: tabular-nums;", "{tempo} BPM" }
+        }
+    }
+}
+
+#[component]
+fn SwitchNo(no: u32, ink: String) -> Element {
+    rsx! {
+        span { style: "position: absolute; top: 5px; left: 9px; font-size: 11px; font-family: ui-monospace, monospace; opacity: 0.45; color: {ink};", "{no}" }
+    }
+}

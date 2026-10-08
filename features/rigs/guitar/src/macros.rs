@@ -489,6 +489,16 @@ fn away(t: f32, e: f32) -> Option<f32> {
     }
 }
 
+/// How a touch remote reads a bar knob (see `MacroKnobView::scale`).
+#[must_use]
+pub fn knob_scale(id: &str) -> &'static str {
+    match id {
+        "delay" | "reverb" | "space" => "wet",
+        "gain" | "tone" | "width" | "output" | "input" => "relative",
+        _ => "level",
+    }
+}
+
 /// A knob's offset from its position: −1 at 0, 0 at `rest`, 1 at 1.
 #[must_use]
 pub fn offset_of(value: f32, rest: f32) -> f32 {
@@ -2778,6 +2788,7 @@ impl MacroEngine {
                     tune: self.tune_views(k, blocks),
                     tuned: self.has_edits(&k.id),
                     snapshot: self.snapshot.clone(),
+                    scale: knob_scale(&k.id).to_string(),
                     children: k
                         .children
                         .iter()

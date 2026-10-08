@@ -288,13 +288,7 @@ pub fn GuitarRigRemote() -> Element {
                     onpointermove: move |e: PointerEvent| drag_bus.root_move(&e),
                     onpointerup: move |_| drag_bus.root_up(),
                     onpointercancel: move |_| drag_bus.root_up(),
-                    crate::tablet::TabletRemote { model: perf_now.clone(), state,
-                        switches: rsx! {
-                            if let Some((on_press, on_toggle_fx, on_toggle_boost, on_cycle_boost, on_tap_tempo, on_prev_song, on_next_song, on_select_song)) = controls {
-                                PerformGrid { model: perf_now.clone(), on_press, on_toggle_fx, on_toggle_boost, on_cycle_boost, on_tap_tempo, on_prev_song, on_next_song, on_select_song }
-                            }
-                        },
-                    }
+                    crate::tablet::TabletRemote { model: perf_now.clone(), state }
                     document::Style { {crate::theme::CSS} }
                 }
             }

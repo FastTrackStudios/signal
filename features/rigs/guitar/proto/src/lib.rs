@@ -987,6 +987,12 @@ pub struct MacroKnobView {
     /// bar's positions can be kept — empty when it plays none.
     #[facet(default)]
     pub snapshot: String,
+    /// How a touch remote reads the knob: `level` (0–100%, 0 is off — Gate,
+    /// Drive, Comp, Mod, Boost…), `wet` (0–200%, its normal level in the
+    /// middle, past it the dry falls away — Delay, Reverb, Space) or
+    /// `relative` (± around its rest — Gain, Tone, Width, Output).
+    #[facet(default)]
+    pub scale: String,
     pub children: Vec<MacroChildView>,
 }
 

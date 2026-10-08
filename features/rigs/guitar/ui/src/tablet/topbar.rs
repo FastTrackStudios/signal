@@ -1,0 +1,295 @@
+//! The top bar — the prototype's `TopBar`, `ModeButton`, `Safety`,
+//! `Settings` indicators, `Cpu` and `Meters`, on the rig.
+//!
+//!   over the sidebar   its toggle, and the footswitch mode (one button, its
+//!                      menu picks — a green line along its foot)
+//!   health & safety    Panic (with the health it fixes, far from Mute), the
+//!                      MIDI and Audio lights (a press opens Setup), CPU, the
+//!                      IN · OUT · PHONES meters, and Mute: a tap mutes the
+//!                      house, a hold offers muting fully
+
+use std::time::Duration;
+
+use dioxus::prelude::*;
+use signal_guitar_proto::rig::RigClient;
+use signal_guitar_proto::PerformanceModel;
+use signal_widgets::PopupHost;
+
+use super::menu::{open_menu, Item, Picked};
+use super::tokens::*;
+use crate::state::RigViewState;
+
+const MODES: [(u32, &str, &str); 3] = [(0, "Preset", "presets"), (1, "Profile", "its stacks"), (2, "Setlist", "the set")];
+
+#[component]
+pub fn TopBar(model: PerformanceModel, state: RigViewState, sidebar: bool, on_sidebar: EventHandler<()>, on_setup: EventHandler<&'static str>) -> Element {
+    let sidebar_ink = if sidebar { INK } else { INK_3 };
+    rsx! {
+        header { style: "height: {TOP_H}px; flex-shrink: 0; display: flex; align-items: stretch; border-bottom: 1px solid {RULE}; background: {SHEET}; box-sizing: border-box; font-family: {FONT};",
+            // Over the sidebar: its toggle and the mode the footswitches are in.
+            div { style: "width: {SIDEBAR_W}px; flex-shrink: 0; display: flex; align-items: stretch; border-right: 1px solid {RULE}; box-sizing: border-box;",
+                button {
+                    "aria-label": if sidebar { "Hide the setlist" } else { "Show the setlist" },
+                    style: "width: 52px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer;",
+                    onclick: move |_| on_sidebar.call(()),
+                    svg { key: "{sidebar}", width: "20", height: "20", view_box: "0 0 20 20",
+                        rect { x: "2.5", y: "3.5", width: "15", height: "13", rx: "2.5", fill: "none", stroke: sidebar_ink, stroke_width: "1.5" }
+                        path { d: "M8 4v12", stroke: sidebar_ink, stroke_width: "1.5" }
+                    }
+                }
+                Rule {}
+                ModeButton { mode: model.perform_mode }
+                Rule {}
+                span { style: "flex: 1;" }
+            }
+            span { style: "flex: 1;" }
+            Rule {}
+            PanicButton {}
+            Rule {}
+            Indicator { kind: "midi", ok: true, onclick: move |_| on_setup.call("midi") }
+            Indicator { kind: "audio", ok: *state.running.read(), onclick: move |_| on_setup.call("audio") }
+            Cpu { cpu: f64::from(state.dsp.read().cpu) }
+            Rule {}
+            Meters { input: *state.in_level.read(), output: *state.out_level.read(), house: model.headphone.main_mute, phones: model.headphone.phones_mute }
+            Rule {}
+            MuteButton { house: model.headphone.main_mute, phones: model.headphone.phones_mute }
+        }
+    }
+}
+
+#[component]
+pub fn Rule() -> Element {
+    rsx! { span { style: "width: 1px; align-self: center; height: 22px; background: {RULE}; flex-shrink: 0;" } }
+}
+
+/// The footswitch mode, as one button: its name, a chevron, the live green
+/// along the bar's foot; a menu of the three, each saying what the switches
+/// will do. Never a blind rotate — a wrong mode changes all ten switches.
+#[component]
+fn ModeButton(mode: u32) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let host = PopupHost::try_use();
+    let label = MODES.iter().find(|m| m.0 == mode).map_or("Profile", |m| m.1);
+    let mut items = vec![Item::head("Footswitches play")];
+    for (m, l, d) in MODES {
+        items.push(Item::run(m.to_string(), l).detail(d).checked(m == mode));
+    }
+    rsx! {
+        button {
+            "aria-label": "Footswitch mode: {label} — change",
+            style: "position: relative; align-self: stretch; min-width: 120px; padding: 0 14px 0 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: none; background: transparent; font-size: 15px; font-weight: 700; color: {INK}; font-family: {FONT}; cursor: pointer;",
+            onclick: move |e: MouseEvent| {
+                let (c, el) = (e.client_coordinates(), e.element_coordinates());
+                let rig = rig.clone();
+                open_menu(host, c.x - el.x, c.y - el.y + f64::from(TOP_H) - 1.0, items.clone(), EventHandler::new(move |p: Picked| {
+                    if let Ok(m) = p.id.parse::<u32>() && let Some(r) = rig.clone() {
+                        spawn(async move { let _ = r.set_perform_mode(m).await; });
+                    }
+                }));
+            },
+            "{label}"
+            svg { width: "10", height: "6", view_box: "0 0 10 6",
+                path { d: "M1 1 L5 5 L9 1", fill: "none", stroke: INK_3, stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round" }
+            }
+            span { style: "position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px; border-radius: 1px; background: {LIVE};" }
+        }
+    }
+}
+
+/// Panic: everything silent at once, the mutes back once the tails die.
+/// One tap — it's for emergencies — and it shows it's working.
+#[component]
+fn PanicButton() -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut busy = use_signal(|| false);
+    let (ink, bg) = if busy() { ("#1a1205", "#fbbf24") } else { ("#fbbf24", CLEAR) };
+    rsx! {
+        button {
+            "aria-label": "Panic — everything silent, then back",
+            style: "align-self: stretch; min-width: 48px; flex-shrink: 0; padding: 0 12px; display: flex; align-items: center; justify-content: center; border: none; background: {bg}; cursor: pointer;",
+            onclick: move |_| {
+                if busy() { return; }
+                busy.set(true);
+                if let Some(r) = rig.clone() {
+                    spawn(async move { let _ = r.panic().await; });
+                }
+                spawn(async move {
+                    architect::platform::sleep(Duration::from_millis(1500)).await;
+                    busy.set(false);
+                });
+            },
+            svg { key: "{busy()}", width: "16", height: "16", view_box: "0 0 16 16",
+                if busy() {
+                    path { d: "M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3.2h-3.2", fill: "none", stroke: ink, stroke_width: "1.7", stroke_linecap: "round", stroke_linejoin: "round" }
+                } else {
+                    path { d: "M5.2 1.5h5.6l3.7 3.7v5.6l-3.7 3.7H5.2l-3.7-3.7V5.2Z", fill: "none", stroke: ink, stroke_width: "1.5", stroke_linejoin: "round" }
+                    path { d: "M8 4.8v4", stroke: ink, stroke_width: "1.7", stroke_linecap: "round" }
+                    circle { cx: "8", cy: "11.2", r: "1", fill: ink }
+                }
+            }
+        }
+    }
+}
+
+/// The MIDI or Audio light: its icon coloured by how the link is; a press
+/// opens Setup on its tab.
+#[component]
+fn Indicator(kind: &'static str, ok: bool, onclick: EventHandler<MouseEvent>) -> Element {
+    let tone = if ok { LIVE } else { VOID };
+    let label = if kind == "midi" { "MIDI" } else { "Audio" };
+    rsx! {
+        button {
+            "aria-label": "{label} — open {label} in Setup",
+            style: "align-self: stretch; min-width: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer;",
+            onclick: move |e| onclick.call(e),
+            svg { key: "{ok}", width: "17", height: "17", view_box: "0 0 16 16",
+                if kind == "midi" {
+                    circle { cx: "8", cy: "8", r: "6.2", fill: "none", stroke: tone, stroke_width: "1.4" }
+                    for (x, y) in [(4.6, 8.0), (5.6, 5.4), (8.0, 4.4), (10.4, 5.4), (11.4, 8.0)] {
+                        circle { key: "{x}", cx: "{x}", cy: "{y}", r: "0.9", fill: tone }
+                    }
+                } else {
+                    path { d: "M1.5 8h2l1.5-4 2.5 8 2-6 1.5 4 1-2h2.5", fill: "none", stroke: tone, stroke_width: "1.4", stroke_linecap: "round", stroke_linejoin: "round" }
+                }
+            }
+        }
+    }
+}
+
+/// CPU: a chip, its load under it — quiet while easy, amber from 60%, red
+/// from 85% (where xruns start).
+#[component]
+fn Cpu(cpu: f64) -> Element {
+    let pct = (cpu * 100.0).round().clamp(0.0, 100.0) as i32;
+    let tone = if pct >= 85 { VOID } else if pct >= 60 { MODIFIED } else { INK_3 };
+    rsx! {
+        span { title: "DSP load on the rig: {pct}%", style: "display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0 6px; font-size: 11px; font-weight: 750; line-height: 1; color: {tone};",
+            svg { key: "{tone}", width: "14", height: "14", view_box: "0 0 16 16",
+                rect { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5", fill: "none", stroke: tone, stroke_width: "1.4" }
+                rect { x: "6", y: "6", width: "4", height: "4", rx: "0.5", fill: tone }
+                path { d: "M6 1.5v2M10 1.5v2M6 12.5v2M10 12.5v2M1.5 6h2M1.5 10h2M12.5 6h2M12.5 10h2", stroke: tone, stroke_width: "1.2", stroke_linecap: "round" }
+            }
+            span { style: "font-variant-numeric: tabular-nums;", "{pct}%" }
+        }
+    }
+}
+
+/// IN, OUT and PHONES as three slim upright bars; a muted output goes red
+/// and still.
+#[component]
+fn Meters(input: f64, output: f64, house: bool, phones: bool) -> Element {
+    rsx! {
+        div { title: "IN · OUT · PHONES", style: "align-self: stretch; flex-shrink: 0; display: flex; gap: 5px; padding: 6px 8px 4px; box-sizing: border-box;",
+            MiniMeter { label: "I", level: input, muted: false, phones: false }
+            MiniMeter { label: "O", level: output, muted: house, phones: false }
+            MiniMeter { label: "", level: output, muted: phones, phones: true }
+        }
+    }
+}
+
+#[component]
+fn MiniMeter(label: &'static str, level: f64, muted: bool, phones: bool) -> Element {
+    let l = level.clamp(0.0, 1.0);
+    // The gradient is the bar's full height, shown up to the level.
+    let inner = 100.0 / l.max(0.01);
+    let ground = if muted { "color-mix(in oklab, #f87171 55%, #000)" } else { WELL };
+    let ink = if muted { VOID } else { INK_3 };
+    rsx! {
+        div { style: "display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 0; min-width: 10px;",
+            span { style: "position: relative; flex: 1; width: 6px; min-height: 0; border-radius: 3px; overflow: hidden; background: {ground};",
+                if !muted {
+                    span { style: "position: absolute; left: 0; right: 0; bottom: 0; height: {pct(l)}%; overflow: hidden;",
+                        span { style: "position: absolute; left: 0; right: 0; bottom: 0; height: {inner}%; background: linear-gradient(0deg, #15803d 0%, #22c55e 60%, #eab308 82%, #f87171 100%);" }
+                    }
+                }
+            }
+            span { style: "height: 12px; display: flex; align-items: center; font-size: 11px; font-weight: 800; line-height: 1; color: {ink};",
+                if phones {
+                    svg { key: "{muted}", width: "12", height: "11", view_box: "0 0 16 14",
+                        path { d: "M2.5 9V7.5a5.5 5.5 0 0 1 11 0V9", fill: "none", stroke: ink, stroke_width: "2" }
+                        rect { x: "1.2", y: "8.2", width: "3.6", height: "5", rx: "1.2", fill: ink }
+                        rect { x: "11.2", y: "8.2", width: "3.6", height: "5", rx: "1.2", fill: ink }
+                    }
+                } else {
+                    "{label}"
+                }
+            }
+        }
+    }
+}
+
+/// Mute: a tap mutes the house (you still hear yourself in the phones);
+/// held, a menu offers muting fully. Lit red while muted; a tap while lit
+/// unmutes.
+#[component]
+fn MuteButton(house: bool, phones: bool) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let host = PopupHost::try_use();
+    let mut held = use_signal(|| false);
+    let mut fired = use_signal(|| false);
+    let full = house && phones;
+    let any = house || phones;
+    let items = vec![
+        Item::head("Mute"),
+        Item::run("house", "Mute house").detail("you still hear yourself").checked(house && !full),
+        Item::run("full", "Mute fully").detail("your guitar out of the phones too").checked(full),
+        Item::Sep,
+        Item::run("none", "Unmute").unless((!any).then(|| "Nothing is muted".to_string())),
+    ];
+    let set = move |rig: Option<RigClient>, h: bool, p: bool| {
+        if let Some(r) = rig {
+            spawn(async move { let _ = r.set_mutes(h, p).await; });
+        }
+    };
+    let (ink, bg) = if any { (DANGER_INK, VOID) } else { (INK_2, CLEAR) };
+    rsx! {
+        button {
+            "aria-label": if any { "Muted — tap to unmute, hold for more" } else { "Mute house — tap to mute the house, hold to mute fully" },
+            "aria-pressed": "{any}",
+            style: "align-self: stretch; min-width: 48px; flex-shrink: 0; padding: 0 12px; display: flex; align-items: center; justify-content: center; border: none; background: {bg}; touch-action: none; cursor: pointer;",
+            onpointerdown: {
+                let rig = rig.clone();
+                let items = items.clone();
+                move |e: PointerEvent| {
+                    let (c, el) = (e.client_coordinates(), e.element_coordinates());
+                    let (left, bottom) = (c.x - el.x, c.y - el.y + f64::from(TOP_H));
+                    held.set(true);
+                    fired.set(false);
+                    let rig = rig.clone();
+                    let items = items.clone();
+                    spawn(async move {
+                        architect::platform::sleep(Duration::from_millis(500)).await;
+                        if held() {
+                            fired.set(true);
+                            open_menu(host, left - 240.0, bottom + 4.0, items, EventHandler::new(move |p: Picked| match p.id.as_str() {
+                                "house" => set(rig.clone(), true, false),
+                                "full" => set(rig.clone(), true, true),
+                                "none" => set(rig.clone(), false, false),
+                                _ => {}
+                            }));
+                        }
+                    });
+                }
+            },
+            onpointerup: {
+                let rig = rig.clone();
+                move |_| {
+                    held.set(false);
+                    if !fired() {
+                        if any { set(rig.clone(), false, false) } else { set(rig.clone(), true, phones) }
+                    }
+                }
+            },
+            onpointercancel: move |_| held.set(false),
+            svg { key: "{any}", width: "17", height: "17", view_box: "0 0 16 16",
+                path { d: "M2 6h2.5L8 3v10L4.5 10H2Z", fill: ink }
+                if any {
+                    path { d: "M10.5 6l4 4M14.5 6l-4 4", stroke: ink, stroke_width: "1.6", stroke_linecap: "round" }
+                } else {
+                    path { d: "M10.5 5.5a3.5 3.5 0 0 1 0 5", fill: "none", stroke: ink, stroke_width: "1.4", stroke_linecap: "round" }
+                    path { d: "M12.5 3.8a6 6 0 0 1 0 8.4", fill: "none", stroke: ink, stroke_width: "1.4", stroke_linecap: "round", opacity: "0.7" }
+                }
+            }
+        }
+    }
+}

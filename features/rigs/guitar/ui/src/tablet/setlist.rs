@@ -20,7 +20,8 @@
 use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{LibraryModel, PerfPart, PerfStack, PerformanceModel};
-use signal_widgets::kit::{ActionMenu, MenuItem, Picked};
+use super::menu::{open_menu, Item, MoreButton, Picked};
+use signal_widgets::PopupHost;
 
 use super::colors::{date_label, name_colour, section_colour, set_heading, set_meta, song_colour};
 use super::tokens::*;
@@ -133,6 +134,7 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
 #[component]
 fn SetHeader(perf: PerformanceModel, lib: LibraryModel) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let host = PopupHost::try_use();
     let set_index = perf.setlist_index as usize;
     let entry = lib.setlists.get(set_index).cloned().unwrap_or_default();
     let name = perf.setlists.get(set_index).cloned().unwrap_or_else(|| entry.name.clone());
@@ -144,17 +146,15 @@ fn SetHeader(perf: PerformanceModel, lib: LibraryModel) -> Element {
     let at = perf.song_index as usize;
 
     // The set picker: every set, the one playing ticked.
-    let mut sets_items = vec![MenuItem::head("Sets")];
+    let mut sets_items = vec![Item::head("Sets")];
     for (i, s) in perf.setlists.iter().enumerate() {
-        let mut item = MenuItem::run(id("set", i), s.clone());
-        item.checked = i == set_index;
+        let item = Item::run(id("set", i), s.clone()).checked(i == set_index);
         sets_items.push(item);
     }
     // The set's actions: its default profile.
-    let mut actions = vec![MenuItem::head(heading.clone()), MenuItem::head("Default profile")];
+    let mut actions = vec![Item::head(heading.clone()), Item::head("Default profile")];
     for (i, p) in lib.profiles.iter().enumerate() {
-        let mut item = MenuItem::run(id("profile", i), p.name.clone());
-        item.checked = p.name.eq_ignore_ascii_case(&entry.profile);
+        let item = Item::run(id("profile", i), p.name.clone()).checked(p.name.eq_ignore_ascii_case(&entry.profile));
         actions.push(item);
     }
     let profiles: Vec<String> = lib.profiles.iter().map(|p| p.name.clone()).collect();
@@ -162,22 +162,25 @@ fn SetHeader(perf: PerformanceModel, lib: LibraryModel) -> Element {
     rsx! {
         header { style: "flex-shrink: 0; height: {HEADER_H}px; padding: 0 6px 0 18px; border-bottom: 1px solid {RULE}; display: flex; flex-direction: column; justify-content: center; gap: 7px; box-sizing: border-box;",
             div { style: "display: flex; align-items: center; gap: 2px;",
-                div { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
-                    div { style: "display: flex; align-items: center; gap: 8px; min-width: 0;",
-                        span { style: "min-width: 0; font-size: 21px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{heading}" }
-                        ActionMenu {
-                            items: sets_items,
-                            title: "Sets".to_string(),
-                            size: 28,
-                            bare: true,
-                            on_pick: {
-                                let rig = rig.clone();
-                                move |p: Picked| {
-                                    if let Some(i) = index_of(p.id, "set") {
-                                        call!(rig, |r| r.select_setlist(i as u32));
-                                    }
+                // The set's name and a chevron: a tap picks another set.
+                button {
+                    style: "flex: 1; min-width: 0; min-height: 44px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 3px; text-align: left; padding: 0 8px; margin: 0 0 0 -8px; border: none; border-radius: {R_MD}; background: transparent; color: {INK}; font-family: {FONT}; cursor: pointer;",
+                    onclick: {
+                        let rig = rig.clone();
+                        move |e: MouseEvent| {
+                            let (c, el) = (e.client_coordinates(), e.element_coordinates());
+                            let rig = rig.clone();
+                            open_menu(host, c.x - el.x, c.y - el.y + 48.0, sets_items.clone(), EventHandler::new(move |p: Picked| {
+                                if let Some(i) = index_of(&p.id, "set") {
+                                    call!(rig, |r| r.select_setlist(i as u32));
                                 }
-                            },
+                            }));
+                        }
+                    },
+                    span { style: "display: flex; align-items: center; gap: 8px; min-width: 0;",
+                        span { style: "min-width: 0; font-size: 21px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{heading}" }
+                        svg { width: "10", height: "6", view_box: "0 0 10 6", style: "flex-shrink: 0;",
+                            path { d: "M1 1 L5 5 L9 1", fill: "none", stroke: INK_3, stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round" }
                         }
                     }
                     // Event · date · profile — words, no chips.
@@ -194,15 +197,13 @@ fn SetHeader(perf: PerformanceModel, lib: LibraryModel) -> Element {
                         span { style: "overflow: hidden; text-overflow: ellipsis;", "{profile}" }
                     }
                 }
-                ActionMenu {
+                MoreButton {
                     items: actions,
-                    title: "Set actions".to_string(),
-                    size: 44,
-                    bare: true,
+                    label: "Set actions".to_string(),
                     on_pick: {
                         let rig = rig.clone();
                         move |p: Picked| {
-                            if let Some(i) = index_of(p.id, "profile")
+                            if let Some(i) = index_of(&p.id, "profile")
                                 && let Some(name) = profiles.get(i).cloned()
                             {
                                 call!(rig, |r| r.set_setlist_profile(set_index as u32, name));
@@ -252,34 +253,30 @@ fn SongRow(perf: PerformanceModel, lib: LibraryModel, index: usize) -> Element {
     let set_index = perf.setlist_index;
 
     let mut items = vec![
-        MenuItem::head(format!("{} · {}", index + 1, song.name)),
-        MenuItem::run("go", "Play from here").unless(up.then(|| "It's up now".to_string())),
-        MenuItem::sep(),
-        MenuItem::head("Profile"),
+        Item::head(format!("{} · {}", index + 1, song.name)),
+        Item::run("go", "Play from here").unless(up.then(|| "It's up now".to_string())),
+        Item::Sep,
+        Item::head("Profile"),
     ];
-    let mut own = MenuItem::run("profile:none", "The set's");
-    own.checked = own_profile.is_empty();
+    let own = Item::run("profile:none", "The set's").checked(own_profile.is_empty());
     items.push(own);
     for (i, p) in lib.profiles.iter().enumerate() {
-        let mut item = MenuItem::run(id("profile", i), p.name.clone());
-        item.checked = p.name.eq_ignore_ascii_case(&own_profile);
+        let item = Item::run(id("profile", i), p.name.clone()).checked(p.name.eq_ignore_ascii_case(&own_profile));
         items.push(item);
     }
-    items.push(MenuItem::head("Colour"));
-    let mut by_name = MenuItem::run("colour:none", "From its name");
-    by_name.checked = song.colour.is_empty();
+    items.push(Item::head("Colour"));
+    let by_name = Item::run("colour:none", "From its name").checked(song.colour.is_empty());
     items.push(by_name);
     for (i, c) in super::colors::SONG_PALETTE.iter().enumerate() {
-        let mut item = MenuItem::run(id("colour", i), COLOUR_NAMES[i]);
-        item.checked = song.colour.eq_ignore_ascii_case(c);
+        let item = Item::run(id("colour", i), COLOUR_NAMES[i]).checked(song.colour.eq_ignore_ascii_case(c));
         items.push(item);
     }
     items.extend([
-        MenuItem::sep(),
-        MenuItem::run("up", "Move up").unless((index == 0).then(|| "Already first".to_string())),
-        MenuItem::run("down", "Move down").unless((index == last).then(|| "Already last".to_string())),
-        MenuItem::sep(),
-        MenuItem::delete("remove", "Remove from this set", None),
+        Item::Sep,
+        Item::run("up", "Move up").unless((index == 0).then(|| "Already first".to_string())),
+        Item::run("down", "Move down").unless((index == last).then(|| "Already last".to_string())),
+        Item::Sep,
+        Item::delete("remove", "Remove from this set"),
     ]);
     let profiles: Vec<String> = lib.profiles.iter().map(|p| p.name.clone()).collect();
     let name = song.name.clone();
@@ -329,16 +326,14 @@ fn SongRow(perf: PerformanceModel, lib: LibraryModel, index: usize) -> Element {
                 }
             }
             div { style: "display: flex; align-items: center; padding-right: 2px;",
-                ActionMenu {
+                MoreButton {
                     items,
-                    title: format!("{} actions", song.name),
-                    size: 44,
-                    bare: true,
+                    label: format!("{} actions", song.name),
                     on_pick: {
                         let rig = rig.clone();
                         move |p: Picked| {
                             let name = name.clone();
-                            match p.id {
+                            match p.id.as_str() {
                                 "go" => call!(rig, |r| r.select_song(index as u32)),
                                 "up" => call!(rig, |r| r.move_setlist_entry(set_index, index as u32, index as u32 - 1)),
                                 "down" => call!(rig, |r| r.move_setlist_entry(set_index, index as u32, index as u32 + 1)),
@@ -468,15 +463,15 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index
     let grouped = !part.section.is_empty();
 
     let items = vec![
-        MenuItem::head(section.name.clone()),
-        MenuItem::run("go", "Play from here").unless((state == "now").then(|| "It's playing".to_string())),
-        MenuItem::name("rename", "Rename…", "Rename", section.name.clone(), Vec::new()),
-        MenuItem::name("part", "Add a part…", "Add", format!("{} · {}", section.name, section.parts.len() + 1), names.clone()),
-        MenuItem::sep(),
-        MenuItem::run("earlier", "Move earlier").unless((index == 0 || several).then(|| if several { "Move its parts".to_string() } else { "Already first".to_string() })),
-        MenuItem::run("later", "Move later").unless((index + 1 == count || several).then(|| if several { "Move its parts".to_string() } else { "Already last".to_string() })),
-        MenuItem::sep(),
-        MenuItem::delete("delete", "Delete section", None),
+        Item::head(section.name.clone()),
+        Item::run("go", "Play from here").unless((state == "now").then(|| "It's playing".to_string())),
+        Item::name("rename", "Rename…", section.name.clone(), "Rename", Vec::new()),
+        Item::name("part", "Add a part…", format!("{} · {}", section.name, section.parts.len() + 1), "Add", names.clone()),
+        Item::Sep,
+        Item::run("earlier", "Move earlier").unless((index == 0 || several).then(|| if several { "Move its parts".to_string() } else { "Already first".to_string() })),
+        Item::run("later", "Move later").unless((index + 1 == count || several).then(|| if several { "Move its parts".to_string() } else { "Already last".to_string() })),
+        Item::Sep,
+        Item::delete("delete", "Delete section"),
     ];
     let ink = match state {
         "done" => INK_3,
@@ -525,17 +520,15 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index
                     }
                 }
             }
-            ActionMenu {
+            MoreButton {
                 items,
-                title: format!("{} actions", section.name),
-                size: 44,
-                bare: true,
+                label: format!("{} actions", section.name),
                 on_pick: {
                     let rig = rig.clone();
                     let names = names.clone();
                     move |p: Picked| {
                         let names = names.clone();
-                        match p.id {
+                        match p.id.as_str() {
                             "go" => call!(rig, |r| r.select_part(first as u32)),
                             "rename" => {
                                 let new_name = p.text.clone();
@@ -583,11 +576,11 @@ fn PartRow(perf: PerformanceModel, lib: LibraryModel, index: usize) -> Element {
         _ => format!("background: {SHEET}; border: 1.5px solid {DIM};"),
     };
     let items = vec![
-        MenuItem::head(part.name.clone()),
-        MenuItem::run("go", "Play from here").unless((state == "now").then(|| "It's playing".to_string())),
-        MenuItem::name("rename", "Rename…", "Rename", part.name.clone(), Vec::new()),
-        MenuItem::sep(),
-        MenuItem::delete("delete", "Delete part", None),
+        Item::head(part.name.clone()),
+        Item::run("go", "Play from here").unless((state == "now").then(|| "It's playing".to_string())),
+        Item::name("rename", "Rename…", part.name.clone(), "Rename", Vec::new()),
+        Item::Sep,
+        Item::delete("delete", "Delete part"),
     ];
     let name = part.name.clone();
     rsx! {
@@ -610,16 +603,14 @@ fn PartRow(perf: PerformanceModel, lib: LibraryModel, index: usize) -> Element {
                     }
                 }
             }
-            ActionMenu {
+            MoreButton {
                 items,
-                title: format!("{} actions", part.name),
-                size: 44,
-                bare: true,
+                label: format!("{} actions", part.name),
                 on_pick: {
                     let rig = rig.clone();
                     move |p: Picked| {
                         let name = name.clone();
-                        match p.id {
+                        match p.id.as_str() {
                             "go" => call!(rig, |r| r.select_part(index as u32)),
                             "rename" => {
                                 let new_name = p.text.clone();
@@ -668,10 +659,10 @@ fn StackRow(stack: PerfStack, index: usize, part: PerfPart, where_: String) -> E
     let pos = stack.position as usize;
     let next = if stack.patches.len() > 1 { stack.patches.get((pos + 1) % stack.patches.len()).cloned() } else { None };
     let is_default = !part.patch.is_empty() && part.patch.eq_ignore_ascii_case(&stack.current_patch);
-    let mut items = vec![MenuItem::head(format!("{} · {}", stack.name, stack.current_patch))];
+    let mut items = vec![Item::head(format!("{} · {}", stack.name, stack.current_patch))];
     if !part.name.is_empty() && !where_.is_empty() {
         items.push(
-            MenuItem::run("default", format!("Make “{}” default for {}", stack.current_patch, where_))
+            Item::run("default", format!("Make “{}” default for {}", stack.current_patch, where_))
                 .unless(is_default.then(|| format!("It's {where_}'s already"))),
         );
     }
@@ -688,9 +679,9 @@ fn StackRow(stack: PerfStack, index: usize, part: PerfPart, where_: String) -> E
                 if on {
                     span { style: "position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: {LIVE};" }
                 }
-                span { style: "width: 70px; flex-shrink: 0; display: flex; align-items: center; gap: 6px;",
+                span { style: "min-width: 70px; flex-shrink: 0; display: flex; align-items: center; gap: 6px;",
                     span { style: "width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; background: {tape};" }
-                    span { style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {pick(on, INK, INK_3)};", "{stack.name}" }
+                    span { style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; color: {pick(on, INK, INK_3)};", "{stack.name}" }
                 }
                 span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;",
                     span { style: "font-size: 14px; font-weight: {pick(on, 700, 560)}; color: {pick(on, INK, INK_2)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
@@ -715,11 +706,9 @@ fn StackRow(stack: PerfStack, index: usize, part: PerfPart, where_: String) -> E
                 }
             }
             if items.len() > 1 {
-                ActionMenu {
+                MoreButton {
                     items,
-                    title: format!("{} actions", stack.name),
-                    size: 44,
-                    bare: true,
+                    label: format!("{} actions", stack.name),
                     on_pick: {
                         let rig = rig.clone();
                         move |p: Picked| {
