@@ -211,6 +211,11 @@ pub struct RigStatus {
     /// Which of [`DI_CLIPS`] it plays.
     #[facet(default)]
     pub di_clip: u32,
+    /// What the time and modulation effects add now (linear peaks, the
+    /// loudest since the last status): delay, reverb, modulation, tremolo.
+    /// Empty from an older engine.
+    #[facet(default)]
+    pub fx_activity: Vec<f32>,
 }
 
 /// A compressor block's rolling telemetry.
@@ -1822,6 +1827,9 @@ pub mod rig {
         fn setup(&self) -> SetupModel;
         /// Write the setup whole (a remote edits its copy and sends it back).
         fn save_setup(&self, setup: SetupModel);
+        /// A guitar photo's bytes (`GuitarEntry::image`, a file in the
+        /// library's `guitars/` folder); empty when there is none.
+        fn guitar_photo(&self, file: String) -> Vec<u8>;
         /// Setlist `index`'s event, day (`YYYY-MM-DD`) and title.
         fn set_setlist_details(&self, index: u32, event: String, date: String, title: String);
         /// The profile every song of setlist `index` plays on unless it has

@@ -736,10 +736,27 @@ impl GuitarRigBackend {
             // Learned pedals: (switch, pressed), and whether one was learned.
             let mut fired: Vec<(String, bool)> = Vec::new();
             let mut learned = false;
+            // The controller in use (Setup): the channel it listens on (0 =
+            // all) and whether a program change picks a patch.
+            let (channel, program_change) = {
+                let setup = self.setup.lock_ok();
+                setup.controllers.get(setup.controller_index as usize).map_or((0, false), |c| (c.channel, c.program_change))
+            };
+            let mut programs: Vec<u8> = Vec::new();
             {
                 let mut log = self.midi_log.lock_ok();
                 for msg in stream.drain() {
                     let [status, d1, d2] = msg.bytes();
+                    // Another channel's voice message is not this controller's.
+                    if channel > 0 && (0x80..0xF0).contains(&status) && u32::from(status & 0x0F) + 1 != channel {
+                        continue;
+                    }
+                    if status & 0xF0 == 0xC0 {
+                        if program_change {
+                            programs.push(d1);
+                        }
+                        continue;
+                    }
                     let outcome = self.learn.lock_ok().on_raw(status, d1, d2);
                     match outcome {
                         signal_rig_host::midi_learn::Outcome::Pass => {}
@@ -794,6 +811,10 @@ impl GuitarRigBackend {
             }
             for (target, pressed) in fired {
                 self.fire_switch(&target, pressed);
+            }
+            for program in programs {
+                tracing::info!(midi.program = program, "guitar: program change → patch");
+                let _ = Rig::select_patch(self, u32::from(program));
             }
             if learned {
                 self.events.publish(RigEvent::Perf(Rig::perf(self)));
@@ -980,6 +1001,7 @@ impl GuitarRigBackend {
                 output_peak: f.output,
                 active_patch: Some(patch).filter(|p| !p.is_empty()),
                 comp_gr_db: f.gain_reduction_db,
+                fx_activity: Vec::new(),
                 input_peak_l: f.input,
                 input_peak_r: f.input,
                 output_peak_l: f.output,
@@ -1041,6 +1063,7 @@ impl GuitarRigBackend {
             output_peak,
             active_patch,
             comp_gr_db: self.live_comp_gr(),
+            fx_activity: (0..fx_blocks::fx_meter::KINDS).map(fx_blocks::fx_meter::take).collect(),
             input_peak_l: in_lr.0,
             input_peak_r: in_lr.1,
             output_peak_l: out_lr.0,
@@ -2458,6 +2481,78 @@ impl GuitarRigBackend {
                     .set_output_trim_db(trim + if mute && !routed { -96.0 } else { 0.0 });
             }
         }
+    }
+
+    /// The chosen guitar's tone on the chosen audio rig (Setup).
+    fn guitar_tone(&self) -> Option<signal_guitar_proto::GuitarTone> {
+        let setup = self.setup.lock_ok();
+        let guitar = setup.guitars.get(setup.guitar_index as usize)?;
+        let rig = setup.rigs.get(setup.rig_index as usize).map(|r| r.id.clone()).unwrap_or_default();
+        Some(guitar.tone_on(&rig))
+    }
+
+    /// The guitar's trim and input EQ, into the stage before the chain.
+    fn apply_guitar_input(&self) {
+        let Some(t) = self.guitar_tone() else { return };
+        let guard = self.rig.lock_ok();
+        if let Some(prig) = guard.as_ref() {
+            prig.rig().set_input_tone(signal_sampler::input_stage::ToneValues {
+                trim_db: t.trim_db,
+                low_cut_hz: t.low_cut_hz,
+                bass_db: t.bass_db,
+                mid_db: t.mid_db,
+                treble_db: t.treble_db,
+            });
+        }
+    }
+
+    /// The guitar's Default gate threshold on the chain's gate — live, not
+    /// recorded on the patch; the gate macro then moves around it. Noisy
+    /// input plays the light end tighter (Subtle where Off would be), which
+    /// the Default threshold already is.
+    fn apply_guitar_gate(&self) {
+        let Some(t) = self.guitar_tone() else { return };
+        let Some(&threshold) = t.gates.get(1) else { return };
+        let gates: Vec<String> = self.blocks.lock_ok().iter().filter(|b| b.block_type == BlockType::Gate).map(|b| b.id.clone()).collect();
+        for id in gates {
+            self.write_live_param(&id, "threshold", threshold.clamp(-90.0, 0.0));
+        }
+    }
+
+    /// The chosen audio rig's rate, buffer and input into the device prefs,
+    /// and the device reopened on them (when it is open).
+    fn apply_audio_rig(&self, r: &signal_guitar_proto::AudioRigEntry) {
+        let mut mgr = RigManager::load(AUDIO_RIG_NAME);
+        if r.rate > 0 {
+            mgr.audio.sample_rate = r.rate;
+        }
+        if r.buffer > 0 {
+            mgr.audio.buffer_size = r.buffer;
+        }
+        // "Input 3" → the third channel; anything else (a built-in mic) the first.
+        mgr.audio.input_channel = r.input.rsplit(' ').next().and_then(|n| n.parse::<usize>().ok()).map_or(0, |n| n.saturating_sub(1));
+        // A device the system knows by that name; else the system's own.
+        let known = |list: Vec<DeviceInfo>| list.iter().any(|d| d.name == r.device);
+        mgr.audio.input_device = if known(GuitarRig::input_devices()) { r.device.clone() } else { String::new() };
+        mgr.audio.output_device = if known(GuitarRig::output_devices()) { r.device.clone() } else { String::new() };
+        if let Err(e) = mgr.save() {
+            tracing::error!("failed to save audio prefs: {e}");
+            return;
+        }
+        if self.rig.lock_ok().is_some() {
+            Rig::restart(self);
+        }
+    }
+
+    /// The rig's house and phones levels: the house is the master trim, the
+    /// phones their volume (a fader: unity at 0.75, 48 dB of travel).
+    fn apply_rig_levels(&self, r: &signal_guitar_proto::AudioRigEntry) {
+        *self.master_trim.lock_ok() = r.house_db.clamp(-24.0, 12.0);
+        self.mark_state_dirty();
+        self.apply_main_mute();
+        let pos = if r.phones_db <= -60.0 { 0.0 } else { (signal_guitar_proto::PHONES_UNITY + r.phones_db / 48.0).clamp(0.0, 1.0) };
+        let self_mix = self.headphone.lock_ok().self_mix;
+        Rig::set_headphone(self, pos, self_mix);
     }
 
     /// Publish the chain and the macro bar — after a macro moves.
@@ -4069,6 +4164,8 @@ impl GuitarRigBackend {
         self.open_todays_setlist();
         // The main fader (its saved trim, −6 dB by default) on the new rig.
         self.apply_main_mute();
+        // The guitar's own trim and input EQ, before the chain.
+        self.apply_guitar_input();
         // The song that is up tunes the switches.
         self.apply_song_stacks();
         // Mirror the (now active) patch's FX chain + apply bypass defaults,
@@ -4424,6 +4521,7 @@ impl GuitarRigBackend {
         }
         *self.blocks.lock_ok() = out;
         self.apply_song_patch_overrides();
+        self.apply_guitar_gate();
         self.label_board();
         self.macros_rebase();
         self.sync_view();
@@ -8592,9 +8690,26 @@ impl Rig for GuitarRigBackend {
         self.setup.lock_ok().clone()
     }
 
+    fn guitar_photo(&self, file: String) -> Vec<u8> {
+        RigLibrary::guitar_photo(&file)
+    }
+
     fn save_setup(&self, setup: signal_guitar_proto::SetupModel) {
         RigLibrary::save_setup(&setup);
-        *self.setup.lock_ok() = setup;
+        let before = std::mem::replace(&mut *self.setup.lock_ok(), setup.clone());
+        let rig_of = |m: &signal_guitar_proto::SetupModel| m.rigs.get(m.rig_index as usize).cloned();
+        let (was, now) = (rig_of(&before), rig_of(&setup));
+        self.apply_guitar_input();
+        self.apply_guitar_gate();
+        if let Some(now) = now {
+            let device = |r: &signal_guitar_proto::AudioRigEntry| (r.device.clone(), r.rate, r.buffer, r.input.clone());
+            if was.as_ref().map(device) != Some(device(&now)) {
+                self.apply_audio_rig(&now);
+            }
+            if was.as_ref().map(|r| (r.house_db.to_bits(), r.phones_db.to_bits())) != Some((now.house_db.to_bits(), now.phones_db.to_bits())) {
+                self.apply_rig_levels(&now);
+            }
+        }
         self.publish_state();
     }
 

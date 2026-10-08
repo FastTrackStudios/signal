@@ -79,8 +79,19 @@ const INTERFACES: &[Interface] = &[
 /// MIDI controllers, how each connects, and its switches.
 const MIDI_DEVICES: &[(&str, &str, u32)] = &[("XSonic AIRSTEP", "Bluetooth", 5), ("Morningstar MC6", "USB", 6)];
 
+/// What any other interface offers, as far as the rig asks of it.
+const GENERIC: Interface = Interface {
+    name: "",
+    inputs: &[("Input 1", "Inst"), ("Input 2", "Inst")],
+    outputs: &["Outputs 1–2"],
+    phones: &["Phones"],
+    rates: &[44_100, 48_000, 96_000],
+    buffers: &[32, 64, 128, 256, 512, 1024],
+    converter_ms: 2.0,
+};
+
 fn interface_of(r: &AudioRigEntry) -> &'static Interface {
-    INTERFACES.iter().find(|i| i.name == r.device).unwrap_or(&INTERFACES[0])
+    INTERFACES.iter().find(|i| i.name == r.device).unwrap_or(&GENERIC)
 }
 
 fn latency_ms(r: &AudioRigEntry) -> f64 {
@@ -113,10 +124,29 @@ fn tick(d: i32) -> String {
     if d == 0 { "0".to_string() } else { format!("−{}", -d) }
 }
 fn link_label(link: &str) -> &'static str {
-    if link == "Bluetooth" { "Bluetooth MIDI · connected" } else { "USB · connected" }
+    if link == "Bluetooth" { "Bluetooth MIDI" } else { "USB" }
 }
 fn running_label(on: bool) -> &'static str {
-    if on { "Connected" } else { "Not running" }
+    if on { "Connected" } else { "Not connected" }
+}
+
+/// The device choices: the known interfaces, the devices the system has,
+/// and the one chosen (whatever it is).
+fn device_options(present: &[String], chosen: &str) -> Vec<(String, String, String)> {
+    let mut out: Vec<(String, String, String)> = Vec::new();
+    let mut add = |name: &str, detail: &str| {
+        if !name.is_empty() && !out.iter().any(|o| o.0 == name) {
+            out.push((name.to_string(), name.to_string(), detail.to_string()));
+        }
+    };
+    for p in present {
+        add(p, "Connected");
+    }
+    for i in INTERFACES {
+        add(i.name, "");
+    }
+    add(chosen, "");
+    out
 }
 
 fn signed(v: f64) -> String {
@@ -165,6 +195,9 @@ impl SetupTab {
 struct Setup {
     model: Signal<SetupModel>,
     rig: Signal<Option<RigClient>>,
+    /// Photos fetched from the rig, by file name, as data URLs ("" when
+    /// the rig has none).
+    photos: Signal<std::collections::HashMap<String, String>>,
 }
 
 impl Setup {
@@ -277,7 +310,8 @@ pub fn SetupView(state: RigViewState, tab: Signal<SetupTab>) -> Element {
     let client = use_hook(try_consume_context::<RigClient>);
     let model = use_signal(SetupModel::default);
     let rig = use_signal(|| client.clone());
-    let setup = use_context_provider(|| Setup { model, rig });
+    let photos = use_signal(std::collections::HashMap::new);
+    let setup = use_context_provider(|| Setup { model, rig, photos });
     use_hook(move || {
         if let Some(r) = client.clone() {
             spawn(async move {
@@ -353,7 +387,7 @@ fn SetupTabs(tab: SetupTab, options: bool, on_tab: EventHandler<SetupTab>) -> El
                             }
                             span { style: "display: flex; opacity: {pick(on, 1.0, 0.55)};",
                                 match id {
-                                    SetupTab::Guitar => rsx! { GuitarPhoto { colour: g.colour.clone(), size: 48 } },
+                                    SetupTab::Guitar => rsx! { GuitarPhoto { image: g.image.clone(), colour: g.colour.clone(), size: 48 } },
                                     SetupTab::Audio => rsx! { RigGlyph { on: true } },
                                     SetupTab::Midi => rsx! { ControllerGlyph { switches: dev.map_or(4, |d| d.2), on: true } },
                                 }
@@ -429,7 +463,7 @@ fn SetupList(tab: SetupTab, on_picked: EventHandler<()>) -> Element {
                                             }),
                                             _ => {}
                                         },
-                                        GuitarPhoto { colour: g.colour.clone(), size: 52 }
+                                        GuitarPhoto { image: g.image.clone(), colour: g.colour.clone(), size: 52 }
                                     }
                                 }
                             }
@@ -603,7 +637,7 @@ fn GuitarTab(state: RigViewState) -> Element {
         div { style: "display: flex; align-items: stretch; min-height: 100%;",
             // The guitar: its photo, upright, and its pickups.
             aside { style: "width: 232px; flex-shrink: 0; padding: 16px; display: flex; flex-direction: column; gap: 14px; border-right: 1px solid {RULE}; box-sizing: border-box;",
-                GuitarPhoto { colour: g.colour.clone(), size: 0 }
+                GuitarPhoto { image: g.image.clone(), colour: g.colour.clone(), size: 0 }
                 span { style: "font-size: 20px; font-weight: 800; line-height: 1.15;", "{g.name}" }
                 div { style: "display: flex; flex-direction: column;",
                     for (i, p) in g.pickups.iter().cloned().enumerate() {
@@ -979,6 +1013,22 @@ fn GuitarEq(tone: GuitarTone, scope: Scope) -> Element {
 #[component]
 fn AudioTab(state: RigViewState) -> Element {
     let setup = use_context::<Setup>();
+    // The devices the system has now — a choice beside the known interfaces.
+    let settings = use_hook(try_consume_context::<signal_guitar_proto::audio::AudioSettingsClient>);
+    let mut present = use_signal(Vec::<String>::new);
+    use_hook(move || {
+        if let Some(s) = settings.clone() {
+            spawn(async move {
+                if let Ok(d) = s.devices().await {
+                    let mut names: Vec<String> = d.inputs.iter().chain(d.outputs.iter()).map(|x| x.name.clone()).collect();
+                    names.dedup();
+                    let mut seen = Vec::new();
+                    names.retain(|n| if seen.contains(n) { false } else { seen.push(n.clone()); true });
+                    present.set(names);
+                }
+            });
+        }
+    });
     let m = setup.model.read().clone();
     let r = audio_rig(&m);
     let dev = interface_of(&r);
@@ -994,23 +1044,26 @@ fn AudioTab(state: RigViewState) -> Element {
     };
     let rate = r.rate;
     let outs = dev.outputs.len() * 2 + dev.phones.len() * 2;
+    // The device is there: the system lists it (the built-in one whenever
+    // the rig plays through the system's own).
+    let connected = present().iter().any(|n| *n == r.device) || (r.device == "Built-in" && *state.running.read());
     rsx! {
         // The interface: the device, and the three numbers that decide feel.
         section { style: "border-bottom: 1px solid {RULE};",
             div { style: "display: flex; align-items: center; gap: 14px; padding: 18px 20px 6px;",
                 span { style: "font-size: 19px; font-weight: 750;", "Interface" }
                 span { style: "display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: {INK_3};",
-                    span { style: "width: 8px; height: 8px; border-radius: 999px; background: {pick(*state.running.read(), LIVE, DIM)};" }
-                    "{running_label(*state.running.read())} · {dev.inputs.len()} in · {outs} out"
+                    span { style: "width: 8px; height: 8px; border-radius: 999px; background: {pick(connected, LIVE, DIM)};" }
+                    "{running_label(connected)} · {dev.inputs.len()} in · {outs} out"
                 }
             }
             div { style: "display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));",
                 Cell { label: "Device",
-                    Select { label: "Interface", value: r.device.clone(), options: INTERFACES.iter().map(|i| (i.name.to_string(), i.name.to_string(), String::new())).collect(),
+                    Select { label: "Interface", value: r.device.clone(), options: device_options(&present(), &r.device),
                         on_pick: move |v: String| set(Box::new(move |y| {
                             // A new device: keep what it can do, else its nearest.
-                            let Some(d) = INTERFACES.iter().find(|i| i.name == v) else { return };
                             y.device = v.clone();
+                            let d = interface_of(y);
                             if !d.inputs.iter().any(|i| i.0 == y.input) { y.input = d.inputs[0].0.into() }
                             if !d.rates.contains(&y.rate) { y.rate = if d.rates.contains(&48_000) { 48_000 } else { d.rates[0] } }
                             if !d.buffers.contains(&y.buffer) { y.buffer = if d.buffers.contains(&128) { 128 } else { d.buffers[0] } }
@@ -1089,21 +1142,14 @@ fn OutputStrip(state: RigViewState, house: bool) -> Element {
     let r = audio_rig(&m);
     let dev = interface_of(&r);
     let db = f64::from(if house { r.house_db } else { r.phones_db });
-    let mut check = use_signal(|| None::<u8>);
     let level = state.out_level.read().clamp(0.0, 1.0) * 10f64.powf(db / 40.0);
     let fill = (db + 60.0) / 66.0;
-    let side = check();
+    // Its glyph lights while the rig plays through it.
+    let side = (level > 0.02).then_some(2u8);
     let options: Vec<(String, String, String)> = if house { dev.outputs } else { dev.phones }.iter().map(|o| (o.to_string(), o.to_string(), String::new())).collect();
     let label = if house { "House" } else { "Phones" };
     let out_label: &'static str = if house { "House output" } else { "Phones output" };
     let out_value = if house { r.house.clone() } else { r.phones.clone() };
-    let check_label = match side {
-        Some(0) => "Left…",
-        Some(1) => "Right…",
-        Some(_) => "Both…",
-        None if house => "Check speakers",
-        None => "Check phones",
-    };
     rsx! {
         div { style: "padding: 12px 20px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0;",
             div { style: "display: flex; align-items: center; gap: 10px;",
@@ -1125,22 +1171,6 @@ fn OutputStrip(state: RigViewState, house: bool) -> Element {
                 }),
                 on_end: move |()| setup.save(),
             }
-            div { style: "display: flex; align-items: center; gap: 12px;",
-                button {
-                    disabled: side.is_some(),
-                    style: "flex-shrink: 0; white-space: nowrap; height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-radius: {R}; border: {outline(!side.is_some())}; font-size: 14px; font-weight: 700; color: {pick(side.is_some(), ON_LIVE, INK)}; background: {pick(side.is_some(), LIVE, CLEAR)}; font-family: {FONT}; cursor: pointer;",
-                    onclick: move |_| {
-                        spawn(async move {
-                            for s in 0..3u8 {
-                                check.set(Some(s));
-                                architect::platform::sleep(std::time::Duration::from_millis(1200)).await;
-                            }
-                            check.set(None);
-                        });
-                    },
-                    "{check_label}"
-                }
-            }
         }
     }
 }
@@ -1153,8 +1183,24 @@ fn MidiTab() -> Element {
     let m = setup.model.read().clone();
     let c = controller(&m);
     let dev = MIDI_DEVICES.iter().find(|d| d.0 == c.device).copied();
-    let mut pressed = use_signal(|| None::<u32>);
+    // What the rig hears, newest first — polled while the tab is open.
+    let rig = use_hook(try_consume_context::<RigClient>);
     let mut heard = use_signal(Vec::<String>::new);
+    use_hook(move || {
+        if let Some(r) = rig.clone() {
+            spawn(async move {
+                loop {
+                    if let Ok(log) = r.midi_recent().await {
+                        let recent: Vec<String> = log.into_iter().rev().take(6).collect();
+                        if *heard.peek() != recent {
+                            heard.set(recent);
+                        }
+                    }
+                    architect::platform::sleep(std::time::Duration::from_millis(400)).await;
+                }
+            });
+        }
+    });
     let set = move |f: Box<dyn FnOnce(&mut ControllerEntry)>| {
         setup.edit(move |m| {
             let k = m.controller_index as usize;
@@ -1170,7 +1216,6 @@ fn MidiTab() -> Element {
         ("send".to_string(), "Send tempo".to_string(), String::new()),
         ("receive".to_string(), "Follow it".to_string(), String::new()),
     ];
-    let ch = c.channel.max(1);
     rsx! {
         section { style: "border-bottom: 1px solid {RULE};",
             div { style: "display: flex; align-items: center; gap: 14px; padding: 18px 20px 6px;",
@@ -1198,24 +1243,11 @@ fn MidiTab() -> Element {
                 div { style: "display: grid; grid-template-columns: repeat({d.2}, minmax(0, 1fr)); border-top: 1px solid {RULE}; border-bottom: 1px solid {RULE};",
                     for i in 0..d.2 {
                         {
-                            let on = pressed() == Some(i);
+                            let on = false;
                             rsx! {
-                                button {
+                                div {
                                     key: "{i}",
-                                    style: "position: relative; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 0 12px; border: none; {left_rule(i > 0)} background: {pick(on, LIVE_WASH, CLEAR)}; font-family: {FONT}; cursor: pointer;",
-                                    onclick: move |_| {
-                                        pressed.set(Some(i));
-                                        let mut h = heard.peek().clone();
-                                        h.insert(0, format!("Switch {} · CC {} · 127 · ch {ch}", i + 1, 20 + i));
-                                        h.truncate(6);
-                                        heard.set(h);
-                                        spawn(async move {
-                                            architect::platform::sleep(std::time::Duration::from_millis(220)).await;
-                                            if pressed() == Some(i) {
-                                                pressed.set(None);
-                                            }
-                                        });
-                                    },
+                                    style: "position: relative; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 0 12px; {left_rule(i > 0)}",
                                     span { style: "width: 10px; height: 10px; border-radius: 999px; background: {pick(on, LIVE, RULE_STRONG)};" }
                                     span { style: "width: 40px; height: 40px; border-radius: 999px; background: {pick(on, KEY_DOWN, UP)}; border-bottom: 3px solid rgba(0,0,0,0.45); box-sizing: border-box;" }
                                     span { style: "font-size: 13px; font-weight: 700; color: {INK_3};", "{i + 1}" }
@@ -1393,12 +1425,43 @@ fn TextField(value: String, placeholder: &'static str, on_commit: EventHandler<S
     }
 }
 
-/// A guitar: its finish behind a guitar glyph (the photos stay local to
-/// the player's library). `size` 0: the sidebar's tall picture.
+/// A guitar's photo, cropped to its body — fetched once from the rig; its
+/// finish behind a guitar glyph when it has none. `size` 0: the sidebar's
+/// tall picture.
 #[component]
-fn GuitarPhoto(colour: String, size: u32) -> Element {
+fn GuitarPhoto(image: String, colour: String, size: u32) -> Element {
+    let setup = use_context::<Setup>();
+    let wanted = image.clone();
+    use_effect(use_reactive!(|wanted| {
+        if wanted.is_empty() || setup.photos.peek().contains_key(&wanted) {
+            return;
+        }
+        let mut photos = setup.photos;
+        photos.write().insert(wanted.clone(), String::new());
+        if let Some(r) = setup.rig.peek().clone() {
+            spawn(async move {
+                let bytes = r.guitar_photo(wanted.clone()).await.unwrap_or_default();
+                if !bytes.is_empty() {
+                    use base64::Engine as _;
+                    let mime = match wanted.rsplit('.').next().unwrap_or("").to_ascii_lowercase().as_str() {
+                        "png" => "image/png",
+                        "jpg" | "jpeg" => "image/jpeg",
+                        _ => "image/webp",
+                    };
+                    let url = format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes));
+                    photos.write().insert(wanted, url);
+                }
+            });
+        }
+    }));
+    let url = setup.photos.read().get(&image).cloned().unwrap_or_default();
     let colour = if colour.is_empty() { "#71717a".to_string() } else { colour };
     let (w, h, r) = if size == 0 { ("100%".to_string(), "260px".to_string(), 10) } else { (format!("{size}px"), format!("{size}px"), 8) };
+    if !url.is_empty() {
+        return rsx! {
+            img { src: "{url}", style: "width: {w}; height: {h}; flex-shrink: 0; border-radius: {r}px; display: block; object-fit: cover; object-position: 50% 62%; background: {colour};" }
+        };
+    }
     rsx! {
         span { style: "width: {w}; height: {h}; flex-shrink: 0; border-radius: {r}px; background: {colour}; border: 1px solid rgba(255,255,255,0.12); box-sizing: border-box; display: flex; align-items: center; justify-content: center;",
             svg { width: "45%", height: "45%", view_box: "0 0 24 24",

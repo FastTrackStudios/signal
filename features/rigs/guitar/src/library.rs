@@ -1256,6 +1256,17 @@ impl RigLibrary {
         );
     }
 
+    /// A guitar photo from the library's `guitars/` folder — a bare file
+    /// name only, never a path out of it. Empty when it is not there.
+    #[must_use]
+    pub fn guitar_photo(file: &str) -> Vec<u8> {
+        let name = std::path::Path::new(file);
+        if file.is_empty() || name.components().count() != 1 {
+            return Vec::new();
+        }
+        std::fs::read(rig_dir().join("guitars").join(name)).unwrap_or_default()
+    }
+
     /// Write `setup.styx` (refused over a file that does not parse).
     pub fn save_setup(setup: &signal_guitar_proto::SetupModel) {
         let Some(store) = writable_store() else {

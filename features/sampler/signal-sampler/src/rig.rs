@@ -611,6 +611,8 @@ struct InputMeterShared {
     /// Bumped when `inject` changes; the probe re-reads it (and restarts the
     /// loop) when it sees a new value, so the audio thread only locks then.
     inject_gen: std::sync::atomic::AtomicU64,
+    /// The guitar's trim and input EQ, applied before the chain.
+    tone: crate::input_stage::InputTone,
 }
 
 /// Mono window the tuner runs autocorrelation over. At 48 kHz this covers
@@ -738,6 +740,8 @@ struct InputProbe {
     /// Where the chain's input is kept for the output stage (a voice fading
     /// out goes on hearing the guitar — see `tail_stage`).
     share: Option<Arc<crate::tail_stage::InputShare>>,
+    /// The guitar's trim and input EQ.
+    stage: crate::input_stage::InputStage,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -753,6 +757,7 @@ impl InputProbe {
             inject_pos: 0,
             inject_gen: 0,
             share: None,
+            stage: crate::input_stage::InputStage::default(),
         }
     }
 
@@ -788,7 +793,8 @@ impl PluginInstance for InputProbe {
     fn latency(&mut self) -> u32 {
         0
     }
-    fn prepare(&mut self, _sr: f64, _bs: u32) -> Result<(), PluginError> {
+    fn prepare(&mut self, sr: f64, _bs: u32) -> Result<(), PluginError> {
+        self.stage.prepare(sr);
         self.prepared = true;
         Ok(())
     }
@@ -804,6 +810,11 @@ impl PluginInstance for InputProbe {
         _events: &PluginEvents<'_>,
     ) -> Result<(), PluginError> {
         let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
+        // The guitar's own trim and EQ first: everything after — the
+        // meters, the tuner, the gate's key, the chain — hears it trimmed.
+        out_l[..frames].copy_from_slice(&in_l[..frames]);
+        out_r[..frames].copy_from_slice(&in_r[..frames]);
+        self.stage.process(&self.shared.tone, &mut out_l[..frames], &mut out_r[..frames]);
         let muted = self.shared.input_muted.load(Ordering::Relaxed);
         // A new test signal (or its removal): re-read it, from the top. Only
         // locks when the generation moved, and never waits for the lock.
@@ -834,7 +845,7 @@ impl PluginInstance for InputProbe {
                         self.fake_pos = (self.fake_pos + 1) % w.len();
                         (v, v)
                     }
-                    None => (in_l[i], in_r[i]),
+                    None => (out_l[i], out_r[i]),
                 }
             };
             // Muted: the chain gets silence (trails keep ringing) while
@@ -2854,6 +2865,11 @@ impl GuitarRig {
     /// Look up a slot by id.
     pub fn slot_info(&self, id: ModelId) -> Option<&SlotInfo> {
         self.slots.iter().find(|s| s.id == id)
+    }
+
+    /// The guitar's own trim and input EQ, before the chain (Setup).
+    pub fn set_input_tone(&self, v: crate::input_stage::ToneValues) {
+        self.input_meter.tone.set(v);
     }
 
     pub fn set_input_trim_db(&self, db: f32) {

@@ -15,6 +15,7 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+base64.workspace = true
 # The app chrome's bar pieces: the rig header claims the app bar and becomes
 # the one bar (crumbs, drag space, window controls). Inert outside the app.
 fts-chrome.workspace = true

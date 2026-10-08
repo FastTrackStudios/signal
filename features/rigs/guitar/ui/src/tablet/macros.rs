@@ -35,6 +35,11 @@ struct Heard {
     input: f64,
     output: f64,
     squash: f64,
+    /// Delay, reverb, modulation, tremolo: what each adds now.
+    delay: f64,
+    reverb: f64,
+    modulation: f64,
+    tremolo: f64,
 }
 
 /// A knob's glow while its effect works, and the gate's meter.
@@ -46,6 +51,11 @@ fn reaction(id: &str, v: f64, h: Heard) -> (f64, Option<(f64, f64)>) {
         "boost" | "pitch" => (if v > 0.0 { h.input * 0.7 } else { 0.0 }, None),
         "gain" => (h.input * 0.35, None),
         "output" => (h.output * 0.3, None),
+        "delay" => (h.delay, None),
+        "reverb" => (h.reverb, None),
+        "space" => (h.delay.max(h.reverb), None),
+        "mod" => (h.modulation, None),
+        "motion" => (h.tremolo.max(h.modulation), None),
         _ => (0.0, None),
     }
 }
@@ -62,10 +72,15 @@ fn greyish(colour: &str) -> bool {
 pub fn TouchMacroBar(state: RigViewState) -> Element {
     let knobs = state.macros.read().clone();
     let mut open = use_signal(|| None::<String>);
+    let fx = state.fx.read().clone();
     let heard = Heard {
         input: *state.in_level.read(),
         output: *state.out_level.read(),
         squash: (f64::from(*state.comp_gr_db.read()) / 12.0).clamp(0.0, 1.0),
+        delay: fx.first().copied().unwrap_or(0.0),
+        reverb: fx.get(1).copied().unwrap_or(0.0),
+        modulation: fx.get(2).copied().unwrap_or(0.0),
+        tremolo: fx.get(3).copied().unwrap_or(0.0),
     };
     let shown = open().and_then(|id| knobs.iter().find(|k| k.id == id).cloned());
     rsx! {
