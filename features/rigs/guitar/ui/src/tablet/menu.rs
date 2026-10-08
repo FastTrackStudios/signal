@@ -68,6 +68,16 @@ pub struct Picked {
 
 /// Open `items` with the menu's top-left at client `(x, y)`.
 pub fn open_menu(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, on_pick: EventHandler<Picked>) {
+    open_at(host, x, y, items, None, on_pick);
+}
+
+/// Open straight into naming: a "+ Add…" button's field, its name filled
+/// in, without the one-item menu in front of it.
+pub fn open_naming(host: Option<PopupHost>, x: f64, y: f64, item: Item, on_pick: EventHandler<Picked>) {
+    open_at(host, x, y, vec![item], Some(0), on_pick);
+}
+
+fn open_at(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picked>) {
     let Some(host) = host else { return };
     if items.is_empty() {
         return;
@@ -80,6 +90,7 @@ pub fn open_menu(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, on_p
             rsx! {
                 MenuPanel {
                     items: items.clone(),
+                    start,
                     on_pick,
                     on_close: move |()| {
                         spawn(async move { host.close() });
@@ -119,10 +130,14 @@ pub fn MoreButton(label: String, items: Vec<Item>, on_pick: EventHandler<Picked>
 /// The menu's contents: its items, or — once a naming item is chosen — the
 /// name field in their place.
 #[component]
-fn MenuPanel(items: Vec<Item>, on_pick: EventHandler<Picked>, on_close: EventHandler<()>) -> Element {
-    let mut naming = use_signal(|| None::<usize>);
+fn MenuPanel(items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picked>, on_close: EventHandler<()>) -> Element {
+    let initial = start.and_then(|i| match items.get(i) {
+        Some(Item::Name { initial, .. }) => Some(initial.clone()),
+        _ => None,
+    });
+    let mut naming = use_signal(|| start);
     let mut armed = use_signal(|| None::<usize>);
-    let mut text = use_signal(String::new);
+    let mut text = use_signal(|| initial.unwrap_or_default());
     let panel = format!(
         "width: {MENU_W}px; max-height: 70vh; overflow-y: auto; padding: 4px; box-sizing: border-box; background: #0d0d10; border: 1px solid {RULE_STRONG}; border-radius: {R_MD}; box-shadow: 0 16px 40px rgba(0,0,0,0.7); font-family: {FONT}; color: {INK};"
     );
@@ -157,6 +172,8 @@ fn MenuPanel(items: Vec<Item>, on_pick: EventHandler<Picked>, on_close: EventHan
                         onkeydown: move |e: KeyboardEvent| {
                             if e.key() == Key::Enter && ok {
                                 commit();
+                            } else if e.key() == Key::Escape {
+                                on_close.call(());
                             }
                         },
                     }
@@ -181,7 +198,8 @@ fn MenuPanel(items: Vec<Item>, on_pick: EventHandler<Picked>, on_close: EventHan
         };
     }
     rsx! {
-        div { role: "menu", style: "{panel}",
+        div { role: "menu", style: "{panel}", tabindex: "-1",
+            onkeydown: move |e: KeyboardEvent| if e.key() == Key::Escape { on_close.call(()) },
             for (i, it) in items.iter().cloned().enumerate() {
                 match it {
                     Item::Sep => rsx! { div { key: "{i}", style: "height: 1px; margin: 4px 6px; background: {RULE};" } },

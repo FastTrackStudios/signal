@@ -19,8 +19,10 @@ mod edit;
 mod macros;
 mod marks;
 mod menu;
+mod panels;
 mod setlist;
 mod setup;
+mod sidebar_views;
 mod switches;
 mod tokens;
 mod topbar;
@@ -59,6 +61,15 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut browser = use_signal(|| false);
     let setup_tab = use_signal(|| setup::SetupTab::Guitar);
     let pick = use_context_provider(|| BuildPick { part: Signal::new(None), building: Signal::new(false) });
+    // "Patch…" on a section or part: pick it and bring the browser up for
+    // it (in Build it is already there).
+    use_context_provider(|| setlist::PickPart {
+        open: Callback::new(move |()| {
+            if view() == View::Perform {
+                browser.set(true);
+            }
+        }),
+    });
     use_effect(move || {
         let mut b = pick.building;
         b.set(view() == View::Build);
@@ -82,7 +93,13 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                 } else {
                     if sidebar() {
                         aside { style: "width: {SIDEBAR_W}px; flex-shrink: 0; height: 100%; border-right: 1px solid {RULE}; box-sizing: border-box; display: flex; flex-direction: column; min-height: 0;",
-                            setlist::TabletSetlist { state }
+                            // The sidebar for the footswitch mode: the set, the
+                            // profile's stacks, or the presets.
+                            match model.perform_mode {
+                                0 => rsx! { sidebar_views::PresetView { state } },
+                                1 => rsx! { sidebar_views::ProfileView { state } },
+                                _ => rsx! { setlist::TabletSetlist { state } },
+                            }
                         }
                     }
                     main { style: "flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; background: {DESK};",

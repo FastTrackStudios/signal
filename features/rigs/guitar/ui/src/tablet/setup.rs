@@ -215,7 +215,7 @@ impl Setup {
     fn save(self) {
         let model = self.model.peek().clone();
         if let Some(r) = self.rig.peek().clone() {
-            spawn(async move {
+            let _ = dioxus_core::spawn_forever(async move {
                 let _ = r.save_setup(model).await;
             });
         }

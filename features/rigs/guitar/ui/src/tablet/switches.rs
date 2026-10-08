@@ -47,7 +47,9 @@ fn LitRing() -> Element {
 macro_rules! call {
     ($rig:expr, |$r:ident| $body:expr) => {{
         if let Some($r) = $rig.clone() {
-            spawn(async move {
+            // Forever, not the component's: a panel that closes itself
+            // would take the call with it.
+            let _ = dioxus_core::spawn_forever(async move {
                 let _ = $body.await;
             });
         }
@@ -102,7 +104,10 @@ fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element 
     let rig = use_hook(try_consume_context::<RigClient>);
     let (bg, fg) = folder(&stack.name);
     let lit = stack.is_active;
-    let variation = (!stack.current_patch.eq_ignore_ascii_case(&stack.name) && !stack.current_patch.is_empty()).then(|| stack.current_patch.clone());
+    // The patch a press plays, by its own name (the rig shows a patch named
+    // like its stack as "Default").
+    let showing = stack.patches.get(stack.position as usize).cloned().unwrap_or_else(|| stack.current_patch.clone());
+    let variation = (!showing.eq_ignore_ascii_case(&stack.name) && !showing.is_empty()).then(|| showing.clone());
     let count = stack.patches.len().max(stack.patch_count as usize);
     let pos = stack.position as usize;
     let tile_bg = if lit { bg.to_string() } else { dim(bg, 0.24) };

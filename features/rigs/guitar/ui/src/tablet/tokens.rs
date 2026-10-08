@@ -103,3 +103,40 @@ pub fn lift(colour: &str) -> String {
 pub fn tint(colour: &str, pct: u32) -> String {
     format!("color-mix(in oklab, {colour} {pct}%, {SHEET})")
 }
+
+/// A choice's border: ringed `w` pt in the focus ink when on, a hairline
+/// when not.
+#[must_use]
+pub fn ring(on: bool, w: f32) -> String {
+    if on { format!("{w}px solid {FOCUS_FG}") } else { format!("1px solid {RULE_STRONG}") }
+}
+
+/// A row's state dot: filled green when on, an open ring of `edge` when not.
+#[must_use]
+pub fn state_dot(on: bool, edge: &str) -> String {
+    if on { format!("background: {LIVE};") } else { format!("border: 1.5px solid {edge};") }
+}
+
+/// The line a dragged row will land above.
+#[must_use]
+pub fn drop_line(on: bool) -> String {
+    if on { format!("border-top: 2px solid {INK_2};") } else { String::new() }
+}
+
+/// A focus outline, when on.
+#[must_use]
+pub fn focus_outline(on: bool) -> String {
+    if on { format!("outline: 2px solid {FOCUS_FG};") } else { String::new() }
+}
+
+/// A hairline under a row, unless it stands apart.
+#[must_use]
+pub fn rule_below(on: bool) -> String {
+    if on { format!("border-bottom: 1px solid {RULE};") } else { String::new() }
+}
+
+/// A tape colour as ink: the grey tape reads as the third ink.
+#[must_use]
+pub fn tape_ink(tape: &str) -> &str {
+    if tape == "#3f3f46" { INK_3 } else { tape }
+}

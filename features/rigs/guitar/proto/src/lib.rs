@@ -1685,6 +1685,12 @@ pub mod rig {
         fn delete_patch(&self, name: String);
         /// Rename a stack.
         fn rename_stack(&self, old: String, new_name: String);
+        /// Move the profile's stack `from` to position `to` (its switch
+        /// moves with it).
+        fn move_stack(&self, from: u32, to: u32);
+        /// Move patch `from` of stack `stack` to position `to` in its
+        /// rotation.
+        fn move_stack_patch(&self, stack: String, from: u32, to: u32);
         /// Delete a stack (its patches stay in the pool).
         fn delete_stack(&self, name: String);
         /// Name a new section on the current song, appended at the end.

@@ -175,6 +175,89 @@ pub fn date_label(iso: &str) -> String {
     format!("{} {d} {}", WEEKDAYS[weekday(y, m, d)], MONTHS[(m - 1) as usize])
 }
 
+fn ymd(iso: &str) -> Option<chrono::NaiveDate> {
+    chrono::NaiveDate::parse_from_str(iso.trim(), "%Y-%m-%d").ok()
+}
+
+/// Today, `YYYY-MM-DD`.
+#[must_use]
+pub fn today_iso() -> String {
+    chrono::Local::now().date_naive().format("%Y-%m-%d").to_string()
+}
+
+/// `iso` moved by `days` (today when it is not a date).
+#[must_use]
+pub fn add_days(iso: &str, days: i64) -> String {
+    let d = ymd(iso).unwrap_or_else(|| chrono::Local::now().date_naive());
+    (d + chrono::Duration::days(days)).format("%Y-%m-%d").to_string()
+}
+
+/// A date's month and weekday, short, and its day: ("Oct", 6, "Tue").
+#[must_use]
+pub fn date_parts(iso: &str) -> Option<(&'static str, u32, &'static str)> {
+    use chrono::Datelike;
+    let d = ymd(iso)?;
+    Some((MONTHS[d.month0() as usize], d.day(), WEEKDAYS[d.weekday().num_days_from_sunday() as usize]))
+}
+
+/// "Today", "Tomorrow", "Yesterday", "In 5 days", "3 weeks ago".
+#[must_use]
+pub fn when_label(iso: &str) -> String {
+    let Some(d) = ymd(iso) else { return String::new() };
+    let days = (d - chrono::Local::now().date_naive()).num_days();
+    match days {
+        0 => "Today".into(),
+        1 => "Tomorrow".into(),
+        -1 => "Yesterday".into(),
+        2..=6 => format!("In {days} days"),
+        7..=13 => "Next week".into(),
+        14.. => format!("In {} weeks", (days as f64 / 7.0).round()),
+        -6..=-2 => format!("{} days ago", -days),
+        -13..=-7 => "Last week".into(),
+        _ => format!("{} weeks ago", (-days as f64 / 7.0).round()),
+    }
+}
+
+/// The stored name, in the house style: event, M-D-YY, title.
+#[must_use]
+pub fn set_name(m: &SetMeta) -> String {
+    use chrono::Datelike;
+    let mut parts = vec![m.event.trim().to_string()];
+    if let Some(d) = ymd(&m.date) {
+        parts.push(format!("{}-{}-{:02}", d.month(), d.day(), d.year() % 100));
+    }
+    if !m.title.trim().is_empty() {
+        parts.push(m.title.trim().to_string());
+    }
+    parts.into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join(" ")
+}
+
+/// The next date an event usually falls on: a week after its latest set,
+/// today when it has none (or the latest is long past).
+#[must_use]
+pub fn next_date_for(event: &str, sets: &[SetMeta]) -> String {
+    let today = today_iso();
+    let mut dates: Vec<&str> = sets.iter().filter(|s| s.event.eq_ignore_ascii_case(event) && !s.date.is_empty()).map(|s| s.date.as_str()).collect();
+    dates.sort_unstable();
+    let Some(last) = dates.last() else { return today };
+    let mut next = add_days(last, 7);
+    while next < today {
+        next = add_days(&next, 7);
+    }
+    next
+}
+
+/// The next section a song's form suggests (Intro → Verse 1 → Chorus 1 …).
+#[must_use]
+pub fn suggest_section(names: &[String]) -> String {
+    if names.is_empty() {
+        return "Intro".into();
+    }
+    let count = |base: &str| names.iter().filter(|n| n.to_lowercase().starts_with(&base.to_lowercase())).count();
+    let (verses, choruses) = (count("Verse"), count("Chorus"));
+    if verses <= choruses { format!("Verse {}", verses + 1) } else { format!("Chorus {}", choruses + 1) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,6 +275,16 @@ mod tests {
         assert_eq!(section_colour("Chorus 2"), "#3b82f6");
         assert_eq!(section_colour("Pre-Chorus"), "#bfdbfe");
         assert_eq!(section_colour("Dance! (V2)"), SLATE);
+    }
+
+    #[test]
+    fn set_names_are_built_in_the_house_style() {
+        let m = SetMeta { event: "HSM".into(), date: "2026-10-06".into(), title: "Worship Night".into() };
+        assert_eq!(set_name(&m), "HSM 10-6-26 Worship Night");
+        assert_eq!(parse_set_name(&set_name(&m)), m);
+        assert_eq!(add_days("2026-10-06", 7), "2026-10-13");
+        assert_eq!(date_parts("2026-10-06"), Some(("Oct", 6, "Tue")));
+        assert_eq!(suggest_section(&["Intro".into(), "Verse 1".into()]), "Chorus 1");
     }
 
     #[test]

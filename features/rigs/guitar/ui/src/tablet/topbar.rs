@@ -83,7 +83,7 @@ fn ModeButton(mode: u32) -> Element {
                 let rig = rig.clone();
                 open_menu(host, c.x - el.x, c.y - el.y + f64::from(TOP_H) - 1.0, items.clone(), EventHandler::new(move |p: Picked| {
                     if let Ok(m) = p.id.parse::<u32>() && let Some(r) = rig.clone() {
-                        spawn(async move { let _ = r.set_perform_mode(m).await; });
+                        let _ = dioxus_core::spawn_forever(async move { let _ = r.set_perform_mode(m).await; });
                     }
                 }));
             },
@@ -111,7 +111,7 @@ fn PanicButton() -> Element {
                 if busy() { return; }
                 busy.set(true);
                 if let Some(r) = rig.clone() {
-                    spawn(async move { let _ = r.panic().await; });
+                    let _ = dioxus_core::spawn_forever(async move { let _ = r.panic().await; });
                 }
                 spawn(async move {
                     architect::platform::sleep(Duration::from_millis(1500)).await;
@@ -238,7 +238,7 @@ fn MuteButton(house: bool, phones: bool) -> Element {
     ];
     let set = move |rig: Option<RigClient>, h: bool, p: bool| {
         if let Some(r) = rig {
-            spawn(async move { let _ = r.set_mutes(h, p).await; });
+            let _ = dioxus_core::spawn_forever(async move { let _ = r.set_mutes(h, p).await; });
         }
     };
     let (ink, bg) = if any { (DANGER_INK, VOID) } else { (INK_2, CLEAR) };

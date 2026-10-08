@@ -2509,6 +2509,17 @@ impl GuitarRigBackend {
         tracing::info!(setlist.name = %name, "today's setlist opened");
     }
 
+    /// Rebuild the live rig from the profile as it is now (after an edit to
+    /// its stacks): the footswitches follow.
+    fn reload_def(&self) {
+        let rebuilt = {
+            let def = self.profile_def.lock_ok();
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&self.effective_def(&def), &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+    }
+
     /// Re-apply the main-output fader: master trim + mute. (The patch's own
     /// level is applied in the rig's output stage, where a switch crossfades
     /// it and the outgoing patch's tail keeps its own.)
@@ -7228,7 +7239,38 @@ impl Rig for GuitarRigBackend {
             RigLibrary::save_profile(&def);
         }
         tracing::info!("stack renamed: {old} → {new_name}");
-        self.publish_state();
+        self.reload_def();
+    }
+
+    fn move_stack(&self, from: u32, to: u32) {
+        {
+            let mut def = self.profile_def.lock_ok();
+            let (from, to) = (from as usize, to as usize);
+            if from >= def.stacks.len() || to >= def.stacks.len() || from == to {
+                return;
+            }
+            let st = def.stacks.remove(from);
+            def.stacks.insert(to, st);
+            RigLibrary::save_profile(&def);
+        }
+        tracing::info!(stack.from = from, stack.to = to, "stack moved");
+        self.reload_def();
+    }
+
+    fn move_stack_patch(&self, stack: String, from: u32, to: u32) {
+        {
+            let mut def = self.profile_def.lock_ok();
+            let Some(st) = def.stacks.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&stack)) else { return };
+            let (from, to) = (from as usize, to as usize);
+            if from >= st.patches.len() || to >= st.patches.len() || from == to {
+                return;
+            }
+            let p = st.patches.remove(from);
+            st.patches.insert(to, p);
+            RigLibrary::save_profile(&def);
+        }
+        tracing::info!(%stack, patch.from = from, patch.to = to, "stack patch moved");
+        self.reload_def();
     }
 
     fn delete_stack(&self, name: String) {
