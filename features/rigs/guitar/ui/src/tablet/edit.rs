@@ -45,11 +45,7 @@ fn OverrideBar(perf: PerformanceModel, edits: usize, picked: Option<usize>) -> E
     let section = picked.and_then(|i| sections.iter().find(|s| s.parts.contains(&i)).cloned());
     let part = picked.and_then(|i| perf.parts.get(i).cloned());
     let (Some(sec), Some(part)) = (section, part) else {
-        return rsx! {
-            div { style: "flex-shrink: 0; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 6px 0 14px; border-top: 1px solid {RULE}; background: {pick(edits > 0, EDITS_BG, SHEET)}; box-sizing: border-box;",
-                span { style: "font-size: 13.5px; color: {INK_3};", "Pick a section in the setlist — what you change here becomes its own." }
-            }
-        };
+        return rsx! {};
     };
     let several = sec.parts.len() > 1;
     let preset = sound_of(&part);

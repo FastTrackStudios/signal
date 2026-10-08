@@ -21,6 +21,7 @@ mod marks;
 mod menu;
 mod panels;
 mod routing;
+mod routing_canvas;
 mod fx_row;
 mod setlist;
 mod setup;

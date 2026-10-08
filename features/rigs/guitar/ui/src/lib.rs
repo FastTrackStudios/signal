@@ -23,7 +23,7 @@ mod face_chrome;
 mod frame_surface;
 /// The rig's blocks drawn with frame faces, chosen by what is loaded.
 mod rig_faces;
-mod grid;
+pub(crate) mod grid;
 /// The shared audio-gui knob (moved to signal-widgets).
 pub use signal_widgets::knob;
 mod icons;

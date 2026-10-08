@@ -14628,6 +14628,7 @@ dependencies = [
  "lumen-blocks",
  "modulation-ui",
  "naga",
+ "parley 0.10.0",
  "reverb-dsp",
  "reverb-ui",
  "rustc-hash 2.1.3",

@@ -12,10 +12,11 @@ use super::tokens::*;
 use crate::rig_faces::{use_faces, BlockFace, FaceEntry, Faces, NameCard};
 use crate::state::RigViewState;
 
-/// The row's box, pt — the landscape iPhone's safe area, so one face set
-/// serves this row and a phone on its side.
+/// The row's box, pt — what a landscape iPhone 16 Pro leaves for it: its
+/// 750 × 381 safe area less the phone's top bar and routing strip, so one
+/// face set serves this row and a phone on its side.
 pub const FX_W: f64 = 750.0;
-pub const FX_H: f64 = 381.0;
+pub const FX_H: f64 = 254.0;
 
 /// A pre effect (before the amp): its face is its pedal's.
 fn is_pre(b: &LiveBlock) -> bool {

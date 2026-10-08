@@ -1,0 +1,617 @@
+//! The routing grid, drawn on the GPU — the rig's grid (signal-grid-ui's
+//! look: modules as containers with a header, blocks as cells bordered in
+//! their type's colour, a port either side, cables between them) painted as
+//! one vector scene into the window's renderer, with no DOM per cell.
+//!
+//! Unfolded by default: the chain left to right in one row, as tall as the
+//! patch needs (a stereo pair stacks two cells), fitted to the view's
+//! height. Folded, it wraps at the view's width — a long module carries on
+//! down the next row, the cable bending back to it.
+//!
+//! One finger pans, two pinch; a tap picks a cell or a module's header, and
+//! a cell's light switches the block. Picks go to `on_pick`.
+
+use dioxus::prelude::*;
+
+/// One block's cell.
+#[derive(Clone, PartialEq, Debug)]
+pub struct CanvasCell {
+    pub id: String,
+    pub name: String,
+    pub sub: String,
+    /// Its type's colour, `#rrggbb`.
+    pub colour: String,
+    pub lit: bool,
+    pub edited: bool,
+}
+
+/// One module: its name, what it plays, its colour, its columns (a block,
+/// or a stereo pair stacked).
+#[derive(Clone, PartialEq, Debug)]
+pub struct CanvasModule {
+    pub name: String,
+    pub label: String,
+    pub colour: String,
+    pub cols: Vec<Vec<CanvasCell>>,
+}
+
+/// What a tap picked.
+#[derive(Clone, PartialEq, Debug)]
+pub enum CanvasPick {
+    Block(String),
+    Module(String, Vec<String>),
+    /// A cell's light: switch the block on or off.
+    Toggle(String),
+    /// Empty grid: nothing.
+    Clear,
+}
+
+/// What is selected, for the highlight: a block's id or a module's name.
+#[derive(Clone, PartialEq, Debug)]
+pub enum CanvasSel {
+    Block(String),
+    Module(String),
+}
+
+#[component]
+pub fn RoutingCanvas(
+    modules: Vec<CanvasModule>,
+    selected: Option<CanvasSel>,
+    /// Wrap at the view's width (else one row).
+    fold: bool,
+    /// Bumped to fit again (the zoom back to the view).
+    fit: u32,
+    on_pick: EventHandler<CanvasPick>,
+) -> Element {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        native::canvas(modules, selected, fold, fit, on_pick)
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (modules, selected, fold, fit, on_pick);
+        rsx! { div {} }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+mod native {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::rc::Rc;
+
+    use anyrender::{PaintScene, RenderContext, Scene};
+    use blitz_dom::Widget;
+    use blitz_dom::node::ComputedStyles;
+    use blitz_traits::events::{BlitzPointerId, BlitzWheelDelta, UiEvent};
+    use dioxus::prelude::*;
+    use kurbo::{Affine, BezPath, Circle, Point, Rect, RoundedRect, Stroke};
+    use parley::{FontContext, FontFamily, FontWeight, Layout, LayoutContext, PositionedLayoutItem, StyleProperty};
+    use vello::peniko::{Color, Fill};
+
+    use super::{CanvasCell, CanvasModule, CanvasPick, CanvasSel};
+
+    // The grid's measures, pt at zoom 1 (signal-grid-ui's, sized for a finger).
+    const CELL: f64 = 92.0;
+    const GAP: f64 = 22.0;
+    const PAD: f64 = 10.0;
+    const HEAD: f64 = 28.0;
+    const MOD_GAP: f64 = 28.0;
+    const ROW_GAP: f64 = 36.0;
+    const EDGE: f64 = 22.0;
+    const END: f64 = 40.0;
+    const PORT: f64 = 5.0;
+
+    /// A piece of a module on the grid (a long one folds into several).
+    #[derive(Clone)]
+    struct Piece {
+        module: usize,
+        cols: std::ops::Range<usize>,
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+        first: bool,
+    }
+
+    fn lanes(m: &CanvasModule) -> usize {
+        m.cols.iter().map(Vec::len).max().unwrap_or(1).max(1)
+    }
+    fn piece_w(n: usize) -> f64 {
+        PAD * 2.0 + n as f64 * CELL + n.saturating_sub(1) as f64 * GAP
+    }
+    fn piece_h(lanes: usize) -> f64 {
+        HEAD + lanes as f64 * CELL + lanes.saturating_sub(1) as f64 * GAP + PAD
+    }
+
+    /// Lay the modules out at zoom 1: in rows `width` wide (fold), or one
+    /// row. The pieces, and the content's size.
+    fn layout(mods: &[CanvasModule], width: Option<f64>) -> (Vec<Piece>, f64, f64) {
+        let mut pieces: Vec<Piece> = Vec::new();
+        let start = EDGE + END + MOD_GAP;
+        let (mut x, mut row_top, mut row_h) = (start, EDGE, 0.0_f64);
+        let mut max_x = x;
+        for (mi, m) in mods.iter().enumerate() {
+            let h = piece_h(lanes(m));
+            let mut c = 0;
+            while c < m.cols.len() {
+                let room = width.map_or(f64::INFINITY, |w| w - EDGE - x);
+                let mut n = m.cols.len() - c;
+                if piece_w(n) > room {
+                    // Whole on a fresh row, when it would fit there.
+                    if c == 0 && x > start && width.is_some_and(|w| piece_w(n) <= w - EDGE - start) {
+                        row_top += row_h + ROW_GAP;
+                        row_h = 0.0;
+                        x = start;
+                        continue;
+                    }
+                    n = (((room - PAD * 2.0 + GAP) / (CELL + GAP)).floor().max(0.0)) as usize;
+                    if n == 0 {
+                        if x > start {
+                            row_top += row_h + ROW_GAP;
+                            row_h = 0.0;
+                            x = start;
+                            continue;
+                        }
+                        n = 1;
+                    }
+                }
+                let w = piece_w(n);
+                pieces.push(Piece { module: mi, cols: c..c + n, x, y: row_top, w, h, first: c == 0 });
+                row_h = row_h.max(h);
+                x += w + MOD_GAP;
+                max_x = max_x.max(x);
+                c += n;
+            }
+        }
+        (pieces, max_x + END + EDGE, row_top + row_h + EDGE)
+    }
+
+    /// A cell's box in content coordinates.
+    fn cell_rect(p: &Piece, k: usize, lane: usize) -> Rect {
+        let x = p.x + PAD + k as f64 * (CELL + GAP);
+        let y = p.y + HEAD + lane as f64 * (CELL + GAP);
+        Rect::new(x, y, x + CELL, y + CELL)
+    }
+
+    /// What a spot on the grid is.
+    #[derive(Clone)]
+    enum Hit {
+        Cell(String),
+        Light(String),
+        Module(usize),
+    }
+
+    enum Gesture {
+        Idle,
+        /// One finger down, not moved yet: a tap, unless it moves.
+        Pending { at: (f64, f64), pan0: (f64, f64) },
+        Pan { at: (f64, f64), pan0: (f64, f64) },
+        Pinch { d0: f64, z0: f64, mid0: (f64, f64), pan0: (f64, f64) },
+    }
+
+    struct State {
+        modules: Vec<CanvasModule>,
+        selected: Option<CanvasSel>,
+        fold: bool,
+        fit: u32,
+        /// The zoom and pan; `fitted` while the zoom follows the view.
+        zoom: f64,
+        pan: (f64, f64),
+        fitted: bool,
+        /// Back to the start on the next paint (a Fit, a fold).
+        reset_pan: bool,
+        /// The view's size, pt (from the last paint).
+        view: (f64, f64),
+        fingers: HashMap<u64, (f64, f64)>,
+        gesture: Gesture,
+        hits: Vec<(Rect, Hit)>,
+        picks: Vec<CanvasPick>,
+        dirty: bool,
+        fonts: FontContext,
+        layouts: LayoutContext<()>,
+        texts: HashMap<(String, u32, u32), Layout<()>>,
+    }
+
+    type Shared = Rc<RefCell<State>>;
+
+    pub(super) fn canvas(modules: Vec<CanvasModule>, selected: Option<CanvasSel>, fold: bool, fit: u32, on_pick: EventHandler<CanvasPick>) -> Element {
+        let state: Shared = use_hook(|| {
+            Rc::new(RefCell::new(State {
+                modules: Vec::new(),
+                selected: None,
+                fold,
+                fit,
+                zoom: 1.0,
+                pan: (0.0, 0.0),
+                fitted: true,
+                reset_pan: true,
+                view: (0.0, 0.0),
+                fingers: HashMap::new(),
+                gesture: Gesture::Idle,
+                hits: Vec::new(),
+                picks: Vec::new(),
+                dirty: true,
+                fonts: FontContext::new(),
+                layouts: LayoutContext::new(),
+                texts: HashMap::new(),
+            }))
+        });
+        // A change of patch, selection or layout: drawn again (the
+        // attribute below changes, so the page repaints).
+        let mut rev = use_signal(|| 0u64);
+        {
+            let mut s = state.borrow_mut();
+            let mut changed = false;
+            if s.modules != modules {
+                s.modules = modules;
+                changed = true;
+            }
+            if s.selected != selected {
+                s.selected = selected;
+                changed = true;
+            }
+            if s.fold != fold || s.fit != fit {
+                s.fold = fold;
+                s.fit = fit;
+                s.fitted = true;
+                s.reset_pan = true;
+                changed = true;
+            }
+            if changed {
+                s.dirty = true;
+                drop(s);
+                let next = *rev.peek() + 1;
+                rev.set(next);
+            }
+        }
+        let update = {
+            let schedule = dioxus_core::schedule_update();
+            std::sync::Arc::new(move || schedule()) as std::sync::Arc<dyn Fn() + Send + Sync>
+        };
+        let attr = use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(CanvasWidget { state: Rc::clone(&state), update: update.clone() }));
+        // Picks go out from a task, not from inside a render.
+        let picks: Vec<CanvasPick> = std::mem::take(&mut state.borrow_mut().picks);
+        if !picks.is_empty() {
+            spawn(async move {
+                for p in picks {
+                    on_pick.call(p);
+                }
+            });
+        }
+        rsx! {
+            object { style: "display: block; width: 100%; height: 100%; touch-action: none;", "data-rev": "{rev}", data: attr }
+        }
+    }
+
+    struct CanvasWidget {
+        state: Shared,
+        update: std::sync::Arc<dyn Fn() + Send + Sync>,
+    }
+
+    fn pointer_key(id: BlitzPointerId) -> u64 {
+        match id {
+            BlitzPointerId::Mouse => 0,
+            BlitzPointerId::Pen => u64::MAX,
+            BlitzPointerId::Finger(f) => f.wrapping_add(1),
+        }
+    }
+
+    fn two(fingers: &HashMap<u64, (f64, f64)>) -> Option<((f64, f64), (f64, f64))> {
+        let mut it = fingers.values();
+        Some((*it.next()?, *it.next()?))
+    }
+
+    impl Widget for CanvasWidget {
+        fn handle_event(&mut self, event: &UiEvent) {
+            let mut s = self.state.borrow_mut();
+            match event {
+                UiEvent::PointerDown(e) => {
+                    let at = (f64::from(e.element.x), f64::from(e.element.y));
+                    s.fingers.insert(pointer_key(e.id), at);
+                    s.gesture = match two(&s.fingers).filter(|_| s.fingers.len() == 2) {
+                        Some((a, b)) => Gesture::Pinch {
+                            d0: ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt().max(1.0),
+                            z0: s.zoom,
+                            mid0: ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0),
+                            pan0: s.pan,
+                        },
+                        None => Gesture::Pending { at, pan0: s.pan },
+                    };
+                }
+                UiEvent::PointerMove(e) => {
+                    let key = pointer_key(e.id);
+                    if !s.fingers.contains_key(&key) {
+                        return;
+                    }
+                    let p = (f64::from(e.element.x), f64::from(e.element.y));
+                    s.fingers.insert(key, p);
+                    match s.gesture {
+                        Gesture::Pending { at, pan0 } if ((p.0 - at.0).powi(2) + (p.1 - at.1).powi(2)).sqrt() > 6.0 => {
+                            s.gesture = Gesture::Pan { at, pan0 };
+                        }
+                        _ => {}
+                    }
+                    match s.gesture {
+                        Gesture::Pan { at, pan0 } => {
+                            s.pan = (pan0.0 + p.0 - at.0, pan0.1 + p.1 - at.1);
+                            s.dirty = true;
+                        }
+                        Gesture::Pinch { d0, z0, mid0, pan0 } => {
+                            if let Some((a, b)) = two(&s.fingers) {
+                                let d = ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt();
+                                let z = (z0 * d / d0).clamp(0.4, 2.5);
+                                let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+                                // The content under the fingers stays under them.
+                                let c = ((mid0.0 - pan0.0) / z0, (mid0.1 - pan0.1) / z0);
+                                s.zoom = z;
+                                s.pan = (mid.0 - c.0 * z, mid.1 - c.1 * z);
+                                s.fitted = false;
+                                s.dirty = true;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                UiEvent::PointerUp(e) => {
+                    let p = (f64::from(e.element.x), f64::from(e.element.y));
+                    s.fingers.remove(&pointer_key(e.id));
+                    if let Gesture::Pending { .. } = s.gesture {
+                        // A tap: what is under it.
+                        let at = Point::new((p.0 - s.pan.0) / s.zoom, (p.1 - s.pan.1) / s.zoom);
+                        let hit = s.hits.iter().rev().find(|(r, _)| r.contains(at)).map(|(_, h)| h.clone());
+                        let pick = match hit {
+                            Some(Hit::Light(id)) => CanvasPick::Toggle(id),
+                            Some(Hit::Cell(id)) => CanvasPick::Block(id),
+                            Some(Hit::Module(i)) => {
+                                let m = &s.modules[i];
+                                CanvasPick::Module(m.name.clone(), m.cols.iter().flatten().map(|c| c.id.clone()).collect())
+                            }
+                            None => CanvasPick::Clear,
+                        };
+                        s.picks.push(pick);
+                        drop(s);
+                        (self.update)();
+                        s = self.state.borrow_mut();
+                    }
+                    s.gesture = Gesture::Idle;
+                }
+                UiEvent::PointerCancel(e) => {
+                    s.fingers.remove(&pointer_key(e.id));
+                    s.gesture = Gesture::Idle;
+                }
+                UiEvent::Wheel(e) => {
+                    let (dx, dy) = match e.delta {
+                        BlitzWheelDelta::Lines(x, y) => (x * 30.0, y * 30.0),
+                        BlitzWheelDelta::Pixels(x, y) => (x, y),
+                    };
+                    s.pan = (s.pan.0 + dx, s.pan.1 + dy);
+                    s.dirty = true;
+                }
+                _ => {}
+            }
+        }
+
+        fn needs_redraw(&self) -> bool {
+            self.state.try_borrow().is_ok_and(|s| s.dirty)
+        }
+
+        fn paint(&mut self, _render_ctx: &mut dyn RenderContext, _styles: &ComputedStyles, width: u32, height: u32, scale: f64) -> Scene {
+            let mut scene = Scene::new();
+            if width < 2 || height < 2 {
+                return scene;
+            }
+            let mut s = self.state.borrow_mut();
+            s.dirty = false;
+            let view = (f64::from(width) / scale, f64::from(height) / scale);
+            s.view = view;
+            // Unfolded and fitted: the row as tall as the view.
+            let natural = layout(&s.modules, None);
+            if s.fitted {
+                s.zoom = if s.fold { 1.0 } else { (view.1 / natural.2).clamp(0.45, 0.9) };
+            }
+            let wrap = s.fold.then(|| view.0 / s.zoom);
+            let (pieces, cw, ch) = layout(&s.modules, wrap);
+            if s.reset_pan {
+                s.reset_pan = false;
+                s.pan = (0.0, 0.0);
+            }
+            // Panning stops at the content's edges; content shorter than
+            // the view sits centred in it.
+            let min_x = (view.0 - cw * s.zoom).min(0.0);
+            let spare_y = view.1 - ch * s.zoom;
+            let pan_y = if spare_y >= 0.0 { spare_y / 2.0 } else { s.pan.1.clamp(spare_y, 0.0) };
+            s.pan = (s.pan.0.clamp(min_x, 0.0), pan_y);
+            let t = Affine::scale(scale) * Affine::translate((s.pan.0, s.pan.1)) * Affine::scale(s.zoom);
+            let mut hits: Vec<(Rect, Hit)> = Vec::new();
+            let st = &mut *s;
+
+            // Cables first, under everything: the chain's order through the
+            // cells — down a module's column, then on to the next.
+            let mut chain: Vec<Rect> = Vec::new();
+            for p in &pieces {
+                let m = &st.modules[p.module];
+                for (k, col) in m.cols[p.cols.clone()].iter().enumerate() {
+                    chain.extend((0..col.len()).map(|l| cell_rect(p, k, l)));
+                }
+            }
+            let cable = Color::from_rgba8(0x52, 0x52, 0x5b, 0xff);
+            let stroke = Stroke::new(2.0);
+            if let (Some(first), Some(last)) = (chain.first(), chain.last()) {
+                let y_in = first.center().y;
+                let y_out = last.center().y;
+                let x_end = chain.iter().map(|r| r.x1).fold(0.0, f64::max) + MOD_GAP;
+                end_pill(&mut scene, st, t, Rect::new(EDGE, y_in - 15.0, EDGE + END, y_in + 15.0), "IN");
+                end_pill(&mut scene, st, t, Rect::new(x_end, y_out - 15.0, x_end + END, y_out + 15.0), "OUT");
+                scene.stroke(&stroke, t, cable, None, &wire(Point::new(EDGE + END, y_in), Point::new(first.x0, y_in), ROW_GAP));
+                scene.stroke(&stroke, t, cable, None, &wire(Point::new(last.x1, y_out), Point::new(x_end, y_out), ROW_GAP));
+            }
+            for w in chain.windows(2) {
+                let (a, b) = (w[0], w[1]);
+                if (a.x0 - b.x0).abs() < 0.5 && b.y0 > a.y0 {
+                    // Down the column.
+                    scene.stroke(&stroke, t, cable, None, &kurbo::Line::new((a.center().x, a.y1), (b.center().x, b.y0)));
+                } else {
+                    scene.stroke(&stroke, t, cable, None, &wire(Point::new(a.x1, a.center().y), Point::new(b.x0, b.center().y), ROW_GAP));
+                }
+            }
+
+            for p in &pieces {
+                let m = st.modules[p.module].clone();
+                let colour = hex(&m.colour);
+                let module_on = matches!(&st.selected, Some(CanvasSel::Module(n)) if *n == m.name);
+                // The module's container.
+                let r = RoundedRect::from_rect(Rect::new(p.x, p.y, p.x + p.w, p.y + p.h), 10.0);
+                scene.fill(Fill::NonZero, t, mix(colour, Color::from_rgba8(0x14, 0x14, 0x18, 0xff), if module_on { 0.16 } else { 0.07 }), None, &r);
+                let edge = if module_on { colour } else { Color::from_rgba8(0x2a, 0x2a, 0x31, 0xff) };
+                scene.stroke(&Stroke::new(if module_on { 2.0 } else { 1.0 }), t, edge, None, &r);
+                // Its header: a mark, its name, what it plays.
+                scene.fill(Fill::NonZero, t, colour, None, &RoundedRect::new(p.x + PAD, p.y + 9.0, p.x + PAD + 8.0, p.y + 17.0, 2.0));
+                let name = if p.first { m.name.to_uppercase() } else { format!("{} ›", m.name.to_uppercase()) };
+                let nw = text(&mut scene, st, t, &name, 10.5, 800.0, lift(colour), p.x + PAD + 14.0, p.y + 17.5, p.w - PAD * 2.0 - 14.0, false);
+                if p.first && !m.label.is_empty() {
+                    text(&mut scene, st, t, &m.label, 10.5, 600.0, Color::from_rgba8(0xa1, 0xa1, 0xaa, 0xff), p.x + PAD + 22.0 + nw, p.y + 17.5, (p.w - PAD * 2.0 - 22.0 - nw).max(0.0), false);
+                }
+                hits.push((Rect::new(p.x, p.y, p.x + p.w, p.y + HEAD), Hit::Module(p.module)));
+                // Its cells.
+                for (k, col) in m.cols[p.cols.clone()].iter().enumerate() {
+                    for (lane, c) in col.iter().enumerate() {
+                        let rect = cell_rect(p, k, lane);
+                        draw_cell(&mut scene, st, t, rect, c);
+                        hits.push((rect, Hit::Cell(c.id.clone())));
+                        hits.push((Rect::new(rect.x1 - 30.0, rect.y0, rect.x1, rect.y0 + 30.0), Hit::Light(c.id.clone())));
+                    }
+                }
+            }
+            st.hits = hits;
+            scene
+        }
+    }
+
+    /// A cable from an out port to an in port: a curve along a row, or down
+    /// round the row's foot and back for a fold.
+    fn wire(a: Point, b: Point, row_gap: f64) -> BezPath {
+        let mut p = BezPath::new();
+        p.move_to((a.x, a.y));
+        if b.x >= a.x {
+            let dx = ((b.x - a.x) / 2.0).max(10.0);
+            p.curve_to((a.x + dx, a.y), (b.x - dx, b.y), (b.x, b.y));
+        } else {
+            // Folded: out, down to the gap under the row, back, down, in.
+            let out = a.x + 11.0;
+            let back = b.x - 11.0;
+            let mid = b.y - CELL / 2.0 - HEAD - row_gap / 2.0;
+            p.line_to((out, a.y));
+            p.line_to((out, mid));
+            p.line_to((back, mid));
+            p.line_to((back, b.y));
+            p.line_to((b.x, b.y));
+        }
+        p
+    }
+
+    fn draw_cell(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, c: &CanvasCell) {
+        let colour = hex(&c.colour);
+        let on = matches!(&st.selected, Some(CanvasSel::Block(id)) if *id == c.id);
+        let rr = RoundedRect::from_rect(r, 9.0);
+        let base = Color::from_rgba8(0x17, 0x17, 0x1b, 0xff);
+        scene.fill(Fill::NonZero, t, if c.lit { mix(colour, base, 0.16) } else { base }, None, &rr);
+        let edge = if on {
+            Color::from_rgba8(0xf4, 0xf4, 0xf5, 0xff)
+        } else if c.lit {
+            mix(colour, base, 0.75)
+        } else {
+            Color::from_rgba8(0x2c, 0x2c, 0x33, 0xff)
+        };
+        scene.stroke(&Stroke::new(if on { 2.5 } else { 1.5 }), t, edge, None, &rr);
+        // Its ports.
+        let port = if c.lit { colour } else { Color::from_rgba8(0x3f, 0x3f, 0x46, 0xff) };
+        for x in [r.x0, r.x1] {
+            scene.fill(Fill::NonZero, t, port, None, &Circle::new((x, r.center().y), PORT));
+        }
+        // Its light.
+        let light = if c.lit { Color::from_rgba8(0x22, 0xc5, 0x5e, 0xff) } else { Color::from_rgba8(0x3f, 0x3f, 0x46, 0xff) };
+        scene.fill(Fill::NonZero, t, light, None, &Circle::new((r.x1 - 13.0, r.y0 + 13.0), 4.5));
+        // Its name, and what it plays.
+        let ink = if c.lit { Color::from_rgba8(0xe4, 0xe4, 0xe7, 0xff) } else { Color::from_rgba8(0x71, 0x71, 0x7a, 0xff) };
+        let cy = r.center().y;
+        if c.sub.is_empty() {
+            text(scene, st, t, &c.name, 12.5, 700.0, ink, r.x0 + 10.0, cy + 4.5, CELL - 20.0, true);
+        } else {
+            text(scene, st, t, &c.name, 12.5, 700.0, ink, r.x0 + 10.0, cy - 2.0, CELL - 20.0, true);
+            text(scene, st, t, &c.sub, 10.0, 550.0, Color::from_rgba8(0x71, 0x71, 0x7a, 0xff), r.x0 + 8.0, cy + 14.0, CELL - 16.0, true);
+        }
+        if c.edited {
+            text(scene, st, t, "Edited", 9.5, 750.0, Color::from_rgba8(0xf5, 0x9e, 0x0b, 0xff), r.x0 + 8.0, r.y1 - 10.0, CELL - 16.0, true);
+        }
+    }
+
+    fn end_pill(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, label: &str) {
+        let rr = RoundedRect::from_rect(r, r.height() / 2.0);
+        scene.fill(Fill::NonZero, t, Color::from_rgba8(0x0b, 0x0b, 0x0e, 0xff), None, &rr);
+        scene.stroke(&Stroke::new(1.5), t, Color::from_rgba8(0x3f, 0x3f, 0x46, 0xff), None, &rr);
+        text(scene, st, t, label, 10.0, 800.0, Color::from_rgba8(0x71, 0x71, 0x7a, 0xff), r.x0, r.center().y + 3.5, r.width(), true);
+    }
+
+    /// Draw `s` with its baseline at `y`, from `x` (or centred in `max_w`),
+    /// cut at `max_w`. Returns its width.
+    #[allow(clippy::too_many_arguments)]
+    fn text(scene: &mut Scene, st: &mut State, t: Affine, s: &str, size: f32, weight: f32, colour: Color, x: f64, y: f64, max_w: f64, centre: bool) -> f64 {
+        if s.is_empty() || max_w <= 0.0 {
+            return 0.0;
+        }
+        let key = (s.to_string(), size.to_bits(), weight.to_bits());
+        if !st.texts.contains_key(&key) {
+            let mut b = st.layouts.ranged_builder(&mut st.fonts, s, 1.0, true);
+            b.push_default(StyleProperty::FontFamily(FontFamily::Source("system-ui".into())));
+            b.push_default(StyleProperty::FontSize(size));
+            b.push_default(StyleProperty::FontWeight(FontWeight::new(weight)));
+            let mut layout: Layout<()> = b.build(s);
+            layout.break_all_lines(None);
+            st.texts.insert(key.clone(), layout);
+        }
+        let layout = &st.texts[&key];
+        let w = f64::from(layout.width());
+        let x = if centre { x + ((max_w - w) / 2.0).max(0.0) } else { x };
+        let at = t * Affine::translate((x, y));
+        let limit = max_w as f32;
+        for line in layout.lines() {
+            for item in line.items() {
+                let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+                let r = run.run();
+                scene.draw_glyphs(
+                    r.font(),
+                    r.font_size(),
+                    false,
+                    r.normalized_coords(),
+                    kurbo::Vec2::ZERO,
+                    Fill::NonZero,
+                    &anyrender::Paint::from(colour),
+                    1.0,
+                    at * Affine::translate((0.0, -f64::from(run.baseline()))),
+                    None,
+                    run.positioned_glyphs().filter(|g| g.x + 6.0 <= limit).map(|g| anyrender::Glyph { id: g.id as _, x: g.x, y: g.y }),
+                );
+            }
+        }
+        w.min(max_w)
+    }
+
+    fn hex(s: &str) -> Color {
+        let h = s.trim_start_matches('#');
+        let v = |i: usize| h.get(i..i + 2).and_then(|x| u8::from_str_radix(x, 16).ok()).unwrap_or(0x71);
+        Color::from_rgba8(v(0), v(2), v(4), 0xff)
+    }
+
+    /// `a` over `b` at `amount`.
+    fn mix(a: Color, b: Color, amount: f32) -> Color {
+        let (a, b) = (a.to_rgba8(), b.to_rgba8());
+        let m = |x: u8, y: u8| (f32::from(x) * amount + f32::from(y) * (1.0 - amount)).round() as u8;
+        Color::from_rgba8(m(a.r, b.r), m(a.g, b.g), m(a.b, b.b), 0xff)
+    }
+
+    /// A colour lifted toward white, for a label on the dark.
+    fn lift(c: Color) -> Color {
+        mix(c, Color::from_rgba8(0xff, 0xff, 0xff, 0xff), 0.78)
+    }
+}

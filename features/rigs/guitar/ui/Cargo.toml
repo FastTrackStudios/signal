@@ -78,6 +78,8 @@ blitz-dom = { workspace = true, features = ["custom-widget"] }
 blitz-traits.workspace = true
 dioxus-native-dom.workspace = true
 vello.workspace = true
+# Text for the GPU routing grid (tablet/routing_canvas).
+parley.workspace = true
 # The shader path: a WGSL fragment shader rendered into a texture vello
 # composites. See `shader.rs` for why this is optional at runtime rather
 # than at build time.
