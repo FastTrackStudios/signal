@@ -83,6 +83,7 @@ pub fn TouchMacroBar(state: RigViewState) -> Element {
                         value: f64::from(k.value),
                         rest: f64::from(k.rest),
                         scale: k.scale.clone(),
+                        level: level_of(&k),
                         more: !k.children.is_empty(),
                         open: open() == Some(k.id.clone()),
                         heard,
@@ -162,6 +163,22 @@ fn Panel(knob: MacroKnobView, on_close: EventHandler<()>) -> Element {
     }
 }
 
+/// A level knob's level, 0..1: where its first param sits now along the
+/// knob's sweep (where the param lands with the knob down, and up) — so a
+/// patch that dials its drive low reads low, and the bottom is off.
+fn level_of(k: &MacroKnobView) -> Option<f64> {
+    if k.scale != "level" {
+        return None;
+    }
+    let t = k.tune.iter().find(|t| !t.off)?;
+    let (lo, hi, x) = (f64::from(t.lo), f64::from(t.hi), f64::from(t.live));
+    if (hi - lo).abs() < 1e-6 {
+        return None;
+    }
+    let n = if t.log && lo > 0.0 && hi > 0.0 && x > 0.0 { (x / lo).ln() / (hi / lo).ln() } else { (x - lo) / (hi - lo) };
+    Some(n.clamp(0.0, 1.0))
+}
+
 /// One macro: the whole cell is the control, drawn by its scale — a level
 /// fills from the left (0 is off); a wet knob fills from the left with its
 /// normal level marked in the middle and the stretch past it hatched; a
@@ -174,6 +191,7 @@ fn Cell(
     value: f64,
     rest: f64,
     scale: String,
+    level: Option<f64>,
     more: bool,
     open: bool,
     heard: Heard,
@@ -187,7 +205,14 @@ fn Cell(
     let mut live = use_signal(|| None::<f64>);
     let mut width = use_signal(|| 120.0_f64);
     let mut last_tap = use_signal(|| false);
-    let v = live().unwrap_or(value).clamp(0.0, 1.0);
+    // A level reads what the patch sets: its first param's live value
+    // (0 when its block is off), not the knob's offset from rest.
+    let v = match (scale == "level", live(), level) {
+        (_, Some(x), None) | (false, Some(x), _) => x,
+        (true, _, Some(l)) => l,
+        _ => value,
+    }
+    .clamp(0.0, 1.0);
     let (wet, relative) = (scale == "wet", scale == "relative");
     let offset = ((v - rest) * 200.0).round() as i32;
     let pct = (v * if wet { 200.0 } else { 100.0 }).round() as i32;

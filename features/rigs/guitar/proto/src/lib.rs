@@ -711,6 +711,184 @@ pub struct LibraryModel {
     pub songs: Vec<SongEntry>,
     pub setlists: Vec<SetlistEntry>,
     pub drives: Vec<DriveEntry>,
+    /// Song collections ("Church"…): a song can be in any number.
+    #[facet(default)]
+    pub collections: Vec<CollectionEntry>,
+}
+
+// ── Setup: guitars, audio rigs, MIDI controllers ──────────────────────────
+
+/// The player's setup (`setup.styx`): the guitars they play, the audio rigs
+/// they play through, the MIDI controllers they play with — and which of
+/// each is in use. Choosing a guitar and a rig sets the input.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SetupModel {
+    #[facet(default)]
+    pub guitars: Vec<GuitarEntry>,
+    #[facet(default)]
+    pub guitar_index: u32,
+    #[facet(default)]
+    pub rigs: Vec<AudioRigEntry>,
+    #[facet(default)]
+    pub rig_index: u32,
+    #[facet(default)]
+    pub controllers: Vec<ControllerEntry>,
+    #[facet(default)]
+    pub controller_index: u32,
+}
+
+/// A guitar: its photo, its pickups, and its tone into the rig.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct GuitarEntry {
+    pub id: String,
+    pub name: String,
+    /// A photo's file name in the library's `guitars/` folder; empty: none.
+    #[facet(default)]
+    pub image: String,
+    /// Its finish, `#rrggbb`, for when there is no photo.
+    #[facet(default)]
+    pub colour: String,
+    #[facet(default)]
+    pub pickups: Vec<Pickup>,
+    /// The guitar's default tone, on any rig.
+    #[facet(default)]
+    pub tone: GuitarTone,
+    /// What a rig overrides of it.
+    #[facet(default)]
+    pub overrides: Vec<ToneOverride>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct Pickup {
+    pub position: String,
+    pub model: String,
+}
+
+/// A guitar's tone into the rig — what a rig can override, part by part:
+/// `trim`, `gates`, `noisy`, `eq`.
+#[derive(Clone, PartialEq, Debug, Facet)]
+pub struct GuitarTone {
+    /// Input trim, dB: brings the guitar's peaks to the presets' level.
+    pub trim_db: f32,
+    /// The gate presets' thresholds, dBFS: Subtle, Default, Tight, Ultra.
+    pub gates: Vec<f32>,
+    /// Noisy input: Off plays Subtle and Subtle plays Default.
+    pub noisy: bool,
+    /// The input EQ: a low cut (Hz) and bass, mid, treble (dB).
+    pub low_cut_hz: f32,
+    pub bass_db: f32,
+    pub mid_db: f32,
+    pub treble_db: f32,
+}
+
+impl Default for GuitarTone {
+    fn default() -> Self {
+        Self {
+            trim_db: 0.0,
+            gates: vec![-75.0, -70.0, -64.0, -56.0],
+            noisy: false,
+            low_cut_hz: 60.0,
+            bass_db: 0.0,
+            mid_db: 0.0,
+            treble_db: 0.0,
+        }
+    }
+}
+
+/// A rig's override of parts of a guitar's tone: `parts` names which
+/// (`trim`, `gates`, `noisy`, `eq`); `tone` holds their values.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct ToneOverride {
+    pub rig: String,
+    #[facet(default)]
+    pub parts: Vec<String>,
+    #[facet(default)]
+    pub tone: GuitarTone,
+}
+
+impl GuitarEntry {
+    /// The tone the guitar plays on `rig`: its default, with the rig's
+    /// overrides over it.
+    #[must_use]
+    pub fn tone_on(&self, rig: &str) -> GuitarTone {
+        let mut t = self.tone.clone();
+        if let Some(o) = self.overrides.iter().find(|o| o.rig == rig) {
+            for part in &o.parts {
+                match part.as_str() {
+                    "trim" => t.trim_db = o.tone.trim_db,
+                    "gates" => t.gates = o.tone.gates.clone(),
+                    "noisy" => t.noisy = o.tone.noisy,
+                    "eq" => {
+                        t.low_cut_hz = o.tone.low_cut_hz;
+                        t.bass_db = o.tone.bass_db;
+                        t.mid_db = o.tone.mid_db;
+                        t.treble_db = o.tone.treble_db;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        t
+    }
+
+    /// The parts of its tone `rig` overrides.
+    #[must_use]
+    pub fn overridden_on(&self, rig: &str) -> Vec<String> {
+        self.overrides.iter().find(|o| o.rig == rig).map(|o| o.parts.clone()).unwrap_or_default()
+    }
+}
+
+/// An audio rig: an interface and how the rig uses it.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct AudioRigEntry {
+    pub id: String,
+    pub name: String,
+    pub device: String,
+    #[facet(default)]
+    pub input: String,
+    #[facet(default)]
+    pub rate: u32,
+    #[facet(default)]
+    pub buffer: u32,
+    #[facet(default)]
+    pub house: String,
+    #[facet(default)]
+    pub house_db: f32,
+    #[facet(default)]
+    pub phones: String,
+    #[facet(default)]
+    pub phones_db: f32,
+    /// Hear the input straight from the interface too.
+    #[facet(default)]
+    pub direct_monitor: bool,
+    /// Where presets expect the guitar's peaks, dBFS.
+    #[facet(default)]
+    pub target_db: f32,
+}
+
+/// A MIDI controller and how the rig listens to it.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct ControllerEntry {
+    pub id: String,
+    pub name: String,
+    pub device: String,
+    /// 1–16; 0 = omni.
+    #[facet(default)]
+    pub channel: u32,
+    #[facet(default)]
+    pub program_change: bool,
+    /// `off`, `send` or `receive`.
+    #[facet(default)]
+    pub clock: String,
+}
+
+/// A named group of songs, for finding them faster.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct CollectionEntry {
+    pub name: String,
+    /// `#rrggbb`.
+    pub colour: String,
+    pub songs: Vec<String>,
 }
 
 /// One profile: a rig's worth of presets, patches and stacks.
@@ -1210,7 +1388,7 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode,
+        SetupModel, Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode,
         Applied, MacroKnobView, MacroResult, MacroSave, MacroTune, PartOverride, PatchInfo,
         PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
     };
@@ -1632,6 +1810,18 @@ pub mod rig {
         /// A song's colour (`#rrggbb`); empty goes back to the one picked
         /// from its name.
         fn set_song_colour(&self, song: String, colour: String);
+        /// Who a song is by, and its genre (empty clears either).
+        fn set_song_info(&self, song: String, artist: String, genre: String);
+        /// Create collection `name`, or replace its colour and songs.
+        fn set_collection(&self, name: String, colour: String, songs: Vec<String>);
+        /// Put `song` in collection `name`, or take it out.
+        fn toggle_in_collection(&self, name: String, song: String);
+        fn rename_collection(&self, old: String, new_name: String);
+        fn delete_collection(&self, name: String);
+        /// The guitars, audio rigs and MIDI controllers, and which are in use.
+        fn setup(&self) -> SetupModel;
+        /// Write the setup whole (a remote edits its copy and sends it back).
+        fn save_setup(&self, setup: SetupModel);
         /// Setlist `index`'s event, day (`YYYY-MM-DD`) and title.
         fn set_setlist_details(&self, index: u32, event: String, date: String, title: String);
         /// The profile every song of setlist `index` plays on unless it has

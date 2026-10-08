@@ -262,6 +262,8 @@ pub struct RigLibrary {
     pub songs: Vec<SongDef>,
     /// `song-info.styx`: song colours, artists, genres, collections.
     pub song_info: SongInfoLib,
+    /// `setup.styx`: the guitars, audio rigs and MIDI controllers.
+    pub setup: signal_guitar_proto::SetupModel,
     pub setlists: Vec<SetlistDef>,
     pub midi_map: MidiMapDef,
     pub keymap: Vec<KeyBindingDef>,
@@ -864,13 +866,20 @@ impl RigLibrary {
                 store.resolve(&mut option.nam);
             }
         }
-        let song_info = store.read::<SongInfoLib>("song-info.styx").unwrap_or_default();
+        // A library with no song details yet starts with one collection,
+        // Church, empty, for the player to fill.
+        let song_info = store.read::<SongInfoLib>("song-info.styx").unwrap_or_else(|| SongInfoLib {
+            songs: Vec::new(),
+            collections: vec![CollectionDef { name: "Church".to_string(), colour: "#f472b6".to_string(), songs: Vec::new() }],
+        });
+        let setup = store.read::<signal_guitar_proto::SetupModel>("setup.styx").unwrap_or_else(seed_setup);
         Self {
             profile,
             profiles,
             drive_presets,
             songs,
             song_info,
+            setup,
             setlists,
             midi_map,
             keymap,
@@ -1247,6 +1256,14 @@ impl RigLibrary {
         );
     }
 
+    /// Write `setup.styx` (refused over a file that does not parse).
+    pub fn save_setup(setup: &signal_guitar_proto::SetupModel) {
+        let Some(store) = writable_store() else {
+            return;
+        };
+        config_watch::write_guarded(&store.dir().join("setup.styx"), setup);
+    }
+
     /// Write `song-info.styx` (refused over a file that does not parse).
     pub fn save_song_info(info: &SongInfoLib) {
         let Some(store) = writable_store() else {
@@ -1442,5 +1459,81 @@ mod song_patch_tests {
             profile.patches[..own].iter().all(|p| p.song.is_empty()),
             "the profile's own stay its own"
         );
+    }
+}
+
+/// A setup to start from: the TMG Strat into the MiniFuse, with the
+/// AIRSTEP — and the other guitars, the Scarlett and the MC6 to choose.
+#[must_use]
+pub fn seed_setup() -> signal_guitar_proto::SetupModel {
+    use signal_guitar_proto::{AudioRigEntry, ControllerEntry, GuitarEntry, GuitarTone, Pickup, SetupModel, ToneOverride};
+    let gates = |floor: f32| vec![floor + 5.0, floor + 10.0, floor + 16.0, floor + 24.0];
+    let pickups = |list: &[(&str, &str)]| list.iter().map(|(p, m)| Pickup { position: (*p).into(), model: (*m).into() }).collect();
+    let tone = |trim_db: f32, floor: f32, noisy: bool, low_cut_hz: f32, bass_db: f32, treble_db: f32| GuitarTone {
+        trim_db,
+        gates: gates(floor),
+        noisy,
+        low_cut_hz,
+        bass_db,
+        mid_db: 0.0,
+        treble_db,
+    };
+    let guitar = |id: &str, name: &str, image: &str, colour: &str, p: Vec<Pickup>, t: GuitarTone, overrides: Vec<ToneOverride>| GuitarEntry {
+        id: id.into(),
+        name: name.into(),
+        image: image.into(),
+        colour: colour.into(),
+        pickups: p,
+        tone: t,
+        overrides,
+    };
+    let rig = |id: &str, name: &str, device: &str, buffer: u32, house: &str, house_db: f32, phones: &str, phones_db: f32| AudioRigEntry {
+        id: id.into(),
+        name: name.into(),
+        device: device.into(),
+        input: "Input 1".into(),
+        rate: 48_000,
+        buffer,
+        house: house.into(),
+        house_db,
+        phones: phones.into(),
+        phones_db,
+        direct_monitor: false,
+        target_db: -15.0,
+    };
+    SetupModel {
+        guitars: vec![
+            guitar(
+                "strat",
+                "TMG Strat",
+                "strat-white-gold.webp",
+                "#e9e4d8",
+                pickups(&[("Bridge", "Seymour Duncan SH-PG1b Pearly Gates"), ("Middle", "Lawler Blonde"), ("Neck", "Lawler Blonde")]),
+                tone(0.0, -77.0, false, 70.0, 0.0, 0.0),
+                vec![ToneOverride { rig: "stage".into(), parts: vec!["trim".into(), "gates".into()], tone: GuitarTone { trim_db: 2.5, gates: gates(-72.0), ..GuitarTone::default() } }],
+            ),
+            guitar("tele", "Blacked Out Tele", "tele-black.webp", "#18181b", pickups(&[("Bridge", "Tele single-coil"), ("Neck", "Tele single-coil")]), tone(3.0, -70.0, true, 80.0, 1.0, -1.5), Vec::new()),
+            guitar(
+                "es339",
+                "Epiphone ES-339",
+                "es339-cherry.webp",
+                "#9f1d2b",
+                pickups(&[("Bridge", "P-90"), ("Neck", "P-90")]),
+                tone(1.5, -68.0, true, 90.0, -1.0, 0.5),
+                vec![ToneOverride { rig: "stage".into(), parts: vec!["noisy".into()], tone: GuitarTone { noisy: false, ..GuitarTone::default() } }],
+            ),
+            guitar("goldtop", "Goldtop Les Paul", "lp-goldtop.webp", "#c9a24a", pickups(&[("Bridge", "P-90"), ("Neck", "P-90")]), tone(1.0, -69.0, false, 80.0, -1.5, 1.0), Vec::new()),
+        ],
+        guitar_index: 0,
+        rigs: vec![
+            rig("minifuse", "MiniFuse 4", "Arturia MiniFuse 4", 128, "Outputs 1–2", -6.0, "Phones 1", -12.0),
+            rig("stage", "Scarlett 2i2", "Focusrite Scarlett 2i2", 64, "Outputs 1–2", 0.0, "Phones", -18.0),
+        ],
+        rig_index: 0,
+        controllers: vec![
+            ControllerEntry { id: "airstep".into(), name: "AIRSTEP".into(), device: "XSonic AIRSTEP".into(), channel: 0, program_change: true, clock: "off".into() },
+            ControllerEntry { id: "mc6".into(), name: "MC6".into(), device: "Morningstar MC6".into(), channel: 1, program_change: true, clock: "off".into() },
+        ],
+        controller_index: 0,
     }
 }

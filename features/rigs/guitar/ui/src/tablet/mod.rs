@@ -11,12 +11,16 @@
 //!   foot bar   the views as tabs (a bar along the top edge when open);
 //!              Perform's docks as toggles (a fill when on); Tuner; Setup
 //!
-//! Build, Edit and Setup are the views still to port.
+//! Build is the browser (`browser`); Edit is `edit`; Setup is `setup`.
 
+mod browser;
 mod colors;
+mod edit;
 mod macros;
+mod marks;
 mod menu;
 mod setlist;
+mod setup;
 mod switches;
 mod tokens;
 mod topbar;
@@ -37,6 +41,15 @@ enum View {
     Setup,
 }
 
+/// The part picked in Build (Setlist mode): what the browser builds into.
+/// Shared by the setlist (whose section rows pick it) and the browser.
+#[derive(Clone, Copy, PartialEq)]
+pub struct BuildPick {
+    pub part: Signal<Option<usize>>,
+    /// Whether a section row's tap picks (Build) or plays (Perform).
+    pub building: Signal<bool>,
+}
+
 #[component]
 pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut view = use_signal(|| View::Perform);
@@ -44,6 +57,12 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut macros = use_signal(|| true);
     let mut docked = use_signal(|| true);
     let mut browser = use_signal(|| false);
+    let setup_tab = use_signal(|| setup::SetupTab::Guitar);
+    let pick = use_context_provider(|| BuildPick { part: Signal::new(None), building: Signal::new(false) });
+    use_effect(move || {
+        let mut b = pick.building;
+        b.set(view() == View::Build);
+    });
     rsx! {
         div { style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; background: {DESK}; color: {INK}; font-family: {FONT}; overflow: hidden;",
             topbar::TopBar {
@@ -51,11 +70,15 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                 state,
                 sidebar: sidebar(),
                 on_sidebar: move |()| sidebar.toggle(),
-                on_setup: move |_tab| view.set(View::Setup),
+                on_setup: move |tab: &'static str| {
+                    let mut t = setup_tab;
+                    t.set(setup::SetupTab::from_id(tab));
+                    view.set(View::Setup);
+                },
             }
             div { style: "flex: 1; min-height: 0; display: flex;",
                 if view() == View::Setup {
-                    Later { what: "Setup — guitar, audio and MIDI" }
+                    setup::SetupView { state, tab: setup_tab }
                 } else {
                     if sidebar() {
                         aside { style: "width: {SIDEBAR_W}px; flex-shrink: 0; height: 100%; border-right: 1px solid {RULE}; box-sizing: border-box; display: flex; flex-direction: column; min-height: 0;",
@@ -73,14 +96,20 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                                 }
                                 // The middle: the browser when it's asked for, else nothing.
                                 div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
-                                    if browser() { Later { what: "Browser" } }
+                                    if browser() {
+                                        browser::Browser { state, on_close: move |()| browser.set(false) }
+                                    }
                                 }
                                 if docked() {
                                     div { style: "flex-shrink: 0;", switches::TouchSwitches { perf: model.clone() } }
                                 }
                             },
-                            View::Build => rsx! { Later { what: "Build — the browser" } },
-                            View::Edit => rsx! { Later { what: "Edit — routing and the block's FX row" } },
+                            View::Build => rsx! {
+                                div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+                                    browser::Browser { state }
+                                }
+                            },
+                            View::Edit => rsx! { edit::EditView { state, perf: model.clone() } },
                             View::Setup => rsx! {},
                         }
                     }
@@ -98,16 +127,6 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                 tuner: model.tuner_visible,
             }
             signal_widgets::PopupLayer {}
-        }
-    }
-}
-
-/// A view still to be ported.
-#[component]
-fn Later(what: &'static str) -> Element {
-    rsx! {
-        div { style: "flex: 1; height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; font-size: 13px; color: {INK_3};",
-            "{what}"
         }
     }
 }

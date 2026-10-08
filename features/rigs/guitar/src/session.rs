@@ -312,6 +312,7 @@ pub struct GuitarRigBackend {
     songs_lib: Arc<Mutex<Vec<SongDef>>>,
     /// `song-info.styx`: each song's colour, artist and genre; collections.
     song_info: Arc<Mutex<SongInfoLib>>,
+    setup: Arc<Mutex<signal_guitar_proto::SetupModel>>,
     setlists: Arc<Mutex<Vec<SetlistDef>>>,
     setlist_index: Arc<Mutex<usize>>,
     song_index: Arc<Mutex<usize>>,
@@ -518,6 +519,7 @@ impl GuitarRigBackend {
             other_profiles: Arc::new(Mutex::new(others)),
             songs_lib: Arc::new(Mutex::new(lib.songs)),
             song_info: Arc::new(Mutex::new(lib.song_info)),
+            setup: Arc::new(Mutex::new(lib.setup)),
             setlists: Arc::new(Mutex::new(lib.setlists)),
             setlist_index: Arc::new(Mutex::new(0)),
             song_index: Arc::new(Mutex::new(0)),
@@ -8206,6 +8208,15 @@ impl Rig for GuitarRigBackend {
                 genre: info.of(&s.name).map(|i| i.genre.clone()).unwrap_or_default(),
             })
             .collect();
+        let collections = info
+            .collections
+            .iter()
+            .map(|c| signal_guitar_proto::CollectionEntry {
+                name: c.name.clone(),
+                colour: c.colour.clone(),
+                songs: c.songs.clone(),
+            })
+            .collect();
         let setlists = sets
             .iter()
             .enumerate()
@@ -8261,6 +8272,7 @@ impl Rig for GuitarRigBackend {
             songs,
             setlists,
             drives,
+            collections,
         }
     }
 
@@ -8576,10 +8588,83 @@ impl Rig for GuitarRigBackend {
         self.publish_state();
     }
 
+    fn setup(&self) -> signal_guitar_proto::SetupModel {
+        self.setup.lock_ok().clone()
+    }
+
+    fn save_setup(&self, setup: signal_guitar_proto::SetupModel) {
+        RigLibrary::save_setup(&setup);
+        *self.setup.lock_ok() = setup;
+        self.publish_state();
+    }
+
     fn set_song_colour(&self, song: String, colour: String) {
         {
             let mut info = self.song_info.lock_ok();
             info.of_mut(&song).colour = colour.trim().to_string();
+            RigLibrary::save_song_info(&info);
+        }
+        self.publish_state();
+    }
+
+    fn set_song_info(&self, song: String, artist: String, genre: String) {
+        {
+            let mut info = self.song_info.lock_ok();
+            let s = info.of_mut(&song);
+            s.artist = artist.trim().to_string();
+            s.genre = genre.trim().to_string();
+            RigLibrary::save_song_info(&info);
+        }
+        self.publish_state();
+    }
+
+    fn set_collection(&self, name: String, colour: String, songs: Vec<String>) {
+        {
+            let mut info = self.song_info.lock_ok();
+            let name = name.trim().to_string();
+            match info.collections.iter_mut().find(|c| c.name.eq_ignore_ascii_case(&name)) {
+                Some(c) => {
+                    c.colour = colour;
+                    c.songs = songs;
+                }
+                None => info.collections.push(crate::library::CollectionDef { name, colour, songs }),
+            }
+            RigLibrary::save_song_info(&info);
+        }
+        self.publish_state();
+    }
+
+    fn toggle_in_collection(&self, name: String, song: String) {
+        {
+            let mut info = self.song_info.lock_ok();
+            let Some(c) = info.collections.iter_mut().find(|c| c.name.eq_ignore_ascii_case(&name)) else {
+                return;
+            };
+            if let Some(i) = c.songs.iter().position(|s| s.eq_ignore_ascii_case(&song)) {
+                c.songs.remove(i);
+            } else {
+                c.songs.push(song);
+            }
+            RigLibrary::save_song_info(&info);
+        }
+        self.publish_state();
+    }
+
+    fn rename_collection(&self, old: String, new_name: String) {
+        {
+            let mut info = self.song_info.lock_ok();
+            if let Some(c) = info.collections.iter_mut().find(|c| c.name.eq_ignore_ascii_case(&old)) {
+                c.name = new_name.trim().to_string();
+            }
+            RigLibrary::save_song_info(&info);
+        }
+        self.publish_state();
+    }
+
+    fn delete_collection(&self, name: String) {
+        {
+            let mut info = self.song_info.lock_ok();
+            info.collections.retain(|c| !c.name.eq_ignore_ascii_case(&name));
             RigLibrary::save_song_info(&info);
         }
         self.publish_state();

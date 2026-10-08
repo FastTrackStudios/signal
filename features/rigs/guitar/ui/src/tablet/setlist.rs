@@ -24,6 +24,7 @@ use super::menu::{open_menu, Item, MoreButton, Picked};
 use signal_widgets::PopupHost;
 
 use super::colors::{date_label, name_colour, section_colour, set_heading, set_meta, song_colour};
+use super::marks::OverrideIcon;
 use super::tokens::*;
 use crate::state::RigViewState;
 
@@ -392,17 +393,6 @@ fn PatchChip(patch: String, stack: String, small: bool, lit: bool) -> Element {
     }
 }
 
-/// The override icon: a square laid over another.
-#[component]
-fn OverrideIcon(colour: String, size: u32) -> Element {
-    rsx! {
-        svg { width: "{size}", height: "{size}", view_box: "0 0 12 12", style: "flex-shrink: 0; display: block;",
-            rect { x: "1", y: "1", width: "7", height: "7", rx: "1.6", fill: "none", stroke: "{colour}", stroke_width: "1.3", opacity: "0.45" }
-            rect { x: "4", y: "4", width: "7", height: "7", rx: "1.6", fill: "{colour}" }
-        }
-    }
-}
-
 // ── Its sections ───────────────────────────────────────────────────────────
 
 #[component]
@@ -447,6 +437,8 @@ fn overridden_blocks(perf: &PerformanceModel, sec: &Section) -> Vec<String> {
 #[component]
 fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index: usize, count: usize) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let build_pick = try_use_context::<super::BuildPick>();
+    let picked = build_pick.is_some_and(|b| (b.building)() && (b.part)().is_some_and(|k| section.parts.contains(&k)));
     let now = perf.part_index as usize;
     let first = section.parts.first().copied().unwrap_or(0);
     let state = if section.parts.contains(&now) { "now" } else if first < now { "done" } else { "ahead" };
@@ -484,6 +476,9 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index
     rsx! {
         div {
             style: "position: relative; display: flex; align-items: center; min-height: 50px; background: {row_bg};",
+            if picked {
+                span { style: "position: absolute; left: 0; top: 0; bottom: 0; right: 0; border: 2px solid {INK}; box-sizing: border-box; pointer-events: none;" }
+            }
             // The section's colour, as its grip.
             span { style: "width: 40px; align-self: stretch; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; box-sizing: border-box;",
                 svg { width: "14", height: "12", view_box: "0 0 14 12",
@@ -494,7 +489,17 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index
                 style: "flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 50px; padding: 4px 4px 4px 6px; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;",
                 onclick: {
                     let rig = rig.clone();
-                    move |_| call!(rig, |r| r.select_part(first as u32))
+                    move |_| {
+                        // In Build a tap picks the part to build into; else it plays it.
+                        if let Some(b) = build_pick {
+                            if *b.building.peek() {
+                                let mut p = b.part;
+                                p.set(Some(first));
+                                return;
+                            }
+                        }
+                        call!(rig, |r| r.select_part(first as u32))
+                    }
                 },
                 span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
                     span { style: "min-width: 0; font-size: 15px; font-weight: {pick(is_now, 700, 520)}; color: {ink}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
@@ -564,6 +569,8 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index
 #[component]
 fn PartRow(perf: PerformanceModel, lib: LibraryModel, index: usize) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let build_pick = try_use_context::<super::BuildPick>();
+    let picked = build_pick.is_some_and(|b| (b.building)() && (b.part)() == Some(index));
     let Some(part) = perf.parts.get(index).cloned() else { return rsx! {} };
     let now = perf.part_index as usize;
     let state = if index == now { "now" } else if index < now { "done" } else { "ahead" };
@@ -584,12 +591,25 @@ fn PartRow(perf: PerformanceModel, lib: LibraryModel, index: usize) -> Element {
     ];
     let name = part.name.clone();
     rsx! {
-        div { style: "display: flex; align-items: center; min-height: 44px; background: {pick(is_now, tint(&colour, 18), CLEAR.to_string())};",
+        div { style: "position: relative; display: flex; align-items: center; min-height: 44px; background: {pick(is_now, tint(&colour, 18), CLEAR.to_string())};",
+            if picked {
+                span { style: "position: absolute; left: 0; top: 0; bottom: 0; right: 0; border: 2px solid {INK}; box-sizing: border-box; pointer-events: none;" }
+            }
             button {
                 style: "flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 2px 4px 2px 46px; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;",
                 onclick: {
                     let rig = rig.clone();
-                    move |_| call!(rig, |r| r.select_part(index as u32))
+                    move |_| {
+                        // In Build a tap picks the part to build into; else it plays it.
+                        if let Some(b) = build_pick {
+                            if *b.building.peek() {
+                                let mut p = b.part;
+                                p.set(Some(index));
+                                return;
+                            }
+                        }
+                        call!(rig, |r| r.select_part(index as u32))
+                    }
                 },
                 span { style: "width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; box-sizing: border-box; {dot}" }
                 span { style: "flex: 1; min-width: 0; font-size: 14px; font-weight: {pick(is_now, 650, 500)}; color: {pick(is_done, INK_3, pick(is_now, INK, INK_2))}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
