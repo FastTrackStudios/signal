@@ -309,7 +309,7 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
             d.perf
                 .stacks
                 .iter()
-                .filter(|st| st.available || !st.patches.is_empty())
+                .filter(|st| !st.patches.is_empty())
                 .flat_map(|st| {
                     let (tape, _) = crate::perform::folder_color(&st.name);
                     let song = song.clone();
@@ -1134,7 +1134,7 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
                             }
                         }
                     }
-                    for st in p.stacks.iter().cloned() {
+                    for st in p.stacks.iter().filter(|st| p.patch_list.iter().any(|x| &x.stack == *st)).cloned() {
                         {
                             let (tape, _) = crate::perform::folder_color(&st);
                             let patches: Vec<String> = p.patch_list.iter().filter(|x| x.stack == st).map(|x| x.name.clone()).collect();

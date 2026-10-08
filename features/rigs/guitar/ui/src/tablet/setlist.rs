@@ -933,11 +933,13 @@ pub fn Stacks(perf: PerformanceModel, lib: LibraryModel, section: String) -> Ele
     let where_ = part.as_ref().map(|p| if p.section.is_empty() || p.name == section { section.clone() } else { p.name.clone() }).unwrap_or_default();
     let song = perf.songs.get(perf.song_index as usize).cloned();
     let colour = song.as_ref().map(|s| song_colour(&s.name, &s.colour)).unwrap_or_else(|| name_colour(&perf.profile_name).to_string());
-    let count = perf.stacks.len();
+    // The stacks the profile fills — an empty slot (Worship's Special) is
+    // not a stack you can play.
+    let count = perf.stacks.iter().filter(|s| !s.patches.is_empty()).count();
     rsx! {
         div { style: "padding: 2px 0 8px 46px;",
             div { style: "background: rgba(0,0,0,0.18); display: flex; flex-direction: column; border-bottom: 1px solid {RULE};",
-                for (i, st) in perf.stacks.iter().enumerate() {
+                for (i, st) in perf.stacks.iter().enumerate().filter(|(_, s)| !s.patches.is_empty()) {
                     StackRow { key: "{st.name}", stack: st.clone(), index: i, count, lib: lib.clone(), profile: perf.profile_name.clone(), part: part.clone().unwrap_or_default(), where_: where_.clone(), song_colour: colour.clone(), in_song: !perf.parts.is_empty() }
                 }
             }

@@ -167,7 +167,8 @@ pub fn ProfileView(state: RigViewState) -> Element {
     let l = lib.read().clone();
     let profile = perf.profile_name.clone();
     let patches: usize = perf.stacks.iter().map(|s| s.patches.len()).sum();
-    let count = perf.stacks.len();
+    // The stacks the profile fills (not an empty slot like Special).
+    let count = perf.stacks.iter().filter(|s| !s.patches.is_empty()).count();
     let drag = use_signal(|| None::<(usize, usize)>);
     let colour = name_colour(&profile).to_string();
     rsx! {
@@ -175,7 +176,7 @@ pub fn ProfileView(state: RigViewState) -> Element {
             Header { title: profile.clone(), sub: format!("{count} stacks · {patches} patches"), icon: Some(profile.clone()) }
             div { style: "flex: 1; min-height: 0; overflow-y: auto; padding: 8px 0 0 8px;",
                 div { style: "background: rgba(0,0,0,0.18); display: flex; flex-direction: column; border-bottom: 1px solid {RULE};",
-                    for (i, st) in perf.stacks.iter().cloned().enumerate() {
+                    for (i, st) in perf.stacks.iter().cloned().enumerate().filter(|(_, s)| !s.patches.is_empty()) {
                         {
                             let (dragging, drop_at) = match drag() {
                                 Some((from, to)) => (from == i, to == i && from != i),

@@ -842,7 +842,7 @@ fn PatchBody(part: usize, perf: PerformanceModel, lib: LibraryModel, on_done: Ev
                 let (rig, name) = (rig.clone(), p.name.clone());
                 move |()| { set(rig.clone(), name.clone(), String::new()); on_done.call(()); }
             } }
-            for st in profile.stacks.iter().cloned() {
+            for st in profile.stacks.iter().filter(|st| profile.patch_list.iter().any(|x| &x.stack == *st)).cloned() {
                 {
                     let (tape, _) = crate::perform::folder_color(&st);
                     let patches: Vec<String> = profile.patch_list.iter().filter(|x| x.stack == st).map(|x| x.name.clone()).collect();
