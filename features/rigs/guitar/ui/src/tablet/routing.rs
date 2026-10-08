@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{CompositionModel, LiveBlock};
 
-use super::routing_canvas::{CanvasCell, CanvasModule, CanvasPick, CanvasSel};
+use super::routing_canvas::{CanvasCell, CanvasItem, CanvasModule, CanvasPick, CanvasSel};
 use super::tokens::*;
 use signal_proto::block::BlockType;
 use crate::state::RigViewState;
@@ -134,9 +134,10 @@ pub fn Routing(state: RigViewState) -> Element {
 const MODULE_ROWS: usize = 3;
 
 /// The playing blocks as the canvas draws them: runs of one module, in
-/// chain order.
+/// chain order. The pre effects run in a line; delays and reverbs sit
+/// either side of the dry; the Core holds the Amp.
 fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
-    let mut out: Vec<(String, Vec<CanvasCell>)> = Vec::new();
+    let mut runs: Vec<(String, Vec<CanvasCell>)> = Vec::new();
     for b in blocks.iter().filter(|b| !b.empty) {
         let cell = CanvasCell {
             id: b.id.clone(),
@@ -146,19 +147,40 @@ fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
             lit: !b.bypassed,
             edited: b.overridden,
         };
-        match out.last_mut() {
+        match runs.last_mut() {
             Some((m, cells)) if *m == b.module => cells.push(cell),
-            _ => out.push((b.module.clone(), vec![cell])),
+            _ => runs.push((b.module.clone(), vec![cell])),
         }
     }
-    out.into_iter()
-        .map(|(name, cells)| CanvasModule {
-            colour: super::marks::module_colour(&name).to_string(),
-            label: String::new(),
-            cols: cells.chunks(MODULE_ROWS).map(<[CanvasCell]>::to_vec).collect(),
-            name,
-        })
-        .collect()
+    let module = |name: String, cells: Vec<CanvasCell>| {
+        let items = match name.as_str() {
+            "Pre" => cells.into_iter().map(|c| CanvasItem::Col(vec![c])).collect(),
+            "Delay" | "Reverb" => cells.chunks(2).map(|c| CanvasItem::Split(c.to_vec())).collect(),
+            _ => cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect(),
+        };
+        CanvasModule { colour: super::marks::module_colour(&name).to_string(), label: String::new(), items, name }
+    };
+    let mut out: Vec<CanvasModule> = Vec::new();
+    let mut runs = runs.into_iter().peekable();
+    while let Some((name, cells)) = runs.next() {
+        if name != "Amp" {
+            out.push(module(name, cells));
+            continue;
+        }
+        // The Core round the Amp: the Core's blocks either side of it.
+        let mut items: Vec<CanvasItem> = Vec::new();
+        if out.last().is_some_and(|m| m.name == "Core") {
+            items = out.pop().map(|m| m.items).unwrap_or_default();
+        }
+        items.push(CanvasItem::Sub(module(name, cells)));
+        if runs.peek().is_some_and(|(n, _)| n == "Core")
+            && let Some((n, c)) = runs.next()
+        {
+            items.extend(module(n, c).items);
+        }
+        out.push(CanvasModule { colour: super::marks::module_colour("Core").to_string(), label: String::new(), items, name: "Core".into() });
+    }
+    out
 }
 
 fn type_colour(t: BlockType) -> &'static str {

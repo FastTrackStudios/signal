@@ -25,14 +25,38 @@ pub struct CanvasCell {
     pub edited: bool,
 }
 
-/// One module: its name, what it plays, its colour, its columns (a block,
-/// or a stereo pair stacked).
+/// One module: its name, what it plays, its colour, and what it holds left
+/// to right — columns of blocks (the chain runs down each), and modules
+/// inside it (Core holds the Amp).
 #[derive(Clone, PartialEq, Debug)]
 pub struct CanvasModule {
     pub name: String,
     pub label: String,
     pub colour: String,
-    pub cols: Vec<Vec<CanvasCell>>,
+    pub items: Vec<CanvasItem>,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum CanvasItem {
+    /// Blocks in a column, the chain running down it.
+    Col(Vec<CanvasCell>),
+    /// Effects in parallel with the dry: one above the line, one below,
+    /// the dry straight through the middle.
+    Split(Vec<CanvasCell>),
+    Sub(CanvasModule),
+}
+
+impl CanvasModule {
+    /// Every block in it, inner modules' too, in chain order.
+    pub fn ids(&self) -> Vec<String> {
+        self.items
+            .iter()
+            .flat_map(|i| match i {
+                CanvasItem::Col(c) | CanvasItem::Split(c) => c.iter().map(|c| c.id.clone()).collect(),
+                CanvasItem::Sub(m) => m.ids(),
+            })
+            .collect()
+    }
 }
 
 /// What a tap picked.
@@ -89,7 +113,7 @@ mod native {
     use parley::{FontContext, FontFamily, FontWeight, Layout, LayoutContext, PositionedLayoutItem, StyleProperty};
     use vello::peniko::{Color, Fill};
 
-    use super::{CanvasCell, CanvasModule, CanvasPick, CanvasSel};
+    use super::{CanvasCell, CanvasItem, CanvasModule, CanvasPick, CanvasSel};
 
     // The grid's measures, pt at zoom 1 (signal-grid-ui's, sized for a finger).
     const CELL: f64 = 92.0;
@@ -106,7 +130,7 @@ mod native {
     #[derive(Clone)]
     struct Piece {
         module: usize,
-        cols: std::ops::Range<usize>,
+        items: std::ops::Range<usize>,
         x: f64,
         y: f64,
         w: f64,
@@ -114,14 +138,31 @@ mod native {
         first: bool,
     }
 
-    fn lanes(m: &CanvasModule) -> usize {
-        m.cols.iter().map(Vec::len).max().unwrap_or(1).max(1)
+    fn item_w(i: &CanvasItem) -> f64 {
+        match i {
+            CanvasItem::Col(_) | CanvasItem::Split(_) => CELL,
+            CanvasItem::Sub(m) => box_w(&m.items),
+        }
     }
-    fn piece_w(n: usize) -> f64 {
-        PAD * 2.0 + n as f64 * CELL + n.saturating_sub(1) as f64 * GAP
+    fn item_h(i: &CanvasItem) -> f64 {
+        match i {
+            CanvasItem::Col(c) => {
+                let l = c.len().max(1) as f64;
+                l * CELL + (l - 1.0) * GAP
+            }
+            CanvasItem::Split(_) => 3.0 * CELL + 2.0 * GAP,
+            CanvasItem::Sub(m) => box_h(&m.items),
+        }
     }
-    fn piece_h(lanes: usize) -> f64 {
-        HEAD + lanes as f64 * CELL + lanes.saturating_sub(1) as f64 * GAP + PAD
+    /// A module's box round `items`, side by side.
+    fn box_w(items: &[CanvasItem]) -> f64 {
+        PAD * 2.0 + items.iter().map(item_w).sum::<f64>() + items.len().saturating_sub(1) as f64 * GAP
+    }
+    fn content_h(items: &[CanvasItem]) -> f64 {
+        items.iter().map(item_h).fold(CELL, f64::max)
+    }
+    fn box_h(items: &[CanvasItem]) -> f64 {
+        HEAD + content_h(items) + PAD
     }
 
     /// Lay the modules out at zoom 1: in rows `width` wide (fold), or one
@@ -131,47 +172,108 @@ mod native {
         let start = EDGE + END + MOD_GAP;
         let (mut x, mut row_top, mut row_h) = (start, EDGE, 0.0_f64);
         let mut max_x = x;
+        let mut row_from = 0;
+        // A row's modules sit centred on its line.
+        let centre = |pieces: &mut Vec<Piece>, from: usize, top: f64, h: f64| {
+            for p in &mut pieces[from..] {
+                p.y = top + (h - p.h) / 2.0;
+            }
+        };
         for (mi, m) in mods.iter().enumerate() {
-            let h = piece_h(lanes(m));
+            let h = box_h(&m.items);
             let mut c = 0;
-            while c < m.cols.len() {
+            while c < m.items.len() {
                 let room = width.map_or(f64::INFINITY, |w| w - EDGE - x);
-                let mut n = m.cols.len() - c;
-                if piece_w(n) > room {
-                    // Whole on a fresh row, when it would fit there.
-                    if c == 0 && x > start && width.is_some_and(|w| piece_w(n) <= w - EDGE - start) {
-                        row_top += row_h + ROW_GAP;
-                        row_h = 0.0;
-                        x = start;
-                        continue;
-                    }
-                    n = (((room - PAD * 2.0 + GAP) / (CELL + GAP)).floor().max(0.0)) as usize;
-                    if n == 0 {
-                        if x > start {
-                            row_top += row_h + ROW_GAP;
-                            row_h = 0.0;
-                            x = start;
-                            continue;
-                        }
-                        n = 1;
-                    }
+                // As many of its items as fit here.
+                let mut n = 0;
+                while c + n < m.items.len() && box_w(&m.items[c..c + n + 1]) <= room {
+                    n += 1;
                 }
-                let w = piece_w(n);
-                pieces.push(Piece { module: mi, cols: c..c + n, x, y: row_top, w, h, first: c == 0 });
+                let all = n == m.items.len() - c;
+                // Whole on a fresh row, when it would fit there; a fresh row
+                // when nothing fits here.
+                let fits_fresh = width.is_some_and(|w| box_w(&m.items[c..]) <= w - EDGE - start);
+                if x > start && (n == 0 || (!all && c == 0 && fits_fresh)) {
+                    centre(&mut pieces, row_from, row_top, row_h);
+                    row_from = pieces.len();
+                    row_top += row_h + ROW_GAP;
+                    row_h = 0.0;
+                    x = start;
+                    continue;
+                }
+                let n = n.max(1);
+                let w = box_w(&m.items[c..c + n]);
+                pieces.push(Piece { module: mi, items: c..c + n, x, y: row_top, w, h, first: c == 0 });
                 row_h = row_h.max(h);
                 x += w + MOD_GAP;
                 max_x = max_x.max(x);
                 c += n;
             }
         }
+        centre(&mut pieces, row_from, row_top, row_h);
         (pieces, max_x + END + EDGE, row_top + row_h + EDGE)
     }
 
-    /// A cell's box in content coordinates.
-    fn cell_rect(p: &Piece, k: usize, lane: usize) -> Rect {
-        let x = p.x + PAD + k as f64 * (CELL + GAP);
-        let y = p.y + HEAD + lane as f64 * (CELL + GAP);
-        Rect::new(x, y, x + CELL, y + CELL)
+    /// A step of the chain: a block, or effects in parallel with the dry
+    /// (their boxes, and the dry's line through the middle).
+    #[derive(Clone)]
+    enum Stage {
+        Block(Rect),
+        Split(Vec<Rect>, (f64, f64, f64)),
+    }
+
+    impl Stage {
+        fn ins(&self) -> Vec<Point> {
+            match self {
+                Stage::Block(r) => vec![Point::new(r.x0, r.center().y)],
+                Stage::Split(rs, (x0, _, y)) => rs.iter().map(|r| Point::new(r.x0, r.center().y)).chain([Point::new(*x0, *y)]).collect(),
+            }
+        }
+        fn outs(&self) -> Vec<Point> {
+            match self {
+                Stage::Block(r) => vec![Point::new(r.x1, r.center().y)],
+                Stage::Split(rs, (_, x1, y)) => rs.iter().map(|r| Point::new(r.x1, r.center().y)).chain([Point::new(*x1, *y)]).collect(),
+            }
+        }
+    }
+
+    /// Where everything in a run of items goes: the chain's stages, its
+    /// cells, and the boxes of the modules inside it.
+    #[derive(Default)]
+    struct Placed {
+        stages: Vec<Stage>,
+        cells: Vec<(Rect, CanvasCell)>,
+        boxes: Vec<(Rect, CanvasModule)>,
+    }
+
+    /// Place `items` from `x0`, each centred on a band `h` tall from `y0`.
+    fn place(items: &[CanvasItem], x0: f64, y0: f64, h: f64, out: &mut Placed) {
+        let mut x = x0;
+        for it in items {
+            let top = y0 + (h - item_h(it)) / 2.0;
+            let cell = |lane: usize| {
+                let y = top + lane as f64 * (CELL + GAP);
+                Rect::new(x, y, x + CELL, y + CELL)
+            };
+            match it {
+                CanvasItem::Col(col) => {
+                    for (l, c) in col.iter().enumerate() {
+                        out.stages.push(Stage::Block(cell(l)));
+                        out.cells.push((cell(l), c.clone()));
+                    }
+                }
+                CanvasItem::Split(cells) => {
+                    let rects: Vec<Rect> = (0..cells.len()).map(|i| cell(if i == 0 { 0 } else { 2 })).collect();
+                    out.cells.extend(rects.iter().copied().zip(cells.iter().cloned()));
+                    out.stages.push(Stage::Split(rects, (x, x + CELL, cell(1).center().y)));
+                }
+                CanvasItem::Sub(m) => {
+                    out.boxes.push((Rect::new(x, top, x + box_w(&m.items), top + box_h(&m.items)), m.clone()));
+                    place(&m.items, x + PAD, top + HEAD, content_h(&m.items), out);
+                }
+            }
+            x += item_w(it) + GAP;
+        }
     }
 
     /// What a spot on the grid is.
@@ -179,7 +281,7 @@ mod native {
     enum Hit {
         Cell(String),
         Light(String),
-        Module(usize),
+        Module(String, Vec<String>),
     }
 
     enum Gesture {
@@ -363,10 +465,7 @@ mod native {
                         let pick = match hit {
                             Some(Hit::Light(id)) => CanvasPick::Toggle(id),
                             Some(Hit::Cell(id)) => CanvasPick::Block(id),
-                            Some(Hit::Module(i)) => {
-                                let m = &s.modules[i];
-                                CanvasPick::Module(m.name.clone(), m.cols.iter().flatten().map(|c| c.id.clone()).collect())
-                            }
+                            Some(Hit::Module(name, ids)) => CanvasPick::Module(name, ids),
                             None => CanvasPick::Clear,
                         };
                         s.picks.push(pick);
@@ -426,61 +525,82 @@ mod native {
             let mut hits: Vec<(Rect, Hit)> = Vec::new();
             let st = &mut *s;
 
-            // Cables first, under everything: the chain's order through the
-            // cells — down a module's column, then on to the next.
-            let mut chain: Vec<Rect> = Vec::new();
-            for p in &pieces {
-                let m = &st.modules[p.module];
-                for (k, col) in m.cols[p.cols.clone()].iter().enumerate() {
-                    chain.extend((0..col.len()).map(|l| cell_rect(p, k, l)));
-                }
-            }
+            // Everything's place: each piece's box, the boxes inside it,
+            // its cells.
+            let placed: Vec<(Piece, Placed)> = pieces
+                .iter()
+                .map(|p| {
+                    let mut out = Placed::default();
+                    let m = &st.modules[p.module];
+                    place(&m.items[p.items.clone()], p.x + PAD, p.y + HEAD, content_h(&m.items), &mut out);
+                    (p.clone(), out)
+                })
+                .collect();
+
+            // Cables first, under everything, through the chain's stages:
+            // down a column, on to the next, out to parallel effects and
+            // back.
+            let stages: Vec<Stage> = placed.iter().flat_map(|(_, pl)| pl.stages.iter().cloned()).collect();
             let cable = Color::from_rgba8(0x52, 0x52, 0x5b, 0xff);
             let stroke = Stroke::new(2.0);
-            if let (Some(first), Some(last)) = (chain.first(), chain.last()) {
-                let y_in = first.center().y;
-                let y_out = last.center().y;
-                let x_end = chain.iter().map(|r| r.x1).fold(0.0, f64::max) + MOD_GAP;
+            let mut line = |scene: &mut Scene, a: Point, b: Point| scene.stroke(&stroke, t, cable, None, &wire(a, b, ROW_GAP));
+            if let (Some(first), Some(last)) = (stages.first(), stages.last()) {
+                let y_in = first.ins().last().map_or(0.0, |p| p.y);
+                let y_out = last.outs().last().map_or(0.0, |p| p.y);
+                let x_end = pieces.iter().map(|p| p.x + p.w).fold(0.0, f64::max) + MOD_GAP;
                 end_pill(&mut scene, st, t, Rect::new(EDGE, y_in - 15.0, EDGE + END, y_in + 15.0), "IN");
                 end_pill(&mut scene, st, t, Rect::new(x_end, y_out - 15.0, x_end + END, y_out + 15.0), "OUT");
-                scene.stroke(&stroke, t, cable, None, &wire(Point::new(EDGE + END, y_in), Point::new(first.x0, y_in), ROW_GAP));
-                scene.stroke(&stroke, t, cable, None, &wire(Point::new(last.x1, y_out), Point::new(x_end, y_out), ROW_GAP));
+                for i in first.ins() {
+                    line(&mut scene, Point::new(EDGE + END, y_in), i);
+                }
+                for o in last.outs() {
+                    line(&mut scene, o, Point::new(x_end, y_out));
+                }
             }
-            for w in chain.windows(2) {
-                let (a, b) = (w[0], w[1]);
-                if (a.x0 - b.x0).abs() < 0.5 && b.y0 > a.y0 {
-                    // Down the column.
-                    scene.stroke(&stroke, t, cable, None, &kurbo::Line::new((a.center().x, a.y1), (b.center().x, b.y0)));
-                } else {
-                    scene.stroke(&stroke, t, cable, None, &wire(Point::new(a.x1, a.center().y), Point::new(b.x0, b.center().y), ROW_GAP));
+            for s2 in &stages {
+                if let Stage::Split(_, (x0, x1, y)) = s2 {
+                    line(&mut scene, Point::new(*x0, *y), Point::new(*x1, *y));
+                }
+            }
+            for w in stages.windows(2) {
+                match (&w[0], &w[1]) {
+                    (Stage::Block(a), Stage::Block(b)) if (a.x0 - b.x0).abs() < 0.5 && b.y0 > a.y0 => {
+                        // Down the column.
+                        scene.stroke(&stroke, t, cable, None, &kurbo::Line::new((a.center().x, a.y1), (b.center().x, b.y0)));
+                    }
+                    (a, b) => {
+                        let (outs, ins) = (a.outs(), b.ins());
+                        if outs.len() == 1 || ins.len() == 1 {
+                            for o in &outs {
+                                for i in &ins {
+                                    line(&mut scene, *o, *i);
+                                }
+                            }
+                        } else {
+                            // Parallel into parallel: they join on the line between.
+                            let j = Point::new((outs[0].x + ins[0].x) / 2.0, ins[ins.len() - 1].y);
+                            for o in &outs {
+                                line(&mut scene, *o, j);
+                            }
+                            for i in &ins {
+                                line(&mut scene, j, *i);
+                            }
+                        }
+                    }
                 }
             }
 
-            for p in &pieces {
+            for (p, pl) in &placed {
                 let m = st.modules[p.module].clone();
-                let colour = hex(&m.colour);
-                let module_on = matches!(&st.selected, Some(CanvasSel::Module(n)) if *n == m.name);
-                // The module's container.
-                let r = RoundedRect::from_rect(Rect::new(p.x, p.y, p.x + p.w, p.y + p.h), 10.0);
-                scene.fill(Fill::NonZero, t, mix(colour, Color::from_rgba8(0x14, 0x14, 0x18, 0xff), if module_on { 0.16 } else { 0.07 }), None, &r);
-                let edge = if module_on { colour } else { Color::from_rgba8(0x2a, 0x2a, 0x31, 0xff) };
-                scene.stroke(&Stroke::new(if module_on { 2.0 } else { 1.0 }), t, edge, None, &r);
-                // Its header: a mark, its name, what it plays.
-                scene.fill(Fill::NonZero, t, colour, None, &RoundedRect::new(p.x + PAD, p.y + 9.0, p.x + PAD + 8.0, p.y + 17.0, 2.0));
-                let name = if p.first { m.name.to_uppercase() } else { format!("{} ›", m.name.to_uppercase()) };
-                let nw = text(&mut scene, st, t, &name, 10.5, 800.0, lift(colour), p.x + PAD + 14.0, p.y + 17.5, p.w - PAD * 2.0 - 14.0, false);
-                if p.first && !m.label.is_empty() {
-                    text(&mut scene, st, t, &m.label, 10.5, 600.0, Color::from_rgba8(0xa1, 0xa1, 0xaa, 0xff), p.x + PAD + 22.0 + nw, p.y + 17.5, (p.w - PAD * 2.0 - 22.0 - nw).max(0.0), false);
+                let r = Rect::new(p.x, p.y, p.x + p.w, p.y + p.h);
+                draw_box(&mut scene, st, t, r, &m, p.first, &mut hits);
+                for (r, inner) in &pl.boxes {
+                    draw_box(&mut scene, st, t, *r, inner, true, &mut hits);
                 }
-                hits.push((Rect::new(p.x, p.y, p.x + p.w, p.y + HEAD), Hit::Module(p.module)));
-                // Its cells.
-                for (k, col) in m.cols[p.cols.clone()].iter().enumerate() {
-                    for (lane, c) in col.iter().enumerate() {
-                        let rect = cell_rect(p, k, lane);
-                        draw_cell(&mut scene, st, t, rect, c);
-                        hits.push((rect, Hit::Cell(c.id.clone())));
-                        hits.push((Rect::new(rect.x1 - 30.0, rect.y0, rect.x1, rect.y0 + 30.0), Hit::Light(c.id.clone())));
-                    }
+                for (rect, c) in &pl.cells {
+                    draw_cell(&mut scene, st, t, *rect, c);
+                    hits.push((*rect, Hit::Cell(c.id.clone())));
+                    hits.push((Rect::new(rect.x1 - 30.0, rect.y0, rect.x1, rect.y0 + 30.0), Hit::Light(c.id.clone())));
                 }
             }
             st.hits = hits;
@@ -508,6 +628,24 @@ mod native {
             p.line_to((b.x, b.y));
         }
         p
+    }
+
+    /// A module's box and its header: a mark, its name, what it plays.
+    fn draw_box(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, m: &CanvasModule, first: bool, hits: &mut Vec<(Rect, Hit)>) {
+        let colour = hex(&m.colour);
+        let on = matches!(&st.selected, Some(CanvasSel::Module(n)) if *n == m.name);
+        let rr = RoundedRect::from_rect(r, 10.0);
+        scene.fill(Fill::NonZero, t, mix(colour, Color::from_rgba8(0x14, 0x14, 0x18, 0xff), if on { 0.16 } else { 0.07 }), None, &rr);
+        let edge = if on { colour } else { Color::from_rgba8(0x2a, 0x2a, 0x31, 0xff) };
+        scene.stroke(&Stroke::new(if on { 2.0 } else { 1.0 }), t, edge, None, &rr);
+        scene.fill(Fill::NonZero, t, colour, None, &RoundedRect::new(r.x0 + PAD, r.y0 + 9.0, r.x0 + PAD + 8.0, r.y0 + 17.0, 2.0));
+        let name = if first { m.name.to_uppercase() } else { format!("{} ›", m.name.to_uppercase()) };
+        let room = r.width() - PAD * 2.0 - 14.0;
+        let nw = text(scene, st, t, &name, 10.5, 800.0, lift(colour), r.x0 + PAD + 14.0, r.y0 + 17.5, room, false);
+        if first && !m.label.is_empty() {
+            text(scene, st, t, &m.label, 10.5, 600.0, Color::from_rgba8(0xa1, 0xa1, 0xaa, 0xff), r.x0 + PAD + 22.0 + nw, r.y0 + 17.5, (room - 8.0 - nw).max(0.0), false);
+        }
+        hits.push((Rect::new(r.x0, r.y0, r.x1, r.y0 + HEAD), Hit::Module(m.name.clone(), m.ids())));
     }
 
     fn draw_cell(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, c: &CanvasCell) {
