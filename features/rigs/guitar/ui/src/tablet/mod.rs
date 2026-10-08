@@ -20,6 +20,8 @@ mod macros;
 mod marks;
 mod menu;
 mod panels;
+mod routing;
+mod fx_row;
 mod setlist;
 mod setup;
 mod sidebar_views;
@@ -63,6 +65,9 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut left_browser = use_signal(|| true);
     let setup_tab = use_signal(|| setup::SetupTab::Guitar);
     let pick = use_context_provider(|| BuildPick { part: Signal::new(None), building: Signal::new(false) });
+    // Edit's routing selection, and where it points the browser.
+    use_context_provider(|| routing::RoutingSel(Signal::new(None)));
+    use_context_provider(|| routing::BrowserFocus(Signal::new(None)));
     // "Patch…" on a section or part: pick it and bring the browser up for
     // it (in Build it is already there).
     use_context_provider(|| setlist::PickPart {

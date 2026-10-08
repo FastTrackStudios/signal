@@ -728,6 +728,18 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
         kind_id.set(home.to_string());
     }
     let mut query = use_signal(String::new);
+    // A block or module picked in Edit's routing opens it here: its kind,
+    // and inside, the preset (and variation) it plays.
+    let mut reveal = use_context_provider(|| Reveal(Signal::new(None))).0;
+    if let Some(super::routing::BrowserFocus(mut focus)) = try_use_context::<super::routing::BrowserFocus>()
+        && let Some(at) = focus()
+    {
+        focus.set(None);
+        kind_id.set(at.kind.clone());
+        opened.set(true);
+        query.set(String::new());
+        reveal.set(Some((at.preset, at.variation)));
+    }
     let mut searching = use_signal(|| false);
     let filter = use_signal(SongFilter::default);
     let all = kinds(&d);
@@ -1157,7 +1169,9 @@ fn KindRow(kind: Kind, on: bool, chevron: bool, items: Vec<Thing>, onclick: Even
 /// A kind's things as rows, under their group's heading (a patch's stack).
 #[component]
 fn ThingList(kind: Kind, items: Vec<Thing>, applies: bool) -> Element {
-    let first = first_current(&items);
+    // The row a routing pick points at, else the first in use.
+    let revealed = try_use_context::<Reveal>().and_then(|r| r.0.peek().clone()).and_then(|(p, _)| items.iter().position(|i| !p.is_empty() && i.name == p));
+    let first = revealed.or_else(|| first_current(&items));
     let mut last = String::new();
     let rows: Vec<(Option<String>, Thing)> = items
         .into_iter()
@@ -1273,8 +1287,20 @@ fn PresetColumns(kind: Kind, items: Vec<Thing>, applies: bool) -> Element {
         .or_else(|| groups.iter().find(|g| g.2.iter().any(|i| !i.inherited.is_empty())))
         .or_else(|| groups.first())
         .map(|g| g.0.clone());
-    let mut picked = use_signal(|| in_use);
-    let mut variations = use_signal(|| false);
+    // A routing pick: its preset open, on its variations.
+    let revealed = try_use_context::<Reveal>().and_then(|r| r.0.peek().clone()).filter(|(p, _)| groups.iter().any(|g| g.0 == *p));
+    let mut picked = use_signal(|| revealed.as_ref().map(|r| r.0.clone()).or(in_use));
+    let mut variations = use_signal(|| revealed.is_some());
+    let mut seen = use_signal(|| revealed.clone());
+    if let Some(r) = try_use_context::<Reveal>().and_then(|r| r.0.read().clone())
+        && groups.iter().any(|g| g.0 == r.0)
+        && *seen.peek() != Some(r.clone())
+    {
+        seen.set(Some(r.clone()));
+        picked.set(Some(r.0.clone()));
+        variations.set(true);
+    }
+    let reveal_variation = seen().map(|r| r.1).unwrap_or_default();
     let width = use_signal(|| None::<f64>);
     let narrow = width().is_some_and(|w| w < COLUMNS_NARROW_W);
     let current = groups.iter().find(|g| Some(&g.0) == picked().as_ref()).or_else(|| groups.first()).map(|g| g.0.clone());
@@ -1342,7 +1368,8 @@ fn PresetColumns(kind: Kind, items: Vec<Thing>, applies: bool) -> Element {
                         span { style: "flex: 1; min-width: 0; font-size: 17px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{name}" }
                     }
                     {
-                        let first = first_current(&vars);
+                        // The variation a routing pick points at, else the first in use.
+                        let first = vars.iter().position(|v| !reveal_variation.is_empty() && v.name == reveal_variation).or_else(|| first_current(&vars));
                         rsx! {
                             for (n, v) in vars.into_iter().enumerate() {
                                 Variation { key: "{v.id}", kind: kind.clone(), item: v.clone(), colour: colour.clone(), applies, scroll: first == Some(n) }
@@ -2028,3 +2055,7 @@ fn variation_picks(d: &Data, target: &Target) -> Vec<signal_guitar_proto::PartPi
         .map(|s| s.picks.clone())
         .unwrap_or_default()
 }
+
+/// Where a routing pick points inside the browser: `(preset, variation)`.
+#[derive(Clone, Copy)]
+struct Reveal(Signal<Option<(String, String)>>);

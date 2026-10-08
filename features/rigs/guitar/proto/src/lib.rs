@@ -1181,6 +1181,11 @@ pub struct LiveBlock {
     /// The capture file it plays, for a tooltip.
     #[facet(default)]
     pub asset: String,
+    /// The module it belongs to, for grouping: `Core`, `Drive`, `Amp`,
+    /// `Delay`, `Reverb`; `Pre` for a pre effect; else its category
+    /// (`Dynamics`, `Modulation`, `Motion`…).
+    #[facet(default)]
+    pub module: String,
     /// A drive board slot with nothing in it: it does nothing.
     #[facet(default)]
     pub empty: bool,

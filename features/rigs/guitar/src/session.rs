@@ -3646,6 +3646,7 @@ impl GuitarRigBackend {
                     id: format!("design-{i}"),
                     engine: 0,
                     block_type: block.block_type,
+                    module: block_module(&name, block.block_type),
                     name,
                     // Everything engaged.
                     //
@@ -4831,7 +4832,8 @@ impl GuitarRigBackend {
                             id: id.clone(),
                             engine: 0,
                             block_type: block.block_type,
-                            name,
+                            module: block_module(&name, block.block_type),
+                name,
                             bypassed: block.bypassed,
                             param_name,
                             param_value,
@@ -11133,6 +11135,7 @@ pub(crate) fn chain_as_live(chain: &[RigBlock]) -> Vec<LiveBlock> {
                 id: format!("chain-{i}"),
                 engine: 0,
                 block_type: block.block_type,
+                module: block_module(&name, block.block_type),
                 name,
                 bypassed: block.bypassed,
                 param_name: None,
@@ -11470,4 +11473,16 @@ fn perf_parts(s: &crate::profiles::SongDef) -> Vec<PerfPart> {
             .collect(),
     })
         .collect()
+}
+
+/// The module a chain block belongs to, for a surface to group by: the
+/// rig's own (`module_of_block`), `Pre` for a pre effect, else its category.
+fn block_module(name: &str, bt: BlockType) -> String {
+    if let Some(m) = crate::profiles::module_of_block(name, bt) {
+        return m.to_string();
+    }
+    if name.len() > 4 && name[..4].eq_ignore_ascii_case("pre ") {
+        return "Pre".to_string();
+    }
+    format!("{:?}", bt.category())
 }

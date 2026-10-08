@@ -16,22 +16,21 @@ use super::tokens::*;
 use super::BuildPick;
 use crate::state::RigViewState;
 
-/// The FX row's height — the landscape iPhone's safe area.
-const FX_ROW_H: u32 = 381;
 
 #[component]
 pub fn EditView(state: RigViewState, perf: PerformanceModel) -> Element {
     let picked = try_use_context::<BuildPick>().and_then(|b| (b.part)());
     // The section's own changes: its overrides and its module/block picks.
     let edits = picked.and_then(|i| perf.parts.get(i)).map_or(0, |p| p.overrides.len() + p.picks.len());
-    let _ = &state;
     rsx! {
         div { style: "height: 100%; display: flex; flex-direction: column; min-height: 0;",
-            // Routing: the block and module system, to be remade — empty until then.
-            div { style: "flex: 1; min-height: 0;" }
+            // Routing: the patch's modules and blocks, in chain order.
+            div { style: "flex: 1; min-height: 0;",
+                super::routing::Routing { state }
+            }
             OverrideBar { perf: perf.clone(), edits, picked }
-            // The FX row: Frame's place — empty until it lands.
-            div { style: "flex-shrink: 0; height: {FX_ROW_H}px; border-top: 1px solid #000; background: #0d0d10;" }
+            // The FX row: the selected block's controls, as Frame draws them.
+            super::fx_row::FxRow { state }
         }
     }
 }
