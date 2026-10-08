@@ -2402,6 +2402,9 @@ impl GuitarRigBackend {
     /// the tail applies tempo/boost/drives to the restored patch.
     fn restore_last_state(&self) {
         let Some(st) = RigLibrary::load_last_state() else {
+            // A first start: the set most recently played (or, with none
+            // yet, the next one), in Setlist mode — where a player picks up.
+            self.open_nearest_setlist();
             return;
         };
         // A state saved in the old Preset mode opens in Profile.
@@ -2462,6 +2465,29 @@ impl GuitarRigBackend {
     /// A setlist dated today ([`SetlistDef::day`]) opens on its own:
     /// Setlist mode, its first song. Not when it is already the one up — a
     /// restart mid-service keeps its place.
+    /// Open the dated set on or most recently before today, else the
+    /// soonest after it; nothing when no set has a date.
+    fn open_nearest_setlist(&self) {
+        let today = chrono::Local::now().date_naive();
+        let idx = {
+            let sets = self.setlists.lock_ok();
+            let dated: Vec<(usize, chrono::NaiveDate)> = sets.iter().enumerate().filter_map(|(i, s)| s.day().map(|d| (i, d))).collect();
+            dated
+                .iter()
+                .filter(|(_, d)| *d <= today)
+                .max_by_key(|(_, d)| *d)
+                .or_else(|| dated.iter().filter(|(_, d)| *d > today).min_by_key(|(_, d)| *d))
+                .map(|(i, _)| *i)
+        };
+        let Some(idx) = idx else { return };
+        *self.perform_mode.lock_ok() = 2;
+        *self.setlist_index.lock_ok() = idx;
+        *self.song_index.lock_ok() = 0;
+        self.recall_song(0);
+        let name = self.setlists.lock_ok().get(idx).map(|s| s.name.clone()).unwrap_or_default();
+        tracing::info!(setlist.name = %name, "first start: the nearest set opened");
+    }
+
     fn open_todays_setlist(&self) {
         let today = chrono::Local::now().date_naive();
         let Some(idx) = self

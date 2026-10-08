@@ -282,13 +282,13 @@ const DEFAULT_KEYMAP: &str = include_str!("../default-config/keymap.styx");
 const DEFAULT_MODULES: &str = include_str!("../default-config/modules.styx");
 const DEFAULT_PRESETS: &str = include_str!("../default-config/presets.styx");
 const DEFAULT_BLOCKS: &str = include_str!("../default-config/blocks.styx");
+const DEFAULT_TONES: &str = include_str!("../default-config/tones.styx");
 
-/// The profiles the app ships (`profiles/<file>`), seeded into a library
-/// that has never had them — see [`seed_profiles`].
-const DEFAULT_PROFILES: &[(&str, &str)] = &[
-    ("blues.styx", include_str!("../default-config/profiles/blues.styx")),
-    ("worship.styx", include_str!("../default-config/profiles/worship.styx")),
-];
+// The shipped library's files — `DEFAULT_MODELS` (captures and cab IRs,
+// `models/`), `DEFAULT_FROZEN` (frozen Cores, `frozen/`), `DEFAULT_PROFILES`
+// (`profiles/<file>`, seeded into a library that has never had them — see
+// [`seed_profiles`]) — listed by build.rs from `default-config/`.
+include!(concat!(env!("OUT_DIR"), "/default_files.rs"));
 
 /// The profile a rig plays when nothing has chosen one (and the one a
 /// library that newly gains it switches to, once): the worship rig — on a
@@ -317,103 +317,7 @@ fn is_ipad() -> bool {
     false
 }
 
-/// The shipped Cores frozen into NAM captures (rig-dir-relative
-/// `frozen/<name>`, see `crate::freeze`): with them a shipped profile plays
-/// without a download.
-const DEFAULT_FROZEN: &[(&str, &[u8])] = &[
-    ("john-mayer--dumble-L.nam", include_bytes!("../default-config/frozen/john-mayer--dumble-L.nam")),
-    ("john-mayer--dumble-klon-L.nam", include_bytes!("../default-config/frozen/john-mayer--dumble-klon-L.nam")),
-    ("john-mayer--stereo-L.nam", include_bytes!("../default-config/frozen/john-mayer--stereo-L.nam")),
-    ("john-mayer--stereo-stack-L.nam", include_bytes!("../default-config/frozen/john-mayer--stereo-stack-L.nam")),
-    ("john-mayer--trio-L.nam", include_bytes!("../default-config/frozen/john-mayer--trio-L.nam")),
-    ("john-mayer--two-rock-L.nam", include_bytes!("../default-config/frozen/john-mayer--two-rock-L.nam")),
-    ("john-mayer--two-rock-screamer-L.nam", include_bytes!("../default-config/frozen/john-mayer--two-rock-screamer-L.nam")),
-    ("john-mayer--vibroverb-L.nam", include_bytes!("../default-config/frozen/john-mayer--vibroverb-L.nam")),
-];
 
-/// The NAM captures the default config references (rig-dir-relative
-/// `models/<name>`), embedded for first-run seeding.
-const DEFAULT_MODELS: &[(&str, &[u8])] = &[
-    (
-        "VX TB30 BR Edge0 BAL2 CAB FREE.nam",
-        include_bytes!("../default-config/models/VX TB30 BR Edge0 BAL2 CAB FREE.nam"),
-    ),
-    (
-        "Fender DRRI _ Clean _ DI Capture (No Cab).nam",
-        include_bytes!("../default-config/models/Fender DRRI _ Clean _ DI Capture (No Cab).nam"),
-    ),
-    (
-        "Fender DRRI _ Clean _ SM57 + Royer R-121 + Room _ Full Rig.nam",
-        include_bytes!(
-            "../default-config/models/Fender DRRI _ Clean _ SM57 + Royer R-121 + Room _ Full Rig.nam"
-        ),
-    ),
-    (
-        "Vib Arena Lead LT.nam",
-        include_bytes!("../default-config/models/Vib Arena Lead LT.nam"),
-    ),
-    (
-        "Vibrato Verb AA Crunch.nam",
-        include_bytes!("../default-config/models/Vibrato Verb AA Crunch.nam"),
-    ),
-    (
-        "Vibrato Verb AA Driven.nam",
-        include_bytes!("../default-config/models/Vibrato Verb AA Driven.nam"),
-    ),
-    (
-        "JHS Morning Glory V4 - High Gain Blue.nam",
-        include_bytes!("../default-config/models/JHS Morning Glory V4 - High Gain Blue.nam"),
-    ),
-    (
-        "JHS Morning Glory V4 - Low Gain Blue.nam",
-        include_bytes!("../default-config/models/JHS Morning Glory V4 - Low Gain Blue.nam"),
-    ),
-    (
-        "JHS Morning Glory V4 - Medium Gain Blue.nam",
-        include_bytes!("../default-config/models/JHS Morning Glory V4 - Medium Gain Blue.nam"),
-    ),
-    (
-        "King of Tone both sides.nam",
-        include_bytes!("../default-config/models/King of Tone both sides.nam"),
-    ),
-    (
-        "King of Tone ver4 Red channel set to Boost.nam",
-        include_bytes!("../default-config/models/King of Tone ver4 Red channel set to Boost.nam"),
-    ),
-    // The Blues profile's pedals and amps (TONE3000 captures).
-    (
-        "KLON 2.nam",
-        include_bytes!("../default-config/models/KLON 2.nam"),
-    ),
-    (
-        "marshall-bluesbreaker-pedal-setting1.nam",
-        include_bytes!("../default-config/models/marshall-bluesbreaker-pedal-setting1.nam"),
-    ),
-    (
-        "46-TS808_Hot_Lvl6_OD1_T5.nam",
-        include_bytes!("../default-config/models/46-TS808_Hot_Lvl6_OD1_T5.nam"),
-    ),
-    (
-        "Dumble Steel SS Clean.nam",
-        include_bytes!("../default-config/models/Dumble Steel SS Clean.nam"),
-    ),
-    (
-        "Dumble Steel SS Drive 1.nam",
-        include_bytes!("../default-config/models/Dumble Steel SS Drive 1.nam"),
-    ),
-    (
-        "Two-Rock_ John Mayer Signature Prototype.nam",
-        include_bytes!("../default-config/models/Two-Rock_ John Mayer Signature Prototype.nam"),
-    ),
-    (
-        "Fender_ Vibroverb_ 1964.nam",
-        include_bytes!("../default-config/models/Fender_ Vibroverb_ 1964.nam"),
-    ),
-    (
-        "Fender_ Vibroverb_ 1964  - Dumble_ Steel String Singer_ _002 -  Two-Rock_ John Mayer Signature Prototype __Signature _83__.nam",
-        include_bytes!("../default-config/models/Fender_ Vibroverb_ 1964  - Dumble_ Steel String Singer_ _002 -  Two-Rock_ John Mayer Signature Prototype __Signature _83__.nam"),
-    ),
-];
 
 /// Write any default NAM model missing from `<rig_dir>/models/`.
 fn seed_models() {
@@ -737,6 +641,22 @@ fn seed_compositions() {
         |l| &mut l.presets,
         |p| format!("{}\t{}", p.block_type, p.name),
     );
+    seed_entries::<crate::compose::PresetLib, crate::compose::RigPresetDef>(
+        &store,
+        crate::compose::PRESETS_FILE,
+        DEFAULT_PRESETS,
+        ".seeded-presets",
+        |l| &mut l.presets,
+        |p| p.name.clone(),
+    );
+    seed_entries::<crate::compose::ToneLib, crate::compose::ToneDef>(
+        &store,
+        crate::compose::TONES_FILE,
+        DEFAULT_TONES,
+        ".seeded-tones",
+        |l| &mut l.tones,
+        |t| t.name.clone(),
+    );
 }
 
 /// Add each shipped song and setlist a library from before it shipped has
@@ -998,6 +918,8 @@ impl RigLibrary {
                 for snap in &mut m.snapshots {
                     store.resolve(&mut snap.nam);
                     store.resolve(&mut snap.nam2);
+                    store.resolve(&mut snap.cab);
+                    store.resolve(&mut snap.cab2);
                 }
             }
         }
@@ -1015,11 +937,11 @@ impl RigLibrary {
         let blocks = one::<crate::compose::BlockLib>(crate::compose::BLOCKS_FILE, DEFAULT_BLOCKS)
             .map(|l| l.presets)
             .unwrap_or_else(|()| last_good.map(|c| c.blocks.clone()).unwrap_or_default());
-        // The presets: none until one is saved (nothing is seeded).
+        // The presets: the library's, or the shipped ones until it has its own.
         let tones_path = rig_dir().join(crate::compose::TONES_FILE);
         let tones = match config_watch::read_tracked::<crate::compose::ToneLib>(&tones_path) {
             Read::Ok(l) => l.tones,
-            Read::Missing => Vec::new(),
+            Read::Missing => facet_styx::from_str::<crate::compose::ToneLib>(DEFAULT_TONES).map(|l| l.tones).unwrap_or_default(),
             Read::Bad(e) => {
                 report_bad(&tones_path, &e);
                 last_good.map(|c| c.tones.clone()).unwrap_or_default()
@@ -1327,6 +1249,36 @@ mod tests {
         assert!(count("Delay") >= 9, "Delay presets ship");
         assert!(count("Reverb") >= 8, "Reverb presets ship");
         assert!(blocks.presets.len() >= 100, "block presets ship");
+    }
+
+    /// Every capture and cab IR the shipped library names ships with it,
+    /// by a path relative to the rig directory — none dangles on a fresh
+    /// install, none points into the machine it was shipped from.
+    #[test]
+    fn every_shipped_capture_ships() {
+        let mut texts: Vec<(&str, &str)> = vec![
+            ("modules.styx", super::DEFAULT_MODULES),
+            ("presets.styx", super::DEFAULT_PRESETS),
+            ("blocks.styx", super::DEFAULT_BLOCKS),
+            ("drive-presets.styx", super::DEFAULT_DRIVE_PRESETS),
+            ("profile.styx", super::DEFAULT_PROFILE),
+        ];
+        texts.extend(super::DEFAULT_PROFILES.iter().copied());
+        let shipped = |dir: &str, name: &str| match dir {
+            "models" => super::DEFAULT_MODELS.iter().any(|(n, _)| *n == name),
+            "frozen" => super::DEFAULT_FROZEN.iter().any(|(n, _)| *n == name),
+            _ => false,
+        };
+        for (file, text) in texts {
+            for quoted in text.split('"').skip(1).step_by(2) {
+                if !(quoted.ends_with(".nam") || quoted.ends_with(".wav")) {
+                    continue;
+                }
+                assert!(!quoted.starts_with('/'), "{file} names an absolute path: {quoted}");
+                let (dir, name) = quoted.split_once('/').unwrap_or(("", quoted));
+                assert!(shipped(dir, name), "{file} names {quoted}, which does not ship");
+            }
+        }
     }
 
     #[test]
