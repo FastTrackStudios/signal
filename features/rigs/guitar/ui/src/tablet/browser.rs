@@ -426,13 +426,33 @@ fn block_chips(d: &Data, info: &signal_guitar_proto::ModuleSnapshotInfo, follow:
             }
         }
     }
+    // Each block's algorithm, then its preset (blocks that are off, or
+    // run nothing named, left out).
     picks
         .into_iter()
-        .map(|b| {
+        .filter_map(|b| {
+            let algo = algo_of(d, &b.preset).filter(|a| a != "off")?;
             let verb = b.block.to_uppercase().starts_with("VERB");
-            Chip { icon: if verb { "Reverb" } else { "Delay" }, tint: if verb { "#8B5CF6" } else { "#3B82F6" }, bold: String::new(), text: b.preset }
+            Some(Chip { icon: if verb { "Reverb" } else { "Delay" }, tint: if verb { "#8B5CF6" } else { "#3B82F6" }, bold: algo, text: b.preset })
         })
         .collect()
+}
+
+/// The algorithm a block preset runs, in the app's names: a delay's style,
+/// a reverb's algorithm, a modulation's engine — "off" when it bypasses.
+fn algo_of(d: &Data, preset: &str) -> Option<String> {
+    let b = d.comp.block_presets.iter().find(|x| x.name == preset)?;
+    if b.bypass {
+        return Some("off".to_string());
+    }
+    let at = |param: &str| b.params.iter().find(|p| p.name == param).map(|p| p.value.round().max(0.0) as usize);
+    let name = match b.block_type.to_lowercase().as_str() {
+        "delay" => crate::control::DELAY_ALGOS.get(at("style")?),
+        "reverb" => crate::control::VERB_ALGOS.get(at("algorithm")?),
+        "chorus" | "flanger" | "vibrato" => crate::control::MOD_ENGINES.get(at("engine")?),
+        _ => None,
+    }?;
+    Some((*name).to_string())
 }
 
 fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<Thing> {
@@ -574,9 +594,16 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
                         if let Some(info) = m.snapshot_info.get(k) {
                             match *kind {
                                 "Amp" | "Drive" => {
-                                    let drive = *kind == "Drive";
-                                    for cap in &info.captures {
-                                        t.chips.push(Chip { icon: if drive { "Drive" } else { "Core" }, tint: if drive { "#ef4444" } else { "#D6B36A" }, bold: String::new(), text: cap.clone() });
+                                    // By role: the amp, the cab, a drive's
+                                    // pedal and the option it plays.
+                                    for m in &info.models {
+                                        let (icon, tint) = match m.role.as_str() {
+                                            "amp" => ("Core", "#D6B36A"),
+                                            "drive" => ("Drive", "#ef4444"),
+                                            _ => ("Amp", "#a1a1aa"),
+                                        };
+                                        let (bold, text) = if m.role == "drive" && !m.pedal.is_empty() { (m.pedal.clone(), m.option.clone()) } else { (String::new(), m.name.clone()) };
+                                        t.chips.push(Chip { icon, tint, bold, text });
                                     }
                                 }
                                 "Delay" | "Reverb" | "Time" => t.chips = block_chips(d, info, *kind == "Time"),
@@ -606,12 +633,15 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
                 .filter(|b| b.block_type.eq_ignore_ascii_case(kind))
                 .map(|b| {
                     let mut t = Thing::new(&b.name, &b.name, colour);
+                    // Its algorithm first ("Tape · in 3 presets"), or off.
                     t.from = if b.bypass {
                         "off".into()
-                    } else if b.used_by.is_empty() {
-                        String::new()
                     } else {
-                        format!("in {}", plural(b.used_by.len(), "preset"))
+                        [algo_of(d, &b.name).unwrap_or_default(), if b.used_by.is_empty() { String::new() } else { format!("in {}", plural(b.used_by.len(), "preset")) }]
+                            .into_iter()
+                            .filter(|x| !x.is_empty())
+                            .collect::<Vec<_>>()
+                            .join(" · ")
                     };
                     let picked = |x: &signal_guitar_proto::PartPick| x.kind.starts_with("block:") && x.preset == b.name;
                     if part.is_some_and(|p| p.picks.iter().any(picked)) || variation_picks(d, target).iter().any(picked) {

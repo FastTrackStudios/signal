@@ -83,6 +83,8 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
         div {
             style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; background: {DESK}; color: {INK}; font-family: {FONT}; font-weight: 500; overflow: hidden;",
             onpointerdown: move |_| away.press(),
+            // Every button answers a press (the prototype's `.pressable`).
+            document::Style { {PRESSABLE} }
             topbar::TopBar {
                 model: model.clone(),
                 state,
@@ -307,3 +309,7 @@ fn Gear(colour: &'static str) -> Element {
         circle { cx: "9", cy: "9", r: "2.4", fill: "none", stroke: colour, stroke_width: "1.4" }
     }
 }
+
+/// A pressed button sinks a little and lightens — over its own background,
+/// which is inline, hence `!important`.
+const PRESSABLE: &str = "button:not(:disabled):active { transform: scale(0.985); background-image: linear-gradient(rgba(255,255,255,0.07), rgba(255,255,255,0.07)) !important; }";

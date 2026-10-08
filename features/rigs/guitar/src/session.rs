@@ -4060,6 +4060,15 @@ impl GuitarRigBackend {
             tracing::warn!(what, "no song is up");
             return;
         };
+        self.edit_song(&song_name, what, edit);
+    }
+
+    /// Edit library song `song_name` (any song, up or not), save the song
+    /// library when it changed, and say so.
+    fn edit_song<F>(&self, song_name: &str, what: &str, edit: F)
+    where
+        F: FnOnce(&mut crate::profiles::SongDef) -> bool,
+    {
         let changed = {
             let mut songs = self.songs_lib.lock_ok();
             let Some(song) = songs
@@ -6249,6 +6258,38 @@ impl Rig for GuitarRigBackend {
         if *idx > last {
             *idx = last;
         }
+    }
+
+    fn edit_song_part(&self, song: String, op: String, part: String, value: String) {
+        let value = value.trim().to_string();
+        self.edit_song(&song, "song section", |s| match op.as_str() {
+            "add" => !value.is_empty() && s.add_part(&value),
+            "rename" => !value.is_empty() && s.rename_part(&part, &value),
+            "remove" => s.remove_part(&part),
+            "move" => match (part.parse::<usize>(), value.parse::<usize>()) {
+                (Ok(from), Ok(to)) => s.move_part(from, to),
+                _ => false,
+            },
+            "section" => {
+                if !s.parts.iter().any(|p| p.eq_ignore_ascii_case(&part)) {
+                    return false;
+                }
+                own_recall_mut(s, &part).section = value.clone();
+                true
+            }
+            "patch" => {
+                if !s.parts.iter().any(|p| p.eq_ignore_ascii_case(&part)) {
+                    return false;
+                }
+                let recall = part_recall_mut(s, &part);
+                recall.patch = value.clone();
+                recall.stack.clear();
+                recall.preset.clear();
+                true
+            }
+            _ => false,
+        });
+        self.publish_state();
     }
 
     fn move_part(&self, from: u32, to: u32) {
@@ -8479,6 +8520,8 @@ impl Rig for GuitarRigBackend {
             CompositionModel, ModulePick, ModulePresetEntry, PresetEntry, PresetSnapshotEntry,
         };
         let comp = RigLibrary::load_compositions();
+        // The drive pedals, for what a Drive snapshot's slots load.
+        let dps = self.drive_presets.lock_ok().clone();
         let pick = |c: &crate::profiles::ModuleChoiceDef| ModulePick {
             module: c.module.clone(),
             preset: c.preset.clone(),
@@ -8618,6 +8661,7 @@ impl Rig for GuitarRigBackend {
                             modules: s.modules.iter().map(pick).collect(),
                             blocks: s.blocks.iter().map(|c| signal_guitar_proto::BlockPick { block: c.block.clone(), preset: c.preset.clone() }).collect(),
                             captures: Vec::new(),
+                            models: Vec::new(),
                             macros: Vec::new(),
                             frozen_available: !s.frozen_nam.is_empty(),
                             frozen: s.frozen && !s.frozen_nam.is_empty(),
@@ -8657,6 +8701,7 @@ impl Rig for GuitarRigBackend {
                             modules,
                             blocks: t.blocks.iter().map(|c| signal_guitar_proto::BlockPick { block: c.block.clone(), preset: c.preset.clone() }).collect(),
                             captures: Vec::new(),
+                            models: Vec::new(),
                             macros: Vec::new(),
                             frozen_available: false,
                             frozen: false,
@@ -8683,7 +8728,7 @@ impl Rig for GuitarRigBackend {
                     snapshots: m.snapshots.iter().map(|s| s.name.clone()).collect(),
                     used_by,
                     snapshot_used_by,
-                    snapshot_info: m.snapshots.iter().map(snapshot_info).collect(),
+                    snapshot_info: m.snapshots.iter().map(|s| snapshot_info(s, &dps)).collect(),
                 })
                 )
                 .collect(),
@@ -10978,7 +11023,7 @@ fn audio_device_present() -> bool {
 
 /// What a module snapshot holds, for a list row: its module picks, its block
 /// presets, and its captures by file stem.
-fn snapshot_info(s: &crate::compose::ModuleSnapshotDef) -> signal_guitar_proto::ModuleSnapshotInfo {
+fn snapshot_info(s: &crate::compose::ModuleSnapshotDef, dps: &[crate::profiles::DrivePresetDef]) -> signal_guitar_proto::ModuleSnapshotInfo {
     let stem = |p: &str| {
         std::path::Path::new(p)
             .file_stem()
@@ -11008,6 +11053,23 @@ fn snapshot_info(s: &crate::compose::ModuleSnapshotDef) -> signal_guitar_proto::
             .into_iter()
             .filter(|p| !p.is_empty())
             .map(|p| stem(p))
+            .collect(),
+        models: [("amp", &s.nam), ("cab", &s.cab), ("amp", &s.nam2), ("cab", &s.cab2)]
+            .into_iter()
+            .filter(|(_, p)| !p.is_empty())
+            .map(|(role, p)| signal_guitar_proto::CaptureModel { role: role.into(), name: stem(p), ..Default::default() })
+            .chain(s.drives.iter().map(|d| {
+                let option = dps
+                    .iter()
+                    .find(|p| p.name.eq_ignore_ascii_case(&d.preset))
+                    .and_then(|p| p.options.get(d.option));
+                signal_guitar_proto::CaptureModel {
+                    role: "drive".into(),
+                    name: option.map(|o| stem(&o.nam)).filter(|n| !n.is_empty()).unwrap_or_else(|| d.preset.clone()),
+                    pedal: d.preset.clone(),
+                    option: option.map(|o| o.name.clone()).unwrap_or_default(),
+                }
+            }))
             .collect(),
         macros: crate::compose::MacroResponseDef::knobs(&s.macros),
         ..Default::default()

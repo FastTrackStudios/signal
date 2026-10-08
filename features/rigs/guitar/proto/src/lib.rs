@@ -627,6 +627,10 @@ pub struct ModuleSnapshotInfo {
     /// Its captures, by file name without the extension: amp, then cab,
     /// then the second amp and cab (empty ones left out).
     pub captures: Vec<String>,
+    /// The NAM models it loads, by role: `amp` and `cab` (its captures),
+    /// `drive` (a slot's pedal: the capture, the pedal and its option).
+    #[facet(default)]
+    pub models: Vec<CaptureModel>,
     /// The macro knobs it tunes on its blocks.
     #[facet(default)]
     pub macros: Vec<String>,
@@ -637,6 +641,20 @@ pub struct ModuleSnapshotInfo {
     /// It plays its frozen captures now.
     #[facet(default)]
     pub frozen: bool,
+}
+
+/// A NAM model a module snapshot loads.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct CaptureModel {
+    /// `amp`, `cab` or `drive`.
+    pub role: String,
+    /// The capture, by file stem (a drive: its option's, else the pedal).
+    pub name: String,
+    /// A drive's pedal and the option it plays; empty otherwise.
+    #[facet(default)]
+    pub pedal: String,
+    #[facet(default)]
+    pub option: String,
 }
 
 /// One parameter a block preset sets.
@@ -1524,6 +1542,11 @@ pub mod rig {
         fn step_part(&self, dir: i32, sections: bool) -> Applied;
         /// Put `part` in section `section` (empty = its own).
         fn set_part_section(&self, part: String, section: String);
+        /// A section edit on any library song (up or not): `op` `add`
+        /// (`value` the new part), `rename` (`part` → `value`), `remove`,
+        /// `move` (`part` the index from, `value` the index to), `section`
+        /// (`part`'s section → `value`), `patch` (`part` plays `value`).
+        fn edit_song_part(&self, song: String, op: String, part: String, value: String);
         /// Whether `part` plays the profile's own switches.
         fn set_part_profile_switches(&self, part: String, on: bool);
         /// Make `part` a repeat of part `of` — it plays and edits `of`'s

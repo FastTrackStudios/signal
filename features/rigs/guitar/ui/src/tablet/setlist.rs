@@ -1010,6 +1010,7 @@ fn Sections(perf: PerformanceModel, lib: LibraryModel, song: usize, panel: Signa
     let mut add_el = use_signal(|| None::<Rc<MountedData>>);
     let names: Vec<String> = sections.iter().map(|s| s.name.clone()).collect();
     let count = sections.len();
+    let song_name = perf.songs.get(song).map(|s| s.name.clone()).unwrap_or_default();
     rsx! {
         div { style: "position: relative; padding: 2px 0 10px; background: {tint(&colour, pick(up, 7, 4))};",
             if up {
@@ -1041,14 +1042,18 @@ fn Sections(perf: PerformanceModel, lib: LibraryModel, song: usize, panel: Signa
                                 count,
                                 names: names.clone(),
                                 panel,
-                                on_grip: move |_: PointerEvent| {
-                                    if !up {
-                                        return;
+                                on_grip: {
+                                    let song_name = song_name.clone();
+                                    move |_: PointerEvent| {
+                                        let (rig, order, song_name) = (rig.clone(), order.clone(), song_name.clone());
+                                        begin_row_drag(bus, drag, rows, count, j, 20.0, move |from, to| {
+                                            if up {
+                                                reorder_parts(rig.clone(), section_moved(&order, from, to));
+                                            } else {
+                                                reorder_song_parts(rig.clone(), song_name.clone(), section_moved(&order, from, to));
+                                            }
+                                        });
                                     }
-                                    let (rig, order) = (rig.clone(), order.clone());
-                                    begin_row_drag(bus, drag, rows, count, j, 20.0, move |from, to| {
-                                        reorder_parts(rig.clone(), section_moved(&order, from, to));
-                                    });
                                 },
                             }
                             // The section playing opens into the stacks.
@@ -1069,16 +1074,21 @@ fn Sections(perf: PerformanceModel, lib: LibraryModel, song: usize, panel: Signa
             if up && sections.is_empty() {
                 Stacks { perf: perf.clone(), lib: lib.clone(), left: 34 }
             }
-            // The rig adds sections to the song up.
-            if up {
+            // Any song's sections can be added to.
+            if !song_name.is_empty() {
             button {
                 style: "display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 14px 0 28px; border: none; background: transparent; color: {INK_2}; font-size: 14px; font-weight: 600; font-family: {FONT}; text-align: left; justify-content: flex-start; cursor: pointer;",
                 onmounted: move |e| add_el.set(Some(e.data())),
                 onclick: move |_| {
-                    let rig = rig.clone();
+                    let (rig, song_name) = (rig.clone(), song_name.clone());
                     open_naming_under(host, add_el.peek().clone(), Item::name("add", "New section…", suggest_section(&names), "Add", names.clone()), EventHandler::new(move |p: Picked| {
                         let name = p.text.clone();
-                        call!(rig, |r| r.add_part(name));
+                        if up {
+                            call!(rig, |r| r.add_part(name));
+                        } else {
+                            let song = song_name.clone();
+                            call!(rig, |r| r.edit_song_part(song, "add".to_string(), String::new(), name));
+                        }
                     }));
                 },
                 span { style: "width: 16px; height: 16px; border-radius: 999px; border: 1px dashed {INK_3}; box-sizing: border-box; display: flex; align-items: center; justify-content: center;",
@@ -1091,6 +1101,23 @@ fn Sections(perf: PerformanceModel, lib: LibraryModel, song: usize, panel: Signa
             }
         }
     }
+}
+
+/// Reorder library song `song`'s parts to `want`, one move at a time (a
+/// song that is not up).
+fn reorder_song_parts(rig: Option<RigClient>, song: String, want: Vec<usize>) {
+    let Some(r) = rig else { return };
+    let _ = dioxus_core::spawn_forever(async move {
+        let mut now: Vec<usize> = (0..want.len()).collect();
+        for (pos, &part) in want.iter().enumerate() {
+            let Some(at) = now.iter().position(|&p| p == part) else { continue };
+            if at != pos {
+                let _ = r.edit_song_part(song.clone(), "move".to_string(), at.to_string(), pos.to_string()).await;
+                let p = now.remove(at);
+                now.insert(pos, p);
+            }
+        }
+    });
 }
 
 /// Play song `song` of the set from part `part`.
@@ -1139,18 +1166,21 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, parts: Vec<PerfPart>, s
     let modules = part_modules(&parts, &section.parts);
     let part_names: Vec<String> = section.parts.iter().filter_map(|&k| parts.get(k).map(|p| p.name.clone())).collect();
     let grouped = !part.section.is_empty();
+    let song_name = perf.songs.get(song).map(|s| s.name.clone()).unwrap_or_default();
 
     let mut items = vec![
         Item::head(section.name.clone()),
         Item::run("go", "Play from here").unless(is_now.then(|| "It's playing".to_string())),
     ];
-    // The rig edits the song up's sections; another song's play from here.
+    // The song up's sound is picked here; any song's sections are edited.
     if up {
-    items.push(if several {
-        Item::run("parts", "Its parts").detail(format!("{}", section.parts.len()))
-    } else {
-        Item::run("patch", "Patch…").detail(sound_of(&part).unwrap_or_else(|| "keeps".to_string()))
-    });
+        items.push(if several {
+            Item::run("parts", "Its parts").detail(format!("{}", section.parts.len()))
+        } else {
+            Item::run("patch", "Patch…").detail(sound_of(&part).unwrap_or_else(|| "keeps".to_string()))
+        });
+    }
+    {
     items.extend([
         Item::name("rename", "Rename…", section.name.clone(), "Rename", names.clone()),
         Item::Sep,
@@ -1196,6 +1226,21 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, parts: Vec<PerfPart>, s
                 "go" if !up => go_to(rig.clone(), song, first),
                 "go" | "parts" => call!(rig, |r| r.select_part(first as u32)),
                 "patch" => choose(),
+                "rename" if !up => {
+                    let (song, new_name) = (song_name.clone(), p.text.clone());
+                    for n in if grouped { part_names } else { part_names.into_iter().take(1).collect() } {
+                        let (song, new_name, op) = (song.clone(), new_name.clone(), if grouped { "section" } else { "rename" });
+                        call!(rig, |r| r.edit_song_part(song, op.to_string(), n, new_name));
+                    }
+                }
+                "earlier" if !up => reorder_song_parts(rig.clone(), song_name.clone(), section_moved(&order, index, index - 1)),
+                "later" if !up => reorder_song_parts(rig.clone(), song_name.clone(), section_moved(&order, index, index + 1)),
+                "delete" if !up => {
+                    for n in part_names {
+                        let song = song_name.clone();
+                        call!(rig, |r| r.edit_song_part(song, "remove".to_string(), n, String::new()));
+                    }
+                }
                 "rename" => {
                     let new_name = p.text.clone();
                     if grouped {

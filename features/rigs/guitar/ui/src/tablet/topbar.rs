@@ -36,6 +36,24 @@ pub fn TopBar(model: PerformanceModel, state: RigViewState, sidebar: bool, on_si
     let phones = (output * f64::from(hp.self_mix)).max(mix * f64::from(hp.mix_level)) * f64::from(hp.volume);
     // Resetting here, or anywhere: the rig says so to every remote.
     let flat = resetting() || model.panicking;
+    // Audio struggling: amber for a few seconds after a dropout.
+    let mut struggling = use_signal(|| 0u32);
+    use_hook(move || {
+        spawn(async move {
+            let mut seen: Option<u64> = None;
+            loop {
+                architect::platform::sleep(Duration::from_secs(1)).await;
+                let perf = state.dsp.peek().clone();
+                let drops = perf.over_budget + perf.xruns;
+                if seen.is_some_and(|s| drops > s) {
+                    struggling.set(5);
+                } else if struggling() > 0 {
+                    struggling.set(struggling() - 1);
+                }
+                seen = Some(drops);
+            }
+        })
+    });
     rsx! {
         header { style: "height: {TOP_H}px; flex-shrink: 0; display: flex; align-items: stretch; border-bottom: 1px solid {RULE}; background: {SHEET}; box-sizing: border-box; font-family: {FONT};",
             // Over the sidebar: its toggle and the mode the footswitches are in.
@@ -64,7 +82,7 @@ pub fn TopBar(model: PerformanceModel, state: RigViewState, sidebar: bool, on_si
             PanicButton { busy: resetting }
             Rule {}
             Indicator { kind: "midi", tone: midi, onclick: move |_| on_setup.call("midi") }
-            Indicator { kind: "audio", tone: if *state.running.read() { LIVE } else { VOID }, onclick: move |_| on_setup.call("audio") }
+            Indicator { kind: "audio", tone: if !*state.running.read() { VOID } else if struggling() > 0 { WARN } else { LIVE }, onclick: move |_| on_setup.call("audio") }
             Cpu { cpu: f64::from(state.dsp.read().cpu) }
             Rule {}
             Meters {
@@ -456,3 +474,6 @@ fn AudioBadge(failed: bool) -> Element {
 }
 
 const AMBER: &str = "#fbbf24";
+
+/// A link that is up but struggling (the prototype's "warn").
+const WARN: &str = "#eab308";
