@@ -1407,6 +1407,12 @@ impl GuitarRigBackend {
         rebuilt: signal_sampler::rig_profile::RigProfile,
         activate: Option<&str>,
     ) {
+        // No engine: the patch to activate is the one shown.
+        if let Some(name) = activate
+            && self.rig.lock_ok().is_none()
+        {
+            *self.design_patch.lock_ok() = name.to_string();
+        }
         self.reload_gapless(rebuilt, ReloadMode::Keep, activate);
         self.retune_after_reload();
     }
@@ -2975,7 +2981,14 @@ impl GuitarRigBackend {
         const KEEP: std::time::Duration = std::time::Duration::from_secs(2);
         let def = self.profile_def.lock_ok();
         let dps = self.drive_presets.lock_ok();
-        let effective = self.effective_def(&def);
+        let mut effective = self.effective_def(&def);
+        // An audition plays with no engine too: the preset's snapshot as a
+        // patch of its own, last, as the live rig carries it.
+        if let Some((preset, snapshot)) = self.audition.lock_ok().clone()
+            && let Some(patch) = crate::compose::snapshot_patch(&effective, &preset, &snapshot, AUDITION_PATCH)
+        {
+            effective.patches.push(patch);
+        }
         let key = design_key(&effective, &dps);
         if let Some((k, at, profile)) = self.design_cache.lock_ok().as_ref()
             && *k == key
@@ -4049,6 +4062,8 @@ impl GuitarRigBackend {
                                     .map(|r| r.profile.clone())
                                     .unwrap_or_default(),
                                 section: s.section_of(pi),
+                                stack: s.part_recall(&name).map(|r| r.stack.clone()).unwrap_or_default(),
+                                preset: s.part_recall(&name).map(|r| r.preset.clone()).unwrap_or_default(),
                                 switch_count: s.part_recall(&name).map_or(0, |r| {
                                     (r.stack_defaults.len() + r.switch_actions.len()) as u32
                                 }),
@@ -6022,7 +6037,11 @@ impl Rig for GuitarRigBackend {
             // content.
             // (Its source's, when the part repeats another; everything else
             // on the part — its changes, section, switches — stays.)
-            part_recall_mut(song, &part).patch.clone_from(&patch);
+            let recall = part_recall_mut(song, &part);
+            recall.patch.clone_from(&patch);
+            // One sound: a patch, a stack or a variation.
+            recall.stack.clear();
+            recall.preset.clear();
             tracing::info!(
                 song = %song_name,
                 part = %part,
@@ -6032,6 +6051,26 @@ impl Rig for GuitarRigBackend {
             RigLibrary::save_songs(&songs);
         }
         self.events.publish(RigEvent::Perf(Rig::perf(self)));
+    }
+
+    fn set_part_stack(&self, part: String, stack: String) {
+        self.edit_current_song("section plays a stack", |song| {
+            let recall = part_recall_mut(song, &part);
+            recall.stack.clone_from(&stack);
+            recall.patch.clear();
+            recall.preset.clear();
+            true
+        });
+    }
+
+    fn set_part_preset(&self, part: String, preset: String, snapshot: String) {
+        self.edit_current_song("section plays a variation", |song| {
+            let recall = part_recall_mut(song, &part);
+            recall.preset = format!("{preset} · {snapshot}");
+            recall.patch.clear();
+            recall.stack.clear();
+            true
+        });
     }
 
     fn add_part(&self, name: String) {
@@ -6612,6 +6651,25 @@ impl Rig for GuitarRigBackend {
                 }
             }
 
+            // A part that plays a preset's variation: that, then its changes.
+            if let Some((preset, variation)) = section.as_ref().and_then(|p| p.preset.split_once(" · ")).map(|(p, v)| (p.to_string(), v.to_string())) {
+                tracing::info!(preset = %preset, variation = %variation, "part → variation");
+                Rig::choose_preset(self, preset, variation);
+                self.apply_section_overrides(&overrides);
+                self.events.publish(RigEvent::Perf(Rig::perf(self)));
+                return;
+            }
+            // A part that plays a whole stack lands on its first patch; the
+            // switch steps it from there.
+            let section = section.map(|mut p| {
+                if p.patch.is_empty() && !p.stack.is_empty() {
+                    let def = self.profile_def.lock_ok();
+                    if let Some(first) = def.stacks.iter().find(|s| s.name.eq_ignore_ascii_case(&p.stack)).and_then(|s| s.patches.first()) {
+                        p.patch = first.clone();
+                    }
+                }
+                p
+            });
             let recall = section.filter(|part| !part.patch.is_empty());
             if let Some(part) = recall {
                 tracing::info!(part = %part.name, patch = %part.patch, "part → patch");
@@ -8146,11 +8204,10 @@ impl Rig for GuitarRigBackend {
             }
         };
         // An audition is what is playing, so it is what the preset tab marks.
-        let auditioning = self
-            .audition
-            .lock_ok()
-            .clone()
-            .filter(|_| self.live_patch_name().as_deref() == Some(AUDITION_PATCH));
+        // The guard released before `live_patch_name`, which reads the
+        // audition again (through `design_profile`).
+        let auditioning = self.audition.lock_ok().clone();
+        let auditioning = auditioning.filter(|_| self.live_patch_name().as_deref() == Some(AUDITION_PATCH));
         let active_blocks: Vec<signal_guitar_proto::BlockPick> = self
             .live_patch_name()
             .and_then(|name| {

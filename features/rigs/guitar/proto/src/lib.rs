@@ -1023,6 +1023,14 @@ pub struct PerfPart {
     /// is up — which, with [`overrides`](Self::overrides), is the common
     /// case: a chorus is usually the verse's sound with one thing changed.
     pub patch: String,
+    /// It plays this whole stack (its first patch, then the switch steps
+    /// it) — empty when it plays a patch.
+    #[facet(default)]
+    pub stack: String,
+    /// It plays this preset's variation (`Preset · Variation`) — empty when
+    /// it plays a patch.
+    #[facet(default)]
+    pub preset: String,
     /// What this section changes on top of that patch.
     #[facet(default)]
     pub overrides: Vec<PartOverride>,
@@ -1640,6 +1648,13 @@ pub mod rig {
         /// Set what a section of the **current song** recalls. An empty
         /// `patch` clears it, making the section a label again.
         fn set_part_patch(&self, part: String, patch: String);
+        /// Section `part` of the current song plays the whole stack `stack`
+        /// (its first patch, then the switch steps it); empty: keeps what
+        /// plays.
+        fn set_part_stack(&self, part: String, stack: String);
+        /// Section `part` of the current song plays `preset`'s `snapshot`
+        /// (a variation) instead of a patch.
+        fn set_part_preset(&self, part: String, preset: String, snapshot: String);
         /// Take back the last sound choice — a section's patch, a preset, a
         /// module or block pick — putting the profile and songs back as
         /// they were before it (saved, and rebuilt to be heard).

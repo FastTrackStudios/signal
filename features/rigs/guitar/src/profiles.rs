@@ -1671,6 +1671,14 @@ pub struct PartRecallDef {
     /// common case: a chorus is usually the verse's sound with one or two
     /// things changed, not a different rig.
     pub patch: String,
+    /// The part plays a whole stack (its first patch, then wherever the
+    /// switch steps it) instead of a patch. Empty: [`patch`](Self::patch).
+    #[facet(default)]
+    pub stack: String,
+    /// The part plays a preset's variation (`Preset · Variation`) instead of
+    /// a patch. Empty: [`patch`](Self::patch).
+    #[facet(default)]
+    pub preset: String,
     /// What this section changes on top of the patch.
     ///
     /// The point of a section. Recalling a whole patch is the blunt version

@@ -359,7 +359,11 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
                     let mut t = Thing::new(format!("{} · {}", p.name, s.name), &s.name, "#a1a1aa");
                     t.group = p.name.clone();
                     t.nested = true;
-                    if d.comp.active_preset == p.name && d.comp.active_snapshot == s.name {
+                    let playing = match target {
+                        Target::Part(k) => d.perf.parts.get(*k).is_some_and(|x| x.preset == format!("{} · {}", p.name, s.name)),
+                        _ => d.comp.active_preset == p.name && d.comp.active_snapshot == s.name,
+                    };
+                    if playing {
                         t.state = Some(State::Playing);
                     }
                     t
@@ -717,7 +721,7 @@ fn applies(kind: &Kind, target: &Target, d: &Data) -> bool {
         Kind::Songs => d.perf.perform_mode == 2,
         Kind::Patches => matches!(target, Target::Part(_) | Target::Stack(_)),
         Kind::Profiles => true,
-        Kind::Presets => !matches!(target, Target::Part(_)),
+        Kind::Presets => true,
         Kind::Module(_) | Kind::Block(_) => *target != Target::None,
     }
 }
@@ -752,7 +756,15 @@ fn apply(rig: Option<RigClient>, kind: &Kind, target: &Target, d: &Data, t: &Thi
         }
         Kind::Presets => {
             let (p, v) = (t.group.clone(), t.name.clone());
-            call!(rig, |r| r.choose_preset(p, v));
+            match target {
+                // A section plays the preset's variation.
+                Target::Part(k) => {
+                    if let Some(part) = d.perf.parts.get(*k).map(|x| x.name.clone()) {
+                        call!(rig, |r| r.set_part_preset(part, p, v));
+                    }
+                }
+                _ => call!(rig, |r| r.choose_preset(p, v)),
+            }
         }
         Kind::Module(m) => {
             let (m, p, v) = ((*m).to_string(), t.group.clone(), t.name.clone());
@@ -1140,14 +1152,13 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
                             let patches: Vec<String> = p.patch_list.iter().filter(|x| x.stack == st).map(|x| x.name.clone()).collect();
                             // A part can play the whole stack: it opens on the
                             // stack's first patch, the switch rotating on.
-                            let first = patches.first().cloned();
-                            let stack_on = part.as_ref().zip(first.as_ref()).is_some_and(|(pp, f)| pp.patch.eq_ignore_ascii_case(f));
+                            let stack_on = part.as_ref().is_some_and(|pp| pp.stack.eq_ignore_ascii_case(&st) && (pp.profile.is_empty() == p.active || pp.profile.eq_ignore_ascii_case(&p.name)));
                             let stack_click = {
-                                let (rig, part_name, borrowed) = (rig.clone(), part.as_ref().map(|pp| pp.name.clone()), (!p.active).then(|| p.name.clone()));
-                                let first = first.clone();
+                                let (rig, part_name, borrowed, st) = (rig.clone(), part.as_ref().map(|pp| pp.name.clone()), (!p.active).then(|| p.name.clone()), st.clone());
                                 move |_| {
-                                    let (Some(pn), Some(f)) = (part_name.clone(), first.clone()) else { return };
-                                    call!(rig, |r| r.set_part_patch(pn, f));
+                                    let Some(pn) = part_name.clone() else { return };
+                                    let stack = st.clone();
+                                    call!(rig, |r| r.set_part_stack(pn, stack));
                                     if let (Some(b), Some(pn)) = (borrowed.clone(), part_name.clone()) {
                                         call!(rig, |r| r.set_part_profile(pn, b));
                                     }

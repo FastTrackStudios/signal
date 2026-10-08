@@ -777,7 +777,7 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, section: Section, index
     items.push(if several {
         Item::run("parts", "Its parts").detail(format!("{}", section.parts.len()))
     } else {
-        Item::run("patch", "Patch…").detail(if part.patch.is_empty() { "keeps".to_string() } else { part.patch.clone() })
+        Item::run("patch", "Patch…").detail(sound_of(&part).unwrap_or_else(|| "keeps".to_string()))
     });
     items.extend([
         Item::name("rename", "Rename…", section.name.clone(), "Rename", section_names),
@@ -908,6 +908,9 @@ PressMenu {
                 span { style: "flex: 0 1 auto; max-width: 64%; min-width: 0; display: flex; padding-right: 10px;",
                     if several {
                         span { style: "font-size: 13px; padding: 3px 8px; border-radius: 4px; background: {FILL}; color: {INK_2}; font-weight: 600;", "{section.parts.len()} parts" }
+                    } else if !part.stack.is_empty() || !part.preset.is_empty() {
+                        // A whole stack, or a preset's variation.
+                        PatchChip { patch: sound_of(&part).unwrap_or_default(), stack: String::new(), small: false, lit: is_now, borrowed: (!part.profile.is_empty()).then(|| part.profile.clone()) }
                     } else if !part.patch.is_empty() {
                         PatchChip { patch: part.patch.clone(), stack: stack.clone(), small: false, lit: is_now, borrowed: borrowed.clone() }
                     } else {
@@ -944,6 +947,20 @@ pub fn Stacks(perf: PerformanceModel, lib: LibraryModel, section: String) -> Ele
                 }
             }
         }
+    }
+}
+
+/// What a part plays, in words: its patch, `Clean stack`, or a preset's
+/// variation; `None` when it keeps what plays.
+pub fn sound_of(part: &PerfPart) -> Option<String> {
+    if !part.stack.is_empty() {
+        Some(format!("{} stack", part.stack))
+    } else if !part.preset.is_empty() {
+        Some(part.preset.clone())
+    } else if !part.patch.is_empty() {
+        Some(part.patch.clone())
+    } else {
+        None
     }
 }
 
