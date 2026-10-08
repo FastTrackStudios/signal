@@ -130,13 +130,28 @@ pub fn Routing(state: RigViewState) -> Element {
 /// chain runs down each column and left to right.
 const MODULE_ROWS: usize = 3;
 
+/// The Core's own blocks: tagged, wherever they sit.
+const CORE_BLOCKS: [&str; 4] = ["Pre Comp", "Gate", "Post Comp", "Amp EQ"];
+/// What the Core plays after the amp: in the Amp module, after the cabs.
+const AMP_SHAPING: [&str; 3] = ["Gate", "Post Comp", "Amp EQ"];
+
 /// The playing blocks as the canvas draws them: runs of one module, in
 /// chain order. The pre effects run in a line; delays and reverbs sit
-/// either side of the dry; the Core holds the Amp.
+/// either side of the dry; the Amp is its two amps into two cabs, then
+/// what shapes it. The Core is a tag on what it owns, not a box.
 fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
     let mut runs: Vec<(String, Vec<CanvasCell>)> = Vec::new();
-    // The amp's slots show loaded or not: two amps, two cabs.
-    for b in blocks.iter().filter(|b| !b.empty || b.module == "Amp") {
+    // The amp's slots show loaded or not: two amps, two cabs. The patch's
+    // trim is a level, not a block to edit here.
+    for b in blocks.iter().filter(|b| (!b.empty || b.module == "Amp") && !b.name.eq_ignore_ascii_case("Patch Trim")) {
+        let is = |names: &[&str]| names.iter().any(|n| n.eq_ignore_ascii_case(&b.name));
+        let module = if is(&AMP_SHAPING) {
+            "Amp".to_string()
+        } else if b.module == "Core" {
+            "Dynamics".to_string()
+        } else {
+            b.module.clone()
+        };
         let cell = CanvasCell {
             id: b.id.clone(),
             name: b.name.clone(),
@@ -146,36 +161,31 @@ fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
             lit: !b.bypassed,
             edited: b.overridden,
             empty: b.empty,
+            core: is(&CORE_BLOCKS),
         };
         match runs.last_mut() {
-            Some((m, cells)) if *m == b.module => cells.push(cell),
-            _ => runs.push((b.module.clone(), vec![cell])),
+            Some((m, cells)) if *m == module => cells.push(cell),
+            _ => runs.push((module, vec![cell])),
         }
     }
-    let module = |name: String, cells: Vec<CanvasCell>| {
-        let items = match name.as_str() {
-            "Pre" => cells.into_iter().map(|c| CanvasItem::Col(vec![c])).collect(),
-            "Delay" | "Reverb" => cells.chunks(2).map(|c| CanvasItem::Split(c.to_vec())).collect(),
-            "Amp" => amp_items(cells),
-            _ => cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect(),
-        };
-        let name = if name == "Pre" { "Pre-FX".to_string() } else { name };
-        CanvasModule { colour: module_colour(&name).to_string(), label: String::new(), items, name }
-    };
-    let mut out: Vec<CanvasModule> = runs.into_iter().map(|(n, c)| module(n, c)).collect();
-    // The Core round everything from its first block to its last: its own
-    // blocks in place, the drives and amps it controls (and what sits
-    // between them, the Pre-FX) as modules inside it.
-    let core_family = |m: &CanvasModule| matches!(m.name.as_str(), "Core" | "Drive" | "Amp");
-    if let (Some(i), Some(j)) = (out.iter().position(core_family), out.iter().rposition(core_family)) {
-        let inner: Vec<CanvasModule> = out.drain(i..=j).collect();
-        let items = inner
-            .into_iter()
-            .flat_map(|m| if m.name == "Core" { m.items } else { vec![CanvasItem::Sub(m)] })
-            .collect();
-        out.insert(i, CanvasModule { colour: module_colour("Core").to_string(), label: String::new(), items, name: "Core".into() });
-    }
-    out
+    runs.into_iter()
+        .map(|(name, cells)| {
+            let items = match name.as_str() {
+                "Pre" => cells.into_iter().map(|c| CanvasItem::Col(vec![c])).collect(),
+                "Delay" | "Reverb" => cells.chunks(2).map(|c| CanvasItem::Split(c.to_vec())).collect(),
+                "Amp" => amp_items(cells),
+                _ => cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect(),
+            };
+            let name = if name == "Pre" { "Pre-FX".to_string() } else { name };
+            CanvasModule {
+                colour: module_colour(&name).to_string(),
+                label: String::new(),
+                items,
+                core: matches!(name.as_str(), "Drive" | "Amp"),
+                name,
+            }
+        })
+        .collect()
 }
 
 const GREY: &str = "#a1a1aa";
@@ -184,13 +194,18 @@ const GREY: &str = "#a1a1aa";
 const MOTION: &str = "#34d399";
 
 /// The Amp module: Amp L over Amp R, then Cab L over Cab R — two stereo
-/// lanes, each amp into its own cab.
+/// lanes, each amp into its own cab — then the gate, post compressor and
+/// amp EQ.
 fn amp_items(cells: Vec<CanvasCell>) -> Vec<CanvasItem> {
     let find = |n: &str| cells.iter().find(|c| c.name.eq_ignore_ascii_case(n)).cloned();
-    match (find("Amp L"), find("Amp R"), find("Cab L"), find("Cab R")) {
-        (Some(al), Some(ar), Some(cl), Some(cr)) => vec![CanvasItem::Pair(vec![al, ar]), CanvasItem::Pair(vec![cl, cr])],
-        _ => cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect(),
-    }
+    let (Some(al), Some(ar), Some(cl), Some(cr)) = (find("Amp L"), find("Amp R"), find("Cab L"), find("Cab R")) else {
+        return cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect();
+    };
+    let stage = ["Amp L", "Amp R", "Cab L", "Cab R"];
+    let rest: Vec<CanvasCell> = cells.iter().filter(|c| !stage.iter().any(|n| c.name.eq_ignore_ascii_case(n))).cloned().collect();
+    let mut items = vec![CanvasItem::Pair(vec![al, ar]), CanvasItem::Pair(vec![cl, cr])];
+    items.extend(rest.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())));
+    items
 }
 
 /// A module's colour on the grid: drives orange, amps yellow, modulation

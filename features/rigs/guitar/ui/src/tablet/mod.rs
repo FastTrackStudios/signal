@@ -61,6 +61,8 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut sidebar = use_signal(|| true);
     let mut macros = use_signal(|| true);
     let mut docked = use_signal(|| true);
+    // Perform's middle: the routing grid, unless it's switched off.
+    let mut routing_on = use_signal(|| true);
     let mut browser = use_signal(|| false);
     // Edit's left pane: the browser, or the sidebar a tap away.
     let mut left_browser = use_signal(|| true);
@@ -137,10 +139,13 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                                         macros::TouchMacroBar { state }
                                     }
                                 }
-                                // The middle: the browser when it's asked for, else nothing.
+                                // The middle: the browser when it's asked for, else the
+                                // routing grid.
                                 div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
                                     if browser() {
                                         browser::Browser { state, on_close: move |()| browser.set(false) }
+                                    } else if routing_on() {
+                                        div { style: "flex: 1; min-height: 0;", routing::Routing { state } }
                                     }
                                 }
                                 if docked() {
@@ -165,6 +170,8 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                 on_macros: move |()| macros.toggle(),
                 switches: docked(),
                 on_switches: move |()| docked.toggle(),
+                routing: routing_on(),
+                on_routing: move |()| routing_on.toggle(),
                 browser: browser(),
                 on_browser: move |()| browser.toggle(),
                 tuner: model.tuner_visible,
@@ -210,6 +217,8 @@ fn FootBar(
     on_macros: EventHandler<()>,
     switches: bool,
     on_switches: EventHandler<()>,
+    routing: bool,
+    on_routing: EventHandler<()>,
     browser: bool,
     on_browser: EventHandler<()>,
     tuner: bool,
@@ -246,6 +255,12 @@ fn FootBar(
                     circle { cx: "13.5", cy: "9", r: "2.6", fill: "none", stroke: ink(macros), stroke_width: "1.4" }
                     path { d: "M4.5 9 6 7.4M13.5 9l1.5-1.6", stroke: ink(macros), stroke_width: "1.4", stroke_linecap: "round" }
                     path { d: "M8 4.5h2M8 13.5h2", stroke: ink(macros), stroke_width: "1.4", stroke_linecap: "round" }
+                }
+                FootButton { label: "Routing", on: routing, pin: true, onclick: move |_| on_routing.call(()),
+                    circle { cx: "3.5", cy: "9", r: "1.8", fill: "none", stroke: ink(routing), stroke_width: "1.4" }
+                    circle { cx: "14.5", cy: "4.5", r: "1.8", fill: "none", stroke: ink(routing), stroke_width: "1.4" }
+                    circle { cx: "14.5", cy: "13.5", r: "1.8", fill: "none", stroke: ink(routing), stroke_width: "1.4" }
+                    path { d: "M5.3 9H8m0 0c2 0 2-4.5 4.7-4.5M8 9c2 0 2 4.5 4.7 4.5", fill: "none", stroke: ink(routing), stroke_width: "1.4", stroke_linecap: "round" }
                 }
                 FootButton { label: "Switches", on: switches, pin: true, onclick: move |_| on_switches.call(()),
                     rect { x: "2", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }

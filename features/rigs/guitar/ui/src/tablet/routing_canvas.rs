@@ -27,6 +27,8 @@ pub struct CanvasCell {
     pub edited: bool,
     /// A slot with nothing loaded (an amp's cab with no IR): dashed.
     pub empty: bool,
+    /// One of the Core's own blocks: it wears the Core's tag.
+    pub core: bool,
 }
 
 /// One module: its name, what it plays, its colour, and what it holds left
@@ -38,6 +40,8 @@ pub struct CanvasModule {
     pub label: String,
     pub colour: String,
     pub items: Vec<CanvasItem>,
+    /// A module the Core controls: it wears the Core's tag.
+    pub core: bool,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -51,6 +55,26 @@ pub enum CanvasItem {
     /// Amp R), one above the line and one below.
     Pair(Vec<CanvasCell>),
     Sub(CanvasModule),
+}
+
+/// Everything the Core owns or controls, in chain order: its tagged blocks
+/// and every block of its tagged modules.
+pub fn core_ids(modules: &[CanvasModule]) -> Vec<String> {
+    fn walk(items: &[CanvasItem], all: bool, out: &mut Vec<String>) {
+        for i in items {
+            match i {
+                CanvasItem::Col(c) | CanvasItem::Split(c) | CanvasItem::Pair(c) => {
+                    out.extend(c.iter().filter(|c| all || c.core).map(|c| c.id.clone()));
+                }
+                CanvasItem::Sub(m) => walk(&m.items, all || m.core, out),
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for m in modules {
+        walk(&m.items, m.core, &mut out);
+    }
+    out
 }
 
 impl CanvasModule {
@@ -124,10 +148,12 @@ mod native {
 
     // The grid's measures, pt at zoom 1 (signal-grid-ui's, sized for a finger).
     const CELL: f64 = 92.0;
-    const GAP: f64 = 22.0;
-    const PAD: f64 = 10.0;
+    // Every column one pitch apart, a module's edge or not: two pads and the
+    // gap between modules make one gap inside one.
+    const GAP: f64 = 34.0;
+    const PAD: f64 = 8.0;
     const HEAD: f64 = 28.0;
-    const MOD_GAP: f64 = 28.0;
+    const MOD_GAP: f64 = GAP - 2.0 * PAD;
     const ROW_GAP: f64 = 36.0;
     const EDGE: f64 = 22.0;
     const END: f64 = 40.0;
@@ -322,6 +348,8 @@ mod native {
         Cell(String),
         Light(String),
         Module(String, Vec<String>),
+        /// The Core's tag: the whole Core.
+        Core,
     }
 
     enum Gesture {
@@ -516,6 +544,7 @@ mod native {
                             Some(Hit::Light(id)) => CanvasPick::Toggle(id),
                             Some(Hit::Cell(id)) => CanvasPick::Block(id),
                             Some(Hit::Module(name, ids)) => CanvasPick::Module(name, ids),
+                            Some(Hit::Core) => CanvasPick::Module("Core".into(), super::core_ids(&s.modules)),
                             None => CanvasPick::Clear,
                         };
                         s.picks.push(pick);
@@ -661,6 +690,9 @@ mod native {
                     draw_cell(&mut scene, st, t, *rect, c);
                     hits.push((*rect, Hit::Cell(c.id.clone())));
                     hits.push((Rect::new(rect.x1 - 30.0, rect.y0, rect.x1, rect.y0 + 30.0), Hit::Light(c.id.clone())));
+                    if c.core {
+                        core_tag(&mut scene, st, t, Point::new(rect.x1 - 13.0, rect.y1 - 13.0), &mut hits);
+                    }
                 }
             }
             st.hits = hits;
@@ -733,7 +765,7 @@ mod native {
     /// A module's box and its header: a mark, its name, what it plays.
     fn draw_box(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, m: &CanvasModule, first: bool, hits: &mut Vec<(Rect, Hit)>) {
         let colour = hex(&m.colour);
-        let on = matches!(&st.selected, Some(CanvasSel::Module(n)) if *n == m.name);
+        let on = matches!(&st.selected, Some(CanvasSel::Module(n)) if *n == m.name || (m.core && n == "Core"));
         let rr = RoundedRect::from_rect(r, 10.0);
         scene.fill(Fill::NonZero, t, mix(colour, Color::from_rgba8(0x14, 0x14, 0x18, 0xff), if on { 0.16 } else { 0.07 }), None, &rr);
         let edge = if on { colour } else { Color::from_rgba8(0x2a, 0x2a, 0x31, 0xff) };
@@ -747,11 +779,15 @@ mod native {
         }
         // Anywhere in its box that isn't a block picks the module.
         hits.push((r, Hit::Module(m.name.clone(), m.ids())));
+        if m.core {
+            core_tag(scene, st, t, Point::new(r.x1 - PAD - 8.0, r.y0 + 13.0), hits);
+        }
     }
 
     fn draw_cell(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, c: &CanvasCell) {
         let colour = hex(&c.colour);
-        let on = matches!(&st.selected, Some(CanvasSel::Block(id)) if *id == c.id);
+        let on = matches!(&st.selected, Some(CanvasSel::Block(id)) if *id == c.id)
+            || (c.core && matches!(&st.selected, Some(CanvasSel::Module(n)) if n == "Core"));
         let rr = RoundedRect::from_rect(r, 9.0);
         let base = Color::from_rgba8(0x17, 0x17, 0x1b, 0xff);
         if c.empty {
@@ -795,6 +831,15 @@ mod native {
         if c.edited {
             text(scene, st, t, "Edited", 9.5, 750.0, Color::from_rgba8(0xf5, 0x9e, 0x0b, 0xff), r.x0 + 8.0, r.y1 - 10.0, CELL - 16.0, true);
         }
+    }
+
+    /// The Core's tag: its mark in a ring, centred at `at`. A tap on it
+    /// picks the whole Core.
+    fn core_tag(scene: &mut Scene, st: &State, t: Affine, at: Point, hits: &mut Vec<(Rect, Hit)>) {
+        let on = matches!(&st.selected, Some(CanvasSel::Module(n)) if n == "Core");
+        let ink = if on { Color::from_rgba8(0xfa, 0xfa, 0xfa, 0xff) } else { Color::from_rgba8(0xa1, 0xa1, 0xaa, 0xff) };
+        glyph(scene, t, "core", at.x - 6.0, at.y - 6.0, 12.0, ink);
+        hits.push((Rect::new(at.x - 14.0, at.y - 14.0, at.x + 14.0, at.y + 14.0), Hit::Core));
     }
 
     fn end_pill(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, label: &str) {
