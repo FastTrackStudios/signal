@@ -162,6 +162,8 @@ fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
             edited: b.overridden,
             empty: b.empty,
             core: is(&CORE_BLOCKS),
+            keys: face_keys(b),
+            params: b.params.iter().map(|p| (p.name.clone(), f64::from(p.value))).chain([("on".to_string(), if b.bypassed { 0.0 } else { 1.0 })]).collect(),
         };
         match runs.last_mut() {
             Some((m, cells)) if *m == module => cells.push(cell),
@@ -186,6 +188,21 @@ fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
             }
         })
         .collect()
+}
+
+/// What picks a block's frame face, most particular first: a delay by its
+/// machine, a reverb by its algorithm, then its type.
+fn face_keys(b: &LiveBlock) -> Vec<String> {
+    let kind = b.block_type.as_str().to_lowercase();
+    let param = |n: &str| b.params.iter().find(|p| p.name == n).map(|p| p.value.round().max(0.0) as usize);
+    let named = match b.block_type {
+        BlockType::Delay => param("style").and_then(|i| crate::control::DELAY_ALGOS.get(i)),
+        BlockType::Reverb => param("algorithm").and_then(|i| crate::control::VERB_ALGOS.get(i)),
+        _ => None,
+    };
+    let mut keys: Vec<String> = named.map(|n| format!("{kind}:{}", n.to_lowercase())).into_iter().collect();
+    keys.push(kind);
+    keys
 }
 
 const GREY: &str = "#a1a1aa";

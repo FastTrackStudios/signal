@@ -29,6 +29,11 @@ pub struct CanvasCell {
     pub empty: bool,
     /// One of the Core's own blocks: it wears the Core's tag.
     pub core: bool,
+    /// What picks its frame face, most particular first (`delay:tape`,
+    /// `delay`): the manifest's `blocks`.
+    pub keys: Vec<String>,
+    /// Its params by name, in their own units, and `on`: the face's values.
+    pub params: Vec<(String, f64)>,
 }
 
 /// One module: its name, what it plays, its colour, and what it holds left
@@ -385,6 +390,58 @@ mod native {
         fonts: FontContext,
         layouts: LayoutContext<()>,
         texts: HashMap<(String, u32, u32), Layout<()>>,
+        /// The frame faces the blocks wear (`faces.json`'s `blocks`).
+        block_faces: Vec<BlockFaceDef>,
+        /// Each block's open face, by the block's id (`None`: it would not
+        /// open), with the face's name and the values last applied.
+        surfaces: HashMap<String, Option<BlockSurface>>,
+    }
+
+    /// A block face in the manifest.
+    struct BlockFaceDef {
+        matches: Vec<String>,
+        face: String,
+        ns: String,
+        /// How far it reaches past the block, a fraction of its side.
+        bleed: f64,
+    }
+
+    struct BlockSurface {
+        face: String,
+        live: frame_live::LiveSurface,
+        applied: Vec<(String, f64)>,
+    }
+
+    /// The manifest's block faces.
+    fn load_block_faces() -> Vec<BlockFaceDef> {
+        let path = crate::frame_surface::design_dir().join("rig-faces").join("faces.json");
+        let Some(doc) = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()) else {
+            return Vec::new();
+        };
+        let strs = |v: &serde_json::Value| v.as_array().map(|a| a.iter().filter_map(|s| s.as_str().map(str::to_string)).collect()).unwrap_or_default();
+        doc.get("blocks")
+            .and_then(|b| b.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|e| {
+                        Some(BlockFaceDef {
+                            matches: strs(e.get("match")?),
+                            face: e.get("face")?.as_str()?.to_string(),
+                            ns: e.get("ns")?.as_str()?.to_string(),
+                            bleed: e.get("bleed").and_then(serde_json::Value::as_f64).unwrap_or(0.0),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn open_block_face(face: &str) -> Option<frame_live::LiveSurface> {
+        let dir = crate::frame_surface::design_dir().join("rig-faces");
+        let (markup, catalog) = frame_live::face_paths(&dir, face);
+        frame_live::LiveSurface::open(&markup, catalog)
+            .map_err(|e| tracing::warn!(target: "frame", face, error = %e, "block face did not open"))
+            .ok()
     }
 
     type Shared = Rc<RefCell<State>>;
@@ -410,6 +467,8 @@ mod native {
                 fonts: FontContext::new(),
                 layouts: LayoutContext::new(),
                 texts: HashMap::new(),
+                block_faces: load_block_faces(),
+                surfaces: HashMap::new(),
             }))
         });
         // A change of patch, selection or layout: drawn again (the
@@ -571,7 +630,8 @@ mod native {
         }
 
         fn needs_redraw(&self) -> bool {
-            self.state.try_borrow().is_ok_and(|s| s.dirty)
+            // A block's face moving (its LFO, its echoes) draws again.
+            self.state.try_borrow().is_ok_and(|s| s.dirty || s.surfaces.values().flatten().any(|b| b.live.is_moving()))
         }
 
         fn paint(&mut self, _render_ctx: &mut dyn RenderContext, _styles: &ComputedStyles, width: u32, height: u32, scale: f64) -> Scene {
@@ -800,7 +860,19 @@ mod native {
             text(scene, st, t, &c.name, 12.5, 700.0, Color::from_rgba8(0x52, 0x52, 0x5b, 0xff), r.x0 + 10.0, r.center().y + 4.5, CELL - 20.0, true);
             return;
         }
-        scene.fill(Fill::NonZero, t, if c.lit { mix(colour, base, 0.16) } else { base }, None, &rr);
+        let faced = paint_face(scene, st, t, r, c);
+        if !faced {
+            scene.fill(Fill::NonZero, t, if c.lit { mix(colour, base, 0.16) } else { base }, None, &rr);
+        } else {
+            // Its name over a shade along the foot; off, the picture dimmed.
+            let foot = RoundedRect::from_rect(Rect::new(r.x0, r.y1 - 34.0, r.x1, r.y1), kurbo::RoundedRectRadii::new(0.0, 0.0, 9.0, 9.0));
+            let shade = vello::peniko::Gradient::new_linear((0.0, r.y1 - 34.0), (0.0, r.y1))
+                .with_stops([Color::from_rgba8(0, 0, 0, 0), Color::from_rgba8(0, 0, 0, 0xd0)].as_slice());
+            scene.fill(Fill::NonZero, t, &shade, None, &foot);
+            if !c.lit {
+                scene.fill(Fill::NonZero, t, Color::from_rgba8(0x0b, 0x0b, 0x0e, 0xa0), None, &rr);
+            }
+        }
         let edge = if on {
             Color::from_rgba8(0xf4, 0xf4, 0xf5, 0xff)
         } else if c.lit {
@@ -822,15 +894,40 @@ mod native {
         // Its name, and what it plays.
         let ink = if c.lit { Color::from_rgba8(0xe4, 0xe4, 0xe7, 0xff) } else { Color::from_rgba8(0x71, 0x71, 0x7a, 0xff) };
         let cy = r.center().y;
-        if c.sub.is_empty() {
+        if faced {
+            text(scene, st, t, &c.name, 12.0, 750.0, ink, r.x0 + 8.0, r.y1 - 9.0, CELL - 16.0, true);
+        } else if c.sub.is_empty() {
             text(scene, st, t, &c.name, 12.5, 700.0, ink, r.x0 + 10.0, cy + 4.5, CELL - 20.0, true);
         } else {
             text(scene, st, t, &c.name, 12.5, 700.0, ink, r.x0 + 10.0, cy - 2.0, CELL - 20.0, true);
             text(scene, st, t, &c.sub, 10.0, 550.0, Color::from_rgba8(0x71, 0x71, 0x7a, 0xff), r.x0 + 8.0, cy + 14.0, CELL - 16.0, true);
         }
-        if c.edited {
+        if c.edited && !faced {
             text(scene, st, t, "Edited", 9.5, 750.0, Color::from_rgba8(0xf5, 0x9e, 0x0b, 0xff), r.x0 + 8.0, r.y1 - 10.0, CELL - 16.0, true);
         }
+    }
+
+    /// A block's frame face over its box (grown by the face's margin), when
+    /// the manifest has one for it; whether it drew.
+    fn paint_face(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, c: &CanvasCell) -> bool {
+        let Some(def) = c.keys.iter().find_map(|k| st.block_faces.iter().find(|d| d.matches.iter().any(|m| m == k))) else {
+            return false;
+        };
+        let (face, ns, bleed) = (def.face.clone(), def.ns.clone(), def.bleed);
+        let slot = st.surfaces.entry(c.id.clone()).or_insert(None);
+        if slot.as_ref().is_none_or(|s| s.face != face) {
+            *slot = open_block_face(&face).map(|live| BlockSurface { face: face.clone(), live, applied: Vec::new() });
+        }
+        let Some(s) = slot.as_mut() else { return false };
+        let values: Vec<(String, f64)> = c.params.iter().map(|(n, v)| (format!("{ns}/{n}"), *v)).collect();
+        if s.applied != values {
+            s.live.apply_real(values.clone());
+            s.applied = values;
+        }
+        let m = bleed * r.width();
+        let at = r.inflate(m, m);
+        s.live.paint_vectors_at(scene, at.width(), at.height(), (t * Affine::translate((at.x0, at.y0))).as_coeffs());
+        true
     }
 
     /// The Core's tag: its mark in a ring, centred at `at`. A tap on it
