@@ -25,6 +25,8 @@ pub struct CanvasCell {
     pub colour: String,
     pub lit: bool,
     pub edited: bool,
+    /// A slot with nothing loaded (an amp's cab with no IR): dashed.
+    pub empty: bool,
 }
 
 /// One module: its name, what it plays, its colour, and what it holds left
@@ -45,6 +47,9 @@ pub enum CanvasItem {
     /// Effects in parallel with the dry: one above the line, one below,
     /// the dry straight through the middle.
     Split(Vec<CanvasCell>),
+    /// Two lanes side by side, each its own (a stereo pair: Amp L over
+    /// Amp R), one above the line and one below.
+    Pair(Vec<CanvasCell>),
     Sub(CanvasModule),
 }
 
@@ -54,7 +59,7 @@ impl CanvasModule {
         self.items
             .iter()
             .flat_map(|i| match i {
-                CanvasItem::Col(c) | CanvasItem::Split(c) => c.iter().map(|c| c.id.clone()).collect(),
+                CanvasItem::Col(c) | CanvasItem::Split(c) | CanvasItem::Pair(c) => c.iter().map(|c| c.id.clone()).collect(),
                 CanvasItem::Sub(m) => m.ids(),
             })
             .collect()
@@ -146,20 +151,40 @@ mod native {
 
     fn item_w(i: &CanvasItem) -> f64 {
         match i {
-            CanvasItem::Col(_) | CanvasItem::Split(_) => CELL,
+            CanvasItem::Col(_) | CanvasItem::Split(_) | CanvasItem::Pair(_) => CELL,
             CanvasItem::Sub(m) => box_w(&m.items),
         }
     }
-    /// How far an item reaches above and below the chain's line: a column
-    /// and a split centred on it, a module's box round its own.
+    /// The grid's lanes, one cell and a gap apart: the chain's line is lane
+    /// 0, with one above and one below. A column's blocks take them from
+    /// the line down (three: from above it); a split or a pair the outer
+    /// two.
+    fn lanes(i: &CanvasItem) -> &'static [i32] {
+        match i {
+            CanvasItem::Col(c) => match c.len() {
+                0 | 1 => &[0],
+                2 => &[0, 1],
+                _ => &[-1, 0, 1],
+            },
+            CanvasItem::Split(c) | CanvasItem::Pair(c) if c.len() < 2 => &[-1],
+            _ => &[-1, 1],
+        }
+    }
+    const LANE: f64 = CELL + GAP;
+
+    /// How far an item reaches above and below the chain's line: its lanes,
+    /// a module's box round its own.
     fn ext(i: &CanvasItem) -> (f64, f64) {
         match i {
-            CanvasItem::Col(c) => {
-                let l = c.len().max(1) as f64;
-                let half = (l * CELL + (l - 1.0) * GAP) / 2.0;
-                (half, half)
+            CanvasItem::Col(_) | CanvasItem::Split(_) | CanvasItem::Pair(_) => {
+                let l = lanes(i);
+                let lo = l.iter().copied().min().unwrap_or(0).min(0);
+                let hi = l.iter().copied().max().unwrap_or(0).max(0);
+                let split = matches!(i, CanvasItem::Split(_));
+                // A split's lanes are both sides, whatever it holds.
+                let (lo, hi) = if split { (-1, 1) } else { (lo, hi) };
+                (f64::from(-lo) * LANE + CELL / 2.0, f64::from(hi) * LANE + CELL / 2.0)
             }
-            CanvasItem::Split(_) => (1.5 * CELL + GAP, 1.5 * CELL + GAP),
             CanvasItem::Sub(m) => {
                 let (a, b) = exts(&m.items);
                 (a + HEAD, b + PAD)
@@ -232,20 +257,21 @@ mod native {
     #[derive(Clone)]
     enum Stage {
         Block(Rect),
-        Split(Vec<Rect>, (f64, f64, f64)),
+        /// Parallel lanes, and the dry's line through them (none for a pair).
+        Split(Vec<Rect>, Option<(f64, f64, f64)>),
     }
 
     impl Stage {
         fn ins(&self) -> Vec<Point> {
             match self {
                 Stage::Block(r) => vec![Point::new(r.x0, r.center().y)],
-                Stage::Split(rs, (x0, _, y)) => rs.iter().map(|r| Point::new(r.x0, r.center().y)).chain([Point::new(*x0, *y)]).collect(),
+                Stage::Split(rs, dry) => rs.iter().map(|r| Point::new(r.x0, r.center().y)).chain(dry.map(|(x0, _, y)| Point::new(x0, y))).collect(),
             }
         }
         fn outs(&self) -> Vec<Point> {
             match self {
                 Stage::Block(r) => vec![Point::new(r.x1, r.center().y)],
-                Stage::Split(rs, (_, x1, y)) => rs.iter().map(|r| Point::new(r.x1, r.center().y)).chain([Point::new(*x1, *y)]).collect(),
+                Stage::Split(rs, dry) => rs.iter().map(|r| Point::new(r.x1, r.center().y)).chain(dry.map(|(_, x1, y)| Point::new(x1, y))).collect(),
             }
         }
     }
@@ -263,22 +289,22 @@ mod native {
     fn place(items: &[CanvasItem], x0: f64, line: f64, out: &mut Placed) {
         let mut x = x0;
         for it in items {
-            let top = line - ext(it).0;
-            let cell = |lane: usize| {
-                let y = top + lane as f64 * (CELL + GAP);
+            let cell = |lane: i32| {
+                let y = line + f64::from(lane) * LANE - CELL / 2.0;
                 Rect::new(x, y, x + CELL, y + CELL)
             };
             match it {
                 CanvasItem::Col(col) => {
-                    for (l, c) in col.iter().enumerate() {
-                        out.stages.push(Stage::Block(cell(l)));
-                        out.cells.push((cell(l), c.clone()));
+                    for (c, l) in col.iter().zip(lanes(it)) {
+                        out.stages.push(Stage::Block(cell(*l)));
+                        out.cells.push((cell(*l), c.clone()));
                     }
                 }
-                CanvasItem::Split(cells) => {
-                    let rects: Vec<Rect> = (0..cells.len()).map(|i| cell(if i == 0 { 0 } else { 2 })).collect();
+                CanvasItem::Split(cells) | CanvasItem::Pair(cells) => {
+                    let rects: Vec<Rect> = lanes(it).iter().take(cells.len()).map(|l| cell(*l)).collect();
                     out.cells.extend(rects.iter().copied().zip(cells.iter().cloned()));
-                    out.stages.push(Stage::Split(rects, (x, x + CELL, line)));
+                    let dry = matches!(it, CanvasItem::Split(_)).then_some((x, x + CELL, line));
+                    out.stages.push(Stage::Split(rects, dry));
                 }
                 CanvasItem::Sub(m) => {
                     let (a, b) = exts(&m.items);
@@ -592,7 +618,7 @@ mod native {
                 }
             }
             for s2 in &stages {
-                if let Stage::Split(_, (x0, x1, y)) = s2 {
+                if let Stage::Split(_, Some((x0, x1, y))) = s2 {
                     line(&mut scene, Point::new(*x0, *y), Point::new(*x1, *y));
                 }
             }
@@ -604,7 +630,13 @@ mod native {
                     }
                     (a, b) => {
                         let (outs, ins) = (a.outs(), b.ins());
-                        if outs.len() == 1 || ins.len() == 1 {
+                        let pairs = matches!((a, b), (Stage::Split(_, None), Stage::Split(_, None))) && outs.len() == ins.len();
+                        if pairs {
+                            // A stereo pair into a pair: lane to lane.
+                            for (o, i) in outs.iter().zip(&ins) {
+                                line(&mut scene, *o, *i);
+                            }
+                        } else if outs.len() == 1 || ins.len() == 1 {
                             for o in &outs {
                                 for i in &ins {
                                     line(&mut scene, *o, *i);
@@ -713,7 +745,8 @@ mod native {
         if first && !m.label.is_empty() {
             text(scene, st, t, &m.label, 10.5, 600.0, Color::from_rgba8(0xa1, 0xa1, 0xaa, 0xff), r.x0 + PAD + 22.0 + nw, r.y0 + 17.5, (room - 8.0 - nw).max(0.0), false);
         }
-        hits.push((Rect::new(r.x0, r.y0, r.x1, r.y0 + HEAD), Hit::Module(m.name.clone(), m.ids())));
+        // Anywhere in its box that isn't a block picks the module.
+        hits.push((r, Hit::Module(m.name.clone(), m.ids())));
     }
 
     fn draw_cell(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, c: &CanvasCell) {
@@ -721,6 +754,16 @@ mod native {
         let on = matches!(&st.selected, Some(CanvasSel::Block(id)) if *id == c.id);
         let rr = RoundedRect::from_rect(r, 9.0);
         let base = Color::from_rgba8(0x17, 0x17, 0x1b, 0xff);
+        if c.empty {
+            let edge = if on { Color::from_rgba8(0xf4, 0xf4, 0xf5, 0xff) } else { Color::from_rgba8(0x3f, 0x3f, 0x46, 0xff) };
+            scene.stroke(&Stroke::new(1.5).with_dashes(0.0, [5.0, 4.0]), t, edge, None, &rr);
+            for x in [r.x0, r.x1] {
+                scene.fill(Fill::NonZero, t, Color::from_rgba8(0x3f, 0x3f, 0x46, 0xff), None, &Circle::new((x, r.center().y), PORT));
+            }
+            glyph(scene, t, &c.kind, r.x0 + 9.0, r.y0 + 8.0, 15.0, Color::from_rgba8(0x52, 0x52, 0x5b, 0xff));
+            text(scene, st, t, &c.name, 12.5, 700.0, Color::from_rgba8(0x52, 0x52, 0x5b, 0xff), r.x0 + 10.0, r.center().y + 4.5, CELL - 20.0, true);
+            return;
+        }
         scene.fill(Fill::NonZero, t, if c.lit { mix(colour, base, 0.16) } else { base }, None, &rr);
         let edge = if on {
             Color::from_rgba8(0xf4, 0xf4, 0xf5, 0xff)

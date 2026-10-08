@@ -221,6 +221,7 @@ mod tests {
             output_level_db: None,
             detail: String::new(),
             asset: String::new(),
+            module: String::new(),
             empty: false,
             params: vec![
                 BlockParam {

@@ -135,15 +135,17 @@ const MODULE_ROWS: usize = 3;
 /// either side of the dry; the Core holds the Amp.
 fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
     let mut runs: Vec<(String, Vec<CanvasCell>)> = Vec::new();
-    for b in blocks.iter().filter(|b| !b.empty) {
+    // The amp's slots show loaded or not: two amps, two cabs.
+    for b in blocks.iter().filter(|b| !b.empty || b.module == "Amp") {
         let cell = CanvasCell {
             id: b.id.clone(),
             name: b.name.clone(),
             sub: if b.preset.is_empty() || b.preset == b.name { b.detail.clone() } else { b.preset.clone() },
             kind: b.block_type.as_str().to_lowercase(),
-            colour: type_colour(b.block_type).to_string(),
+            colour: if b.module == "Motion" { MOTION } else { type_colour(b.block_type) }.to_string(),
             lit: !b.bypassed,
             edited: b.overridden,
+            empty: b.empty,
         };
         match runs.last_mut() {
             Some((m, cells)) if *m == b.module => cells.push(cell),
@@ -154,6 +156,7 @@ fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
         let items = match name.as_str() {
             "Pre" => cells.into_iter().map(|c| CanvasItem::Col(vec![c])).collect(),
             "Delay" | "Reverb" => cells.chunks(2).map(|c| CanvasItem::Split(c.to_vec())).collect(),
+            "Amp" => amp_items(cells),
             _ => cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect(),
         };
         let name = if name == "Pre" { "Pre-FX".to_string() } else { name };
@@ -176,6 +179,19 @@ fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
 }
 
 const GREY: &str = "#a1a1aa";
+/// Motion (tremolo, vibrato, rotary): green, apart from the cool modulation
+/// and the violet reverbs.
+const MOTION: &str = "#34d399";
+
+/// The Amp module: Amp L over Amp R, then Cab L over Cab R — two stereo
+/// lanes, each amp into its own cab.
+fn amp_items(cells: Vec<CanvasCell>) -> Vec<CanvasItem> {
+    let find = |n: &str| cells.iter().find(|c| c.name.eq_ignore_ascii_case(n)).cloned();
+    match (find("Amp L"), find("Amp R"), find("Cab L"), find("Cab R")) {
+        (Some(al), Some(ar), Some(cl), Some(cr)) => vec![CanvasItem::Pair(vec![al, ar]), CanvasItem::Pair(vec![cl, cr])],
+        _ => cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect(),
+    }
+}
 
 /// A module's colour on the grid: drives orange, amps yellow, modulation
 /// cyan, delays blue, reverbs violet; everything else grey.
@@ -184,6 +200,7 @@ fn module_colour(name: &str) -> &'static str {
         "Drive" => "#f97316",
         "Amp" => "#eab308",
         "Modulation" => "#22d3ee",
+        "Motion" => MOTION,
         "Delay" => "#3b82f6",
         "Reverb" => "#8b5cf6",
         _ => GREY,
@@ -194,7 +211,8 @@ fn type_colour(t: BlockType) -> &'static str {
     match t {
         BlockType::Drive | BlockType::Boost | BlockType::Saturator => "#f97316",
         BlockType::Amp | BlockType::Cabinet => "#eab308",
-        BlockType::Chorus | BlockType::Flanger | BlockType::Phaser | BlockType::Vibrato => "#22d3ee",
+        BlockType::Chorus | BlockType::Flanger | BlockType::Phaser => "#22d3ee",
+        BlockType::Trem | BlockType::Rotary | BlockType::Vibrato => MOTION,
         BlockType::Delay => "#3b82f6",
         BlockType::Reverb => "#8b5cf6",
         _ => GREY,

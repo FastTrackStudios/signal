@@ -1317,7 +1317,7 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             .into_iter()
             .filter_map(|b| target(b, "depth", Curve::Lin, 1.0, 1.0))
             .collect();
-        add_single(&mut out, "motion", "Motion", "#EC4899", t, 0.5);
+        add_single(&mut out, "motion", "Motion", "#34D399", t, 0.5);
     }
 
     // ── Boost: the boost block's level, ±6 dB on what the pedal gives ──
@@ -3582,6 +3582,7 @@ mod tests {
             output_level_db: None,
             detail: String::new(),
             asset: String::new(),
+            module: String::new(),
             empty: false,
         }
     }
