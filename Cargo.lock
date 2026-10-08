@@ -14607,6 +14607,7 @@ dependencies = [
  "anyrender_vello 0.12.0",
  "anyrender_vello_hybrid",
  "architect",
+ "base64 0.22.1",
  "blitz-dom",
  "blitz-paint",
  "blitz-traits",
@@ -20674,6 +20675,14 @@ dependencies = [
 ]
 
 [[patch.unused]]
+name = "keyflow-proto"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "keyflow-syntax"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "chord-tool"
 version = "0.1.0"
 
@@ -20683,12 +20692,4 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "session"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "keyflow-proto"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "keyflow-syntax"
 version = "0.1.0"
