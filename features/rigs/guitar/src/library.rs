@@ -291,13 +291,31 @@ const DEFAULT_PROFILES: &[(&str, &str)] = &[
 ];
 
 /// The profile a rig plays when nothing has chosen one (and the one a
-/// library that newly gains it switches to, once).
+/// library that newly gains it switches to, once): the worship rig — on a
+/// laptop or an iPad at a service — and Blues on a phone.
+#[must_use]
+pub fn default_profile_name() -> &'static str {
+    if cfg!(target_os = "ios") && !is_ipad() { "Blues" } else { "Worship" }
+}
+
+/// Whether this is an iPad: the device's model (`hw.machine`, `iPad14,3`),
+/// or under the simulator, the model it simulates.
 #[cfg(target_os = "ios")]
-pub const DEFAULT_PROFILE_NAME: &str = "Blues";
-/// The profile a library opens on: on a laptop at a service, the worship rig
-/// (the phone keeps Blues).
+fn is_ipad() -> bool {
+    if let Ok(m) = std::env::var("SIMULATOR_MODEL_IDENTIFIER") {
+        return m.starts_with("iPad");
+    }
+    let mut buf = [0u8; 64];
+    let mut len = buf.len();
+    // SAFETY: a NUL-terminated name, and a buffer with its length.
+    let ok = unsafe { libc::sysctlbyname(c"hw.machine".as_ptr(), buf.as_mut_ptr().cast(), &mut len, std::ptr::null_mut(), 0) } == 0;
+    ok && buf[..len.min(buf.len())].starts_with(b"iPad")
+}
+
 #[cfg(not(target_os = "ios"))]
-pub const DEFAULT_PROFILE_NAME: &str = "Worship";
+fn is_ipad() -> bool {
+    false
+}
 
 /// The shipped Cores frozen into NAM captures (rig-dir-relative
 /// `frozen/<name>`, see `crate::freeze`): with them a shipped profile plays
@@ -593,14 +611,14 @@ fn load_profiles(store: &StyxDir) -> Vec<ProfileDef> {
 const SEEDED_MARKER: &str = ".seeded";
 
 /// The default profile a library has been switched to, in
-/// `profiles/.default`: a library opens on [`DEFAULT_PROFILE_NAME`] once
+/// `profiles/.default`: a library opens on [`default_profile_name`] once
 /// when it changes (an install from before it, whose last-played profile
 /// would otherwise win), then remembers the player's choice.
 const DEFAULT_MARKER: &str = ".default";
 
 /// Add each shipped profile (`DEFAULT_PROFILES`) the library has never had
 /// — a fresh install, or one from before it shipped — to `profiles` and to
-/// `profiles/`. Whether the library should open on [`DEFAULT_PROFILE_NAME`]
+/// `profiles/`. Whether the library should open on [`default_profile_name`]
 /// this once: it was just seeded, or the library has not opened on it yet.
 fn seed_profiles(profiles: &mut Vec<ProfileDef>) -> bool {
     let dir = profiles_store();
@@ -631,7 +649,7 @@ fn seed_profiles(profiles: &mut Vec<ProfileDef>) -> bool {
             config_watch::write_guarded(&dir.dir().join(file), &def);
         }
         tracing::info!(profile = %def.name, "rig library: seeded shipped profile");
-        gained_default |= def.name.eq_ignore_ascii_case(DEFAULT_PROFILE_NAME);
+        gained_default |= def.name.eq_ignore_ascii_case(default_profile_name());
         profiles.push(def);
     }
     if changed && writable_store().is_some() {
@@ -642,10 +660,10 @@ fn seed_profiles(profiles: &mut Vec<ProfileDef>) -> bool {
     }
     let default_marker = dir.dir().join(DEFAULT_MARKER);
     let opened_on = std::fs::read_to_string(&default_marker).unwrap_or_default();
-    if !opened_on.trim().eq_ignore_ascii_case(DEFAULT_PROFILE_NAME) && writable_store().is_some() {
+    if !opened_on.trim().eq_ignore_ascii_case(default_profile_name()) && writable_store().is_some() {
         gained_default = true;
         let _ = std::fs::create_dir_all(dir.dir());
-        if let Err(e) = std::fs::write(&default_marker, format!("{DEFAULT_PROFILE_NAME}\n")) {
+        if let Err(e) = std::fs::write(&default_marker, format!("{}\n", default_profile_name())) {
             tracing::warn!("rig library: cannot write {}: {e}", default_marker.display());
         }
     }
@@ -854,7 +872,7 @@ impl RigLibrary {
         let wanted = Self::load_last_state()
             .map(|s| s.profile)
             .filter(|p| !p.is_empty() && !gained_default)
-            .unwrap_or_else(|| DEFAULT_PROFILE_NAME.to_string());
+            .unwrap_or_else(|| default_profile_name().to_string());
         let profile = profiles
             .iter()
             .find(|p| p.name.eq_ignore_ascii_case(&wanted))

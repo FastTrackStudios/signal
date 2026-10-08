@@ -694,6 +694,15 @@ fn apply(rig: Option<RigClient>, kind: &Kind, target: &Target, d: &Data, t: &Thi
     }
 }
 
+/// Bring a row into view in its list — the one in use, when a list opens
+/// on it further down.
+fn into_view(e: MountedEvent) {
+    let el = e.data();
+    spawn(async move {
+        let _ = el.scroll_to(ScrollBehavior::Instant).await;
+    });
+}
+
 #[component]
 fn SearchGlyph(size: u32, colour: &'static str) -> Element {
     rsx! {
@@ -855,6 +864,8 @@ fn PresetColumns(kind: Kind, items: Vec<Thing>, applies: bool) -> Element {
                                 key: "{g.0}",
                                 style: "position: relative; width: 100%; min-height: 46px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 16px; border: none; text-align: left; background: {pick(on, wash.as_str(), CLEAR)}; color: {INK}; font-family: {FONT}; cursor: pointer;",
                                 onclick: move |_| picked.set(Some(name.clone())),
+                                // The preset in use, brought into view.
+                                onmounted: move |e| if on { into_view(e) },
                                 if on {
                                     span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: {g.1};" }
                                 }
@@ -905,6 +916,7 @@ fn Variation(kind: Kind, item: Thing, colour: String, applies: bool) -> Element 
             disabled: !applies,
             style: "position: relative; width: 100%; display: flex; align-items: flex-start; gap: 12px; min-height: 52px; padding: 12px 16px; border: none; border-bottom: 1px solid {RULE}; text-align: left; background: {bg}; color: {INK}; font-family: {FONT}; cursor: {pick(applies, \"pointer\", \"default\")};",
             onclick: move |_| apply_now(rig.clone(), ctx, build, &k2, &i2),
+            onmounted: move |e| if on { into_view(e) },
             if on {
                 span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: {bar};" }
             }
@@ -977,6 +989,7 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
                                 key: "{p.name}",
                                 style: "position: relative; width: 100%; min-height: 52px; display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 14px; border: none; text-align: left; background: {pick(on, \"rgba(255,255,255,0.07)\", CLEAR)}; color: {INK}; font-family: {FONT}; cursor: pointer;",
                                 onclick: move |_| picked.set(name.clone()),
+                                onmounted: move |e| if on { into_view(e) },
                                 if on {
                                     span { style: "position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 2px 2px 0; background: {name_colour(&p.name)};" }
                                 }
