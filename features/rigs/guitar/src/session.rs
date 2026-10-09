@@ -7786,6 +7786,77 @@ impl Rig for GuitarRigBackend {
         ImportOutcome { ok: true, slot, preset: group, variation: snapshot, message: String::new() }
     }
 
+    fn captures(&self) -> Vec<signal_guitar_proto::LocalCapture> {
+        use signal_guitar_proto::LocalCapture;
+        let nam = nam_root();
+        let mut dirs = vec![nam.clone(), crate::library::rig_dir().join("models")];
+        // iOS: the app's documents, where the Files app puts what is copied in.
+        #[cfg(target_os = "ios")]
+        if let Some(home) = std::env::var_os("HOME") {
+            dirs.push(std::path::PathBuf::from(home).join("Documents"));
+        }
+        let mut files: Vec<std::path::PathBuf> = Vec::new();
+        fn walk(dir: &std::path::Path, depth: u32, out: &mut Vec<std::path::PathBuf>) {
+            let Ok(rd) = std::fs::read_dir(dir) else { return };
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    if depth < 5 {
+                        walk(&p, depth + 1, out);
+                    }
+                } else if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("nam")) {
+                    out.push(p);
+                }
+            }
+        }
+        for d in &dirs {
+            walk(d, 0, &mut files);
+        }
+        let mut seen = std::collections::HashSet::new();
+        files.retain(|p| seen.insert(std::fs::canonicalize(p).unwrap_or_else(|_| p.clone())));
+        // What is known of each: the catalog's provenance (by its place in
+        // the NAM library), else what uses it — a drive preset's option is a
+        // pedal, an Amp module snapshot's capture an amp.
+        let catalog = nam_catalog();
+        let by_rel: std::collections::HashMap<String, &signal_nam::nam_file::Provenance> = catalog
+            .as_ref()
+            .map(|c| c.entries.values().filter_map(|e| e.provenance.as_ref().map(|p| (e.relative_path.clone(), p))).collect())
+            .unwrap_or_default();
+        let file_of = |p: &str| std::path::Path::new(p).file_name().map(|f| f.to_string_lossy().to_lowercase()).unwrap_or_default();
+        let pedals: std::collections::HashSet<String> = self.drive_presets.lock_ok().iter().flat_map(|d| d.options.iter().map(|o| file_of(&o.nam))).collect();
+        let amps: std::collections::HashSet<String> = RigLibrary::load_compositions()
+            .modules
+            .iter()
+            .filter(|m| m.module.eq_ignore_ascii_case(crate::profiles::AMP_MODULE))
+            .flat_map(|m| m.snapshots.iter().flat_map(|s| [file_of(&s.nam), file_of(&s.nam2)]))
+            .collect();
+        let mut out: Vec<LocalCapture> = files
+            .iter()
+            .map(|p| {
+                let path = p.to_string_lossy().into_owned();
+                let name = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                let prov = p.strip_prefix(&nam).ok().and_then(|r| by_rel.get(&r.to_string_lossy().into_owned()).copied());
+                let folder = p.parent().and_then(|d| d.file_name()).map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+                let group = prov
+                    .and_then(|v| v.tone_name.clone())
+                    .unwrap_or_else(|| if ["models", "nam", "Documents"].contains(&folder.as_str()) || folder.chars().all(|c| c.is_ascii_digit()) { name.clone() } else { folder.clone() });
+                let file = file_of(&path);
+                let gear = prov.and_then(|v| v.gear.clone()).unwrap_or_else(|| {
+                    if pedals.contains(&file) {
+                        "pedal".into()
+                    } else if amps.contains(&file) {
+                        "amp".into()
+                    } else {
+                        String::new()
+                    }
+                });
+                LocalCapture { name, path, group, gear, creator: prov.and_then(|v| v.creator.clone()).unwrap_or_default() }
+            })
+            .collect();
+        out.sort_by(|a, b| a.group.to_lowercase().cmp(&b.group.to_lowercase()).then(a.name.cmp(&b.name)));
+        out
+    }
+
     fn add_drive_preset(&self, name: String, nam_path: String) {
         if !std::path::Path::new(&nam_path).exists() {
             tracing::warn!("add_drive_preset: {nam_path} does not exist");

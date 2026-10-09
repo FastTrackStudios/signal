@@ -17,6 +17,7 @@ mod browser;
 mod colors;
 pub(crate) mod splash;
 mod tones;
+mod captures;
 mod edit;
 mod macros;
 mod marks;
@@ -90,7 +91,9 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut sidebar_browser = use_signal(|| false);
     // Its slot, for TONE3000 (an amp, a drive slot), and which source shows.
     let mut tone_slot = use_signal(|| None::<String>);
-    let mut tone_tab = use_signal(|| false);
+    // 0 its presets, 1 TONE3000, 2 the captures on this device.
+    let mut tone_tab = use_signal(|| 0u8);
+    let source_title = if tone_tab() == 1 { "TONE3000" } else { "MY CAPTURES" };
     // With the sidebar on a block's presets, picking another block in the
     // routing turns it to that block's.
     use_effect(move || {
@@ -118,7 +121,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     use_context_provider(|| {
         crate::face_chrome::OpenPresets(Callback::new(move |(block, block_type): (String, String)| {
             tone_slot.set(tones::slot_of(&block, &block_type));
-            tone_tab.set(false);
+            tone_tab.set(0);
             let mut f = browser_focus.0;
             let kind = browser_kind(&block_type);
             f.set(Some(routing::Focus { kind, preset: String::new(), variation: String::new(), search: false }));
@@ -186,29 +189,40 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                                     browser::Browser { state, narrow: true }
                                 } else if sidebar_browser() {
                                     // An amp or a drive slot: its presets, and at their foot
-                                    // the way to TONE3000's; there, the way back.
-                                    if let Some(slot) = tone_slot().filter(|_| tones::available()) {
-                                        if tone_tab() {
+                                    // the captures on this device and TONE3000; there, the way back.
+                                    if let Some(slot) = tone_slot() {
+                                        if tone_tab() != 0 {
                                             div { style: "flex-shrink: 0; height: 52px; display: flex; align-items: center; gap: 4px; padding: 0 6px; border-bottom: 1px solid {RULE}; background: {SHEET};",
                                                 button {
                                                     style: "height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: none; background: transparent; color: {INK_2}; font-size: 15px; font-weight: 650; font-family: {FONT}; cursor: pointer;",
-                                                    onclick: move |_| tone_tab.set(false),
+                                                    onclick: move |_| tone_tab.set(0),
                                                     svg { width: "9", height: "15", view_box: "0 0 9 15",
                                                         path { d: "M7.5 1.5 1.5 7.5l6 6", fill: "none", stroke: INK_2, stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round" }
                                                     }
                                                     "{slot}"
                                                 }
-                                                span { style: "flex: 1; text-align: center; font-size: 14px; font-weight: 800; letter-spacing: 0.06em; color: {INK};", "TONE3000" }
+                                                div { style: "flex: 1; text-align: center; font-size: 14px; font-weight: 800; letter-spacing: 0.06em; color: {INK};", {source_title} }
                                                 span { style: "width: 80px;" }
                                             }
-                                            tones::TonesPanel { slot }
+                                            if tone_tab() == 1 {
+                                                tones::TonesPanel { slot }
+                                            } else {
+                                                captures::CapturesPanel { slot }
+                                            }
                                         } else {
                                             browser::Browser { state, narrow: true, on_close: move |()| sidebar_browser.set(false) }
-                                            div { style: "flex-shrink: 0; padding: 12px 14px; border-top: 1px solid {RULE};",
+                                            div { style: "flex-shrink: 0; display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid {RULE};",
                                                 button {
-                                                    style: "width: 100%; height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border: none; border-radius: {R}; background: {FILL}; color: {INK}; font-size: 15px; font-weight: 650; font-family: {FONT}; cursor: pointer;",
-                                                    onclick: move |_| tone_tab.set(true),
-                                                    "More on TONE3000"
+                                                    style: "flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; border: none; border-radius: {R}; background: {FILL}; color: {INK}; font-size: 15px; font-weight: 650; font-family: {FONT}; cursor: pointer;",
+                                                    onclick: move |_| tone_tab.set(2),
+                                                    "My captures"
+                                                }
+                                                if tones::available() {
+                                                    button {
+                                                        style: "flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; border: none; border-radius: {R}; background: {FILL}; color: {INK}; font-size: 15px; font-weight: 650; font-family: {FONT}; cursor: pointer;",
+                                                        onclick: move |_| tone_tab.set(1),
+                                                        "TONE3000"
+                                                    }
                                                 }
                                             }
                                         }

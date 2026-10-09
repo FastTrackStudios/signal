@@ -50,6 +50,20 @@ pub struct CaptureImport {
     pub slot: String,
 }
 
+/// A capture on this device: a `.nam` the rig ships, one downloaded, or
+/// one copied in.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct LocalCapture {
+    /// The file's name, without `.nam`.
+    pub name: String,
+    pub path: String,
+    /// The tone it belongs to (its download's title, else its folder).
+    pub group: String,
+    /// `pedal`, `amp`, … when known (the catalog's, or what uses it).
+    pub gear: String,
+    pub creator: String,
+}
+
 /// What loading a capture did.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct ImportOutcome {
@@ -1533,7 +1547,7 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        SetupModel, Artwork, CaptureImport, CompTrace, CompositionModel, DiClip, ImportOutcome, LevelProgress, LibraryModel, LiveBlock, LiveNode,
+        SetupModel, Artwork, CaptureImport, CompTrace, CompositionModel, DiClip, ImportOutcome, LevelProgress, LocalCapture, LibraryModel, LiveBlock, LiveNode,
         Applied, MacroKnobView, MacroResult, MacroSave, MacroTune, PartOverride, PatchInfo,
         PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
     };
@@ -1833,6 +1847,10 @@ pub mod rig {
         /// preset, the capture a snapshot of it). Saved with the patch, and
         /// heard at once.
         fn load_capture(&self, import: CaptureImport) -> ImportOutcome;
+        /// Every capture on this device, by tone: the rig's shipped models,
+        /// the NAM library's downloads, and (iOS) any copied into the app's
+        /// documents through the Files app.
+        fn captures(&self) -> Vec<LocalCapture>;
         /// Re-read the styx library from disk and rebuild the live rig —
         /// the hook for external edits (text editor, LLM, git).
         fn reload_library(&self);

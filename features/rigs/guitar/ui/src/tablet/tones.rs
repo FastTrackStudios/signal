@@ -21,8 +21,8 @@ pub fn available() -> bool {
     try_consume_context::<Tone3000Client>().is_some()
 }
 
-/// The slot a block (or module) of the FX row's bar loads captures into,
-/// if TONE3000 has any for it: an amp, a drive slot.
+/// The slot a block (or module) of the FX row's bar loads captures into:
+/// an amp, a drive slot.
 pub fn slot_of(block: &str, block_type: &str) -> Option<String> {
     let t = block_type.to_lowercase();
     if t == "module:amp" {
@@ -31,11 +31,17 @@ pub fn slot_of(block: &str, block_type: &str) -> Option<String> {
     if t == "amp" || t == "drive" || t == "boost" {
         return Some(block.to_string());
     }
+    // The Drive module: the drive block it was opened from, else its first.
+    if t == "module:drive" {
+        let b = block.to_lowercase();
+        let slot = (b.starts_with("drive ") || b.starts_with("boost")).then(|| block.to_string()).unwrap_or_else(|| "Drive 1".into());
+        return Some(slot);
+    }
     None
 }
 
 /// The catalog's gear for a slot: what a search there should find.
-fn gears_for(slot: &str) -> Vec<String> {
+pub(super) fn gears_for(slot: &str) -> Vec<String> {
     let s = slot.to_lowercase();
     if s.starts_with("drive") || s.starts_with("boost") {
         vec!["pedal".into()]
