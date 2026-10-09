@@ -1549,3 +1549,45 @@ pub fn seed_setup() -> signal_guitar_proto::SetupModel {
         controller_index: 0,
     }
 }
+
+#[cfg(test)]
+mod seed_tests {
+    use super::*;
+
+    fn names(dir: &std::path::Path) -> Vec<String> {
+        let text = std::fs::read_to_string(dir.join("setlists.styx")).expect("setlists");
+        facet_styx::from_str::<SetlistLib>(&text).expect("parses").setlists.into_iter().map(|s| s.name).collect()
+    }
+
+    fn seed(store: &StyxDir) {
+        seed_entries::<SetlistLib, crate::profiles::SetlistDef>(store, "setlists.styx", DEFAULT_SETLISTS, ".seeded-setlists", |l| &mut l.setlists, |s| s.name.clone());
+    }
+
+    /// A library from before a set shipped gets it on its next load; one the
+    /// player deleted after it came stays deleted.
+    #[test]
+    fn a_shipped_set_reaches_a_library_without_it_once() {
+        let dir = std::env::temp_dir().join(format!("signal-seed-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = StyxDir::new(&dir);
+        // The player's own library: one set of theirs, nothing shipped yet.
+        let mut own = facet_styx::from_str::<SetlistLib>(DEFAULT_SETLISTS).expect("shipped sets parse").setlists.remove(0);
+        own.name = "Mine".into();
+        let mine = SetlistLib { setlists: vec![own] };
+        std::fs::write(dir.join("setlists.styx"), facet_styx::to_string(&mine).unwrap()).unwrap();
+
+        seed(&store);
+        let got = names(&dir);
+        assert!(got.contains(&"Mine".to_string()));
+        assert!(got.contains(&"SETLIST NAME".to_string()), "the shipped set arrives: {got:?}");
+
+        // Deleted by the player: the next load leaves it gone.
+        let mut lib = facet_styx::from_str::<SetlistLib>(&std::fs::read_to_string(dir.join("setlists.styx")).unwrap()).unwrap();
+        lib.setlists.retain(|s| s.name != "SETLIST NAME");
+        std::fs::write(dir.join("setlists.styx"), facet_styx::to_string(&lib).unwrap()).unwrap();
+        seed(&store);
+        assert!(!names(&dir).contains(&"SETLIST NAME".to_string()), "a deleted set stays deleted");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
