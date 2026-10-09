@@ -64,13 +64,21 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut docked = use_signal(|| true);
     // Perform's middle: the routing grid, unless it's switched off.
     let mut routing_on = use_signal(|| true);
+    // Perform's FX row: the selected block's controls, docked over the
+    // switches; a block picked in the grid brings it up.
+    let mut fx_on = use_signal(|| false);
     let mut browser = use_signal(|| false);
     // Edit's left pane: the browser, or the sidebar a tap away.
     let mut left_browser = use_signal(|| true);
     let setup_tab = use_signal(|| setup::SetupTab::Guitar);
     let pick = use_context_provider(|| BuildPick { part: Signal::new(None), building: Signal::new(false) });
     // Edit's routing selection, and where it points the browser.
-    use_context_provider(|| routing::RoutingSel(Signal::new(None)));
+    let routing_sel = use_context_provider(|| routing::RoutingSel(Signal::new(None))).0;
+    use_effect(move || {
+        if routing_sel().is_some() {
+            fx_on.set(true);
+        }
+    });
     use_context_provider(|| routing::BrowserFocus(Signal::new(None)));
     // "Patch…" on a section or part: pick it and bring the browser up for
     // it (in Build it is already there).
@@ -149,6 +157,9 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                                         div { style: "flex: 1; min-height: 0;", routing::Routing { state } }
                                     }
                                 }
+                                if fx_on() {
+                                    fx_row::FxRow { state }
+                                }
                                 if docked() {
                                     div { style: "flex-shrink: 0;", switches::TouchSwitches { perf: model.clone() } }
                                 }
@@ -173,6 +184,8 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                 on_switches: move |()| docked.toggle(),
                 routing: routing_on(),
                 on_routing: move |()| routing_on.toggle(),
+                fx: fx_on(),
+                on_fx: move |()| fx_on.toggle(),
                 browser: browser(),
                 on_browser: move |()| browser.toggle(),
                 tuner: model.tuner_visible,
@@ -220,6 +233,8 @@ fn FootBar(
     on_switches: EventHandler<()>,
     routing: bool,
     on_routing: EventHandler<()>,
+    fx: bool,
+    on_fx: EventHandler<()>,
     browser: bool,
     on_browser: EventHandler<()>,
     tuner: bool,
@@ -267,6 +282,11 @@ fn FootBar(
                     rect { x: "2", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
                     rect { x: "7", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
                     rect { x: "12", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
+                }
+                FootButton { label: "FX", on: fx, pin: true, onclick: move |_| on_fx.call(()),
+                    circle { cx: "5", cy: "6", r: "2.2", fill: "none", stroke: ink(fx), stroke_width: "1.4" }
+                    circle { cx: "13", cy: "12", r: "2.2", fill: "none", stroke: ink(fx), stroke_width: "1.4" }
+                    path { d: "M2 6h0.8M7.2 6H16M2 12h8.8M15.2 12H16", stroke: ink(fx), stroke_width: "1.4", stroke_linecap: "round" }
                 }
             }
             span { style: "flex: 1;" }
