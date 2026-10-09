@@ -373,7 +373,7 @@ fn input_items(cells: Vec<CanvasCell>) -> Vec<CanvasItem> {
 }
 
 
-const GREY: &str = "#a1a1aa";
+const GREY: &str = INK_2;
 /// Motion (tremolo, vibrato, rotary): green, apart from the cool modulation
 /// and the violet reverbs.
 const MOTION: &str = "#34d399";

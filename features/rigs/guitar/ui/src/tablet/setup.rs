@@ -30,7 +30,7 @@ use crate::state::RigViewState;
 /// A rig's override of the guitar, in the rig's colour.
 const RIG: &str = "#38bdf8";
 const WARN: &str = "#eab308";
-const THUMB: &str = "#f4f4f5";
+const THUMB: &str = INK;
 const GATE_NAMES: [&str; 4] = ["Subtle", "Default", "Tight", "Ultra"];
 const GATE_MIN: f64 = -96.0;
 const GATE_MAX: f64 = -24.0;
@@ -104,10 +104,10 @@ fn khz(rate: u32) -> String {
     if (k - k.round()).abs() < 0.05 { format!("{} kHz", k.round()) } else { format!("{k:.1} kHz") }
 }
 
-const LIVE_WASH: &str = "rgba(34,197,94,0.08)";
+const LIVE_WASH: &str = LIVE_BG;
 const LEVEL_OPEN: &str = "rgba(34,197,94,0.55)";
-const KEY_DOWN: &str = "#3a3a42";
-const SWITCH_ON: &str = "rgba(34,197,94,0.1)";
+const KEY_DOWN: &str = DIM;
+const SWITCH_ON: &str = LIVE_BG;
 const GUITAR: &str = "Guitar";
 const END: &str = "flex-end";
 const START: &str = "flex-start";
@@ -130,6 +130,15 @@ fn tick_place(d: i32) -> String {
         -60 => "position: absolute; left: 0px;".to_string(),
         0 => "position: absolute; right: 0px;".to_string(),
         _ => format!("position: absolute; left: {}%; width: 40px; margin-left: -20px; text-align: center;", f64::from(d + 60) / 60.0 * 100.0),
+    }
+}
+/// A gate scale tick's label on −96…−24: the ends flush, the rest centred.
+fn gate_tick_place(d: i32) -> String {
+    let at = f64::from(d) - GATE_MIN;
+    match d {
+        -96 => "position: absolute; left: 0px;".to_string(),
+        -24 => "position: absolute; right: 0px;".to_string(),
+        _ => format!("position: absolute; left: {}%; width: 40px; margin-left: -20px; text-align: center;", at / (GATE_MAX - GATE_MIN) * 100.0),
     }
 }
 fn link_label(link: &str) -> &'static str {
@@ -391,10 +400,10 @@ fn SetupTabs(tab: SetupTab, options: bool, on_tab: EventHandler<SetupTab>) -> El
                                 }
                             }
                             span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;",
-                                span { style: "font-size: 11.5px; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; color: {pick(on, INK_2, INK_3)};", "{label}" }
+                                span { style: "font-size: 12px; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; color: {pick(on, INK_2, INK_3)};", "{label}" }
                                 span { style: "font-size: 17px; font-weight: 750; color: {pick(on, INK, INK_2)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{name}" }
                                 if !sub.is_empty() {
-                                    span { style: "display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: {sub_ink}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+                                    span { style: "display: flex; align-items: center; gap: 6px; font-size: 13px; color: {sub_ink}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
                                         if id == SetupTab::Guitar { OverrideIcon { colour: RIG.to_string(), size: 11 } }
                                         "{sub}"
                                     }
@@ -609,7 +618,7 @@ fn ListRow(in_use: bool, title: String, sub: String, sub_mark: bool, on_pick: Ev
                 span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
                     span { style: "font-size: 15px; font-weight: {pick(in_use, 700, 600)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{title}" }
                     if !sub.is_empty() {
-                        span { style: "display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: {INK_3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+                        span { style: "display: flex; align-items: center; gap: 6px; font-size: 13px; color: {INK_3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
                             if sub_mark { OverrideIcon { colour: RIG.to_string(), size: 11 } }
                             "{sub}"
                         }
@@ -653,7 +662,7 @@ fn GuitarTab(state: RigViewState) -> Element {
                 div { style: "display: flex; flex-direction: column;",
                     for (i, p) in g.pickups.iter().cloned().enumerate() {
                         div { key: "{i}", style: "display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px solid {RULE};",
-                            span { style: "font-size: 11.5px; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; color: {INK_3};", "{p.position}" }
+                            span { style: "font-size: 12px; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; color: {INK_3};", "{p.position}" }
                             TextField { value: p.model.clone(), placeholder: "Pickup model", on_commit: move |v: String| setup.edit(|m| {
                                 let k = m.guitar_index as usize;
                                 if let Some(q) = m.guitars.get_mut(k).and_then(|g| g.pickups.get_mut(i)) { q.model = v.clone() }
@@ -684,7 +693,7 @@ fn GuitarTab(state: RigViewState) -> Element {
                                 let bg = match (on, s) {
                                     (false, _) => CLEAR.to_string(),
                                     (true, Scope::Rig) => format!("color-mix(in oklab, {RIG} 20%, transparent)"),
-                                    (true, Scope::Guitar) => "rgba(255,255,255,0.08)".to_string(),
+                                    (true, Scope::Guitar) => FILL_ON.to_string(),
                                 };
                                 let label = if s == Scope::Guitar { "Guitar default".to_string() } else { format!("Only on {}", r.name) };
                                 rsx! {
@@ -747,12 +756,12 @@ fn ToneBlock(title: &'static str, parts: Vec<String>, over: Vec<String>, scope: 
                 if !mine.is_empty() {
                     span { style: "display: flex; gap: 6px;",
                         button {
-                            style: "height: 36px; padding: 0 12px; border: none; border-radius: {R}; background: transparent; font-size: 13px; font-weight: 650; color: {INK_2}; font-family: {FONT}; cursor: pointer;",
+                            style: "height: {HIT}px; padding: 0 12px; border: none; border-radius: {R}; background: transparent; font-size: 13px; font-weight: 650; color: {INK_2}; font-family: {FONT}; cursor: pointer;",
                             onclick: move |_| setup.edit(|m| settle(m, &m1, false)),
                             "Discard"
                         }
                         button {
-                            style: "height: 36px; padding: 0 14px; border-radius: {R}; border: 1px solid {RULE_STRONG}; background: transparent; font-size: 13px; font-weight: 700; color: {INK}; font-family: {FONT}; cursor: pointer;",
+                            style: "height: {HIT}px; padding: 0 14px; border-radius: {R}; border: 1px solid {RULE_STRONG}; background: transparent; font-size: 13px; font-weight: 700; color: {INK}; font-family: {FONT}; cursor: pointer;",
                             onclick: move |_| setup.edit(|m| settle(m, &m2, true)),
                             "Save to guitar"
                         }
@@ -804,15 +813,18 @@ fn LevelMatch(state: RigViewState, tone: GuitarTone, scope: Scope, target: f64) 
                         span { style: "position: absolute; top: 5px; bottom: 5px; left: 0; width: {pos(now.max(-60.0))}%; border-radius: 3px; background: linear-gradient(90deg, #15803d, #22c55e 70%, #eab308 90%, #f87171);" }
                         span { style: "position: absolute; top: 2px; bottom: 2px; left: calc({pos(peak.max(-60.0))}% - 1px); width: 2px; background: {pick(in_band, LIVE, THUMB)};" }
                     }
-                    div { style: "position: relative; height: 14px; margin-top: 3px; font-size: 11px; color: {INK_3}; font-variant-numeric: tabular-nums;",
+                    div { style: "position: relative; height: 14px; margin-top: 3px; font-size: 12px; color: {INK_3}; font-variant-numeric: tabular-nums;",
                         for d in [-60, -45, -30, -15, 0] {
                             span { key: "{d}", style: "{tick_place(d)}", "{tick(d)}" }
                         }
                     }
                 }
                 span { style: "width: 92px; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-variant-numeric: tabular-nums;",
-                    span { style: "font-size: 17px; font-weight: 800; color: {pick(in_band, LIVE, INK)};", "{peak.round()}" }
-                    span { style: "font-size: 11px; color: {INK_3};", "peak · {trim0(target)}" }
+                    // The peak, or a dash with nothing coming in (not −90).
+                    span { style: "font-size: 17px; font-weight: 800; color: {pick(in_band, LIVE, INK)};",
+                        if peak > -60.0 { "{peak.round()}" } else { "—" }
+                    }
+                    span { style: "font-size: 12px; color: {INK_3};", "target {trim0(target)}" }
                 }
             }
             div { style: "display: flex; align-items: center; gap: 10px;",
@@ -822,7 +834,7 @@ fn LevelMatch(state: RigViewState, tone: GuitarTone, scope: Scope, target: f64) 
                 }
                 button {
                     disabled: matching().is_some(),
-                    style: "flex-shrink: 0; height: 52px; min-width: 128px; padding: 0 16px; border-radius: 6px; border: {outline(!matching().is_some())}; font-size: 14px; font-weight: 700; white-space: nowrap; color: {pick(matching().is_some(), ON_LIVE, INK)}; background: {pick(matching().is_some(), LIVE, CLEAR)}; font-family: {FONT}; cursor: pointer;",
+                    style: "flex-shrink: 0; height: 52px; min-width: 128px; padding: 0 16px; border-radius: 6px; border: {outline(!matching().is_some())}; font-size: 14px; font-weight: 700; white-space: nowrap; color: {INK}; background: {pick(matching().is_some(), FILL_ON, CLEAR)}; font-family: {FONT}; cursor: pointer;",
                     onclick: move |_| {
                         matching.set(Some(-90.0));
                         spawn(async move {
@@ -904,11 +916,17 @@ fn Gates(state: RigViewState, tone: GuitarTone, scope: Scope) -> Element {
                         let open = now >= g;
                         rsx! {
                             span { key: "{i}", style: "position: absolute; top: 0; bottom: 0; left: calc({pct(g)}% - 10px); width: 20px; display: flex; flex-direction: column; align-items: center; pointer-events: none;",
-                                span { style: "margin-top: 5px; width: 20px; height: 17px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: {pick(open, ON_LIVE, INK)}; background: {pick(open, LIVE, KEY_DOWN)};", "{&GATE_NAMES[i][..1]}" }
+                                span { style: "margin-top: 5px; width: 20px; height: 17px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: {pick(open, ON_LIVE, INK)}; background: {pick(open, LIVE, KEY_DOWN)};", "{&GATE_NAMES[i][..1]}" }
                                 span { style: "flex: 1; width: 2px; margin-top: 2px; background: {THUMB}; opacity: 0.85;" }
                             }
                         }
                     }
+                }
+            }
+            // Its scale, as the trim's: −96 at the left to −24 at the right.
+            div { style: "position: relative; height: 16px; margin-top: -6px; font-size: 12px; color: {INK_3}; font-variant-numeric: tabular-nums;",
+                for d in [-96, -84, -72, -60, -48, -36, -24] {
+                    span { key: "{d}", style: "{gate_tick_place(d)}", "−{-d}" }
                 }
             }
             // Each threshold, to step.
@@ -916,7 +934,7 @@ fn Gates(state: RigViewState, tone: GuitarTone, scope: Scope) -> Element {
                 for (i, g) in gates.iter().copied().enumerate() {
                     div { key: "{i}", style: "display: flex; align-items: center; gap: 2px; padding: 2px 2px 2px 12px; {left_rule(i > 0)}",
                         span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px;",
-                            span { style: "font-size: 11.5px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; color: {INK_3};", "{GATE_NAMES[i]}" }
+                            span { style: "font-size: 12px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; color: {INK_3};", "{GATE_NAMES[i]}" }
                             span { style: "font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums;", "{trim0(g)}" }
                         }
                         for d in [-1.0_f64, 1.0] {
@@ -933,7 +951,7 @@ fn Gates(state: RigViewState, tone: GuitarTone, scope: Scope) -> Element {
             div { style: "display: flex; align-items: center; gap: 12px; min-height: 52px; border-top: 1px solid {RULE}; padding-top: 8px;",
                 button {
                     disabled: measuring().is_some(),
-                    style: "height: 44px; padding: 0 16px; border-radius: {R}; border: {outline(!measuring().is_some())}; font-size: 14px; font-weight: 700; white-space: nowrap; color: {pick(measuring().is_some(), ON_LIVE, INK)}; background: {pick(measuring().is_some(), LIVE, CLEAR)}; font-family: {FONT}; cursor: pointer;",
+                    style: "height: 44px; padding: 0 16px; border-radius: {R}; border: {outline(!measuring().is_some())}; font-size: 14px; font-weight: 700; white-space: nowrap; color: {INK}; background: {pick(measuring().is_some(), FILL_ON, CLEAR)}; font-family: {FONT}; cursor: pointer;",
                     onclick: move |_| {
                         measuring.set(Some(0.0));
                         spawn(async move {
@@ -1180,7 +1198,7 @@ fn OutputStrip(state: RigViewState, house: bool) -> Element {
             div { style: "display: flex; align-items: center; gap: 12px;",
                 button {
                     disabled: check().is_some(),
-                    style: "flex-shrink: 0; white-space: nowrap; height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-radius: {R}; font-size: 14px; font-weight: 700; font-family: {FONT}; cursor: pointer; box-sizing: border-box; color: {pick(check().is_some(), ON_LIVE, INK)}; background: {pick(check().is_some(), LIVE, CLEAR)}; border: {outline(check().is_none())};",
+                    style: "flex-shrink: 0; white-space: nowrap; height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-radius: {R}; font-size: 14px; font-weight: 700; font-family: {FONT}; cursor: pointer; box-sizing: border-box; color: {INK}; background: {pick(check().is_some(), FILL_ON, CLEAR)}; border: {outline(check().is_none())};",
                     onclick: move |_| {
                         let output = if house { "house" } else { "phones" }.to_string();
                         let rig = rig.clone();
@@ -1318,7 +1336,7 @@ fn MidiTab() -> Element {
                     for i in 0..d.2 {
                         {
                             let on = pressed() == Some(i as usize);
-                            let glow = if on { format!("0 0 10px {LIVE}") } else { NO_SHADOW.to_string() };
+                            let glow = NO_SHADOW;
                             rsx! {
                                 button {
                                     key: "{i}",
@@ -1362,7 +1380,7 @@ fn MidiTab() -> Element {
 fn Cell(label: &'static str, children: Element) -> Element {
     rsx! {
         div { style: "min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 14px 18px 16px;",
-            span { style: "font-size: 11.5px; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; color: {INK_3};", "{label}" }
+            span { style: "font-size: 12px; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; color: {INK_3};", "{label}" }
             {children}
         }
     }
@@ -1401,8 +1419,8 @@ fn Toggle(on: bool, on_flip: EventHandler<()>) -> Element {
         button {
             style: "width: 52px; height: 44px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: none; background: transparent; cursor: pointer;",
             onclick: move |_| on_flip.call(()),
-            span { style: "width: 46px; height: 28px; border-radius: 999px; padding: 3px; box-sizing: border-box; background: {pick(on, LIVE, RULE_STRONG)}; display: flex; justify-content: {pick(on, END, START)};",
-                span { style: "width: 22px; height: 22px; border-radius: 999px; background: {THUMB};" }
+            span { style: "width: 46px; height: 28px; border-radius: 999px; padding: 3px; box-sizing: border-box; background: {pick(on, FOCUS_FG, RULE_STRONG)}; display: flex; justify-content: {pick(on, END, START)};",
+                span { style: "width: 22px; height: 22px; border-radius: 999px; background: {pick(on, SHEET, THUMB)};" }
             }
         }
     }

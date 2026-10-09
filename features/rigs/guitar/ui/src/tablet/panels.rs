@@ -43,7 +43,7 @@ pub enum Panel {
 }
 
 /// The picked swatch's double ring: the sheet, then the focus ink.
-const SWATCH_RING: &str = "0 0 0 2px #141418, 0 0 0 4px #d4d4d8";
+const SWATCH_RING: &str = "0 0 0 2px #141418, 0 0 0 4px #d4d4d8"; // SHEET_2, FOCUS_FG
 
 const KEYS: [&str; 12] = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
@@ -108,10 +108,11 @@ pub fn PanelView(panel: Panel, perf: PerformanceModel, lib: LibraryModel, on_clo
         Panel::Profile(song) => rsx! { ProfileBody { song, perf: perf.clone(), lib: lib.clone(), on_done: on_close } },
         Panel::Patch(k) => rsx! { PatchBody { part: k, perf: perf.clone(), lib: lib.clone(), on_done: on_close } },
     };
-    let (justify, radius, edge, shadow) = if top {
-        ("flex-start", "0 0 14px 14px", format!("border-bottom: 1px solid {RULE_STRONG};"), "0 16px 40px rgba(0,0,0,0.55)")
+    // Flat: the sheet stands off the scrim by its tone and a hairline.
+    let (justify, radius, edge) = if top {
+        ("flex-start", format!("0 0 {R_MD} {R_MD}"), format!("border-bottom: 1px solid {RULE_STRONG};"))
     } else {
-        ("flex-end", "12px 12px 0 0", "border-top: 1px solid #3a3a42;".to_string(), "0 -16px 40px rgba(0,0,0,0.5)")
+        ("flex-end", format!("{R_MD} {R_MD} 0 0"), format!("border-top: 1px solid {RULE_STRONG};"))
     };
     // Pull a sheet down by its grabber or its title to close it.
     let bus = DragBus::try_use();
@@ -123,7 +124,7 @@ pub fn PanelView(panel: Panel, perf: PerformanceModel, lib: LibraryModel, on_clo
                 style: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; border: none; background: rgba(0,0,0,0.66); cursor: default;",
                 onclick: move |_| on_close.call(()),
             }
-            div { style: "position: relative; top: {pull}px; max-height: {pick(top, 92, 95)}%; display: flex; flex-direction: column; background: #18181c; {edge} border-radius: {radius}; box-shadow: {shadow};",
+            div { style: "position: relative; top: {pull}px; max-height: {pick(top, 92, 95)}%; display: flex; flex-direction: column; background: {SHEET_2}; {edge} border-radius: {radius};",
                 div {
                     style: "display: flex; flex-direction: column; touch-action: none;",
                     onpointerdown: move |e: PointerEvent| {
@@ -197,7 +198,7 @@ fn SetGroup(label: &'static str, rows: Vec<(usize, SetMeta)>, perf: PerformanceM
     let open = perf.setlist_index as usize;
     rsx! {
         div {
-            div { style: "padding: 14px 18px 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_3};", "{label}" }
+            div { style: "padding: 14px 18px 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_3};", "{label}" }
             for (i, m) in rows {
                 {
                     let on = i == open;
@@ -215,9 +216,9 @@ fn SetGroup(label: &'static str, rows: Vec<(usize, SetMeta)>, perf: PerformanceM
                             },
                             // The date as a block: the day large, month and weekday small.
                             span { style: "width: 44px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; line-height: 1;",
-                                span { style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_3};", "{parts.map_or(\"—\", |p| p.0)}" }
+                                span { style: "font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_3};", "{parts.map_or(\"—\", |p| p.0)}" }
                                 span { style: "font-size: 22px; font-weight: 750; margin: 2px 0;", if let Some(p) = parts { "{p.1}" } }
-                                span { style: "font-size: 11px; color: {INK_3};", "{parts.map_or(\"\", |p| p.2)}" }
+                                span { style: "font-size: 12px; color: {INK_3};", "{parts.map_or(\"\", |p| p.2)}" }
                             }
                             span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;",
                                 span { style: "font-size: 16px; font-weight: {pick(on, 750, 620)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{set_heading(&m)}" }
@@ -232,7 +233,7 @@ fn SetGroup(label: &'static str, rows: Vec<(usize, SetMeta)>, perf: PerformanceM
                                 }
                             }
                             if on {
-                                span { style: "flex-shrink: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: {LIVE_BG}; color: {LIVE};", "Open" }
+                                span { style: "flex-shrink: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: {FILL_ON}; color: {FOCUS_FG};", "Open" }
                             }
                         }
                     }
@@ -295,7 +296,7 @@ fn DetailsBody(mode: DetailsMode, perf: PerformanceModel, lib: LibraryModel, on_
         }
     }
     let field = format!("width: 100%; min-height: 48px; padding: 0 12px; border: 1px solid {RULE_STRONG}; border-radius: {R}; background: #0a0a0d; color: {INK}; font-size: 16px; font-family: {FONT}; box-sizing: border-box;");
-    let label = format!("font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_3}; margin-bottom: 8px;");
+    let label = format!("font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_3}; margin-bottom: 8px;");
     let confirm = match mode {
         DetailsMode::Edit => "Save".to_string(),
         DetailsMode::Duplicate => format!("Duplicate {}", songs_label(perf.songs.len())),
@@ -330,7 +331,7 @@ fn DetailsBody(mode: DetailsMode, perf: PerformanceModel, lib: LibraryModel, on_
                         }
                     }
                     button {
-                        style: "min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px dashed {RULE_STRONG}; background: transparent; color: {INK_2}; font-size: 14px; font-weight: 600; font-family: {FONT}; cursor: pointer;",
+                        style: "min-height: {HIT}px; padding: 0 12px; border-radius: 999px; border: 1px dashed {RULE_STRONG}; background: transparent; color: {INK_2}; font-size: 14px; font-weight: 600; font-family: {FONT}; cursor: pointer;",
                         onclick: move |_| new_event.set(Some(String::new())),
                         "+ New event"
                     }
@@ -360,7 +361,7 @@ fn DetailsBody(mode: DetailsMode, perf: PerformanceModel, lib: LibraryModel, on_
                             rsx! {
                                 button {
                                     key: "{ql}",
-                                    style: "min-height: 40px; padding: 0 12px; border-radius: {R}; border: {ring(on, 2.0)}; background: {pick(on, UP, CLEAR)}; color: {INK}; font-size: 14px; font-weight: {pick(on, 700, 560)}; font-family: {FONT}; cursor: pointer;",
+                                    style: "min-height: {HIT}px; padding: 0 12px; border-radius: {R}; border: {ring(on, 2.0)}; background: {pick(on, UP, CLEAR)}; color: {INK}; font-size: 14px; font-weight: {pick(on, 700, 560)}; font-family: {FONT}; cursor: pointer;",
                                     onclick: move |_| {
                                         let mut x = m();
                                         x.date = qd.clone();
@@ -469,8 +470,8 @@ fn DateField(value: String, on_change: EventHandler<String>) -> Element {
         month.set((k.div_euclid(12), (k.rem_euclid(12) + 1) as u32));
     };
     let field = format!("width: 100%; min-height: 48px; padding: 0 12px; border: 1px solid {RULE_STRONG}; border-radius: {R}; background: #0a0a0d; font-size: 16px; font-family: {FONT}; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-start; text-align: left; cursor: pointer;");
-    let nav = format!("width: 44px; height: 40px; border: none; border-radius: {R}; background: transparent; color: {INK_2}; font-size: 18px; font-family: {FONT}; cursor: pointer;");
-    let foot = format!("min-height: 40px; padding: 0 12px; border: none; border-radius: {R}; background: transparent; color: {INK_2}; font-size: 14px; font-weight: 600; font-family: {FONT}; cursor: pointer;");
+    let nav = format!("width: 44px; height: {HIT}px; border: none; border-radius: {R}; background: transparent; color: {INK_2}; font-size: 18px; font-family: {FONT}; cursor: pointer;");
+    let foot = format!("min-height: {HIT}px; padding: 0 12px; border: none; border-radius: {R}; background: transparent; color: {INK_2}; font-size: 14px; font-weight: 600; font-family: {FONT}; cursor: pointer;");
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 8px;",
             button {
@@ -479,7 +480,7 @@ fn DateField(value: String, on_change: EventHandler<String>) -> Element {
                 "{shown}"
             }
             if open() {
-                div { style: "padding: 8px; border: 1px solid {RULE_STRONG}; border-radius: {R_MD}; background: #0d0d10; display: flex; flex-direction: column; gap: 4px;",
+                div { style: "padding: 8px; border: 1px solid {RULE_STRONG}; border-radius: {R_MD}; background: {SHEET}; display: flex; flex-direction: column; gap: 4px;",
                     div { style: "display: flex; align-items: center;",
                         button { style: "{nav}", onclick: move |_| step(-1), "‹" }
                         span { style: "flex: 1; text-align: center; font-size: 15px; font-weight: 700;", "{title}" }
@@ -487,7 +488,7 @@ fn DateField(value: String, on_change: EventHandler<String>) -> Element {
                     }
                     div { style: "display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px;",
                         for (k, w) in ["S", "M", "T", "W", "T", "F", "S"].into_iter().enumerate() {
-                            span { key: "w{k}", style: "text-align: center; font-size: 11px; font-weight: 700; color: {INK_3}; padding: 4px 0;", "{w}" }
+                            span { key: "w{k}", style: "text-align: center; font-size: 12px; font-weight: 700; color: {INK_3}; padding: 4px 0;", "{w}" }
                         }
                         for k in 0..lead {
                             span { key: "b{k}" }
@@ -501,7 +502,7 @@ fn DateField(value: String, on_change: EventHandler<String>) -> Element {
                                 rsx! {
                                     button {
                                         key: "d{d}",
-                                        style: "min-height: 40px; border-radius: {R}; border: {pick(on, \"2px solid #d4d4d8\", \"none\")}; background: {pick(on, UP, CLEAR)}; color: {pick(is_today, LIVE, INK)}; font-size: 15px; font-weight: {pick(on || is_today, 750, 560)}; font-family: {FONT}; box-sizing: border-box; cursor: pointer;",
+                                        style: "min-height: {HIT}px; border-radius: {R}; border: {pick(on, \"2px solid #d4d4d8\", \"none\")}; background: {pick(on, UP, CLEAR)}; color: {pick(is_today, LIVE, INK)}; font-size: 15px; font-weight: {pick(on || is_today, 750, 560)}; font-family: {FONT}; box-sizing: border-box; cursor: pointer;",
                                         onclick: move |_| {
                                             on_change.call(iso.clone());
                                             open.set(false);
@@ -611,7 +612,7 @@ fn AddBody(perf: PerformanceModel, lib: LibraryModel) -> Element {
                                 span { style: "min-width: 30px; height: 28px; padding: 0 6px; box-sizing: border-box; border: 1px solid {RULE_STRONG}; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 650; color: {INK_2};", "{s.key}" }
                             }
                             span { style: "width: 30px; text-align: right; color: {INK_2}; font-size: 14px;", if s.bpm > 0 { "{s.bpm}" } }
-                            span { style: "width: 46px; text-align: right; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {pick(added, INK_3, FOCUS_FG)};",
+                            span { style: "width: 46px; text-align: right; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {pick(added, INK_3, FOCUS_FG)};",
                                 if added { "In set" } else { "Add" }
                             }
                         }
@@ -664,7 +665,7 @@ fn KeyGrid(value: String, on_pick: EventHandler<String>) -> Element {
                         rsx! {
                             button {
                                 key: "{lbl}",
-                                style: "min-height: 40px; padding: 0 13px; border: none; border-radius: {R}; background: {pick(on, \"rgba(0,0,0,0.5)\", CLEAR)}; color: {pick(on, \"#fafafa\", INK_2)}; font-size: 15px; font-weight: {pick(on, 700, 560)}; font-family: {FONT}; white-space: nowrap; cursor: pointer;",
+                                style: "min-height: {HIT}px; padding: 0 13px; border: none; border-radius: {R}; background: {pick(on, \"rgba(0,0,0,0.5)\", CLEAR)}; color: {pick(on, \"#fafafa\", INK_2)}; font-size: 15px; font-weight: {pick(on, 700, 560)}; font-family: {FONT}; white-space: nowrap; cursor: pointer;",
                                 onclick: move |_| on_pick.call(if is_minor { format!("{root}m") } else { root.clone() }),
                                 "{lbl}"
                             }
@@ -788,7 +789,7 @@ fn ColourBody(index: usize, perf: PerformanceModel, on_done: EventHandler<()>) -
                             button {
                                 key: "{c}",
                                 "aria-label": "Colour {c}",
-                                style: "aspect-ratio: 1; min-height: 44px; border-radius: 10px; border: none; background: {c}; box-shadow: {pick(on, SWATCH_RING, NO_SHADOW)}; cursor: pointer;",
+                                style: "aspect-ratio: 1; min-height: 44px; border-radius: {R_MD}; border: none; background: {c}; box-shadow: {pick(on, SWATCH_RING, NO_SHADOW)}; cursor: pointer;",
                                 onclick: move |_| {
                                     let name = name.clone();
                                     call!(rig, |r| r.set_song_colour(name, c.to_string()));
@@ -896,7 +897,7 @@ fn ProfileCell(name: String, of: String, inherit: bool, profile: Option<ProfileE
                 }
             }
             span { style: "flex-shrink: 0; font-size: 15px; font-weight: {pick(on, 700, 600)}; font-style: {pick(inherit, \"italic\", \"normal\")}; color: {pick(on, INK, INK_2)}; white-space: nowrap;", "{name}" }
-            span { style: "flex: 1; min-width: 0; text-align: right; font-size: 11.5px; color: {INK_3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{meta.join(\" · \")}" }
+            span { style: "flex: 1; min-width: 0; text-align: right; font-size: 12px; color: {INK_3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{meta.join(\" · \")}" }
             if on {
                 svg { width: "16", height: "16", view_box: "0 0 14 14", style: "flex-shrink: 0;",
                     path { d: "M2.5 7.5 5.5 10.5 11.5 3.5", fill: "none", stroke: INK, stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round" }

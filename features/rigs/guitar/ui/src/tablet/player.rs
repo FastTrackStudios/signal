@@ -38,13 +38,18 @@ pub fn Player() -> Element {
                     }
                     guitars.set(s.guitars);
                 }
+                // The spinner turns every 60 ms while a clip plays; the rig
+                // is asked how it is doing every fifth turn (300 ms).
+                let mut tick = 0u32;
                 loop {
-                    if let Ok(st) = rig.status().await {
+                    let ask = tick % 5 == 0 || !status.peek().di_playing;
+                    tick = tick.wrapping_add(1);
+                    if ask && let Ok(st) = rig.status().await {
                         if *status.peek() != st {
                             status.set(st);
                         }
                     }
-                    if open() && let Ok(c) = rig.di_clips().await && *clips.peek() != c {
+                    if ask && open() && let Ok(c) = rig.di_clips().await && *clips.peek() != c {
                         clips.set(c);
                     }
                     let playing = status.peek().di_playing;
@@ -102,9 +107,9 @@ fn Card(status: RigStatus, clips: Vec<DiClip>, guitars: Vec<GuitarEntry>, guitar
     let playing = status.di_playing;
     let current = clips.iter().find(|c| c.id == status.di_clip_id).cloned();
     let recording = status.di_recording;
-    let chip = |on: bool| format!("height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid {}; background: {}; color: {}; font-size: 13.5px; font-weight: 650; font-family: {FONT}; display: flex; align-items: center; cursor: pointer; flex-shrink: 0;", pick(on, INK_2, RULE_STRONG), pick(on, "rgba(255,255,255,0.08)", "transparent"), pick(on, INK, INK_2));
+    let chip = |on: bool| format!("height: {HIT}px; padding: 0 12px; border-radius: 999px; border: 1px solid {}; background: {}; color: {}; font-size: 14px; font-weight: 650; font-family: {FONT}; display: flex; align-items: center; cursor: pointer; flex-shrink: 0;", pick(on, INK_2, RULE_STRONG), pick(on, "rgba(255,255,255,0.08)", "transparent"), pick(on, INK, INK_2));
     rsx! {
-        div { style: "position: absolute; top: 100%; right: 0; z-index: 60; width: 400px; max-height: 620px; display: flex; flex-direction: column; background: {SHEET}; border: 1px solid {RULE_STRONG}; border-radius: 14px; box-shadow: 0 18px 40px rgba(0,0,0,0.55); overflow: hidden; font-family: {FONT}; color: {INK};",
+        div { style: "position: absolute; top: 100%; right: 0; z-index: 60; width: 400px; max-height: 620px; display: flex; flex-direction: column; background: {SHEET}; border: 1px solid {RULE_STRONG}; border-radius: {R_MD}; overflow: hidden; font-family: {FONT}; color: {INK};",
             // What plays, and the switch for it.
             div { style: "display: flex; align-items: center; gap: 12px; padding: 14px 14px 12px 16px; border-bottom: 1px solid {RULE};",
                 div { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;",
@@ -112,7 +117,7 @@ fn Card(status: RigStatus, clips: Vec<DiClip>, guitars: Vec<GuitarEntry>, guitar
                         {current.as_ref().map_or_else(|| "Nothing playing".to_string(), |c| c.name.clone())}
                     }
                     if let Some(c) = current.as_ref().filter(|c| !c.builtin) {
-                        span { style: "font-size: 12.5px; color: {INK_3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{through(c)}" }
+                        span { style: "font-size: 13px; color: {INK_3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{through(c)}" }
                     }
                 }
                 {
@@ -121,7 +126,7 @@ fn Card(status: RigStatus, clips: Vec<DiClip>, guitars: Vec<GuitarEntry>, guitar
                     rsx! {
                         button {
                             "aria-label": if playing { "Stop" } else { "Play" },
-                            style: "width: 48px; height: 48px; border-radius: 24px; border: none; display: flex; align-items: center; justify-content: center; background: {pick(playing, INK, LIVE)}; cursor: pointer; flex-shrink: 0;",
+                            style: "width: 48px; height: 48px; border-radius: 999px; border: none; display: flex; align-items: center; justify-content: center; background: {pick(playing, INK, LIVE)}; cursor: pointer; flex-shrink: 0;",
                             onclick: move |_| {
                                 let (Some(r), id) = (rig.clone(), id.clone()) else { return };
                                 let _ = dioxus_core::spawn_forever(async move {
@@ -142,7 +147,7 @@ fn Card(status: RigStatus, clips: Vec<DiClip>, guitars: Vec<GuitarEntry>, guitar
                         }
                     }
                 }
-                button { "aria-label": "Close", style: "width: 34px; height: 34px; border: none; background: transparent; color: {INK_3}; font-size: 20px; cursor: pointer;", onclick: move |_| on_close.call(()), "×" }
+                button { "aria-label": "Close", style: "width: {HIT}px; height: {HIT}px; border: none; background: transparent; color: {INK_3}; font-size: 20px; cursor: pointer;", onclick: move |_| on_close.call(()), "×" }
             }
             // Whose recordings: a guitar's, or the shipped ones.
             div { style: "display: flex; gap: 8px; padding: 12px 14px; overflow-x: auto; border-bottom: 1px solid {RULE};",
@@ -172,7 +177,7 @@ fn Card(status: RigStatus, clips: Vec<DiClip>, guitars: Vec<GuitarEntry>, guitar
                     rsx! {
                         button {
                             disabled: recording,
-                            style: "height: 40px; padding: 0 16px; border-radius: 20px; border: none; display: flex; align-items: center; gap: 8px; background: {pick(recording, RECORD, \"rgba(239,68,68,0.16)\")}; color: {pick(recording, \"#fff\", RECORD)}; font-size: 14px; font-weight: 750; font-family: {FONT}; cursor: pointer;",
+                            style: "height: {HIT}px; padding: 0 16px; border-radius: 999px; border: none; display: flex; align-items: center; gap: 8px; background: {pick(recording, RECORD, \"rgba(239,68,68,0.16)\")}; color: {pick(recording, \"#fff\", RECORD)}; font-size: 14px; font-weight: 750; font-family: {FONT}; cursor: pointer;",
                             onclick: move |_| {
                                 let secs = seconds();
                                 if let Some(r) = rig.clone() {
@@ -208,13 +213,13 @@ fn ClipRow(clip: DiClip, on: bool) -> Element {
         }
     };
     let (c_name, c_gain, id_play, id_del) = (clip.clone(), clip.clone(), clip.id.clone(), clip.id.clone());
-    let field = format!("flex: 1; min-width: 0; height: 30px; padding: 0 8px; border-radius: 7px; border: 1px solid transparent; background: rgba(255,255,255,0.05); color: {INK}; font-size: 13px; font-family: {FONT};");
+    let field = format!("flex: 1; min-width: 0; height: {HIT}px; padding: 0 8px; border-radius: {R}; border: 1px solid transparent; background: rgba(255,255,255,0.05); color: {INK}; font-size: 13px; font-family: {FONT};");
     rsx! {
-        div { style: "display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-bottom: 1px solid {RULE}; background: {pick(on, \"rgba(34,197,94,0.08)\", \"transparent\")};",
+        div { style: "display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-bottom: 1px solid {RULE}; background: {pick(on, LIVE_BG, CLEAR)};",
             div { style: "display: flex; align-items: center; gap: 10px;",
                 button {
                     "aria-label": "Play {clip.name}",
-                    style: "width: 34px; height: 34px; border-radius: 17px; border: 1px solid {pick(on, LIVE, RULE_STRONG)}; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;",
+                    style: "width: {HIT}px; height: {HIT}px; border-radius: 999px; border: 1px solid {pick(on, LIVE, RULE_STRONG)}; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;",
                     onclick: move |_| {
                         let id = id_play.clone();
                         if let Some(r) = r_play.clone() {
@@ -243,7 +248,7 @@ fn ClipRow(clip: DiClip, on: bool) -> Element {
                     span { style: "font-size: 12px; color: {INK_3}; font-variant-numeric: tabular-nums;", {format!("{:.0} s", clip.seconds)} }
                     button {
                         "aria-label": "Delete {clip.name}",
-                        style: "width: 30px; height: 30px; border: none; background: transparent; color: {INK_3}; font-size: 16px; cursor: pointer;",
+                        style: "width: {HIT}px; height: {HIT}px; border: none; background: transparent; color: {INK_3}; font-size: 16px; cursor: pointer;",
                         onclick: move |_| {
                             let id = id_del.clone();
                             if let Some(r) = r_del.clone() {

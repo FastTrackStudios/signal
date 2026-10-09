@@ -9,6 +9,25 @@
 
 use dioxus::prelude::*;
 
+/// Whether the player asked for less motion (iOS Settings › Accessibility ›
+/// Motion › Reduce Motion). Elsewhere: no.
+#[must_use]
+pub fn reduce_motion() -> bool {
+    #[cfg(target_os = "ios")]
+    {
+        #[link(name = "UIKit", kind = "framework")]
+        unsafe extern "C" {
+            fn UIAccessibilityIsReduceMotionEnabled() -> bool;
+        }
+        // SAFETY: a plain query of a system setting, no arguments.
+        unsafe { UIAccessibilityIsReduceMotionEnabled() }
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        false
+    }
+}
+
 /// The logo's wave, from the app icon (`apps/desktop/ios/icon.svg`), in its
 /// 1024 space: a burst of sine across the middle.
 const WAVE: &str = "M200 512 L204 511 L207 508 L210 504 L214 500 L217 494 L221 488 L224 482 L228 474 L231 467 L235 460 L238 452 L242 445 L245 438 L248 431 L252 425 L256 419 L259 414 L262 410 L266 407 L269 404 L273 403 L276 402 L280 403 L283 405 L287 408 L290 412 L294 418 L297 424 L300 432 L304 441 L308 450 L311 461 L314 473 L318 485 L321 498 L325 512 L328 526 L332 541 L335 555 L339 570 L342 585 L346 600 L349 614 L352 628 L356 641 L360 653 L363 665 L366 675 L370 685 L373 693 L377 700 L380 705 L384 710 L387 712 L391 713 L394 712 L398 710 L401 706 L404 701 L408 694 L412 685 L415 675 L418 663 L422 650 L425 636 L429 621 L432 604 L436 587 L439 569 L443 551 L446 531 L450 512 L453 492 L456 473 L460 453 L464 434 L467 416 L470 398 L474 381 L477 364 L481 349 L484 336 L488 323 L491 312 L495 302 L498 294 L502 288 L505 284 L508 281 L512 280 L516 281 L519 284 L522 288 L526 294 L529 302 L533 312 L536 323 L540 336 L543 349 L547 364 L550 381 L554 398 L557 416 L560 434 L564 453 L568 473 L571 492 L574 512 L578 531 L581 551 L585 569 L588 587 L592 604 L595 621 L599 636 L602 650 L606 663 L609 675 L612 685 L616 694 L620 701 L623 706 L626 710 L630 712 L633 713 L637 712 L640 710 L644 705 L647 700 L651 693 L654 685 L658 675 L661 665 L664 653 L668 641 L672 628 L675 614 L678 600 L682 585 L685 570 L689 555 L692 541 L696 526 L699 512 L703 498 L706 485 L710 473 L713 461 L716 450 L720 441 L724 432 L727 424 L730 418 L734 412 L737 408 L741 405 L744 403 L748 402 L751 403 L755 404 L758 407 L762 410 L765 414 L768 419 L772 425 L776 431 L779 438 L782 445 L786 452 L789 460 L793 467 L796 474 L800 482 L803 488 L807 494 L810 500 L814 504 L817 508 L820 511 L824 512";
@@ -87,6 +106,21 @@ pub fn Splash(ready: bool) -> Element {
     }));
     if gone() {
         return rsx! {};
+    }
+    // Less motion asked for: the logo still, whole, and a plain fade away —
+    // no drawing on, no glint, no breathing.
+    if reduce_motion() {
+        let tall = LOGO_W * VIEW.3 / VIEW.2;
+        let fade = if leaving() { format!("opacity: 0; transition: opacity {OUT_MS}ms linear; pointer-events: none;") } else { String::new() };
+        return rsx! {
+            div {
+                style: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #050506; {fade}",
+                div { style: "position: relative; width: {LOGO_W}px; height: {tall}px;",
+                    Wave { stroke: "url(#sig-body)".to_string(), width: 76.0, opacity: 1.0 }
+                }
+                div { style: "margin-top: 40px; padding-left: 0.38em; font-size: 30px; font-weight: 800; color: #f4f4f5; letter-spacing: 0.38em;", "SIGNAL" }
+            }
+        };
     }
     let tall = LOGO_W * VIEW.3 / VIEW.2;
     let out = if leaving() { format!("animation: sig-out {OUT_MS}ms cubic-bezier(0.4, 0, 1, 1) forwards; pointer-events: none;") } else { String::new() };

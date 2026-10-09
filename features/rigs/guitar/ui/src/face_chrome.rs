@@ -94,7 +94,7 @@ pub fn PresetStepper(
         return rsx! {};
     }
     let arrow = if touch {
-        "font-size: 20px; line-height: 1; color: #d4d4d8; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer;"
+        "font-size: 20px; line-height: 1; color: #d4d4d8; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer;"
     } else {
         "font-size: 11px; line-height: 1; color: #a1a1aa; padding: 0 3px; cursor: pointer;"
     };

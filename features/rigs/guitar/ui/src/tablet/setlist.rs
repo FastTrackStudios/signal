@@ -474,11 +474,23 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
     let rows: Rows = use_signal(Vec::new);
     let mut away = use_signal(|| None::<bool>);
     let perf_sig = state.perf;
+    // One measurement at a time: a scroll fires many events, and each asked
+    // for two rects (and a retry loop). One asked for while one runs is
+    // kept, and run once after it — so the last position is always measured.
+    let flight = use_signal(|| 0u8);
     let measure = move || {
         let at = perf_sig.peek().song_index as usize;
         let up = rows.peek().get(at).cloned().flatten();
         let (Some(list), Some(up)) = (list_el.peek().clone(), up) else { return };
+        // A handle's copy, so the closure stays `Fn`.
+        let mut flight = flight;
+        if *flight.peek() > 0 {
+            flight.set(2);
+            return;
+        }
+        flight.set(1);
         spawn(async move {
+          loop {
             // Mounted before laid out: wait for a layout to measure.
             for _ in 0..10 {
                 if let (Ok(l), Ok(u)) = (list.get_client_rect().await, up.get_client_rect().await)
@@ -489,8 +501,12 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
                 }
                 architect::platform::sleep(std::time::Duration::from_millis(50)).await;
             }
-            let (Ok(l), Ok(u)) = (list.get_client_rect().await, up.get_client_rect().await) else { return };
+            let (Ok(l), Ok(u)) = (list.get_client_rect().await, up.get_client_rect().await) else {
+                flight.set(0);
+                return;
+            };
             if l.height() <= 1.0 || u.height() <= 1.0 {
+                flight.set(0);
                 return;
             }
             let now = if u.max_y() < l.min_y() + 1.0 {
@@ -503,6 +519,13 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
             if *away.peek() != now {
                 away.set(now);
             }
+            if *flight.peek() == 2 {
+                flight.set(1);
+                continue;
+            }
+            flight.set(0);
+            break;
+          }
         });
     };
     // The song up moves on: measure where the new one is.
@@ -613,10 +636,10 @@ fn NowBar(perf: PerformanceModel, above: bool, on_back: EventHandler<()>) -> Ele
     let Some(song) = perf.songs.get(perf.song_index as usize).cloned() else { return rsx! {} };
     let colour = song_colour(&song.name, &song.colour);
     let section = perf.parts.get(perf.part_index as usize).map(|p| if p.section.is_empty() { p.name.clone() } else { p.section.clone() }).unwrap_or_default();
-    let edge = if above { "top: 0px; box-shadow: 0 6px 16px rgba(0,0,0,0.45);" } else { "bottom: 0px; box-shadow: 0 -6px 16px rgba(0,0,0,0.45);" };
+    let edge = if above { format!("top: 0px; border-bottom: 1px solid {RULE_STRONG};") } else { format!("bottom: 0px; border-top: 1px solid {RULE_STRONG};") };
     rsx! {
         button {
-            style: "position: absolute; left: 0px; right: 0px; {edge} z-index: 5; height: 44px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 0 14px; border: none; text-align: left; background: {tint(&colour, 16)}; color: {INK}; font-family: {FONT}; cursor: pointer;",
+            style: "position: absolute; left: 0px; right: 0px; z-index: 5; height: {HIT}px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 0 14px; border: none; {edge} text-align: left; background: {tint(&colour, 16)}; color: {INK}; font-family: {FONT}; cursor: pointer;",
             onclick: move |_| on_back.call(()),
             span { style: "width: 22px; height: 22px; border-radius: 5px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 750; background: {colour}; color: #0b0b0e;", "{perf.song_index + 1}" }
             span { style: "font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{song.name}" }
@@ -631,6 +654,14 @@ fn NowBar(perf: PerformanceModel, above: bool, on_back: EventHandler<()>) -> Ele
                 "Now"
             }
         }
+    }
+}
+
+/// A list with nothing in it, said in a line where its rows would be.
+#[component]
+pub fn EmptyLine(text: String) -> Element {
+    rsx! {
+        div { style: "padding: 28px 16px; text-align: center; font-size: 15px; font-weight: 560; color: {INK_3};", "{text}" }
     }
 }
 
@@ -715,7 +746,7 @@ fn SetHeader(perf: PerformanceModel, lib: LibraryModel, panel: Signal<Option<Pan
                         }
                         span { "{date}" }
                         if let Some(w) = soon.clone() {
-                            span { style: "color: {pick(w == \"Today\", LIVE, INK_2)}; font-weight: 650;", "{w}" }
+                            span { style: "color: {pick(w == \"Today\", FOCUS_FG, INK_2)}; font-weight: 650;", "{w}" }
                         }
                         span { "·" }
                         span { style: "overflow: hidden; text-overflow: ellipsis;", "{profile}" }
@@ -773,6 +804,10 @@ fn SetHeader(perf: PerformanceModel, lib: LibraryModel, panel: Signal<Option<Pan
 const STICK_SONG: &str = "position: sticky; top: 0px; z-index: 3;";
 /// The section playing, pinned under the song while its stacks scroll.
 const STICK_SECTION: &str = "position: sticky; top: 64px; z-index: 2;";
+/// How far a row kept in view stands below the list's top: under the song
+/// and the section pinned there (64 + 50), so it never comes to rest
+/// half-hidden beneath them.
+const PINNED_H: u32 = 114;
 
 const UNSTUCK: &str = "position: relative;";
 
@@ -976,9 +1011,9 @@ fn Changes(modules: Vec<String>, max: usize) -> Element {
 
 #[component]
 fn Badge(live: bool, children: Element) -> Element {
-    let (bg, fg) = if live { (LIVE_BG, LIVE) } else { ("rgba(255,255,255,0.07)", INK_2) };
+    let (bg, fg) = if live { (LIVE_BG, LIVE) } else { (FILL, INK_2) };
     rsx! {
-        span { style: "flex-shrink: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: {bg}; color: {fg};",
+        span { style: "flex-shrink: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: {bg}; color: {fg};",
             {children}
         }
     }
@@ -1209,7 +1244,7 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, parts: Vec<PerfPart>, s
     let grip = section_colour(&section.name);
     let row_bg = pick(is_now, tint(&colour, pick(several, 10, 18)), CLEAR.to_string());
     // The section playing stays under the song while its stacks scroll.
-    let pin = if is_now { format!("{STICK_SECTION} box-shadow: 0 1px 0 {RULE};") } else { UNSTUCK.to_string() };
+    let pin = if is_now { format!("{STICK_SECTION} box-shadow: 0 1px 0 {RULE_STRONG};") } else { UNSTUCK.to_string() };
     let order: Vec<Section> = {
         let mut v = sections_of(&parts);
         v.truncate(count);
@@ -1291,8 +1326,9 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, parts: Vec<PerfPart>, s
             items: items.clone(),
             on_pick: pick_handler,
             style: "{pin} display: flex; align-items: center; min-height: 50px; background: {row_bg};",
-            // The row's whole height, for keeping it in view.
-            span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 1px; pointer-events: none;", onmounted: move |e| anchor.set(Some(e.data())) }
+            // Where keeping it in view scrolls to: the pinned rows' height
+            // above it, so it lands below them.
+            span { style: "position: absolute; left: 0; top: -{PINNED_H}px; height: {PINNED_H}px; width: 1px; pointer-events: none;", onmounted: move |e| anchor.set(Some(e.data())) }
             // The grip, in the section's colour: drag to move the section.
             span {
                 "aria-label": "Drag {section.name} to move it",
@@ -1579,9 +1615,9 @@ pub fn StackRow(
                         }
                     }
                 },
-                span { style: "width: 70px; flex-shrink: 0; display: flex; align-items: center; gap: 6px;",
+                span { style: "width: 88px; flex-shrink: 0; display: flex; align-items: center; gap: 6px;",
                     span { style: "width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; background: {tape};" }
-                    span { style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; color: {pick(on, INK, INK_3)};", "{view.name}" }
+                    span { style: "font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; color: {pick(on, INK, INK_3)};", "{view.name}" }
                 }
                 span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;",
                     span { style: "font-size: 14px; font-weight: {pick(on, 700, 560)}; color: {pick(on, INK, INK_2)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",

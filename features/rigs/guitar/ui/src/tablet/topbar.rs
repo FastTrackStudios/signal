@@ -233,7 +233,7 @@ fn Cpu(cpu: f64) -> Element {
     let pct = (cpu * 100.0).round().clamp(0.0, 100.0) as i32;
     let tone = if pct >= 85 { VOID } else if pct >= 60 { MODIFIED } else { INK_3 };
     rsx! {
-        span { title: "DSP load on the rig: {pct}%", style: "display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0 6px; font-size: 11px; font-weight: 750; line-height: 1; color: {tone};",
+        span { title: "DSP load on the rig: {pct}%", style: "display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0 6px; font-size: 12px; font-weight: 750; line-height: 1; color: {tone};",
             svg { key: "{tone}", width: "14", height: "14", view_box: "0 0 16 16",
                 rect { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5", fill: "none", stroke: tone, stroke_width: "1.4" }
                 rect { x: "6", y: "6", width: "4", height: "4", rx: "0.5", fill: tone }
@@ -273,7 +273,7 @@ fn MiniMeter(label: &'static str, level: f64, muted: bool, phones: bool) -> Elem
                     }
                 }
             }
-            span { style: "height: 12px; display: flex; align-items: center; font-size: 11px; font-weight: 800; line-height: 1; color: {ink};",
+            span { style: "height: 12px; display: flex; align-items: center; font-size: 12px; font-weight: 800; line-height: 1; color: {ink};",
                 if phones {
                     svg { key: "{muted}", width: "12", height: "11", view_box: "0 0 16 14",
                         path { d: "M2.5 9V7.5a5.5 5.5 0 0 1 11 0V9", fill: "none", stroke: ink, stroke_width: "2" }
@@ -320,7 +320,8 @@ fn MuteButton(house: bool, phones: bool) -> Element {
         spawn(async move {
             loop {
                 architect::platform::sleep(Duration::from_millis(80)).await;
-                if lit() {
+                // Less motion asked for: lit, and still.
+                if lit() && !super::splash::reduce_motion() {
                     phase.set((phase() + 0.08 / 1.6) % 1.0);
                 } else if phase() != 0.0 {
                     phase.set(0.0);
@@ -463,7 +464,7 @@ fn AudioBadge(failed: bool) -> Element {
         div { style: "align-self: stretch; display: flex; align-items: center; padding: 0 10px; flex-shrink: 0;",
             button {
                 disabled: starting(),
-                style: "height: 34px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-radius: 999px; border: 1.5px solid {edge}; background: {bg}; color: {ink}; font-family: {FONT}; font-size: 13px; font-weight: 750; white-space: nowrap; cursor: pointer; box-sizing: border-box;",
+                style: "height: {HIT}px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-radius: 999px; border: 1.5px solid {edge}; background: {bg}; color: {ink}; font-family: {FONT}; font-size: 13px; font-weight: 750; white-space: nowrap; cursor: pointer; box-sizing: border-box;",
                 onclick: move |_| {
                     starting.set(true);
                     if let Some(r) = rig.clone() {

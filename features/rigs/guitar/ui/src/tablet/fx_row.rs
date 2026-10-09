@@ -170,12 +170,25 @@ pub fn FxRow(state: RigViewState) -> Element {
         });
     };
     let w = row_w();
+    // A module's faces at the row's height side by side, each in its own
+    // proportion — and, when they are wider than the row together, all
+    // narrowed by the same factor so the row holds every one whole (wider,
+    // centred, the first would spill off the left where no scroll reaches).
+    let natural = |b: &LiveBlock| match face_for(b, &faces) {
+        Some(f) => {
+            let f = f.at(crate::control::Tier::Ipad);
+            (face_h * f.size.0 / f.size.1.max(1.0)).round()
+        }
+        None => 260.0,
+    };
+    let total: f64 = shown.iter().map(natural).sum::<f64>() + (shown.len().saturating_sub(1)) as f64;
+    let fit = if !one && total > w { (w / total).min(1.0) } else { 1.0 };
     rsx! {
-        div { style: "flex-shrink: 0; height: {FX_H}px; box-sizing: border-box; border-top: 1px solid #000; background: #0d0d10; display: flex; flex-direction: column;",
+        div { style: "flex-shrink: 0; height: {FX_H}px; box-sizing: border-box; border-top: 1px solid {WELL}; background: {SHEET}; display: flex; flex-direction: column;",
             div { style: "flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden;",
             onmounted: move |e| measure(e.data()),
-            div { style: "height: 100%; display: flex; align-items: stretch; justify-content: center; gap: 1px; width: max-content; min-width: 100%;",
-                for b in shown.into_iter() {
+            div { style: "height: 100%; display: flex; align-items: stretch; justify-content: center; gap: 1px; width: 100%;",
+                for b in shown.clone().into_iter() {
                     {
                         let face = face_for(&b, &faces);
                         rsx! {
@@ -191,7 +204,7 @@ pub fn FxRow(state: RigViewState) -> Element {
                                     // and its own proportion, so each fits whole.
                                     Some(f) => {
                                         let f = f.at(crate::control::Tier::Ipad);
-                                        let w = (face_h * f.size.0 / f.size.1.max(1.0)).round();
+                                        let w = (face_h * f.size.0 / f.size.1.max(1.0) * fit).floor();
                                         rsx! {
                                             div { style: "width: {w}px; height: 100%;",
                                                 BlockFace { block: b.clone(), streams: streams_for(&b, &f.ns, &state), face: f, fill: true }
@@ -202,8 +215,8 @@ pub fn FxRow(state: RigViewState) -> Element {
                                     // art (its capture's, from TONE3000), else its
                                     // name card.
                                     None => rsx! {
-                                        div { style: "width: {pick(one, w, 260.0)}px; height: 100%; padding: 12px; box-sizing: border-box;",
-                                            ArtCard { block: b.clone(), aspect: (pick(one, w, 260.0), face_h) }
+                                        div { style: "width: {pick(one, w, (260.0 * fit).floor())}px; height: 100%; padding: 12px; box-sizing: border-box;",
+                                            ArtCard { block: b.clone(), aspect: (pick(one, w, (260.0 * fit).floor()), face_h) }
                                         }
                                     },
                                 }
@@ -256,9 +269,9 @@ pub fn FxPresetBar(state: RigViewState) -> Element {
         _ => None,
     };
     let label = picked_module.clone().or_else(|| bar_block.as_ref().map(|b| b.name.clone())).unwrap_or_default();
-    let tag = "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; white-space: nowrap;";
-    let chip = "height: 40px; max-width: 300px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: none; border-radius: 6px; background: rgba(255,255,255,0.08); color: #f4f4f5; font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; cursor: pointer;";
-    let arrow = "width: 40px; height: 40px; border: none; background: transparent; color: #d4d4d8; font-size: 20px; cursor: pointer;";
+    let tag = format!("font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_2}; white-space: nowrap;");
+    let chip = format!("height: {HIT}px; max-width: 300px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: none; border-radius: {R}; background: {FILL_ON}; color: {INK}; font-size: 15px; font-weight: 650; white-space: nowrap; overflow: hidden; cursor: pointer;");
+    let arrow = format!("width: {HIT}px; height: {HIT}px; display: flex; align-items: center; justify-content: center; border: none; border-radius: {R}; background: transparent; cursor: pointer;");
 
     if let Some(pick) = module_pick {
         let module = pick.module.clone();
@@ -300,7 +313,7 @@ pub fn FxPresetBar(state: RigViewState) -> Element {
         return rsx! {
             div { style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px;",
                 span { style: "{tag}", "{label}" }
-                button { style: "{arrow}", onclick: move |_| { let m = m1.clone(); call!(r1, |r| r.step_module(m, -1)); }, "‹" }
+                button { style: "{arrow}", onclick: move |_| { let m = m1.clone(); call!(r1, |r| r.step_module(m, -1)); }, Chevron { left: true } }
                 button {
                     style: "{chip}",
                     onclick: move |_| {
@@ -313,7 +326,7 @@ pub fn FxPresetBar(state: RigViewState) -> Element {
                         span { style: "width: 8px; height: 8px; border-radius: 4px; background: #f59e0b; flex-shrink: 0;" }
                     }
                 }
-                button { style: "{arrow}", onclick: move |_| { let m = m2.clone(); call!(r2, |r| r.step_module(m, 1)); }, "›" }
+                button { style: "{arrow}", onclick: move |_| { let m = m2.clone(); call!(r2, |r| r.step_module(m, 1)); }, Chevron { left: false } }
                 MoreButton { label: format!("{module} preset actions"), items, on_pick }
             }
         };
@@ -387,7 +400,7 @@ fn ArtCard(block: LiveBlock, aspect: (f64, f64)) -> Element {
     }));
     match art.read().clone().flatten() {
         Some(uri) => rsx! {
-            div { style: "position: relative; width: 100%; height: 100%; border-radius: 12px; overflow: hidden; background: #111;",
+            div { style: "position: relative; width: 100%; height: 100%; border-radius: {R_MD}; overflow: hidden; background: #111;",
                 img { src: "{uri}", style: "position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover;" }
                 div { style: "position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: baseline; gap: 10px; padding: 10px 14px; background: rgba(0,0,0,0.6);",
                     span { style: "font-size: 13px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: {INK_2};", "{block.name}" }
@@ -396,5 +409,16 @@ fn ArtCard(block: LiveBlock, aspect: (f64, f64)) -> Element {
             }
         },
         None => rsx! { NameCard { block, aspect } },
+    }
+}
+
+/// A step's chevron, drawn (a glyph set in the font sits off-centre and
+/// changes weight with it).
+#[component]
+pub(super) fn Chevron(left: bool) -> Element {
+    rsx! {
+        svg { width: "10", height: "16", view_box: "0 0 10 16",
+            path { d: pick(left, "M8 2 2 8l6 6", "M2 2l6 6-6 6"), fill: "none", stroke: FOCUS_FG, stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round" }
+        }
     }
 }

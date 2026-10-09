@@ -156,17 +156,17 @@ fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element 
             if lit { LitRing {} }
             SwitchNo { no, ink: ink.clone() }
             // The stack, small, beside the switch's number.
-            span { style: "position: absolute; top: 5px; left: 24px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {ink}; opacity: 0.75;", "{stack.name}" }
+            span { style: "position: absolute; top: 5px; left: 24px; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {ink}; opacity: 0.85;", "{stack.name}" }
             span { style: "font-size: {name_px(&part, compact)}px; font-weight: 750; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: {ink};", "{part}" }
             // One grey mark at the top right when it overrides anything.
             if !stack.override_modules.is_empty() {
                 span { style: "position: absolute; top: 6px; right: 8px; display: flex;",
-                    super::marks::OverrideIcon { colour: "#a1a1aa".to_string(), size: if compact { 10 } else { 12 } }
+                    super::marks::OverrideIcon { colour: INK_2.to_string(), size: if compact { 10 } else { 12 } }
                 }
             }
             // The preset it loads, under its name.
             if !stack.preset.is_empty() && !compact {
-                span { style: "font-size: 12.5px; font-weight: 600; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: {ink};", "{core_line(&stack.preset)}" }
+                span { style: "font-size: 13px; font-weight: 600; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: {ink};", "{core_line(&stack.preset)}" }
             }
             if count > 1 {
                 span { style: "display: flex; align-items: center; gap: {pick(compact, 4, 6)}px; margin-top: {pick(compact, 0, 4)}px;",
@@ -192,7 +192,7 @@ fn FnTile(no: u32, title: &'static str, subtitle: String, bg: &'static str, text
             if lit { LitRing {} }
             SwitchNo { no, ink: ink.clone() }
             span { style: "font-size: 14px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; color: {ink};", "{title}" }
-            span { style: "font-size: 11px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {ink};", "{subtitle}" }
+            span { style: "font-size: 13px; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {ink};", "{subtitle}" }
         }
     }
 }
@@ -240,7 +240,7 @@ fn TapTempo(bpm: u32) -> Element {
                 });
             },
             if beat() { LitRing {} }
-            SwitchNo { no: 5, ink: "#e4e4e7".to_string() }
+            SwitchNo { no: 5, ink: INK.to_string() }
             span { style: "font-size: 20px; font-weight: 700;", "Tap Tempo" }
             span { style: "font-size: 14px; font-weight: 600; opacity: 0.8; font-variant-numeric: tabular-nums;", "{tempo} BPM" }
         }
@@ -268,7 +268,7 @@ fn TunerTile(muted: bool, onclick: EventHandler<MouseEvent>) -> Element {
     });
     let r = reading();
     let in_tune = r.active && r.cents.abs() <= 5.0;
-    let (bg, ink, needle) = if in_tune { ("#14532d", "#4ade80", "#4ade80") } else { ("#18181b", "#e4e4e7", "#facc15") };
+    let (bg, ink, needle) = if in_tune { ("#14532d", "#4ade80", "#4ade80") } else { (SHEET_2, INK, "#facc15") };
     let at = 50.0 + r.cents.clamp(-50.0, 50.0);
     let note = if r.active { r.note.clone() } else { "—".to_string() };
     let cents = if r.active { format!("{:+.0}", r.cents) } else { String::new() };
@@ -279,7 +279,7 @@ fn TunerTile(muted: bool, onclick: EventHandler<MouseEvent>) -> Element {
             if muted { LitRing {} }
             SwitchNo { no: 10, ink: ink.to_string() }
             if muted {
-                span { style: "position: absolute; top: 5px; right: 9px; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: {ink}; opacity: 0.8;", "MUTE" }
+                span { style: "position: absolute; top: 5px; right: 9px; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; color: {ink}; opacity: 0.85;", "MUTE" }
             }
             span { style: "font-size: 17px; font-weight: 800; min-width: 34px; color: {ink};", "{note}" }
             div { style: "position: relative; flex: 1; height: 16px;",
@@ -289,7 +289,7 @@ fn TunerTile(muted: bool, onclick: EventHandler<MouseEvent>) -> Element {
                     div { style: "position: absolute; left: {at}%; top: 0; bottom: 0; width: 4px; margin-left: -2px; border-radius: 2px; background: {needle};" }
                 }
             }
-            span { style: "font-size: 11px; font-weight: 700; min-width: 24px; text-align: right; font-variant-numeric: tabular-nums; opacity: 0.8;", "{cents}" }
+            span { style: "font-size: 12px; font-weight: 700; min-width: 24px; text-align: right; font-variant-numeric: tabular-nums; opacity: 0.8;", "{cents}" }
         }
     }
 }
@@ -297,7 +297,7 @@ fn TunerTile(muted: bool, onclick: EventHandler<MouseEvent>) -> Element {
 #[component]
 fn SwitchNo(no: u32, ink: String) -> Element {
     rsx! {
-        span { style: "position: absolute; top: 5px; left: 9px; font-size: 11px; font-family: ui-monospace, monospace; opacity: 0.45; color: {ink};", "{no}" }
+        span { style: "position: absolute; top: 5px; left: 9px; font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; opacity: 0.6; color: {ink};", "{no}" }
     }
 }
 

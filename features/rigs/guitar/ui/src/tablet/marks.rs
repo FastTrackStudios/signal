@@ -4,6 +4,8 @@
 
 use dioxus::prelude::*;
 
+use super::tokens::INK_2;
+
 /// Each module's colour — the macros' for its effect; a part's own edits
 /// stay amber.
 pub fn module_colour(kind: &str) -> &'static str {
@@ -27,7 +29,7 @@ pub fn block_colour(kind: &str) -> &'static str {
         "delay" => "#3B82F6",
         "reverb" => "#8B5CF6",
         "chorus" => "#7DD3FC",
-        _ => "#a1a1aa",
+        _ => INK_2,
     }
 }
 
@@ -165,7 +167,7 @@ pub fn Strike(width: f64) -> Element {
     rsx! {
         svg { view_box: "0 0 100 10", preserve_aspect_ratio: "none",
             style: "position: absolute; left: -4px; top: 50%; height: 12px; margin-top: -6px; width: calc(100% + 8px);",
-            path { d: "M1 6 C 20 4.5, 40 6.8, 60 5.2 S 90 4.6, 99 5.6", fill: "none", stroke: "#a1a1aa", stroke_width: "{width}", vector_effect: "non-scaling-stroke" }
+            path { d: "M1 6 C 20 4.5, 40 6.8, 60 5.2 S 90 4.6, 99 5.6", fill: "none", stroke: INK_2, stroke_width: "{width}", vector_effect: "non-scaling-stroke" }
         }
     }
 }

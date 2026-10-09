@@ -114,7 +114,7 @@ fn ScrollWindow(max_h: f64, #[props(default)] watch: String, children: Element) 
                 {children}
             }
             if more {
-                div { style: "position: absolute; top: 4px; bottom: 4px; right: 3px; width: 4px; border-radius: 2px; background: rgba(255,255,255,0.08); pointer-events: none;",
+                div { style: "position: absolute; top: 4px; bottom: 4px; right: 3px; width: 4px; border-radius: 2px; background: {FILL_ON}; pointer-events: none;",
                     div { style: "position: absolute; left: 0; right: 0; top: {at}px; height: {thumb - 8.0}px; border-radius: 2px; background: rgba(255,255,255,0.45);" }
                 }
             }
@@ -130,7 +130,7 @@ fn SearchFoot(label: &'static str, kind: &'static str, at: String, variation: St
     let picker = try_use_context::<super::setlist::PickPart>();
     rsx! {
         button {
-            style: "display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: none; border-radius: {R}; background: {FILL}; color: {INK_3}; font-size: 15px; font-family: {FONT}; text-align: left; cursor: pointer;",
+            style: "display: flex; align-items: center; gap: 8px; height: {HIT}px; padding: 0 12px; border: none; border-radius: {R}; background: {FILL}; color: {INK_3}; font-size: 15px; font-family: {FONT}; text-align: left; cursor: pointer;",
             onclick: move |_| {
                 if let Some(super::routing::BrowserFocus(mut f)) = focus {
                     f.set(Some(super::routing::Focus { kind: kind.into(), preset: at.clone(), variation: variation.clone(), search: true }));
@@ -212,7 +212,7 @@ pub fn PresetView(state: RigViewState) -> Element {
             }
         })
     };
-    let chip = |on: bool| format!("height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid {}; background: {}; color: {}; font-size: 13px; font-weight: 650; font-family: {FONT}; display: flex; align-items: center; gap: 6px; cursor: pointer; flex-shrink: 0;", pick(on, INK_2, RULE_STRONG), pick(on, "rgba(255,255,255,0.08)", "transparent"), pick(on, INK, INK_2));
+    let chip = |on: bool| format!("height: {HIT}px; padding: 0 12px; border-radius: 999px; border: 1px solid {}; background: {}; color: {}; font-size: 13px; font-weight: 650; font-family: {FONT}; display: flex; align-items: center; gap: 6px; cursor: pointer; flex-shrink: 0;", pick(on, INK_2, RULE_STRONG), pick(on, "rgba(255,255,255,0.08)", "transparent"), pick(on, INK, INK_2));
     rsx! {
         section { style: "height: 100%; display: flex; flex-direction: column; min-height: 0; background: {SHEET}; font-family: {FONT}; color: {INK};",
             // The one loaded, held: big, its variations four rows tall.
@@ -220,7 +220,7 @@ pub fn PresetView(state: RigViewState) -> Element {
                 div { style: "flex-shrink: 0; border-bottom: 1px solid {RULE}; background: {ROW_ON};",
                     div { style: "display: flex; align-items: center; gap: 8px; padding: 14px 6px 8px 16px;",
                         div { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
-                            span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: {LIVE};", "LOADED" }
+                            span { style: "font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: {LIVE};", "LOADED" }
                             span { style: "font-size: 22px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
                             span { style: "font-size: 13px; color: {INK_3};", "{c.active_snapshot} · {p.snapshots.len()} variations" }
                         }
@@ -438,7 +438,7 @@ pub fn ProfileView(state: RigViewState) -> Element {
                 div { style: "flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 14px 6px 8px 16px; border-bottom: 1px solid {RULE};",
                     ProfileIcon { name: profile.clone(), colour: colour.clone(), size: 24 }
                     div { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
-                        span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: {LIVE};", "LOADED" }
+                        span { style: "font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: {LIVE};", "LOADED" }
                         span { style: "font-size: 22px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{profile}" }
                         span { style: "font-size: 13px; color: {INK_3};", "{count} stacks · {patches} patches" }
                     }
@@ -518,7 +518,7 @@ pub fn ProfileView(state: RigViewState) -> Element {
             // The drawer: search, and every other profile — a tap loads it.
             if drawer() {
                 div { style: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 5; background: rgba(0,0,0,0.5);", onclick: move |_| drawer.set(false) }
-                div { style: "position: absolute; left: 0; right: 0; bottom: 0; top: 22%; z-index: 6; display: flex; flex-direction: column; background: {SHEET}; border-top: 1px solid {RULE_STRONG}; border-radius: 14px 14px 0 0; box-shadow: 0 -12px 32px rgba(0,0,0,0.5);",
+                div { style: "position: absolute; left: 0; right: 0; bottom: 0; top: 22%; z-index: 6; display: flex; flex-direction: column; background: {SHEET}; border-top: 1px solid {RULE_STRONG}; border-radius: {R_MD} {R_MD} 0 0;",
                     div { style: "flex-shrink: 0; display: flex; justify-content: center; padding: 8px 0 2px;",
                         span { style: "width: 36px; height: 5px; border-radius: 3px; background: {RULE_STRONG};" }
                     }
@@ -536,12 +536,15 @@ pub fn ProfileView(state: RigViewState) -> Element {
                             }
                         }
                         button {
-                            style: "height: 40px; padding: 0 10px; border: none; background: transparent; font-size: 14px; font-weight: 650; color: {INK_2}; font-family: {FONT}; cursor: pointer;",
+                            style: "height: {HIT}px; padding: 0 10px; border: none; background: transparent; font-size: 14px; font-weight: 650; color: {INK_2}; font-family: {FONT}; cursor: pointer;",
                             onclick: move |_| drawer.set(false),
                             "Done"
                         }
                     }
                     div { style: "flex: 1; min-height: 0; overflow-y: auto; border-top: 1px solid {RULE};",
+                if rest.is_empty() {
+                    super::setlist::EmptyLine { text: "No other profiles".to_string() }
+                }
                 for p in rest.into_iter() {
                     {
                         let name = p.name.clone();

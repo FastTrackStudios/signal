@@ -73,13 +73,14 @@ impl Target {
     }
 }
 
-/// Everything the browser reads, fetched together.
+/// Everything the browser reads, fetched together — shared, so a render's
+/// copy of it is four pointers rather than the whole library.
 #[derive(Clone, PartialEq, Default)]
 struct Data {
-    perf: PerformanceModel,
-    lib: LibraryModel,
-    comp: CompositionModel,
-    patches: Vec<PatchInfo>,
+    perf: Rc<PerformanceModel>,
+    lib: Rc<LibraryModel>,
+    comp: Rc<CompositionModel>,
+    patches: Rc<Vec<PatchInfo>>,
 }
 
 fn use_data(state: RigViewState) -> Signal<Data> {
@@ -91,10 +92,10 @@ fn use_data(state: RigViewState) -> Signal<Data> {
             spawn(async move {
                 let (lib, comp, patches) = (r.library().await, r.compositions().await, r.patches().await);
                 data.set(Data {
-                    perf,
-                    lib: lib.unwrap_or_default(),
-                    comp: comp.unwrap_or_default(),
-                    patches: patches.unwrap_or_default(),
+                    perf: Rc::new(perf),
+                    lib: Rc::new(lib.unwrap_or_default()),
+                    comp: Rc::new(comp.unwrap_or_default()),
+                    patches: Rc::new(patches.unwrap_or_default()),
                 });
             });
         }
@@ -217,7 +218,7 @@ impl Kind {
             Self::Songs => "#f472b6".into(),
             Self::Patches => "#38bdf8".into(),
             Self::Profiles => "#a78bfa".into(),
-            Self::Presets => "#a1a1aa".into(),
+            Self::Presets => INK_2.into(),
             Self::Module(m) => module_colour(m).into(),
             Self::Block(b) => block_colour(b).into(),
         }
@@ -615,7 +616,7 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
                                         let (icon, tint) = match m.role.as_str() {
                                             "amp" => ("Core", "#D6B36A"),
                                             "drive" => ("Drive", "#ef4444"),
-                                            _ => ("Amp", "#a1a1aa"),
+                                            _ => ("Amp", INK_2),
                                         };
                                         let (bold, text) = if m.role == "drive" && !m.pedal.is_empty() { (m.pedal.clone(), m.option.clone()) } else { (String::new(), m.name.clone()) };
                                         t.chips.push(Chip { icon, tint, bold, text });
@@ -917,7 +918,7 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
                     // Clear what the part carries of its own, in one go.
                     if let Some((part, kinds, overrides, n)) = own.clone() {
                         button {
-                            style: "height: 32px; padding: 0 10px; border: 1px solid {RULE_STRONG}; background: transparent; border-radius: {R}; font-size: 12.5px; font-weight: 700; color: {INK_2}; font-family: {FONT}; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; box-sizing: border-box;",
+                            style: "height: {HIT}px; padding: 0 10px; border: 1px solid {RULE_STRONG}; background: transparent; border-radius: {R}; font-size: 13px; font-weight: 700; color: {INK_2}; font-family: {FONT}; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; box-sizing: border-box;",
                             onclick: move |_| {
                                 for k in kinds.clone() {
                                     let part = part.clone();
@@ -936,7 +937,7 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
                     }
                     if let Some((p, v, n)) = own_variation.clone() {
                         button {
-                            style: "height: 32px; padding: 0 10px; border: 1px solid {RULE_STRONG}; background: transparent; border-radius: {R}; font-size: 12.5px; font-weight: 700; color: {INK_2}; font-family: {FONT}; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; box-sizing: border-box;",
+                            style: "height: {HIT}px; padding: 0 10px; border: 1px solid {RULE_STRONG}; background: transparent; border-radius: {R}; font-size: 13px; font-weight: 700; color: {INK_2}; font-family: {FONT}; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; box-sizing: border-box;",
                             onclick: move |_| {
                                 let (p, v) = (p.clone(), v.clone());
                                 call!(rig_clear_variation, |r| r.clear_variation_picks(p, v));
@@ -1001,7 +1002,7 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
                 nav { style: "width: {pick(narrow, \"100%\", \"188px\")}; flex-shrink: 0; overflow-y: auto; border-right: {pick(narrow, \"none\", RULE_LINE)}; padding-bottom: 12px; box-sizing: border-box;",
                     for (gi, group) in ["Library", "Sounds", "Modules", "Blocks"].iter().enumerate() {
                         div { key: "{gi}",
-                            div { style: "padding: 14px 16px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_3};", "{group}" }
+                            div { style: "padding: 14px 16px 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_3};", "{group}" }
                             for k in all.iter().filter(|k| k.group() == *group).cloned() {
                                 KindRow { key: "{k.id()}", kind: k.clone(), on: !narrow && q.is_empty() && k.id() == kind_id(), chevron: narrow, items: things(&k, &d, &target, &set_songs), onclick: {
                                     let id = k.id();
@@ -1188,8 +1189,9 @@ fn SearchGlyph(size: u32, colour: &'static str) -> Element {
     }
 }
 
-/// A kind in the rail: tinted by its colour (stronger when open), and what
-/// is in use there now — an override, or what a preset higher up chose.
+/// A kind in the rail: its colour as a swatch (the rail stays grey, colour
+/// only marking what kind a thing is), lifted and set bolder when open, and
+/// what is in use there now — an override, or what a preset higher up chose.
 #[component]
 fn KindRow(kind: Kind, on: bool, chevron: bool, items: Vec<Thing>, onclick: EventHandler<MouseEvent>) -> Element {
     let colour = kind.colour();
@@ -1197,17 +1199,15 @@ fn KindRow(kind: Kind, on: bool, chevron: bool, items: Vec<Thing>, onclick: Even
     let swapped = cur.is_some_and(|c| c.state == Some(State::Swapped));
     let inherited_only = cur.is_some_and(|c| c.state.is_none() && !c.inherited.is_empty());
     let label = cur.map(|c| if c.nested { c.id.clone() } else { c.name.clone() });
-    let bg = format!("color-mix(in oklab, {colour} {}%, {MAIN})", if on { 30 } else { 11 });
+    let bg = if on { UP } else { CLEAR };
     let sub_ink = if swapped { format!("color-mix(in oklab, {colour} 45%, {INK_3})") } else { INK_3.to_string() };
     rsx! {
         button {
-            style: "position: relative; width: 100%; min-height: {pick(label.is_some(), 52, 44)}px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 4px 14px 4px 16px; margin-bottom: 1px; border: none; text-align: left; background: {bg}; color: {INK}; font-family: {FONT}; cursor: pointer;",
+            style: "position: relative; width: 100%; min-height: {pick(label.is_some(), 56, 48)}px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 4px 14px 4px 16px; border: none; border-bottom: 1px solid {RULE}; text-align: left; background: {bg}; color: {INK}; font-family: {FONT}; cursor: pointer;",
             onclick: move |e| onclick.call(e),
-            if on {
-                span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: {colour};" }
-            }
+            span { style: "width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; background: {colour};" }
             span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;",
-                span { style: "font-size: 15px; font-weight: {pick(on, 700, 600)}; color: {pick(on, INK, INK_2)};", "{kind.label()}" }
+                span { style: "font-size: 16px; font-weight: {pick(on, 750, 560)}; color: {pick(on, INK, INK_2)};", "{kind.label()}" }
                 if let Some(l) = label.clone() {
                     span { style: "display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 12px; font-weight: 600; color: {sub_ink};",
                         if swapped { OverrideIcon { colour: colour.clone(), size: 11 } }
@@ -1242,14 +1242,18 @@ fn ThingList(kind: Kind, items: Vec<Thing>, applies: bool) -> Element {
             (head, i)
         })
         .collect();
+    let empty = rows.is_empty().then(|| format!("No {} yet", kind.label().to_lowercase()));
     rsx! {
         div { style: "padding-bottom: 16px;",
+            if let Some(t) = empty {
+                super::setlist::EmptyLine { text: t }
+            }
             for (n, (head, i)) in rows.into_iter().enumerate() {
                 div { key: "{i.id}",
                     if let Some(h) = head {
                         div { style: "display: flex; align-items: center; gap: 8px; padding: 14px 16px 6px;",
                             span { style: "width: 9px; height: 9px; border-radius: 2px; background: {tape_mark(&h)};" }
-                            span { style: "font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_2};", "{h}" }
+                            span { style: "font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_2};", "{h}" }
                         }
                     }
                     Row { kind: kind.clone(), item: i.clone(), sub: i.from.clone(), applies, scroll: first == Some(n) }
@@ -1379,21 +1383,18 @@ fn PresetColumns(kind: Kind, items: Vec<Thing>, applies: bool) -> Element {
                             let over = g.2.iter().any(|i| i.state == Some(State::Swapped));
                             let plays = g.2.iter().any(|i| i.state == Some(State::Playing));
                             let from = g.2.iter().any(|i| !i.inherited.is_empty());
-                            let wash = format!("color-mix(in oklab, {} 18%, {MAIN})", g.1);
+                            let wash = UP;
                             let name = g.0.clone();
                             rsx! {
                                 button {
                                     key: "{g.0}",
-                                    style: "position: relative; width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: flex-start; gap: 8px; padding: 0 12px 0 16px; border: none; text-align: left; background: {pick(lit, wash.as_str(), CLEAR)}; color: {INK}; font-family: {FONT}; cursor: pointer;",
+                                    style: "position: relative; width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: flex-start; gap: 8px; padding: 0 12px 0 16px; border: none; text-align: left; background: {pick(lit, wash, CLEAR)}; color: {INK}; font-family: {FONT}; cursor: pointer;",
                                     onclick: move |_| {
                                         picked.set(Some(name.clone()));
                                         variations.set(true);
                                     },
                                     // The preset in use, brought into view.
                                     onmounted: move |e| if on { into_view(e) },
-                                    if lit {
-                                        span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: {g.1};" }
-                                    }
                                     span { style: "flex: 1; min-width: 0; font-size: 15px; font-weight: {pick(on, 700, 560)}; color: {pick(on, INK, INK_2)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{g.0}" }
                                     if over { OverrideIcon { key: "{g.1}", colour: g.1.clone(), size: 12 } }
                                     if plays { span { style: "width: 7px; height: 7px; border-radius: 999px; background: {LIVE};" } }
@@ -1416,7 +1417,7 @@ fn PresetColumns(kind: Kind, items: Vec<Thing>, applies: bool) -> Element {
                         if narrow {
                             button {
                                 "aria-label": "All presets",
-                                style: "width: 32px; height: 44px; margin-left: -8px; flex-shrink: 0; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;",
+                                style: "width: {HIT}px; height: 44px; margin-left: -8px; flex-shrink: 0; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;",
                                 onclick: move |_| variations.set(false),
                                 svg { width: "9", height: "15", view_box: "0 0 9 15",
                                     path { d: "M7.5 1.5 1.5 7.5l6 6", fill: "none", stroke: INK_2, stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round" }
@@ -1451,7 +1452,7 @@ fn Variation(kind: Kind, item: Thing, colour: String, applies: bool, scroll: boo
     let underneath = !item.inherited.is_empty();
     let swapped = item.state == Some(State::Swapped);
     let bg = if on {
-        format!("color-mix(in oklab, {colour} 16%, {MAIN})")
+        UP.to_string()
     } else if underneath {
         "rgba(255,255,255,0.025)".to_string()
     } else {
@@ -1563,6 +1564,9 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
             onmounted: move |e| measure(e.data(), width),
             if show_profiles {
                 div { style: "width: {pick(narrow, \"100%\", \"38%\")}; max-width: {pick(narrow, \"none\", \"240px\")}; flex-shrink: 0; overflow-y: auto; border-right: {pick(narrow, \"none\", RULE_LINE)};",
+                    if d.lib.profiles.is_empty() {
+                        super::setlist::EmptyLine { text: "No profiles yet".to_string() }
+                    }
                     for p in d.lib.profiles.iter().cloned() {
                         {
                             let on = p.name == current;
@@ -1597,7 +1601,7 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
                         if narrow {
                             button {
                                 "aria-label": "All profiles",
-                                style: "width: 32px; height: 44px; margin-left: -8px; flex-shrink: 0; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;",
+                                style: "width: {HIT}px; height: 44px; margin-left: -8px; flex-shrink: 0; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;",
                                 onclick: move |_| stacks.set(false),
                                 svg { width: "9", height: "15", view_box: "0 0 9 15",
                                     path { d: "M7.5 1.5 1.5 7.5l6 6", fill: "none", stroke: INK_2, stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round" }
@@ -1608,7 +1612,7 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
                         span { style: "flex: 1; min-width: 0; font-size: 17px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{current}" }
                         if part.is_some() && borrowed.is_some() {
                             button {
-                                style: "height: 36px; padding: 0 12px; border-radius: {R}; border: 1px solid {RULE_STRONG}; background: transparent; color: {INK}; font-size: 13px; font-weight: 700; font-family: {FONT}; white-space: nowrap; cursor: pointer; box-sizing: border-box;",
+                                style: "height: {HIT}px; padding: 0 12px; border-radius: {R}; border: 1px solid {RULE_STRONG}; background: transparent; color: {INK}; font-size: 13px; font-weight: 700; font-family: {FONT}; white-space: nowrap; cursor: pointer; box-sizing: border-box;",
                                 onclick: {
                                     let (rig, song, name) = (rig.clone(), song.clone(), current.clone());
                                     move |_| {
@@ -1716,7 +1720,7 @@ fn SearchResults(d: Data, target: Target, set_songs: Vec<String>, q: String, raw
     let first = found.iter().position(|(_, i)| i.state.is_some() || !i.inherited.is_empty());
     rsx! {
         if found.is_empty() {
-            div { style: "padding: 32px 16px; font-size: 13.5px; color: {INK_3}; text-align: center; line-height: 1.4;", "Nothing called “{raw}”." }
+            div { style: "padding: 32px 16px; font-size: 14px; color: {INK_3}; text-align: center; line-height: 1.4;", "Nothing called “{raw}”." }
         }
         for (n, (k, i)) in found.into_iter().enumerate() {
             {
@@ -1745,7 +1749,7 @@ fn collection_colour(lib: &LibraryModel) -> String {
 /// The song filters: a collection (All, or one of the player's) and
 /// artist, key and genre — offering only what the library has.
 #[component]
-fn SongFilters(lib: LibraryModel, filter: Signal<SongFilter>) -> Element {
+fn SongFilters(lib: Rc<LibraryModel>, filter: Signal<SongFilter>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let host = PopupHost::try_use();
     let f = filter();
@@ -1777,7 +1781,7 @@ fn SongFilters(lib: LibraryModel, filter: Signal<SongFilter>) -> Element {
                         rsx! {
                             button {
                                 key: "{name.clone().unwrap_or_default()}",
-                                style: "height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border: none; border-radius: 4px; font-size: 14px; font-weight: {pick(on, 750, 600)}; white-space: nowrap; color: {pick(on, INK, INK_3)}; background: {pick(on, FILL_ON, CLEAR)}; font-family: {FONT}; cursor: pointer;",
+                                style: "height: {HIT}px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border: none; border-radius: 4px; font-size: 14px; font-weight: {pick(on, 750, 600)}; white-space: nowrap; color: {pick(on, INK, INK_3)}; background: {pick(on, FILL_ON, CLEAR)}; font-family: {FONT}; cursor: pointer;",
                                 onclick: move |_| {
                                     let mut fl = filter;
                                     fl.write().collection = n2.clone();
@@ -1792,7 +1796,7 @@ fn SongFilters(lib: LibraryModel, filter: Signal<SongFilter>) -> Element {
                 }
                 button {
                     "aria-label": "New collection",
-                    style: "width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer;",
+                    style: "width: {HIT}px; height: {HIT}px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer;",
                     onclick: {
                         let rig = rig.clone();
                         let taken = taken.clone();
@@ -1896,7 +1900,7 @@ fn Facet(label: &'static str, value: Option<String>, options: Vec<String>, onpic
             if on {
                 button {
                     "aria-label": "Clear {label}",
-                    style: "width: 36px; height: 44px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer;",
+                    style: "width: {HIT}px; height: 44px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer;",
                     onclick: move |_| onpick.call(None),
                     svg { width: "10", height: "10", view_box: "0 0 10 10",
                         path { d: "M2 2l6 6M8 2l-6 6", stroke: INK_2, stroke_width: "1.6", stroke_linecap: "round" }
@@ -1979,11 +1983,10 @@ fn SongRow(d: Data, item: Thing, add: bool, scroll: bool) -> Element {
     let colour = collection_colour(&d.lib);
     rsx! {
         div {
-            style: "position: relative; display: flex; align-items: center; background: {pick(on, \"rgba(255,255,255,0.06)\", CLEAR)};",
+            // In the set: lifted, and said — not green, which is for what
+            // plays.
+            style: "position: relative; display: flex; align-items: center; background: {pick(on, FILL, CLEAR)};",
             onmounted: move |e| if scroll { into_view(e) },
-            if on {
-                span { style: "position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: {LIVE};" }
-            }
             button {
                 disabled: !add,
                 style: "flex: 1; min-width: 0; min-height: 56px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 6px 4px 6px 16px; border: none; text-align: left; background: transparent; color: {INK}; font-family: {FONT}; cursor: {pick(add, \"pointer\", \"default\")};",
@@ -2010,7 +2013,7 @@ fn SongRow(d: Data, item: Thing, add: bool, scroll: bool) -> Element {
                     }
                 }
                 if on {
-                    span { style: "flex-shrink: 0; font-size: 12px; font-weight: 700; color: {LIVE};", "In" }
+                    span { style: "flex-shrink: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: {INK_2};", "In set" }
                 }
             }
             MoreButton {
@@ -2056,7 +2059,7 @@ fn all_patches(d: &Data) -> Vec<(String, String, String)> {
     }
     // The rest are the song's own, merged into the profile while it plays.
     let song = song_now(d);
-    for x in &d.patches {
+    for x in d.patches.iter() {
         if !out.iter().any(|o| o.0.eq_ignore_ascii_case(&x.name)) {
             let stack = if x.stack.is_empty() { "Special".to_string() } else { x.stack.clone() };
             out.push((x.name.clone(), stack, format!("{song}'s own")));
@@ -2090,7 +2093,7 @@ fn StepButton(back: bool, to: Option<usize>, part: Signal<Option<usize>>) -> Ele
         button {
             disabled: to.is_none(),
             "aria-label": if back { "Previous section" } else { "Next section" },
-            style: "width: 40px; height: 44px; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;",
+            style: "width: {HIT}px; height: 44px; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;",
             onclick: move |_| {
                 if let Some(k) = to {
                     let mut p = part;
@@ -2107,7 +2110,7 @@ fn StepButton(back: bool, to: Option<usize>, part: Signal<Option<usize>>) -> Ele
 const FLIPPED: &str = "transform: scaleX(-1);";
 
 /// The rail's right-hand rule.
-const RULE_LINE: &str = "1px solid #222228";
+const RULE_LINE: &str = "1px solid #222228"; // RULE
 
 /// The picks put over the playing variation (a preset target).
 fn variation_picks(d: &Data, target: &Target) -> Vec<signal_guitar_proto::PartPick> {

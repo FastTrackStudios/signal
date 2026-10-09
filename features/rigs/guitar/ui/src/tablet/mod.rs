@@ -457,7 +457,7 @@ fn FootButton(label: &'static str, on: bool, pin: bool, #[props(default)] groupe
             }
             // Keyed by its state: rebuilt, not restyled, when it changes.
             svg { key: "{on}", width: "20", height: "20", view_box: "0 0 18 18", style: "display: block;", {children} }
-            span { style: "font-size: 11px; font-weight: {pick(on, 700, 600)}; letter-spacing: 0.01em; color: {colour};", "{label}" }
+            span { style: "font-size: 12px; font-weight: {pick(on, 700, 600)}; letter-spacing: 0.01em; color: {colour};", "{label}" }
         }
     }
 }

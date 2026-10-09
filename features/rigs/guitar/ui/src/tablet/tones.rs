@@ -156,29 +156,20 @@ pub fn TonesPanel(slot: String) -> Element {
     });
 
     let signed_in = status.read().signed_in;
-    let row = "width: 100%; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 14px; border: none; border-bottom: 1px solid #ffffff12; background: transparent; color: #f4f4f5; text-align: left; font-family: inherit; cursor: pointer;";
+    let row = format!("width: 100%; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 14px; border: none; border-bottom: 1px solid {RULE}; background: transparent; color: {INK}; text-align: left; font-family: inherit; cursor: pointer;");
 
     rsx! {
         div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column; font-family: {FONT}; color: {INK};",
             // What it did: loaded where, or why not.
             if let Some(o) = outcome() {
-                div { style: "flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: {pick(o.ok, \"#14532d\", \"#7f1d1d\")};",
-                    span { style: "flex: 1; font-size: 14px; font-weight: 650;",
-                        if o.ok { "{o.preset} · {o.variation} → {o.slot}" } else { "{o.message}" }
-                    }
-                    button { style: "width: 32px; height: 32px; border: none; background: transparent; cursor: pointer;", onclick: move |_| outcome.set(None),
-                        svg { width: "12", height: "12", view_box: "0 0 12 12",
-                            path { d: "M2 2l8 8M10 2l-8 8", stroke: INK, stroke_width: "1.6", stroke_linecap: "round" }
-                        }
-                    }
-                }
+                super::captures::OutcomeBanner { outcome: o, on_dismiss: move |()| outcome.set(None) }
             }
             if !signed_in {
                 // Sign in through the account.
                 div { style: "flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px;",
                     span { style: "font-size: 18px; font-weight: 750;", "TONE3000" }
                     button {
-                        style: "height: 48px; padding: 0 22px; border: none; border-radius: 10px; background: #2563eb; color: white; font-size: 16px; font-weight: 700; font-family: {FONT}; cursor: pointer;",
+                        style: "height: 48px; padding: 0 22px; border: none; border-radius: {R}; background: #3f3f46; color: #ffffff; font-size: 16px; font-weight: 700; font-family: {FONT}; cursor: pointer;",
                         onclick: move |_| {
                             let (account, opener) = (account.clone(), opener.clone());
                             spawn(async move {
@@ -199,7 +190,7 @@ pub fn TonesPanel(slot: String) -> Element {
             } else if let Some(tone) = open() {
                 // A tone's captures: a tap loads one.
                 div { style: "flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid {RULE};",
-                    button { style: "width: 40px; height: 40px; border: none; background: transparent; color: {INK_2}; font-size: 20px; cursor: pointer;", onclick: move |_| open.set(None), "‹" }
+                    button { style: "width: {HIT}px; height: {HIT}px; border: none; background: transparent; color: {INK_2}; font-size: 20px; cursor: pointer;", onclick: move |_| open.set(None), "‹" }
                     div { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;",
                         span { style: "font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{tone.name}" }
                         span { style: "font-size: 12px; color: {INK_3};", "{tone.creator} · {tone.license}" }
@@ -250,7 +241,7 @@ pub fn TonesPanel(slot: String) -> Element {
                             oninput: move |e| query.set(e.value()),
                             onkeydown: move |e: KeyboardEvent| if e.key() == Key::Enter { run_search(()) },
                         }
-                        button { style: "height: 32px; padding: 0 10px; border: none; border-radius: 6px; background: rgba(255,255,255,0.1); color: {INK}; font-size: 13px; font-weight: 650; font-family: {FONT}; cursor: pointer;", onclick: move |_| run_search(()), "Search" }
+                        button { style: "height: {HIT}px; padding: 0 10px; border: none; border-radius: 6px; background: rgba(255,255,255,0.1); color: {INK}; font-size: 13px; font-weight: 650; font-family: {FONT}; cursor: pointer;", onclick: move |_| run_search(()), "Search" }
                     }
                 }
                 div { style: "flex: 1; min-height: 0; overflow-y: auto;",

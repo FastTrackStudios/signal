@@ -64,13 +64,13 @@ fn OverrideBar(perf: PerformanceModel, edits: usize, picked: Option<usize>) -> E
         div { style: "flex-shrink: 0; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 6px 0 14px; border-top: 1px solid {RULE}; background: {pick(edits > 0, EDITS_BG, SHEET)}; box-sizing: border-box;",
             span { style: "font-size: 14px; font-weight: 750; color: {colour}; white-space: nowrap;", "{sec.name}" }
             if several {
-                span { style: "font-size: 13.5px; font-weight: 650; white-space: nowrap;", "{part.name}" }
+                span { style: "font-size: 14px; font-weight: 650; white-space: nowrap;", "{part.name}" }
             }
             span { style: "font-size: 13px; color: {pick(edits > 0, MODIFIED, INK_3)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{note}" }
             span { style: "flex: 1;" }
             if edits > 0 {
                 button {
-                    style: "height: 36px; padding: 0 12px; border: none; border-radius: {R}; background: transparent; font-size: 13px; font-weight: 650; color: {INK_2}; font-family: {FONT}; cursor: pointer;",
+                    style: "height: {HIT}px; padding: 0 12px; border: none; border-radius: {R}; background: transparent; font-size: 13px; font-weight: 650; color: {INK_2}; font-family: {FONT}; cursor: pointer;",
                     onclick: move |_| {
                         // Back to its sound as it is: no overrides, no picks.
                         if let Some(r) = r1.clone() {
@@ -87,7 +87,7 @@ fn OverrideBar(perf: PerformanceModel, edits: usize, picked: Option<usize>) -> E
                 }
                 button {
                     disabled: !can_save,
-                    style: "height: 36px; padding: 0 14px; border-radius: {R}; border: 1px solid {RULE_STRONG}; box-sizing: border-box; background: transparent; font-size: 13px; font-weight: 700; color: {INK}; font-family: {FONT}; cursor: pointer;",
+                    style: "height: {HIT}px; padding: 0 14px; border-radius: {R}; border: 1px solid {RULE_STRONG}; box-sizing: border-box; background: transparent; font-size: 13px; font-weight: 700; color: {INK}; font-family: {FONT}; cursor: pointer;",
                     onclick: move |_| {
                         if !can_save { return; }
                         if let Some(r) = r2.clone() {

@@ -68,19 +68,25 @@ pub struct Picked {
 
 /// Open `items` with the menu's top-left at client `(x, y)`.
 pub fn open_menu(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, on_pick: EventHandler<Picked>) {
-    open_at(host, x, y, items, None, on_pick, || {});
+    open_at(host, x, y, None, items, None, on_pick, || {});
+}
+
+/// Open `items` under an opener whose top is at `above`: below it when the
+/// menu fits there, else above it — never over it.
+pub fn open_menu_by(host: Option<PopupHost>, x: f64, y: f64, above: f64, items: Vec<Item>, on_pick: EventHandler<Picked>) {
+    open_at(host, x, y, Some(above), items, None, on_pick, || {});
 }
 
 /// As [`open_menu`], with `on_close` run however it closes — for an opener
 /// that shows itself open while its menu is.
 pub fn open_menu_closing(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, on_pick: EventHandler<Picked>, on_close: impl Fn() + 'static) {
-    open_at(host, x, y, items, None, on_pick, on_close);
+    open_at(host, x, y, None, items, None, on_pick, on_close);
 }
 
 /// Open straight into naming: a "+ Add…" button's field, its name filled
 /// in, without the one-item menu in front of it.
 pub fn open_naming(host: Option<PopupHost>, x: f64, y: f64, item: Item, on_pick: EventHandler<Picked>) {
-    open_at(host, x, y, vec![item], Some(0), on_pick, || {});
+    open_at(host, x, y, None, vec![item], Some(0), on_pick, || {});
 }
 
 /// Open straight into naming, anchored under `el` as a ⋯ menu is: its
@@ -99,7 +105,7 @@ fn window_size() -> (f64, f64) {
     try_consume_context::<crate::control::WindowSize>().map_or((0.0, 0.0), |s| *s.0.peek())
 }
 
-fn open_at(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picked>, on_close: impl Fn() + 'static) {
+fn open_at(host: Option<PopupHost>, x: f64, y: f64, above: Option<f64>, items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picked>, on_close: impl Fn() + 'static) {
     let Some(host) = host else { return };
     if items.is_empty() {
         return;
@@ -108,9 +114,17 @@ fn open_at(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, start: Opt
     let (w, h) = window_size();
     let x = if w > 0.0 && x + MENU_W > w - 8.0 { (x - MENU_W).max(8.0) } else { x };
     // And above the point when it would run off the bottom (a menu opened
-    // from the foot bar): its height estimated from its rows.
-    let tall = items.len() as f64 * 46.0 + 16.0;
-    let y = if h > 0.0 && y + tall > h - 8.0 { (h - 8.0 - tall).max(8.0) } else { y };
+    // from the foot bar): its height estimated from its rows — above its
+    // opener when there is one, so the menu never covers what opened it.
+    let tall = items.iter().map(|i| if matches!(i, Item::Sep) { 9.0 } else { 50.0 }).sum::<f64>() + 10.0;
+    let y = if h > 0.0 && y + tall > h - 8.0 {
+        match above {
+            Some(top) => (top - 6.0 - tall).max(8.0),
+            None => (h - 8.0 - tall).max(8.0),
+        }
+    } else {
+        y
+    };
     host.open(
         x,
         y,
@@ -145,7 +159,7 @@ pub fn MoreButton(label: String, items: Vec<Item>, on_pick: EventHandler<Picked>
                 e.stop_propagation();
                 let (c, el) = (e.client_coordinates(), e.element_coordinates());
                 let (left, top) = (c.x - el.x, c.y - el.y);
-                open_menu(host, left + 48.0 - MENU_W, top + 52.0, items.clone(), on_pick);
+                open_menu_by(host, left + 48.0 - MENU_W, top + 52.0, top, items.clone(), on_pick);
             },
             svg { width: "20", height: "4", view_box: "0 0 20 4", style: "display: block;",
                 circle { cx: "2", cy: "2", r: "2", fill: INK_2 }
@@ -188,7 +202,7 @@ fn MenuPanel(items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picke
     };
     let max_h = if win_h > 0.0 { format!("{}px", win_h - 16.0) } else { "70vh".to_string() };
     let panel = format!(
-        "position: relative; top: {}px; width: {MENU_W}px; max-height: {max_h}; overflow-y: auto; padding: 4px; box-sizing: border-box; background: #0d0d10; border: 1px solid {RULE_STRONG}; border-radius: {R_MD}; box-shadow: 0 16px 40px rgba(0,0,0,0.7); font-family: {FONT}; color: {INK};",
+        "position: relative; top: {}px; width: {MENU_W}px; max-height: {max_h}; overflow-y: auto; padding: 4px; box-sizing: border-box; background: {SHEET_2}; border: 1px solid {RULE_STRONG}; border-radius: {R_MD}; font-family: {FONT}; color: {INK};",
         -lift()
     );
     if let Some(i) = naming()
@@ -268,7 +282,7 @@ fn MenuPanel(items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picke
                                         on_close.call(());
                                     },
                                     span { style: "width: 14px; display: flex; justify-content: center;",
-                                        if checked { span { style: "width: 8px; height: 8px; border-radius: 999px; background: {LIVE};" } }
+                                        if checked { span { style: "width: 8px; height: 8px; border-radius: 999px; background: {FOCUS_FG};" } }
                                     }
                                     span { style: "flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;", "{label}" }
                                     if !detail.is_empty() { span { style: "font-size: 14px; color: {INK_3}; font-weight: 500;", "{detail}" } }

@@ -169,7 +169,7 @@ fn Panel(knob: MacroKnobView, on_close: EventHandler<()>) -> Element {
     let template = if heads { format!("64px repeat({cols}, minmax(0, 1fr))") } else { format!("repeat({cols}, minmax(0, 1fr))") };
     let label_ink = lift(&knob.color);
     rsx! {
-        div { style: "position: absolute; left: 0; right: 0; top: 100%; z-index: 5; background: #0d0d10; border-bottom: 2px solid {knob.color}; box-shadow: 0 16px 32px rgba(0,0,0,0.55);",
+        div { style: "position: absolute; left: 0; right: 0; top: 100%; z-index: 5; background: {SHEET_2}; border-bottom: 2px solid {knob.color};",
             div { style: "display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 6px 0 12px;",
                 span { style: "font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {label_ink};", "{knob.label}" }
                 span { style: "flex: 1;" }
@@ -185,7 +185,7 @@ fn Panel(knob: MacroKnobView, on_close: EventHandler<()>) -> Element {
             div { style: "display: grid; grid-template-columns: {template}; gap: 1px; background: #000; border-top: 1px solid #000;",
                 for g in order.iter() {
                     if heads {
-                        span { key: "h{g}", style: "display: flex; align-items: center; padding: 0 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; color: {INK_3}; background: #111114;", "{g}" }
+                        span { key: "h{g}", style: "display: flex; align-items: center; padding: 0 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; color: {INK_3}; background: {SHEET_2};", "{g}" }
                     }
                     for c in rows.get(g).cloned().unwrap_or_default() {
                         Cell {
@@ -204,7 +204,7 @@ fn Panel(knob: MacroKnobView, on_close: EventHandler<()>) -> Element {
                     }
                     if let Some(r) = rows.get(g) {
                         for k in r.len()..cols {
-                            span { key: "pad{g}{k}", style: "background: #111114;" }
+                            span { key: "pad{g}{k}", style: "background: {SHEET_2};" }
                         }
                     }
                 }
@@ -307,7 +307,7 @@ fn Cell(
     let (glow, meter) = reaction(&id, v, heard);
     let label_ink = if greyish(&colour) { INK_2.to_string() } else { lift(&colour) };
     let value_ink = if quiet { INK_3.to_string() } else if wet && v > 0.5 { lift(&colour) } else { INK.to_string() };
-    let bg = if open { "#1c1c22" } else if active() { "#18181d" } else { "#111114" };
+    let bg = if open { UP } else if active() { FILL_ON } else { SHEET_2 };
     let fill = format!("color-mix(in oklab, {colour} {}%, transparent)", if active() { 32 } else { 22 });
     let hatch = format!(
         "repeating-linear-gradient(135deg, color-mix(in oklab, {colour} {a}%, transparent) 0px, color-mix(in oklab, {colour} {a}%, transparent) 4px, color-mix(in oklab, {colour} {b}%, transparent) 4px, color-mix(in oklab, {colour} {b}%, transparent) 8px)",
@@ -315,7 +315,7 @@ fn Cell(
         b = if active() { 24 } else { 16 }
     );
     let glow_bg = format!("color-mix(in oklab, {colour} {}%, transparent)", (glow * 26.0).round() as i32);
-    let mid_line = if wet { ("4px", "#45454d") } else { ("8px", RULE_STRONG) };
+    let mid_line = if wet { ("10px", INK_3) } else { ("8px", RULE_STRONG) };
     let send = {
         let rig = rig.clone();
         let id = id.clone();
@@ -420,19 +420,22 @@ fn Cell(
             if let Some((level, mark)) = meter {
                 span { style: "position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,0.55);",
                     span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: {pct_of(level)}%; background: {pick(level >= mark, LIVE, GATE_SHUT)};" }
-                    span { style: "position: absolute; top: -2px; bottom: 0; left: calc({pct_of(mark)}% - 1px); width: 2px; background: #f4f4f5;" }
+                    span { style: "position: absolute; top: -2px; bottom: 0; left: calc({pct_of(mark)}% - 1px); width: 2px; background: {INK};" }
                 }
             }
-            // The middle: rest for a relative knob, the normal level for a wet one.
+            // The middle: rest for a relative knob, the normal level for a
+            // wet one — a tick along the foot, clear of the words.
             if scale != "level" {
-                span { style: "position: absolute; top: {mid_line.0}; bottom: {mid_line.0}; left: 50%; width: 1px; background: {mid_line.1};" }
+                span { style: "position: absolute; bottom: 0; height: {mid_line.0}; left: 50%; width: 1px; background: {mid_line.1};" }
             }
             span { style: "position: absolute; top: 0; bottom: 0; left: {pct_of(lo)}%; width: {pct_of(fill_hi - lo)}%; background: {fill};" }
             if wet && v > 0.5 {
                 span { style: "position: absolute; top: 0; bottom: 0; left: 50%; width: {pct_of(v - 0.5)}%; background: {hatch};" }
             }
+            // Where it sits: the fill's edge, a tick along the foot (a line
+            // the cell's height ran through its label).
             if !quiet {
-                span { style: "position: absolute; top: 0; bottom: 0; left: calc({pct_of(v)}% - 1px); width: 2px; background: {colour};" }
+                span { style: "position: absolute; bottom: 0; height: 10px; left: calc({pct_of(v)}% - 1px); width: 2px; background: {colour};" }
             }
             span { style: "position: relative; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 8px; box-sizing: border-box;",
                 span { style: "min-width: 0; display: flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: {label_ink}; white-space: nowrap; overflow: hidden;",

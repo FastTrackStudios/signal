@@ -693,6 +693,10 @@ mod native {
                 let (from, to) = &s.focus;
                 let x0 = pieces.iter().find(|p| s.modules[p.module].name == *from).map(|p| p.x);
                 let x1 = pieces.iter().rev().find(|p| s.modules[p.module].name == *to).map(|p| p.x + p.w);
+                // Ending on the chain's last module, the span takes in the
+                // OUT pill after it too, so nothing sits on the view's edge.
+                let end = pieces.iter().map(|p| p.x + p.w).fold(0.0, f64::max);
+                let x1 = x1.map(|x| if (x - end).abs() < 0.5 { x + MOD_GAP + END } else { x });
                 x0.zip(x1).filter(|(a, b)| b > a)
             };
             if s.fitted {
@@ -906,7 +910,22 @@ mod native {
         glyph(scene, t, &m.name.to_lowercase(), r.x0 + PAD + 2.0, r.y0 + 8.0, 16.0, colour);
         let name = if first { m.name.to_uppercase() } else { format!("{} ›", m.name.to_uppercase()) };
         let room = r.width() - PAD * 2.0 - 14.0;
-        let nw = text(scene, st, t, &name, 12.5, 800.0, lift(colour), r.x0 + PAD + 23.0, r.y0 + 21.0, room - 9.0, false);
+        // A long name (MODULATION) set smaller to fit its one column, down
+        // to 10.5; past that it is cut with an ellipsis. Clear of the Core
+        // tag where there is one. (The canvas is drawn zoomed: 9.5 reads as ~11.)
+        let avail = room - 9.0 - if m.core { 16.0 } else { 0.0 };
+        let mut natural = measure(st, &name, 12.5, 800.0);
+        // Still too long at the smallest: the short name the macro bar
+        // uses (MODULATION → MOD).
+        let name = if natural * 9.5 / 12.5 > avail * 0.92 && m.name.eq_ignore_ascii_case("modulation") {
+            let short = if first { "MOD".to_string() } else { "MOD ›".to_string() };
+            natural = measure(st, &short, 12.5, 800.0);
+            short
+        } else {
+            name
+        };
+        let size = if natural > avail { (12.5 * avail / natural).max(9.5) } else { 12.5 };
+        let nw = text(scene, st, t, &name, size as f32, 800.0, lift(colour), r.x0 + PAD + 23.0, r.y0 + 21.0, avail, false);
         if first && !m.label.is_empty() {
             text(scene, st, t, &m.label, 10.5, 600.0, Color::from_rgba8(0xa1, 0xa1, 0xaa, 0xff), r.x0 + PAD + 31.0 + nw, r.y0 + 21.0, (room - 8.0 - nw).max(0.0), false);
         }
@@ -977,11 +996,24 @@ mod native {
             text(scene, st, t, v, 17.0, 800.0, ink, r.x0 + 6.0, r.center().y + 4.0, CELL - 12.0, true);
         }
         let (size, icon) = (12.0, 13.0);
-        let w = measure(st, &c.name, size, 750.0).min(CELL - 16.0 - icon - 4.0);
-        let x = r.center().x - (icon + 4.0 + w) / 2.0;
+        // A dynamics or EQ face keeps its own switch in the foot's right
+        // corner: the name stays clear of it. A name too long for its room
+        // is set a little smaller (to 10.5), and only past that cut.
+        let switch_corner = faced && matches!(c.kind.as_str(), "dynamics" | "compressor" | "limiter" | "gate" | "eq");
+        let corner = if switch_corner { 16.0 } else { 0.0 };
+        // There, the face says what it is: its type's glyph gives the name
+        // its room.
+        let icon = if switch_corner { -4.0 } else { icon };
+        let room = CELL - 14.0 - icon - 4.0 - corner;
+        let natural = measure(st, &c.name, size, 750.0);
+        let size = if natural > room { (f64::from(size) * room / natural).max(10.5) as f32 } else { size };
+        let w = measure(st, &c.name, size, 750.0).min(room);
+        let x = r.center().x - corner / 2.0 - (icon + 4.0 + w) / 2.0;
         let base = if faced || c.value.is_some() { r.y1 - 7.0 } else { r.center().y + 5.0 };
-        glyph(scene, t, &c.kind, x, base - 10.5, icon, if c.lit { colour } else { Color::from_rgba8(0x52, 0x52, 0x5b, 0xff) });
-        text(scene, st, t, &c.name, size, 750.0, ink, x + icon + 4.0, base, w + 6.0, false);
+        if !switch_corner {
+            glyph(scene, t, &c.kind, x, base - 10.5, icon, if c.lit { colour } else { Color::from_rgba8(0x52, 0x52, 0x5b, 0xff) });
+        }
+        text(scene, st, t, &c.name, size, 750.0, ink, x + icon + 4.0, base, room, false);
     }
 
     /// A block's frame face over its box (grown by the face's margin), when
@@ -1093,15 +1125,25 @@ mod native {
             return 0.0;
         }
         let key = laid(st, s, size, weight);
+        let w = f64::from(st.texts[&key].width());
+        // Too long for its room: cut at a glyph, an ellipsis after it.
+        let cut = w > max_w + 0.5;
+        let ell = if cut {
+            let k = laid(st, "…", size, weight);
+            Some((k.clone(), f64::from(st.texts[&k].width())))
+        } else {
+            None
+        };
         let layout = &st.texts[&key];
-        let w = f64::from(layout.width());
         let x = if centre { x + ((max_w - w) / 2.0).max(0.0) } else { x };
         let at = t * Affine::translate((x, y));
-        let limit = max_w as f32;
+        let limit = (max_w - ell.as_ref().map_or(0.0, |e| e.1)) as f32;
+        let mut end = 0.0f32;
         for line in layout.lines() {
             for item in line.items() {
                 let PositionedLayoutItem::GlyphRun(run) = item else { continue };
                 let r = run.run();
+                end = run.positioned_glyphs().filter(|g| !cut || g.x + g.advance <= limit).fold(end, |e, g| e.max(g.x + g.advance));
                 scene.draw_glyphs(
                     r.font(),
                     r.font_size(),
@@ -1113,8 +1155,32 @@ mod native {
                     1.0,
                     at * Affine::translate((0.0, -f64::from(run.baseline()))),
                     None,
-                    run.positioned_glyphs().filter(|g| g.x + 6.0 <= limit).map(|g| anyrender::Glyph { id: g.id as _, x: g.x, y: g.y }),
+                    run.positioned_glyphs()
+                        .filter(move |g| !cut || g.x + g.advance <= limit)
+                        .map(|g| anyrender::Glyph { id: g.id as _, x: g.x, y: g.y }),
                 );
+            }
+        }
+        if let Some((k, _)) = ell {
+            let layout = &st.texts[&k];
+            for line in layout.lines() {
+                for item in line.items() {
+                    let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+                    let r = run.run();
+                    scene.draw_glyphs(
+                        r.font(),
+                        r.font_size(),
+                        false,
+                        r.normalized_coords(),
+                        kurbo::Vec2::ZERO,
+                        Fill::NonZero,
+                        &anyrender::Paint::from(colour),
+                        1.0,
+                        at * Affine::translate((f64::from(end), -f64::from(run.baseline()))),
+                        None,
+                        run.positioned_glyphs().map(|g| anyrender::Glyph { id: g.id as _, x: g.x, y: g.y }),
+                    );
+                }
             }
         }
         w.min(max_w)
