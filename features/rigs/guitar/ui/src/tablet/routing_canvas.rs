@@ -410,9 +410,10 @@ mod native {
         /// Each block's open face, by the block's id (`None`: it would not
         /// open), with the face's name and the values last applied.
         surfaces: HashMap<String, Option<BlockSurface>>,
-        /// The faces this frame paints again (see `FACES_PER_FRAME`): of
-        /// those with something new, the ones that have waited longest.
+        /// The faces due this frame, longest waiting first, and when the
+        /// frame's repainting began (see `FACE_BUDGET`).
         repaint: Vec<String>,
+        repaint_from: std::time::Instant,
     }
 
     /// A block face in the manifest.
@@ -442,10 +443,11 @@ mod native {
     /// motion reads smooth at this rate on a block this size, and the grid
     /// itself still pans and zooms at the display's.
     const FACE_FPS: u32 = 30;
-    /// How many faces one frame paints again, at most: the moving ones fall
-    /// due together (they share a clock), and painting them all in one
-    /// frame was that frame's whole budget. The rest wait a frame or two.
-    const FACES_PER_FRAME: u32 = 3;
+    /// How long one frame spends painting faces again, at most: the moving
+    /// ones fall due together (they share a clock), and painting them all
+    /// in one frame was that frame's whole budget. The longest waiting go
+    /// first; the rest wait a frame.
+    const FACE_BUDGET: std::time::Duration = std::time::Duration::from_micros(2500);
 
     /// The manifest's block faces.
     fn load_block_faces() -> Vec<BlockFaceDef> {
@@ -506,6 +508,7 @@ mod native {
                 block_faces: load_block_faces(),
                 surfaces: HashMap::new(),
                 repaint: Vec::new(),
+                repaint_from: std::time::Instant::now(),
             }))
         });
         // A change of patch, selection or layout: drawn again (the
@@ -716,7 +719,8 @@ mod native {
                 .filter_map(|(id, b)| b.as_ref().filter(|b| b.live.needs_redraw()).map(|b| (b.recorded_at, id.clone())))
                 .collect();
             due.sort();
-            st.repaint = due.into_iter().take(FACES_PER_FRAME as usize).map(|(_, id)| id).collect();
+            st.repaint = due.into_iter().map(|(_, id)| id).collect();
+            st.repaint_from = std::time::Instant::now();
 
             // Everything's place: each piece's box, the boxes inside it,
             // its cells.
@@ -1010,7 +1014,11 @@ mod native {
         // A face with no picture yet (or a new size) is painted at once; one
         // that has only moved waits its turn.
         let fresh = s.recorded.as_ref().is_none_or(|(_, was)| *was != size);
-        if fresh || st.repaint.contains(&c.id) {
+        // Due, and its turn: none waited longer still unpainted, and the
+        // frame's budget not spent.
+        let turn = st.repaint.first() == Some(&c.id) || (st.repaint.contains(&c.id) && st.repaint_from.elapsed() < FACE_BUDGET);
+        if fresh || turn {
+            st.repaint.retain(|id| id != &c.id);
             s.recorded_at = std::time::Instant::now();
             let mut rec = Scene::new();
             s.live.paint_vectors_at(&mut rec, size.0, size.1, Affine::IDENTITY.as_coeffs());
