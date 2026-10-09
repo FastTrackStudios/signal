@@ -85,7 +85,10 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     use_context_provider(|| setlist::PickPart {
         open: Callback::new(move |()| {
             match view() {
-                View::Perform => browser.set(true),
+                View::Perform => {
+                    browser.set(true);
+                    routing_on.set(false);
+                }
                 View::Edit => left_browser.set(true),
                 _ => {}
             }
@@ -154,7 +157,10 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                                 // routing grid.
                                 div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
                                     if browser() {
-                                        browser::Browser { state, on_close: move |()| browser.set(false) }
+                                        browser::Browser { state, on_close: move |()| {
+                            browser.set(false);
+                            routing_on.set(true);
+                        } }
                                     } else if routing_on() {
                                         div { style: "flex: 1; min-height: 0;", routing::Routing { state } }
                                     }
@@ -189,7 +195,13 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                 },
                 routing: routing_on(),
-                on_routing: move |()| routing_on.toggle(),
+                // The middle holds one at a time: the routing, or the browser.
+                on_routing: move |()| {
+                    routing_on.toggle();
+                    if routing_on() {
+                        browser.set(false);
+                    }
+                },
                 fx: fx_on(),
                 on_fx: move |()| {
                     fx_on.toggle();
@@ -198,7 +210,10 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                 },
                 browser: browser(),
-                on_browser: move |()| browser.toggle(),
+                on_browser: move |()| {
+                    browser.toggle();
+                    routing_on.set(!browser());
+                },
             }
             signal_widgets::PopupLayer {}
         }
@@ -266,42 +281,44 @@ fn FootBar(
                 rect { x: "7.3", y: "5", width: "3.4", height: "2.6", rx: "0.8", fill: ink(edit) }
                 rect { x: "12.3", y: "8", width: "3.4", height: "2.6", rx: "0.8", fill: ink(edit) }
             }
-            // Perform: the browser on call, and the docks — the macros along
-            // the top, the switches along the foot.
+            // Perform: what the middle holds — the routing or the browser —
+            // and the macros along the top.
             if perform {
                 Rule {}
-                FootButton { label: "Browser", on: browser, pin: true, onclick: move |_| on_browser.call(()),
-                    path { d: "M3 3.5h3v11H3ZM7.5 3.5h3v11h-3ZM12 4l2.8-.8 2 10.6-2.8.8Z", fill: "none", stroke: ink(browser), stroke_width: "1.4", stroke_linejoin: "round" }
+                Group {
+                    FootButton { label: "Routing", on: routing, pin: true, grouped: true, onclick: move |_| on_routing.call(()),
+                        circle { cx: "3.5", cy: "9", r: "1.8", fill: "none", stroke: ink(routing), stroke_width: "1.4" }
+                        circle { cx: "14.5", cy: "4.5", r: "1.8", fill: "none", stroke: ink(routing), stroke_width: "1.4" }
+                        circle { cx: "14.5", cy: "13.5", r: "1.8", fill: "none", stroke: ink(routing), stroke_width: "1.4" }
+                        path { d: "M5.3 9H8m0 0c2 0 2-4.5 4.7-4.5M8 9c2 0 2 4.5 4.7 4.5", fill: "none", stroke: ink(routing), stroke_width: "1.4", stroke_linecap: "round" }
+                    }
+                    FootButton { label: "Browser", on: browser, pin: true, grouped: true, onclick: move |_| on_browser.call(()),
+                        path { d: "M3 3.5h3v11H3ZM7.5 3.5h3v11h-3ZM12 4l2.8-.8 2 10.6-2.8.8Z", fill: "none", stroke: ink(browser), stroke_width: "1.4", stroke_linejoin: "round" }
+                    }
                 }
-                Rule {}
                 FootButton { label: "Macros", on: macros, pin: true, onclick: move |_| on_macros.call(()),
                     circle { cx: "4.5", cy: "9", r: "2.6", fill: "none", stroke: ink(macros), stroke_width: "1.4" }
                     circle { cx: "13.5", cy: "9", r: "2.6", fill: "none", stroke: ink(macros), stroke_width: "1.4" }
                     path { d: "M4.5 9 6 7.4M13.5 9l1.5-1.6", stroke: ink(macros), stroke_width: "1.4", stroke_linecap: "round" }
                     path { d: "M8 4.5h2M8 13.5h2", stroke: ink(macros), stroke_width: "1.4", stroke_linecap: "round" }
                 }
-                FootButton { label: "Routing", on: routing, pin: true, onclick: move |_| on_routing.call(()),
-                    circle { cx: "3.5", cy: "9", r: "1.8", fill: "none", stroke: ink(routing), stroke_width: "1.4" }
-                    circle { cx: "14.5", cy: "4.5", r: "1.8", fill: "none", stroke: ink(routing), stroke_width: "1.4" }
-                    circle { cx: "14.5", cy: "13.5", r: "1.8", fill: "none", stroke: ink(routing), stroke_width: "1.4" }
-                    path { d: "M5.3 9H8m0 0c2 0 2-4.5 4.7-4.5M8 9c2 0 2 4.5 4.7 4.5", fill: "none", stroke: ink(routing), stroke_width: "1.4", stroke_linecap: "round" }
-                }
             }
             span { style: "flex: 1;" }
             // Perform's dock, at the right: the switches or the FX row, one
             // at a time.
             if perform {
-                FootButton { label: "Switches", on: switches, pin: true, onclick: move |_| on_switches.call(()),
-                    rect { x: "2", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
-                    rect { x: "7", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
-                    rect { x: "12", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
+                Group {
+                    FootButton { label: "Switches", on: switches, pin: true, grouped: true, onclick: move |_| on_switches.call(()),
+                        rect { x: "2", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
+                        rect { x: "7", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
+                        rect { x: "12", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
+                    }
+                    FootButton { label: "FX", on: fx, pin: true, grouped: true, onclick: move |_| on_fx.call(()),
+                        circle { cx: "5", cy: "6", r: "2.2", fill: "none", stroke: ink(fx), stroke_width: "1.4" }
+                        circle { cx: "13", cy: "12", r: "2.2", fill: "none", stroke: ink(fx), stroke_width: "1.4" }
+                        path { d: "M2 6h0.8M7.2 6H16M2 12h8.8M15.2 12H16", stroke: ink(fx), stroke_width: "1.4", stroke_linecap: "round" }
+                    }
                 }
-                FootButton { label: "FX", on: fx, pin: true, onclick: move |_| on_fx.call(()),
-                    circle { cx: "5", cy: "6", r: "2.2", fill: "none", stroke: ink(fx), stroke_width: "1.4" }
-                    circle { cx: "13", cy: "12", r: "2.2", fill: "none", stroke: ink(fx), stroke_width: "1.4" }
-                    path { d: "M2 6h0.8M7.2 6H16M2 12h8.8M15.2 12H16", stroke: ink(fx), stroke_width: "1.4", stroke_linecap: "round" }
-                }
-                Rule {}
             }
             Rule {}
             FootButton { label: "Setup", on: setup, pin: false, onclick: move |_| on_view.call(View::Setup),
@@ -321,14 +338,15 @@ fn ink(on: bool) -> &'static str {
 /// one open is bright with a bar along its top edge. A dock (`pin`) is a
 /// toggle: on, it sits in a fill.
 #[component]
-fn FootButton(label: &'static str, on: bool, pin: bool, onclick: EventHandler<MouseEvent>, children: Element) -> Element {
+fn FootButton(label: &'static str, on: bool, pin: bool, #[props(default)] grouped: bool, onclick: EventHandler<MouseEvent>, children: Element) -> Element {
     let colour = ink(on);
     let bg = if pin && on { FILL_ON } else { CLEAR };
+    let margin = if grouped { "0" } else { pick(pin, PIN_MARGIN, TAB_MARGIN) };
     rsx! {
         button {
             title: "{label}",
             "aria-pressed": "{on}",
-            style: "position: relative; min-width: 64px; margin: {pick(pin, PIN_MARGIN, TAB_MARGIN)}; padding: 0 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: none; border-radius: {pick(pin, 8, 0)}px; background: {bg}; color: {colour}; font-family: {FONT}; cursor: pointer;",
+            style: "position: relative; min-width: 64px; margin: {margin}; padding: 0 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: none; border-radius: {pick(pin, 8, 0)}px; background: {bg}; color: {colour}; font-family: {FONT}; cursor: pointer;",
             onclick: move |e| onclick.call(e),
             if !pin && on {
                 span { style: "position: absolute; top: 0; left: 12px; right: 12px; height: 3px; border-radius: 0 0 3px 3px; background: {INK};" }
@@ -337,6 +355,15 @@ fn FootButton(label: &'static str, on: bool, pin: bool, onclick: EventHandler<Mo
             svg { key: "{on}", width: "20", height: "20", view_box: "0 0 18 18", style: "display: block;", {children} }
             span { style: "font-size: 11px; font-weight: {pick(on, 700, 600)}; letter-spacing: 0.01em; color: {colour};", "{label}" }
         }
+    }
+}
+
+/// Toggles that share one place, side by side in a well: one of them on
+/// at a time.
+#[component]
+fn Group(children: Element) -> Element {
+    rsx! {
+        div { style: "display: flex; align-items: stretch; gap: 2px; margin: 5px 4px; padding: 2px; border-radius: 10px; background: rgba(255,255,255,0.04);", {children} }
     }
 }
 

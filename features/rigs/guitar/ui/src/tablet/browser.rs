@@ -742,6 +742,7 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
         kind_id.set(home.to_string());
     }
     let mut query = use_signal(String::new);
+    let mut searching = use_signal(|| false);
     // A block or module picked in Edit's routing opens it here: its kind,
     // and inside, the preset (and variation) it plays.
     let mut reveal = use_context_provider(|| Reveal(Signal::new(None))).0;
@@ -753,8 +754,10 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
         opened.set(true);
         query.set(String::new());
         reveal.set(Some((at.preset, at.variation)));
+        if at.search {
+            searching.set(true);
+        }
     }
-    let mut searching = use_signal(|| false);
     let filter = use_signal(SongFilter::default);
     let all = kinds(&d);
     let kind = all.iter().find(|k| k.id() == kind_id()).cloned().unwrap_or(Kind::Songs);
@@ -811,6 +814,13 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
             SearchGlyph { size: 15, colour: INK_3 }
             input {
                 autofocus: true,
+                // Focused as it mounts: the keyboard comes up with it.
+                onmounted: move |e| {
+                    let el = e.data();
+                    spawn(async move {
+                        let _ = el.set_focus(true).await;
+                    });
+                },
                 value: "{query}",
                 placeholder: "Search everything",
                 style: "flex: 1; min-width: 0; height: 100%; border: none; background: transparent; color: {INK}; font-size: 15px; font-family: {FONT};",

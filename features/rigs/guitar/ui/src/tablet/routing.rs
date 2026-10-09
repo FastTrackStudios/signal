@@ -33,6 +33,8 @@ pub struct Focus {
     pub kind: String,
     pub preset: String,
     pub variation: String,
+    /// Open on the search, the keyboard up.
+    pub search: bool,
 }
 
 /// The browser's focus, set by a selection here.
@@ -50,6 +52,7 @@ pub fn focus_for(sel: &Selected, blocks: &[LiveBlock], comp: &CompositionModel) 
             kind: format!("module:{kind}"),
             preset: pick.map(|p| p.preset.clone()).unwrap_or_default(),
             variation: pick.map(|p| p.snapshot.clone()).unwrap_or_default(),
+            search: false,
         })
     };
     match sel {
@@ -58,7 +61,7 @@ pub fn focus_for(sel: &Selected, blocks: &[LiveBlock], comp: &CompositionModel) 
             let b = blocks.iter().find(|b| b.id == *id)?;
             let t = b.block_type.as_str().to_lowercase();
             if comp.block_presets.iter().any(|p| p.block_type.eq_ignore_ascii_case(&t)) {
-                return Some(Focus { kind: format!("block:{t}"), preset: b.preset.clone(), variation: String::new() });
+                return Some(Focus { kind: format!("block:{t}"), preset: b.preset.clone(), variation: String::new(), search: false });
             }
             module_focus(&b.module)
         }

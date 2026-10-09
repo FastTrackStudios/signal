@@ -173,7 +173,7 @@ pub fn PresetView(state: RigViewState) -> Element {
                     style: "display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: none; border-radius: {R}; background: {FILL}; color: {INK_3}; font-size: 15px; font-family: {FONT}; text-align: left; cursor: pointer;",
                     onclick: move |_| {
                         if let Some(super::routing::BrowserFocus(mut f)) = focus {
-                            f.set(Some(super::routing::Focus { kind: "presets".into(), preset: playing_for_browser.clone(), variation: snapshot_for_browser.clone() }));
+                            f.set(Some(super::routing::Focus { kind: "presets".into(), preset: playing_for_browser.clone(), variation: snapshot_for_browser.clone(), search: true }));
                         }
                         if let Some(pick) = picker.as_ref() {
                             pick.open.call(());
