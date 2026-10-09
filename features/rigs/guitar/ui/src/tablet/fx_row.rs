@@ -198,9 +198,12 @@ pub fn FxRow(state: RigViewState) -> Element {
                                             }
                                         }
                                     }
+                                    // No face of its own: a drive's or an amp's cover
+                                    // art (its capture's, from TONE3000), else its
+                                    // name card.
                                     None => rsx! {
                                         div { style: "width: {pick(one, w, 260.0)}px; height: 100%; padding: 12px; box-sizing: border-box;",
-                                            NameCard { block: b.clone(), aspect: (pick(one, w, 260.0), face_h) }
+                                            ArtCard { block: b.clone(), aspect: (pick(one, w, 260.0), face_h) }
                                         }
                                     },
                                 }
@@ -237,7 +240,27 @@ pub fn FxPresetBar(state: RigViewState) -> Element {
         div { style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 12px;",
                 if let Some(b) = bar_block.clone() {
                     span { style: "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_3}; white-space: nowrap;", "{b.name}" }
-                    crate::face_chrome::PresetStepper { block: b.name.clone(), block_type: b.block_type.as_str().to_lowercase(), show_empty: true, touch: true }
+                    if matches!(b.block_type, BlockType::Drive | BlockType::Boost) {
+                        // A drive slot's pedal: its own library (the Drive
+                        // module's), opened by a tap.
+                        {
+                            let (name, kind) = (b.name.clone(), b.block_type.as_str().to_string());
+                            let label = if b.preset.is_empty() { "—".to_string() } else { b.preset.clone() };
+                            rsx! {
+                                button {
+                                    style: "height: 40px; max-width: 320px; padding: 0 14px; border: none; border-radius: 6px; background: rgba(255,255,255,0.08); color: {INK}; font-size: 14px; font-weight: 650; font-family: {FONT}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;",
+                                    onclick: move |_| {
+                                        if let Some(crate::face_chrome::OpenPresets(o)) = open {
+                                            o.call((name.clone(), kind.clone()));
+                                        }
+                                    },
+                                    "{label}"
+                                }
+                            }
+                        }
+                    } else {
+                        crate::face_chrome::PresetStepper { block: b.name.clone(), block_type: b.block_type.as_str().to_lowercase(), show_empty: true, touch: true }
+                    }
                 }
                 if let Some(m) = module.clone() {
                     span { style: "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_3}; white-space: nowrap;", "{m}" }
@@ -252,5 +275,43 @@ pub fn FxPresetBar(state: RigViewState) -> Element {
                     }
                 }
                     }
+    }
+}
+
+/// A block's cover art (a TONE3000 capture's photograph) filling its card,
+/// its name and preset on a band along the foot; its name card while there
+/// is none.
+#[component]
+fn ArtCard(block: LiveBlock, aspect: (f64, f64)) -> Element {
+    let rig = use_hook(try_consume_context::<signal_guitar_proto::rig::RigClient>);
+    let has_art = matches!(block.block_type, BlockType::Drive | BlockType::Boost | BlockType::Amp);
+    let name = block.name.clone();
+    let preset = block.preset.clone();
+    let art = use_resource(use_reactive!(|name, preset| {
+        let rig = rig.clone();
+        async move {
+            let _ = preset;
+            if !has_art {
+                return None;
+            }
+            let a = rig?.block_artwork(name).await.ok()?;
+            if a.bytes.is_empty() {
+                return None;
+            }
+            use base64::Engine as _;
+            Some(format!("data:{};base64,{}", a.mime, base64::engine::general_purpose::STANDARD.encode(&a.bytes)))
+        }
+    }));
+    match art.read().clone().flatten() {
+        Some(uri) => rsx! {
+            div { style: "position: relative; width: 100%; height: 100%; border-radius: 12px; overflow: hidden; background: #111;",
+                img { src: "{uri}", style: "position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover;" }
+                div { style: "position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: baseline; gap: 10px; padding: 10px 14px; background: rgba(0,0,0,0.6);",
+                    span { style: "font-size: 13px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: {INK_2};", "{block.name}" }
+                    span { style: "font-size: 16px; font-weight: 700; color: {INK}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{block.preset}" }
+                }
+            }
+        },
+        None => rsx! { NameCard { block, aspect } },
     }
 }

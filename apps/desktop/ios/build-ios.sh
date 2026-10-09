@@ -27,7 +27,7 @@ export PATH="$BIN_IOS:$PATH"
 # `___chkstk_darwin` is missing at the link.
 export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-15.0}"
 
-dx build --platform ios --no-default-features --features signal-guitar,signal-keys-rig
+dx build --platform ios --no-default-features --features signal-guitar,signal-keys-rig,tone3000
 
 # dx names the bundle from the package (SignalDesktop.app today; it has
 # changed between dx versions), so take the newest one it wrote.

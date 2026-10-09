@@ -14,14 +14,14 @@
 use std::sync::{Arc, OnceLock};
 
 use architect::rig::RigBackend as _;
-#[cfg(feature = "signal")]
+#[cfg(feature = "tone3000")]
 use signal_account_proto::account::AccountAuthClient;
 use signal_guitar::GuitarRigBackend;
 use signal_guitar::proto::audio::AudioSettingsClient;
 use signal_guitar::proto::rig::{Rig as _, RigClient, RigStreamClient};
 #[cfg(feature = "signal-keys-rig")]
 use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
-#[cfg(feature = "signal")]
+#[cfg(feature = "tone3000")]
 use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
 
 /// The embedded rig: the backend + the established in-process clients.
@@ -32,16 +32,16 @@ pub struct RigEngine {
     pub settings: AudioSettingsClient,
     /// The TONE3000 catalog. `Option` for symmetry with the network path,
     /// where an older engine may not serve it; in-process it is always here.
-    #[cfg(feature = "signal")]
+    #[cfg(feature = "tone3000")]
     pub tones: Option<Tone3000Client>,
-    #[cfg(feature = "signal")]
+    #[cfg(feature = "tone3000")]
     pub tones_stream: Option<Tone3000StreamClient>,
     /// The `FastTrackStudio` account (sign in once, TONE3000 — and whatever
     /// else it gathers — works without a second per-machine authorization).
     /// `Option` for the same reason `tones` is: the RPC exists once this
     /// engine is up, but establishing a client is still one more thing that
     /// can fail, and a UI with no account button is the right degradation.
-    #[cfg(feature = "signal")]
+    #[cfg(feature = "tone3000")]
     pub account: Option<AccountAuthClient>,
     /// The in-process keys rig (sampler engine) — dormant until the keys
     /// view starts it.
@@ -98,11 +98,11 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         // `signal` feature: their sign-in lands on a localhost listener,
         // which the phone cannot offer (iOS needs ASWebAuthenticationSession
         // for that), so the iPhone build leaves them out for now.
-        #[cfg(feature = "signal")]
+        #[cfg(feature = "tone3000")]
         let (router, account, tone3000) = {
             // TONE3000 on the same in-process router: with no separate
             // engine process to hold the session, the embedded one holds it.
-            let config_dir = signal_sampler::rig_prefs::signal_config_dir();
+            let config_dir = signal_rig_host::store::signal_config_dir();
             // The FastTrackStudio account — same reasoning as engine_main.rs:
             // linking TONE3000 to it once means every machine signed in to the
             // account can download without its own authorization.
@@ -165,11 +165,11 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             backend.show_without_audio();
         }
 
-        #[cfg(feature = "signal")]
+        #[cfg(feature = "tone3000")]
         let tones: Option<Tone3000Client> = server.establish().await.ok();
-        #[cfg(feature = "signal")]
+        #[cfg(feature = "tone3000")]
         let tones_stream: Option<Tone3000StreamClient> = server.establish().await.ok();
-        #[cfg(feature = "signal")]
+        #[cfg(feature = "tone3000")]
         let account_client: Option<AccountAuthClient> = server.establish().await.ok();
 
         // The OAuth redirect (TONE3000's and the FastTrackStudio account's)
@@ -181,7 +181,7 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         // `Tone3000Backend` read and write the SAME session files, from the
         // same config dir, so either one completing a sign-in is enough),
         // and this one simply does not also try to bind it.
-        #[cfg(feature = "signal")]
+        #[cfg(feature = "tone3000")]
         {
             let addr = crate::engine_tone3000::callback_listen_addr(&account);
             let app = crate::engine_tone3000::standalone_callback_router(
@@ -208,11 +208,11 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         Ok::<_, eyre::Report>(RigEngine {
             rig,
             stream,
-            #[cfg(feature = "signal")]
+            #[cfg(feature = "tone3000")]
             tones,
-            #[cfg(feature = "signal")]
+            #[cfg(feature = "tone3000")]
             tones_stream,
-            #[cfg(feature = "signal")]
+            #[cfg(feature = "tone3000")]
             account: account_client,
             settings,
             #[cfg(feature = "signal-keys-rig")]

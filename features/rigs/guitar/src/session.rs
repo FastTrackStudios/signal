@@ -7362,6 +7362,26 @@ impl Rig for GuitarRigBackend {
             .collect()
     }
 
+    fn block_artwork(&self, block: String) -> signal_guitar_proto::Artwork {
+        use signal_guitar_proto::Artwork;
+        let Some(path) = self.nam_path_for_block(&block) else {
+            return Artwork::default();
+        };
+        let hash = capture_hash(&path);
+        let Some(relative) = nam_catalog()
+            .as_ref()
+            .and_then(|c| c.get_entry(&hash))
+            .and_then(|e| e.provenance.as_ref())
+            .and_then(|p| p.artwork_path.clone())
+        else {
+            return Artwork::default();
+        };
+        match std::fs::read(nam_root().join(&relative)) {
+            Ok(bytes) => Artwork { mime: mime_for_path(&relative).to_string(), bytes, error: String::new() },
+            Err(e) => Artwork { error: e.to_string(), ..Artwork::default() },
+        }
+    }
+
     fn preset_artwork(&self, preset: String) -> signal_guitar_proto::Artwork {
         use signal_guitar_proto::Artwork;
         let hash = {
@@ -7681,6 +7701,89 @@ impl Rig for GuitarRigBackend {
             // `add_preset` already dedupes and persists.
             self.add_preset(name, nam_path);
         }
+    }
+
+    fn load_capture(&self, import: signal_guitar_proto::CaptureImport) -> signal_guitar_proto::ImportOutcome {
+        use signal_guitar_proto::ImportOutcome;
+        let fail = |message: String| {
+            tracing::warn!(import.slot = %import.slot, %message, "load_capture refused");
+            ImportOutcome { ok: false, slot: import.slot.clone(), message, ..ImportOutcome::default() }
+        };
+        if !std::path::Path::new(&import.path).exists() {
+            return fail("The download is missing".to_string());
+        }
+        let group = if import.group.trim().is_empty() { import.name.clone() } else { import.group.clone() };
+        let variation = if import.name.trim().is_empty() { "Default".to_string() } else { import.name.clone() };
+        let pedal = import.gear.eq_ignore_ascii_case("pedal");
+        let slot = if !import.slot.is_empty() {
+            import.slot.clone()
+        } else if pedal {
+            crate::profiles::DRIVE_SLOTS[0].to_string()
+        } else {
+            "Amp L".to_string()
+        };
+        let hash = capture_hash(&import.path);
+        if slot.to_lowercase().starts_with("drive") {
+            // The tone a drive preset, this capture an option of it; the
+            // playing patch's slot plays that option.
+            let option = {
+                let mut dps = self.drive_presets.lock_ok();
+                // A scratch profile: the import's own slot-claiming is the
+                // profile default's, and here the patch's slot is set instead.
+                let mut scratch = self.profile_def.lock_ok().clone();
+                let _ = crate::profiles::import_drive_capture(&mut scratch, &mut dps, &group, &variation, &import.path, &hash);
+                RigLibrary::save_drive_presets(&dps);
+                dps.iter()
+                    .find(|p| p.name.eq_ignore_ascii_case(&group))
+                    .and_then(|p| p.options.iter().position(|o| o.nam == import.path))
+                    .unwrap_or(0)
+            };
+            let (block, preset) = (slot.clone(), group.clone());
+            self.edit_live_patch(move |patch| {
+                let choice = crate::profiles::DriveSlotDef { block: block.clone(), preset, option };
+                match patch.drives.iter_mut().find(|d| d.block.eq_ignore_ascii_case(&block)) {
+                    Some(d) => *d = choice,
+                    None => patch.drives.push(choice),
+                }
+            });
+            self.spawn_drive_calibration();
+            tracing::info!(import.slot = %slot, import.preset = %group, import.variation = %variation, "load_capture: drive");
+            return ImportOutcome { ok: true, slot, preset: group, variation, message: String::new() };
+        }
+        // An amp: the tone an Amp module preset, this capture a snapshot of
+        // it, played by the patch.
+        let snapshot = {
+            let mut comp = RigLibrary::load_compositions();
+            let module = crate::profiles::AMP_MODULE;
+            if !comp.modules.iter().any(|m| m.module.eq_ignore_ascii_case(module) && m.name.eq_ignore_ascii_case(&group)) {
+                comp.modules.push(crate::compose::ModulePresetDef { module: module.to_string(), name: group.clone(), snapshots: Vec::new() });
+            }
+            let Some(m) = comp.modules.iter_mut().find(|m| m.module.eq_ignore_ascii_case(module) && m.name.eq_ignore_ascii_case(&group)) else {
+                return fail("Could not make the amp preset".to_string());
+            };
+            let name = match m.snapshots.iter().find(|s| s.nam == import.path) {
+                Some(s) => s.name.clone(),
+                None => {
+                    // Unique within the preset.
+                    let mut name = variation.clone();
+                    let mut k = 2;
+                    while m.snapshots.iter().any(|s| s.name.eq_ignore_ascii_case(&name)) {
+                        name = format!("{variation} {k}");
+                        k += 1;
+                    }
+                    m.snapshots.push(crate::compose::ModuleSnapshotDef { name: name.clone(), nam: import.path.clone(), ..Default::default() });
+                    RigLibrary::save_compositions(&comp);
+                    name
+                }
+            };
+            name
+        };
+        let applied = self.choose_module(crate::profiles::AMP_MODULE.to_string(), group.clone(), snapshot.clone());
+        if !applied.ok {
+            return fail(applied.message);
+        }
+        tracing::info!(import.slot = %slot, import.preset = %group, import.variation = %snapshot, "load_capture: amp");
+        ImportOutcome { ok: true, slot, preset: group, variation: snapshot, message: String::new() }
     }
 
     fn add_drive_preset(&self, name: String, nam_path: String) {

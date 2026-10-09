@@ -43,6 +43,9 @@ pub struct CanvasCell {
     /// own (a drive's pedal) — `(face, namespace, fills)`: fitted whole
     /// between its labels, or filling the block (an amp's faceplate).
     pub fallback: Option<(String, String, bool)>,
+    /// Its cover art (a TONE3000 capture's photograph), drawn when no face
+    /// matches it.
+    pub art: Option<vello::peniko::ImageData>,
 }
 
 /// One module: its name, what it plays, its colour, and what it holds left
@@ -930,7 +933,7 @@ mod native {
             text(scene, st, t, &c.name, 12.5, 700.0, Color::from_rgba8(0x52, 0x52, 0x5b, 0xff), r.x0 + 10.0, r.center().y + 4.5, CELL - 20.0, true);
             return;
         }
-        let faced = paint_face(scene, st, t, r, c);
+        let faced = paint_face(scene, st, t, r, c) || paint_art(scene, t, r, c);
         if !faced {
             scene.fill(Fill::NonZero, t, if c.lit { mix(colour, base, 0.16) } else { base }, None, &rr);
         } else {
@@ -1027,6 +1030,18 @@ mod native {
         if let Some((rec, _)) = &s.recorded {
             scene.append_scene(rec.clone(), t * Affine::translate((at.x0, at.y0)));
         }
+        true
+    }
+
+    /// A block's cover art, filling it (cropped to its shape, centred).
+    fn paint_art(scene: &mut Scene, t: Affine, r: Rect, c: &CanvasCell) -> bool {
+        let Some(img) = &c.art else { return false };
+        let (iw, ih) = (f64::from(img.width.max(1)), f64::from(img.height.max(1)));
+        let k = (r.width() / iw).max(r.height() / ih);
+        let (dx, dy) = (r.x0 + (r.width() - iw * k) / 2.0, r.y0 + (r.height() - ih * k) / 2.0);
+        scene.push_clip_layer(t, &RoundedRect::from_rect(r, 9.0));
+        scene.draw_image(img.into(), t * Affine::translate((dx, dy)) * Affine::scale(k));
+        scene.pop_layer();
         true
     }
 

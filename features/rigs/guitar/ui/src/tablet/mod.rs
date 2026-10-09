@@ -16,6 +16,7 @@
 mod browser;
 mod colors;
 pub(crate) mod splash;
+mod tones;
 mod edit;
 mod macros;
 mod marks;
@@ -87,6 +88,9 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     // The sidebar turned into a browser on one block's (or module's)
     // presets — the FX row's bar opens it.
     let mut sidebar_browser = use_signal(|| false);
+    // Its slot, for TONE3000 (an amp, a drive slot), and which source shows.
+    let mut tone_slot = use_signal(|| None::<String>);
+    let mut tone_tab = use_signal(|| false);
     // With the sidebar on a block's presets, picking another block in the
     // routing turns it to that block's.
     use_effect(move || {
@@ -95,8 +99,14 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
             return;
         }
         let kind = match picked {
-            Some(routing::Selected::Block(id)) => state.blocks.peek().iter().find(|b| b.id == id).map(|b| format!("block:{}", b.block_type.as_str().to_lowercase())),
-            Some(routing::Selected::Module(m, _)) => Some(format!("module:{m}")),
+            Some(routing::Selected::Block(id)) => state.blocks.peek().iter().find(|b| b.id == id).map(|b| {
+                tone_slot.set(tones::slot_of(&b.name, b.block_type.as_str()));
+                browser_kind(b.block_type.as_str())
+            }),
+            Some(routing::Selected::Module(m, _)) => {
+                tone_slot.set(tones::slot_of(&m, &format!("module:{m}")));
+                Some(format!("module:{m}"))
+            }
             None => None,
         };
         if let Some(kind) = kind {
@@ -106,9 +116,11 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     });
     // A face's preset name: the browser, on that block's presets.
     use_context_provider(|| {
-        crate::face_chrome::OpenPresets(Callback::new(move |(_block, block_type): (String, String)| {
+        crate::face_chrome::OpenPresets(Callback::new(move |(block, block_type): (String, String)| {
+            tone_slot.set(tones::slot_of(&block, &block_type));
+            tone_tab.set(false);
             let mut f = browser_focus.0;
-            let kind = if block_type.starts_with("module:") { block_type.clone() } else { format!("block:{}", block_type.to_lowercase()) };
+            let kind = browser_kind(&block_type);
             f.set(Some(routing::Focus { kind, preset: String::new(), variation: String::new(), search: false }));
             // In the sidebar, the routing and the FX row kept in view.
             match view() {
@@ -173,7 +185,36 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                                 if view() == View::Edit && left_browser() {
                                     browser::Browser { state, narrow: true }
                                 } else if sidebar_browser() {
-                                    browser::Browser { state, narrow: true, on_close: move |()| sidebar_browser.set(false) }
+                                    // An amp or a drive slot: its presets, and at their foot
+                                    // the way to TONE3000's; there, the way back.
+                                    if let Some(slot) = tone_slot().filter(|_| tones::available()) {
+                                        if tone_tab() {
+                                            div { style: "flex-shrink: 0; height: 52px; display: flex; align-items: center; gap: 4px; padding: 0 6px; border-bottom: 1px solid {RULE}; background: {SHEET};",
+                                                button {
+                                                    style: "height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: none; background: transparent; color: {INK_2}; font-size: 15px; font-weight: 650; font-family: {FONT}; cursor: pointer;",
+                                                    onclick: move |_| tone_tab.set(false),
+                                                    svg { width: "9", height: "15", view_box: "0 0 9 15",
+                                                        path { d: "M7.5 1.5 1.5 7.5l6 6", fill: "none", stroke: INK_2, stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round" }
+                                                    }
+                                                    "{slot}"
+                                                }
+                                                span { style: "flex: 1; text-align: center; font-size: 14px; font-weight: 800; letter-spacing: 0.06em; color: {INK};", "TONE3000" }
+                                                span { style: "width: 80px;" }
+                                            }
+                                            tones::TonesPanel { slot }
+                                        } else {
+                                            browser::Browser { state, narrow: true, on_close: move |()| sidebar_browser.set(false) }
+                                            div { style: "flex-shrink: 0; padding: 12px 14px; border-top: 1px solid {RULE};",
+                                                button {
+                                                    style: "width: 100%; height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border: none; border-radius: {R}; background: {FILL}; color: {INK}; font-size: 15px; font-weight: 650; font-family: {FONT}; cursor: pointer;",
+                                                    onclick: move |_| tone_tab.set(true),
+                                                    "More on TONE3000"
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        browser::Browser { state, narrow: true, on_close: move |()| sidebar_browser.set(false) }
+                                    }
                                 } else {
                                     // The sidebar for the footswitch mode: the set,
                                     // the profile's stacks, or the presets.
@@ -404,6 +445,19 @@ fn FootButton(label: &'static str, on: bool, pin: bool, #[props(default)] groupe
             svg { key: "{on}", width: "20", height: "20", view_box: "0 0 18 18", style: "display: block;", {children} }
             span { style: "font-size: 11px; font-weight: {pick(on, 700, 600)}; letter-spacing: 0.01em; color: {colour};", "{label}" }
         }
+    }
+}
+
+/// The browser's kind for a block type: a drive slot's pedals are the
+/// Drive module's presets; a module's its own; any other block its type's.
+fn browser_kind(block_type: &str) -> String {
+    let t = block_type.to_lowercase();
+    if t.starts_with("module:") {
+        block_type.to_string()
+    } else if t == "drive" || t == "boost" {
+        "module:Drive".to_string()
+    } else {
+        format!("block:{t}")
     }
 }
 

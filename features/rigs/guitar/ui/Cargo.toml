@@ -28,6 +28,8 @@ signal-guitar-proto.workspace = true
 # The TONE3000 catalog browser — mounted as the Tones page. Wasm-clean,
 # like everything else here.
 signal-tone3000-ui.workspace = true
+signal-tone3000-proto.workspace = true
+signal-account-proto.workspace = true
 # The real FTS-EQ editor: the band model, the response maths and the
 # graph's own painters.
 #
@@ -66,6 +68,8 @@ serde_json.workspace = true
 architect = { workspace = true, features = ["atom", "vox", "platform"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Cover art (TONE3000 photographs) decoded for the routing grid's blocks.
+image.workspace = true
 # The custom-widget surface: a painted scene composited into Blitz's own
 # paint pass. Native only — a DOM renderer cannot be handed an `Any`
 # attribute at all (it panics); the browser replays the same scenes onto a

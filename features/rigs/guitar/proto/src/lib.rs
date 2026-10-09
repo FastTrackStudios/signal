@@ -34,6 +34,35 @@ pub const DI_CLIPS: &[&str] = &["Chords", "Palm-mute picking", "Riff"];
 /// A recording the DI player loops through the chain in the guitar's
 /// place: one the app ships ([`DI_CLIPS`]), or one recorded
 /// ([`record_loop`](rig::Rig::record_loop)) into the library's `di/` —
+/// A downloaded capture to load into a slot of the playing patch.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct CaptureImport {
+    /// The capture's own name (a gain setting: "Gain 6").
+    pub name: String,
+    /// Where the file is.
+    pub path: String,
+    /// The catalog's category (`pedal`, `amp`, `amp-cab`, `full-rig`…).
+    pub gear: String,
+    /// The tone it belongs to: its captures become one preset's variations.
+    pub group: String,
+    /// The block to load it into (`Amp L`, `Drive 2`); empty: the gear
+    /// decides (a pedal the first drive slot, anything else the amp).
+    pub slot: String,
+}
+
+/// What loading a capture did.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct ImportOutcome {
+    pub ok: bool,
+    /// The block it went to.
+    pub slot: String,
+    /// The preset it is in now, and its variation.
+    pub preset: String,
+    pub variation: String,
+    /// Why not, when it failed.
+    pub message: String,
+}
+
 /// with what it was played on and through, so a tone heard through it is
 /// heard at the gain it was recorded at.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
@@ -1504,7 +1533,7 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        SetupModel, Artwork, CompTrace, CompositionModel, DiClip, LevelProgress, LibraryModel, LiveBlock, LiveNode,
+        SetupModel, Artwork, CaptureImport, CompTrace, CompositionModel, DiClip, ImportOutcome, LevelProgress, LibraryModel, LiveBlock, LiveNode,
         Applied, MacroKnobView, MacroResult, MacroSave, MacroTune, PartOverride, PatchInfo,
         PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
     };
@@ -1652,6 +1681,10 @@ pub mod rig {
         /// no photographs. Kept off [`PresetInfo`] so listing the pool does
         /// not drag every picture across the wire.
         fn preset_artwork(&self, preset: String) -> Artwork;
+        /// Cover art for what a block of the playing patch plays (a drive
+        /// slot's pedal, the amp): its capture's, from the catalog. Empty
+        /// when it has none.
+        fn block_artwork(&self, block: String) -> Artwork;
         /// Measure every patch through its whole chain and trim each to a
         /// common loudness.
         ///
@@ -1794,6 +1827,12 @@ pub mod rig {
         /// The routing lives here rather than in a GUI because it is rig
         /// policy, and every GUI is a remote.
         fn import_capture(&self, name: String, nam_path: String, gear: String, group: String);
+        /// Load a downloaded capture into a slot of the playing patch: a
+        /// pedal into a drive slot (its tone a drive preset, the capture an
+        /// option of it), an amp into the Amp module (its tone an Amp module
+        /// preset, the capture a snapshot of it). Saved with the patch, and
+        /// heard at once.
+        fn load_capture(&self, import: CaptureImport) -> ImportOutcome;
         /// Re-read the styx library from disk and rebuild the live rig —
         /// the hook for external edits (text editor, LLM, git).
         fn reload_library(&self);

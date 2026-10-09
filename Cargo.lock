@@ -14633,11 +14633,13 @@ dependencies = [
  "reverb-ui",
  "rustc-hash 2.1.3",
  "serde_json",
+ "signal-account-proto",
  "signal-grid",
  "signal-grid-ui",
  "signal-guitar",
  "signal-guitar-proto",
  "signal-proto",
+ "signal-tone3000-proto",
  "signal-tone3000-ui",
  "signal-widgets",
  "tokio",
@@ -20677,14 +20679,6 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "keyflow-proto"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "keyflow-syntax"
-version = "0.1.0"
-
-[[patch.unused]]
 name = "chord-tool"
 version = "0.1.0"
 
@@ -20694,4 +20688,12 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "session"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "keyflow-proto"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "keyflow-syntax"
 version = "0.1.0"

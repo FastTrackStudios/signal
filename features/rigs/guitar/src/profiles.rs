@@ -1167,6 +1167,8 @@ pub const PRE_FX: &str = "Pre FX";
 /// its drive board (the Drive module), its amps (the Amp module), the gate,
 /// the amp EQ and the post compressor. A patch's preset *is* its Core.
 pub const CORE: &str = "Core";
+/// The amp module: Amp L (and R), their cabs.
+pub const AMP_MODULE: &str = "Amp";
 
 /// The transposer: the first block of the chain.
 pub const TRANSPOSE: &str = "Transpose";

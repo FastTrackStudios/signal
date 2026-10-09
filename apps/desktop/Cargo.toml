@@ -129,6 +129,16 @@ signal = [
     "dep:signal-ekit-proto",
     # TONE3000: the engine holds the session and serves the OAuth redirect
     # (engine_tone3000.rs); signal-nam resolves where downloads land.
+    "tone3000",
+    "dep:axum",
+    "dep:tower-http",
+]
+# TONE3000 and the FastTrackStudio account in the app itself (the iPad's
+# embedded engine): search, download and import captures, signing in
+# through the account. Part of `signal`; the iOS build adds it on its own.
+tone3000 = [
+    "dep:signal-tone3000-proto",
+    "dep:signal-tone3000-ui",
     "dep:signal-tone3000",
     "dep:signal-account",
     "dep:signal-account-proto",
@@ -372,11 +382,13 @@ dioxus = { workspace = true, default-features = true, features = ["mobile", "lau
 objc2 = "0.6"
 # The record-permission request's completion handler (ios_audio.rs).
 block2 = "0.6"
+# The config dir the TONE3000 and account sessions live in (rig_engine.rs).
+signal-rig-host = { workspace = true }
 objc2-ui-kit = { version = "0.3", features = [
     "UIApplication", "UIResponder", "UIScene", "UISceneOptions", "UISceneSession",
     "UIWindowScene", "UIWindow", "UIView", "UIViewController", "UIScreen", "UIOrientation", "block2",
 ] }
-objc2-foundation = { version = "0.3", features = ["NSArray", "NSSet", "NSString"] }
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSSet", "NSString", "NSURL"] }
 
 # PipeWire (audio + MIDI) is the Linux DEFAULT via target-gated deps inside
 # daw-audio-io and the rig crates themselves — no per-app feature plumbing.

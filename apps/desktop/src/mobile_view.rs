@@ -143,6 +143,26 @@ pub fn MobileApp() -> Element {
                     let _ = provide_context(engine.settings.clone());
                     #[cfg(feature = "signal-keys-rig")]
                     let _ = provide_context(engine.keys.clone());
+                    // TONE3000 and the account: the browser's Tone3000 source
+                    // and the sign-in, the page opened in an in-app sheet.
+                    #[cfg(feature = "tone3000")]
+                    {
+                        if let Some(t) = engine.tones.clone() {
+                            let _ = provide_context(t);
+                        }
+                        if let Some(t) = engine.tones_stream.clone() {
+                            let _ = provide_context(t);
+                        }
+                        if let Some(a) = engine.account.clone() {
+                            let _ = provide_context(a);
+                        }
+                        let _ = provide_context(signal_tone3000_ui::UrlOpener::new(|url| {
+                            #[cfg(target_os = "ios")]
+                            crate::ios_safari::open(&url);
+                            #[cfg(not(target_os = "ios"))]
+                            let _ = url;
+                        }));
+                    }
                     rsx! { Router {} }
                 }
                 None => rsx! {

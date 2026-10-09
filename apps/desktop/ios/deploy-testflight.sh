@@ -51,7 +51,7 @@ trap cleanup_tmp EXIT
 DX_PACKAGE="${DX_PACKAGE:-signal-desktop}"
 DX_APP_DIR="${DX_APP_DIR:-apps/desktop}"
 # No colon: an explicitly-empty DX_FEATURES (Task, default features) is honored.
-DX_FEATURES="${DX_FEATURES---no-default-features --features signal-guitar,signal-keys-rig}"
+DX_FEATURES="${DX_FEATURES---no-default-features --features signal-guitar,signal-keys-rig,tone3000}"
 # Bundle id the App Store profile is minted for — must match the built .app's
 # CFBundleIdentifier (from the package's Dioxus.toml).
 DX_BUNDLE_ID="${DX_BUNDLE_ID:-app.fasttrackstudio.signal}"

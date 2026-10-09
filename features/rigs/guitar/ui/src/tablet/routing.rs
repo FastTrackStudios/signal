@@ -89,7 +89,44 @@ pub fn Routing(state: RigViewState) -> Element {
     });
     let blocks = state.blocks.read().clone();
     let faces = crate::rig_faces::use_faces();
-    let modules = canvas_modules(&blocks, &faces);
+    // The amps' and drives' cover art (their captures', from TONE3000), by
+    // block: what a block with no face of its own is drawn as.
+    let art_key: Vec<(String, String)> = blocks.iter().filter(|b| matches!(b.block_type, BlockType::Drive | BlockType::Boost | BlockType::Amp) && !b.empty).map(|b| (b.name.clone(), b.preset.clone())).collect();
+    let rig_art = rig.clone();
+    let arts = use_resource(use_reactive!(|art_key| {
+        let rig = rig_art.clone();
+        async move {
+            let mut out = std::collections::HashMap::new();
+            let Some(r) = rig else { return out };
+            for (name, _) in art_key {
+                if let Ok(a) = r.block_artwork(name.clone()).await
+                    && !a.bytes.is_empty()
+                    && let Some(img) = thumbnail(&a.bytes)
+                {
+                    out.insert(name, img);
+                }
+            }
+            out
+        }
+    }));
+    let mut modules = canvas_modules(&blocks, &faces);
+    if let Some(arts) = arts.read().as_ref().filter(|a| !a.is_empty()) {
+        let by_id: std::collections::HashMap<String, String> = blocks.iter().map(|b| (b.id.clone(), b.name.clone())).collect();
+        for m in &mut modules {
+            for item in &mut m.items {
+                let cells: Vec<&mut CanvasCell> = match item {
+                    CanvasItem::Col(c) => c.iter_mut().collect(),
+                    CanvasItem::Lanes(c) => c.iter_mut().map(|(_, c)| c).collect(),
+                    CanvasItem::Merge(c, into) => c.iter_mut().map(|(_, c)| c).chain(std::iter::once(&mut into.1)).collect(),
+                };
+                for cell in cells {
+                    if let Some(img) = by_id.get(&cell.id).and_then(|n| arts.get(n)) {
+                        cell.art = Some(img.clone());
+                    }
+                }
+            }
+        }
+    }
     let selected = sel().map(|s| match s {
         Selected::Block(id) => CanvasSel::Block(id),
         Selected::Module(m, _) => CanvasSel::Module(m),
@@ -172,6 +209,7 @@ pub(super) fn canvas_modules(blocks: &[LiveBlock], faces: &crate::rig_faces::Fac
             // Its block face, else its unit's own (a drive's pedal).
             keys: face_keys(b),
             fallback: pedal(b, faces),
+                art: None,
             value: level_of(b),
             // The trim levels the patch: under the dynamics, not theirs.
             loose: b.name.eq_ignore_ascii_case("Patch Trim"),
@@ -322,6 +360,7 @@ fn input_items(cells: Vec<CanvasCell>) -> Vec<CanvasItem> {
                 value: None,
                 loose: false,
                 fallback: None,
+                art: None,
             },
         }
     };
@@ -382,4 +421,18 @@ fn type_colour(t: BlockType) -> &'static str {
         BlockType::Reverb => "#8b5cf6",
         _ => GREY,
     }
+}
+
+/// A cover photograph decoded small enough for a block (its longer side
+/// 256 px).
+fn thumbnail(bytes: &[u8]) -> Option<vello::peniko::ImageData> {
+    let img = image::load_from_memory(bytes).ok()?.thumbnail(256, 256).to_rgba8();
+    let (width, height) = img.dimensions();
+    Some(vello::peniko::ImageData {
+        data: vello::peniko::Blob::new(std::sync::Arc::new(img.into_raw())),
+        format: vello::peniko::ImageFormat::Rgba8,
+        alpha_type: vello::peniko::ImageAlphaType::Alpha,
+        width,
+        height,
+    })
 }
