@@ -177,8 +177,8 @@ fn canvas_modules(blocks: &[LiveBlock], unfolded: &[String], faces: &crate::rig_
             edited: b.overridden,
             empty: b.empty,
             core: is(&CORE_BLOCKS),
-            // A drive or a pre effect wears its pedal, when it has one.
-            keys: if pedal(b, faces).is_some() { Vec::new() } else { face_keys(b) },
+            // Its block face, else its unit's own (a drive's pedal).
+            keys: face_keys(b),
             fallback: pedal(b, faces),
             value: level_of(b),
             // The trim levels the patch: under the dynamics, not theirs.
@@ -264,7 +264,6 @@ fn pedal(b: &LiveBlock, faces: &crate::rig_faces::Faces) -> Option<(String, Stri
             Some((stem(f), f.ns.clone(), false))
         }
         "Drive" | "Pre" => super::fx_row::face_for(b, faces).map(|f| (stem(&f), f.ns, false)),
-        _ if b.name.eq_ignore_ascii_case("Post Comp") => Some(("55-post-comp-distressor-block".into(), "dist".into(), true)),
         "Amp" if b.block_type == BlockType::Amp => {
             let f = faces.amp(&b.asset).or_else(|| faces.amp(&b.preset))?;
             Some((format!("{}-block", stem(f)), f.ns.clone(), true))
@@ -294,6 +293,15 @@ fn face_keys(b: &LiveBlock) -> Vec<String> {
         _ => None,
     };
     let mut keys: Vec<String> = named.map(|n| format!("{kind}:{}", n.to_lowercase())).into_iter().collect();
+    match b.module.as_str() {
+        // A drive slot by the pedal it plays (`drive:klon centaur`).
+        "Drive" if !b.preset.is_empty() => keys.insert(0, format!("drive:{}", b.preset.to_lowercase())),
+        // A pre effect by its kind first (`pre:chorus`).
+        "Pre" => keys.insert(0, format!("pre:{kind}")),
+        // The post compressor by its unit, the Distressor.
+        _ if b.name.eq_ignore_ascii_case("Post Comp") => keys.insert(0, "post comp".to_string()),
+        _ => {}
+    }
     keys.push(kind);
     keys
 }
