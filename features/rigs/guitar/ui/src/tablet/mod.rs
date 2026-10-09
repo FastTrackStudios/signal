@@ -15,6 +15,7 @@
 
 mod browser;
 mod colors;
+pub(crate) mod splash;
 mod edit;
 mod macros;
 mod marks;

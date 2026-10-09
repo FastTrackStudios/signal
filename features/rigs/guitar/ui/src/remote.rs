@@ -278,17 +278,33 @@ pub fn GuitarRigRemote() -> Element {
     });
 
     // A phone held sideways: the chain a page at a time, nothing else.
+    // The tablet's page waits for the opening logo to draw on (see below).
+    let mut tablet_drawn = use_signal(|| false);
+    use_hook(move || {
+        spawn(async move {
+            architect::platform::sleep(std::time::Duration::from_millis(crate::tablet::splash::DRAWN_MS)).await;
+            tablet_drawn.set(true);
+        });
+    });
     let size = try_use_context::<crate::control::WindowSize>().map_or((0.0, 0.0), |s| (s.0)());
     // An iPad: the touch layout — setlist, macros, switches, a foot bar of
     // views.
     if crate::control::FormFactor::of(size) == crate::control::FormFactor::Tablet {
+        // Opening: the logo draws on first; the page (thirty faces opening,
+        // the main thread's for a moment) is built under it after, then it
+        // lifts once the rig's profile and chain are in.
+        let built = tablet_drawn();
+        let ready = built && !perf_now.profile_name.is_empty() && !state.blocks.read().is_empty();
         return rsx! {
             fts_audio_ui::drag::DragProvider { fill: true,
                 div { style: "position: relative; width: 100%; height: 100%; display: flex;",
                     onpointermove: move |e: PointerEvent| drag_bus.root_move(&e),
                     onpointerup: move |_| drag_bus.root_up(),
                     onpointercancel: move |_| drag_bus.root_up(),
-                    crate::tablet::TabletRemote { model: perf_now.clone(), state }
+                    if built {
+                        crate::tablet::TabletRemote { model: perf_now.clone(), state }
+                    }
+                    crate::tablet::splash::Splash { ready }
                     document::Style { {crate::theme::CSS} }
                 }
             }
