@@ -90,12 +90,9 @@ pub fn TouchSwitches(perf: PerformanceModel) -> Element {
                     onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.next_song()) } }
                 FnTile { no: 9, title: "Boost", subtitle: if boost { boost_label.clone() } else { format!("{boost_label} · off") }, bg: "#fafafa", text: "#0a0a0a", lit: boost,
                     onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_boost()) } }
-                if perf.tuner_visible {
-                    TunerTile { onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_tuner()) } }
-                } else {
-                    FnTile { no: 10, title: "Tuner", subtitle: "A 440".to_string(), bg: "#3f3f46", text: "#e4e4e7", lit: false,
-                        onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_tuner()) } }
-                }
+                // Always tuning; a press mutes the guitar into the chain to
+                // tune in silence.
+                TunerTile { muted: perf.tuner_visible, onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_tuner()) } }
                 for i in 0..4usize {
                     if let Some(st) = stacks.get(i).cloned() {
                         StackTile { key: "m{i}", no: i as u32 + 1, stack: st, index: i, compact: false }
@@ -237,10 +234,11 @@ fn TapTempo(bpm: u32) -> Element {
     }
 }
 
-/// The tuner switch while the tuner is up: the note and how far off, the
-/// needle about the middle, green when in tune. A tap puts it away.
+/// The tuner switch, always tuning: the note and how far off, the needle
+/// about the middle, green when in tune. A press mutes the guitar into the
+/// chain (`muted`: lit, "Mute") to tune in silence.
 #[component]
-fn TunerTile(onclick: EventHandler<MouseEvent>) -> Element {
+fn TunerTile(muted: bool, onclick: EventHandler<MouseEvent>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut reading = use_signal(signal_guitar_proto::TunerReading::default);
     use_future(move || {
@@ -265,8 +263,11 @@ fn TunerTile(onclick: EventHandler<MouseEvent>) -> Element {
         button {
             style: "position: relative; min-width: 0; overflow: hidden; border: none; border-radius: 0; padding: 0 10px; display: flex; flex-direction: row; align-items: center; gap: 10px; background: {bg}; color: {ink}; font-family: {FONT}; cursor: pointer;",
             onclick: move |e| onclick.call(e),
-            LitRing {}
+            if muted { LitRing {} }
             SwitchNo { no: 10, ink: ink.to_string() }
+            if muted {
+                span { style: "position: absolute; top: 5px; right: 9px; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: {ink}; opacity: 0.8;", "MUTE" }
+            }
             span { style: "font-size: 17px; font-weight: 800; min-width: 34px; color: {ink};", "{note}" }
             div { style: "position: relative; flex: 1; height: 16px;",
                 div { style: "position: absolute; left: 0; right: 0; top: 7px; height: 2px; background: rgba(255,255,255,0.18);" }

@@ -228,9 +228,11 @@ mod native {
     /// two.
     fn lanes(i: &CanvasItem) -> Vec<i32> {
         match i {
+            // From the top row, so every module's header lines up; the
+            // rows under a short one stay empty.
             CanvasItem::Col(c) => match c.len() {
-                0 | 1 => vec![0],
-                2 => vec![0, 1],
+                0 | 1 => vec![-1],
+                2 => vec![-1, 0],
                 3 => vec![-1, 0, 1],
                 // Four rows: the line the second.
                 _ => vec![-1, 0, 1, 2],

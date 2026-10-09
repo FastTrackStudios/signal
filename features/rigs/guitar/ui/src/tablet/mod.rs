@@ -32,7 +32,6 @@ mod tokens;
 mod topbar;
 
 use dioxus::prelude::*;
-use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::PerformanceModel;
 
 use self::tokens::*;
@@ -75,7 +74,11 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let pick = use_context_provider(|| BuildPick { part: Signal::new(None), building: Signal::new(false) });
     // Edit's routing selection, and where it points the browser.
     let routing_sel = use_context_provider(|| routing::RoutingSel(Signal::new(None))).0;
-    use_effect(move || fx_on.set(routing_sel().is_some()));
+    use_effect(move || {
+        let picked = routing_sel().is_some();
+        fx_on.set(picked);
+        docked.set(!picked);
+    });
     use_context_provider(|| routing::BrowserFocus(Signal::new(None)));
     // "Patch…" on a section or part: pick it and bring the browser up for
     // it (in Build it is already there).
@@ -177,14 +180,23 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                 macros: macros(),
                 on_macros: move |()| macros.toggle(),
                 switches: docked(),
-                on_switches: move |()| docked.toggle(),
+                on_switches: move |()| {
+                    docked.toggle();
+                    if docked() {
+                        fx_on.set(false);
+                    }
+                },
                 routing: routing_on(),
                 on_routing: move |()| routing_on.toggle(),
                 fx: fx_on(),
-                on_fx: move |()| fx_on.toggle(),
+                on_fx: move |()| {
+                    fx_on.toggle();
+                    if fx_on() {
+                        docked.set(false);
+                    }
+                },
                 browser: browser(),
                 on_browser: move |()| browser.toggle(),
-                tuner: model.tuner_visible,
             }
             signal_widgets::PopupLayer {}
         }
@@ -233,9 +245,7 @@ fn FootBar(
     on_fx: EventHandler<()>,
     browser: bool,
     on_browser: EventHandler<()>,
-    tuner: bool,
 ) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
     let (perform, build, edit, setup) = (view == View::Perform, view == View::Build, view == View::Edit, view == View::Setup);
     rsx! {
         footer { style: "height: {FOOT_H}px; flex-shrink: 0; display: flex; align-items: stretch; border-top: 1px solid {RULE}; background: {SHEET}; padding: 0 6px; box-sizing: border-box;",
@@ -274,6 +284,11 @@ fn FootBar(
                     circle { cx: "14.5", cy: "13.5", r: "1.8", fill: "none", stroke: ink(routing), stroke_width: "1.4" }
                     path { d: "M5.3 9H8m0 0c2 0 2-4.5 4.7-4.5M8 9c2 0 2 4.5 4.7 4.5", fill: "none", stroke: ink(routing), stroke_width: "1.4", stroke_linecap: "round" }
                 }
+            }
+            span { style: "flex: 1;" }
+            // Perform's dock, at the right: the switches or the FX row, one
+            // at a time.
+            if perform {
                 FootButton { label: "Switches", on: switches, pin: true, onclick: move |_| on_switches.call(()),
                     rect { x: "2", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
                     rect { x: "7", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
@@ -284,14 +299,7 @@ fn FootBar(
                     circle { cx: "13", cy: "12", r: "2.2", fill: "none", stroke: ink(fx), stroke_width: "1.4" }
                     path { d: "M2 6h0.8M7.2 6H16M2 12h8.8M15.2 12H16", stroke: ink(fx), stroke_width: "1.4", stroke_linecap: "round" }
                 }
-            }
-            span { style: "flex: 1;" }
-            FootButton { label: "Tuner", on: tuner, pin: true, onclick: move |_| {
-                    if let Some(r) = rig.clone() {
-                        spawn(async move { let _ = r.toggle_tuner().await; });
-                    }
-                },
-                path { d: "M3 13a6 6 0 0 1 12 0M9 13l3-5", fill: "none", stroke: ink(tuner), stroke_width: "1.5", stroke_linecap: "round" }
+                Rule {}
             }
             Rule {}
             FootButton { label: "Setup", on: setup, pin: false, onclick: move |_| on_view.call(View::Setup),
