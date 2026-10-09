@@ -252,6 +252,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                 },
                 browser: browser(),
+                state,
                 on_browser: move |()| {
                     browser.toggle();
                     routing_on.set(!browser());
@@ -304,6 +305,7 @@ fn FootBar(
     on_fx: EventHandler<()>,
     browser: bool,
     on_browser: EventHandler<()>,
+    state: RigViewState,
 ) -> Element {
     let (perform, build, edit, setup) = (view == View::Perform, view == View::Build, view == View::Edit, view == View::Setup);
     rsx! {
@@ -345,7 +347,12 @@ fn FootBar(
                     path { d: "M8 4.5h2M8 13.5h2", stroke: ink(macros), stroke_width: "1.4", stroke_linecap: "round" }
                 }
             }
-            span { style: "flex: 1;" }
+            // The FX row's block and its preset, while the row is up.
+            if (perform && fx) || edit {
+                fx_row::FxPresetBar { state }
+            } else {
+                span { style: "flex: 1;" }
+            }
             // Perform's dock, at the right: the switches or the FX row, one
             // at a time.
             if perform {

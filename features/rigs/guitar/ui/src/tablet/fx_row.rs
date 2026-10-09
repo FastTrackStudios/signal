@@ -17,8 +17,6 @@ use crate::state::RigViewState;
 /// face set serves this row and a phone on its side.
 pub const FX_W: f64 = 750.0;
 pub const FX_H: f64 = 254.0;
-/// The bar along its top: what is picked, and its preset.
-pub const BAR_H: f64 = 44.0;
 
 /// A pre effect (before the amp): its face is its pedal's.
 fn is_pre(b: &LiveBlock) -> bool {
@@ -153,17 +151,7 @@ pub fn FxRow(state: RigViewState) -> Element {
         None => Vec::new(),
     };
     let one = shown.len() == 1;
-    // The bar along the top: what is picked and the preset it plays — a
-    // block's, or a module's.
-    let module = match sel() {
-        Some(Selected::Module(m, _)) => Some(m),
-        _ => None,
-    };
-    let bar_block = if module.is_none() { shown.first().cloned() } else { None };
-    let comp = try_use_context::<crate::face_chrome::FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
-    let module_preset = module.as_ref().and_then(|m| comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m))).map(|p| if p.snapshot.is_empty() { p.preset.clone() } else { format!("{} · {}", p.preset, p.snapshot) });
-    let open = try_use_context::<crate::face_chrome::OpenPresets>();
-    let face_h = FX_H - BAR_H;
+    let face_h = FX_H;
     // The row's width, measured: one block's face fills it edge to edge.
     let mut row_w = use_signal(|| FX_W);
     let measure = move |el: std::rc::Rc<MountedData>| {
@@ -184,26 +172,6 @@ pub fn FxRow(state: RigViewState) -> Element {
     let w = row_w();
     rsx! {
         div { style: "flex-shrink: 0; height: {FX_H}px; box-sizing: border-box; border-top: 1px solid #000; background: #0d0d10; display: flex; flex-direction: column;",
-            div { style: "flex-shrink: 0; height: {BAR_H}px; display: flex; align-items: center; gap: 10px; padding: 0 6px 0 14px; border-bottom: 1px solid {RULE}; background: {SHEET}; box-sizing: border-box;",
-                if let Some(b) = bar_block.clone() {
-                    span { style: "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_3}; white-space: nowrap;", "{b.name}" }
-                    span { style: "flex: 1;" }
-                    crate::face_chrome::PresetStepper { block: b.name.clone(), block_type: b.block_type.as_str().to_lowercase(), show_empty: true, touch: true }
-                }
-                if let Some(m) = module.clone() {
-                    span { style: "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_3}; white-space: nowrap;", "{m}" }
-                    span { style: "flex: 1;" }
-                    button {
-                        style: "height: 32px; max-width: 320px; padding: 0 12px; border: none; border-radius: 6px; background: rgba(255,255,255,0.08); color: {INK}; font-size: 14px; font-weight: 650; font-family: {FONT}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;",
-                        onclick: move |_| {
-                            if let Some(crate::face_chrome::OpenPresets(o)) = open {
-                                o.call((m.clone(), format!("module:{m}")));
-                            }
-                        },
-                        "{module_preset.clone().unwrap_or_else(|| \"—\".to_string())}"
-                    }
-                }
-            }
             div { style: "flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden;",
             onmounted: move |e| measure(e.data()),
             div { style: "height: 100%; display: flex; align-items: stretch; justify-content: center; gap: 1px; width: max-content; min-width: 100%;",
@@ -243,5 +211,46 @@ pub fn FxRow(state: RigViewState) -> Element {
             }
             }
         }
+    }
+}
+
+/// What the FX row shows, and its preset — in the foot bar's middle, so the
+/// row keeps its height: the block (or module) picked and the preset it
+/// plays, ‹ › stepping; the name turns the sidebar into its presets.
+#[component]
+pub fn FxPresetBar(state: RigViewState) -> Element {
+    let sel = use_context::<RoutingSel>().0;
+    let blocks = state.blocks.read().clone();
+    let first = || blocks.iter().find(|b| b.block_type == BlockType::Drive && !b.empty).or_else(|| blocks.first()).map(|b| b.id.clone());
+    let module = match sel() {
+        Some(Selected::Module(m, _)) => Some(m),
+        _ => None,
+    };
+    let bar_block = match sel().or_else(|| first().map(Selected::Block)) {
+        Some(Selected::Block(id)) => blocks.iter().find(|b| b.id == id).cloned().or_else(|| slot_block(&id)),
+        _ => None,
+    };
+    let comp = try_use_context::<crate::face_chrome::FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
+    let module_preset = module.as_ref().and_then(|m| comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m))).map(|p| if p.snapshot.is_empty() { p.preset.clone() } else { format!("{} · {}", p.preset, p.snapshot) });
+    let open = try_use_context::<crate::face_chrome::OpenPresets>();
+    rsx! {
+        div { style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 12px;",
+                if let Some(b) = bar_block.clone() {
+                    span { style: "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_3}; white-space: nowrap;", "{b.name}" }
+                    crate::face_chrome::PresetStepper { block: b.name.clone(), block_type: b.block_type.as_str().to_lowercase(), show_empty: true, touch: true }
+                }
+                if let Some(m) = module.clone() {
+                    span { style: "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_3}; white-space: nowrap;", "{m}" }
+                    button {
+                        style: "height: 32px; max-width: 320px; padding: 0 12px; border: none; border-radius: 6px; background: rgba(255,255,255,0.08); color: {INK}; font-size: 14px; font-weight: 650; font-family: {FONT}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;",
+                        onclick: move |_| {
+                            if let Some(crate::face_chrome::OpenPresets(o)) = open {
+                                o.call((m.clone(), format!("module:{m}")));
+                            }
+                        },
+                        "{module_preset.clone().unwrap_or_else(|| \"—\".to_string())}"
+                    }
+                }
+                    }
     }
 }
