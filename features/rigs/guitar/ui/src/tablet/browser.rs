@@ -574,7 +574,7 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
                     let mut t = Thing::new(&id, &s.name, colour);
                     t.group = p.name.clone();
                     t.nested = true;
-                    let playing = part.is_some_and(|x| x.preset == id) || (d.perf.perform_mode == 0 && d.comp.active_preset == p.name && d.comp.active_snapshot == s.name);
+                    let playing = part.is_some_and(|x| x.preset == id) || ((d.perf.perform_mode == 0 || matches!(target, Target::Stack(_))) && d.comp.active_preset == p.name && d.comp.active_snapshot == s.name);
                     if playing {
                         t.state = Some(State::Playing);
                     }
@@ -592,6 +592,7 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
             // What a preset higher up chose here — shown with an override
             // too, so clearing one shows what comes back.
             let chosen = inherited(d, target).0.into_iter().find(|c| c.0 == *kind).map(|c| c.1);
+            let playing_patch = matches!(target, Target::Stack(_) | Target::None);
             d.comp
                 .modules
                 .iter()
@@ -626,6 +627,10 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
                         }
                         if swapped.as_ref().is_some_and(|p| p.preset == m.name && p.snapshot == v) {
                             t.state = Some(State::Swapped);
+                        } else if playing_patch && d.comp.active_modules.iter().any(|a| a.module.eq_ignore_ascii_case(kind) && a.preset == m.name && (a.snapshot == v || a.snapshot.is_empty() && k == 0)) {
+                            // What the playing patch picks (Profile mode, or
+                            // nothing picked): it is in.
+                            t.state = Some(State::In);
                         }
                         if let Some(c) = chosen.as_ref().filter(|c| c.preset == m.name && c.variation == v) {
                             t.inherited = c.from.clone();
@@ -1046,9 +1051,13 @@ fn applies(kind: &Kind, target: &Target, d: &Data) -> bool {
         Kind::Patches => matches!(target, Target::Part(_) | Target::Stack(_)),
         // The song's profile for a part; the set's in Setlist or Profile mode.
         Kind::Profiles => part || d.perf.perform_mode != 0,
-        Kind::Presets => part || d.perf.perform_mode == 0,
-        Kind::Module(_) => matches!(target, Target::Part(_) | Target::Preset(..)),
-        Kind::Block(b) => matches!(target, Target::Part(_) | Target::Preset(..)) && chain_block(d, b).is_some(),
+        // A preset: a section's, the Preset mode's audition, or (Profile
+        // mode) the stack's playing patch's Core.
+        Kind::Presets => part || matches!(target, Target::Stack(_)) || d.perf.perform_mode == 0,
+        // A module or block: on whatever plays — a section picked, the
+        // variation, else the playing patch (the stack's in Profile mode).
+        Kind::Module(_) => true,
+        Kind::Block(b) => chain_block(d, b).is_some(),
     }
 }
 
@@ -1098,6 +1107,9 @@ fn apply(rig: Option<RigClient>, kind: &Kind, target: &Target, d: &Data, t: &Thi
                         call!(rig, |r| r.set_part_preset(part, p, v));
                     }
                 }
+                // Profile mode: the stack's patch takes it as its Core,
+                // saved in the profile.
+                Target::Stack(_) => call!(rig, |r| r.choose_module("Core".to_string(), p, v)),
                 _ => call!(rig, |r| r.choose_preset(p, v)),
             }
         }
