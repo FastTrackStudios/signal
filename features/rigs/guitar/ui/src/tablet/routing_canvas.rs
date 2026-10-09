@@ -3,13 +3,15 @@
 //! their type's colour, a port either side, cables between them) painted as
 //! one vector scene into the window's renderer, with no DOM per cell.
 //!
-//! Unfolded by default: the chain left to right in one row, as tall as the
-//! patch needs (a stereo pair stacks two cells), fitted to the view's
-//! height. Folded, it wraps at the view's width — a long module carries on
-//! down the next row, the cable bending back to it.
+//! The chain left to right in one row, four rows tall, fitted to the
+//! view's height; square cables turning in the gaps. A block the manifest
+//! has a frame face for wears it, animated, its preset along the top and
+//! its name along the foot; off, it is muted. A module with nothing in use
+//! folds to a thin strip, a tap away. A navigator along the top shows the
+//! whole chain and scrolls it.
 //!
-//! One finger pans, two pinch; a tap picks a cell or a module's header, and
-//! a cell's light switches the block. Picks go to `on_pick`.
+//! One finger pans, two pinch; a tap picks a block, a module (its box or
+//! header), the Core (its tag), or unfolds a strip. Picks go to `on_pick`.
 
 use dioxus::prelude::*;
 
@@ -34,6 +36,10 @@ pub struct CanvasCell {
     pub keys: Vec<String>,
     /// Its params by name, in their own units, and `on`: the face's values.
     pub params: Vec<(String, f64)>,
+    /// The face it wears when no block face matches its keys: its unit's
+    /// own (a drive's pedal) — `(face, namespace, fills)`: fitted whole
+    /// between its labels, or filling the block (an amp's faceplate).
+    pub fallback: Option<(String, String, bool)>,
 }
 
 /// One module: its name, what it plays, its colour, and what it holds left
@@ -47,6 +53,14 @@ pub struct CanvasModule {
     pub items: Vec<CanvasItem>,
     /// A module the Core controls: it wears the Core's tag.
     pub core: bool,
+    /// Folded to a thin strip (nothing in it is in use): still in the
+    /// chain, a tap away.
+    pub collapsed: bool,
+    /// Unfolded though nothing in it is in use: its header folds it back.
+    pub idle: bool,
+    /// No box and no header: blocks that are no module's (the Input column,
+    /// what each patch brings in ahead of the drives).
+    pub bare: bool,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -112,10 +126,11 @@ impl CanvasModule {
 pub enum CanvasPick {
     Block(String),
     Module(String, Vec<String>),
-    /// A cell's light: switch the block on or off.
-    Toggle(String),
     /// Empty grid: nothing.
     Clear,
+    /// A folded module's strip, or an unfolded idle one's fold: fold or
+    /// unfold it, by name.
+    Fold(String),
 }
 
 /// What is selected, for the highlight: a block's id or a module's name.
@@ -171,14 +186,21 @@ mod native {
     // gap between modules make one gap inside one.
     const GAP: f64 = 16.0;
     const PAD: f64 = 5.0;
-    const HEAD: f64 = 22.0;
+    /// A module's header: a finger's height, the module's tap target.
+    const HEAD: f64 = 36.0;
     const MOD_GAP: f64 = GAP - 2.0 * PAD;
+    /// A folded module's strip.
+    const STRIP: f64 = 30.0;
     const ROW_GAP: f64 = 36.0;
     const EDGE: f64 = 6.0;
     const END: f64 = 40.0;
     const PORT: f64 = 5.0;
+    /// A faced block's top and foot bands, for its preset and its name.
+    const BAND: f64 = 22.0;
     /// The navigator along the top: the whole graph, thin, as a scrollbar.
     const NAV_H: f64 = 44.0;
+    /// Where the navigator's picture starts: the chips sit before it.
+    const NAV_LEFT: f64 = 112.0;
 
     /// A piece of a module on the grid (a long one folds into several).
     /// `line` is where the chain's line runs, down from its top.
@@ -266,6 +288,17 @@ mod native {
             }
         };
         for (mi, m) in mods.iter().enumerate() {
+            if m.collapsed {
+                // A strip the grid's height, its blocks folded away.
+                let (a, b) = (LANE + CELL / 2.0, 2.0 * LANE + CELL / 2.0);
+                let (line, h) = (HEAD + a, HEAD + a + b + PAD);
+                pieces.push(Piece { module: mi, items: 0..0, x, y: row_top, w: STRIP, h, line, first: true });
+                above = above.max(line);
+                below = below.max(h - line);
+                x += STRIP + MOD_GAP;
+                max_x = max_x.max(x);
+                continue;
+            }
             let (a, b) = exts(&m.items);
             let (line, h) = (HEAD + a, HEAD + a + b + PAD);
             let mut c = 0;
@@ -381,10 +414,11 @@ mod native {
     #[derive(Clone)]
     enum Hit {
         Cell(String),
-        Light(String),
         Module(String, Vec<String>),
         /// The Core's tag: the whole Core.
         Core,
+        /// A module's strip or fold.
+        Fold(String),
     }
 
     enum Gesture {
@@ -635,10 +669,10 @@ mod native {
                         let at = Point::new((p.0 - s.pan.0) / s.zoom, (p.1 - NAV_H - s.pan.1) / s.zoom);
                         let hit = s.hits.iter().rev().find(|(r, _)| r.contains(at)).map(|(_, h)| h.clone());
                         let pick = match hit {
-                            Some(Hit::Light(id)) => CanvasPick::Toggle(id),
                             Some(Hit::Cell(id)) => CanvasPick::Block(id),
                             Some(Hit::Module(name, ids)) => CanvasPick::Module(name, ids),
                             Some(Hit::Core) => CanvasPick::Module("Core".into(), super::core_ids(&s.modules)),
+                            Some(Hit::Fold(name)) => CanvasPick::Fold(name),
                             None => CanvasPick::Clear,
                         };
                         s.picks.push(pick);
@@ -729,15 +763,28 @@ mod native {
             for (p, pl) in &placed {
                 let m = st.modules[p.module].clone();
                 let r = Rect::new(p.x, p.y, p.x + p.w, p.y + p.h);
+                if m.collapsed {
+                    draw_strip(&mut scene, st, t, r, &m, &mut hits);
+                    continue;
+                }
+                if m.bare {
+                    continue;
+                }
                 draw_box(&mut scene, st, t, r, &m, p.first, &mut hits);
-                // A module of mixed effects (the Pre-FX): each block's own
-                // colour behind it, so its delay reads blue and its reverb
-                // violet.
-                if m.name == "Pre-FX" {
+                // A module of mixed effects (the Pre-FX, the Time): each
+                // block on a tile of its own colour, so its delay reads blue
+                // and its reverb violet.
+                if matches!(m.name.as_str(), "Pre-FX" | "Time" | "Input") {
+                    // Full bands across the box, one a block, meeting
+                    // halfway between them: the box is its blocks' colours.
                     let base = Color::from_rgba8(0x14, 0x14, 0x18, 0xff);
-                    for (cr, c) in &pl.cells {
-                        let band = RoundedRect::new((cr.x0 - GAP / 2.0 + 3.0).max(r.x0 + 3.0), r.y0 + HEAD - 2.0, (cr.x1 + GAP / 2.0 - 3.0).min(r.x1 - 3.0), r.y1 - 3.0, 8.0);
-                        scene.fill(Fill::NonZero, t, mix(hex(&c.colour), base, 0.16), None, &band);
+                    let n = pl.cells.len();
+                    for (i, (cr, c)) in pl.cells.iter().enumerate() {
+                        let y0 = if i == 0 { r.y0 + HEAD - 4.0 } else { cr.y0 - GAP / 2.0 };
+                        let y1 = if i + 1 == n { r.y1 } else { cr.y1 + GAP / 2.0 };
+                        let bottom = if i + 1 == n { 10.0 } else { 0.0 };
+                        let band = RoundedRect::from_rect(Rect::new(r.x0, y0, r.x1, y1), kurbo::RoundedRectRadii::new(0.0, 0.0, bottom, bottom));
+                        scene.fill(Fill::NonZero, t, mix(hex(&c.colour), base, 0.2), None, &band);
                     }
                 }
                 for (r, inner) in &pl.boxes {
@@ -818,7 +865,6 @@ mod native {
                 for (rect, c) in &pl.cells {
                     draw_cell(&mut scene, st, t, *rect, c);
                     hits.push((*rect, Hit::Cell(c.id.clone())));
-                    hits.push((Rect::new(rect.x1 - 30.0, rect.y0, rect.x1, rect.y0 + 30.0), Hit::Light(c.id.clone())));
                     if c.core {
                         core_tag(&mut scene, st, t, Point::new(rect.x1 - 13.0, rect.y1 - 13.0), &mut hits);
                     }
@@ -833,9 +879,10 @@ mod native {
             scene.fill(Fill::NonZero, ts, Color::from_rgba8(0x0b, 0x0b, 0x0e, 0xff), None, &bar);
             scene.fill(Fill::NonZero, ts, Color::from_rgba8(0x27, 0x27, 0x2a, 0xff), None, &Rect::new(0.0, NAV_H - 1.0, view.0, NAV_H));
             // Stretched to the bar: the whole width, the bar's height.
-            let m = (view.0 - 24.0) / cw;
+            // Room at its left for the host's chips (All, Fit).
+            let x0 = NAV_LEFT;
+            let m = (view.0 - x0 - 12.0) / cw;
             let my = (NAV_H - 10.0) / ch;
-            let x0 = 12.0;
             st.nav = (x0, m);
             let mini = Affine::translate((x0, 5.0)) * Affine::scale_non_uniform(m, my);
             for (p, pl) in &placed {
@@ -917,17 +964,27 @@ mod native {
         scene.fill(Fill::NonZero, t, mix(colour, Color::from_rgba8(0x14, 0x14, 0x18, 0xff), if on { 0.16 } else { 0.07 }), None, &rr);
         let edge = if on { colour } else { Color::from_rgba8(0x2a, 0x2a, 0x31, 0xff) };
         scene.stroke(&Stroke::new(if on { 2.0 } else { 1.0 }), t, edge, None, &rr);
-        glyph(scene, t, &m.name.to_lowercase(), r.x0 + PAD - 1.0, r.y0 + 4.0, 13.0, colour);
+        // The header's band: lighter, the module's handle.
+        let head = RoundedRect::from_rect(Rect::new(r.x0, r.y0, r.x1, r.y0 + HEAD - 4.0), kurbo::RoundedRectRadii::new(10.0, 10.0, 0.0, 0.0));
+        scene.fill(Fill::NonZero, t, mix(colour, Color::from_rgba8(0x14, 0x14, 0x18, 0xff), if on { 0.3 } else { 0.12 }), None, &head);
+        glyph(scene, t, &m.name.to_lowercase(), r.x0 + PAD + 2.0, r.y0 + 8.0, 16.0, colour);
         let name = if first { m.name.to_uppercase() } else { format!("{} ›", m.name.to_uppercase()) };
         let room = r.width() - PAD * 2.0 - 14.0;
-        let nw = text(scene, st, t, &name, 10.5, 800.0, lift(colour), r.x0 + PAD + 14.0, r.y0 + 15.0, room, false);
+        let nw = text(scene, st, t, &name, 12.5, 800.0, lift(colour), r.x0 + PAD + 23.0, r.y0 + 21.0, room - 9.0, false);
         if first && !m.label.is_empty() {
-            text(scene, st, t, &m.label, 10.5, 600.0, Color::from_rgba8(0xa1, 0xa1, 0xaa, 0xff), r.x0 + PAD + 22.0 + nw, r.y0 + 15.0, (room - 8.0 - nw).max(0.0), false);
+            text(scene, st, t, &m.label, 10.5, 600.0, Color::from_rgba8(0xa1, 0xa1, 0xaa, 0xff), r.x0 + PAD + 31.0 + nw, r.y0 + 21.0, (room - 8.0 - nw).max(0.0), false);
         }
         // Anywhere in its box that isn't a block picks the module.
         hits.push((r, Hit::Module(m.name.clone(), m.ids())));
         if m.core {
-            core_tag(scene, st, t, Point::new(r.x1 - PAD - 8.0, r.y0 + 11.0), hits);
+            core_tag(scene, st, t, Point::new(r.x1 - PAD - 10.0, r.y0 + 16.0), hits);
+        }
+        // Unfolded with nothing in use: a fold at the header's end.
+        if m.idle {
+            let at = Point::new(r.x1 - PAD - 12.0, r.y0 + 16.0);
+            let chevron = rounded_path(&[Point::new(at.x + 3.0, at.y - 6.0), Point::new(at.x - 3.0, at.y), Point::new(at.x + 3.0, at.y + 6.0)], 1.5);
+            scene.stroke(&Stroke::new(2.0).with_caps(kurbo::Cap::Round), t, lift(colour), None, &chevron);
+            hits.push((Rect::new(at.x - 18.0, r.y0, r.x1, r.y0 + HEAD), Hit::Fold(m.name.clone())));
         }
     }
 
@@ -951,13 +1008,16 @@ mod native {
         if !faced {
             scene.fill(Fill::NonZero, t, if c.lit { mix(colour, base, 0.16) } else { base }, None, &rr);
         } else {
-            // Its name over a shade along the foot; off, the picture dimmed.
-            let foot = RoundedRect::from_rect(Rect::new(r.x0, r.y1 - 34.0, r.x1, r.y1), kurbo::RoundedRectRadii::new(0.0, 0.0, 9.0, 9.0));
-            let shade = vello::peniko::Gradient::new_linear((0.0, r.y1 - 34.0), (0.0, r.y1))
-                .with_stops([Color::from_rgba8(0, 0, 0, 0), Color::from_rgba8(0, 0, 0, 0xd0)].as_slice());
-            scene.fill(Fill::NonZero, t, &shade, None, &foot);
+            // Its preset and its name each on a band of their own, whatever
+            // the picture under them; off, the picture dimmed.
+            let band = Color::from_rgba8(0x08, 0x08, 0x0a, 0xc8);
+            let head = RoundedRect::from_rect(Rect::new(r.x0, r.y0, r.x1, r.y0 + BAND), kurbo::RoundedRectRadii::new(9.0, 9.0, 0.0, 0.0));
+            let foot = RoundedRect::from_rect(Rect::new(r.x0, r.y1 - BAND, r.x1, r.y1), kurbo::RoundedRectRadii::new(0.0, 0.0, 9.0, 9.0));
+            scene.fill(Fill::NonZero, t, band, None, &head);
+            scene.fill(Fill::NonZero, t, band, None, &foot);
             if !c.lit {
-                scene.fill(Fill::NonZero, t, Color::from_rgba8(0x0b, 0x0b, 0x0e, 0xa0), None, &rr);
+                // Off: muted, the picture sunk into the desk.
+                scene.fill(Fill::NonZero, t, Color::from_rgba8(0x18, 0x18, 0x1c, 0xb8), None, &rr);
             }
         }
         let edge = if on {
@@ -973,34 +1033,34 @@ mod native {
         for x in [r.x0, r.x1] {
             scene.fill(Fill::NonZero, t, port, None, &Circle::new((x, r.center().y), PORT));
         }
-        // What it is.
-        glyph(scene, t, &c.kind, r.x0 + 9.0, r.y0 + 8.0, 15.0, if c.lit { colour } else { Color::from_rgba8(0x52, 0x52, 0x5b, 0xff) });
-        // Its light.
-        let light = if c.lit { Color::from_rgba8(0x22, 0xc5, 0x5e, 0xff) } else { Color::from_rgba8(0x3f, 0x3f, 0x46, 0xff) };
-        scene.fill(Fill::NonZero, t, light, None, &Circle::new((r.x1 - 13.0, r.y0 + 13.0), 4.5));
-        // Its name, and what it plays.
+        // Its preset along the top, what it is and its name along the
+        // foot; an edit marked at the top right.
         let ink = if c.lit { Color::from_rgba8(0xe4, 0xe4, 0xe7, 0xff) } else { Color::from_rgba8(0x71, 0x71, 0x7a, 0xff) };
-        let cy = r.center().y;
-        if faced {
-            text(scene, st, t, &c.name, 12.0, 750.0, ink, r.x0 + 8.0, r.y1 - 9.0, CELL - 16.0, true);
-        } else if c.sub.is_empty() {
-            text(scene, st, t, &c.name, 12.5, 700.0, ink, r.x0 + 10.0, cy + 4.5, CELL - 20.0, true);
-        } else {
-            text(scene, st, t, &c.name, 12.5, 700.0, ink, r.x0 + 10.0, cy - 2.0, CELL - 20.0, true);
-            text(scene, st, t, &c.sub, 10.0, 550.0, Color::from_rgba8(0x71, 0x71, 0x7a, 0xff), r.x0 + 8.0, cy + 14.0, CELL - 16.0, true);
+        if !c.sub.is_empty() {
+            let sub = if faced { Color::from_rgba8(0xd4, 0xd4, 0xd8, 0xff) } else { Color::from_rgba8(0x8a, 0x8a, 0x93, 0xff) };
+            text(scene, st, t, &c.sub, 9.5, 650.0, sub, r.x0 + 8.0, r.y0 + 14.5, CELL - (if c.edited { 26.0 } else { 16.0 }), false);
         }
-        if c.edited && !faced {
-            text(scene, st, t, "Edited", 9.5, 750.0, Color::from_rgba8(0xf5, 0x9e, 0x0b, 0xff), r.x0 + 8.0, r.y1 - 10.0, CELL - 16.0, true);
+        if c.edited {
+            scene.fill(Fill::NonZero, t, Color::from_rgba8(0xf5, 0x9e, 0x0b, 0xff), None, &Circle::new((r.x1 - 11.0, r.y0 + 12.0), 3.5));
         }
+        let (size, icon) = (12.0, 13.0);
+        let w = measure(st, &c.name, size, 750.0).min(CELL - 16.0 - icon - 4.0);
+        let x = r.center().x - (icon + 4.0 + w) / 2.0;
+        let base = if faced { r.y1 - 7.0 } else { r.center().y + 5.0 };
+        glyph(scene, t, &c.kind, x, base - 10.5, icon, if c.lit { colour } else { Color::from_rgba8(0x52, 0x52, 0x5b, 0xff) });
+        text(scene, st, t, &c.name, size, 750.0, ink, x + icon + 4.0, base, w + 6.0, false);
     }
 
     /// A block's frame face over its box (grown by the face's margin), when
     /// the manifest has one for it; whether it drew.
     fn paint_face(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, c: &CanvasCell) -> bool {
-        let Some(def) = c.keys.iter().find_map(|k| st.block_faces.iter().find(|d| d.matches.iter().any(|m| m == k))) else {
+        let def = c.keys.iter().find_map(|k| st.block_faces.iter().find(|d| d.matches.iter().any(|m| m == k)));
+        // A block face fills the block; a unit's own face (a pedal, an amp)
+        // sits whole between the bands.
+        let unit = def.is_none() && !c.fallback.as_ref().is_some_and(|f| f.2);
+        let Some((face, ns, bleed)) = def.map(|d| (d.face.clone(), d.ns.clone(), d.bleed)).or_else(|| c.fallback.clone().map(|(f, n, _)| (f, n, 0.0))) else {
             return false;
         };
-        let (face, ns, bleed) = (def.face.clone(), def.ns.clone(), def.bleed);
         let slot = st.surfaces.entry(c.id.clone()).or_insert(None);
         if slot.as_ref().is_none_or(|s| s.face != face) {
             *slot = open_block_face(&face).map(|live| BlockSurface { face: face.clone(), live, applied: Vec::new() });
@@ -1012,9 +1072,27 @@ mod native {
             s.applied = values;
         }
         let m = bleed * r.width();
-        let at = r.inflate(m, m);
+        if unit {
+            // The unit on the block's own ground.
+            scene.fill(Fill::NonZero, t, Color::from_rgba8(0x17, 0x17, 0x1b, 0xff), None, &RoundedRect::from_rect(r, 9.0));
+        }
+        let at = if unit { Rect::new(r.x0 + 4.0, r.y0 + BAND + 2.0, r.x1 - 4.0, r.y1 - BAND - 2.0) } else { r.inflate(m, m) };
         s.live.paint_vectors_at(scene, at.width(), at.height(), (t * Affine::translate((at.x0, at.y0))).as_coeffs());
         true
+    }
+
+    /// A folded module: a thin strip in its colour, its mark at the top and
+    /// its name down it. A tap unfolds it.
+    fn draw_strip(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, m: &CanvasModule, hits: &mut Vec<(Rect, Hit)>) {
+        let colour = hex(&m.colour);
+        let rr = RoundedRect::from_rect(r, 10.0);
+        scene.fill(Fill::NonZero, t, mix(colour, Color::from_rgba8(0x14, 0x14, 0x18, 0xff), 0.1), None, &rr);
+        scene.stroke(&Stroke::new(1.0).with_dashes(0.0, [4.0, 4.0]), t, mix(colour, Color::from_rgba8(0x14, 0x14, 0x18, 0xff), 0.45), None, &rr);
+        glyph(scene, t, &m.name.to_lowercase(), r.center().x - 7.0, r.y0 + 9.0, 14.0, colour);
+        // The name, reading upward.
+        let up = t * Affine::translate((r.center().x + 4.5, r.y0 + 34.0)) * Affine::rotate(std::f64::consts::FRAC_PI_2);
+        text(scene, st, up, &m.name.to_uppercase(), 10.5, 800.0, lift(colour), 0.0, 0.0, r.height() - 44.0, false);
+        hits.push((r, Hit::Fold(m.name.clone())));
     }
 
     /// The Core's tag: its mark in a ring, centred at `at`. A tap on it
@@ -1036,10 +1114,17 @@ mod native {
     /// Draw `s` with its baseline at `y`, from `x` (or centred in `max_w`),
     /// cut at `max_w`. Returns its width.
     #[allow(clippy::too_many_arguments)]
-    fn text(scene: &mut Scene, st: &mut State, t: Affine, s: &str, size: f32, weight: f32, colour: Color, x: f64, y: f64, max_w: f64, centre: bool) -> f64 {
-        if s.is_empty() || max_w <= 0.0 {
+    /// `s`'s width at `size` and `weight`.
+    fn measure(st: &mut State, s: &str, size: f32, weight: f32) -> f64 {
+        if s.is_empty() {
             return 0.0;
         }
+        let key = laid(st, s, size, weight);
+        f64::from(st.texts[&key].width())
+    }
+
+    /// `s` laid out (cached), by its key.
+    fn laid(st: &mut State, s: &str, size: f32, weight: f32) -> (String, u32, u32) {
         let key = (s.to_string(), size.to_bits(), weight.to_bits());
         if !st.texts.contains_key(&key) {
             let mut b = st.layouts.ranged_builder(&mut st.fonts, s, 1.0, true);
@@ -1050,6 +1135,14 @@ mod native {
             layout.break_all_lines(None);
             st.texts.insert(key.clone(), layout);
         }
+        key
+    }
+
+    fn text(scene: &mut Scene, st: &mut State, t: Affine, s: &str, size: f32, weight: f32, colour: Color, x: f64, y: f64, max_w: f64, centre: bool) -> f64 {
+        if s.is_empty() || max_w <= 0.0 {
+            return 0.0;
+        }
+        let key = laid(st, s, size, weight);
         let layout = &st.texts[&key];
         let w = f64::from(layout.width());
         let x = if centre { x + ((max_w - w) / 2.0).max(0.0) } else { x };
@@ -1084,6 +1177,7 @@ mod native {
         const SPIN: &[&str] = &["M20 12a8 8 0 1 1-2.3-5.6", "M20 4v4h-4"];
         const DYN: &[&str] = &["M4 5v14h16", "M4 19l6-6 10-4"];
         match key {
+            "input" => &["M12 3v6", "M8 9h8v4a4 4 0 0 1-8 0z", "M12 17v4"],
             "core" => &["M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z", "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z"],
             "drive" | "boost" | "saturator" => &["M13 2 4 14h7l-1 8 9-12h-7z"],
             "amp" => &["M3 7h18v12H3z", "M3 11h18", "M7 15h.01", "M11 15h.01"],

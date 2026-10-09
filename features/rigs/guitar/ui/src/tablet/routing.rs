@@ -86,7 +86,13 @@ pub fn Routing(state: RigViewState) -> Element {
     });
     let blocks = state.blocks.read().clone();
     let mut fit = use_signal(|| 0u32);
-    let modules = canvas_modules(&blocks);
+    // What the patch uses (its blocks that are on, and the amps), or every
+    // block when asked for all.
+    let mut all = use_signal(|| false);
+    // The idle modules unfolded by hand.
+    let mut unfolded = use_signal(Vec::<String>::new);
+    let faces = crate::rig_faces::use_faces();
+    let modules = canvas_modules(&blocks, all(), &unfolded.read(), &faces);
     let selected = sel().map(|s| match s {
         Selected::Block(id) => CanvasSel::Block(id),
         Selected::Module(m, _) => CanvasSel::Module(m),
@@ -96,16 +102,16 @@ pub fn Routing(state: RigViewState) -> Element {
         let s = match pick {
             CanvasPick::Block(id) => Some(Selected::Block(id)),
             CanvasPick::Module(m, ids) => Some(Selected::Module(m, ids)),
-            CanvasPick::Toggle(id) => {
-                if let (Some(r), Some(b)) = (rig.clone(), blocks.iter().find(|b| b.id == id)) {
-                    let on = b.bypassed;
-                    let _ = dioxus_core::spawn_forever(async move {
-                        let _ = r.set_block_bypass(id, !on).await;
-                    });
+            CanvasPick::Clear => None,
+            CanvasPick::Fold(name) => {
+                let mut u = unfolded.write();
+                if let Some(i) = u.iter().position(|n| *n == name) {
+                    u.remove(i);
+                } else {
+                    u.push(name);
                 }
                 return;
             }
-            CanvasPick::Clear => None,
         };
         if let (Some(s), Some(BrowserFocus(mut f))) = (s.as_ref(), focus)
             && let Some(at) = focus_for(s, &blocks, &comp.peek())
@@ -115,11 +121,13 @@ pub fn Routing(state: RigViewState) -> Element {
         let mut sel = sel;
         sel.set(s);
     };
+    let all_on = if all() { "border-color: #a1a1aa; color: #fafafa;" } else { "" };
     let chip = "height: 30px; padding: 0 11px; border-radius: 15px; border: 1px solid #3f3f46; background: rgba(11,11,14,0.86); color: #d4d4d8; font-size: 12.5px; font-weight: 650; display: flex; align-items: center; cursor: pointer;";
     rsx! {
         div { style: "position: relative; height: 100%; min-height: 0; background: {DESK}; overflow: hidden;",
-            super::routing_canvas::RoutingCanvas { modules, selected, fold: false, fit: fit(), focus: ("Drive".to_string(), "Reverb".to_string()), on_pick }
-            div { style: "position: absolute; bottom: 8px; right: 8px; display: flex; gap: 6px;",
+            super::routing_canvas::RoutingCanvas { modules, selected, fold: false, fit: fit(), focus: ("Input".to_string(), "Time".to_string()), on_pick }
+            div { style: "position: absolute; top: 7px; left: 8px; display: flex; gap: 6px;",
+                div { style: "{chip} {all_on}", onclick: move |_| all.toggle(), "All" }
                 div { style: "{chip}", onclick: move |_| fit += 1, "Fit" }
             }
         }
@@ -128,7 +136,7 @@ pub fn Routing(state: RigViewState) -> Element {
 
 /// A module's blocks in up to three rows, then on to the next column: the
 /// chain runs down each column and left to right.
-const MODULE_ROWS: usize = 3;
+const MODULE_ROWS: usize = 4;
 
 /// The Core's own blocks: tagged, wherever they sit.
 const CORE_BLOCKS: [&str; 4] = ["Pre Comp", "Gate", "Post Comp", "Amp EQ"];
@@ -139,15 +147,29 @@ const AMP_EQ: &str = "Amp EQ";
 /// chain order. The pre effects run in a line; delays and reverbs sit
 /// either side of the dry; the Amp is its two amps into two cabs, then
 /// what shapes it. The Core is a tag on what it owns, not a box.
-fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
+fn canvas_modules(blocks: &[LiveBlock], all: bool, unfolded: &[String], faces: &crate::rig_faces::Faces) -> Vec<CanvasModule> {
     let mut runs: Vec<(String, Vec<CanvasCell>)> = Vec::new();
+    // Everything ahead of the drive board is the Input column.
+    let mut past_input = false;
     // The amps show loaded or not; a cab is part of its amp, and the
     // patch's trim is a level, not a block to edit here.
-    for b in blocks.iter().filter(|b| (!b.empty || b.module == "Amp") && b.block_type != BlockType::Cabinet && !b.name.eq_ignore_ascii_case("Patch Trim")) {
+    for b in blocks.iter().filter(|b| (!b.empty || b.module == "Amp" || b.module == "Drive") && b.block_type != BlockType::Cabinet && !b.name.eq_ignore_ascii_case("Patch Trim")) {
         let is = |names: &[&str]| names.iter().any(|n| n.eq_ignore_ascii_case(&b.name));
         // The Core's blocks: the amp EQ with the amps, the rest (the
         // compressors and the gate) dynamics of their own.
-        let module = if b.name.eq_ignore_ascii_case(AMP_EQ) {
+        past_input |= b.module == "Drive";
+        let module = if !past_input {
+            // What the guitar meets first: its compressor, a pitch effect,
+            // an envelope filter, a wah — what this patch has on, one column,
+            // no module's. The volume pedal shows only with all.
+            if !all && (b.bypassed || b.block_type == BlockType::Volume) {
+                continue;
+            }
+            "Input".to_string()
+        } else if matches!(b.module.as_str(), "Delay" | "Reverb") {
+            // The delays and the reverbs: one Time column.
+            "Time".to_string()
+        } else if b.name.eq_ignore_ascii_case(AMP_EQ) {
             "Amp".to_string()
         } else if b.module == "Core" || (b.name.eq_ignore_ascii_case("Boost") && b.module != "Drive") {
             // The post-amp boost sits with the dynamics.
@@ -157,7 +179,7 @@ fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
         };
         let cell = CanvasCell {
             id: b.id.clone(),
-            name: b.name.clone(),
+            name: if b.module == "Pre" { pre_name(b) } else { b.name.clone() },
             sub: if b.preset.is_empty() || b.preset == b.name { b.detail.clone() } else { b.preset.clone() },
             kind: b.block_type.as_str().to_lowercase(),
             colour: if b.module == "Motion" { MOTION } else { type_colour(b.block_type) }.to_string(),
@@ -165,7 +187,9 @@ fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
             edited: b.overridden,
             empty: b.empty,
             core: is(&CORE_BLOCKS),
-            keys: face_keys(b),
+            // A drive or a pre effect wears its pedal, when it has one.
+            keys: if pedal(b, faces).is_some() { Vec::new() } else { face_keys(b) },
+            fallback: pedal(b, faces),
             params: b.params.iter().map(|p| (p.name.clone(), f64::from(p.value))).chain([("on".to_string(), if b.bypassed { 0.0 } else { 1.0 })]).collect(),
         };
         // The amp EQ joins the amps it follows, though the gate and the
@@ -187,20 +211,74 @@ fn canvas_modules(blocks: &[LiveBlock]) -> Vec<CanvasModule> {
             let items = match name.as_str() {
                 // The pre effects down one column: the grid is four rows.
                 "Pre" => cells.chunks(4).map(|c| CanvasItem::Col(c.to_vec())).collect(),
-                "Delay" | "Reverb" => cells.chunks(2).map(|c| CanvasItem::Split(c.to_vec())).collect(),
+                // The delays and reverbs side by side with the dry, one column.
+                "Time" => cells.chunks(4).map(|c| CanvasItem::Lanes(c.iter().cloned().zip(-1..).map(|(c, l)| (l, c)).collect())).collect(),
                 "Amp" => amp_items(cells),
+                "Input" => {
+                    // The compressor, the pitch, the filter or wah, the volume.
+                    let rank = |c: &CanvasCell| match c.kind.as_str() {
+                        "compressor" => 0,
+                        "pitch" => 1,
+                        "filter" => 2,
+                        "wah" => 3,
+                        _ => 4,
+                    };
+                    let mut cells = cells;
+                    cells.sort_by_key(rank);
+                    cells.chunks(4).map(|c| CanvasItem::Col(c.to_vec())).collect()
+                }
                 _ => cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect(),
             };
             let name = if name == "Pre" { "Pre-FX".to_string() } else { name };
+            // What the patch uses: a module with nothing on folds to a
+            // strip (the amps never), unless unfolded or all are asked for.
+            let idle = name != "Amp" && !cells_of(&items).iter().any(|c| c.lit && !c.empty);
+            let open = all || unfolded.contains(&name);
             CanvasModule {
                 colour: module_colour(&name).to_string(),
                 label: String::new(),
                 items,
                 core: matches!(name.as_str(), "Drive" | "Amp"),
+                collapsed: idle && !open && name != "Input",
+                idle: idle && open && !all && name != "Input",
+                bare: name == "Input",
                 name,
             }
         })
         .collect()
+}
+
+/// A pre effect by what it is, not its slot: its delay "Delay", its reverb
+/// "Verb", and its mod and motion slots the effect they hold (a chorus,
+/// a phaser, a tremolo…).
+fn pre_name(b: &LiveBlock) -> String {
+    match b.block_type {
+        BlockType::Delay => "Delay".into(),
+        BlockType::Reverb => "Verb".into(),
+        BlockType::Trem => "Tremolo".into(),
+        t => {
+            let n = t.as_str();
+            let mut c = n.chars();
+            c.next().map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
+        }
+    }
+}
+
+/// The unit a block is, as its face and namespace: a drive slot's or a
+/// pre effect's pedal, an amp's own amp (its block composition).
+fn pedal(b: &LiveBlock, faces: &crate::rig_faces::Faces) -> Option<(String, String, bool)> {
+    if b.empty {
+        return None;
+    }
+    let stem = |f: &crate::rig_faces::FaceEntry| f.face.trim_start_matches("rig-faces/").to_string();
+    match b.module.as_str() {
+        "Drive" | "Pre" => super::fx_row::face_for(b, faces).map(|f| (stem(&f), f.ns, false)),
+        "Amp" if b.block_type == BlockType::Amp => {
+            let f = faces.amp(&b.asset).or_else(|| faces.amp(&b.preset))?;
+            Some((format!("{}-block", stem(f)), f.ns.clone(), true))
+        }
+        _ => None,
+    }
 }
 
 /// What picks a block's frame face, most particular first: a delay by its
@@ -216,6 +294,19 @@ fn face_keys(b: &LiveBlock) -> Vec<String> {
     let mut keys: Vec<String> = named.map(|n| format!("{kind}:{}", n.to_lowercase())).into_iter().collect();
     keys.push(kind);
     keys
+}
+
+/// Every cell in a module's items.
+fn cells_of(items: &[CanvasItem]) -> Vec<&CanvasCell> {
+    items
+        .iter()
+        .flat_map(|i| match i {
+            CanvasItem::Col(c) | CanvasItem::Split(c) => c.iter().collect::<Vec<_>>(),
+            CanvasItem::Lanes(c) => c.iter().map(|(_, c)| c).collect(),
+            CanvasItem::Merge(c, (_, into)) => c.iter().map(|(_, c)| c).chain([into]).collect(),
+            CanvasItem::Sub(m) => cells_of(&m.items),
+        })
+        .collect()
 }
 
 const GREY: &str = "#a1a1aa";
@@ -250,6 +341,7 @@ fn module_colour(name: &str) -> &'static str {
         "Modulation" => "#22d3ee",
         "Motion" => MOTION,
         "Delay" => "#3b82f6",
+        "Time" => "#6366f1",
         "Reverb" => "#8b5cf6",
         _ => GREY,
     }
