@@ -2479,11 +2479,23 @@ pub(crate) mod golden {
         let drives = parse::<DrivePresetLib>("bass drives", include_str!("../default-config-bass/drive-presets.styx")).presets;
         let built = build_profile(&flatten(&profile, &comp), &drives);
         let names: Vec<&str> = built.patches.iter().map(|p| p.name.as_str()).collect();
-        assert_eq!(names, ["Amp", "DI", "Crunch", "Drive", "Moog", "Env", "Fuzz"]);
+        assert_eq!(names, ["Amp", "DI", "Crunch", "Drive", "Moog", "Env", "Fuzz", "Ambient"]);
+        // As the bass plays it: no Pre-FX, no Motion; Modulation and Time
+        // kept.
+        let mut fitted = built.patches[0].clone();
+        crate::profiles::fit_to_instrument(&mut fitted, crate::instrument::Instrument::Bass);
+        let chain = &fitted.chain;
+        assert!(!chain.iter().any(|b| b.module == crate::profiles::PRE_FX || b.module == "Motion"), "no Pre-FX or Motion on a bass");
+        assert!(chain.iter().any(|b| b.name == "Chorus") && chain.iter().any(|b| b.name == "DLY 1"), "Modulation and Time kept");
         for p in &built.patches {
             let b = |n: &str| p.chain.iter().find(|b| b.name == n).unwrap_or_else(|| panic!("{}: no {n}", p.name));
             let amp = &b("Amp L").nam;
-            assert!(amp.contains(if p.name == "DI" { "Full Flat" } else { "AGS Med" }), "{}: amp {amp}", p.name);
+            let want = match p.name.as_str() {
+                "DI" => "Full Flat",
+                "Ambient" => "AGS Warm",
+                _ => "AGS Med",
+            };
+            assert!(amp.contains(want), "{}: amp {amp}", p.name);
             let d1 = b("Drive 1");
             let driven = matches!(p.name.as_str(), "Crunch" | "Drive" | "Fuzz");
             assert_eq!(!d1.bypassed, driven, "{}: Drive 1 on", p.name);
@@ -2494,5 +2506,26 @@ pub(crate) mod golden {
             assert_eq!(!b("Filter").bypassed, matches!(p.name.as_str(), "Moog" | "Env"), "{}: the filter", p.name);
             assert!(!b("Post Comp").bypassed && !b("Amp EQ").bypassed, "{}: the mix chain", p.name);
         }
+    }
+
+    /// The bass's Metal: Clean on the Tone Hammer, Crunch and Drive on the
+    /// Parallax (its full captures, in the amp slot) — and it opens on
+    /// Drive.
+    #[test]
+    fn the_bass_metal_builds_as_designed() {
+        let profile: ProfileDef = parse("bass metal", include_str!("../default-config-bass/profiles/metal.styx"));
+        assert_eq!(profile.default_patch, "Drive", "Metal opens on its drive");
+        let comp = Compositions {
+            tones: Vec::new(),
+            modules: parse::<ModuleLib>("bass modules", include_str!("../default-config-bass/modules.styx")).presets,
+            presets: parse::<PresetLib>("bass presets", include_str!("../default-config-bass/presets.styx")).presets,
+            blocks: parse::<BlockLib>("bass blocks", include_str!("../default-config-bass/blocks.styx")).presets,
+        };
+        let drives = parse::<DrivePresetLib>("bass drives", include_str!("../default-config-bass/drive-presets.styx")).presets;
+        let built = build_profile(&flatten(&profile, &comp), &drives);
+        let amp = |name: &str| built.patches.iter().find(|p| p.name == name).and_then(|p| p.chain.iter().find(|b| b.name == "Amp L")).map(|b| b.nam.clone()).unwrap_or_default();
+        assert!(amp("Clean").contains("AGS Med"), "Clean: {}", amp("Clean"));
+        assert!(amp("Crunch").contains("PARALLAX DIST SMOOTH"), "Crunch: {}", amp("Crunch"));
+        assert!(amp("Drive").contains("PARALLAX DEFAULT.nam"), "Drive: {}", amp("Drive"));
     }
 }

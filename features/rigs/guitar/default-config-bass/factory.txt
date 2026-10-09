@@ -173,3 +173,8 @@ setlists.styx	Kids Ministry 10-7-26 Worship Night	cc77c659c0a7b4d6
 setlists.styx	CYA 9-24-26	1d7908ab9a6696ae
 setlists.styx	SETLIST NAME	82ebbe38223a01db
 worship.styx	Worship	94d3af91e29fc191
+modules.styx	Amp :: Parallax	2bb0baa44ccdba95
+presets.styx	Tone Hammer	c485ed40a6f74802
+presets.styx	Parallax	a12da6117a15913f
+metal.styx	Metal	646b7dfaa82ab5f6
+worship.styx	Worship	6ce21fc618363bb2

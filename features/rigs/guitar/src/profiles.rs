@@ -791,6 +791,15 @@ fn drive_board(drives: &[DriveSlotDef], dps: &[DrivePresetDef], patch: RigPatch)
 }
 
 #[must_use]
+/// A chain fitted to its instrument: the bass's is the guitar's less what a
+/// bass has no use for — the Pre-FX in front of the amp, the Motion
+/// module; it keeps Modulation and Time.
+pub(crate) fn fit_to_instrument(patch: &mut RigPatch, instrument: crate::instrument::Instrument) {
+    if instrument == crate::instrument::Instrument::Bass {
+        patch.chain.retain(|b| b.module != PRE_FX && b.module != "Motion");
+    }
+}
+
 pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
     // One amp + its cab — the same shape for "Amp L" and "Amp R"; with both
     // loaded the engine runs the two stages in parallel. A `.nam` that is
@@ -1098,6 +1107,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             nam_of(&p.preset2),
             cab_of(&p.preset2),
         );
+        fit_to_instrument(&mut patch, crate::instrument::current());
         set_patch_trim(&mut patch, p.level_db + p.trim_db);
         assign_meters(&mut patch);
         apply_overrides(&mut patch, &p.overrides);

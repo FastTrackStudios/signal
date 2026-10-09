@@ -34,12 +34,24 @@ fn the_rig_switches_between_the_guitar_and_the_bass() {
     let perf = Rig::perf(&rig);
     assert_eq!(perf.instrument, "bass");
     assert_eq!(perf.profile_name, "Worship");
-    assert_eq!(stacks(&rig), ["Clean", "Crunch", "Drive", "Synth", "Fuzz"]);
+    assert_eq!(stacks(&rig), ["Clean", "Crunch", "Drive", "Synth", "Fuzz", "Ambient"]);
     assert!(!Rig::chain(&rig).is_empty(), "the bass's chain is on screen");
+    // The bass's chain: no Pre-FX, no Motion — Modulation and Time kept.
+    let names: Vec<String> = Rig::chain(&rig).into_iter().map(|b| b.name).collect();
+    for gone in ["Pre Verb", "Pre Delay", "Tremolo", "Rotary"] {
+        assert!(!names.iter().any(|n| n == gone), "{gone} on a bass: {names:?}");
+    }
+    for kept in ["Chorus", "DLY 1", "VERB 1"] {
+        assert!(names.iter().any(|n| n == kept), "{kept} kept: {names:?}");
+    }
+    // It opens on the profile, its fifth switch the fifth stack.
+    let perf = Rig::perf(&rig);
+    assert_eq!(perf.perform_mode, 1, "the bass opens in Profile mode");
+    assert_eq!(perf.switch_actions.get(4).map(String::as_str), Some("stack"), "switch 5 is the fifth stack");
     // Nothing of the guitar's carried over: every stack shows the bass's own
     // patches.
     // (A patch named like its stack shows as "Default".)
-    let bass_patches = ["Amp", "DI", "Crunch", "Drive", "Moog", "Env", "Fuzz", "Default"];
+    let bass_patches = ["Amp", "DI", "Crunch", "Drive", "Moog", "Env", "Fuzz", "Ambient", "Default"];
     let all: Vec<String> = Rig::perf(&rig).stacks.iter().map(|s| format!("{}: {} {:?}", s.name, s.current_patch, s.patches)).collect();
     for st in Rig::perf(&rig).stacks {
         assert!(bass_patches.contains(&st.current_patch.as_str()), "{}: a guitar patch carried over: {} — {all:?}", st.name, st.current_patch);

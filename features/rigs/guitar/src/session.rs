@@ -178,7 +178,15 @@ impl Default for MeterPump {
 /// straight on to the next song when it has none — and holding it goes back;
 /// with none (Profile mode) it taps the tempo.
 fn default_switch_actions(song_is_up: bool) -> Vec<String> {
-    let five = if song_is_up { "sections" } else { "tap_tempo" };
+    // The bass's fifth switch is its fifth stack (it seldom taps a tempo);
+    // held, it is the tuner either way.
+    let five = if crate::instrument::current() == crate::instrument::Instrument::Bass {
+        "stack"
+    } else if song_is_up {
+        "sections"
+    } else {
+        "tap_tempo"
+    };
     ["stack", "stack", "stack", "stack", five]
         .iter()
         .map(|s| (*s).to_string())
@@ -681,6 +689,10 @@ impl GuitarRigBackend {
         // The watcher starts over on the new directory (its files are not
         // edits made under the rig).
         self.reset_config_watch();
+        // Where this instrument was left (or, the first time, where it
+        // starts), and its switches as its own.
+        *self.switch_actions.lock_ok() = default_switch_actions(false);
+        self.restore_last_state();
         tracing::info!(instrument.from = from.id(), instrument.to = to.id(), "instrument switched");
         if crate::library::rig_is_design() {
             self.open_for_design();
@@ -2189,7 +2201,10 @@ impl GuitarRigBackend {
     /// footswitches 1–5 and the direct CC 106–110 mapping.
     fn hold_layer_action(&self, slot: usize) {
         match slot {
-            0 => Rig::press_stack(self, 4),
+            // The stack after the switches': the fifth (the guitar's
+            // Ambient), or the sixth where switch 5 is itself a stack (the
+            // bass's Ambient).
+            0 => Rig::press_stack(self, if self.switch_job(4) == "stack" { 5 } else { 4 }),
             1 => Rig::toggle_fx(self),
             2 => self.toggle_song_mode(),
             3 => Rig::toggle_boost(self),
@@ -2228,7 +2243,9 @@ impl GuitarRigBackend {
     fn switch_tap(&self, sw: usize) {
         let job = self.switch_job(sw);
         match job.as_str() {
-            "stack" if sw < 4 => Rig::press_stack(self, sw as u32),
+            // Switches 1–4 are stacks 1–4; a fifth is one where the profile
+            // has a fifth stack (the bass's).
+            "stack" if sw < 4 || sw < self.profile_def.lock_ok().stacks.len() => Rig::press_stack(self, sw as u32),
             "tap_tempo" => Rig::tap_tempo(self),
             "parts" => self.step_part_impl(1, false),
             "sections" => self.step_part_impl(1, true),
@@ -2579,7 +2596,13 @@ impl GuitarRigBackend {
         let Some(st) = RigLibrary::load_last_state() else {
             // A first start: the set most recently played (or, with none
             // yet, the next one), in Setlist mode — where a player picks up.
-            self.open_nearest_setlist();
+            // The bass opens on its profile: a bassist plays from the
+            // profile far more than from a set.
+            if crate::instrument::current() == crate::instrument::Instrument::Bass {
+                *self.perform_mode.lock_ok() = 1;
+            } else {
+                self.open_nearest_setlist();
+            }
             return;
         };
         // A state saved in the old Preset mode opens in Profile.

@@ -192,6 +192,24 @@ fn main() {
             kilt("Fuzz", KILT, 3, None),
         ],
     });
+    // The Parallax (Metal) as an amp: its full captures carry their own
+    // compressor and cab — the smooth distortion (≈10 % THD) and the
+    // default (≈25 %); the cab-less ones are near clean.
+    modules.push(ModulePresetDef {
+        module: "Amp".into(),
+        name: "Parallax".into(),
+        snapshots: vec![
+            amp_snap("Dist Smooth", "PARALLAX DIST SMOOTH.nam"),
+            // Its distortion peaks with less in (≈ −22 dB): the chain hits
+            // it ~10 dB hotter, so the most trim the amp's drive gives.
+            ModuleSnapshotDef {
+                overrides: vec![OverrideDef::set("Amp", "Amp L", "drive", 0.0)],
+                ..amp_snap("Default", "PARALLAX DEFAULT.nam")
+            },
+            amp_snap("Default No Cab", "PARALLAX DEFAULT (No Cab).nam"),
+            amp_snap("Raw", "PARALLAX DEFAULT (No Comp and No Cab).nam"),
+        ],
+    });
     write(&out.join("modules.styx"), &ModuleLib { presets: modules });
 
     // ── Block presets: the guitar's, and the bass's own ───────────────
@@ -242,6 +260,14 @@ fn main() {
         "Moog" => 6.0,
         "Env" => 6.2,
         "Fuzz" => -0.8,
+        "Ambient" => 7.9,
+        _ => 0.0,
+    };
+    // Metal's levels (measured the same way).
+    let metal_level = |name: &str| match name {
+        "Clean" => 3.0,
+        "Crunch" => 4.4,
+        "Drive" => 2.6,
         _ => 0.0,
     };
     let snap = |name: &str, drive: (&str, &str), amp: &str, extra: &[(&str, &str)], comp: &str| {
@@ -265,9 +291,24 @@ fn main() {
             snap("Fuzz", (KILT, "Fuzz"), "AGS", &[], "Bass Opto"),
             snap("Moog", ("Off", "Off"), "AGS", &[("Pitch", "Microsynth Octave"), ("Filter", "Moog Sweep")], "Bass Opto Heavy"),
             snap("Env", ("Off", "Off"), "AGS", &[("Filter", "Envelope")], "Bass Opto"),
+            snap("Ambient", ("Off", "Off"), "AGS Warm", &[], "Bass Opto"),
         ],
     };
-    write(&out.join("presets.styx"), &PresetLib { presets: vec![core] });
+    // Metal's Core: the Tone Hammer clean, the Parallax for the dirt.
+    let with_amp = |mut sn: PresetSnapshotDef, preset: &str, snapshot: &str, level: f32| {
+        sn.modules = vec![choice("Drive", "Off", "Off"), choice("Amp", preset, snapshot)];
+        sn.level_db = level;
+        sn
+    };
+    let metal_core = RigPresetDef {
+        name: "Parallax".into(),
+        snapshots: vec![
+            with_amp(snap("Clean", ("Off", "Off"), "AGS", &[], "Bass Opto"), AMP, "AGS", metal_level("Clean")),
+            with_amp(snap("Crunch", ("Off", "Off"), "AGS", &[], "Bass Opto"), "Parallax", "Dist Smooth", metal_level("Crunch")),
+            with_amp(snap("Drive", ("Off", "Off"), "AGS", &[], "Bass Opto"), "Parallax", "Default", metal_level("Drive")),
+        ],
+    };
+    write(&out.join("presets.styx"), &PresetLib { presets: vec![core, metal_core] });
     write(&out.join("tones.styx"), &ToneLib { tones: Vec::new() });
 
     // ── Songs: the same songs and sections, the guitar's sounds left out
@@ -291,14 +332,16 @@ fn main() {
     std::fs::copy(guitar.join("setlists.styx"), out.join("setlists.styx")).unwrap();
 
     // ── The Worship profile ───────────────────────────────────────────
-    let patch = |name: &str, snapshot: &str| PatchDef {
+    let patch_in = |name: &str, snapshot: &str, time: (&str, &str)| PatchDef {
         name: name.into(),
         rig_preset: CORE.into(),
         snapshot: snapshot.into(),
-        // Bass plays dry: the room is the mix's.
-        modules: vec![choice("Time", "Dry", "Dry")],
+        modules: vec![choice("Time", time.0, time.1)],
         ..PatchDef::default()
     };
+    // Bass plays dry: the room is the mix's — but for the Ambient stack's
+    // hall, for swells and pads.
+    let patch = |name: &str, snapshot: &str| patch_in(name, snapshot, ("Dry", "Dry"));
     let stack = |name: &str, patches: &[&str]| StackDef { name: name.into(), patches: patches.iter().map(|p| (*p).to_string()).collect(), ..StackDef::default() };
     let worship = ProfileDef {
         name: "Worship".into(),
@@ -310,6 +353,7 @@ fn main() {
             patch("Moog", "Moog"),
             patch("Env", "Env"),
             patch("Fuzz", "Fuzz"),
+            patch_in("Ambient", "Ambient", ("Ambience", "Hall")),
         ],
         stacks: vec![
             stack("Clean", &["Amp", "DI"]),
@@ -317,10 +361,23 @@ fn main() {
             stack("Drive", &["Drive"]),
             stack("Synth", &["Moog", "Env"]),
             stack("Fuzz", &["Fuzz"]),
+            // Switch 6: the hold layer's first, where the guitar has its
+            // Ambient too.
+            stack("Ambient", &["Ambient"]),
         ],
         ..ProfileDef::default()
     };
     write(&out.join("profiles/worship.styx"), &worship);
+    // Metal: the Parallax — Clean, Crunch, Drive; it opens on Drive.
+    let metal_patch = |name: &str| PatchDef { rig_preset: "Parallax".into(), ..patch(name, name) };
+    let metal = ProfileDef {
+        name: "Metal".into(),
+        patches: vec![metal_patch("Clean"), metal_patch("Crunch"), metal_patch("Drive")],
+        stacks: vec![stack("Clean", &["Clean"]), stack("Crunch", &["Crunch"]), stack("Drive", &["Drive"])],
+        default_patch: "Drive".into(),
+        ..ProfileDef::default()
+    };
+    write(&out.join("profiles/metal.styx"), &metal);
     // The legacy single profile a library seeds `profile.styx` from.
     write(&out.join("profile.styx"), &worship);
 }

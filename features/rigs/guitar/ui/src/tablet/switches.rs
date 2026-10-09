@@ -4,6 +4,7 @@
 //!   row A   switches 6–10, the hold layer (a foot's hold lives "up" from
 //!           the toe): Ambient · FX Toggle · Song · Boost · Tuner
 //!   row B   switches 1–5: the profile's first four stacks, then Tap Tempo
+//!           — or, where switch 5 is a stack (the bass's), the fifth
 //!
 //! A stack switch plays its stack; pressed again it steps through it. Its
 //! tile is the stack's colour, lit when it plays, dimmed toward the grid
@@ -74,6 +75,9 @@ pub fn TouchSwitches(perf: PerformanceModel) -> Element {
     let boost = perf.boost_db.abs() > 0.01;
     // Off: the level it switches on at, as the rig keeps it.
     let boost_label = format!("{:+.0} dB", if boost { perf.boost_db } else { perf.boost_level });
+    // Switch 5 a stack (the bass's fifth): its tile under the foot, and the
+    // hold layer's first tile the sixth stack.
+    let five_is_stack = perf.switch_actions.get(4).is_some_and(|a| a == "stack") && stacks.len() > 4;
     rsx! {
         div { style: "display: flex; flex-direction: column; background: #0a0a0c;",
             // One grid, two rows of five, the same columns: the hold layer
@@ -82,8 +86,8 @@ pub fn TouchSwitches(perf: PerformanceModel) -> Element {
             // As tall as the FX row it swaps with (a landscape iPhone's
             // room): the grid above never moves.
             div { style: "display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: {HOLD_H}px {MAIN_H}px; gap: 1px; background: #000; border-top: 1px solid #000; box-sizing: border-box; height: {super::fx_row::FX_H}px;",
-                if let Some(st) = stacks.get(4).cloned() {
-                    StackTile { no: 6, stack: st, index: 4, compact: true }
+                if let Some((i, st)) = { let i = if five_is_stack { 5 } else { 4 }; stacks.get(i).cloned().map(|s| (i, s)) } {
+                    StackTile { no: 6, stack: st, index: i, compact: true }
                 } else {
                     Empty { no: 6 }
                 }
@@ -103,7 +107,11 @@ pub fn TouchSwitches(perf: PerformanceModel) -> Element {
                         Empty { key: "m{i}", no: i as u32 + 1 }
                     }
                 }
-                TapTempo { bpm: perf.tempo_bpm }
+                if five_is_stack {
+                    StackTile { no: 5, stack: stacks[4].clone(), index: 4, compact: false }
+                } else {
+                    TapTempo { bpm: perf.tempo_bpm }
+                }
             }
         }
     }
