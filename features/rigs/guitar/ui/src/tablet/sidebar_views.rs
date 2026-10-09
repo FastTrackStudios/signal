@@ -59,21 +59,58 @@ fn Header(title: String, sub: String, icon: Option<String>, #[props(default)] ac
 
 // ── Presets ────────────────────────────────────────────────────────────────
 
-/// A window `shown` rows tall onto `rows` rows, with a scrollbar that says
-/// there is more and where it is.
+/// A window at most `max_h` tall onto what it holds, with a scrollbar that
+/// says there is more and where it is. Its content's height is measured
+/// (as it mounts, as it scrolls, and when `watch` changes — a stack opened,
+/// a variation added), so rows of any height scroll in it.
 #[component]
-fn ScrollWindow(rows: usize, shown: usize, children: Element) -> Element {
-    let total = rows as f64 * VARIATION_ROW;
-    let view = total.min(shown as f64 * VARIATION_ROW);
-    let mut top = use_signal(|| 0.0_f64);
-    let more = total > view + 0.5;
-    let thumb = (view / total * view).max(24.0);
-    let at = if more { top() / (total - view) * (view - thumb) } else { 0.0 };
+fn ScrollWindow(max_h: f64, #[props(default)] watch: String, children: Element) -> Element {
+    let mut el = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    // (scroll top, how far it scrolls, window height). Blitz's scroll size
+    // is the overflow — how far the content scrolls — not its height; its
+    // scroll events say either, by path, so only their scroll top is taken.
+    let mut m = use_signal(|| (0.0_f64, 0.0_f64, 0.0_f64));
+    let measure = move || {
+        if let Some(e) = el.peek().clone() {
+            // Until it has been laid out (it mounts before layout runs).
+            spawn(async move {
+                for _ in 0..10 {
+                    if let (Ok(size), Ok(rect)) = (e.get_scroll_size().await, e.get_client_rect().await)
+                        && rect.height() > 0.0
+                    {
+                        let next = (m.peek().0, size.height, rect.height());
+                        if *m.peek() != next {
+                            m.set(next);
+                        }
+                        return;
+                    }
+                    architect::platform::sleep(std::time::Duration::from_millis(30)).await;
+                }
+            });
+        }
+    };
+    use_effect(use_reactive!(|watch| {
+        let _ = watch;
+        measure();
+    }));
+    let (top, overflow, view) = m();
+    let total = view + overflow;
+    let more = view > 0.0 && overflow > 0.5;
+    let thumb = if more { (view / total * view).max(24.0) } else { 0.0 };
+    let at = if more { (top / overflow).clamp(0.0, 1.0) * (view - thumb) } else { 0.0 };
     rsx! {
         div { style: "position: relative;",
             div {
-                style: "max-height: {view}px; overflow-y: auto;",
-                onscroll: move |e| top.set(e.data().scroll_top()),
+                style: "max-height: {max_h}px; overflow-y: auto;",
+                onmounted: move |e| {
+                    el.set(Some(e.data()));
+                    measure();
+                },
+                onscroll: move |e| {
+                    let (_, o, v) = *m.peek();
+                    m.set((e.data().scroll_top(), o, v));
+                    measure();
+                },
                 {children}
             }
             if more {
@@ -84,6 +121,36 @@ fn ScrollWindow(rows: usize, shown: usize, children: Element) -> Element {
         }
     }
 }
+
+/// The search at a sidebar's foot: the whole browser, on `kind`, the
+/// keyboard up.
+#[component]
+fn SearchFoot(label: &'static str, kind: &'static str, at: String, variation: String) -> Element {
+    let focus = try_use_context::<super::routing::BrowserFocus>();
+    let picker = try_use_context::<super::setlist::PickPart>();
+    rsx! {
+        button {
+            style: "display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: none; border-radius: {R}; background: {FILL}; color: {INK_3}; font-size: 15px; font-family: {FONT}; text-align: left; cursor: pointer;",
+            onclick: move |_| {
+                if let Some(super::routing::BrowserFocus(mut f)) = focus {
+                    f.set(Some(super::routing::Focus { kind: kind.into(), preset: at.clone(), variation: variation.clone(), search: true }));
+                }
+                if let Some(pick) = picker.as_ref() {
+                    pick.open.call(());
+                }
+            },
+            svg { width: "16", height: "16", view_box: "0 0 16 16",
+                circle { cx: "7", cy: "7", r: "4.8", fill: "none", stroke: INK_3, stroke_width: "1.6" }
+                path { d: "M10.6 10.6 14 14", stroke: INK_3, stroke_width: "1.6", stroke_linecap: "round" }
+            }
+            "{label}"
+        }
+    }
+}
+
+/// The loaded profile's stacks window, at most: four stacks and the open
+/// one's patches, about.
+const STACKS_H: f64 = 340.0;
 
 /// A variation's row, for the loaded preset's window of four.
 const VARIATION_ROW: f64 = 44.0;
@@ -110,8 +177,6 @@ pub fn PresetView(state: RigViewState) -> Element {
     let perf: PerformanceModel = state.perf.read().clone();
     let mut open = use_signal(|| None::<String>);
     let mut role = use_signal(|| None::<&'static str>);
-    let focus = try_use_context::<super::routing::BrowserFocus>();
-    let picker = try_use_context::<super::setlist::PickPart>();
     let playing = c.active_preset.clone();
     let loaded = c.presets.iter().find(|p| p.name == playing).cloned();
     let fits = |p: &signal_guitar_proto::PresetEntry| role().is_none_or(|r| p.snapshots.iter().any(|s| role_of(&s.name) == Some(r)));
@@ -165,7 +230,7 @@ pub fn PresetView(state: RigViewState) -> Element {
                         }
                         MoreButton { label: format!("{} actions", p.name), items: preset_actions.clone(), on_pick: on_preset }
                     }
-                    ScrollWindow { rows: p.snapshots.len() + 1, shown: 4,
+                    ScrollWindow { max_h: VARIATION_ROW * 4.0, watch: format!("{}", p.snapshots.len()),
                         Variations { preset: p.name.clone(), variations: p.snapshots.iter().map(|s| s.name.clone()).collect::<Vec<_>>(), playing: (c.active_preset.clone(), c.active_snapshot.clone()) }
                     }
                 }
@@ -180,11 +245,35 @@ pub fn PresetView(state: RigViewState) -> Element {
                         let rig = rig.clone();
                         let name = p.name.clone();
                         let shown: Vec<String> = p.snapshots.iter().map(|s| s.name.clone()).filter(|s| role().is_none_or(|r| role_of(s) == Some(r))).collect();
-                        let n = p.snapshots.len();
+                        let items = vec![
+                            Item::head(p.name.clone()),
+                            Item::run("load", "Load"),
+                            Item::name("new", "New preset…", format!("{} 2", p.name), "Add", preset_names.clone()),
+                            Item::name("rename", "Rename…", p.name.clone(), "Rename", preset_names.clone()),
+                            Item::Sep,
+                            Item::delete("delete", "Delete preset"),
+                        ];
+                        let on_pick = {
+                            let (rig, from, first) = (rig.clone(), p.name.clone(), first.clone());
+                            EventHandler::new(move |x: Picked| {
+                                let (from, name, first) = (from.clone(), x.text.clone(), first.clone());
+                                match x.id.as_str() {
+                                    "load" => call!(rig, |r| r.choose_preset(from, first)),
+                                    "new" => call!(rig, |r| async move {
+                                        let _ = r.duplicate_rig_preset(from, name.clone()).await;
+                                        r.choose_preset(name, first).await
+                                    }),
+                                    "rename" => call!(rig, |r| r.rename_rig_preset(from, name)),
+                                    "delete" => call!(rig, |r| r.delete_rig_preset(from)),
+                                    _ => {}
+                                }
+                            })
+                        };
                         rsx! {
                             div { key: "{p.name}", style: "border-bottom: 1px solid {RULE};",
+                                div { style: "display: flex; align-items: center; padding-right: 6px;",
                                 button {
-                                    style: "position: relative; width: 100%; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px 0 16px; text-align: left; border: none; background: {CLEAR}; color: {INK}; font-family: {FONT}; cursor: pointer;",
+                                    style: "position: relative; flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px 0 16px; text-align: left; border: none; background: {CLEAR}; color: {INK}; font-family: {FONT}; cursor: pointer;",
                                     onclick: move |_| {
                                         open.set(if is_open { None } else { Some(name.clone()) });
                                         if !is_open {
@@ -194,10 +283,11 @@ pub fn PresetView(state: RigViewState) -> Element {
                                     },
                                     span { style: "width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; background: {swatch};" }
                                     span { style: "flex: 1; min-width: 0; font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
-                                    span { style: "font-size: 13px; color: {INK_3};", "{n}" }
                                     svg { key: "{is_open}", width: "10", height: "6", view_box: "0 0 10 6",
                                         path { d: pick(is_open, "M1 5 L5 1 L9 5", "M1 1 L5 5 L9 1"), fill: "none", stroke: INK_3, stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round" }
                                     }
+                                }
+                                MoreButton { label: format!("{} actions", p.name), items, on_pick }
                                 }
                                 if is_open {
                                     Variations { preset: p.name.clone(), variations: shown, playing: (c.active_preset.clone(), c.active_snapshot.clone()) }
@@ -210,22 +300,7 @@ pub fn PresetView(state: RigViewState) -> Element {
             // At the foot: the kinds of sound, and the search — the whole
             // browser, on the presets.
             div { style: "flex-shrink: 0; display: flex; flex-direction: column-reverse; gap: 10px; padding: 12px 14px; border-top: 1px solid {RULE};",
-                button {
-                    style: "display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: none; border-radius: {R}; background: {FILL}; color: {INK_3}; font-size: 15px; font-family: {FONT}; text-align: left; cursor: pointer;",
-                    onclick: move |_| {
-                        if let Some(super::routing::BrowserFocus(mut f)) = focus {
-                            f.set(Some(super::routing::Focus { kind: "presets".into(), preset: playing_for_browser.clone(), variation: snapshot_for_browser.clone(), search: true }));
-                        }
-                        if let Some(pick) = picker.as_ref() {
-                            pick.open.call(());
-                        }
-                    },
-                    svg { width: "16", height: "16", view_box: "0 0 16 16",
-                        circle { cx: "7", cy: "7", r: "4.8", fill: "none", stroke: INK_3, stroke_width: "1.6" }
-                        path { d: "M10.6 10.6 14 14", stroke: INK_3, stroke_width: "1.6", stroke_linecap: "round" }
-                    }
-                    "Search presets"
-                }
+                SearchFoot { label: "Search presets", kind: "presets", at: playing_for_browser.clone(), variation: snapshot_for_browser.clone() }
                 div { style: "display: flex; gap: 6px; overflow-x: auto;",
                     button { style: "{chip(role().is_none())}", onclick: move |_| role.set(None), "All" }
                     for r in ROLES {
@@ -325,6 +400,7 @@ pub fn ProfileView(state: RigViewState) -> Element {
     let focus = try_use_context::<super::routing::BrowserFocus>();
     let picker = try_use_context::<super::setlist::PickPart>();
     let others: Vec<String> = names.iter().filter(|n| **n != profile).cloned().collect();
+    let rest: Vec<signal_guitar_proto::ProfileEntry> = l.profiles.iter().filter(|p| p.name != profile).cloned().collect();
     let on_profile = {
         let (rig, profile) = (rig.clone(), profile.clone());
         Some(EventHandler::new(move |p: Picked| {
@@ -357,51 +433,64 @@ pub fn ProfileView(state: RigViewState) -> Element {
     };
     rsx! {
         section { style: "height: 100%; display: flex; flex-direction: column; min-height: 0; background: {SHEET}; font-family: {FONT}; color: {INK};",
-            Header { title: profile.clone(), sub: format!("{count} stacks · {patches} patches"), icon: Some(profile.clone()), actions: profile_actions, on_pick: on_profile }
-            div { style: "flex: 1; min-height: 0; overflow-y: auto; padding-top: 8px;",
-                div { style: "position: relative; padding: 2px 0 8px 8px;",
-                    div { style: "background: rgba(0,0,0,0.18); display: flex; flex-direction: column; border-bottom: 1px solid {RULE};",
-                        for (k, v) in views.iter().cloned().enumerate() {
-                            {
-                                let (lifted, line) = match drag() {
-                                    Some((from, to)) if to == k && from != k => (false, Some(to < from)),
-                                    Some((from, _)) => (from == k, None),
-                                    None => (false, None),
-                                };
-                                let rig = rig.clone();
-                                let full = full.clone();
-                                rsx! {
-                                    div {
-                                        key: "{v.name}",
-                                        style: "position: relative; display: flex; flex-direction: column; opacity: {pick(lifted, 0.5, 1.0)};",
-                                        onmounted: move |e| keep_row(rows, k, &e),
-                                        StackRow {
-                                            view: v.clone(),
-                                            shown: k,
-                                            count,
-                                            prev: k.checked_sub(1).map(|p| full[p]),
-                                            next: full.get(k + 1).copied(),
-                                            lib: l.clone(),
-                                            profile: profile.clone(),
-                                            part: perf.parts.get(perf.part_index as usize).cloned().unwrap_or_default(),
-                                            own: own.clone(),
-                                            live,
-                                            where_: "this song".to_string(),
-                                            song_colour: colour.clone(),
-                                            in_song: false,
-                                            grip: move |_: PointerEvent| {
-                                                let (rig, full) = (rig.clone(), full.clone());
-                                                begin_row_drag(bus, drag, rows, count, k, 16.0, move |from, to| {
-                                                    let (a, b) = (full[from], full[to]);
-                                                    call!(rig, |r| r.move_stack(a as u32, b as u32));
-                                                });
-                                            },
-                                        }
-                                        if v.on {
-                                            StackPatches { view: v.clone() }
-                                        }
-                                        if let Some(above) = line {
-                                            span { style: "position: absolute; left: 0; right: 0; {pick(above, \"top\", \"bottom\")}: 0px; height: 2px; background: {INK_2}; z-index: 4; pointer-events: none;" }
+            // The one loaded, held: big, its stacks in a window that scrolls.
+            div { style: "flex-shrink: 0; border-bottom: 1px solid {RULE}; background: {ROW_ON};",
+                div { style: "display: flex; align-items: center; gap: 10px; padding: 14px 6px 8px 16px;",
+                    ProfileIcon { name: profile.clone(), colour: colour.clone(), size: 24 }
+                    div { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
+                        span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: {LIVE};", "LOADED" }
+                        span { style: "font-size: 22px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{profile}" }
+                        span { style: "font-size: 13px; color: {INK_3};", "{count} stacks · {patches} patches" }
+                    }
+                    if let Some(pick) = on_profile {
+                        MoreButton { label: format!("{profile} actions"), items: profile_actions.clone(), on_pick: pick }
+                    }
+                }
+                ScrollWindow { max_h: STACKS_H, watch: format!("{}|{}", views.len(), views.iter().position(|v| v.on).map_or(-1, |p| p as i64)),
+                    div { style: "position: relative; padding: 0 0 8px 0;",
+                        div { style: "background: rgba(0,0,0,0.18); display: flex; flex-direction: column; border-bottom: 1px solid {RULE};",
+                            for (k, v) in views.iter().cloned().enumerate() {
+                                {
+                                    let (lifted, line) = match drag() {
+                                        Some((from, to)) if to == k && from != k => (false, Some(to < from)),
+                                        Some((from, _)) => (from == k, None),
+                                        None => (false, None),
+                                    };
+                                    let rig = rig.clone();
+                                    let full = full.clone();
+                                    rsx! {
+                                        div {
+                                            key: "{v.name}",
+                                            style: "position: relative; display: flex; flex-direction: column; opacity: {pick(lifted, 0.5, 1.0)};",
+                                            onmounted: move |e| keep_row(rows, k, &e),
+                                            StackRow {
+                                                view: v.clone(),
+                                                shown: k,
+                                                count,
+                                                prev: k.checked_sub(1).map(|p| full[p]),
+                                                next: full.get(k + 1).copied(),
+                                                lib: l.clone(),
+                                                profile: profile.clone(),
+                                                part: perf.parts.get(perf.part_index as usize).cloned().unwrap_or_default(),
+                                                own: own.clone(),
+                                                live,
+                                                where_: "this song".to_string(),
+                                                song_colour: colour.clone(),
+                                                in_song: false,
+                                                grip: move |_: PointerEvent| {
+                                                    let (rig, full) = (rig.clone(), full.clone());
+                                                    begin_row_drag(bus, drag, rows, count, k, 16.0, move |from, to| {
+                                                        let (a, b) = (full[from], full[to]);
+                                                        call!(rig, |r| r.move_stack(a as u32, b as u32));
+                                                    });
+                                                },
+                                            }
+                                            if v.on {
+                                                StackPatches { view: v.clone() }
+                                            }
+                                            if let Some(above) = line {
+                                                span { style: "position: absolute; left: 0; right: 0; {pick(above, \"top\", \"bottom\")}: 0px; height: 2px; background: {INK_2}; z-index: 4; pointer-events: none;" }
+                                            }
                                         }
                                     }
                                 }
@@ -409,6 +498,65 @@ pub fn ProfileView(state: RigViewState) -> Element {
                         }
                     }
                 }
+            }
+            // The rest, a tap loading one.
+            div { style: "flex: 1; min-height: 0; overflow-y: auto;",
+                for p in rest.into_iter() {
+                    {
+                        let name = p.name.clone();
+                        let rig = rig.clone();
+                        let items = vec![
+                            Item::head(p.name.clone()),
+                            Item::run("load", "Load"),
+                            Item::name("new", "New profile…", format!("{} 2", p.name), "Add", names.clone()),
+                            Item::name("rename", "Rename…", p.name.clone(), "Rename", names.clone()),
+                            Item::Sep,
+                            Item::delete("delete", "Delete profile"),
+                        ];
+                        let on_pick = {
+                            let (rig, from) = (rig.clone(), p.name.clone());
+                            EventHandler::new(move |x: Picked| {
+                                let (from, name) = (from.clone(), x.text.clone());
+                                match x.id.as_str() {
+                                    "load" => call!(rig, |r| r.select_profile(from)),
+                                    "new" => call!(rig, |r| async move {
+                                        let _ = r.add_profile(name.clone(), from).await;
+                                        r.select_profile(name).await
+                                    }),
+                                    "rename" => call!(rig, |r| r.rename_profile(from, name)),
+                                    "delete" => call!(rig, |r| r.delete_profile(from)),
+                                    _ => {}
+                                }
+                            })
+                        };
+                        rsx! {
+                            div { key: "{p.name}", style: "display: flex; align-items: center; border-bottom: 1px solid {RULE}; padding-right: 6px;",
+                            button {
+                                style: "flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 6px 8px 16px; text-align: left; border: none; background: {CLEAR}; color: {INK}; font-family: {FONT}; cursor: pointer;",
+                                onclick: move |_| {
+                                    let n = name.clone();
+                                    call!(rig, |r| r.select_profile(n));
+                                },
+                                ProfileIcon { name: p.name.clone(), colour: name_colour(&p.name).to_string(), size: 18 }
+                                span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px;",
+                                    span { style: "font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
+                                    // Its stacks, as their tapes.
+                                    span { style: "display: flex; gap: 4px;",
+                                        for (i, st) in p.stacks.iter().enumerate() {
+                                            span { key: "{i}", style: "width: 16px; height: 4px; border-radius: 2px; background: {tape_mark(st)};" }
+                                        }
+                                    }
+                                }
+                            }
+                            MoreButton { label: format!("{} actions", p.name), items, on_pick }
+                            }
+                        }
+                    }
+                }
+            }
+            // At the foot: the search — the whole browser, on the profiles.
+            div { style: "flex-shrink: 0; display: flex; flex-direction: column; padding: 12px 14px; border-top: 1px solid {RULE};",
+                SearchFoot { label: "Search profiles", kind: "profiles", at: profile.clone(), variation: String::new() }
             }
         }
     }

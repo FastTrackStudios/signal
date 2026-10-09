@@ -1515,7 +1515,11 @@ pub fn StackRow(
         PressMenu {
             items: items.clone(),
             on_pick: pick_handler,
-            style: "display: flex; align-items: stretch; border-top: 1px solid {RULE}; background: {pick(on, tint(&song_colour, 18), CLEAR.to_string())};",
+            style: "position: relative; display: flex; align-items: stretch; border-top: 1px solid {RULE}; background: {pick(on, tint(&song_colour, 18), CLEAR.to_string())};",
+            // Playing (or home): a bar at the row's very left, before its grip.
+            if on || home {
+                span { style: "position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 0 2px 2px 0; z-index: 1; pointer-events: none; {fill} {ring}" }
+            }
             if let Some(g) = grip {
                 span {
                     "aria-label": "Drag {view.name} to move it",
@@ -1547,9 +1551,6 @@ pub fn StackRow(
                         }
                     }
                 },
-                if on || home {
-                    span { style: "position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; {fill} {ring}" }
-                }
                 span { style: "width: 70px; flex-shrink: 0; display: flex; align-items: center; gap: 6px;",
                     span { style: "width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; background: {tape};" }
                     span { style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; color: {pick(on, INK, INK_3)};", "{view.name}" }
