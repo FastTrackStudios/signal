@@ -54,10 +54,16 @@ pub fn face_for(b: &LiveBlock, faces: &Faces) -> Option<FaceEntry> {
         // reduction), as its block in the grid shows it.
         BlockType::Compressor if b.name.to_lowercase().contains("pre") => faces.comp.clone().or_else(|| faces.pre_comp_pedal.clone()).or_else(pedal),
         BlockType::Compressor => faces.post_comp.clone(),
-        BlockType::Delay if !is_pre(b) => faces.time(false, crate::control::DELAY_ALGOS.get(param("style").unwrap_or(1)).copied().unwrap_or("")).cloned(),
-        BlockType::Reverb if !is_pre(b) => faces.time(true, crate::control::VERB_ALGOS.get(param("algorithm").unwrap_or(1)).copied().unwrap_or("")).cloned(),
+        // A delay or reverb: its machine's face (a pre one: its pedal, if
+        // its preset has one).
+        BlockType::Delay => (if is_pre(b) { pedal() } else { None })
+            .or_else(|| faces.time(false, crate::control::DELAY_ALGOS.get(param("style").unwrap_or(1)).copied().unwrap_or("")).cloned()),
+        BlockType::Reverb => (if is_pre(b) { pedal() } else { None })
+            .or_else(|| faces.time(true, crate::control::VERB_ALGOS.get(param("algorithm").unwrap_or(1)).copied().unwrap_or("")).cloned()),
         BlockType::Volume if b.name.eq_ignore_ascii_case("Patch Trim") => faces.trim.clone(),
-        _ if is_pre(b) => pedal(),
+        // A pre effect: its pedal, else its type's face (a pre tremolo the
+        // tremolo's).
+        t if is_pre(b) => pedal().or_else(|| faces.modulation(t.as_str()).cloned()),
         t => faces.modulation(t.as_str()).cloned().or_else(pedal),
     }
 }
@@ -92,6 +98,36 @@ fn slot_block(id: &str) -> Option<LiveBlock> {
         option: 0,
         overridden: false,
     })
+}
+
+/// A block's live readings for its face, by its namespace: the spectrum
+/// under an EQ, a compressor's level and gain reduction and their traces,
+/// a gate's level, the Distressor's lamps.
+fn streams_for(b: &LiveBlock, ns: &str, state: &RigViewState) -> Vec<(String, Vec<f64>)> {
+    let db = |lin: f32| if lin <= 1e-6 { -90.0 } else { f64::from(20.0 * lin.log10()).max(-90.0) };
+    let in_db = f64::from(*state.in_peak_db.read());
+    match b.block_type {
+        BlockType::Eq => {
+            let spectrum: Vec<f64> = state.spectrum.read().iter().map(|v| f64::from(*v)).collect();
+            if spectrum.is_empty() { Vec::new() } else { vec![(format!("{ns}/spectrum"), spectrum)] }
+        }
+        BlockType::Compressor | BlockType::Gate => {
+            let waves = state.comp_wave.read();
+            let trace = waves.get(&b.name);
+            let gr_db = trace.map_or_else(|| f64::from(*state.comp_gr_db.read()), |t| f64::from(t.2));
+            let mut out = vec![(format!("{ns}/in"), vec![in_db]), (format!("{ns}/gr"), vec![-gr_db.abs()])];
+            match trace {
+                Some((input, gr, _)) => {
+                    out.push((format!("{ns}/in_history"), input.iter().map(|v| db(*v)).collect()));
+                    out.push((format!("{ns}/gr_history"), gr.iter().map(|v| -f64::from(*v) * 40.0).collect()));
+                }
+                // No trace of its own (a gate): its level, a reading at a time.
+                None => out.push((format!("{ns}/in_history"), vec![in_db])),
+            }
+            out
+        }
+        _ => Vec::new(),
+    }
 }
 
 #[component]
@@ -142,7 +178,7 @@ pub fn FxRow(state: RigViewState) -> Element {
                                     // One block: its face fills the row's box.
                                     Some(f) if one => rsx! {
                                         div { style: "width: {w}px; height: 100%;",
-                                            BlockFace { block: b.clone(), face: f.at_box(w, FX_H), fill: true, stepper: true }
+                                            BlockFace { block: b.clone(), streams: streams_for(&b, &f.ns, &state), face: f.for_row(w, FX_H), fill: true, stepper: true }
                                         }
                                     },
                                     // A module's: each in a box the row's height
@@ -152,7 +188,7 @@ pub fn FxRow(state: RigViewState) -> Element {
                                         let w = (FX_H * f.size.0 / f.size.1.max(1.0)).round();
                                         rsx! {
                                             div { style: "width: {w}px; height: 100%;",
-                                                BlockFace { block: b.clone(), face: f, fill: true }
+                                                BlockFace { block: b.clone(), streams: streams_for(&b, &f.ns, &state), face: f, fill: true }
                                             }
                                         }
                                     }

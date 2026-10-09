@@ -72,6 +72,10 @@ pub fn FrameSurface(
     /// Text the face shows (a nameplate's preset): (address, text).
     #[props(default)]
     texts: Vec<(String, String)>,
+    /// Live readings for its plots, meters and lamps: (stream id, values)
+    /// — a spectrum, a level, a gain reduction, a trace.
+    #[props(default)]
+    streams: Vec<(String, Vec<f64>)>,
 ) -> Element {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -81,21 +85,21 @@ pub fn FrameSurface(
         let key = format!("{name}|{}", variants.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(","));
         rsx! {
             for k in [key] {
-                NativeFace { key: "{k}", name: name.clone(), values: values.clone(), on_edit, stretch, variants: variants.clone(), responsive, texts: texts.clone() }
+                NativeFace { key: "{k}", name: name.clone(), values: values.clone(), on_edit, stretch, variants: variants.clone(), responsive, texts: texts.clone(), streams: streams.clone() }
             }
         }
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let _ = (name, values, on_edit, stretch, variants, responsive, texts);
+        let _ = (name, values, on_edit, stretch, variants, responsive, texts, streams);
         rsx! { div { style: "width: 100%; height: 100%;" } }
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[component]
-fn NativeFace(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool, texts: Vec<(String, String)>) -> Element {
-    native::mount(name, values, on_edit, stretch, variants, responsive, texts)
+fn NativeFace(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool, texts: Vec<(String, String)>, streams: Vec<(String, Vec<f64>)>) -> Element {
+    native::mount(name, values, on_edit, stretch, variants, responsive, texts, streams)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -184,7 +188,8 @@ mod native {
     /// How often the design's files are checked for a new version.
     const RELOAD_POLL: std::time::Duration = std::time::Duration::from_millis(250);
 
-    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool, texts: Vec<(String, String)>) -> Element {
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool, texts: Vec<(String, String)>, streams: Vec<(String, Vec<f64>)>) -> Element {
         let live: Shared = use_hook(|| {
             let opened = if variants.is_empty() {
                 open_face(&name, stretch, responsive).map(|l| Surfaces { all: vec![(1.0, l)], active: 0 })
@@ -231,6 +236,19 @@ mod native {
                 }
             }
             applied.set(values);
+        }
+        // Its live readings, each time they change (they arrive at meter
+        // rate; the same reading twice would push a history twice).
+        let mut applied_streams: Signal<Vec<(String, Vec<f64>)>> = use_signal(Vec::new);
+        if !streams.is_empty() && *applied_streams.peek() != streams {
+            if let Ok(s) = live.borrow_mut().as_mut() {
+                for l in s.each_mut() {
+                    for (id, v) in &streams {
+                        l.apply_stream(id, v.clone());
+                    }
+                }
+            }
+            applied_streams.set(streams);
         }
         // Its text, likewise.
         let mut applied_texts: Signal<Vec<(String, String)>> = use_signal(Vec::new);

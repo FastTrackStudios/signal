@@ -57,6 +57,9 @@ pub struct FaceEntry {
     /// face's flip arrow (`<ns>/flip`) turns it over.
     pub back: Option<String>,
     pub back_dark: Option<String>,
+    /// The face made for the iPad's FX row (`row` in the manifest): its
+    /// face and size. [`for_row`](Self::for_row) takes it.
+    pub row: Option<(String, (f64, f64))>,
 }
 
 /// A face's version for one tier — and its proportions there (`variants`:
@@ -110,6 +113,25 @@ impl FaceEntry {
     /// proportions are nearest a `w` × `h` box: a wide, short lane draws the
     /// lane version even on a desktop, a tall box the upright unit.
     #[must_use]
+    /// For the iPad's FX row, `w` × `h`: the face made for it where there
+    /// is one, else the layout nearest its proportions ([`at_box`](Self::at_box)).
+    #[must_use]
+    pub fn for_row(&self, w: f64, h: f64) -> Self {
+        match &self.row {
+            Some((face, size)) => {
+                let mut f = self.clone();
+                f.face.clone_from(face);
+                f.size = *size;
+                f.variants.clear();
+                f.tiers.clear();
+                f.back = None;
+                f.dark = None;
+                f
+            }
+            None => self.at_box(w, h),
+        }
+    }
+
     pub fn at_box(&self, w: f64, h: f64) -> Self {
         if w <= 0.0 || h <= 0.0 {
             return self.clone();
@@ -313,7 +335,11 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
     let time_knob = v.get("time_knob").and_then(serde_json::Value::as_bool).unwrap_or(false);
     let back = v.get("back").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
     let back_dark = v.get("back_dark").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
-    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark, tiers, nameplate, time_knob, back, back_dark })
+    let row = v.get("row").and_then(|r| {
+        let s = r.get("size")?.as_array()?;
+        Some((format!("{SET}/{}", r.get("face")?.as_str()?), (s.first()?.as_f64()?, s.get(1)?.as_f64()?)))
+    });
+    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark, tiers, nameplate, time_knob, back, back_dark, row })
 }
 
 impl Faces {
@@ -488,6 +514,9 @@ pub fn BlockFace(
     /// among them too.
     #[props(default)]
     members: Vec<(String, String)>,
+    /// Live readings for the face (see `FrameSurface::streams`).
+    #[props(default)]
+    streams: Vec<(String, Vec<f64>)>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     // The nameplate: the preset playing, printed by the face.
@@ -568,6 +597,7 @@ pub fn BlockFace(
                 variants: face.variants.clone(),
                 values,
                 texts,
+                streams,
                 on_edit: move |(addr, value): (String, f64)| {
                     // The flip arrow: the other side.
                     if addr.ends_with("/flip") {
