@@ -1,288 +1,540 @@
-# Trio Clean
+# Clean Blackface
 Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
 Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
-Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pre Comp | nam= | ir= | bypassed=false | attack=25 knee=6 makeup=4 meter=1 mix=1 ratio=3 release=200 style=2 threshold=-22.5
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
-Boost | nam= | ir= | bypassed=true | drive=0.5
-Drive 1 | nam=models/KLON 2.nam | ir= | bypassed=true | drive=0.5
-Drive 2 | nam=models/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
-Drive 3 | nam=models/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=models/JHS Morning Glory V4 - Medium Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
-Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
-Amp L | nam=models/Fender_ Vibroverb_ 1964  - Dumble_ Steel String Singer_ _002 -  Two-Rock_ John Mayer Signature Prototype __Signature _83__.nam | ir= | bypassed=false | 
+Pre Verb | nam= | ir= | bypassed=false | algorithm=3 damping=0.4 decay=0.6553 high_cut=6000 level=-15 low_cut=150 mix=1 modulation=0 predelay=0 size=0.4 tone=-0.2 variant=0
+Amp L | nam=models/FNDR BFDRI VB Clean BAL2 CAB.nam | ir= | bypassed=false | 
 Cab L | nam= | ir= | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 
-Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
-Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-62
+Post Comp | nam= | ir= | bypassed=false | attack=20 knee=8 makeup=2 meter=2 mix=1 ratio=2 release=400 style=3 threshold=-22
 Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
-Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Tremolo | nam= | ir= | bypassed=true | 
 Vibrato | nam= | ir= | bypassed=true | 
 Rotary | nam= | ir= | bypassed=true | 
-Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Chorus | nam= | ir= | bypassed=true | 
 Flanger | nam= | ir= | bypassed=true | 
 Phaser | nam= | ir= | bypassed=true | 
-Patch Trim | nam= | ir= | bypassed=false | gain_db=7.320118
-DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
-DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
-VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
-VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Patch Trim | nam= | ir= | bypassed=false | gain_db=-1.1292896
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0 high_cut=3000 high_pass=150 level=-11 mix=1 pan=0 style=2 tap_div_l=7 tap_div_r=7 time=110
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=0 damping=0.5 decay=0.4114 high_cut=6000 level=-18 low_cut=250 mix=1 modulation=0.1 predelay=0 size=0.35 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
 Master EQ | nam= | ir= | bypassed=true | 
 Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
-# Vibroverb + Dumble
+# Clean Chorus
 Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
 Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
-Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pre Comp | nam= | ir= | bypassed=false | attack=25 knee=6 makeup=4 meter=1 mix=1 ratio=3 release=200 style=2 threshold=-22.5
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
-Boost | nam= | ir= | bypassed=true | drive=0.5
-Drive 1 | nam=models/KLON 2.nam | ir= | bypassed=true | drive=0.5
-Drive 2 | nam=models/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
-Drive 3 | nam=models/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=models/JHS Morning Glory V4 - Medium Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
-Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
-Amp L | nam=models/Fender_ Vibroverb_ 1964.nam | ir= | bypassed=false | 
-Cab L | nam= | ir= | bypassed=false | 
-Amp R | nam=models/Dumble Steel SS Clean.nam | ir= | bypassed=false | 
-Cab R | nam= | ir= | bypassed=false | 
-Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
-Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
-Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
-Boost | nam= | ir= | bypassed=false | gain_db=0
-Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
-Vibrato | nam= | ir= | bypassed=true | 
-Rotary | nam= | ir= | bypassed=true | 
-Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
-Flanger | nam= | ir= | bypassed=true | 
-Phaser | nam= | ir= | bypassed=true | 
-Patch Trim | nam= | ir= | bypassed=false | gain_db=7.2250137
-DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
-DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
-VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
-VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
-Master EQ | nam= | ir= | bypassed=true | 
-Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
-# Stereo Stack
-Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
-Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
-Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
-Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
-Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
-Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
-Boost | nam= | ir= | bypassed=true | drive=0.5
-Drive 1 | nam=models/KLON 2.nam | ir= | bypassed=false | drive=0.5
-Drive 2 | nam=models/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=false | drive=0.5
-Drive 3 | nam=models/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
-Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
-Pre Motion | nam= | ir= | bypassed=true | 
-Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
-Amp L | nam=models/Fender_ Vibroverb_ 1964.nam | ir= | bypassed=false | 
-Cab L | nam= | ir= | bypassed=false | 
-Amp R | nam=models/Dumble Steel SS Drive 1.nam | ir= | bypassed=false | 
-Cab R | nam= | ir= | bypassed=false | 
-Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
-Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
-Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
-Boost | nam= | ir= | bypassed=false | gain_db=0
-Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
-Vibrato | nam= | ir= | bypassed=true | 
-Rotary | nam= | ir= | bypassed=true | 
-Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
-Flanger | nam= | ir= | bypassed=true | 
-Phaser | nam= | ir= | bypassed=true | 
-Patch Trim | nam= | ir= | bypassed=false | gain_db=2.2129402
-DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
-DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
-VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
-VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
-Master EQ | nam= | ir= | bypassed=true | 
-Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
-# Vibroverb
-Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
-Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
-Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
-Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
-Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
-Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
-Boost | nam= | ir= | bypassed=true | drive=0.5
-Drive 1 | nam=models/KLON 2.nam | ir= | bypassed=true | drive=0.5
-Drive 2 | nam=models/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
-Drive 3 | nam=models/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
-Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
-Pre Motion | nam= | ir= | bypassed=true | 
-Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
-Amp L | nam=models/Fender_ Vibroverb_ 1964.nam | ir= | bypassed=false | 
+Pre Verb | nam= | ir= | bypassed=false | algorithm=3 damping=0.4 decay=0.6553 high_cut=6000 level=-15 low_cut=150 mix=1 modulation=0 predelay=0 size=0.4 tone=-0.2 variant=0
+Amp L | nam=models/FNDR BFDRI VB Clean BAL2 CAB.nam | ir= | bypassed=false | 
 Cab L | nam= | ir= | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 
-Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
-Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-62
+Post Comp | nam= | ir= | bypassed=false | attack=20 knee=8 makeup=2 meter=2 mix=1 ratio=2 release=400 style=3 threshold=-22
 Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
-Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Tremolo | nam= | ir= | bypassed=true | 
 Vibrato | nam= | ir= | bypassed=true | 
 Rotary | nam= | ir= | bypassed=true | 
-Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Chorus | nam= | ir= | bypassed=true | 
 Flanger | nam= | ir= | bypassed=true | 
 Phaser | nam= | ir= | bypassed=true | 
-Patch Trim | nam= | ir= | bypassed=false | gain_db=5.0025883
-DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
-DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
-VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
-VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Patch Trim | nam= | ir= | bypassed=false | gain_db=-1.1292896
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0 high_cut=3000 high_pass=150 level=-11 mix=1 pan=0 style=2 tap_div_l=7 tap_div_r=7 time=110
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=0 damping=0.5 decay=0.4114 high_cut=6000 level=-18 low_cut=250 mix=1 modulation=0.1 predelay=0 size=0.35 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
 Master EQ | nam= | ir= | bypassed=true | 
 Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
-# Dumble Clean
+# Crunch JR
 Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
 Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
-Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pre Comp | nam= | ir= | bypassed=false | attack=30 knee=6 makeup=2 meter=1 mix=1 ratio=2.5 release=150 style=2 threshold=-19.5
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
-Boost | nam= | ir= | bypassed=true | drive=0.5
-Drive 1 | nam=models/KLON 2.nam | ir= | bypassed=true | drive=0.5
-Drive 2 | nam=models/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
-Drive 3 | nam=models/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=models/JHS Morning Glory V4 - Medium Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
-Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
-Amp L | nam=models/Dumble Steel SS Clean.nam | ir= | bypassed=false | 
-Cab L | nam= | ir= | bypassed=false | 
+Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
+Amp L | nam=models/EDGY - Fender Deluxe Reverb 1965 _Hyper Accuracy_.nam | ir= | bypassed=false | 
+Cab L | nam= | ir=models/TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30.wav | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 
-Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
-Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-62
+Post Comp | nam= | ir= | bypassed=false | attack=20 knee=8 makeup=2 meter=2 mix=1 ratio=2 release=400 style=3 threshold=-21
 Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
-Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Tremolo | nam= | ir= | bypassed=true | 
 Vibrato | nam= | ir= | bypassed=true | 
 Rotary | nam= | ir= | bypassed=true | 
-Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Chorus | nam= | ir= | bypassed=true | 
 Flanger | nam= | ir= | bypassed=true | 
 Phaser | nam= | ir= | bypassed=true | 
-Patch Trim | nam= | ir= | bypassed=false | gain_db=7.5701866
-DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
-DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
-VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
-VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Patch Trim | nam= | ir= | bypassed=false | gain_db=0.4002819
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0 high_cut=3000 high_pass=150 level=-11 mix=1 pan=0 style=2 tap_div_l=7 tap_div_r=7 time=110
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=0 damping=0.5 decay=0.4114 high_cut=6000 level=-18 low_cut=250 mix=1 modulation=0.1 predelay=0 size=0.35 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
 Master EQ | nam= | ir= | bypassed=true | 
 Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
-# Dumble Klon
+# Crunch Tweed
 Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
 Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
-Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
-Boost | nam= | ir= | bypassed=true | drive=0.5
-Drive 1 | nam=models/KLON 2.nam | ir= | bypassed=false | drive=0.5
-Drive 2 | nam=models/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
-Drive 3 | nam=models/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=models/JHS Morning Glory V4 - Medium Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
-Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
-Amp L | nam=models/Dumble Steel SS Drive 1.nam | ir= | bypassed=false | 
+Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
+Amp L | nam=models/Fender Bassman 5F6A - Pushed.nam | ir= | bypassed=false | 
 Cab L | nam= | ir= | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 
-Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
-Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-62
+Post Comp | nam= | ir= | bypassed=false | attack=20 knee=8 makeup=2 meter=2 mix=1 ratio=2 release=400 style=3 threshold=-22
 Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
-Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Tremolo | nam= | ir= | bypassed=true | 
 Vibrato | nam= | ir= | bypassed=true | 
 Rotary | nam= | ir= | bypassed=true | 
-Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Chorus | nam= | ir= | bypassed=true | 
 Flanger | nam= | ir= | bypassed=true | 
 Phaser | nam= | ir= | bypassed=true | 
-Patch Trim | nam= | ir= | bypassed=false | gain_db=1.7965851
-DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
-DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
-VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
-VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Patch Trim | nam= | ir= | bypassed=false | gain_db=1.6700249
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0 high_cut=3000 high_pass=150 level=-11 mix=1 pan=0 style=2 tap_div_l=7 tap_div_r=7 time=110
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=0 damping=0.5 decay=0.4114 high_cut=6000 level=-18 low_cut=250 mix=1 modulation=0.1 predelay=0 size=0.35 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
 Master EQ | nam= | ir= | bypassed=true | 
 Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
-# Two-Rock
+# Texas
 Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
 Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
-Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
-Boost | nam= | ir= | bypassed=true | drive=0.5
-Drive 1 | nam=models/KLON 2.nam | ir= | bypassed=true | drive=0.5
-Drive 2 | nam=models/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
-Drive 3 | nam=models/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=true | drive=0.5
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone both sides.nam | ir= | bypassed=false | drive=0.45
+Drive 2 | nam=models/JHS Morning Glory V4 - Low Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
-Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
-Amp L | nam=models/Two-Rock_ John Mayer Signature Prototype.nam | ir= | bypassed=false | 
-Cab L | nam= | ir= | bypassed=false | 
+Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
+Amp L | nam=models/Tim R Fender Twin Reverb Ch1 BR G06.nam | ir= | bypassed=false | 
+Cab L | nam= | ir=models/1966 Bassman Cabinet with Jensen C12N - SM57 - Cap.wav | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 
-Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
-Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-62
+Post Comp | nam= | ir= | bypassed=false | attack=20 knee=8 makeup=2 meter=2 mix=1 ratio=2 release=400 style=3 threshold=-21.5
 Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
-Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Tremolo | nam= | ir= | bypassed=true | 
 Vibrato | nam= | ir= | bypassed=true | 
 Rotary | nam= | ir= | bypassed=true | 
-Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Chorus | nam= | ir= | bypassed=true | 
 Flanger | nam= | ir= | bypassed=true | 
 Phaser | nam= | ir= | bypassed=true | 
-Patch Trim | nam= | ir= | bypassed=false | gain_db=5.84556
-DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
-DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
-VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
-VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Patch Trim | nam= | ir= | bypassed=false | gain_db=0.09807396
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0 high_cut=3000 high_pass=150 level=-11 mix=1 pan=0 style=2 tap_div_l=7 tap_div_r=7 time=110
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=0 damping=0.5 decay=0.4114 high_cut=6000 level=-18 low_cut=250 mix=1 modulation=0.1 predelay=0 size=0.35 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
 Master EQ | nam= | ir= | bypassed=true | 
 Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
-# Two-Rock Screamer
+# Cranked
 Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
 Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
-Pre Comp | nam= | ir= | bypassed=false | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pre Comp | nam= | ir= | bypassed=false | attack=30 knee=6 makeup=2 meter=1 mix=1 ratio=2.5 release=150 style=2 threshold=-19.5
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
-Boost | nam= | ir= | bypassed=true | drive=0.5
-Drive 1 | nam=models/KLON 2.nam | ir= | bypassed=true | drive=0.5
-Drive 2 | nam=models/marshall-bluesbreaker-pedal-setting1.nam | ir= | bypassed=true | drive=0.5
-Drive 3 | nam=models/46-TS808_Hot_Lvl6_OD1_T5.nam | ir= | bypassed=false | drive=0.5
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=models/JHS Morning Glory V4 - Medium Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
 Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
-Pre Delay | nam= | ir= | bypassed=false | dry=1 feedback=0.12 level=-14 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=110
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
-Pre Verb | nam= | ir= | bypassed=false | algorithm=3 decay=0.35 level=-16.5 mix=1 tone=0
-Amp L | nam=models/Two-Rock_ John Mayer Signature Prototype.nam | ir= | bypassed=false | 
+Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
+Amp L | nam=models/CRANCKED - Fender Deluxe Reverb 1965 _Hyper Accuracy_.nam | ir= | bypassed=false | 
+Cab L | nam= | ir=models/TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30.wav | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=60 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=20 knee=8 makeup=2 meter=2 mix=1 ratio=2 release=400 style=3 threshold=-21
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=true | 
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=true | 
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=0.26311874
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0 high_cut=3000 high_pass=150 level=-11 mix=1 pan=0 style=2 tap_div_l=7 tap_div_r=7 time=110
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=0 damping=0.5 decay=0.4114 high_cut=6000 level=-18 low_cut=250 mix=1 modulation=0.1 predelay=0 size=0.35 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Lead Lux
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone both sides.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=models/JHS Morning Glory V4 - Low Gain Blue.nam | ir= | bypassed=false | drive=0.4
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
+Amp L | nam=models/Clapton_s Bassman - Marked Settings _Jumpered_.nam | ir= | bypassed=false | 
 Cab L | nam= | ir= | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 
-Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-50
-Post Comp | nam= | ir= | bypassed=false | attack=20 meter=2 ratio=3 release=100 threshold=-24
+Gate | nam= | ir= | bypassed=false | attack=1 release=60 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=15 knee=4 makeup=5 meter=2 mix=1 ratio=4 release=250 style=2 threshold=-25.5
 Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
 Boost | nam= | ir= | bypassed=false | gain_db=0
-Tremolo | nam= | ir= | bypassed=false | depth=0.15 rate=4
+Tremolo | nam= | ir= | bypassed=true | 
 Vibrato | nam= | ir= | bypassed=true | 
 Rotary | nam= | ir= | bypassed=true | 
-Chorus | nam= | ir= | bypassed=false | depth=0.3 mix=0.2 rate=0.6
+Chorus | nam= | ir= | bypassed=true | 
 Flanger | nam= | ir= | bypassed=true | 
 Phaser | nam= | ir= | bypassed=true | 
-Patch Trim | nam= | ir= | bypassed=false | gain_db=4.813238
-DLY 1 | nam= | ir= | bypassed=false | dry=1 feedback=0.3 high_cut=3200 high_pass=150 level=-24 mix=1 mod_depth=0.25 mod_rate=0.8 style=0 tap_div_l=0 tap_div_r=0 time=540
-DLY 2 | nam= | ir= | bypassed=false | dry=1 feedback=0.35 high_cut=3000 high_pass=100 level=-26 mix=1 mod_depth=0.3 mod_rate=0.5 style=2 tap_div_l=0 tap_div_r=0 time=420
-VERB 1 | nam= | ir= | bypassed=false | algorithm=2 damping=0.45 decay=0.24 dry=1 high_cut=8000 level=-20 low_cut=180 mix=1 modulation=0.12 predelay=18 size=0.5 tone=-0.15
-VERB 2 | nam= | ir= | bypassed=false | algorithm=4 damping=0.4 decay=0.75 dry=1 high_cut=7000 level=-28 low_cut=200 mix=1 modulation=0.5 predelay=30 size=0.85 tone=-0.1
+Patch Trim | nam= | ir= | bypassed=false | gain_db=1.8346634
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0.35 high_cut=4000 high_pass=200 level=-10 mix=1 mod_depth=0.15 style=0 tap_div_l=1 tap_div_r=1 time=340
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=1 damping=0.4 decay=0.4245 high_cut=6000 level=-14 low_cut=250 mix=1 modulation=0.35 predelay=25 size=0.75 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Lead Texas
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone both sides.nam | ir= | bypassed=false | drive=0.7
+Drive 2 | nam=models/JHS Morning Glory V4 - Low Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
+Amp L | nam=models/Tim R Fender Twin Reverb Ch1 BR G06.nam | ir= | bypassed=false | 
+Cab L | nam= | ir=models/1966 Bassman Cabinet with Jensen C12N - SM57 - Cap.wav | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-62
+Post Comp | nam= | ir= | bypassed=false | attack=15 knee=4 makeup=5 meter=2 mix=1 ratio=4 release=250 style=2 threshold=-24.5
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=true | 
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=true | 
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=0.8168545
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0.35 high_cut=4000 high_pass=200 level=-10 mix=1 mod_depth=0.15 style=0 tap_div_l=1 tap_div_r=1 time=340
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=1 damping=0.4 decay=0.4245 high_cut=6000 level=-14 low_cut=250 mix=1 modulation=0.35 predelay=25 size=0.75 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Slow Verb
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=false | attack=25 knee=6 makeup=4 meter=1 mix=1 ratio=3 release=200 style=2 threshold=-22.5
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=models/JHS Morning Glory V4 - Medium Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=false | algorithm=3 damping=0.4 decay=0.6553 high_cut=6000 level=-15 low_cut=150 mix=1 modulation=0 predelay=0 size=0.4 tone=-0.2 variant=0
+Amp L | nam=models/Fender 65_ Twin Reverb_2x12_CLEAN_SM57.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-62
+Post Comp | nam= | ir= | bypassed=false | attack=20 knee=8 makeup=2 meter=2 mix=1 ratio=2 release=400 style=3 threshold=-21.5
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=true | 
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=true | 
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=-1.900568
+DLY 1 | nam= | ir= | bypassed=false | duck_release=0.35 duck_sens=6 feedback=0.55 high_cut=3500 high_pass=300 level=-6 mix=1 mod_depth=0.25 style=0 tap_div_l=1 tap_div_r=1 time=340
+DLY 2 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0.25 high_cut=4000 high_pass=200 level=-15 mix=1 mod_depth=0.1 style=0 tap_div_l=0 tap_div_r=0 time=450
+VERB 1 | nam= | ir= | bypassed=false | algorithm=1 damping=0.5 decay=0.585 duck=0.25 duck_release=400 duck_threshold=-30 high_cut=5500 level=-10 low_cut=400 mix=1 modulation=0.4 predelay=60 size=0.9 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Clean
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=false | attack=25 knee=6 makeup=4 meter=1 mix=1 ratio=3 release=200 style=2 threshold=-22.5
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=models/JHS Morning Glory V4 - Medium Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=false | algorithm=3 damping=0.4 decay=0.6553 high_cut=6000 level=-15 low_cut=150 mix=1 modulation=0 predelay=0 size=0.4 tone=-0.2 variant=0
+Amp L | nam=models/Deluxe Reverb.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-62
+Post Comp | nam= | ir= | bypassed=false | attack=20 knee=8 makeup=2 meter=2 mix=1 ratio=2 release=400 style=3 threshold=-22.5
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=true | 
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=true | 
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=-0.9262371
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0 high_cut=3000 high_pass=150 level=-11 mix=1 pan=0 style=2 tap_div_l=7 tap_div_r=7 time=110
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=0 damping=0.5 decay=0.4114 high_cut=6000 level=-18 low_cut=250 mix=1 modulation=0.1 predelay=0 size=0.35 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Crunch
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=models/JHS Morning Glory V4 - Medium Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
+Amp L | nam=models/Fender Deluxe Reverb - V5_ T6_ B4_ Klon Gain 10_ SM57 - Standard.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=60 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=20 knee=8 makeup=2 meter=2 mix=1 ratio=2 release=400 style=3 threshold=-23
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=true | 
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=true | 
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=1.6711121
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0 high_cut=3000 high_pass=150 level=-11 mix=1 pan=0 style=2 tap_div_l=7 tap_div_r=7 time=110
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=0 damping=0.5 decay=0.4114 high_cut=6000 level=-18 low_cut=250 mix=1 modulation=0.1 predelay=0 size=0.35 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Deluxe OD
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone both sides.nam | ir= | bypassed=false | drive=0.3
+Drive 2 | nam=models/JHS Morning Glory V4 - Low Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
+Amp L | nam=models/CRANCKED - Fender Deluxe Reverb 1965 _Hyper Accuracy_.nam | ir= | bypassed=false | 
+Cab L | nam= | ir=models/TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30.wav | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=60 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=20 knee=8 makeup=2 meter=2 mix=1 ratio=2 release=400 style=3 threshold=-20
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=true | 
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=true | 
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=-1.0201378
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0 high_cut=3000 high_pass=150 level=-11 mix=1 pan=0 style=2 tap_div_l=7 tap_div_r=7 time=110
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=0 damping=0.5 decay=0.4114 high_cut=6000 level=-18 low_cut=250 mix=1 modulation=0.1 predelay=0 size=0.35 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Clean Dumble
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=false | attack=25 knee=6 makeup=4 meter=1 mix=1 ratio=3 release=200 style=2 threshold=-22.5
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=models/JHS Morning Glory V4 - Medium Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
+Amp L | nam=models/Dumble ODS Clean.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=120 threshold=-62
+Post Comp | nam= | ir= | bypassed=false | attack=20 knee=8 makeup=2 meter=2 mix=1 ratio=2 release=400 style=3 threshold=-21
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=true | 
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=true | 
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=-1.4199619
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0 high_cut=3000 high_pass=150 level=-11 mix=1 pan=0 style=2 tap_div_l=7 tap_div_r=7 time=110
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=0 damping=0.5 decay=0.4114 high_cut=6000 level=-18 low_cut=250 mix=1 modulation=0.1 predelay=0 size=0.35 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Lead
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=models/JHS Morning Glory V4 - Medium Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
+Amp L | nam=models/Dumble ODS HiGain.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=60 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=15 knee=4 makeup=5 meter=2 mix=1 ratio=4 release=250 style=2 threshold=-26
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=true | 
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=true | 
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=2.491108
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0.35 high_cut=4000 high_pass=200 level=-10 mix=1 mod_depth=0.15 style=0 tap_div_l=1 tap_div_r=1 time=340
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=1 damping=0.4 decay=0.4245 high_cut=6000 level=-14 low_cut=250 mix=1 modulation=0.35 predelay=25 size=0.75 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
+Master EQ | nam= | ir= | bypassed=true | 
+Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1
+# Gravity Rhythm
+Transpose | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 mix=1 semitones=0
+Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engine=0 live=1 mix=1 semitones=0
+Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
+Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
+Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
+Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
+Drive 2 | nam=models/JHS Morning Glory V4 - Medium Gain Blue.nam | ir= | bypassed=true | drive=0.5
+Drive 3 | nam= | ir= | bypassed=true | drive=0.5
+Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
+Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
+Pre Motion | nam= | ir= | bypassed=true | 
+Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
+Amp L | nam=models/Dumble ODS Drive.nam | ir= | bypassed=false | 
+Cab L | nam= | ir= | bypassed=false | 
+Amp R | nam= | ir= | bypassed=true | 
+Cab R | nam= | ir= | bypassed=true | 
+Gate | nam= | ir= | bypassed=false | attack=1 release=60 threshold=-50
+Post Comp | nam= | ir= | bypassed=false | attack=20 knee=8 makeup=2 meter=2 mix=1 ratio=2 release=400 style=3 threshold=-22.5
+Amp EQ | nam= | ir= | bypassed=false | b1_freq=80 b1_on=1 b1_shape=0 b1_used=1 b2_freq=212 b2_on=1 b2_used=1 b3_freq=560 b3_on=1 b3_used=1 b4_freq=1400 b4_on=1 b4_used=1 b5_freq=5500 b5_on=1 b5_used=1
+Boost | nam= | ir= | bypassed=false | gain_db=0
+Tremolo | nam= | ir= | bypassed=true | 
+Vibrato | nam= | ir= | bypassed=true | 
+Rotary | nam= | ir= | bypassed=true | 
+Chorus | nam= | ir= | bypassed=true | 
+Flanger | nam= | ir= | bypassed=true | 
+Phaser | nam= | ir= | bypassed=true | 
+Patch Trim | nam= | ir= | bypassed=false | gain_db=1.7230091
+DLY 1 | nam= | ir= | bypassed=false | duck_sens=0 feedback=0 high_cut=3000 high_pass=150 level=-11 mix=1 pan=0 style=2 tap_div_l=7 tap_div_r=7 time=110
+DLY 2 | nam= | ir= | bypassed=true | feedback=0.62 level=-20 mix=1 style=1 tap_div_l=1 tap_div_r=1 time=600
+VERB 1 | nam= | ir= | bypassed=false | algorithm=0 damping=0.5 decay=0.4114 high_cut=6000 level=-18 low_cut=250 mix=1 modulation=0.1 predelay=0 size=0.35 variant=0
+VERB 2 | nam= | ir= | bypassed=true | algorithm=1 decay=0.85 level=-20 mix=1 size=0.5
 Master EQ | nam= | ir= | bypassed=true | 
 Limiter | nam= | ir= | bypassed=false | attack=0.1 knee=0 meter=3 ratio=20 release=50 threshold=-1

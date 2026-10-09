@@ -15,10 +15,11 @@ src=${1:-$HOME/.config/signal/rig}
 dst=$(cd "$(dirname "$0")" && pwd)
 
 # Merge: what the shipped files lack is added by name; what they have stays
-# (the golden tests hold the shipped Blues rig to its record). Worship is
-# taken whole — it is the iPad's and the laptop's default.
+# (the golden tests hold the shipped Blues rig to its record — rewrite it
+# with UPDATE_GOLDEN=1 when a take changes it). Worship is taken whole — it
+# is the iPad's and the laptop's default — and so is Blues, its five stacks.
 root=$(cd "$dst/../../../.." && pwd)
-(cd "$root" && cargo run -q -p signal-guitar --example ship_library -- "$src" "$dst" --take Worship)
+(cd "$root" && cargo run -q -p signal-guitar --example ship_library -- "$src" "$dst" --take Worship --take Blues)
 
 # Every absolute capture or IR path, copied in flat and rewritten.
 mkdir -p "$dst/models"
