@@ -105,8 +105,12 @@ fn open_at(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, start: Opt
         return;
     }
     // Keep it on screen: left of the point when it would run off the right.
-    let (w, _) = window_size();
+    let (w, h) = window_size();
     let x = if w > 0.0 && x + MENU_W > w - 8.0 { (x - MENU_W).max(8.0) } else { x };
+    // And above the point when it would run off the bottom (a menu opened
+    // from the foot bar): its height estimated from its rows.
+    let tall = items.len() as f64 * 46.0 + 16.0;
+    let y = if h > 0.0 && y + tall > h - 8.0 { (h - 8.0 - tall).max(8.0) } else { y };
     host.open(
         x,
         y,

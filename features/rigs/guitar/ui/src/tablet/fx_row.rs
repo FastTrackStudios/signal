@@ -218,63 +218,146 @@ pub fn FxRow(state: RigViewState) -> Element {
 }
 
 /// What the FX row shows, and its preset — in the foot bar's middle, so the
-/// row keeps its height: the block (or module) picked and the preset it
-/// plays, ‹ › stepping; the name turns the sidebar into its presets.
+/// row keeps its height. A drive or an amp (or a module picked): its module
+/// preset and variation, ‹ › through the variations, a dot when it plays
+/// changed, ⋯ to save it (to the variation, as a new one, as a new preset),
+/// rename or delete. Any other block: its block preset, the same ⋯. The
+/// name turns the sidebar into the presets.
 #[component]
 pub fn FxPresetBar(state: RigViewState) -> Element {
+    use super::menu::{Item, MoreButton, Picked};
+    use super::setlist::call;
+    let rig = use_hook(try_consume_context::<signal_guitar_proto::rig::RigClient>);
     let sel = use_context::<RoutingSel>().0;
     let blocks = state.blocks.read().clone();
     let first = || blocks.iter().find(|b| b.block_type == BlockType::Drive && !b.empty).or_else(|| blocks.first()).map(|b| b.id.clone());
-    let module = match sel() {
+    let comp = try_use_context::<crate::face_chrome::FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
+    let open = try_use_context::<crate::face_chrome::OpenPresets>();
+    let picked_module = match sel() {
         Some(Selected::Module(m, _)) => Some(m),
         _ => None,
     };
-    let bar_block = match sel().or_else(|| first().map(Selected::Block)) {
-        Some(Selected::Block(id)) => blocks.iter().find(|b| b.id == id).cloned().or_else(|| slot_block(&id)),
+    let bar_block = if picked_module.is_some() {
+        None
+    } else {
+        match sel().or_else(|| first().map(Selected::Block)) {
+            Some(Selected::Block(id)) => blocks.iter().find(|b| b.id == id).cloned().or_else(|| slot_block(&id)),
+            _ => None,
+        }
+    };
+    // The module it saves into: the one picked, or a drive's or amp's own.
+    let module_pick = match (&picked_module, &bar_block) {
+        (Some(m), _) => comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m)).cloned(),
+        (None, Some(b)) if matches!(b.block_type, BlockType::Drive | BlockType::Boost | BlockType::Amp) => {
+            let owns = |p: &&signal_guitar_proto::ModulePick| p.blocks.iter().any(|x| x.eq_ignore_ascii_case(&b.name));
+            // Its own module (Drive, Amp) before the Core that holds them all.
+            comp.active_modules.iter().filter(owns).find(|p| !p.module.eq_ignore_ascii_case("Core")).or_else(|| comp.active_modules.iter().find(owns)).cloned()
+        }
         _ => None,
     };
-    let comp = try_use_context::<crate::face_chrome::FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
-    let module_preset = module.as_ref().and_then(|m| comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m))).map(|p| if p.snapshot.is_empty() { p.preset.clone() } else { format!("{} · {}", p.preset, p.snapshot) });
-    let open = try_use_context::<crate::face_chrome::OpenPresets>();
-    rsx! {
-        div { style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 12px;",
-                if let Some(b) = bar_block.clone() {
-                    span { style: "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_3}; white-space: nowrap;", "{b.name}" }
-                    if matches!(b.block_type, BlockType::Drive | BlockType::Boost) {
-                        // A drive slot's pedal: its own library (the Drive
-                        // module's), opened by a tap.
-                        {
-                            let (name, kind) = (b.name.clone(), b.block_type.as_str().to_string());
-                            let label = if b.preset.is_empty() { "—".to_string() } else { b.preset.clone() };
-                            rsx! {
-                                button {
-                                    style: "height: 40px; max-width: 320px; padding: 0 14px; border: none; border-radius: 6px; background: rgba(255,255,255,0.08); color: {INK}; font-size: 14px; font-weight: 650; font-family: {FONT}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;",
-                                    onclick: move |_| {
-                                        if let Some(crate::face_chrome::OpenPresets(o)) = open {
-                                            o.call((name.clone(), kind.clone()));
-                                        }
-                                    },
-                                    "{label}"
-                                }
-                            }
+    let label = picked_module.clone().or_else(|| bar_block.as_ref().map(|b| b.name.clone())).unwrap_or_default();
+    let tag = "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; white-space: nowrap;";
+    let chip = "height: 40px; max-width: 300px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: none; border-radius: 6px; background: rgba(255,255,255,0.08); color: #f4f4f5; font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; cursor: pointer;";
+    let arrow = "width: 40px; height: 40px; border: none; background: transparent; color: #d4d4d8; font-size: 20px; cursor: pointer;";
+
+    if let Some(pick) = module_pick {
+        let module = pick.module.clone();
+        let edited = blocks.iter().any(|b| b.overridden && pick.blocks.iter().any(|x| x.eq_ignore_ascii_case(&b.name)));
+        let entry = comp.modules.iter().find(|m| m.module.eq_ignore_ascii_case(&module) && m.name == pick.preset).cloned();
+        let variations = entry.as_ref().map(|e| e.snapshots.clone()).unwrap_or_default();
+        let presets: Vec<String> = comp.modules.iter().filter(|m| m.module.eq_ignore_ascii_case(&module)).map(|m| m.name.clone()).collect();
+        let shown = if pick.snapshot.is_empty() { pick.preset.clone() } else { format!("{} · {}", pick.preset, pick.snapshot) };
+        let var_name = if pick.snapshot.is_empty() { "Main".to_string() } else { pick.snapshot.clone() };
+        let items = vec![
+            Item::head(shown.clone()),
+            Item::run("update", format!("Save to {var_name}")).unless((!edited).then(|| "Nothing changed".to_string())),
+            Item::name("new_var", "New variation…", format!("{var_name} 2"), "Save", variations.clone()),
+            Item::name("new_preset", "New preset…", format!("{} 2", pick.preset), "Save", presets.clone()),
+            Item::name("ren_var", "Rename variation…", var_name.clone(), "Rename", variations.clone()),
+            Item::name("ren_preset", "Rename preset…", pick.preset.clone(), "Rename", presets),
+            Item::Sep,
+            Item::delete("del_var", "Delete variation").unless((variations.len() <= 1).then(|| "Its only variation".to_string())),
+            Item::delete("del_preset", "Delete preset"),
+        ];
+        let on_pick = {
+            let (rig, module, preset, var) = (rig.clone(), module.clone(), pick.preset.clone(), var_name.clone());
+            EventHandler::new(move |x: Picked| {
+                let (m, p, v, t) = (module.clone(), preset.clone(), var.clone(), x.text.clone());
+                match x.id.as_str() {
+                    "update" => call!(rig, |r| r.save_module_snapshot(m, p, v)),
+                    "new_var" => call!(rig, |r| r.save_module_snapshot(m, p, t)),
+                    "new_preset" => call!(rig, |r| r.save_module_snapshot(m, t, v)),
+                    "ren_var" => call!(rig, |r| r.rename_module_snapshot(m, p, v, t)),
+                    "ren_preset" => call!(rig, |r| r.rename_module_preset(m, p, t)),
+                    "del_var" => call!(rig, |r| r.delete_module_snapshot(m, p, v)),
+                    "del_preset" => call!(rig, |r| r.delete_module_preset(m, p)),
+                    _ => {}
+                }
+            })
+        };
+        let (r1, r2, m1, m2) = (rig.clone(), rig.clone(), module.clone(), module.clone());
+        let (open_name, open_kind) = (label.clone(), format!("module:{module}"));
+        return rsx! {
+            div { style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px;",
+                span { style: "{tag}", "{label}" }
+                button { style: "{arrow}", onclick: move |_| { let m = m1.clone(); call!(r1, |r| r.step_module(m, -1)); }, "‹" }
+                button {
+                    style: "{chip}",
+                    onclick: move |_| {
+                        if let Some(crate::face_chrome::OpenPresets(o)) = open {
+                            o.call((open_name.clone(), open_kind.clone()));
                         }
-                    } else {
-                        crate::face_chrome::PresetStepper { block: b.name.clone(), block_type: b.block_type.as_str().to_lowercase(), show_empty: true, touch: true }
+                    },
+                    span { style: "overflow: hidden; text-overflow: ellipsis;", "{shown}" }
+                    if edited {
+                        span { style: "width: 8px; height: 8px; border-radius: 4px; background: #f59e0b; flex-shrink: 0;" }
                     }
                 }
-                if let Some(m) = module.clone() {
-                    span { style: "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_3}; white-space: nowrap;", "{m}" }
-                    button {
-                        style: "height: 32px; max-width: 320px; padding: 0 12px; border: none; border-radius: 6px; background: rgba(255,255,255,0.08); color: {INK}; font-size: 14px; font-weight: 650; font-family: {FONT}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;",
-                        onclick: move |_| {
-                            if let Some(crate::face_chrome::OpenPresets(o)) = open {
-                                o.call((m.clone(), format!("module:{m}")));
-                            }
-                        },
-                        "{module_preset.clone().unwrap_or_else(|| \"—\".to_string())}"
-                    }
-                }
-                    }
+                button { style: "{arrow}", onclick: move |_| { let m = m2.clone(); call!(r2, |r| r.step_module(m, 1)); }, "›" }
+                MoreButton { label: format!("{module} preset actions"), items, on_pick }
+            }
+        };
+    }
+
+    // A block of its own: its block preset.
+    let Some(b) = bar_block else {
+        return rsx! { span { style: "flex: 1;" } };
+    };
+    let kind = b.block_type.as_str().to_lowercase();
+    let mine: Vec<String> = comp.block_presets.iter().filter(|p| p.block_type.eq_ignore_ascii_case(&kind)).map(|p| p.name.clone()).collect();
+    let playing = comp.active_blocks.iter().find(|x| x.block.eq_ignore_ascii_case(&b.name)).map(|x| x.preset.clone()).unwrap_or_default();
+    let mut items = vec![Item::head(if playing.is_empty() { b.name.clone() } else { playing.clone() })];
+    if !playing.is_empty() {
+        items.push(Item::run("update", format!("Save to {playing}")).unless((!b.overridden).then(|| "Nothing changed".to_string())));
+    }
+    items.push(Item::name("new", "New preset…", if playing.is_empty() { format!("{} 1", b.name) } else { format!("{playing} 2") }, "Save", mine.clone()));
+    if !playing.is_empty() {
+        items.push(Item::name("rename", "Rename…", playing.clone(), "Rename", mine.clone()));
+        items.push(Item::Sep);
+        items.push(Item::delete("delete", "Delete preset"));
+    }
+    let on_pick = {
+        let (rig, block, playing) = (rig.clone(), b.name.clone(), playing.clone());
+        EventHandler::new(move |x: Picked| {
+            let (blk, p, t) = (block.clone(), playing.clone(), x.text.clone());
+            match x.id.as_str() {
+                "update" => call!(rig, |r| r.save_block_preset(blk, p)),
+                "new" => call!(rig, |r| r.save_block_preset(blk, t)),
+                "rename" => call!(rig, |r| r.rename_block_preset(p, t)),
+                "delete" => call!(rig, |r| r.delete_block_preset(p)),
+                _ => {}
+            }
+        })
+    };
+    rsx! {
+        div { style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px;",
+            span { style: "{tag}", "{label}" }
+            crate::face_chrome::PresetStepper { block: b.name.clone(), block_type: kind, show_empty: true, touch: true }
+            if b.overridden {
+                span { style: "width: 8px; height: 8px; border-radius: 4px; background: #f59e0b;" }
+            }
+            MoreButton { label: format!("{} preset actions", b.name), items, on_pick }
+        }
     }
 }
 
