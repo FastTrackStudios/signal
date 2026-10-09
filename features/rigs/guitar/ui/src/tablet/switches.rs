@@ -20,6 +20,9 @@ fn folder(name: &str) -> (&'static str, &'static str) {
     crate::perform::folder_color(name)
 }
 
+/// The switches' text: white on every colour (Boost, on white, keeps black).
+const WHITE: &str = "#fafafa";
+
 /// switches::dim — a colour darkened toward the grid's ground.
 fn dim(hex: &str, amount: f64) -> String {
     let ch = |i: usize| f64::from(u8::from_str_radix(hex.get(1 + i..3 + i).unwrap_or("00"), 16).unwrap_or(0));
@@ -84,9 +87,9 @@ pub fn TouchSwitches(perf: PerformanceModel) -> Element {
                 } else {
                     Empty { no: 6 }
                 }
-                FnTile { no: 7, title: "FX Toggle", subtitle: if fx { "Time FX on".to_string() } else { "Time FX off".to_string() }, bg: "#ec4899", text: "#22050f", lit: fx,
+                FnTile { no: 7, title: "FX Toggle", subtitle: if fx { "Time FX on".to_string() } else { "Time FX off".to_string() }, bg: "#ec4899", text: WHITE, lit: fx,
                     onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_fx()) } }
-                FnTile { no: 8, title: "Song", subtitle: song, bg: "#a78bfa", text: "#1e1b4b", lit: perf.perform_mode == 2,
+                FnTile { no: 8, title: "Song", subtitle: song, bg: "#a78bfa", text: WHITE, lit: perf.perform_mode == 2,
                     onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.next_song()) } }
                 FnTile { no: 9, title: "Boost", subtitle: if boost { boost_label.clone() } else { format!("{boost_label} · off") }, bg: "#fafafa", text: "#0a0a0a", lit: boost,
                     onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_boost()) } }
@@ -113,7 +116,7 @@ pub fn TouchSwitches(perf: PerformanceModel) -> Element {
 #[component]
 fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let (bg, fg) = folder(&stack.name);
+    let (bg, _) = folder(&stack.name);
     let lit = stack.is_active;
     // The part a press plays: its patch, by its own name.
     let showing = stack.patches.get(stack.position as usize).cloned().unwrap_or_else(|| stack.current_patch.clone());
@@ -121,7 +124,8 @@ fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element 
     let count = stack.patches.len().max(stack.patch_count as usize);
     let pos = stack.position as usize;
     let tile_bg = if lit { bg.to_string() } else { dim(bg, 0.24) };
-    let ink = if lit { fg.to_string() } else { dim(fg, 0.35) };
+    // White on every stack's colour; muted while another plays.
+    let ink = if lit { WHITE.to_string() } else { dim(WHITE, 0.5) };
     let dot = if compact { 5 } else { 6 };
     // A momentary switch plays while held: pressed on the way down,
     // released on the way up.
