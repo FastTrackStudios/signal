@@ -85,10 +85,8 @@ pub fn Routing(state: RigViewState) -> Element {
         }
     });
     let blocks = state.blocks.read().clone();
-    // The idle modules unfolded by hand.
-    let mut unfolded = use_signal(Vec::<String>::new);
     let faces = crate::rig_faces::use_faces();
-    let modules = canvas_modules(&blocks, &unfolded.read(), &faces);
+    let modules = canvas_modules(&blocks, &faces);
     let selected = sel().map(|s| match s {
         Selected::Block(id) => CanvasSel::Block(id),
         Selected::Module(m, _) => CanvasSel::Module(m),
@@ -99,15 +97,6 @@ pub fn Routing(state: RigViewState) -> Element {
             CanvasPick::Block(id) => Some(Selected::Block(id)),
             CanvasPick::Module(m, ids) => Some(Selected::Module(m, ids)),
             CanvasPick::Clear => None,
-            CanvasPick::Fold(name) => {
-                let mut u = unfolded.write();
-                if let Some(i) = u.iter().position(|n| *n == name) {
-                    u.remove(i);
-                } else {
-                    u.push(name);
-                }
-                return;
-            }
         };
         if let (Some(s), Some(BrowserFocus(mut f))) = (s.as_ref(), focus)
             && let Some(at) = focus_for(s, &blocks, &comp.peek())
@@ -137,7 +126,7 @@ const AMP_EQ: &str = "Amp EQ";
 /// chain order. The pre effects run in a line; delays and reverbs sit
 /// either side of the dry; the Amp is its two amps into two cabs, then
 /// what shapes it. The Core is a tag on what it owns, not a box.
-fn canvas_modules(blocks: &[LiveBlock], unfolded: &[String], faces: &crate::rig_faces::Faces) -> Vec<CanvasModule> {
+fn canvas_modules(blocks: &[LiveBlock], faces: &crate::rig_faces::Faces) -> Vec<CanvasModule> {
     let mut runs: Vec<(String, Vec<CanvasCell>)> = Vec::new();
     // Everything ahead of the drive board is the Input column.
     let mut past_input = false;
@@ -214,17 +203,11 @@ fn canvas_modules(blocks: &[LiveBlock], unfolded: &[String], faces: &crate::rig_
                 _ => cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect(),
             };
             let name = if name == "Pre" { "Pre-FX".to_string() } else { name };
-            // What the patch uses: a module with nothing on folds to a
-            // strip (the amps never), unless unfolded by hand.
-            let idle = name != "Amp" && !cells_of(&items).iter().any(|c| c.lit && !c.empty);
-            let open = unfolded.contains(&name);
             CanvasModule {
                 colour: module_colour(&name).to_string(),
                 label: String::new(),
                 items,
                 core: matches!(name.as_str(), "Drive" | "Amp"),
-                collapsed: idle && !open && name != "Input",
-                idle: idle && open && name != "Input",
                 bare: name == "Input",
                 name,
             }
@@ -347,18 +330,6 @@ fn input_items(cells: Vec<CanvasCell>) -> Vec<CanvasItem> {
     ])]
 }
 
-/// Every cell in a module's items.
-fn cells_of(items: &[CanvasItem]) -> Vec<&CanvasCell> {
-    items
-        .iter()
-        .flat_map(|i| match i {
-            CanvasItem::Col(c) | CanvasItem::Split(c) => c.iter().collect::<Vec<_>>(),
-            CanvasItem::Lanes(c) => c.iter().map(|(_, c)| c).collect(),
-            CanvasItem::Merge(c, (_, into)) => c.iter().map(|(_, c)| c).chain([into]).collect(),
-            CanvasItem::Sub(m) => cells_of(&m.items),
-        })
-        .collect()
-}
 
 const GREY: &str = "#a1a1aa";
 /// Motion (tremolo, vibrato, rotary): green, apart from the cool modulation

@@ -107,17 +107,17 @@ pub fn TouchSwitches(perf: PerformanceModel) -> Element {
 }
 
 /// A stack's switch: lit in its folder colour when it plays, dark when not.
-/// The stack's name is the main sound; a variation gets a sub-label; dots
-/// say where the next press lands.
+/// The part it plays is the big name (the patch, by its own name); the
+/// stack's name small at the top; the preset the part loads, with what it
+/// overrides, under the name; dots say where the next press lands.
 #[component]
 fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let (bg, fg) = folder(&stack.name);
     let lit = stack.is_active;
-    // The patch a press plays, by its own name (the rig shows a patch named
-    // like its stack as "Default").
+    // The part a press plays: its patch, by its own name.
     let showing = stack.patches.get(stack.position as usize).cloned().unwrap_or_else(|| stack.current_patch.clone());
-    let variation = (!showing.eq_ignore_ascii_case(&stack.name) && !showing.is_empty()).then(|| showing.clone());
+    let part = if showing.is_empty() { stack.name.clone() } else { showing };
     let count = stack.patches.len().max(stack.patch_count as usize);
     let pos = stack.position as usize;
     let tile_bg = if lit { bg.to_string() } else { dim(bg, 0.24) };
@@ -151,9 +151,18 @@ fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element 
             },
             if lit { LitRing {} }
             SwitchNo { no, ink: ink.clone() }
-            span { style: "font-size: {pick(compact, 14, 24)}px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; color: {ink};", "{stack.name}" }
-            if let Some(v) = variation {
-                span { style: "font-size: {pick(compact, 11, 14)}px; font-weight: 600; opacity: {pick(compact, 0.8, 0.9)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: {ink};", "{v}" }
+            // The stack, small, beside the switch's number.
+            span { style: "position: absolute; top: 5px; left: 24px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {ink}; opacity: 0.75;", "{stack.name}" }
+            span { style: "font-size: {pick(compact, 15, 25)}px; font-weight: 750; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: {ink};", "{part}" }
+            // One grey mark at the top right when it overrides anything.
+            if !stack.override_modules.is_empty() {
+                span { style: "position: absolute; top: 6px; right: 8px; display: flex;",
+                    super::marks::OverrideIcon { colour: "#a1a1aa".to_string(), size: if compact { 10 } else { 12 } }
+                }
+            }
+            // The preset it loads, under its name.
+            if !stack.preset.is_empty() && !compact {
+                span { style: "font-size: 12.5px; font-weight: 600; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: {ink};", "{stack.preset}" }
             }
             if count > 1 {
                 span { style: "display: flex; align-items: center; gap: {pick(compact, 4, 6)}px; margin-top: {pick(compact, 0, 4)}px;",

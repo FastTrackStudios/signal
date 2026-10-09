@@ -6,11 +6,10 @@
 //! The chain left to right in one row, four rows tall, fitted to the
 //! view's height; square cables turning in the gaps. A block the manifest
 //! has a frame face for wears it, animated, its preset along the top and
-//! its name along the foot; off, it is muted. A module with nothing in use
-//! folds to a thin strip, a tap away.
+//! its name along the foot; off, it is muted.
 //!
 //! One finger pans, two pinch; a tap picks a block, a module (its box or
-//! header), the Core (its tag), or unfolds a strip. Picks go to `on_pick`.
+//! header) or the Core (its tag). Picks go to `on_pick`.
 
 use dioxus::prelude::*;
 
@@ -57,11 +56,6 @@ pub struct CanvasModule {
     pub items: Vec<CanvasItem>,
     /// A module the Core controls: it wears the Core's tag.
     pub core: bool,
-    /// Folded to a thin strip (nothing in it is in use): still in the
-    /// chain, a tap away.
-    pub collapsed: bool,
-    /// Unfolded though nothing in it is in use: its header folds it back.
-    pub idle: bool,
     /// No box and no header: blocks that are no module's (the Input column,
     /// what each patch brings in ahead of the drives).
     pub bare: bool,
@@ -71,9 +65,6 @@ pub struct CanvasModule {
 pub enum CanvasItem {
     /// Blocks in a column, the chain running down it.
     Col(Vec<CanvasCell>),
-    /// Effects in parallel with the dry: one above the line, one below,
-    /// the dry straight through the middle.
-    Split(Vec<CanvasCell>),
     /// Blocks in parallel, each on the lane it names (the line 0, one
     /// above −1, one below 1): Amp L over Amp R; a block alone off the line
     /// (the amps' EQ on the bottom row).
@@ -81,7 +72,6 @@ pub enum CanvasItem {
     /// Blocks in parallel on their lanes, into one block under them in the
     /// same column (the amps into their EQ on the third row).
     Merge(Vec<(i32, CanvasCell)>, (i32, CanvasCell)),
-    Sub(CanvasModule),
 }
 
 /// Everything the Core owns or controls, in chain order: its tagged blocks
@@ -90,7 +80,7 @@ pub fn core_ids(modules: &[CanvasModule]) -> Vec<String> {
     fn walk(items: &[CanvasItem], all: bool, out: &mut Vec<String>) {
         for i in items {
             match i {
-                CanvasItem::Col(c) | CanvasItem::Split(c) => {
+                CanvasItem::Col(c) => {
                     out.extend(c.iter().filter(|c| all || c.core).map(|c| c.id.clone()));
                 }
                 CanvasItem::Lanes(c) => {
@@ -99,7 +89,6 @@ pub fn core_ids(modules: &[CanvasModule]) -> Vec<String> {
                 CanvasItem::Merge(c, into) => {
                     out.extend(c.iter().chain([into]).filter(|(_, c)| all || c.core).map(|(_, c)| c.id.clone()));
                 }
-                CanvasItem::Sub(m) => walk(&m.items, all || m.core, out),
             }
         }
     }
@@ -116,10 +105,9 @@ impl CanvasModule {
         self.items
             .iter()
             .flat_map(|i| match i {
-                CanvasItem::Col(c) | CanvasItem::Split(c) => c.iter().map(|c| c.id.clone()).collect(),
+                CanvasItem::Col(c) => c.iter().map(|c| c.id.clone()).collect::<Vec<_>>(),
                 CanvasItem::Lanes(c) => c.iter().map(|(_, c)| c.id.clone()).collect(),
                 CanvasItem::Merge(c, into) => c.iter().chain([into]).map(|(_, c)| c.id.clone()).collect(),
-                CanvasItem::Sub(m) => m.ids(),
             })
             .collect()
     }
@@ -132,9 +120,6 @@ pub enum CanvasPick {
     Module(String, Vec<String>),
     /// Empty grid: nothing.
     Clear,
-    /// A folded module's strip, or an unfolded idle one's fold: fold or
-    /// unfold it, by name.
-    Fold(String),
 }
 
 /// What is selected, for the highlight: a block's id or a module's name.
@@ -193,8 +178,6 @@ mod native {
     /// A module's header: a finger's height, the module's tap target.
     const HEAD: f64 = 36.0;
     const MOD_GAP: f64 = GAP - 2.0 * PAD;
-    /// A folded module's strip.
-    const STRIP: f64 = 30.0;
     const ROW_GAP: f64 = 36.0;
     const EDGE: f64 = 6.0;
     const END: f64 = 40.0;
@@ -218,8 +201,7 @@ mod native {
 
     fn item_w(i: &CanvasItem) -> f64 {
         match i {
-            CanvasItem::Col(_) | CanvasItem::Split(_) | CanvasItem::Lanes(_) | CanvasItem::Merge(..) => CELL,
-            CanvasItem::Sub(m) => box_w(&m.items),
+            CanvasItem::Col(_) | CanvasItem::Lanes(_) | CanvasItem::Merge(..) => CELL,
         }
     }
     /// The grid's lanes, one cell and a gap apart: the chain's line is lane
@@ -237,11 +219,8 @@ mod native {
                 // Four rows: the line the second.
                 _ => vec![-1, 0, 1, 2],
             },
-            CanvasItem::Split(c) if c.len() < 2 => vec![-1],
-            CanvasItem::Split(_) => vec![-1, 1],
             CanvasItem::Lanes(c) => c.iter().map(|(l, _)| *l).collect(),
             CanvasItem::Merge(c, (l, _)) => c.iter().map(|(l, _)| *l).chain([*l]).collect(),
-            CanvasItem::Sub(_) => vec![0],
         }
     }
     const LANE: f64 = CELL + GAP;
@@ -250,18 +229,11 @@ mod native {
     /// a module's box round its own.
     fn ext(i: &CanvasItem) -> (f64, f64) {
         match i {
-            CanvasItem::Col(_) | CanvasItem::Split(_) | CanvasItem::Lanes(_) | CanvasItem::Merge(..) => {
+            CanvasItem::Col(_) | CanvasItem::Lanes(_) | CanvasItem::Merge(..) => {
                 let l = lanes(i);
                 let lo = l.iter().copied().min().unwrap_or(0).min(0);
                 let hi = l.iter().copied().max().unwrap_or(0).max(0);
-                let split = matches!(i, CanvasItem::Split(_));
-                // A split's lanes are both sides, whatever it holds.
-                let (lo, hi) = if split { (-1, 1) } else { (lo, hi) };
                 (f64::from(-lo) * LANE + CELL / 2.0, f64::from(hi) * LANE + CELL / 2.0)
-            }
-            CanvasItem::Sub(m) => {
-                let (a, b) = exts(&m.items);
-                (a + HEAD, b + PAD)
             }
         }
     }
@@ -290,17 +262,6 @@ mod native {
             }
         };
         for (mi, m) in mods.iter().enumerate() {
-            if m.collapsed {
-                // A strip the grid's height, its blocks folded away.
-                let (a, b) = (LANE + CELL / 2.0, 2.0 * LANE + CELL / 2.0);
-                let (line, h) = (HEAD + a, HEAD + a + b + PAD);
-                pieces.push(Piece { module: mi, items: 0..0, x, y: row_top, w: STRIP, h, line, first: true });
-                above = above.max(line);
-                below = below.max(h - line);
-                x += STRIP + MOD_GAP;
-                max_x = max_x.max(x);
-                continue;
-            }
             let (a, b) = exts(&m.items);
             let (line, h) = (HEAD + a, HEAD + a + b + PAD);
             let mut c = 0;
@@ -385,11 +346,6 @@ mod native {
                         out.cells.push((cell(l), c.clone()));
                     }
                 }
-                CanvasItem::Split(cells) => {
-                    let rects: Vec<Rect> = lanes(it).into_iter().take(cells.len()).map(cell).collect();
-                    out.cells.extend(rects.iter().copied().zip(cells.iter().cloned()));
-                    out.stages.push(Stage::Split(rects, Some((x, x + CELL, line))));
-                }
                 CanvasItem::Merge(cells, (il, into)) => {
                     let rects: Vec<Rect> = cells.iter().map(|(l, _)| cell(*l)).collect();
                     out.cells.extend(rects.iter().copied().zip(cells.iter().map(|(_, c)| c.clone())));
@@ -401,11 +357,6 @@ mod native {
                     let rects: Vec<Rect> = cells.iter().map(|(l, _)| cell(*l)).collect();
                     out.cells.extend(rects.iter().copied().zip(cells.iter().map(|(_, c)| c.clone())));
                     out.stages.push(if rects.len() == 1 { Stage::Block(rects[0]) } else { Stage::Split(rects, None) });
-                }
-                CanvasItem::Sub(m) => {
-                    let (a, b) = exts(&m.items);
-                    out.boxes.push((Rect::new(x, line - a - HEAD, x + box_w(&m.items), line + b + PAD), m.clone()));
-                    place(&m.items, x + PAD, line, out);
                 }
             }
             x += item_w(it) + GAP;
@@ -419,8 +370,6 @@ mod native {
         Module(String, Vec<String>),
         /// The Core's tag: the whole Core.
         Core,
-        /// A module's strip or fold.
-        Fold(String),
     }
 
     enum Gesture {
@@ -667,7 +616,6 @@ mod native {
                             Some(Hit::Cell(id)) => CanvasPick::Block(id),
                             Some(Hit::Module(name, ids)) => CanvasPick::Module(name, ids),
                             Some(Hit::Core) => CanvasPick::Module("Core".into(), super::core_ids(&s.modules)),
-                            Some(Hit::Fold(name)) => CanvasPick::Fold(name),
                             None => CanvasPick::Clear,
                         };
                         s.picks.push(pick);
@@ -761,10 +709,6 @@ mod native {
                 if pl.cells.iter().any(|(_, c)| c.loose) {
                     let inner = pl.cells.iter().filter(|(_, c)| !c.loose).map(|(cr, _)| cr.y1).fold(r.y0 + HEAD, f64::max);
                     r.y1 = inner + PAD;
-                }
-                if m.collapsed {
-                    draw_strip(&mut scene, st, t, r, &m, &mut hits);
-                    continue;
                 }
                 if m.bare {
                     continue;
@@ -937,13 +881,6 @@ mod native {
         if m.core {
             core_tag(scene, st, t, Point::new(r.x1 - PAD - 10.0, r.y0 + 16.0), hits);
         }
-        // Unfolded with nothing in use: a fold at the header's end.
-        if m.idle {
-            let at = Point::new(r.x1 - PAD - 12.0, r.y0 + 16.0);
-            let chevron = rounded_path(&[Point::new(at.x + 3.0, at.y - 6.0), Point::new(at.x - 3.0, at.y), Point::new(at.x + 3.0, at.y + 6.0)], 1.5);
-            scene.stroke(&Stroke::new(2.0).with_caps(kurbo::Cap::Round), t, lift(colour), None, &chevron);
-            hits.push((Rect::new(at.x - 18.0, r.y0, r.x1, r.y0 + HEAD), Hit::Fold(m.name.clone())));
-        }
     }
 
     fn draw_cell(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, c: &CanvasCell) {
@@ -1041,20 +978,6 @@ mod native {
         let at = if unit { Rect::new(r.x0 + 4.0, r.y0 + BAND + 2.0, r.x1 - 4.0, r.y1 - BAND - 2.0) } else { r.inflate(m, m) };
         s.live.paint_vectors_at(scene, at.width(), at.height(), (t * Affine::translate((at.x0, at.y0))).as_coeffs());
         true
-    }
-
-    /// A folded module: a thin strip in its colour, its mark at the top and
-    /// its name down it. A tap unfolds it.
-    fn draw_strip(scene: &mut Scene, st: &mut State, t: Affine, r: Rect, m: &CanvasModule, hits: &mut Vec<(Rect, Hit)>) {
-        let colour = hex(&m.colour);
-        let rr = RoundedRect::from_rect(r, 10.0);
-        scene.fill(Fill::NonZero, t, mix(colour, Color::from_rgba8(0x14, 0x14, 0x18, 0xff), 0.1), None, &rr);
-        scene.stroke(&Stroke::new(1.0).with_dashes(0.0, [4.0, 4.0]), t, mix(colour, Color::from_rgba8(0x14, 0x14, 0x18, 0xff), 0.45), None, &rr);
-        glyph(scene, t, &m.name.to_lowercase(), r.center().x - 7.0, r.y0 + 9.0, 14.0, colour);
-        // The name, reading upward.
-        let up = t * Affine::translate((r.center().x + 4.5, r.y0 + 34.0)) * Affine::rotate(std::f64::consts::FRAC_PI_2);
-        text(scene, st, up, &m.name.to_uppercase(), 10.5, 800.0, lift(colour), 0.0, 0.0, r.height() - 44.0, false);
-        hits.push((r, Hit::Fold(m.name.clone())));
     }
 
     /// The Core's tag: its mark in a ring, centred at `at`. A tap on it
