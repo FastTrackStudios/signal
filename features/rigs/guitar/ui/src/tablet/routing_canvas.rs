@@ -721,7 +721,7 @@ mod native {
             if s.fitted {
                 let tall = gh / natural.2;
                 let wide = span.map_or(f64::INFINITY, |(a, b)| view.0 / (b - a + 2.0 * EDGE));
-                s.zoom = if s.fold { 1.0 } else { tall.min(wide).clamp(0.35, 1.25) };
+                s.zoom = if s.fold { 1.0 } else { tall.min(wide).clamp(0.35, 1.8) };
             }
             let wrap = s.fold.then(|| view.0 / s.zoom);
             let (pieces, cw, ch) = layout(&s.modules, wrap);

@@ -15,7 +15,7 @@ use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::PerformanceModel;
 use signal_widgets::PopupHost;
 
-use super::menu::{open_menu, open_menu_closing, Item, Picked, MENU_W};
+use super::menu::{open_menu, Item, Picked, MENU_W};
 use super::tokens::*;
 use crate::state::RigViewState;
 
@@ -68,9 +68,7 @@ pub fn TopBar(model: PerformanceModel, state: RigViewState, sidebar: bool, on_si
                     }
                 }
                 Rule {}
-                ModeButton { mode: model.perform_mode }
-                Rule {}
-                span { style: "flex: 1;" }
+                ModeTabs { mode: model.perform_mode }
             }
             span { style: "flex: 1;" }
             // Audio not running: a badge that starts it (or, after a
@@ -103,43 +101,39 @@ pub fn Rule() -> Element {
     rsx! { span { style: "width: 1px; align-self: center; height: 22px; background: {RULE}; flex-shrink: 0;" } }
 }
 
-/// The footswitch mode, as one button: its name, a chevron, the live green
-/// along the bar's foot; a menu of the three, each saying what the switches
-/// will do. Never a blind rotate — a wrong mode changes all ten switches.
+/// The footswitch mode as three tabs — Preset, Profile, Setlist — what the
+/// sidebar shows and the switches play: a tap goes there, the live green
+/// under the one in play.
 #[component]
-fn ModeButton(mode: u32) -> Element {
+fn ModeTabs(mode: u32) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let host = PopupHost::try_use();
-    let mut open = use_signal(|| false);
     // 0 Preset, 1 Profile, anything else Setlist — as the sidebar reads it.
-    let label = MODES[(mode as usize).min(MODES.len() - 1)].1;
-    let bg = if open() { "rgba(255,255,255,0.05)" } else { CLEAR };
-    let mut items = vec![Item::head("Footswitches play")];
-    for (m, l, d) in MODES {
-        items.push(Item::run(m.to_string(), l).detail(d).checked(m == mode));
-    }
+    let on = mode.min(2);
     rsx! {
-        button {
-            "aria-label": "Footswitch mode: {label} — change",
-            style: "position: relative; align-self: stretch; min-width: 120px; padding: 0 14px 0 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: none; background: {bg}; font-size: 15px; font-weight: 700; color: {INK}; font-family: {FONT}; cursor: pointer;",
-            onclick: move |e: MouseEvent| {
-                let (c, el) = (e.client_coordinates(), e.element_coordinates());
-                let rig = rig.clone();
-                open.set(true);
-                open_menu_closing(host, c.x - el.x, c.y - el.y + f64::from(TOP_H), items.clone(), EventHandler::new(move |p: Picked| {
-                    if let Ok(m) = p.id.parse::<u32>() && let Some(r) = rig.clone() {
-                        let _ = dioxus_core::spawn_forever(async move { let _ = r.set_perform_mode(m).await; });
+        div { style: "flex: 1; min-width: 0; display: flex; align-items: stretch;",
+            for (m, label, _) in MODES {
+                {
+                    let rig = rig.clone();
+                    let here = m == on;
+                    rsx! {
+                        button {
+                            key: "{m}",
+                            "aria-label": "Footswitches play the {label}",
+                            style: "position: relative; flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; border: none; background: transparent; font-size: 15px; font-weight: {pick(here, 750, 600)}; color: {pick(here, INK, INK_3)}; font-family: {FONT}; cursor: pointer;",
+                            onclick: move |_| {
+                                if here { return; }
+                                if let Some(r) = rig.clone() {
+                                    let _ = dioxus_core::spawn_forever(async move { let _ = r.set_perform_mode(m).await; });
+                                }
+                            },
+                            "{label}"
+                            if here {
+                                span { style: "position: absolute; left: 10px; right: 10px; bottom: 0; height: 2px; border-radius: 1px; background: {LIVE};" }
+                            }
+                        }
                     }
-                }), move || {
-                    let mut open = open;
-                    open.set(false);
-                });
-            },
-            "{label}"
-            svg { key: "{open()}", width: "10", height: "6", view_box: "0 0 10 6", style: "{pick(open(), ROTATED, NOTHING)}",
-                path { d: "M1 1 L5 5 L9 1", fill: "none", stroke: INK_3, stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round" }
+                }
             }
-            span { style: "position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px; border-radius: 1px; background: {LIVE};" }
         }
     }
 }
@@ -385,8 +379,6 @@ fn MuteButton(house: bool, phones: bool) -> Element {
         }
     }
 }
-
-const ROTATED: &str = "transform: rotate(180deg);";
 
 fn set_mutes(rig: Option<RigClient>, house: bool, phones: bool) {
     if let Some(r) = rig {
