@@ -39,7 +39,7 @@ fn use_compositions(state: RigViewState) -> Signal<CompositionModel> {
 }
 
 #[component]
-fn Header(title: String, sub: String, icon: Option<String>) -> Element {
+fn Header(title: String, sub: String, icon: Option<String>, #[props(default)] actions: Vec<Item>, #[props(default)] on_pick: Option<EventHandler<Picked>>) -> Element {
     rsx! {
         header { style: "flex-shrink: 0; height: {HEADER_H}px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid {RULE}; box-sizing: border-box;",
             if let Some(p) = icon {
@@ -48,6 +48,10 @@ fn Header(title: String, sub: String, icon: Option<String>) -> Element {
             span { style: "display: flex; flex-direction: column; gap: 3px; min-width: 0;",
                 span { style: "font-size: 22px; font-weight: 750; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{title}" }
                 span { style: "font-size: 13px; color: {INK_3};", "{sub}" }
+            }
+            if let Some(pick) = on_pick.filter(|_| !actions.is_empty()) {
+                span { style: "flex: 1;" }
+                MoreButton { label: format!("{title} actions"), items: actions.clone(), on_pick: pick }
             }
         }
     }
@@ -113,16 +117,53 @@ pub fn PresetView(state: RigViewState) -> Element {
     let fits = |p: &signal_guitar_proto::PresetEntry| role().is_none_or(|r| p.snapshots.iter().any(|s| role_of(&s.name) == Some(r)));
     let rest: Vec<signal_guitar_proto::PresetEntry> = c.presets.iter().filter(|p| p.name != playing && fits(p)).cloned().collect();
     let (playing_for_browser, snapshot_for_browser) = (playing.clone(), c.active_snapshot.clone());
+    // The loaded preset's menu: a new one (a copy of it), its name, gone.
+    let preset_names: Vec<String> = c.presets.iter().map(|p| p.name.clone()).collect();
+    let preset_actions = vec![
+        Item::head(playing.clone()),
+        Item::name("new", "New preset…", format!("{playing} 2"), "Add", preset_names.clone()),
+        Item::name("rename", "Rename…", playing.clone(), "Rename", preset_names.clone()),
+        Item::Sep,
+        Item::delete("delete", "Delete preset").unless((preset_names.len() <= 1).then(|| "The only preset".to_string())),
+    ];
+    let next_preset = c.presets.iter().find(|p| p.name != playing).map(|p| (p.name.clone(), p.snapshots.first().map(|s| s.name.clone()).unwrap_or_default()));
+    let on_preset = {
+        let (rig, from, variation) = (rig.clone(), playing.clone(), c.active_snapshot.clone());
+        EventHandler::new(move |p: Picked| {
+            let (from, name, variation) = (from.clone(), p.text.clone(), variation.clone());
+            match p.id.as_str() {
+                "new" => call!(rig, |r| async move {
+                    let _ = r.duplicate_rig_preset(from, name.clone()).await;
+                    r.choose_preset(name, variation).await
+                }),
+                "rename" => call!(rig, |r| r.rename_rig_preset(from, name)),
+                // It is the one loaded: load another, then let it go.
+                "delete" => {
+                    let next = next_preset.clone();
+                    call!(rig, |r| async move {
+                        if let Some((p, v)) = next {
+                            let _ = r.choose_preset(p, v).await;
+                        }
+                        r.delete_rig_preset(from).await
+                    });
+                }
+                _ => {}
+            }
+        })
+    };
     let chip = |on: bool| format!("height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid {}; background: {}; color: {}; font-size: 13px; font-weight: 650; font-family: {FONT}; display: flex; align-items: center; gap: 6px; cursor: pointer; flex-shrink: 0;", pick(on, INK_2, RULE_STRONG), pick(on, "rgba(255,255,255,0.08)", "transparent"), pick(on, INK, INK_2));
     rsx! {
         section { style: "height: 100%; display: flex; flex-direction: column; min-height: 0; background: {SHEET}; font-family: {FONT}; color: {INK};",
             // The one loaded, held: big, its variations four rows tall.
             if let Some(p) = loaded.clone() {
                 div { style: "flex-shrink: 0; border-bottom: 1px solid {RULE}; background: {ROW_ON};",
-                    div { style: "display: flex; flex-direction: column; gap: 3px; padding: 14px 16px 8px;",
-                        span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: {LIVE};", "LOADED" }
-                        span { style: "font-size: 22px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
-                        span { style: "font-size: 13px; color: {INK_3};", "{c.active_snapshot} · {p.snapshots.len()} variations" }
+                    div { style: "display: flex; align-items: center; gap: 8px; padding: 14px 6px 8px 16px;",
+                        div { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
+                            span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: {LIVE};", "LOADED" }
+                            span { style: "font-size: 22px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
+                            span { style: "font-size: 13px; color: {INK_3};", "{c.active_snapshot} · {p.snapshots.len()} variations" }
+                        }
+                        MoreButton { label: format!("{} actions", p.name), items: preset_actions.clone(), on_pick: on_preset }
                     }
                     ScrollWindow { rows: p.snapshots.len() + 1, shown: 4,
                         Variations { preset: p.name.clone(), variations: p.snapshots.iter().map(|s| s.name.clone()).collect::<Vec<_>>(), playing: (c.active_preset.clone(), c.active_snapshot.clone()) }
@@ -271,9 +312,52 @@ pub fn ProfileView(state: RigViewState) -> Element {
     let own = part_patch(&perf);
     let live = is_live(&perf, own.as_deref());
     let full: Vec<usize> = views.iter().map(|v| v.index).collect();
+    // The profile's menu: a new one (a copy of this), its name, the others.
+    let names: Vec<String> = l.profiles.iter().map(|p| p.name.clone()).collect();
+    let profile_actions = vec![
+        Item::head(profile.clone()),
+        Item::name("new", "New profile…", format!("{profile} 2"), "Add", names.clone()),
+        Item::name("rename", "Rename…", profile.clone(), "Rename", names.clone()),
+        Item::run("all", "All profiles…").detail(format!("{}", names.len())),
+        Item::Sep,
+        Item::delete("delete", "Delete profile").unless((names.len() <= 1).then(|| "The only profile".to_string())),
+    ];
+    let focus = try_use_context::<super::routing::BrowserFocus>();
+    let picker = try_use_context::<super::setlist::PickPart>();
+    let others: Vec<String> = names.iter().filter(|n| **n != profile).cloned().collect();
+    let on_profile = {
+        let (rig, profile) = (rig.clone(), profile.clone());
+        Some(EventHandler::new(move |p: Picked| {
+            let (from, name) = (profile.clone(), p.text.clone());
+            match p.id.as_str() {
+                "new" => call!(rig, |r| async move {
+                    let _ = r.add_profile(name.clone(), from).await;
+                    r.select_profile(name).await
+                }),
+                "rename" => call!(rig, |r| r.rename_profile(from, name)),
+                // It is the one playing: play another, then let it go.
+                "delete" => {
+                    let next = others.first().cloned().unwrap_or_default();
+                    call!(rig, |r| async move {
+                        let _ = r.select_profile(next).await;
+                        r.delete_profile(from).await
+                    });
+                }
+                "all" => {
+                    if let Some(super::routing::BrowserFocus(mut f)) = focus {
+                        f.set(Some(super::routing::Focus { kind: "profiles".into(), preset: from, variation: String::new(), search: false }));
+                    }
+                    if let Some(pick) = picker.as_ref() {
+                        pick.open.call(());
+                    }
+                }
+                _ => {}
+            }
+        }))
+    };
     rsx! {
         section { style: "height: 100%; display: flex; flex-direction: column; min-height: 0; background: {SHEET}; font-family: {FONT}; color: {INK};",
-            Header { title: profile.clone(), sub: format!("{count} stacks · {patches} patches"), icon: Some(profile.clone()) }
+            Header { title: profile.clone(), sub: format!("{count} stacks · {patches} patches"), icon: Some(profile.clone()), actions: profile_actions, on_pick: on_profile }
             div { style: "flex: 1; min-height: 0; overflow-y: auto; padding-top: 8px;",
                 div { style: "position: relative; padding: 2px 0 8px 8px;",
                     div { style: "background: rgba(0,0,0,0.18); display: flex; flex-direction: column; border-bottom: 1px solid {RULE};",

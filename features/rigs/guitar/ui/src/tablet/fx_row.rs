@@ -54,28 +54,35 @@ pub fn FxRow(state: RigViewState) -> Element {
     let sel = use_context::<RoutingSel>().0;
     let faces = use_faces();
     let blocks = state.blocks.read().clone();
-    // What it shows: the selection, else the drive board's first pedal,
-    // else the chain's first block.
-    let shown: Vec<LiveBlock> = match sel() {
-        Some(Selected::Block(id)) => blocks.iter().filter(|b| b.id == id).cloned().collect(),
+    // What it shows: the selection among the rest of its module (the drive
+    // board, the time column) — the row's width is the module's, the pick
+    // outlined — else the drive board, else the chain's first block's module.
+    let picked = match sel() {
+        Some(Selected::Block(id)) => Some(id),
+        _ => None,
+    };
+    let first = || blocks.iter().find(|b| b.block_type == BlockType::Drive && !b.empty).or_else(|| blocks.first()).map(|b| b.id.clone());
+    let shown: Vec<LiveBlock> = match sel().or_else(|| first().map(Selected::Block)) {
+        Some(Selected::Block(id)) => {
+            let module = super::routing::canvas_modules(&blocks, &faces).into_iter().map(|m| m.ids()).find(|ids| ids.contains(&id)).unwrap_or_else(|| vec![id.clone()]);
+            module.iter().filter_map(|m| blocks.iter().find(|b| &b.id == m && (!b.empty || b.id == id))).cloned().collect()
+        }
         Some(Selected::Module(_, ids)) => blocks.iter().filter(|b| ids.contains(&b.id)).cloned().collect(),
-        None => blocks
-            .iter()
-            .find(|b| b.block_type == BlockType::Drive && !b.empty)
-            .or_else(|| blocks.first())
-            .cloned()
-            .into_iter()
-            .collect(),
+        None => Vec::new(),
     };
     let one = shown.len() == 1;
     rsx! {
         div { style: "flex-shrink: 0; height: {FX_H}px; box-sizing: border-box; border-top: 1px solid #000; background: #0d0d10; overflow-x: auto; overflow-y: hidden;",
-            div { style: "height: 100%; display: flex; align-items: stretch; justify-content: {pick(one, \"center\", \"flex-start\")}; gap: 1px; width: max-content; min-width: 100%;",
+            div { style: "height: 100%; display: flex; align-items: stretch; justify-content: center; gap: 1px; width: max-content; min-width: 100%;",
                 for b in shown.into_iter() {
                     {
                         let face = face_for(&b, &faces);
+                        let mark = !one && picked.as_deref() == Some(b.id.as_str());
                         rsx! {
-                            div { key: "{b.id}", style: "flex-shrink: 0; height: 100%; display: flex; align-items: stretch;",
+                            div { key: "{b.id}", style: "position: relative; flex-shrink: 0; height: 100%; display: flex; align-items: stretch;",
+                                if mark {
+                                    span { style: "position: absolute; inset: 0; z-index: 2; border: 2px solid {INK}; border-radius: 4px; pointer-events: none;" }
+                                }
                                 match face {
                                     // One block: its face fills the row's box.
                                     Some(f) if one => rsx! {

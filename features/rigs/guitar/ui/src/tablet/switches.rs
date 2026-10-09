@@ -162,7 +162,7 @@ fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element 
             }
             // The preset it loads, under its name.
             if !stack.preset.is_empty() && !compact {
-                span { style: "font-size: 12.5px; font-weight: 600; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: {ink};", "{stack.preset}" }
+                span { style: "font-size: 12.5px; font-weight: 600; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: {ink};", "{core_line(&stack.preset)}" }
             }
             if count > 1 {
                 span { style: "display: flex; align-items: center; gap: {pick(compact, 4, 6)}px; margin-top: {pick(compact, 0, 4)}px;",
@@ -294,5 +294,15 @@ fn TunerTile(muted: bool, onclick: EventHandler<MouseEvent>) -> Element {
 fn SwitchNo(no: u32, ink: String) -> Element {
     rsx! {
         span { style: "position: absolute; top: 5px; left: 9px; font-size: 11px; font-family: ui-monospace, monospace; opacity: 0.45; color: {ink};", "{no}" }
+    }
+}
+
+/// A tile's preset line: the Core preset and its variation, without the
+/// picks added on top ("Deluxe + AC30 · Clean + Amp EQ" → "Deluxe + AC30 ·
+/// Clean") — the tile has room for the one thing it loads.
+fn core_line(preset: &str) -> &str {
+    match preset.find(" · ") {
+        Some(dot) => preset[dot..].find(" + ").map_or(preset, |plus| &preset[..dot + plus]),
+        None => preset,
     }
 }

@@ -736,10 +736,17 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
         },
         d.perf.perform_mode
     );
-    let mut last_home = use_signal(|| home_key.clone());
-    if *last_home.peek() != home_key {
-        last_home.set(home_key.clone());
-        kind_id.set(home.to_string());
+    // Taken once the rig's data is in (it opens empty, then loads): the
+    // first home is where it opens, unless a focus already said where.
+    let loaded = !d.lib.profiles.is_empty() || !d.perf.songs.is_empty();
+    let mut last_home = use_signal(|| None::<String>);
+    let mut focused = use_signal(|| false);
+    if loaded && last_home.peek().as_deref() != Some(home_key.as_str()) {
+        let first = last_home.peek().is_none();
+        last_home.set(Some(home_key.clone()));
+        if !(first && *focused.peek()) {
+            kind_id.set(home.to_string());
+        }
     }
     let mut query = use_signal(String::new);
     let mut searching = use_signal(|| false);
@@ -750,6 +757,7 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
         && let Some(at) = focus()
     {
         focus.set(None);
+        focused.set(true);
         kind_id.set(at.kind.clone());
         opened.set(true);
         query.set(String::new());
@@ -837,6 +845,13 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
         }
     };
     let song_things = things(&Kind::Songs, &d, &target, &set_songs);
+    // The song list's columns, by the browser's width (less its kinds).
+    let song_cols = match width() {
+        _ if narrow => 1,
+        Some(w) if w >= 1100.0 => 3,
+        Some(w) if w >= 800.0 => 2,
+        _ => 1,
+    };
     let rig_clear = use_hook(try_consume_context::<RigClient>);
     let rig_clear_variation = rig_clear.clone();
     // Everything the picked part carries of its own — its picks and its
@@ -865,8 +880,9 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
                 root.set(Some(el.clone()));
                 measure(el, width);
             },
-            // What it's for, the filters, the search — the macro bar's height.
-            div { style: "flex-shrink: 0; height: {HEADER_H}px; display: flex; flex-direction: column; justify-content: center; border-bottom: 1px solid {RULE}; box-sizing: border-box;",
+            // What it's for, the filters, the search — the macro bar's height
+            // beside it; narrow (Edit's side pane, no macro bar), a row.
+            div { style: "flex-shrink: 0; height: {pick(narrow, 60, HEADER_H)}px; display: flex; flex-direction: column; justify-content: center; border-bottom: 1px solid {RULE}; box-sizing: border-box;",
                 div { style: "display: flex; align-items: center; gap: 8px; height: {pick(titled, 42, 48)}px; padding: {pick(titled, \"0 4px 0 14px\", \"0 4px 0 12px\")};",
                     // Narrow, inside a kind: back to them all.
                     if narrow && opened() && q.is_empty() {
@@ -992,12 +1008,14 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
                 }
                 // The things.
                 if !narrow || opened() || !q.is_empty() {
-                div { style: "position: relative; flex: 1; min-width: 0; overflow-y: auto; display: flex; flex-direction: column;",
+                // Keyed by the kind: a new kind starts at the top, not at the
+                // last one's scroll (Songs scrolls down to the set's song).
+                div { key: "{kind.id()}", style: "position: relative; flex: 1; min-width: 0; overflow-y: auto; display: flex; flex-direction: column;",
                     if !q.is_empty() {
                         SearchResults { key: "{list_key}", d: d.clone(), target: target.clone(), set_songs: set_songs.clone(), q: q.clone(), raw: raw.clone() }
                     } else {
                         match kind.clone() {
-                            Kind::Songs => rsx! { SongList { key: "{list_key}", d: d.clone(), songs: song_things.clone(), filter, add: d.perf.perform_mode == 2 } },
+                            Kind::Songs => rsx! { SongList { key: "{list_key}", d: d.clone(), songs: song_things.clone(), filter, add: d.perf.perform_mode == 2, cols: song_cols } },
                             Kind::Profiles => rsx! { ProfileColumns { d: d.clone(), target: target.clone() } },
                             Kind::Presets | Kind::Module(_) => rsx! { PresetColumns { key: "{kind.id()}", kind: kind.clone(), items: things(&kind, &d, &target, &set_songs), applies: applies(&kind, &target, &d) } },
                             k => rsx! { ThingList { key: "{list_key}", kind: k.clone(), items: things(&k, &d, &target, &set_songs), applies: applies(&k, &target, &d) } },
@@ -1487,11 +1505,12 @@ fn Variation(kind: Kind, item: Thing, colour: String, applies: bool, scroll: boo
 fn ProfileColumns(d: Data, target: Target) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let song_profile = profile_of(&d, true);
-    let mut picked = use_signal(|| song_profile.clone());
+    // The one tapped, else the song's (known once the rig's data is in).
+    let mut picked = use_signal(|| None::<String>);
     let mut stacks = use_signal(|| false);
     let width = use_signal(|| None::<f64>);
     let narrow = width().is_some_and(|w| w < COLUMNS_NARROW_W);
-    let current = picked();
+    let current = picked().unwrap_or_else(|| song_profile.clone());
     let profile = d.lib.profiles.iter().find(|p| p.name == current).cloned();
     let part = match &target {
         Target::Part(k) => d.perf.parts.get(*k).cloned(),
@@ -1521,7 +1540,9 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
     let show_stacks = !narrow || stacks();
     rsx! {
         div {
-            style: "height: 100%; display: flex; min-height: 0;",
+            // Grown in the list's column, not `height: 100%` — Blitz gives
+            // a percentage of a flex column's indefinite height nothing.
+            style: "flex: 1; min-height: 0; display: flex;",
             onmounted: move |e| measure(e.data(), width),
             if show_profiles {
                 div { style: "width: {pick(narrow, \"100%\", \"38%\")}; max-width: {pick(narrow, \"none\", \"240px\")}; flex-shrink: 0; overflow-y: auto; border-right: {pick(narrow, \"none\", RULE_LINE)};",
@@ -1536,7 +1557,7 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
                                     key: "{p.name}",
                                     style: "position: relative; width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 6px 12px 6px 14px; border: none; text-align: left; background: {pick(lit, \"rgba(255,255,255,0.07)\", CLEAR)}; color: {INK}; font-family: {FONT}; cursor: pointer;",
                                     onclick: move |_| {
-                                        picked.set(name.clone());
+                                        picked.set(Some(name.clone()));
                                         stacks.set(true);
                                     },
                                     if lit {
@@ -1872,7 +1893,7 @@ fn Facet(label: &'static str, value: Option<String>, options: Vec<String>, onpic
 /// The songs the filters let through; a tap adds one to the set (Setlist
 /// mode); ⋯ puts it in collections and sets its artist and genre.
 #[component]
-fn SongList(d: Data, songs: Vec<Thing>, filter: Signal<SongFilter>, add: bool) -> Element {
+fn SongList(d: Data, songs: Vec<Thing>, filter: Signal<SongFilter>, add: bool, #[props(default = 1)] cols: usize) -> Element {
     let f = filter();
     let col = f.collection.clone().and_then(|c| d.lib.collections.iter().find(|x| x.name == c).cloned());
     let shown: Vec<Thing> = songs
@@ -1889,12 +1910,15 @@ fn SongList(d: Data, songs: Vec<Thing>, filter: Signal<SongFilter>, add: bool) -
     // The first song in the set: the one the list opens on.
     let first = shown.iter().position(|t| t.state.is_some());
     rsx! {
-        div { style: "padding-bottom: 16px;",
+        // As many columns as the width takes (`cols`, from the browser's
+        // measure — Blitz has no `auto-fill`): one in a side pane, two or
+        // three across the main area.
+        div { style: "padding-bottom: 16px; display: grid; grid-template-columns: repeat({cols}, minmax(0, 1fr)); align-content: start;",
             for (n, t) in shown.iter().cloned().enumerate() {
                 SongRow { key: "{t.id}", d: d.clone(), item: t.clone(), add, scroll: first == Some(n) }
             }
             if shown.is_empty() {
-                div { style: "display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 32px 16px;",
+                div { style: "grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 32px 16px;",
                     span { style: "font-size: 14px; color: {INK_3};",
                         if col.is_some() && f.artist.is_none() && f.key.is_none() && f.genre.is_none() {
                             "{col.as_ref().map(|c| c.name.clone()).unwrap_or_default()} is empty"

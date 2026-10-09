@@ -111,7 +111,7 @@ pub fn Routing(state: RigViewState) -> Element {
     };
     rsx! {
         div { style: "position: relative; height: 100%; min-height: 0; background: {DESK}; overflow: hidden;",
-            super::routing_canvas::RoutingCanvas { modules, selected, fold: false, fit: 0, focus: ("Input".to_string(), "Time".to_string()), on_pick }
+            super::routing_canvas::RoutingCanvas { modules, selected, fold: false, fit: 0, focus: ("Input".to_string(), "Master".to_string()), on_pick }
         }
     }
 }
@@ -129,7 +129,7 @@ const AMP_EQ: &str = "Amp EQ";
 /// chain order. The pre effects run in a line; delays and reverbs sit
 /// either side of the dry; the Amp is its two amps into two cabs, then
 /// what shapes it. The Core is a tag on what it owns, not a box.
-fn canvas_modules(blocks: &[LiveBlock], faces: &crate::rig_faces::Faces) -> Vec<CanvasModule> {
+pub(super) fn canvas_modules(blocks: &[LiveBlock], faces: &crate::rig_faces::Faces) -> Vec<CanvasModule> {
     let mut runs: Vec<(String, Vec<CanvasCell>)> = Vec::new();
     // Everything ahead of the drive board is the Input column.
     let mut past_input = false;

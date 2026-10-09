@@ -75,14 +75,14 @@ pub fn PanelView(panel: Panel, perf: PerformanceModel, lib: LibraryModel, on_clo
     let song_at = |i: usize| perf.songs.get(i).cloned().unwrap_or_default();
     let (title, sub) = match &p {
         Panel::Sets => ("Sets".to_string(), format!("{} sets", perf.setlists.len())),
-        Panel::Details(DetailsMode::New) => ("New set".to_string(), "An event on a date — a title only if the night has one".to_string()),
+        Panel::Details(DetailsMode::New) => ("New set".to_string(), String::new()),
         Panel::Details(DetailsMode::Edit) => ("Set details".to_string(), set_name_now.clone()),
-        Panel::Details(DetailsMode::Duplicate) => ("Duplicate set".to_string(), format!("{} songs from {}", perf.songs.len(), set_heading(&set_m))),
+        Panel::Details(DetailsMode::Duplicate) => ("Duplicate set".to_string(), format!("{} from {}", songs_label(perf.songs.len()), set_heading(&set_m))),
         Panel::Add => ("Add songs".to_string(), format!("To {set_name_now}")),
-        Panel::Key(i) => (song_at(*i).name, "Key in this set".to_string()),
-        Panel::Tempo(i) => (song_at(*i).name, "Tempo in this set".to_string()),
-        Panel::Start(i) => (song_at(*i).name, "The patch it starts on".to_string()),
-        Panel::Colour(i) => (song_at(*i).name, "Its colour — every set and device shows it".to_string()),
+        Panel::Key(i) => (song_at(*i).name, "Key".to_string()),
+        Panel::Tempo(i) => (song_at(*i).name, "Tempo".to_string()),
+        Panel::Start(i) => (song_at(*i).name, "Start patch".to_string()),
+        Panel::Colour(i) => (song_at(*i).name, "Colour".to_string()),
         Panel::Profile(Some(i)) => (song_at(*i).name, String::new()),
         Panel::Profile(None) => ("Default profile".to_string(), String::new()),
         Panel::Patch(k) => {
@@ -226,7 +226,7 @@ fn SetGroup(label: &'static str, rows: Vec<(usize, SetMeta)>, perf: PerformanceM
                                         EventChip { event: m.event.clone(), big: false }
                                     }
                                     span { style: "font-size: 13px; color: {INK_3};",
-                                        "{songs} songs"
+                                        "{songs} {pick(songs == 1, \"song\", \"songs\")}"
                                         if !when.is_empty() { " · {when}" }
                                     }
                                 }
@@ -298,7 +298,7 @@ fn DetailsBody(mode: DetailsMode, perf: PerformanceModel, lib: LibraryModel, on_
     let label = format!("font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_3}; margin-bottom: 8px;");
     let confirm = match mode {
         DetailsMode::Edit => "Save".to_string(),
-        DetailsMode::Duplicate => format!("Duplicate {} songs", perf.songs.len()),
+        DetailsMode::Duplicate => format!("Duplicate {}", songs_label(perf.songs.len())),
         DetailsMode::New => "Create set".to_string(),
     };
     let count = perf.setlists.len() as u32;
@@ -388,7 +388,7 @@ fn DetailsBody(mode: DetailsMode, perf: PerformanceModel, lib: LibraryModel, on_
                 }
                 input {
                     value: "{cur.title}",
-                    placeholder: "Only for a special night — e.g. Worship Night",
+                    placeholder: "Title",
                     style: "{field}",
                     oninput: move |e| {
                         let mut x = m();
@@ -1084,4 +1084,9 @@ fn Cell(title: String, on: bool, onclick: EventHandler<()>, children: Element) -
             {children}
         }
     }
+}
+
+/// "1 song", "3 songs".
+fn songs_label(n: usize) -> String {
+    format!("{n} {}", if n == 1 { "song" } else { "songs" })
 }
