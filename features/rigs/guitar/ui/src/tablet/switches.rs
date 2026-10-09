@@ -157,7 +157,7 @@ fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element 
             SwitchNo { no, ink: ink.clone() }
             // The stack, small, beside the switch's number.
             span { style: "position: absolute; top: 5px; left: 24px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {ink}; opacity: 0.75;", "{stack.name}" }
-            span { style: "font-size: {pick(compact, 15, 25)}px; font-weight: 750; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: {ink};", "{part}" }
+            span { style: "font-size: {name_px(&part, compact)}px; font-weight: 750; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: {ink};", "{part}" }
             // One grey mark at the top right when it overrides anything.
             if !stack.override_modules.is_empty() {
                 span { style: "position: absolute; top: 6px; right: 8px; display: flex;",
@@ -309,4 +309,15 @@ fn core_line(preset: &str) -> &str {
         Some(dot) => preset[dot..].find(" + ").map_or(preset, |plus| &preset[..dot + plus]),
         None => preset,
     }
+}
+
+/// The part name's size on a tile: 25 pt, down to 15 for a long name, so
+/// the whole name fits the tile's ~154 pt (Inter bold runs ~0.58 em a
+/// letter).
+fn name_px(name: &str, compact: bool) -> f64 {
+    if compact {
+        return 15.0;
+    }
+    let letters = name.chars().count().max(1) as f64;
+    (154.0 / (letters * 0.58)).clamp(15.0, 25.0).floor()
 }
