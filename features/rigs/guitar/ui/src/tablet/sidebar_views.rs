@@ -148,10 +148,6 @@ fn SearchFoot(label: &'static str, kind: &'static str, at: String, variation: St
     }
 }
 
-/// The loaded profile's stacks window, at most: four stacks and the open
-/// one's patches, about.
-const STACKS_H: f64 = 340.0;
-
 /// A variation's row, for the loaded preset's window of four.
 const VARIATION_ROW: f64 = 44.0;
 
@@ -400,7 +396,10 @@ pub fn ProfileView(state: RigViewState) -> Element {
     let focus = try_use_context::<super::routing::BrowserFocus>();
     let picker = try_use_context::<super::setlist::PickPart>();
     let others: Vec<String> = names.iter().filter(|n| **n != profile).cloned().collect();
-    let rest: Vec<signal_guitar_proto::ProfileEntry> = l.profiles.iter().filter(|p| p.name != profile).cloned().collect();
+    let mut drawer = use_signal(|| false);
+    let mut query = use_signal(String::new);
+    let q = query().trim().to_lowercase();
+    let rest: Vec<signal_guitar_proto::ProfileEntry> = l.profiles.iter().filter(|p| p.name != profile && (q.is_empty() || p.name.to_lowercase().contains(&q) || p.stacks.iter().any(|st| st.to_lowercase().contains(&q)))).cloned().collect();
     let on_profile = {
         let (rig, profile) = (rig.clone(), profile.clone());
         Some(EventHandler::new(move |p: Picked| {
@@ -432,10 +431,11 @@ pub fn ProfileView(state: RigViewState) -> Element {
         }))
     };
     rsx! {
-        section { style: "height: 100%; display: flex; flex-direction: column; min-height: 0; background: {SHEET}; font-family: {FONT}; color: {INK};",
-            // The one loaded, held: big, its stacks in a window that scrolls.
-            div { style: "flex-shrink: 0; border-bottom: 1px solid {RULE}; background: {ROW_ON};",
-                div { style: "display: flex; align-items: center; gap: 10px; padding: 14px 6px 8px 16px;",
+        section { style: "position: relative; height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: {SHEET}; font-family: {FONT}; color: {INK};",
+            // The one loaded, whole: its name, then every stack (the one
+            // playing open on its patches), scrolling.
+            div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column; background: {ROW_ON};",
+                div { style: "flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 14px 6px 8px 16px; border-bottom: 1px solid {RULE};",
                     ProfileIcon { name: profile.clone(), colour: colour.clone(), size: 24 }
                     div { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
                         span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: {LIVE};", "LOADED" }
@@ -446,7 +446,7 @@ pub fn ProfileView(state: RigViewState) -> Element {
                         MoreButton { label: format!("{profile} actions"), items: profile_actions.clone(), on_pick: pick }
                     }
                 }
-                ScrollWindow { max_h: STACKS_H, watch: format!("{}|{}", views.len(), views.iter().position(|v| v.on).map_or(-1, |p| p as i64)),
+                div { style: "flex: 1; min-height: 0; overflow-y: auto;",
                     div { style: "position: relative; padding: 0 0 8px 0;",
                         div { style: "background: rgba(0,0,0,0.18); display: flex; flex-direction: column; border-bottom: 1px solid {RULE};",
                             for (k, v) in views.iter().cloned().enumerate() {
@@ -499,8 +499,49 @@ pub fn ProfileView(state: RigViewState) -> Element {
                     }
                 }
             }
-            // The rest, a tap loading one.
-            div { style: "flex: 1; min-height: 0; overflow-y: auto;",
+            // At the foot: the other profiles, in a drawer.
+            div { style: "flex-shrink: 0; display: flex; flex-direction: column; padding: 12px 14px; border-top: 1px solid {RULE};",
+                button {
+                    style: "display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border: none; border-radius: {R}; background: {FILL}; color: {INK_2}; font-size: 15px; font-weight: 650; font-family: {FONT}; text-align: left; cursor: pointer;",
+                    onclick: move |_| {
+                        query.set(String::new());
+                        drawer.set(true);
+                    },
+                    svg { width: "16", height: "16", view_box: "0 0 16 16",
+                        circle { cx: "7", cy: "7", r: "4.8", fill: "none", stroke: INK_3, stroke_width: "1.6" }
+                        path { d: "M10.6 10.6 14 14", stroke: INK_3, stroke_width: "1.6", stroke_linecap: "round" }
+                    }
+                    span { style: "flex: 1;", "Profiles" }
+                    span { style: "font-size: 13px; color: {INK_3};", "{names.len()}" }
+                }
+            }
+            // The drawer: search, and every other profile — a tap loads it.
+            if drawer() {
+                div { style: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 5; background: rgba(0,0,0,0.5);", onclick: move |_| drawer.set(false) }
+                div { style: "position: absolute; left: 0; right: 0; bottom: 0; top: 22%; z-index: 6; display: flex; flex-direction: column; background: {SHEET}; border-top: 1px solid {RULE_STRONG}; border-radius: 14px 14px 0 0; box-shadow: 0 -12px 32px rgba(0,0,0,0.5);",
+                    div { style: "flex-shrink: 0; display: flex; justify-content: center; padding: 8px 0 2px;",
+                        span { style: "width: 36px; height: 5px; border-radius: 3px; background: {RULE_STRONG};" }
+                    }
+                    div { style: "flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 8px 10px 10px 14px;",
+                        label { style: "flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: {R}; background: {FILL};",
+                            svg { width: "15", height: "15", view_box: "0 0 16 16",
+                                circle { cx: "7", cy: "7", r: "4.8", fill: "none", stroke: INK_3, stroke_width: "1.6" }
+                                path { d: "M10.6 10.6 14 14", stroke: INK_3, stroke_width: "1.6", stroke_linecap: "round" }
+                            }
+                            input {
+                                value: "{query}",
+                                placeholder: "Search profiles",
+                                style: "flex: 1; min-width: 0; height: 100%; border: none; background: transparent; color: {INK}; font-size: 15px; font-family: {FONT};",
+                                oninput: move |e| query.set(e.value()),
+                            }
+                        }
+                        button {
+                            style: "height: 40px; padding: 0 10px; border: none; background: transparent; font-size: 14px; font-weight: 650; color: {INK_2}; font-family: {FONT}; cursor: pointer;",
+                            onclick: move |_| drawer.set(false),
+                            "Done"
+                        }
+                    }
+                    div { style: "flex: 1; min-height: 0; overflow-y: auto; border-top: 1px solid {RULE};",
                 for p in rest.into_iter() {
                     {
                         let name = p.name.clone();
@@ -536,6 +577,7 @@ pub fn ProfileView(state: RigViewState) -> Element {
                                 onclick: move |_| {
                                     let n = name.clone();
                                     call!(rig, |r| r.select_profile(n));
+                                    drawer.set(false);
                                 },
                                 ProfileIcon { name: p.name.clone(), colour: name_colour(&p.name).to_string(), size: 18 }
                                 span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px;",
@@ -554,9 +596,7 @@ pub fn ProfileView(state: RigViewState) -> Element {
                     }
                 }
             }
-            // At the foot: the search — the whole browser, on the profiles.
-            div { style: "flex-shrink: 0; display: flex; flex-direction: column; padding: 12px 14px; border-top: 1px solid {RULE};",
-                SearchFoot { label: "Search profiles", kind: "profiles", at: profile.clone(), variation: String::new() }
+                }
             }
         }
     }
