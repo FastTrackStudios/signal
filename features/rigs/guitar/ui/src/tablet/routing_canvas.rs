@@ -7,8 +7,7 @@
 //! view's height; square cables turning in the gaps. A block the manifest
 //! has a frame face for wears it, animated, its preset along the top and
 //! its name along the foot; off, it is muted. A module with nothing in use
-//! folds to a thin strip, a tap away. A navigator along the top shows the
-//! whole chain and scrolls it.
+//! folds to a thin strip, a tap away.
 //!
 //! One finger pans, two pinch; a tap picks a block, a module (its box or
 //! header), the Core (its tag), or unfolds a strip. Picks go to `on_pick`.
@@ -202,10 +201,6 @@ mod native {
     const PORT: f64 = 5.0;
     /// A faced block's top and foot bands, for its preset and its name.
     const BAND: f64 = 22.0;
-    /// The navigator along the top: the whole graph, thin, as a scrollbar.
-    const NAV_H: f64 = 44.0;
-    /// Where the navigator's picture starts: the chips sit before it.
-    const NAV_LEFT: f64 = 112.0;
 
     /// A piece of a module on the grid (a long one folds into several).
     /// `line` is where the chain's line runs, down from its top.
@@ -432,8 +427,7 @@ mod native {
         Pending { at: (f64, f64), pan0: (f64, f64) },
         Pan { at: (f64, f64), pan0: (f64, f64) },
         Pinch { d0: f64, z0: f64, mid0: (f64, f64), pan0: (f64, f64) },
-        /// A finger on the navigator: the view follows it.
-        Nav,
+
     }
 
     struct State {
@@ -452,8 +446,7 @@ mod native {
         /// The view's size, pt (from the last paint).
         view: (f64, f64),
         fingers: HashMap<u64, (f64, f64)>,
-        /// The navigator's left edge and scale (from the last paint).
-        nav: (f64, f64),
+
         gesture: Gesture,
         hits: Vec<(Rect, Hit)>,
         picks: Vec<CanvasPick>,
@@ -531,7 +524,7 @@ mod native {
                 reset_pan: true,
                 view: (0.0, 0.0),
                 fingers: HashMap::new(),
-                nav: (0.0, 0.0),
+
                 gesture: Gesture::Idle,
                 hits: Vec::new(),
                 picks: Vec::new(),
@@ -622,10 +615,6 @@ mod native {
                             mid0: ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0),
                             pan0: s.pan,
                         },
-                        None if at.1 < NAV_H => {
-                            nav_to(&mut s, at.0);
-                            Gesture::Nav
-                        }
                         None => Gesture::Pending { at, pan0: s.pan },
                     };
                 }
@@ -643,7 +632,6 @@ mod native {
                         _ => {}
                     }
                     match s.gesture {
-                        Gesture::Nav => nav_to(&mut s, p.0),
                         Gesture::Pan { at, pan0 } => {
                             s.reset_pan = false;
                             s.pan = (pan0.0 + p.0 - at.0, pan0.1 + p.1 - at.1);
@@ -671,7 +659,7 @@ mod native {
                     s.fingers.remove(&pointer_key(e.id));
                     if let Gesture::Pending { .. } = s.gesture {
                         // A tap: what is under it.
-                        let at = Point::new((p.0 - s.pan.0) / s.zoom, (p.1 - NAV_H - s.pan.1) / s.zoom);
+                        let at = Point::new((p.0 - s.pan.0) / s.zoom, (p.1 - s.pan.1) / s.zoom);
                         let hit = s.hits.iter().rev().find(|(r, _)| r.contains(at)).map(|(_, h)| h.clone());
                         let pick = match hit {
                             Some(Hit::Cell(id)) => CanvasPick::Block(id),
@@ -718,8 +706,7 @@ mod native {
             s.dirty = false;
             let view = (f64::from(width) / scale, f64::from(height) / scale);
             s.view = view;
-            // The graph's part of the view, under the navigator.
-            let gh = (view.1 - NAV_H).max(1.0);
+            let gh = view.1.max(1.0);
             // Unfolded and fitted: the row as tall as the view.
             let natural = layout(&s.modules, None);
             // The span it opens on: from the focus's first module to its
@@ -749,7 +736,7 @@ mod native {
             let spare_y = gh - ch * s.zoom;
             let pan_y = if spare_y >= 0.0 { spare_y / 2.0 } else { s.pan.1.clamp(spare_y, 0.0) };
             s.pan = (s.pan.0.clamp(min_x, 0.0), pan_y);
-            let t = Affine::scale(scale) * Affine::translate((s.pan.0, NAV_H + s.pan.1)) * Affine::scale(s.zoom);
+            let t = Affine::scale(scale) * Affine::translate((s.pan.0, s.pan.1)) * Affine::scale(s.zoom);
             let mut hits: Vec<(Rect, Hit)> = Vec::new();
             let st = &mut *s;
 
@@ -882,49 +869,8 @@ mod native {
             }
             st.hits = hits;
 
-            // The navigator: every module and block, small, the whole width;
-            // the part in view framed.
-            let ts = Affine::scale(scale);
-            let bar = Rect::new(0.0, 0.0, view.0, NAV_H);
-            scene.fill(Fill::NonZero, ts, Color::from_rgba8(0x0b, 0x0b, 0x0e, 0xff), None, &bar);
-            scene.fill(Fill::NonZero, ts, Color::from_rgba8(0x27, 0x27, 0x2a, 0xff), None, &Rect::new(0.0, NAV_H - 1.0, view.0, NAV_H));
-            // Stretched to the bar: the whole width, the bar's height.
-            // Room at its left for the host's chips (All, Fit).
-            let x0 = NAV_LEFT;
-            let m = (view.0 - x0 - 12.0) / cw;
-            let my = (NAV_H - 10.0) / ch;
-            st.nav = (x0, m);
-            let mini = Affine::translate((x0, 5.0)) * Affine::scale_non_uniform(m, my);
-            for (p, pl) in &placed {
-                let colour = hex(&st.modules[p.module].colour);
-                let dark = Color::from_rgba8(0x14, 0x14, 0x18, 0xff);
-                scene.fill(Fill::NonZero, ts * mini, mix(colour, dark, 0.22), None, &RoundedRect::new(p.x, p.y, p.x + p.w, p.y + p.h, 4.0));
-                for (r, inner) in &pl.boxes {
-                    scene.fill(Fill::NonZero, ts * mini, mix(hex(&inner.colour), dark, 0.3), None, &RoundedRect::from_rect(*r, 4.0));
-                }
-                for (r, c) in &pl.cells {
-                    let fill = if c.lit { hex(&c.colour) } else { Color::from_rgba8(0x3f, 0x3f, 0x46, 0xff) };
-                    scene.fill(Fill::NonZero, ts * mini, fill, None, &r.inset(-4.0));
-                }
-            }
-            let (vx0, vx1) = (-st.pan.0 / st.zoom, (view.0 - st.pan.0) / st.zoom);
-            let frame = RoundedRect::new(x0 + vx0 * m, 3.0, (x0 + vx1 * m).min(view.0 - 2.0), NAV_H - 4.0, 5.0);
-            scene.fill(Fill::NonZero, ts, Color::from_rgba8(0xff, 0xff, 0xff, 0x14), None, &frame);
-            scene.stroke(&Stroke::new(1.5), ts, Color::from_rgba8(0xe4, 0xe4, 0xe7, 0xff), None, &frame);
             scene
         }
-    }
-
-    /// The view centred on the navigator's `x`.
-    fn nav_to(s: &mut State, x: f64) {
-        let (x0, m) = s.nav;
-        if m <= 0.0 {
-            return;
-        }
-        let at = (x - x0) / m;
-        s.reset_pan = false;
-        s.pan.0 = s.view.0 / 2.0 - at * s.zoom;
-        s.dirty = true;
     }
 
     /// A cable from an out port to an in port, square: along the out
