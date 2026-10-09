@@ -53,14 +53,18 @@ pub fn face_for(b: &LiveBlock, faces: &Faces) -> Option<FaceEntry> {
         // The Pre Comp: the compressor's scope (its curve, its gain
         // reduction), as its block in the grid shows it.
         BlockType::Compressor if b.name.to_lowercase().contains("pre") => faces.comp.clone().or_else(|| faces.pre_comp_pedal.clone()).or_else(pedal),
-        BlockType::Compressor => faces.post_comp.clone(),
+        // The post compressor is the Distressor; any other (the master's
+        // limiter) the compressor scope.
+        BlockType::Compressor if b.name.to_lowercase().contains("post") => faces.post_comp.clone(),
+        BlockType::Compressor => faces.comp.clone().or_else(|| faces.post_comp.clone()),
         // A delay or reverb: its machine's face (a pre one: its pedal, if
         // its preset has one).
         BlockType::Delay => (if is_pre(b) { pedal() } else { None })
             .or_else(|| faces.time(false, crate::control::DELAY_ALGOS.get(param("style").unwrap_or(1)).copied().unwrap_or("")).cloned()),
         BlockType::Reverb => (if is_pre(b) { pedal() } else { None })
             .or_else(|| faces.time(true, crate::control::VERB_ALGOS.get(param("algorithm").unwrap_or(1)).copied().unwrap_or("")).cloned()),
-        BlockType::Volume if b.name.eq_ignore_ascii_case("Patch Trim") => faces.trim.clone(),
+        // A level (the patch's trim, the post-amp boost): the level face.
+        BlockType::Volume if b.params.iter().any(|p| p.name == "gain_db") => faces.trim.clone(),
         // A pre effect: its pedal, else its type's face (a pre tremolo the
         // tremolo's).
         t if is_pre(b) => pedal().or_else(|| faces.modulation(t.as_str()).cloned()),
