@@ -36,6 +36,11 @@ pub struct CanvasCell {
     pub keys: Vec<String>,
     /// Its params by name, in their own units, and `on`: the face's values.
     pub params: Vec<(String, f64)>,
+    /// A level it shows large (a boost's, a trim's dB).
+    pub value: Option<String>,
+    /// In its module's column but outside its box (the patch's trim under
+    /// the dynamics).
+    pub loose: bool,
     /// The face it wears when no block face matches its keys: its unit's
     /// own (a drive's pedal) — `(face, namespace, fills)`: fitted whole
     /// between its labels, or filling the block (an amp's faceplate).
@@ -762,7 +767,12 @@ mod native {
             // The modules' boxes, then the cables over them, then the cells.
             for (p, pl) in &placed {
                 let m = st.modules[p.module].clone();
-                let r = Rect::new(p.x, p.y, p.x + p.w, p.y + p.h);
+                let mut r = Rect::new(p.x, p.y, p.x + p.w, p.y + p.h);
+                // A loose block sits under the box: the box ends above it.
+                if pl.cells.iter().any(|(_, c)| c.loose) {
+                    let inner = pl.cells.iter().filter(|(_, c)| !c.loose).map(|(cr, _)| cr.y1).fold(r.y0 + HEAD, f64::max);
+                    r.y1 = inner + PAD;
+                }
                 if m.collapsed {
                     draw_strip(&mut scene, st, t, r, &m, &mut hits);
                     continue;
@@ -1043,10 +1053,14 @@ mod native {
         if c.edited {
             scene.fill(Fill::NonZero, t, Color::from_rgba8(0xf5, 0x9e, 0x0b, 0xff), None, &Circle::new((r.x1 - 11.0, r.y0 + 12.0), 3.5));
         }
+        // A level block: its level large in the middle, its name at the foot.
+        if let (Some(v), false) = (&c.value, faced) {
+            text(scene, st, t, v, 17.0, 800.0, ink, r.x0 + 6.0, r.center().y + 4.0, CELL - 12.0, true);
+        }
         let (size, icon) = (12.0, 13.0);
         let w = measure(st, &c.name, size, 750.0).min(CELL - 16.0 - icon - 4.0);
         let x = r.center().x - (icon + 4.0 + w) / 2.0;
-        let base = if faced { r.y1 - 7.0 } else { r.center().y + 5.0 };
+        let base = if faced || c.value.is_some() { r.y1 - 7.0 } else { r.center().y + 5.0 };
         glyph(scene, t, &c.kind, x, base - 10.5, icon, if c.lit { colour } else { Color::from_rgba8(0x52, 0x52, 0x5b, 0xff) });
         text(scene, st, t, &c.name, size, 750.0, ink, x + icon + 4.0, base, w + 6.0, false);
     }
@@ -1178,6 +1192,7 @@ mod native {
         const DYN: &[&str] = &["M4 5v14h16", "M4 19l6-6 10-4"];
         match key {
             "input" => &["M12 3v6", "M8 9h8v4a4 4 0 0 1-8 0z", "M12 17v4"],
+            "master" => &["M6 4v16", "M12 4v16", "M18 4v16", "M4 9h4", "M10 15h4", "M16 7h4"],
             "core" => &["M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z", "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z"],
             "drive" | "boost" | "saturator" => &["M13 2 4 14h7l-1 8 9-12h-7z"],
             "amp" => &["M3 7h18v12H3z", "M3 11h18", "M7 15h.01", "M11 15h.01"],
