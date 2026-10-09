@@ -111,8 +111,27 @@ pub fn FxRow(state: RigViewState) -> Element {
         None => Vec::new(),
     };
     let one = shown.len() == 1;
+    // The row's width, measured: one block's face fills it edge to edge.
+    let mut row_w = use_signal(|| FX_W);
+    let measure = move |el: std::rc::Rc<MountedData>| {
+        spawn(async move {
+            for _ in 0..10 {
+                if let Ok(r) = el.get_client_rect().await
+                    && r.width() > 0.0
+                {
+                    if (*row_w.peek() - r.width()).abs() > 0.5 {
+                        row_w.set(r.width());
+                    }
+                    return;
+                }
+                architect::platform::sleep(std::time::Duration::from_millis(30)).await;
+            }
+        });
+    };
+    let w = row_w();
     rsx! {
         div { style: "flex-shrink: 0; height: {FX_H}px; box-sizing: border-box; border-top: 1px solid #000; background: #0d0d10; overflow-x: auto; overflow-y: hidden;",
+            onmounted: move |e| measure(e.data()),
             div { style: "height: 100%; display: flex; align-items: stretch; justify-content: center; gap: 1px; width: max-content; min-width: 100%;",
                 for b in shown.into_iter() {
                     {
@@ -122,8 +141,8 @@ pub fn FxRow(state: RigViewState) -> Element {
                                 match face {
                                     // One block: its face fills the row's box.
                                     Some(f) if one => rsx! {
-                                        div { style: "width: {FX_W}px; height: 100%;",
-                                            BlockFace { block: b.clone(), face: f.at_box(FX_W, FX_H), fill: true, stepper: true }
+                                        div { style: "width: {w}px; height: 100%;",
+                                            BlockFace { block: b.clone(), face: f.at_box(w, FX_H), fill: true, stepper: true }
                                         }
                                     },
                                     // A module's: each in a box the row's height
@@ -138,8 +157,8 @@ pub fn FxRow(state: RigViewState) -> Element {
                                         }
                                     }
                                     None => rsx! {
-                                        div { style: "width: {pick(one, FX_W, 260.0)}px; height: 100%; padding: 12px; box-sizing: border-box;",
-                                            NameCard { block: b.clone(), aspect: (pick(one, FX_W, 260.0), FX_H) }
+                                        div { style: "width: {pick(one, w, 260.0)}px; height: 100%; padding: 12px; box-sizing: border-box;",
+                                            NameCard { block: b.clone(), aspect: (pick(one, w, 260.0), FX_H) }
                                         }
                                     },
                                 }
