@@ -220,6 +220,11 @@ pub struct PatchDef {
     /// naming it. The patch's own picks and edits go on top. Empty: none.
     #[facet(default)]
     pub tone: String,
+    /// What kind of sound it is — one of [`ROLES`]: Clean, Crunch, Drive,
+    /// Lead, Ambient — so its name needn't say it. Empty: as its stack or
+    /// its variation says (see [`PatchDef::role_in`]).
+    #[facet(default)]
+    pub role: String,
     #[facet(default)]
     pub modules: Vec<ModuleChoiceDef>,
     /// This patch's own block presets — a single delay, a reverb — over
@@ -381,7 +386,24 @@ impl OverrideDef {
     }
 }
 
+/// The kinds of sound a patch is tagged with: what a stack holds, what the
+/// browser sorts by.
+pub const ROLES: [&str; 5] = ["Clean", "Crunch", "Drive", "Lead", "Ambient"];
+
+/// `s` as a role, if it names one.
+#[must_use]
+pub fn role_named(s: &str) -> Option<&'static str> {
+    ROLES.iter().find(|r| r.eq_ignore_ascii_case(s.trim())).copied()
+}
+
 impl PatchDef {
+    /// The kind of sound this is: its own tag, else its stack's (`stack`,
+    /// when that names a role), else its variation's.
+    #[must_use]
+    pub fn role_in(&self, stack: &str) -> String {
+        role_named(&self.role).or_else(|| role_named(stack)).or_else(|| role_named(&self.snapshot)).unwrap_or_default().to_string()
+    }
+
     /// The unique module names this patch overrides (for the UI's
     /// override badges).
     #[must_use]
@@ -492,6 +514,7 @@ pub fn worship_def() -> ProfileDef {
         no_rotate: false,
     };
     let patch = |name: &str, preset: &str| PatchDef {
+        role: String::new(),
         song: String::new(),
         name: name.to_string(),
         preset: preset.to_string(),
@@ -2893,6 +2916,7 @@ mod tone_label_tests {
 
     fn patch() -> PatchDef {
         PatchDef {
+            role: String::new(),
             song: String::new(),
             name: "Clean Verb".into(),
             preset: "Fender Clean".into(),
@@ -2932,5 +2956,43 @@ mod cloud_default_tests {
     fn a_cloud_lands_at_eight_seconds() {
         let t60 = 1.0_f64 * (120.0_f64 / 1.0).powf(f64::from(super::CLOUD_DEFAULT_DECAY));
         assert!((t60 - 8.0).abs() < 0.01, "{t60}");
+    }
+}
+
+#[cfg(test)]
+mod role_tests {
+    use super::*;
+
+    #[test]
+    fn a_patch_is_the_kind_its_tag_or_stack_or_variation_says() {
+        let mut p = PatchDef { name: "Edge".into(), role: String::new(), snapshot: "Crunch".into(), ..patch_for_roles() };
+        assert_eq!(p.role_in(""), "Crunch", "its variation's, untagged and in no stack");
+        assert_eq!(p.role_in("Lead"), "Lead", "its stack's before its variation's");
+        assert_eq!(p.role_in("Special"), "Crunch", "a stack that names no role says nothing");
+        p.role = "ambient".into();
+        assert_eq!(p.role_in("Lead"), "Ambient", "its own tag first, as the role is spelled");
+        p.role = "Funky".into();
+        assert_eq!(p.role_in(""), "Crunch", "a tag that is no role is none");
+    }
+
+    fn patch_for_roles() -> PatchDef {
+        PatchDef {
+            role: String::new(),
+            song: String::new(),
+            name: String::new(),
+            preset: String::new(),
+            preset2: String::new(),
+            rig_preset: String::new(),
+            snapshot: String::new(),
+            tone: String::new(),
+            modules: Vec::new(),
+            blocks: Vec::new(),
+            drives: Vec::new(),
+            trim_db: 0.0,
+            level_db: 0.0,
+            boost_db: 0.0,
+            overrides: Vec::new(),
+            macros: Vec::new(),
+        }
     }
 }

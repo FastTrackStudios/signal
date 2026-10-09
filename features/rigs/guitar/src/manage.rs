@@ -1203,6 +1203,7 @@ mod tests {
 
     fn patch(name: &str) -> PatchDef {
         PatchDef {
+            role: String::new(),
             song: String::new(),
             name: name.into(),
             preset: String::new(),

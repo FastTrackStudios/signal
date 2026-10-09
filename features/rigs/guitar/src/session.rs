@@ -3509,7 +3509,14 @@ impl GuitarRigBackend {
                         )
                     })
                     .unwrap_or_default();
+                let role = def
+                    .patches
+                    .iter()
+                    .find(|d| d.name.eq_ignore_ascii_case(&p.name))
+                    .map(|d| d.role_in(stack_entry.map_or("", |st| st.name.as_str())))
+                    .unwrap_or_default();
                 PatchInfo {
+                    role,
                     preset,
                     rig_preset,
                     variation,
@@ -7614,6 +7621,7 @@ impl Rig for GuitarRigBackend {
                 return;
             }
             def.patches.push(crate::profiles::PatchDef {
+                role: String::new(),
                 song: String::new(),
                 name: name.clone(),
                 preset,
@@ -7781,6 +7789,20 @@ impl Rig for GuitarRigBackend {
         };
         tracing::info!("patch renamed: {old} → {new_name}");
         self.reload_rebuilt(rebuilt);
+    }
+
+    fn set_patch_role(&self, patch: String, role: String) {
+        let role = crate::profiles::role_named(&role).unwrap_or_default().to_string();
+        {
+            let mut def = self.profile_def.lock_ok();
+            let Some(p) = def.patches.iter_mut().find(|p| p.name.eq_ignore_ascii_case(&patch)) else {
+                return;
+            };
+            p.role = role.clone();
+            RigLibrary::save_profile(&def);
+        }
+        tracing::info!(patch.name = %patch, patch.role = %role, "patch tagged");
+        self.publish_state();
     }
 
     fn delete_patch(&self, name: String) {
@@ -9411,6 +9433,7 @@ impl Rig for GuitarRigBackend {
                 drives: active.drives.clone(),
                 presets: active.presets.clone(),
                 patches: vec![crate::profiles::PatchDef {
+                    role: String::new(),
                     song: String::new(),
                     name: "Clean".to_string(),
                     preset: first,
@@ -10056,6 +10079,7 @@ impl Rig for GuitarRigBackend {
                 let mut def = self.profile_def.lock_ok();
                 def.patches.retain(|p| p.name != crate::profiles::PRESET_BENCH);
                 def.patches.push(crate::profiles::PatchDef {
+                    role: String::new(),
                     name: crate::profiles::PRESET_BENCH.to_string(),
                     song: String::new(),
                     preset: String::new(),
@@ -11078,6 +11102,7 @@ mod tests {
 
     fn patch(name: &str, preset: &str) -> PatchDef {
         PatchDef {
+            role: String::new(),
             song: String::new(),
             name: name.to_string(),
             preset: preset.to_string(),

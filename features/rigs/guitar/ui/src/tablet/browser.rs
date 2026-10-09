@@ -455,7 +455,21 @@ fn algo_of(d: &Data, preset: &str) -> Option<String> {
     Some((*name).to_string())
 }
 
+/// A kind's items — a patch findable by the kind of sound it is ("crunch"
+/// finds Edge) as well as by its name.
 fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<Thing> {
+    let mut out = things_of(kind, d, target, set_songs);
+    if matches!(kind, Kind::Patches) {
+        for t in &mut out {
+            if let Some(p) = d.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&t.name)) && !p.role.is_empty() {
+                t.search = format!("{} {}", t.search, p.role.to_lowercase());
+            }
+        }
+    }
+    out
+}
+
+fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<Thing> {
     let part = match target {
         Target::Part(k) => d.perf.parts.get(*k),
         _ => None,

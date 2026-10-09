@@ -445,6 +445,10 @@ pub struct PatchInfo {
     pub default_in_stack: bool,
     /// Module names this patch overrides on its preset.
     pub override_modules: Vec<String>,
+    /// What kind of sound it is: Clean, Crunch, Drive, Lead or Ambient —
+    /// its own tag, else its stack's or variation's (empty: none).
+    #[facet(default)]
+    pub role: String,
 }
 
 /// One preset in the pool — a complete tone patches point at.
@@ -1806,6 +1810,9 @@ pub mod rig {
         fn delete_preset(&self, name: String);
         /// Rename a patch (stack rotations follow). Rebuilds.
         fn rename_patch(&self, old: String, new_name: String);
+        /// Tag a patch with the kind of sound it is (Clean, Crunch, Drive,
+        /// Lead, Ambient; empty: untagged, as its stack or variation says).
+        fn set_patch_role(&self, patch: String, role: String);
         /// Delete a patch (removed from every stack). Rebuilds.
         fn delete_patch(&self, name: String);
         /// Rename a stack.
