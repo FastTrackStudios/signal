@@ -272,7 +272,7 @@ mod native {
                 l.set_animate(moving);
             }
         }
-        let attr = use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(FrameWidget { live: Rc::clone(&live), edits: Rc::clone(&edits), update: update.clone(), target: None }));
+        let attr = use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(FrameWidget { live: Rc::clone(&live), edits: Rc::clone(&edits), update: update.clone(), target: None, fingers: Vec::new(), pinch: None }));
         // The edits go out from a task, not from inside a render.
         let heard: Vec<(String, f64)> = std::mem::take(&mut *edits.borrow_mut());
         if let Some(handler) = on_edit
@@ -301,6 +301,22 @@ mod native {
         update: std::sync::Arc<dyn Fn() + Send + Sync>,
         /// The texture Blitz holds for us, its size, and which variant's.
         target: Option<(ResourceId, (u32, u32), usize)>,
+        /// The fingers down on it, where each is (element coordinates).
+        fingers: Vec<(u64, (f64, f64))>,
+        /// Two fingers down: where the first was when the second landed
+        /// (the band it held), and the fingers' spread last seen.
+        pinch: Option<((f64, f64), f64)>,
+    }
+
+    /// How many wheel notches a doubling of the fingers' spread is: the
+    /// face's wheel rule turns it into the band's Q (a cut's slope).
+    const NOTCHES_PER_DOUBLING: f64 = 1.5;
+
+    fn spread(f: &[(u64, (f64, f64))]) -> f64 {
+        match f {
+            [(_, a), (_, b), ..] => ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt().max(1.0),
+            _ => 1.0,
+        }
     }
 
     /// The window's device and queue, from whatever the renderer boxed.
@@ -370,11 +386,65 @@ mod native {
             let mut guard = self.live.borrow_mut();
             let Ok(surfaces) = guard.as_mut() else { return };
             let live = surfaces.active_mut();
+            let finger = |id: &blitz_traits::events::BlitzPointerId| match id {
+                blitz_traits::events::BlitzPointerId::Finger(n) => Some(*n),
+                _ => None,
+            };
             match event {
-                UiEvent::PointerDown(e) => live.pointer_down(f64::from(e.element.x), f64::from(e.element.y), mods(e.mods)),
-                UiEvent::PointerMove(e) => live.pointer_move(f64::from(e.element.x), f64::from(e.element.y), mods(e.mods)),
-                UiEvent::PointerUp(_) => live.pointer_up(),
-                UiEvent::PointerCancel(_) => live.cancel(),
+                UiEvent::PointerDown(e) => {
+                    let at = (f64::from(e.element.x), f64::from(e.element.y));
+                    if let Some(n) = finger(&e.id) {
+                        self.fingers.retain(|f| f.0 != n);
+                        self.fingers.push((n, at));
+                    }
+                    if self.fingers.len() == 2 {
+                        // A second finger: a pinch. The first finger's drag
+                        // ends where it is; the band under it takes the pinch.
+                        let held = self.fingers[0].1;
+                        live.pointer_up();
+                        self.pinch = Some((held, spread(&self.fingers)));
+                    } else if self.pinch.is_none() {
+                        live.pointer_down(at.0, at.1, mods(e.mods));
+                    }
+                }
+                UiEvent::PointerMove(e) => {
+                    let at = (f64::from(e.element.x), f64::from(e.element.y));
+                    if let Some(n) = finger(&e.id)
+                        && let Some(f) = self.fingers.iter_mut().find(|f| f.0 == n)
+                    {
+                        f.1 = at;
+                    }
+                    match self.pinch {
+                        Some((held, last)) => {
+                            let now = spread(&self.fingers);
+                            // Apart: a wider band (a lower Q); together: narrower.
+                            // (The face's wheel raises Q on a notch down.)
+                            let notches = (now / last).log2() * NOTCHES_PER_DOUBLING;
+                            if notches.abs() > 0.01 {
+                                live.wheel(held.0, held.1, notches, mods(e.mods));
+                                self.pinch = Some((held, now));
+                            }
+                        }
+                        None => live.pointer_move(at.0, at.1, mods(e.mods)),
+                    }
+                }
+                UiEvent::PointerUp(e) => {
+                    if let Some(n) = finger(&e.id) {
+                        self.fingers.retain(|f| f.0 != n);
+                    }
+                    if self.pinch.is_some() {
+                        if self.fingers.is_empty() {
+                            self.pinch = None;
+                        }
+                    } else {
+                        live.pointer_up();
+                    }
+                }
+                UiEvent::PointerCancel(_) => {
+                    self.fingers.clear();
+                    self.pinch = None;
+                    live.cancel();
+                }
                 UiEvent::Wheel(e) => {
                     let notches = match e.delta {
                         BlitzWheelDelta::Lines(_, y) => -y,
