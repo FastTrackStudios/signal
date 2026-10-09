@@ -229,7 +229,7 @@ Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
 Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
-Amp L | nam=models/Clapton_s Bassman - Marked Settings _Jumpered_.nam | ir= | bypassed=false | 
+Amp L | nam=models/Clapton_s Bassman - Marked Settings _Jumpered_.nam | ir= | bypassed=false | drive=0.333
 Cab L | nam= | ir= | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 

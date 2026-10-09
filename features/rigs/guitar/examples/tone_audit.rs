@@ -110,6 +110,40 @@ fn main() {
         return;
     }
     let (soft, hard) = (sine(-18.0), sine(-8.0));
+    if args.iter().any(|a| a == "--fx") {
+        // How loud each patch's delays and reverbs sit under the playing:
+        // the chords DI with them off, then each alone, the difference
+        // being the wet signal — its loudness against the dry, dB.
+        let chords = signal_guitar::di_player::recording(0, SR);
+        let is_dly = |n: &str| n.to_lowercase().starts_with("dly");
+        let is_verb = |n: &str| n.to_lowercase().starts_with("verb");
+        let lufs = |x: &[f64]| signal_sampler::loudness::integrated_lufs(x, f64::from(SR));
+        let mono = |(l, r): (Vec<f32>, Vec<f32>)| -> Vec<f64> { l.iter().zip(&r).map(|(a, b)| f64::from(a + b) * 0.5).collect() };
+        let rows = signal_guitar::levelling::par_map(&built.patches, 0, |p| {
+            let lim = |n: &str| n.eq_ignore_ascii_case("limiter");
+            let dry = with(p, |n| is_dly(n) || is_verb(n) || lim(n));
+            let dly = with(p, |n| is_verb(n) || lim(n));
+            let verb = with(p, |n| is_dly(n) || lim(n));
+            let r = |q: &RigPatch| render_through(q, SR, &chords).map(mono);
+            let (Some(d), Some(a), Some(b)) = (r(&dry), r(&dly), r(&verb)) else { return (f64::NAN, f64::NAN, f64::NAN) };
+            let base = lufs(&d);
+            let wet = |x: &[f64]| {
+                let diff: Vec<f64> = x.iter().zip(&d).map(|(x, y)| x - y).collect();
+                lufs(&diff) - base
+            };
+            (base, wet(&a), wet(&b))
+        });
+        println!("{:<20} {:>7} {:>7} {:>7}   blocks on", "patch", "dry", "delay", "reverb");
+        for (p, (base, dl, vb)) in built.patches.iter().zip(&rows) {
+            let on: Vec<String> = p.chain.iter().filter(|b| !b.bypassed && (is_dly(&b.name) || is_verb(&b.name))).map(|b| {
+                let lvl = b.param_f32("level").map_or(String::new(), |v| format!(" {v:.1}"));
+                format!("{}{lvl}", b.name)
+            }).collect();
+            let show = |v: f64| if v < -60.0 || v.is_nan() { "—".to_string() } else { format!("{v:+.1}") };
+            println!("{:<20} {:>7.1} {:>7} {:>7}   {}", p.name, base, show(*dl), show(*vb), on.join(", "));
+        }
+        return;
+    }
     if models_mode {
         // Every capture in the library's models/, alone in Amp L.
         let dir = signal_guitar::library::rig_dir().join("models");
