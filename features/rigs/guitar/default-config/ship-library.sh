@@ -19,11 +19,16 @@ dst=$(cd "$(dirname "$0")" && pwd)
 # with UPDATE_GOLDEN=1 when a take changes it). Worship is taken whole — it
 # is the iPad's and the laptop's default — and so is Blues, its five stacks.
 root=$(cd "$dst/../../../.." && pwd)
+# First, what ships now goes on the factory record (factory.txt): a library
+# still holding an entry as shipped takes the new version of it.
+(cd "$root" && cargo test -q -p signal-guitar --lib record_factory -- --ignored >/dev/null)
 (cd "$root" && cargo run -q -p signal-guitar --example ship_library -- "$src" "$dst" --take Worship --take Blues)
 
 # Every absolute capture or IR path, copied in flat and rewritten.
 mkdir -p "$dst/models"
-refs=$(grep -ohE '"/[^"]+\.(nam|wav)"' "$dst"/*.styx "$dst"/profiles/*.styx | tr -d '"' | sort -u)
+# Quoted (a path with spaces) or bare.
+refs=$( { grep -ohE '"/[^"]+\.(nam|wav)"' "$dst"/*.styx "$dst"/profiles/*.styx | tr -d '"'
+          grep -ohE '(nam2?|cab2?|ir) /[^ ,)}"]+\.(nam|wav)' "$dst"/*.styx "$dst"/profiles/*.styx | cut -d' ' -f2-; } | sort -u)
 while IFS= read -r ref; do
   [ -z "$ref" ] && continue
   name=$(basename "$ref")
@@ -34,7 +39,7 @@ while IFS= read -r ref; do
   cp "$ref" "$dst/models/$name"
 done <<< "$refs"
 # Rewrite: any absolute path to a .nam/.wav → models/<file>.
-perl -pi -e 's#"/[^"]*/([^"/]+\.(?:nam|wav))"#"models/$1"#g' "$dst"/*.styx "$dst"/profiles/*.styx
+perl -pi -e 's#"/[^"]*/([^"/]+\.(?:nam|wav))"#"models/$1"#g; s#(nam2?|cab2?|ir) /[^ ,)}"]*/([^/ ,)}"]+\.(?:nam|wav))#$1 "models/$2"#g' "$dst"/*.styx "$dst"/profiles/*.styx
 
 # The frozen Cores the presets play.
 mkdir -p "$dst/frozen"

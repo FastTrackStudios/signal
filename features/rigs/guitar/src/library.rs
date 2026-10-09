@@ -577,6 +577,17 @@ fn seed_profiles(profiles: &mut Vec<ProfileDef>) -> bool {
             seeded.push(def.name.clone());
             changed = true;
         }
+        // One the library has as the app shipped it takes the newer one.
+        if let Some(mine) = profiles.iter_mut().find(|p| p.name.eq_ignore_ascii_case(&def.name))
+            && factory_update(file, &def.name, &*mine, &def)
+        {
+            if writable_store().is_some() {
+                config_watch::write_guarded(&dir.dir().join(file), &def);
+            }
+            tracing::info!(profile = %def.name, "rig library: shipped profile updated");
+            *mine = def;
+            continue;
+        }
         if had || present {
             continue;
         }
@@ -715,8 +726,68 @@ fn seed_songs_and_setlists() {
     );
 }
 
+/// Every revision the app has shipped of each shipped entry, as
+/// fingerprints — `file`, key and [`fingerprint`] a line, tab-separated
+/// (a key's own tab written ` :: `). An entry still matching one is the
+/// factory's, untouched by the player, so a newer shipped version of it
+/// replaces it ([`factory_update`]); one they changed is theirs and stays.
+/// `ship-library.sh` records the shipped files here before it changes them.
+const FACTORY: &str = include_str!("../default-config/factory.txt");
+
+/// An entry as text, its capture and IR paths cut to their file names — so
+/// a library's `/Users/…/x.nam` and the shipped `models/x.nam` read the same
+/// — hashed (FNV-1a, 64-bit, hex).
+pub(crate) fn fingerprint<T: for<'a> Facet<'a>>(entry: &T) -> String {
+    let text = facet_styx::to_string(entry).unwrap_or_default();
+    let mut out = String::with_capacity(text.len());
+    let mut token = String::new();
+    let mut quoted = false;
+    let flush = |token: &mut String, out: &mut String| {
+        let lower = token.to_lowercase();
+        if (lower.ends_with(".nam") || lower.ends_with(".wav")) && token.contains('/') {
+            out.push_str(token.rsplit('/').next().unwrap_or(token));
+        } else {
+            out.push_str(token);
+        }
+        token.clear();
+    };
+    for c in text.chars() {
+        let boundary = if quoted { c == '"' } else { c == '"' || c.is_whitespace() || ",(){}".contains(c) };
+        if boundary {
+            flush(&mut token, &mut out);
+            out.push(c);
+            if c == '"' {
+                quoted = !quoted;
+            }
+        } else {
+            token.push(c);
+        }
+    }
+    flush(&mut token, &mut out);
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in out.bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{h:016x}")
+}
+
+/// The [`FACTORY`] line for an entry.
+pub(crate) fn factory_line(file: &str, key: &str, fingerprint: &str) -> String {
+    format!("{file}\t{}\t{fingerprint}", key.replace('\t', " :: "))
+}
+
+/// Whether `mine` should take the shipped `ship`: it differs, and is still
+/// one of the versions the app shipped before.
+fn factory_update<T: for<'a> Facet<'a>>(file: &str, key: &str, mine: &T, ship: &T) -> bool {
+    let have = fingerprint(mine);
+    have != fingerprint(ship) && FACTORY.lines().any(|l| l == factory_line(file, key, &have))
+}
+
 /// [`seed_compositions`] for one file: the shipped entries (by `key`) not in
-/// the library's file nor in its `marker` are added and written back.
+/// the library's file nor in its `marker` are added and written back, and
+/// the ones it still has as shipped take the shipped version now
+/// ([`factory_update`]).
 fn seed_entries<L, E>(
     store: &StyxDir,
     file: &str,
@@ -726,7 +797,7 @@ fn seed_entries<L, E>(
     key: impl Fn(&E) -> String,
 ) where
     L: for<'a> Facet<'a>,
-    E: Clone,
+    E: Clone + for<'a> Facet<'a>,
 {
     let path = store.dir().join(file);
     let Read::Ok(mut lib) = config_watch::read_tracked::<L>(&path) else { return };
@@ -751,9 +822,19 @@ fn seed_entries<L, E>(
             added += 1;
         }
     }
-    if added > 0 {
+    let mut updated = 0usize;
+    for e in list(&mut ship).iter() {
+        let k = key(e);
+        if let Some(mine) = list(&mut lib).iter_mut().find(|m| key(m).eq_ignore_ascii_case(&k))
+            && factory_update(file, &k, &*mine, e)
+        {
+            *mine = e.clone();
+            updated += 1;
+        }
+    }
+    if added > 0 || updated > 0 {
         config_watch::write_guarded(&path, &lib);
-        tracing::info!(file, added, "rig library: seeded shipped presets");
+        tracing::info!(file, added, updated, "rig library: seeded shipped presets");
     }
     if let Err(e) = std::fs::write(&marker, seeded.join("\n") + "\n") {
         tracing::warn!("rig library: cannot write {}: {e}", marker.display());
@@ -1553,6 +1634,73 @@ pub fn seed_setup() -> signal_guitar_proto::SetupModel {
 #[cfg(test)]
 mod seed_tests {
     use super::*;
+
+    /// Every entry of `shipped` (a library file's text) as [`FACTORY`] lines.
+    fn lines<L, E>(file: &str, shipped: &str, list: impl Fn(&mut L) -> &mut Vec<E>, key: impl Fn(&E) -> String) -> Vec<String>
+    where
+        L: for<'a> Facet<'a>,
+        E: for<'a> Facet<'a>,
+    {
+        let mut lib = facet_styx::from_str::<L>(shipped).expect("the shipped file parses");
+        list(&mut lib).iter().map(|e| factory_line(file, &key(e), &fingerprint(e))).collect()
+    }
+
+    /// Record what ships now in `default-config/factory.txt`, before it is
+    /// changed — `ship-library.sh` runs this first — so a library still
+    /// holding it takes the next version.
+    #[test]
+    #[ignore = "writes default-config/factory.txt; run by ship-library.sh"]
+    fn record_factory() {
+        use crate::compose::{BlockLib, ModuleLib, PresetLib, ToneLib};
+        let mut all: Vec<String> = Vec::new();
+        all.extend(lines::<ModuleLib, _>(crate::compose::MODULES_FILE, DEFAULT_MODULES, |l| &mut l.presets, |p| format!("{}\t{}", p.module, p.name)));
+        all.extend(lines::<BlockLib, _>(crate::compose::BLOCKS_FILE, DEFAULT_BLOCKS, |l| &mut l.presets, |p| format!("{}\t{}", p.block_type, p.name)));
+        all.extend(lines::<PresetLib, _>(crate::compose::PRESETS_FILE, DEFAULT_PRESETS, |l| &mut l.presets, |p| p.name.clone()));
+        all.extend(lines::<ToneLib, _>(crate::compose::TONES_FILE, DEFAULT_TONES, |l| &mut l.tones, |t| t.name.clone()));
+        all.extend(lines::<SongLib, _>("songs.styx", DEFAULT_SONGS, |l| &mut l.songs, |s| s.name.clone()));
+        all.extend(lines::<SetlistLib, _>("setlists.styx", DEFAULT_SETLISTS, |l| &mut l.setlists, |s| s.name.clone()));
+        for (file, text) in DEFAULT_PROFILES {
+            let def: ProfileDef = facet_styx::from_str(text).expect("the shipped profile parses");
+            all.push(factory_line(file, &def.name, &fingerprint(&def)));
+        }
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/default-config/factory.txt");
+        let mut have: Vec<String> = std::fs::read_to_string(path).unwrap_or_default().lines().map(str::to_string).collect();
+        for l in all {
+            if !have.contains(&l) {
+                have.push(l);
+            }
+        }
+        std::fs::write(path, have.join("\n") + "\n").expect("factory.txt written");
+    }
+
+    /// A factory entry the player never touched takes the newer shipped one;
+    /// one they changed stays theirs.
+    #[test]
+    fn an_untouched_factory_entry_follows_the_factory() {
+        use crate::compose::ModuleLib;
+        let mut lib = facet_styx::from_str::<ModuleLib>(DEFAULT_MODULES).expect("modules parse");
+        let old = lib.presets.remove(0);
+        let mut new = old.clone();
+        new.snapshots.truncate(1);
+        let mut file_lines = FACTORY.to_string();
+        let key = format!("{}\t{}", old.module, old.name);
+        file_lines.push_str(&factory_line(crate::compose::MODULES_FILE, &key, &fingerprint(&old)));
+        let followed = fingerprint(&old) != fingerprint(&new)
+            && file_lines.lines().any(|l| l == factory_line(crate::compose::MODULES_FILE, &key, &fingerprint(&old)));
+        assert!(followed, "the shipped version as it was is recognised");
+        // A path written differently is the same entry.
+        let mut moved = old.clone();
+        for s in &mut moved.snapshots {
+            if s.nam.starts_with("models/") {
+                s.nam = format!("/Users/someone/.config/signal/rig/{}", s.nam);
+            }
+        }
+        assert_eq!(fingerprint(&moved), fingerprint(&old), "a library's absolute paths read as the shipped ones");
+        // Edited by the player: no longer a factory version.
+        let mut edited = old;
+        edited.name.push_str(" (mine)");
+        assert!(!file_lines.lines().any(|l| l.ends_with(&fingerprint(&edited))));
+    }
 
     fn names(dir: &std::path::Path) -> Vec<String> {
         let text = std::fs::read_to_string(dir.join("setlists.styx")).expect("setlists");

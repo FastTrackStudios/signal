@@ -13,7 +13,7 @@ Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
 Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=false | algorithm=3 damping=0.4 decay=0.6553 high_cut=6000 level=-15 low_cut=150 mix=1 modulation=0 predelay=0 size=0.4 tone=-0.2 variant=0
-Amp L | nam=models/FNDR BFDRI VB Clean BAL2 CAB.nam | ir= | bypassed=false | 
+Amp L | nam=models/FNDR BFDRI VB Clean BAL2 CAB.nam | ir= | bypassed=false | drive=0.375
 Cab L | nam= | ir= | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 
@@ -49,7 +49,7 @@ Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
 Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=false | algorithm=3 damping=0.4 decay=0.6553 high_cut=6000 level=-15 low_cut=150 mix=1 modulation=0 predelay=0 size=0.4 tone=-0.2 variant=0
-Amp L | nam=models/FNDR BFDRI VB Clean BAL2 CAB.nam | ir= | bypassed=false | 
+Amp L | nam=models/FNDR BFDRI VB Clean BAL2 CAB.nam | ir= | bypassed=false | drive=0.375
 Cab L | nam= | ir= | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 
@@ -85,7 +85,7 @@ Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
 Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
-Amp L | nam=models/EDGY - Fender Deluxe Reverb 1965 _Hyper Accuracy_.nam | ir= | bypassed=false | 
+Amp L | nam=models/EDGY - Fender Deluxe Reverb 1965 _Hyper Accuracy_.nam | ir= | bypassed=false | drive=0.333
 Cab L | nam= | ir=models/TF 66 DR 1X12 JENSN C12NA - 57 R121 70-30.wav | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 
@@ -301,7 +301,7 @@ Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
 Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=false | algorithm=3 damping=0.4 decay=0.6553 high_cut=6000 level=-15 low_cut=150 mix=1 modulation=0 predelay=0 size=0.4 tone=-0.2 variant=0
-Amp L | nam=models/Fender 65_ Twin Reverb_2x12_CLEAN_SM57.nam | ir= | bypassed=false | 
+Amp L | nam=models/Fender 65_ Twin Reverb_2x12_CLEAN_SM57.nam | ir= | bypassed=false | drive=0.333
 Cab L | nam= | ir= | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 
@@ -337,7 +337,7 @@ Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
 Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=false | algorithm=3 damping=0.4 decay=0.6553 high_cut=6000 level=-15 low_cut=150 mix=1 modulation=0 predelay=0 size=0.4 tone=-0.2 variant=0
-Amp L | nam=models/Deluxe Reverb.nam | ir= | bypassed=false | 
+Amp L | nam=models/Fender DRRI _ Clean _ SM57 + Royer R-121 + Room _ Full Rig.nam | ir= | bypassed=false | 
 Cab L | nam= | ir= | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 
@@ -445,7 +445,7 @@ Pre Mod | nam= | ir= | bypassed=true | depth=0.4 engine=5 mix=0.5 rate=0.6
 Pre Delay | nam= | ir= | bypassed=true | feedback=0.15 level=-16.5 mix=1 style=0 tap_div_l=7 tap_div_r=7 time=120
 Pre Motion | nam= | ir= | bypassed=true | 
 Pre Verb | nam= | ir= | bypassed=true | algorithm=3 decay=0.35 level=-16.5 mix=1
-Amp L | nam=models/Dumble ODS Clean.nam | ir= | bypassed=false | 
+Amp L | nam=models/Dumble ODS Clean.nam | ir= | bypassed=false | drive=0.29
 Cab L | nam= | ir= | bypassed=false | 
 Amp R | nam= | ir= | bypassed=true | 
 Cab R | nam= | ir= | bypassed=true | 
