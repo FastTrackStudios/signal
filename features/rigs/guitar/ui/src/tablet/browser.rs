@@ -646,6 +646,8 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
         Kind::Block(kind) => {
             let colour = block_colour(kind);
             let chosen: Vec<ChosenBlock> = inherited(d, target).1.into_iter().find(|b| b.0 == *kind).map(|b| b.1).unwrap_or_default();
+            let playing_patch = matches!(target, Target::Stack(_) | Target::None);
+            let on_block = chain_block(d, kind);
             d.comp
                 .block_presets
                 .iter()
@@ -665,6 +667,9 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
                     let picked = |x: &signal_guitar_proto::PartPick| x.kind.starts_with("block:") && x.preset == b.name;
                     if part.is_some_and(|p| p.picks.iter().any(picked)) || variation_picks(d, target).iter().any(picked) {
                         t.state = Some(State::Swapped);
+                    } else if playing_patch && on_block.as_ref().is_some_and(|blk| d.comp.active_blocks.iter().any(|a| a.block.eq_ignore_ascii_case(blk) && a.preset == b.name)) {
+                        // What the playing patch's block plays: it is in.
+                        t.state = Some(State::In);
                     }
                     t.inherited = chosen.iter().filter(|c| c.preset == b.name).map(|c| format!("{} · {}", c.from, c.block)).collect::<Vec<_>>().join(", ");
                     t

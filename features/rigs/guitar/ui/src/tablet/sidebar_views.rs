@@ -22,7 +22,7 @@ use super::tokens::*;
 use crate::state::RigViewState;
 
 /// The compositions, refetched whenever the rig's state moves on.
-fn use_compositions(state: RigViewState) -> Signal<CompositionModel> {
+pub(super) fn use_compositions(state: RigViewState) -> Signal<CompositionModel> {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut comp = use_signal(CompositionModel::default);
     use_effect(move || {

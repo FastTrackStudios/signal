@@ -81,18 +81,42 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
         docked.set(!picked);
     });
     let browser_focus = use_context_provider(|| routing::BrowserFocus(Signal::new(None)));
+    // The faces' presets (their names, the FX row's bar).
+    let face_comp = sidebar_views::use_compositions(state);
+    use_context_provider(|| crate::face_chrome::FacePresets(face_comp));
+    // The sidebar turned into a browser on one block's (or module's)
+    // presets — the FX row's bar opens it.
+    let mut sidebar_browser = use_signal(|| false);
+    // With the sidebar on a block's presets, picking another block in the
+    // routing turns it to that block's.
+    use_effect(move || {
+        let picked = routing_sel();
+        if !*sidebar_browser.peek() {
+            return;
+        }
+        let kind = match picked {
+            Some(routing::Selected::Block(id)) => state.blocks.peek().iter().find(|b| b.id == id).map(|b| format!("block:{}", b.block_type.as_str().to_lowercase())),
+            Some(routing::Selected::Module(m, _)) => Some(format!("module:{m}")),
+            None => None,
+        };
+        if let Some(kind) = kind {
+            let mut f = browser_focus.0;
+            f.set(Some(routing::Focus { kind, preset: String::new(), variation: String::new(), search: false }));
+        }
+    });
     // A face's preset name: the browser, on that block's presets.
     use_context_provider(|| {
         crate::face_chrome::OpenPresets(Callback::new(move |(_block, block_type): (String, String)| {
             let mut f = browser_focus.0;
-            f.set(Some(routing::Focus { kind: format!("block:{}", block_type.to_lowercase()), preset: String::new(), variation: String::new(), search: false }));
+            let kind = if block_type.starts_with("module:") { block_type.clone() } else { format!("block:{}", block_type.to_lowercase()) };
+            f.set(Some(routing::Focus { kind, preset: String::new(), variation: String::new(), search: false }));
+            // In the sidebar, the routing and the FX row kept in view.
             match view() {
-                View::Perform => {
-                    browser.set(true);
-                    routing_on.set(false);
-                }
                 View::Edit => left_browser.set(true),
-                _ => {}
+                _ => {
+                    sidebar.set(true);
+                    sidebar_browser.set(true);
+                }
             }
         }))
     });
@@ -148,6 +172,8 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                             div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
                                 if view() == View::Edit && left_browser() {
                                     browser::Browser { state, narrow: true }
+                                } else if sidebar_browser() {
+                                    browser::Browser { state, narrow: true, on_close: move |()| sidebar_browser.set(false) }
                                 } else {
                                     // The sidebar for the footswitch mode: the set,
                                     // the profile's stacks, or the presets.

@@ -17,6 +17,8 @@ use crate::state::RigViewState;
 /// face set serves this row and a phone on its side.
 pub const FX_W: f64 = 750.0;
 pub const FX_H: f64 = 254.0;
+/// The bar along its top: what is picked, and its preset.
+pub const BAR_H: f64 = 44.0;
 
 /// A pre effect (before the amp): its face is its pedal's.
 fn is_pre(b: &LiveBlock) -> bool {
@@ -151,6 +153,17 @@ pub fn FxRow(state: RigViewState) -> Element {
         None => Vec::new(),
     };
     let one = shown.len() == 1;
+    // The bar along the top: what is picked and the preset it plays — a
+    // block's, or a module's.
+    let module = match sel() {
+        Some(Selected::Module(m, _)) => Some(m),
+        _ => None,
+    };
+    let bar_block = if module.is_none() { shown.first().cloned() } else { None };
+    let comp = try_use_context::<crate::face_chrome::FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
+    let module_preset = module.as_ref().and_then(|m| comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m))).map(|p| if p.snapshot.is_empty() { p.preset.clone() } else { format!("{} · {}", p.preset, p.snapshot) });
+    let open = try_use_context::<crate::face_chrome::OpenPresets>();
+    let face_h = FX_H - BAR_H;
     // The row's width, measured: one block's face fills it edge to edge.
     let mut row_w = use_signal(|| FX_W);
     let measure = move |el: std::rc::Rc<MountedData>| {
@@ -170,7 +183,28 @@ pub fn FxRow(state: RigViewState) -> Element {
     };
     let w = row_w();
     rsx! {
-        div { style: "flex-shrink: 0; height: {FX_H}px; box-sizing: border-box; border-top: 1px solid #000; background: #0d0d10; overflow-x: auto; overflow-y: hidden;",
+        div { style: "flex-shrink: 0; height: {FX_H}px; box-sizing: border-box; border-top: 1px solid #000; background: #0d0d10; display: flex; flex-direction: column;",
+            div { style: "flex-shrink: 0; height: {BAR_H}px; display: flex; align-items: center; gap: 10px; padding: 0 6px 0 14px; border-bottom: 1px solid {RULE}; background: {SHEET}; box-sizing: border-box;",
+                if let Some(b) = bar_block.clone() {
+                    span { style: "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_3}; white-space: nowrap;", "{b.name}" }
+                    span { style: "flex: 1;" }
+                    crate::face_chrome::PresetStepper { block: b.name.clone(), block_type: b.block_type.as_str().to_lowercase(), show_empty: true, touch: true }
+                }
+                if let Some(m) = module.clone() {
+                    span { style: "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_3}; white-space: nowrap;", "{m}" }
+                    span { style: "flex: 1;" }
+                    button {
+                        style: "height: 32px; max-width: 320px; padding: 0 12px; border: none; border-radius: 6px; background: rgba(255,255,255,0.08); color: {INK}; font-size: 14px; font-weight: 650; font-family: {FONT}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;",
+                        onclick: move |_| {
+                            if let Some(crate::face_chrome::OpenPresets(o)) = open {
+                                o.call((m.clone(), format!("module:{m}")));
+                            }
+                        },
+                        "{module_preset.clone().unwrap_or_else(|| \"—\".to_string())}"
+                    }
+                }
+            }
+            div { style: "flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden;",
             onmounted: move |e| measure(e.data()),
             div { style: "height: 100%; display: flex; align-items: stretch; justify-content: center; gap: 1px; width: max-content; min-width: 100%;",
                 for b in shown.into_iter() {
@@ -182,14 +216,14 @@ pub fn FxRow(state: RigViewState) -> Element {
                                     // One block: its face fills the row's box.
                                     Some(f) if one => rsx! {
                                         div { style: "width: {w}px; height: 100%;",
-                                            BlockFace { block: b.clone(), streams: streams_for(&b, &f.ns, &state), face: f.for_row(w, FX_H), fill: true, stepper: true }
+                                            BlockFace { block: b.clone(), streams: streams_for(&b, &f.ns, &state), face: f.for_row(w, face_h), fill: true }
                                         }
                                     },
                                     // A module's: each in a box the row's height
                                     // and its own proportion, so each fits whole.
                                     Some(f) => {
                                         let f = f.at(crate::control::Tier::Ipad);
-                                        let w = (FX_H * f.size.0 / f.size.1.max(1.0)).round();
+                                        let w = (face_h * f.size.0 / f.size.1.max(1.0)).round();
                                         rsx! {
                                             div { style: "width: {w}px; height: 100%;",
                                                 BlockFace { block: b.clone(), streams: streams_for(&b, &f.ns, &state), face: f, fill: true }
@@ -198,7 +232,7 @@ pub fn FxRow(state: RigViewState) -> Element {
                                     }
                                     None => rsx! {
                                         div { style: "width: {pick(one, w, 260.0)}px; height: 100%; padding: 12px; box-sizing: border-box;",
-                                            NameCard { block: b.clone(), aspect: (pick(one, w, 260.0), FX_H) }
+                                            NameCard { block: b.clone(), aspect: (pick(one, w, 260.0), face_h) }
                                         }
                                     },
                                 }
@@ -206,6 +240,7 @@ pub fn FxRow(state: RigViewState) -> Element {
                         }
                     }
                 }
+            }
             }
         }
     }

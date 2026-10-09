@@ -68,7 +68,7 @@ pub fn PresetStepper(
     let at = names.iter().position(|n| n.eq_ignore_ascii_case(&playing));
     let label = if !playing.is_empty() {
         playing.clone()
-    } else if names.is_empty() {
+    } else if names.is_empty() && !touch {
         "No presets yet".to_string()
     } else {
         "—".to_string()
