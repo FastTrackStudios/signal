@@ -80,12 +80,14 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
         docked.set(!picked);
     });
     use_context_provider(|| routing::BrowserFocus(Signal::new(None)));
-    // "Patch…" on a section or part: pick it and bring the browser up for
-    // it (in Build it is already there).
+    // "Patch…" on a section or part, or the presets' search: bring the
+    // browser up (in Edit it takes the sidebar; in Build it is already there).
     use_context_provider(|| setlist::PickPart {
         open: Callback::new(move |()| {
-            if view() == View::Perform {
-                browser.set(true);
+            match view() {
+                View::Perform => browser.set(true),
+                View::Edit => left_browser.set(true),
+                _ => {}
             }
         }),
     });

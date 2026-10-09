@@ -55,6 +55,32 @@ fn Header(title: String, sub: String, icon: Option<String>) -> Element {
 
 // ── Presets ────────────────────────────────────────────────────────────────
 
+/// A window `shown` rows tall onto `rows` rows, with a scrollbar that says
+/// there is more and where it is.
+#[component]
+fn ScrollWindow(rows: usize, shown: usize, children: Element) -> Element {
+    let total = rows as f64 * VARIATION_ROW;
+    let view = total.min(shown as f64 * VARIATION_ROW);
+    let mut top = use_signal(|| 0.0_f64);
+    let more = total > view + 0.5;
+    let thumb = (view / total * view).max(24.0);
+    let at = if more { top() / (total - view) * (view - thumb) } else { 0.0 };
+    rsx! {
+        div { style: "position: relative;",
+            div {
+                style: "max-height: {view}px; overflow-y: auto;",
+                onscroll: move |e| top.set(e.data().scroll_top()),
+                {children}
+            }
+            if more {
+                div { style: "position: absolute; top: 4px; bottom: 4px; right: 3px; width: 4px; border-radius: 2px; background: rgba(255,255,255,0.08); pointer-events: none;",
+                    div { style: "position: absolute; left: 0; right: 0; top: {at}px; height: {thumb - 8.0}px; border-radius: 2px; background: rgba(255,255,255,0.45);" }
+                }
+            }
+        }
+    }
+}
+
 /// A variation's row, for the loaded preset's window of four.
 const VARIATION_ROW: f64 = 44.0;
 
@@ -68,8 +94,8 @@ fn role_of(variation: &str) -> Option<&'static str> {
 }
 
 /// The presets: the loaded one held at the top, its variations in a window
-/// four rows tall; under it a search and the kinds of sound; then the rest,
-/// scrolling on their own.
+/// four rows tall; the rest scrolling under it; at the foot the kinds of
+/// sound, and a search that opens the whole browser on the presets.
 #[component]
 pub fn PresetView(state: RigViewState) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -80,13 +106,13 @@ pub fn PresetView(state: RigViewState) -> Element {
     let perf: PerformanceModel = state.perf.read().clone();
     let mut open = use_signal(|| None::<String>);
     let mut role = use_signal(|| None::<&'static str>);
-    let mut query = use_signal(String::new);
+    let focus = try_use_context::<super::routing::BrowserFocus>();
+    let picker = try_use_context::<super::setlist::PickPart>();
     let playing = c.active_preset.clone();
     let loaded = c.presets.iter().find(|p| p.name == playing).cloned();
     let fits = |p: &signal_guitar_proto::PresetEntry| role().is_none_or(|r| p.snapshots.iter().any(|s| role_of(&s.name) == Some(r)));
-    let q = query().trim().to_lowercase();
-    let found = |p: &signal_guitar_proto::PresetEntry| q.is_empty() || p.name.to_lowercase().contains(&q) || p.snapshots.iter().any(|s| s.name.to_lowercase().contains(&q));
-    let rest: Vec<signal_guitar_proto::PresetEntry> = c.presets.iter().filter(|p| p.name != playing && fits(p) && found(p)).cloned().collect();
+    let rest: Vec<signal_guitar_proto::PresetEntry> = c.presets.iter().filter(|p| p.name != playing && fits(p)).cloned().collect();
+    let (playing_for_browser, snapshot_for_browser) = (playing.clone(), c.active_snapshot.clone());
     let chip = |on: bool| format!("height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid {}; background: {}; color: {}; font-size: 13px; font-weight: 650; font-family: {FONT}; display: flex; align-items: center; gap: 6px; cursor: pointer; flex-shrink: 0;", pick(on, INK_2, RULE_STRONG), pick(on, "rgba(255,255,255,0.08)", "transparent"), pick(on, INK, INK_2));
     rsx! {
         section { style: "height: 100%; display: flex; flex-direction: column; min-height: 0; background: {SHEET}; font-family: {FONT}; color: {INK};",
@@ -98,32 +124,8 @@ pub fn PresetView(state: RigViewState) -> Element {
                         span { style: "font-size: 22px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
                         span { style: "font-size: 13px; color: {INK_3};", "{c.active_snapshot} · {p.snapshots.len()} variations" }
                     }
-                    div { style: "max-height: {VARIATION_ROW * 4.0}px; overflow-y: auto;",
+                    ScrollWindow { rows: p.snapshots.len() + 1, shown: 4,
                         Variations { preset: p.name.clone(), variations: p.snapshots.iter().map(|s| s.name.clone()).collect::<Vec<_>>(), playing: (c.active_preset.clone(), c.active_snapshot.clone()) }
-                    }
-                }
-            }
-            // Find the rest: by name, by the kind of sound.
-            div { style: "flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-bottom: 1px solid {RULE};",
-                label { style: "display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: {R}; background: {FILL};",
-                    svg { width: "16", height: "16", view_box: "0 0 16 16",
-                        circle { cx: "7", cy: "7", r: "4.8", fill: "none", stroke: INK_3, stroke_width: "1.6" }
-                        path { d: "M10.6 10.6 14 14", stroke: INK_3, stroke_width: "1.6", stroke_linecap: "round" }
-                    }
-                    input {
-                        style: "flex: 1; min-width: 0; height: 100%; border: none; background: transparent; color: {INK}; font-size: 15px; font-family: {FONT};",
-                        placeholder: "Search presets",
-                        value: "{query}",
-                        oninput: move |e| query.set(e.value()),
-                    }
-                }
-                div { style: "display: flex; gap: 6px; overflow-x: auto;",
-                    button { style: "{chip(role().is_none())}", onclick: move |_| role.set(None), "All" }
-                    for r in ROLES {
-                        button { key: "{r}", style: "{chip(role() == Some(r))}", onclick: move |_| role.set(if role() == Some(r) { None } else { Some(r) }),
-                            span { style: "width: 8px; height: 8px; border-radius: 2px; background: {tape_mark(r)};" }
-                            "{r}"
-                        }
                     }
                 }
             }
@@ -160,6 +162,35 @@ pub fn PresetView(state: RigViewState) -> Element {
                                     Variations { preset: p.name.clone(), variations: shown, playing: (c.active_preset.clone(), c.active_snapshot.clone()) }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+            // At the foot: the kinds of sound, and the search — the whole
+            // browser, on the presets.
+            div { style: "flex-shrink: 0; display: flex; flex-direction: column-reverse; gap: 10px; padding: 12px 14px; border-top: 1px solid {RULE};",
+                button {
+                    style: "display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: none; border-radius: {R}; background: {FILL}; color: {INK_3}; font-size: 15px; font-family: {FONT}; text-align: left; cursor: pointer;",
+                    onclick: move |_| {
+                        if let Some(super::routing::BrowserFocus(mut f)) = focus {
+                            f.set(Some(super::routing::Focus { kind: "presets".into(), preset: playing_for_browser.clone(), variation: snapshot_for_browser.clone() }));
+                        }
+                        if let Some(pick) = picker.as_ref() {
+                            pick.open.call(());
+                        }
+                    },
+                    svg { width: "16", height: "16", view_box: "0 0 16 16",
+                        circle { cx: "7", cy: "7", r: "4.8", fill: "none", stroke: INK_3, stroke_width: "1.6" }
+                        path { d: "M10.6 10.6 14 14", stroke: INK_3, stroke_width: "1.6", stroke_linecap: "round" }
+                    }
+                    "Search presets"
+                }
+                div { style: "display: flex; gap: 6px; overflow-x: auto;",
+                    button { style: "{chip(role().is_none())}", onclick: move |_| role.set(None), "All" }
+                    for r in ROLES {
+                        button { key: "{r}", style: "{chip(role() == Some(r))}", onclick: move |_| role.set(if role() == Some(r) { None } else { Some(r) }),
+                            span { style: "width: 8px; height: 8px; border-radius: 2px; background: {tape_mark(r)};" }
+                            "{r}"
                         }
                     }
                 }
