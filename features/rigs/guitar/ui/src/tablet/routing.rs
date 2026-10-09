@@ -119,7 +119,7 @@ pub fn Routing(state: RigViewState) -> Element {
     };
     rsx! {
         div { style: "position: relative; height: 100%; min-height: 0; background: {DESK}; overflow: hidden;",
-            super::routing_canvas::RoutingCanvas { modules, selected, fold: false, fit: 0, focus: ("Drive".to_string(), "Time".to_string()), on_pick }
+            super::routing_canvas::RoutingCanvas { modules, selected, fold: false, fit: 0, focus: ("Input".to_string(), "Time".to_string()), on_pick }
         }
     }
 }

@@ -31,6 +31,37 @@ pub struct AudioDevice {
 /// them: a guitar played straight into an interface, shipped with the app.
 pub const DI_CLIPS: &[&str] = &["Chords", "Palm-mute picking", "Riff"];
 
+/// A recording the DI player loops through the chain in the guitar's
+/// place: one the app ships ([`DI_CLIPS`]), or one recorded
+/// ([`record_loop`](rig::Rig::record_loop)) into the library's `di/` —
+/// with what it was played on and through, so a tone heard through it is
+/// heard at the gain it was recorded at.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct DiClip {
+    /// `builtin:<n>` for a shipped one; the recording's file stem else.
+    pub id: String,
+    pub name: String,
+    /// The guitar it was played on (`GuitarEntry::id`); empty: not known.
+    #[facet(default)]
+    pub guitar: String,
+    /// The patch playing while it was recorded.
+    #[facet(default)]
+    pub patch: String,
+    /// That patch's rig preset and snapshot (`Deluxe + AC30 · Clean`): the
+    /// gain structure it went through.
+    #[facet(default)]
+    pub rig_preset: String,
+    /// The gain it was played at, as the player notes it: "65%", "2
+    /// o'clock", "36 dB"…
+    #[facet(default)]
+    pub gain: String,
+    #[facet(default)]
+    pub seconds: f32,
+    /// Shipped with the app: not edited, not deleted.
+    #[facet(default)]
+    pub builtin: bool,
+}
+
 /// Enumerated inputs + outputs, fetched in one call.
 #[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct AudioDevices {
@@ -208,9 +239,15 @@ pub struct RigStatus {
     /// instrument's place ([`Rig::play_di`](rig::Rig::play_di)).
     #[facet(default)]
     pub di_playing: bool,
-    /// Which of [`DI_CLIPS`] it plays.
+    /// Which of [`DI_CLIPS`] it plays (a recording: past them).
     #[facet(default)]
     pub di_clip: u32,
+    /// The [`DiClip`] it plays, by id.
+    #[facet(default)]
+    pub di_clip_id: String,
+    /// The DI player is recording a loop of the input.
+    #[facet(default)]
+    pub di_recording: bool,
     /// What the time and modulation effects add now (linear peaks, the
     /// loudest since the last status): delay, reverb, modulation, tremolo.
     /// Empty from an older engine.
@@ -1463,7 +1500,7 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        SetupModel, Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode,
+        SetupModel, Artwork, CompTrace, CompositionModel, DiClip, LevelProgress, LibraryModel, LiveBlock, LiveNode,
         Applied, MacroKnobView, MacroResult, MacroSave, MacroTune, PartOverride, PatchInfo,
         PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
     };
@@ -1513,6 +1550,21 @@ pub mod rig {
         /// instrument (off) — tones dialled in with no guitar to hand. With no
         /// audio open, it opens the output only.
         fn play_di(&self, clip: u32, on: bool);
+        /// Record `seconds` (1–30) of the input into the DI library — with
+        /// the guitar in use, the patch and its rig preset — and loop it
+        /// through the chain: a phrase played once, then heard through
+        /// every tone. Needs the audio running.
+        fn record_loop(&self, seconds: u32);
+        /// The DI library: the shipped clips, then the recorded ones.
+        fn di_clips(&self) -> Vec<DiClip>;
+        /// Loop clip `id` through the chain in the guitar's place
+        /// ([`play_di`](Self::play_di) `false` stops it).
+        fn play_di_clip(&self, id: String);
+        /// Rewrite a recorded clip's name, guitar and gain note (its
+        /// recording and what it was played through stay).
+        fn edit_di_clip(&self, clip: DiClip);
+        /// Delete a recorded clip and its recording.
+        fn delete_di_clip(&self, id: String);
         /// Live transport + meter snapshot.
         fn status(&self) -> RigStatus;
         /// Current performance model (profile + footswitch stacks + state).

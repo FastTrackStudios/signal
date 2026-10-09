@@ -82,8 +82,12 @@ pub fn TouchSwitches(perf: PerformanceModel) -> Element {
                     onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.next_song()) } }
                 FnTile { no: 9, title: "Boost", subtitle: if boost { boost_label.clone() } else { format!("{boost_label} · off") }, bg: "#fafafa", text: "#0a0a0a", lit: boost,
                     onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_boost()) } }
-                FnTile { no: 10, title: "Tuner", subtitle: "A 440".to_string(), bg: "#3f3f46", text: "#e4e4e7", lit: perf.tuner_visible,
-                    onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_tuner()) } }
+                if perf.tuner_visible {
+                    TunerTile { onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_tuner()) } }
+                } else {
+                    FnTile { no: 10, title: "Tuner", subtitle: "A 440".to_string(), bg: "#3f3f46", text: "#e4e4e7", lit: false,
+                        onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_tuner()) } }
+                }
                 for i in 0..4usize {
                     if let Some(st) = stacks.get(i).cloned() {
                         StackTile { key: "m{i}", no: i as u32 + 1, stack: st, index: i, compact: false }
@@ -189,6 +193,23 @@ fn TapTempo(bpm: u32) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut flash = use_signal(|| false);
     let tempo = if bpm == 0 { 120 } else { bpm };
+    // The ring: lit on every beat at the rig's tempo, out a short while
+    // after.
+    let mut beat = use_signal(|| false);
+    let mut period = use_signal(|| 500u64);
+    let ms = 60_000 / u64::from(tempo.max(1));
+    if *period.peek() != ms {
+        period.set(ms);
+    }
+    use_future(move || async move {
+        loop {
+            beat.set(true);
+            architect::platform::sleep(std::time::Duration::from_millis(90)).await;
+            beat.set(false);
+            let rest = period.peek().saturating_sub(90).max(10);
+            architect::platform::sleep(std::time::Duration::from_millis(rest)).await;
+        }
+    });
     rsx! {
         button {
             style: "position: relative; border: none; border-radius: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: {pick(flash(), TAP_FLASH, TAP_BG)}; color: #e4e4e7; font-family: {FONT}; cursor: pointer;",
@@ -200,9 +221,53 @@ fn TapTempo(bpm: u32) -> Element {
                     flash.set(false);
                 });
             },
+            if beat() { LitRing {} }
             SwitchNo { no: 5, ink: "#e4e4e7".to_string() }
             span { style: "font-size: 20px; font-weight: 700;", "Tap Tempo" }
             span { style: "font-size: 14px; font-weight: 600; opacity: 0.8; font-variant-numeric: tabular-nums;", "{tempo} BPM" }
+        }
+    }
+}
+
+/// The tuner switch while the tuner is up: the note and how far off, the
+/// needle about the middle, green when in tune. A tap puts it away.
+#[component]
+fn TunerTile(onclick: EventHandler<MouseEvent>) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut reading = use_signal(signal_guitar_proto::TunerReading::default);
+    use_future(move || {
+        let rig = rig.clone();
+        async move {
+            let Some(rig) = rig else { return };
+            loop {
+                if let Ok(r) = rig.tuner().await {
+                    reading.set(r);
+                }
+                architect::platform::sleep(std::time::Duration::from_millis(100)).await;
+            }
+        }
+    });
+    let r = reading();
+    let in_tune = r.active && r.cents.abs() <= 5.0;
+    let (bg, ink, needle) = if in_tune { ("#14532d", "#4ade80", "#4ade80") } else { ("#18181b", "#e4e4e7", "#facc15") };
+    let at = 50.0 + r.cents.clamp(-50.0, 50.0);
+    let note = if r.active { r.note.clone() } else { "—".to_string() };
+    let cents = if r.active { format!("{:+.0}", r.cents) } else { String::new() };
+    rsx! {
+        button {
+            style: "position: relative; min-width: 0; overflow: hidden; border: none; border-radius: 0; padding: 0 10px; display: flex; flex-direction: row; align-items: center; gap: 10px; background: {bg}; color: {ink}; font-family: {FONT}; cursor: pointer;",
+            onclick: move |e| onclick.call(e),
+            LitRing {}
+            SwitchNo { no: 10, ink: ink.to_string() }
+            span { style: "font-size: 17px; font-weight: 800; min-width: 34px; color: {ink};", "{note}" }
+            div { style: "position: relative; flex: 1; height: 16px;",
+                div { style: "position: absolute; left: 0; right: 0; top: 7px; height: 2px; background: rgba(255,255,255,0.18);" }
+                div { style: "position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(255,255,255,0.5);" }
+                if r.active {
+                    div { style: "position: absolute; left: {at}%; top: 0; bottom: 0; width: 4px; margin-left: -2px; border-radius: 2px; background: {needle};" }
+                }
+            }
+            span { style: "font-size: 11px; font-weight: 700; min-width: 24px; text-align: right; font-variant-numeric: tabular-nums; opacity: 0.8;", "{cents}" }
         }
     }
 }

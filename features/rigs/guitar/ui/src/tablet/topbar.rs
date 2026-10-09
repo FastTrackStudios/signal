@@ -77,6 +77,8 @@ pub fn TopBar(model: PerformanceModel, state: RigViewState, sidebar: bool, on_si
                 AudioBadge { failed: !state.audio_error.read().is_empty() }
             }
             Rule {}
+            super::player::Player {}
+            Rule {}
             PanicButton { busy: resetting }
             Rule {}
             Indicator { kind: "midi", tone: midi, onclick: move |_| on_setup.call("midi") }
@@ -126,7 +128,10 @@ fn ModeTabs(mode: u32) -> Element {
                                     let _ = dioxus_core::spawn_forever(async move { let _ = r.set_perform_mode(m).await; });
                                 }
                             },
-                            "{label}"
+                            span { style: "display: flex; align-items: center; gap: 7px;",
+                                ModeIcon { mode: m, ink: pick(here, INK, INK_3).to_string() }
+                                "{label}"
+                            }
                             if here {
                                 span { style: "position: absolute; left: 10px; right: 10px; bottom: 0; height: 2px; border-radius: 1px; background: {LIVE};" }
                             }
@@ -134,6 +139,22 @@ fn ModeTabs(mode: u32) -> Element {
                     }
                 }
             }
+        }
+    }
+}
+
+/// A mode's mark: a preset's layers, a profile's stacks of patches, a
+/// setlist's lines.
+#[component]
+fn ModeIcon(mode: u32, ink: String) -> Element {
+    let d = match mode {
+        0 => "M9 2.5 15.5 6 9 9.5 2.5 6ZM2.5 9 9 12.5 15.5 9M2.5 12 9 15.5 15.5 12",
+        1 => "M3 3.5h4.5v4.5H3ZM10.5 3.5H15v4.5h-4.5ZM3 10h4.5v4.5H3ZM10.5 10H15v4.5h-4.5Z",
+        _ => "M6 4.5h9M6 9h9M6 13.5h9M3 4.5h.01M3 9h.01M3 13.5h.01",
+    };
+    rsx! {
+        svg { key: "{ink}", width: "18", height: "18", view_box: "0 0 18 18", style: "flex-shrink: 0; display: block;",
+            path { d: "{d}", fill: "none", stroke: "{ink}", stroke_width: "1.6", stroke_linecap: "round", stroke_linejoin: "round" }
         }
     }
 }

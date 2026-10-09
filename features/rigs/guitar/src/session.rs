@@ -379,6 +379,12 @@ pub struct GuitarRigBackend {
     di_wanted: Arc<std::sync::atomic::AtomicBool>,
     /// Which recording it plays (`signal_guitar_proto::DI_CLIPS`).
     di_clip: Arc<std::sync::atomic::AtomicU32>,
+    /// The DI player is recording a loop (see [`Rig::record_loop`]).
+    di_recording: Arc<std::sync::atomic::AtomicBool>,
+    /// The clip it plays, by [`DiClip`](signal_guitar_proto::DiClip) id.
+    di_clip_id: Arc<std::sync::Mutex<String>>,
+    /// The recorded clips (`di.styx`).
+    di_lib: Arc<std::sync::Mutex<Vec<signal_guitar_proto::DiClip>>>,
     /// The rig opens its output only — the DI player with no interface to
     /// play into it. A plain [`Rig::start`] clears it.
     output_only: Arc<std::sync::atomic::AtomicBool>,
@@ -569,6 +575,9 @@ impl GuitarRigBackend {
             wants_audio: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             di_wanted: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             di_clip: Arc::new(std::sync::atomic::AtomicU32::new(0)),
+            di_recording: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            di_clip_id: Arc::new(std::sync::Mutex::new(String::new())),
+            di_lib: Arc::new(std::sync::Mutex::new(RigLibrary::di_lib().clips)),
             output_only: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             switch_modes: Arc::new(Mutex::new(Vec::new())),
             switch_actions: Arc::new(Mutex::new(default_switch_actions(false))),
@@ -1091,6 +1100,8 @@ impl GuitarRigBackend {
                 mix_db_r: -90.0,
                 audio_error: String::new(),
                 di_playing: false,
+                di_recording: false,
+                di_clip_id: String::new(),
                 di_clip: 0,
             };
         }
@@ -1153,6 +1164,8 @@ impl GuitarRigBackend {
             mix_db_r: -90.0,
             audio_error: String::new(),
             di_playing: self.di_wanted.load(std::sync::atomic::Ordering::Relaxed),
+            di_recording: self.di_recording.load(std::sync::atomic::Ordering::Relaxed),
+            di_clip_id: self.di_clip_id.lock_ok().clone(),
             di_clip: self.di_clip.load(std::sync::atomic::Ordering::Relaxed),
         }
     }
@@ -5802,12 +5815,40 @@ impl GuitarRigBackend {
 
     /// Loop the DI recording through the open rig's chain (no rig: nothing —
     /// the next open does it).
+    /// A new recording's entry: the guitar in use, the patch playing and
+    /// its rig preset, named after the guitar.
+    fn di_clip_for(&self, id: String, seconds: f32) -> signal_guitar_proto::DiClip {
+        let (guitar, guitar_name) = {
+            let setup = self.setup.lock_ok();
+            setup.guitars.get(setup.guitar_index as usize).map(|g| (g.id.clone(), g.name.clone())).unwrap_or_default()
+        };
+        let patch = self.live_patch_name().unwrap_or_default();
+        let rig_preset = self
+            .profile_def
+            .lock_ok()
+            .patches
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&patch))
+            .map(|p| if p.snapshot.is_empty() { p.rig_preset.clone() } else { format!("{} · {}", p.rig_preset, p.snapshot) })
+            .unwrap_or_default();
+        let n = self.di_lib.lock_ok().iter().filter(|c| c.guitar == guitar).count() + 1;
+        let who = if guitar_name.is_empty() { "Loop".to_string() } else { guitar_name };
+        signal_guitar_proto::DiClip { id, name: format!("{who} {n}"), guitar, patch, rig_preset, gain: String::new(), seconds, builtin: false }
+    }
+
     fn inject_di(&self) {
         let guard = self.rig.lock_ok();
         let Some(prig) = guard.as_ref() else { return };
         let rig = prig.rig();
         let clip = self.di_clip.load(std::sync::atomic::Ordering::Relaxed);
-        rig.start_test_signal(crate::di_player::recording(clip, rig.sample_rate));
+        let id = self.di_clip_id.lock_ok().clone();
+        // A shipped clip by its index, a recorded one from its file.
+        let samples = if (clip as usize) < signal_guitar_proto::DI_CLIPS.len() {
+            crate::di_player::recording(clip, rig.sample_rate)
+        } else {
+            crate::di_player::recorded(&RigLibrary::di_clip_path(&id), rig.sample_rate)
+        };
+        rig.start_test_signal(samples);
         tracing::info!(di.clip = clip, di.rate = rig.sample_rate, "di player: looping a DI recording through the chain");
     }
 
@@ -5891,6 +5932,9 @@ impl Rig for GuitarRigBackend {
         use std::sync::atomic::Ordering;
         self.di_wanted.store(on, Ordering::Relaxed);
         self.di_clip.store(clip, Ordering::Relaxed);
+        if (clip as usize) < signal_guitar_proto::DI_CLIPS.len() {
+            *self.di_clip_id.lock_ok() = format!("builtin:{clip}");
+        }
         if on {
             if self.rig.lock_ok().is_some() {
                 self.inject_di();
@@ -5913,6 +5957,102 @@ impl Rig for GuitarRigBackend {
             }
         }
         tracing::info!(di.on = on, di.clip = clip, "di player");
+        self.publish_state();
+    }
+
+    fn record_loop(&self, seconds: u32) {
+        use std::sync::atomic::Ordering;
+        let secs = seconds.clamp(1, 30) as usize;
+        let sr = {
+            let guard = self.rig.lock_ok();
+            let Some(prig) = guard.as_ref() else {
+                tracing::warn!(di.loop_secs = secs, "di player: no audio running to record a loop from");
+                return;
+            };
+            let sr = prig.sample_rate() as usize;
+            // The input, not a clip playing in its place.
+            prig.rig().stop_test_signal();
+            prig.rig().arm_di_capture(secs * sr);
+            sr
+        };
+        self.di_wanted.store(false, Ordering::Relaxed);
+        self.di_recording.store(true, Ordering::Relaxed);
+        self.publish_state();
+        let backend = self.clone();
+        std::thread::spawn(move || {
+            for _ in 0..(secs + 2) * 10 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                let done = backend.rig.lock_ok().as_ref().is_none_or(|p| p.rig().di_capture_state().1 == 0);
+                if done {
+                    break;
+                }
+            }
+            let samples = backend.rig.lock_ok().as_ref().map(|p| p.rig().take_di_capture()).unwrap_or_default();
+            backend.di_recording.store(false, Ordering::Relaxed);
+            if samples.is_empty() {
+                tracing::warn!(di.loop_secs = secs, "di player: the loop recorded nothing");
+                backend.publish_state();
+                return;
+            }
+            // Into the library, with what it was played on and through.
+            let id = format!("di-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis()));
+            let path = RigLibrary::di_clip_path(&id);
+            if let Err(e) = crate::di_player::write(&path, &samples, sr as u32) {
+                tracing::warn!(error = %e, "di player: the loop would not save");
+                backend.publish_state();
+                return;
+            }
+            let clip = backend.di_clip_for(id.clone(), samples.len() as f32 / sr as f32);
+            tracing::info!(di.loop_secs = secs, di.clip = %clip.id, di.guitar = %clip.guitar, di.patch = %clip.patch, "di player: loop recorded");
+            {
+                let mut lib = backend.di_lib.lock_ok();
+                lib.push(clip);
+                RigLibrary::save_di_lib(&crate::library::DiLib { clips: lib.clone() });
+            }
+            Rig::play_di_clip(&backend, id);
+        });
+    }
+
+    fn di_clips(&self) -> Vec<signal_guitar_proto::DiClip> {
+        let shipped = signal_guitar_proto::DI_CLIPS.iter().enumerate().map(|(i, name)| signal_guitar_proto::DiClip {
+            id: format!("builtin:{i}"),
+            name: (*name).to_string(),
+            builtin: true,
+            ..Default::default()
+        });
+        shipped.chain(self.di_lib.lock_ok().iter().cloned()).collect()
+    }
+
+    fn play_di_clip(&self, id: String) {
+        // A shipped clip by its index; a recording past them.
+        let clip = id
+            .strip_prefix("builtin:")
+            .and_then(|n| n.parse::<u32>().ok())
+            .unwrap_or(signal_guitar_proto::DI_CLIPS.len() as u32);
+        *self.di_clip_id.lock_ok() = id;
+        Rig::play_di(self, clip, true);
+    }
+
+    fn edit_di_clip(&self, clip: signal_guitar_proto::DiClip) {
+        let mut lib = self.di_lib.lock_ok();
+        let Some(c) = lib.iter_mut().find(|c| c.id == clip.id) else { return };
+        c.name = clip.name;
+        c.guitar = clip.guitar;
+        c.gain = clip.gain;
+        RigLibrary::save_di_lib(&crate::library::DiLib { clips: lib.clone() });
+        drop(lib);
+        self.publish_state();
+    }
+
+    fn delete_di_clip(&self, id: String) {
+        if self.di_clip_id.lock_ok().as_str() == id {
+            Rig::play_di(self, 0, false);
+        }
+        let mut lib = self.di_lib.lock_ok();
+        lib.retain(|c| c.id != id);
+        RigLibrary::save_di_lib(&crate::library::DiLib { clips: lib.clone() });
+        drop(lib);
+        let _ = std::fs::remove_file(RigLibrary::di_clip_path(&id));
         self.publish_state();
     }
 

@@ -20,6 +20,7 @@ mod macros;
 mod marks;
 mod menu;
 mod panels;
+mod player;
 mod routing;
 mod routing_canvas;
 mod fx_row;

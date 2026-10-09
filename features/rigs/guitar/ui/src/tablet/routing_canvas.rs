@@ -794,7 +794,7 @@ mod native {
             let stages: Vec<Stage> = placed.iter().flat_map(|(_, pl)| pl.stages.iter().cloned()).collect();
             let cable = Color::from_rgba8(0x52, 0x52, 0x5b, 0xff);
             let stroke = Stroke::new(2.0);
-            let mut line = |scene: &mut Scene, a: Point, b: Point| scene.stroke(&stroke, t, cable, None, &wire(a, b, ROW_GAP));
+            let line = |scene: &mut Scene, a: Point, b: Point| scene.stroke(&stroke, t, cable, None, &wire(a, b, ROW_GAP));
             if let (Some(first), Some(last)) = (stages.first(), stages.last()) {
                 let y_in = first.ins().last().map_or(0.0, |p| p.y);
                 let y_out = last.outs().last().map_or(0.0, |p| p.y);

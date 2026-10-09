@@ -59,8 +59,9 @@ pub const TOP_H: u32 = 48;
 pub const FOOT_H: u32 = 56;
 /// The setlist header's height — the macro bar's, so the lines run across.
 pub const HEADER_H: u32 = super::macros::MACRO_BAR_H;
-/// The sidebar's width — the prototype's (an iPhone's, 402pt).
-pub const SIDEBAR_W: u32 = 402;
+/// The sidebar: an iPhone 16 Pro's width as the hand sees it, held up to
+/// the iPad (its 402 pt at the phone's density come to about this).
+pub const SIDEBAR_W: u32 = 360;
 
 /// The font every surface uses.
 pub const FONT: &str = "-apple-system, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif";

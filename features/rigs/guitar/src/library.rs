@@ -129,6 +129,37 @@ fn writable_store() -> Option<StyxDir> {
     Some(store())
 }
 
+/// The DI player's recordings (`di.styx`, their files in `di/`).
+#[derive(Clone, Debug, Default, Facet)]
+pub struct DiLib {
+    #[facet(default)]
+    pub clips: Vec<signal_guitar_proto::DiClip>,
+}
+
+impl RigLibrary {
+    /// The recorded DI clips.
+    #[must_use]
+    pub fn di_lib() -> DiLib {
+        store().read::<DiLib>("di.styx").unwrap_or_default()
+    }
+
+    /// Write `di.styx`.
+    pub fn save_di_lib(lib: &DiLib) {
+        let Some(store) = writable_store() else {
+            return;
+        };
+        config_watch::write_guarded(&store.dir().join("di.styx"), lib);
+    }
+
+    /// Where recording `id` lives: the library's `di/`, or a scratch folder
+    /// on a run that writes nothing.
+    #[must_use]
+    pub fn di_clip_path(id: &str) -> PathBuf {
+        let dir = if rig_is_ephemeral() { std::env::temp_dir().join("signal-di") } else { rig_dir().join("di") };
+        dir.join(format!("{id}.wav"))
+    }
+}
+
 // Wrapper structs: styx serialises a struct per file.
 #[derive(Clone, Debug, Facet)]
 pub struct DrivePresetLib {
