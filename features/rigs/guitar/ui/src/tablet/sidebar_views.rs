@@ -55,6 +55,9 @@ fn Header(title: String, sub: String, icon: Option<String>) -> Element {
 
 // ── Presets ────────────────────────────────────────────────────────────────
 
+/// A variation's row, for the loaded preset's window of four.
+const VARIATION_ROW: f64 = 44.0;
+
 /// The kinds of sound a variation can be: what the list sorts by.
 const ROLES: [&str; 5] = ["Clean", "Crunch", "Drive", "Lead", "Ambient"];
 
@@ -64,8 +67,9 @@ fn role_of(variation: &str) -> Option<&'static str> {
     ROLES.iter().find(|r| v.contains(&r.to_lowercase())).copied()
 }
 
-/// The presets: the loaded one first, open on its variations; then the
-/// rest, sortable by the kind of sound their variations are.
+/// The presets: the loaded one held at the top, its variations in a window
+/// four rows tall; under it a search and the kinds of sound; then the rest,
+/// scrolling on their own.
 #[component]
 pub fn PresetView(state: RigViewState) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -76,27 +80,44 @@ pub fn PresetView(state: RigViewState) -> Element {
     let perf: PerformanceModel = state.perf.read().clone();
     let mut open = use_signal(|| None::<String>);
     let mut role = use_signal(|| None::<&'static str>);
+    let mut query = use_signal(String::new);
     let playing = c.active_preset.clone();
     let loaded = c.presets.iter().find(|p| p.name == playing).cloned();
     let fits = |p: &signal_guitar_proto::PresetEntry| role().is_none_or(|r| p.snapshots.iter().any(|s| role_of(&s.name) == Some(r)));
-    let rest: Vec<signal_guitar_proto::PresetEntry> = c.presets.iter().filter(|p| p.name != playing && fits(p)).cloned().collect();
+    let q = query().trim().to_lowercase();
+    let found = |p: &signal_guitar_proto::PresetEntry| q.is_empty() || p.name.to_lowercase().contains(&q) || p.snapshots.iter().any(|s| s.name.to_lowercase().contains(&q));
+    let rest: Vec<signal_guitar_proto::PresetEntry> = c.presets.iter().filter(|p| p.name != playing && fits(p) && found(p)).cloned().collect();
     let chip = |on: bool| format!("height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid {}; background: {}; color: {}; font-size: 13px; font-weight: 650; font-family: {FONT}; display: flex; align-items: center; gap: 6px; cursor: pointer; flex-shrink: 0;", pick(on, INK_2, RULE_STRONG), pick(on, "rgba(255,255,255,0.08)", "transparent"), pick(on, INK, INK_2));
     rsx! {
         section { style: "height: 100%; display: flex; flex-direction: column; min-height: 0; background: {SHEET}; font-family: {FONT}; color: {INK};",
-            div { style: "flex: 1; min-height: 0; overflow-y: auto;",
-                // The one loaded: big, its variations under it.
-                if let Some(p) = loaded.clone() {
-                    div { style: "border-bottom: 1px solid {RULE}; background: {ROW_ON};",
-                        div { style: "display: flex; flex-direction: column; gap: 3px; padding: 16px 16px 10px;",
-                            span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: {LIVE};", "LOADED" }
-                            span { style: "font-size: 22px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
-                            span { style: "font-size: 13px; color: {INK_3};", "{c.active_snapshot} · {p.snapshots.len()} variations" }
-                        }
+            // The one loaded, held: big, its variations four rows tall.
+            if let Some(p) = loaded.clone() {
+                div { style: "flex-shrink: 0; border-bottom: 1px solid {RULE}; background: {ROW_ON};",
+                    div { style: "display: flex; flex-direction: column; gap: 3px; padding: 14px 16px 8px;",
+                        span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: {LIVE};", "LOADED" }
+                        span { style: "font-size: 22px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
+                        span { style: "font-size: 13px; color: {INK_3};", "{c.active_snapshot} · {p.snapshots.len()} variations" }
+                    }
+                    div { style: "max-height: {VARIATION_ROW * 4.0}px; overflow-y: auto;",
                         Variations { preset: p.name.clone(), variations: p.snapshots.iter().map(|s| s.name.clone()).collect::<Vec<_>>(), playing: (c.active_preset.clone(), c.active_snapshot.clone()) }
                     }
                 }
-                // Sort the rest by the kind of sound.
-                div { style: "display: flex; gap: 6px; padding: 12px 14px; overflow-x: auto; border-bottom: 1px solid {RULE};",
+            }
+            // Find the rest: by name, by the kind of sound.
+            div { style: "flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-bottom: 1px solid {RULE};",
+                label { style: "display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: {R}; background: {FILL};",
+                    svg { width: "16", height: "16", view_box: "0 0 16 16",
+                        circle { cx: "7", cy: "7", r: "4.8", fill: "none", stroke: INK_3, stroke_width: "1.6" }
+                        path { d: "M10.6 10.6 14 14", stroke: INK_3, stroke_width: "1.6", stroke_linecap: "round" }
+                    }
+                    input {
+                        style: "flex: 1; min-width: 0; height: 100%; border: none; background: transparent; color: {INK}; font-size: 15px; font-family: {FONT};",
+                        placeholder: "Search presets",
+                        value: "{query}",
+                        oninput: move |e| query.set(e.value()),
+                    }
+                }
+                div { style: "display: flex; gap: 6px; overflow-x: auto;",
                     button { style: "{chip(role().is_none())}", onclick: move |_| role.set(None), "All" }
                     for r in ROLES {
                         button { key: "{r}", style: "{chip(role() == Some(r))}", onclick: move |_| role.set(if role() == Some(r) { None } else { Some(r) }),
@@ -105,6 +126,8 @@ pub fn PresetView(state: RigViewState) -> Element {
                         }
                     }
                 }
+            }
+            div { style: "flex: 1; min-height: 0; overflow-y: auto;",
                 for p in rest.into_iter() {
                     {
                         let is_open = open().as_deref() == Some(p.name.as_str());
