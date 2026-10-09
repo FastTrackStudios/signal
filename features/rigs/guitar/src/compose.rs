@@ -2461,4 +2461,38 @@ pub(crate) mod golden {
         }
         assert_eq!(recorded.lines().count(), now.lines().count(), "the record's length differs");
     }
+
+    /// The bass's shipped library builds every Worship patch as it says:
+    /// the Tone Hammer in every patch (AGS on, flat for the DI), the Kilt
+    /// in the drive slot for Crunch, Drive and Fuzz only, the octave and
+    /// the swept filter on for Moog, the envelope filter for Env — and the
+    /// mix chain (opto comp, mix EQ) everywhere.
+    #[test]
+    fn the_bass_worship_builds_as_designed() {
+        let profile: ProfileDef = parse("bass worship", include_str!("../default-config-bass/profiles/worship.styx"));
+        let comp = Compositions {
+            tones: Vec::new(),
+            modules: parse::<ModuleLib>("bass modules", include_str!("../default-config-bass/modules.styx")).presets,
+            presets: parse::<PresetLib>("bass presets", include_str!("../default-config-bass/presets.styx")).presets,
+            blocks: parse::<BlockLib>("bass blocks", include_str!("../default-config-bass/blocks.styx")).presets,
+        };
+        let drives = parse::<DrivePresetLib>("bass drives", include_str!("../default-config-bass/drive-presets.styx")).presets;
+        let built = build_profile(&flatten(&profile, &comp), &drives);
+        let names: Vec<&str> = built.patches.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["Amp", "DI", "Crunch", "Drive", "Moog", "Env", "Fuzz"]);
+        for p in &built.patches {
+            let b = |n: &str| p.chain.iter().find(|b| b.name == n).unwrap_or_else(|| panic!("{}: no {n}", p.name));
+            let amp = &b("Amp L").nam;
+            assert!(amp.contains(if p.name == "DI" { "Full Flat" } else { "AGS Med" }), "{}: amp {amp}", p.name);
+            let d1 = b("Drive 1");
+            let driven = matches!(p.name.as_str(), "Crunch" | "Drive" | "Fuzz");
+            assert_eq!(!d1.bypassed, driven, "{}: Drive 1 on", p.name);
+            if driven {
+                assert!(d1.nam.to_lowercase().contains("kilt"), "{}: the Kilt, not {}", p.name, d1.nam);
+            }
+            assert_eq!(!b("Pitch").bypassed, p.name == "Moog", "{}: the octave", p.name);
+            assert_eq!(!b("Filter").bypassed, matches!(p.name.as_str(), "Moog" | "Env"), "{}: the filter", p.name);
+            assert!(!b("Post Comp").bypassed && !b("Amp EQ").bypassed, "{}: the mix chain", p.name);
+        }
+    }
 }

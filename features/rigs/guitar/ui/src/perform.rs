@@ -63,8 +63,9 @@ pub fn folder_color(name: &str) -> (&'static str, &'static str) {
         "clean" => ("#38bdf8", "#082f49"),
         "crunch" => ("#2563eb", "#ffffff"),
         "drive" | "rhythm" => ("#f97316", "#1c0d02"),
-        "lead" => ("#ef4444", "#1f0606"),
+        "lead" | "fuzz" => ("#ef4444", "#1f0606"),
         "ambient" => ("#06b6d4", "#04222a"),
+        "synth" => ("#a78bfa", "#1e1b4b"),
         "" | "none" | "—" => ("#3f3f46", "#e4e4e7"),
         other => {
             const SET: [(&str, &str); 8] = [

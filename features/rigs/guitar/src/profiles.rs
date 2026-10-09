@@ -187,7 +187,7 @@ pub fn drive_presets() -> Vec<DrivePresetDef> {
 /// One patch: a name in the profile + the preset it points at + the
 /// overrides that make it different from the preset (the domain's
 /// `Patch { target, overrides }` — see `signal_proto::overrides`).
-#[derive(Clone, Debug, Facet)]
+#[derive(Default, Clone, Debug, Facet)]
 pub struct PatchDef {
     pub name: String,
     /// The song this patch belongs to — empty for the profile's own. A
@@ -450,7 +450,7 @@ impl PatchDef {
 
 /// The editable profile definition: the preset pool, the patches pointing
 /// into it, and the footswitch stacks grouping the patches.
-#[derive(Clone, Debug, Facet)]
+#[derive(Default, Clone, Debug, Facet)]
 pub struct ProfileDef {
     /// Drive-slot assignments (block → drive preset + selected option).
     pub drives: Vec<DriveSlotDef>,
@@ -470,7 +470,7 @@ pub struct ProfileDef {
 }
 
 /// A footswitch stack: a name and its patch rotation.
-#[derive(Clone, Debug, Facet)]
+#[derive(Default, Clone, Debug, Facet)]
 pub struct StackDef {
     pub name: String,
     pub patches: Vec<String>,
@@ -870,6 +870,14 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 BlockType::Pitch,
                 "Harmonizer",
                 &[("semitones", "4"), ("cents", "0"), ("a_level", "0.6"), ("b_semitones", "7"), ("b_level", "0.5"), ("dry", "1"), ("mix", "0.5")],
+            ))
+            // The envelope filter (a Q-Tron, a bass's auto-wah, a synth
+            // sweep): a resonant band-pass low in the range that the
+            // playing opens three octaves up.
+            .with_block(off_fx(
+                BlockType::Filter,
+                "Filter",
+                &[("mode", "2"), ("cutoff", "0.43"), ("resonance", "0.45"), ("env_octaves", "3"), ("env_sens", "0.5"), ("env_attack", "4"), ("env_release", "140"), ("mix", "1")],
             ))
             // Volume pedal (clean gain, unity default) — the Control view's
             // left pedal drives it.

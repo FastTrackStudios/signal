@@ -55,9 +55,6 @@ members = [
     "features/plugin-host",
     "features/reaper/signal-extension",
     "features/reaper/signal-reaper-controller",
-    "features/rigs/bass",
-    "features/rigs/bass/proto",
-    "features/rigs/bass/ui",
     "features/rigs/drums",
     "features/rigs/drums/proto",
     "features/rigs/drums/ui",
@@ -301,9 +298,6 @@ signal-plugin-host = { path = "features/plugin-host", default-features = false }
 signal-sampler = { path = "features/sampler/signal-sampler" }
 signal-packs-proto = { path = "features/sampler/packs-proto" }
 signal-pack-library = { path = "features/sampler/pack-library" }
-signal-bass = { path = "features/rigs/bass" }
-signal-bass-proto = { path = "features/rigs/bass/proto" }
-signal-bass-ui = { path = "features/rigs/bass/ui" }
 signal-guitar = { path = "features/rigs/guitar" }
 signal-guitar-proto = { path = "features/rigs/guitar/proto" }
 signal-guitar-ui = { path = "features/rigs/guitar/ui" }

@@ -312,8 +312,11 @@ pub fn tape_for(stack: &str) -> &'static str {
         "clean" => "#38bdf8",
         "crunch" => "#2563eb",
         "drive" | "rhythm" => "#f97316",
-        "lead" => "#ef4444",
+        // A bass's top-gain stack is its lead.
+        "lead" | "fuzz" => "#ef4444",
         "ambient" => "#06b6d4",
+        // A bass's synth stack (an octave, a sweep).
+        "synth" => "#a78bfa",
         "special" => TAPE_SPECIAL,
         _ => TAPE_GAFFER,
     }

@@ -54,7 +54,7 @@ pub fn rig_dir() -> PathBuf {
             return PathBuf::from(p);
         }
     }
-    signal_config_dir().join("rig")
+    signal_config_dir().join(crate::instrument::current().dir_name())
 }
 
 /// The styx store over [`rig_dir`].
@@ -321,6 +321,68 @@ const DEFAULT_TONES: &str = include_str!("../default-config/tones.styx");
 // [`seed_profiles`]) — listed by build.rs from `default-config/`.
 include!(concat!(env!("OUT_DIR"), "/default_files.rs"));
 
+/// One instrument's shipped library: what a fresh install of it is seeded
+/// with. The `DEFAULT_*` consts are the guitar's (and what the guitar's
+/// tests read); the rig reads the playing instrument's through [`shipped`].
+pub(crate) struct Shipped {
+    pub profile: &'static str,
+    pub drive_presets: &'static str,
+    songs: &'static str,
+    setlists: &'static str,
+    midi: &'static str,
+    keymap: &'static str,
+    modules: &'static str,
+    presets: &'static str,
+    blocks: &'static str,
+    tones: &'static str,
+    factory: &'static str,
+    models: &'static [(&'static str, &'static [u8])],
+    frozen: &'static [(&'static str, &'static [u8])],
+    profiles: &'static [(&'static str, &'static str)],
+}
+
+static GUITAR: Shipped = Shipped {
+    profile: DEFAULT_PROFILE,
+    drive_presets: DEFAULT_DRIVE_PRESETS,
+    songs: DEFAULT_SONGS,
+    setlists: DEFAULT_SETLISTS,
+    midi: DEFAULT_MIDI,
+    keymap: DEFAULT_KEYMAP,
+    modules: DEFAULT_MODULES,
+    presets: DEFAULT_PRESETS,
+    blocks: DEFAULT_BLOCKS,
+    tones: DEFAULT_TONES,
+    factory: FACTORY,
+    models: DEFAULT_MODELS,
+    frozen: DEFAULT_FROZEN,
+    profiles: DEFAULT_PROFILES,
+};
+
+static BASS: Shipped = Shipped {
+    profile: include_str!("../default-config-bass/profile.styx"),
+    drive_presets: include_str!("../default-config-bass/drive-presets.styx"),
+    songs: include_str!("../default-config-bass/songs.styx"),
+    setlists: include_str!("../default-config-bass/setlists.styx"),
+    midi: include_str!("../default-config-bass/midi.styx"),
+    keymap: include_str!("../default-config-bass/keymap.styx"),
+    modules: include_str!("../default-config-bass/modules.styx"),
+    presets: include_str!("../default-config-bass/presets.styx"),
+    blocks: include_str!("../default-config-bass/blocks.styx"),
+    tones: include_str!("../default-config-bass/tones.styx"),
+    factory: include_str!("../default-config-bass/factory.txt"),
+    models: BASS_MODELS,
+    frozen: BASS_FROZEN,
+    profiles: BASS_PROFILES,
+};
+
+/// The playing instrument's shipped library.
+pub(crate) fn shipped() -> &'static Shipped {
+    match crate::instrument::current() {
+        crate::instrument::Instrument::Guitar => &GUITAR,
+        crate::instrument::Instrument::Bass => &BASS,
+    }
+}
+
 /// The profile a rig plays when nothing has chosen one (and the one a
 /// library that newly gains it switches to, once): the worship rig — on a
 /// laptop or an iPad at a service — and Blues on a phone.
@@ -352,8 +414,8 @@ fn is_ipad() -> bool {
 
 /// Write any default NAM model missing from `<rig_dir>/models/`.
 fn seed_models() {
-    seed_files(&rig_dir().join("models"), DEFAULT_MODELS);
-    seed_files(&rig_dir().join("frozen"), DEFAULT_FROZEN);
+    seed_files(&rig_dir().join("models"), shipped().models);
+    seed_files(&rig_dir().join("frozen"), shipped().frozen);
 }
 
 /// Write each `(name, bytes)` into `dir` unless it is there already.
@@ -525,7 +587,7 @@ fn load_profiles(store: &StyxDir) -> Vec<ProfileDef> {
     // that are there and do not parse are somebody's work, and seeding a
     // default into their place could overwrite one of them.
     if files.is_empty() {
-        let legacy = read_or_seed(store, "profile.styx", DEFAULT_PROFILE, worship_def);
+        let legacy = read_or_seed(store, "profile.styx", shipped().profile, worship_def);
         if writable_store().is_some() {
             config_watch::write_guarded(&dir.dir().join(profile_file(&legacy.name)), &legacy);
             let old = store.dir().join("profile.styx");
@@ -563,7 +625,7 @@ fn seed_profiles(profiles: &mut Vec<ProfileDef>) -> bool {
         .unwrap_or_default();
     let mut gained_default = false;
     let mut changed = false;
-    for (file, text) in DEFAULT_PROFILES {
+    for (file, text) in shipped().profiles {
         let def: ProfileDef = match facet_styx::from_str(text) {
             Ok(def) => def,
             Err(e) => {
@@ -630,7 +692,7 @@ fn seed_drive_presets(presets: &mut Vec<DrivePresetDef>) -> bool {
     let Some(store) = writable_store() else {
         return false;
     };
-    let Ok(shipped) = facet_styx::from_str::<DrivePresetLib>(DEFAULT_DRIVE_PRESETS) else {
+    let Ok(shipped) = facet_styx::from_str::<DrivePresetLib>(shipped().drive_presets) else {
         tracing::warn!("rig library: shipped drive presets do not parse");
         return false;
     };
@@ -670,7 +732,7 @@ fn seed_compositions() {
     seed_entries::<crate::compose::ModuleLib, crate::compose::ModulePresetDef>(
         &store,
         crate::compose::MODULES_FILE,
-        DEFAULT_MODULES,
+        shipped().modules,
         ".seeded-modules",
         |l| &mut l.presets,
         |p| format!("{}\t{}", p.module, p.name),
@@ -678,7 +740,7 @@ fn seed_compositions() {
     seed_entries::<crate::compose::BlockLib, crate::compose::BlockPresetDef>(
         &store,
         crate::compose::BLOCKS_FILE,
-        DEFAULT_BLOCKS,
+        shipped().blocks,
         ".seeded-blocks",
         |l| &mut l.presets,
         |p| format!("{}\t{}", p.block_type, p.name),
@@ -686,7 +748,7 @@ fn seed_compositions() {
     seed_entries::<crate::compose::PresetLib, crate::compose::RigPresetDef>(
         &store,
         crate::compose::PRESETS_FILE,
-        DEFAULT_PRESETS,
+        shipped().presets,
         ".seeded-presets",
         |l| &mut l.presets,
         |p| p.name.clone(),
@@ -694,7 +756,7 @@ fn seed_compositions() {
     seed_entries::<crate::compose::ToneLib, crate::compose::ToneDef>(
         &store,
         crate::compose::TONES_FILE,
-        DEFAULT_TONES,
+        shipped().tones,
         ".seeded-tones",
         |l| &mut l.tones,
         |t| t.name.clone(),
@@ -711,7 +773,7 @@ fn seed_songs_and_setlists() {
     seed_entries::<SongLib, crate::profiles::SongDef>(
         store,
         "songs.styx",
-        DEFAULT_SONGS,
+        shipped().songs,
         ".seeded-songs",
         |l| &mut l.songs,
         |s| s.name.clone(),
@@ -719,7 +781,7 @@ fn seed_songs_and_setlists() {
     seed_entries::<SetlistLib, crate::profiles::SetlistDef>(
         store,
         "setlists.styx",
-        DEFAULT_SETLISTS,
+        shipped().setlists,
         ".seeded-setlists",
         |l| &mut l.setlists,
         |s| s.name.clone(),
@@ -781,7 +843,7 @@ pub(crate) fn factory_line(file: &str, key: &str, fingerprint: &str) -> String {
 /// one of the versions the app shipped before.
 fn factory_update<T: for<'a> Facet<'a>>(file: &str, key: &str, mine: &T, ship: &T) -> bool {
     let have = fingerprint(mine);
-    have != fingerprint(ship) && FACTORY.lines().any(|l| l == factory_line(file, key, &have))
+    have != fingerprint(ship) && shipped().factory.lines().any(|l| l == factory_line(file, key, &have))
 }
 
 /// [`seed_compositions`] for one file: the shipped entries (by `key`) not in
@@ -865,7 +927,7 @@ impl RigLibrary {
         let gained_default = seed_profiles(&mut profiles);
         Self::split_core_once(&store, &mut profiles);
         let mut drive_presets =
-            read_or_seed::<DrivePresetLib>(&store, "drive-presets.styx", DEFAULT_DRIVE_PRESETS, || {
+            read_or_seed::<DrivePresetLib>(&store, "drive-presets.styx", shipped().drive_presets, || {
                 DrivePresetLib {
                     presets: drive_presets(),
                 }
@@ -876,19 +938,19 @@ impl RigLibrary {
         }
         seed_compositions();
         seed_songs_and_setlists();
-        let songs = read_or_seed::<SongLib>(&store, "songs.styx", DEFAULT_SONGS, || SongLib {
+        let songs = read_or_seed::<SongLib>(&store, "songs.styx", shipped().songs, || SongLib {
             songs: song_library(),
         })
         .songs;
         let setlists =
-            read_or_seed::<SetlistLib>(&store, "setlists.styx", DEFAULT_SETLISTS, || SetlistLib {
+            read_or_seed::<SetlistLib>(&store, "setlists.styx", shipped().setlists, || SetlistLib {
                 setlists: default_setlists(),
             })
             .setlists;
         let midi_map =
-            read_or_seed::<MidiMapDef>(&store, "midi.styx", DEFAULT_MIDI, default_midi_map);
+            read_or_seed::<MidiMapDef>(&store, "midi.styx", shipped().midi, default_midi_map);
         let keymap =
-            read_or_seed::<KeymapLib>(&store, "keymap.styx", DEFAULT_KEYMAP, || KeymapLib {
+            read_or_seed::<KeymapLib>(&store, "keymap.styx", shipped().keymap, || KeymapLib {
                 bindings: default_keymap(),
             })
             .bindings;
@@ -1021,7 +1083,7 @@ impl RigLibrary {
         }
         let store = store();
         let modules =
-            one::<crate::compose::ModuleLib>(crate::compose::MODULES_FILE, DEFAULT_MODULES).map(|l| l.presets);
+            one::<crate::compose::ModuleLib>(crate::compose::MODULES_FILE, shipped().modules).map(|l| l.presets);
         let fresh_modules = modules.is_ok();
         let mut modules =
             modules.unwrap_or_else(|()| last_good.map(|c| c.modules.clone()).unwrap_or_default());
@@ -1035,7 +1097,7 @@ impl RigLibrary {
                 }
             }
         }
-        let presets = one::<crate::compose::PresetLib>(crate::compose::PRESETS_FILE, DEFAULT_PRESETS)
+        let presets = one::<crate::compose::PresetLib>(crate::compose::PRESETS_FILE, shipped().presets)
             .map(|mut l| {
                 for p in &mut l.presets {
                     for snap in &mut p.snapshots {
@@ -1046,14 +1108,14 @@ impl RigLibrary {
                 l.presets
             })
             .unwrap_or_else(|()| last_good.map(|c| c.presets.clone()).unwrap_or_default());
-        let blocks = one::<crate::compose::BlockLib>(crate::compose::BLOCKS_FILE, DEFAULT_BLOCKS)
+        let blocks = one::<crate::compose::BlockLib>(crate::compose::BLOCKS_FILE, shipped().blocks)
             .map(|l| l.presets)
             .unwrap_or_else(|()| last_good.map(|c| c.blocks.clone()).unwrap_or_default());
         // The presets: the library's, or the shipped ones until it has its own.
         let tones_path = rig_dir().join(crate::compose::TONES_FILE);
         let tones = match config_watch::read_tracked::<crate::compose::ToneLib>(&tones_path) {
             Read::Ok(l) => l.tones,
-            Read::Missing => facet_styx::from_str::<crate::compose::ToneLib>(DEFAULT_TONES).map(|l| l.tones).unwrap_or_default(),
+            Read::Missing => facet_styx::from_str::<crate::compose::ToneLib>(shipped().tones).map(|l| l.tones).unwrap_or_default(),
             Read::Bad(e) => {
                 report_bad(&tones_path, &e);
                 last_good.map(|c| c.tones.clone()).unwrap_or_default()
@@ -1594,8 +1656,27 @@ pub fn seed_setup() -> signal_guitar_proto::SetupModel {
         direct_monitor: false,
         target_db: -15.0,
     };
+    // The bass's instruments: a Jazz, its neck pickup a Lawler — and the
+    // input's low cut down at 25 Hz (a guitar's 70 would take the bass's
+    // fundamentals), its gates lower for a held note's long tail.
+    let instruments = if crate::instrument::current() == crate::instrument::Instrument::Bass {
+        vec![
+            guitar(
+                "jazz",
+                "Geddy Lee Jazz Bass",
+                "",
+                "#18181b",
+                pickups(&[("Bridge", "Fender Jazz single-coil"), ("Neck", "Lawler Jazz")]),
+                tone(0.0, -80.0, false, 25.0, 0.0, 0.0),
+                Vec::new(),
+            ),
+            guitar("pbass", "Precision Bass", "", "#e9e4d8", pickups(&[("Middle", "Fender split-coil")]), tone(0.0, -80.0, false, 25.0, 0.0, 0.0), Vec::new()),
+        ]
+    } else {
+        Vec::new()
+    };
     SetupModel {
-        guitars: vec![
+        guitars: if !instruments.is_empty() { instruments } else { vec![
             guitar(
                 "strat",
                 "TMG Strat",
@@ -1616,7 +1697,7 @@ pub fn seed_setup() -> signal_guitar_proto::SetupModel {
                 vec![ToneOverride { rig: "stage".into(), parts: vec!["noisy".into()], tone: GuitarTone { noisy: false, ..GuitarTone::default() } }],
             ),
             guitar("goldtop", "Goldtop Les Paul", "lp-goldtop.webp", "#c9a24a", pickups(&[("Bridge", "P-90"), ("Neck", "P-90")]), tone(1.0, -69.0, false, 80.0, -1.5, 1.0), Vec::new()),
-        ],
+        ] },
         guitar_index: 0,
         rigs: vec![
             rig("minifuse", "MiniFuse 4", "Arturia MiniFuse 4", 128, "Outputs 1–2", -6.0, "Phones 1", -12.0),
@@ -1652,25 +1733,28 @@ mod seed_tests {
     #[ignore = "writes default-config/factory.txt; run by ship-library.sh"]
     fn record_factory() {
         use crate::compose::{BlockLib, ModuleLib, PresetLib, ToneLib};
-        let mut all: Vec<String> = Vec::new();
-        all.extend(lines::<ModuleLib, _>(crate::compose::MODULES_FILE, DEFAULT_MODULES, |l| &mut l.presets, |p| format!("{}\t{}", p.module, p.name)));
-        all.extend(lines::<BlockLib, _>(crate::compose::BLOCKS_FILE, DEFAULT_BLOCKS, |l| &mut l.presets, |p| format!("{}\t{}", p.block_type, p.name)));
-        all.extend(lines::<PresetLib, _>(crate::compose::PRESETS_FILE, DEFAULT_PRESETS, |l| &mut l.presets, |p| p.name.clone()));
-        all.extend(lines::<ToneLib, _>(crate::compose::TONES_FILE, DEFAULT_TONES, |l| &mut l.tones, |t| t.name.clone()));
-        all.extend(lines::<SongLib, _>("songs.styx", DEFAULT_SONGS, |l| &mut l.songs, |s| s.name.clone()));
-        all.extend(lines::<SetlistLib, _>("setlists.styx", DEFAULT_SETLISTS, |l| &mut l.setlists, |s| s.name.clone()));
-        for (file, text) in DEFAULT_PROFILES {
-            let def: ProfileDef = facet_styx::from_str(text).expect("the shipped profile parses");
-            all.push(factory_line(file, &def.name, &fingerprint(&def)));
-        }
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/default-config/factory.txt");
-        let mut have: Vec<String> = std::fs::read_to_string(path).unwrap_or_default().lines().map(str::to_string).collect();
-        for l in all {
-            if !have.contains(&l) {
-                have.push(l);
+        // Each instrument's shipped library, into its own record.
+        for (dir, shipped) in [("default-config", &GUITAR), ("default-config-bass", &BASS)] {
+            let mut all: Vec<String> = Vec::new();
+            all.extend(lines::<ModuleLib, _>(crate::compose::MODULES_FILE, shipped.modules, |l| &mut l.presets, |p| format!("{}\t{}", p.module, p.name)));
+            all.extend(lines::<BlockLib, _>(crate::compose::BLOCKS_FILE, shipped.blocks, |l| &mut l.presets, |p| format!("{}\t{}", p.block_type, p.name)));
+            all.extend(lines::<PresetLib, _>(crate::compose::PRESETS_FILE, shipped.presets, |l| &mut l.presets, |p| p.name.clone()));
+            all.extend(lines::<ToneLib, _>(crate::compose::TONES_FILE, shipped.tones, |l| &mut l.tones, |t| t.name.clone()));
+            all.extend(lines::<SongLib, _>("songs.styx", shipped.songs, |l| &mut l.songs, |s| s.name.clone()));
+            all.extend(lines::<SetlistLib, _>("setlists.styx", shipped.setlists, |l| &mut l.setlists, |s| s.name.clone()));
+            for (file, text) in shipped.profiles {
+                let def: ProfileDef = facet_styx::from_str(text).expect("the shipped profile parses");
+                all.push(factory_line(file, &def.name, &fingerprint(&def)));
             }
+            let path = format!("{}/{dir}/factory.txt", env!("CARGO_MANIFEST_DIR"));
+            let mut have: Vec<String> = std::fs::read_to_string(&path).unwrap_or_default().lines().map(str::to_string).collect();
+            for l in all {
+                if !have.contains(&l) {
+                    have.push(l);
+                }
+            }
+            std::fs::write(&path, have.join("\n") + "\n").expect("factory.txt written");
         }
-        std::fs::write(path, have.join("\n") + "\n").expect("factory.txt written");
     }
 
     /// A factory entry the player never touched takes the newer shipped one;

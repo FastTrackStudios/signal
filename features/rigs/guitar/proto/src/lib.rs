@@ -440,6 +440,10 @@ pub struct PerformanceModel {
     /// (patch repoints, preset edits) that don't change the fields above,
     /// so clients can refetch derived data (patches/presets) on change.
     pub revision: u64,
+    /// The instrument the rig is (`guitar`, `bass`): its own library, the
+    /// same chain and the same screens.
+    #[facet(default)]
+    pub instrument: String,
     /// The current song's profile; empty when it keeps whatever is loaded.
     #[facet(default)]
     pub song_profile: String,
@@ -1861,6 +1865,10 @@ pub mod rig {
         /// does not parse changes nothing. One line per file applied, or a
         /// line saying nothing had changed.
         fn reload_config(&self) -> String;
+        /// Make the rig the guitar or the bass (`guitar`, `bass`): its
+        /// position saved, the other instrument's library loaded and played
+        /// from where it was left. What it did, in a line.
+        fn set_instrument(&self, instrument: String) -> String;
         /// Rename a pool preset (patch pointers follow).
         fn rename_preset(&self, old: String, new_name: String);
         /// Delete a pool preset — refused while any patch points at it.

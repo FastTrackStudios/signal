@@ -16,7 +16,11 @@ use signal_guitar::measure::render_through;
 use signal_sampler::rig_profile::RigPatch;
 
 const SR: u32 = 48_000;
-const F0: f64 = 196.0;
+/// The test note: a guitar's G (196 Hz), or `TONE_AUDIT_F0` (82 for a
+/// bass's low E).
+fn f0() -> f64 {
+    std::env::var("TONE_AUDIT_F0").ok().and_then(|v| v.parse().ok()).unwrap_or(196.0)
+}
 /// The input levels a capture is swept over (sine peak, dBFS): -18 plays
 /// like the shipped chords DI, -8 is digging in.
 const LEVELS: [f64; 7] = [-30.0, -26.0, -22.0, -18.0, -14.0, -10.0, -6.0];
@@ -48,17 +52,17 @@ fn goertzel(x: &[f32], f: f64) -> f64 {
 /// THD %, harmonics 2–12 over the fundamental, of the last second.
 fn thd(x: &[f32]) -> f64 {
     let tail = &x[x.len().saturating_sub(SR as usize)..];
-    let h1 = goertzel(tail, F0);
+    let h1 = goertzel(tail, f0());
     if h1 < 1e-9 {
         return f64::NAN;
     }
-    let rest: f64 = (2..=12).map(|k| goertzel(tail, F0 * f64::from(k)).powi(2)).sum();
+    let rest: f64 = (2..=12).map(|k| goertzel(tail, f0() * f64::from(k)).powi(2)).sum();
     100.0 * rest.sqrt() / h1
 }
 
 fn sine(peak_db: f64) -> Vec<f32> {
     let a = 10f64.powf(peak_db / 20.0);
-    (0..2 * SR as usize).map(|i| (a * (2.0 * std::f64::consts::PI * F0 * i as f64 / f64::from(SR)).sin()) as f32).collect()
+    (0..2 * SR as usize).map(|i| (a * (2.0 * std::f64::consts::PI * f0() * i as f64 / f64::from(SR)).sin()) as f32).collect()
 }
 
 fn with(patch: &RigPatch, off: impl Fn(&str) -> bool) -> RigPatch {
@@ -94,6 +98,8 @@ fn main() {
     };
     let out = args.get(1).filter(|a| *a != "--models").map(std::path::PathBuf::from);
     let models_mode = args.iter().any(|a| a == "--models");
+    // The instrument first (`SIGNAL_INSTRUMENT=bass`): it names the library.
+    signal_guitar::instrument::init();
     signal_guitar::levelling::apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
     let Some(def) = lib.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(name)) else {
@@ -201,7 +207,7 @@ fn main() {
     for (p, (s, h, a, lufs)) in built.patches.iter().zip(&rows) {
         let amp_l = p.chain.iter().find(|b| b.name == "Amp L" && !b.bypassed).map_or("", |b| b.nam.rsplit('/').next().unwrap_or(""));
         let amp_r = p.chain.iter().find(|b| b.name == "Amp R" && !b.bypassed).map_or("", |b| b.nam.rsplit('/').next().unwrap_or(""));
-        let drives: Vec<&str> = p.chain.iter().filter(|b| !b.bypassed && (b.name.starts_with("Drive") || b.name == "Boost") && !b.nam.is_empty()).map(|b| b.name.as_str()).collect();
+        let drives: Vec<String> = p.chain.iter().filter(|b| !b.bypassed && (b.name.starts_with("Drive") || b.name == "Boost") && !b.nam.is_empty()).map(|b| format!("{}={}", b.name, b.nam.rsplit('/').next().unwrap_or(""))).collect();
         println!(
             "{:<16} {:>6.1} / {:<6.1}  {:>6.1} / {:<6.1}  {:>6.1} / {:<6.1} {:>6.1}  {} | {} {:?}",
             p.name, s.0, s.1, h.0, h.1, a.0, a.1, lufs, amp_l, amp_r, drives

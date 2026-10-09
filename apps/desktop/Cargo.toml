@@ -99,8 +99,6 @@ signal-keys-rig = [
 ]
 signal = [
     "signal-guitar",
-    "dep:signal-bass-proto",
-    "dep:signal-bass-ui",
     "dep:signal-drums-proto",
     "dep:signal-drums-ui",
     "dep:signal-keys-proto",
@@ -115,7 +113,6 @@ signal = [
     # engine_main.rs — the former apps/signal-engine). These optional
     # deps only exist in the not(wasm32) target table, so enabling them
     # here is a no-op on the web build.
-    "dep:signal-bass",
     "dep:signal-drums",
     "dep:signal-keys",
     "dep:signal-synth-rig",
@@ -223,8 +220,6 @@ signal-tone3000-proto = { workspace = true, optional = true }
 signal-tone3000-ui = { workspace = true, optional = true }
 fts-chrome.workspace = true
 signal-guitar-ui = { workspace = true, optional = true }
-signal-bass-proto = { workspace = true, optional = true }
-signal-bass-ui = { workspace = true, optional = true }
 signal-drums-proto = { workspace = true, optional = true }
 signal-drums-ui = { workspace = true, optional = true }
 signal-keys-proto = { workspace = true, optional = true }
@@ -326,7 +321,6 @@ fx-blocks = { workspace = true, optional = true }
 # ── Engine mode (`--engine`, feature `signal`) — the former
 #    apps/signal-engine, native only ─────────────────────────────────────
 signal-guitar = { workspace = true, optional = true }
-signal-bass = { workspace = true, optional = true }
 signal-drums = { workspace = true, optional = true }
 signal-keys = { workspace = true, optional = true }
 signal-synth-rig = { workspace = true, optional = true }

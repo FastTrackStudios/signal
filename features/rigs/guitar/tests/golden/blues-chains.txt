@@ -4,6 +4,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=false | attack=25 knee=6 makeup=4 meter=1 mix=1 ratio=3 release=200 style=2 threshold=-22.5
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
@@ -40,6 +41,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=false | attack=25 knee=6 makeup=4 meter=1 mix=1 ratio=3 release=200 style=2 threshold=-22.5
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
@@ -76,6 +78,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=false | attack=30 knee=6 makeup=2 meter=1 mix=1 ratio=2.5 release=150 style=2 threshold=-19.5
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
@@ -112,6 +115,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
@@ -148,6 +152,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone both sides.nam | ir= | bypassed=false | drive=0.45
@@ -184,6 +189,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=false | attack=30 knee=6 makeup=2 meter=1 mix=1 ratio=2.5 release=150 style=2 threshold=-19.5
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
@@ -220,6 +226,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone both sides.nam | ir= | bypassed=true | drive=0.5
@@ -256,6 +263,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone both sides.nam | ir= | bypassed=false | drive=0.7
@@ -292,6 +300,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=false | attack=25 knee=6 makeup=4 meter=1 mix=1 ratio=3 release=200 style=2 threshold=-22.5
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
@@ -328,6 +337,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=false | attack=25 knee=6 makeup=4 meter=1 mix=1 ratio=3 release=200 style=2 threshold=-22.5
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
@@ -364,6 +374,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
@@ -400,6 +411,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone both sides.nam | ir= | bypassed=false | drive=0.3
@@ -436,6 +448,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=false | attack=25 knee=6 makeup=4 meter=1 mix=1 ratio=3 release=200 style=2 threshold=-22.5
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
@@ -472,6 +485,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
@@ -508,6 +522,7 @@ Dive Bomb | nam= | ir= | bypassed=true | a_level=1 b_level=0 cents=0 dry=0 engin
 Pre Comp | nam= | ir= | bypassed=true | attack=20 meter=1 ratio=4 release=200 threshold=-30
 Pitch | nam= | ir= | bypassed=true | a_level=0.7 b_level=0.7 b_semitones=-12 cents=0 dry=1 mix=0.5 semitones=12
 Harmonizer | nam= | ir= | bypassed=true | a_level=0.6 b_level=0.5 b_semitones=7 cents=0 dry=1 mix=0.5 semitones=4
+Filter | nam= | ir= | bypassed=true | cutoff=0.43 env_attack=4 env_octaves=3 env_release=140 env_sens=0.5 mix=1 mode=2 resonance=0.45
 Volume Pedal | nam= | ir= | bypassed=false | gain_db=0
 Boost | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5
 Drive 1 | nam=models/King of Tone ver4 Red channel set to Boost.nam | ir= | bypassed=true | drive=0.5

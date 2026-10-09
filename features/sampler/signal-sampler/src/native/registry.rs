@@ -425,7 +425,7 @@ fn build_filter(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
         f = f.with_character(FilterCharacter::Ladder);
     }
     let mut f: Box<dyn PluginInstance> = Box::new(f);
-    apply_named(f.as_mut(), block, &["drive", "mix"]);
+    apply_named(f.as_mut(), block, &["drive", "mix", "env_octaves", "env_sens", "env_attack", "env_release", "mode"]);
     f
 }
 

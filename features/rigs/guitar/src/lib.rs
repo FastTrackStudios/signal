@@ -23,6 +23,7 @@ pub mod compose;
 pub mod config_watch;
 pub mod design;
 pub mod di_player;
+pub mod instrument;
 pub mod drop_log;
 pub mod freeze;
 pub mod levelling;

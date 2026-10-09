@@ -1,9 +1,3 @@
-modules.styx	Drive :: Blues Drive	5f9889ec8f34f40f
-modules.styx	Amp :: John Mayer Trio	3113642a8f2d34a6
-modules.styx	Amp :: Vibroverb + Dumble	2948096fd6ac1554
-modules.styx	Amp :: Vibroverb 1964	f2b14cc13abda2b9
-modules.styx	Amp :: Dumble SSS	f927c8e022381dcb
-modules.styx	Amp :: Two-Rock John Mayer	c79aa3cc59fc27a4
 modules.styx	Delay :: John Mayer	b18ef3ad47447706
 modules.styx	Reverb :: John Mayer	cfd5da3ce3053eb5
 modules.styx	Time :: John Mayer	be1213f55c2d7c14
@@ -34,34 +28,9 @@ modules.styx	Reverb :: Hall	0329902b7c903ef8
 modules.styx	Reverb :: Ambient	785df17001305c86
 modules.styx	Reverb :: Shimmer	b20242a3b8088baf
 modules.styx	Reverb :: Swell	21eeb3b39b49ac93
-modules.styx	Drive :: King of Tone + Morning Glory	7ca07fb8244fbee4
-modules.styx	Amp :: Fender Deluxe Reverb	034f90c0e4886a02
-modules.styx	Amp :: Fender Twin Reverb	44ff8c6f02d888d4
-modules.styx	Amp :: Fender Bassman	f8624d17237a2aab
-modules.styx	Amp :: Vox AC30	e217f04cc8d0eb92
-modules.styx	Amp :: Dumble ODS	c2f9e064c9abb1ea
-modules.styx	Amp :: Marshall Plexi	3adcc42a0df60bb3
-modules.styx	Amp :: Marshall JCM800	3b168cf6e1a50d9a
-modules.styx	Amp :: Friedman BE-100	54e3e6a81dfdfab0
-modules.styx	Amp :: Soldano SLO-100	a417825d6f534e63
-modules.styx	Amp :: Mesa Dual Rectifier	7dbb1210d646c81b
-modules.styx	Amp :: Mesa Mark IIC+	6b1656a9c3520d4a
-modules.styx	Amp :: EVH 5150 III	db10babb5fd1d9d7
-modules.styx	Amp :: Peavey 5150/6505	064e1ab5b80264aa
-modules.styx	Amp :: Bogner Uberschall	d236cc2b1ea37fc5
-modules.styx	Amp :: Diezel VH4	11bea13577783061
-modules.styx	Amp :: ENGL Powerball	37ef0d2fb317319e
-modules.styx	Amp :: ENGL Fireball	375b99403f92917d
-modules.styx	Amp :: Hiwatt DR103	d510d763f494911d
-modules.styx	Amp :: Deluxe + AC30	d59f2ae773a755db
-modules.styx	Amp :: Plexi + AC30	72bdd830b65a60fe
-modules.styx	Amp :: JCM800 + AC30	21e461a00c0f5b68
-modules.styx	Amp :: 5150 III + Recto	e00b138e99572159
-modules.styx	Drive :: Off	6626b0667bbe24c4
-modules.styx	Drive :: King of Tone	0bf1e6a8283a7466
-modules.styx	Drive :: Morning Glory	453f8f0c24ba2489
-modules.styx	Drive :: King of Tone (Both Sides)	bd283e20c2aae70d
-modules.styx	Drive :: Morning Glory (Low Gain)	45e1937232896538
+modules.styx	Amp :: Aguilar Tone Hammer	7db46c34aefdeca2
+modules.styx	Drive :: Off	16f91713152101fa
+modules.styx	Drive :: JHS Kilt	19373d6eb0be4834
 blocks.styx	delay :: Aqua-Puss Slap	206e39ebbdeca7fd
 blocks.styx	reverb :: Gravity Tank Spring	9fd4629acb22f6a7
 blocks.styx	trem :: Gravity Tank Trem	b5e85f72b3070f2b
@@ -82,7 +51,7 @@ blocks.styx	compressor :: Comp Off	c06b01dfdc7bd7c8
 blocks.styx	compressor :: Clean Sustain	426a3729143f47b4
 blocks.styx	compressor :: Funk Squash	e54a5649eb79f282
 blocks.styx	compressor :: Country Squash	629418bf3d920928
-blocks.styx	compressor :: Swell Sustain	730e4875c39ac739
+blocks.styx	compressor :: Swell Sustain	9aa139822296cae2
 blocks.styx	compressor :: Drive Tighten	a8684cd985a85c0d
 blocks.styx	compressor :: Live Glue	20449a4fbc602ba9
 blocks.styx	compressor :: Clean Punch	1145e22327e6727c
@@ -166,105 +135,41 @@ blocks.styx	delay :: Rainbow Dotted	3ca005f63356d1e8
 blocks.styx	reverb :: Rainbow Hall	ade61693d38dc30f
 blocks.styx	delay :: Flute Octave Echo	09209f2fd471f29c
 blocks.styx	delay :: Flute Wash	c3e1c89a6b9f9e5b
-presets.styx	John Mayer	44d000f9d25eb8b4
-presets.styx	Fender Deluxe Reverb	b69441f031a58388
-presets.styx	Fender Twin Reverb	521b37b555693160
-presets.styx	Fender Bassman	4dd372e6019bf4d7
-presets.styx	Vox AC30	1ba708fc8a33714f
-presets.styx	Dumble ODS	c5867a9124ae23f2
-presets.styx	Marshall Plexi	2a80a383a879ac15
-presets.styx	Marshall JCM800	ef5fc1c99371a682
-presets.styx	Friedman BE-100	71af0063b7f2f80c
-presets.styx	Soldano SLO-100	43310f5af16f3707
-presets.styx	Mesa Dual Rectifier	405e777f6067231e
-presets.styx	Mesa Mark IIC+	b7eeb8d835b4f791
-presets.styx	EVH 5150 III	4ba6e4e38a6922bc
-presets.styx	Peavey 5150/6505	5882b8407f0a0a5b
-presets.styx	Bogner Uberschall	13dcca195fb01461
-presets.styx	Diezel VH4	8879af176665a12a
-presets.styx	ENGL Powerball	3d3b79a5f6ad16ef
-presets.styx	ENGL Fireball	15356619e9452e7e
-presets.styx	Hiwatt DR103	f1d68cc659af9099
-presets.styx	Deluxe + AC30	47649ef1058eeb9c
-presets.styx	Plexi + AC30	a3292279ef7fc414
-presets.styx	JCM800 + AC30	16cea2805ce3f427
-presets.styx	5150 III + Recto	a09a3f19b4991b12
-tones.styx	Clean	12ca32dca58ebf9b
-tones.styx	Clean Verb	46ff193406c751ad
-tones.styx	Clean Dry	2c070dbf74fb19b5
-tones.styx	Crunch	7ebc77f30040ecd8
-tones.styx	Crunch Dotted	eb793633097415a5
-tones.styx	Drive	ee144e4d4efb434a
-tones.styx	Drive Dotted	0882b0cbd36b7580
-tones.styx	Lead	2033ed5742455872
-tones.styx	Lead Quarter	0357f417afea83d9
-tones.styx	Ambient	a0311edec44a3ab3
-tones.styx	Swells	6d528fe969768347
-tones.styx	Rainbow Road	37b54e506cb36ef9
-tones.styx	Dry Chorus Clean	60c2c1660e7ded16
-tones.styx	Dry Chorus Clean L	7aa687761fde61df
-tones.styx	Dry Funky Clean	a6f4267b6ed4f91c
-tones.styx	Ambient Delay Flute	b173d548c8a7b8ba
-tones.styx	Ambient Clean	58ca054eaa0dc7cc
-tones.styx	Verbed Clean	372414987f0f927e
-tones.styx	Verbed Crunch	5d7028e1689e865b
-tones.styx	Verbed Drive	35d62f864b3d74da
-tones.styx	Verbed Lead	5b63dfe3c1f3cf0a
-tones.styx	Lead Streets	bbba29cba462fa07
+blocks.styx	pitch :: Microsynth Octave	effa5a7c9c0fd78a
+blocks.styx	filter :: Moog Sweep	bd3c2e6e63877ebe
+blocks.styx	filter :: Envelope	fee7ad5b3fa98ca8
+blocks.styx	compressor :: Bass Opto	d01dbe32cb70bfe3
+blocks.styx	compressor :: Bass Opto Heavy	92d6e9c04ef064a6
+blocks.styx	eq :: Bass Mix EQ	5e43878c0d2c7af5
+blocks.styx	gate :: Bass Gate	8f0c5fa267db93f3
+presets.styx	Tone Hammer	c21e43a24bb1a100
 songs.styx	What a God	f2c96246fb5bd87c
-songs.styx	No Other Name	6dbf9ae266b81e17
+songs.styx	No Other Name	0270a595f7b68f0c
 songs.styx	Owe You Praise	e751a016408f5ac8
-songs.styx	WASHED	ab9bca708d82a784
+songs.styx	WASHED	78ade3c0a268f138
 songs.styx	Who Else	c6d5e02b52ef40de
 songs.styx	Build My Life / With Everything	5c57f4918d399072
 songs.styx	Reckless Love	e788acbc2830dca6
 songs.styx	Great Are You Lord	d5955385fd3d03da
 songs.styx	Thank God I'm Free	3f29f3584d60a7db
 songs.styx	Always on Time	298e518e2d670300
-songs.styx	TAKEOVER	fee612bf0f449fba
+songs.styx	TAKEOVER	1c8df8b1a3ae6632
 songs.styx	Give Me Jesus	27270be13fbf3b15
 songs.styx	Keep On Finding More	7fdc33b4be33b314
 songs.styx	On And On	a813cabacf032269
 songs.styx	I Thank God	6b92c5812c33656d
 songs.styx	Praise	eb8f865feb14c1e9
-songs.styx	AMAZING!	ab35047fb2d63670
+songs.styx	AMAZING!	bf552e4bbd5ee136
 songs.styx	GOODBYE YESTERDAY	9e493b26ff466950
-songs.styx	SONG 1 TITLE	04e93f9fb34a805d
-songs.styx	SONG 2 TITLE	1407e779e94c6f4e
-songs.styx	SONG 3 TITLE	9e222146307cb6e0
-songs.styx	SONG 4 TITLE	a8eba2ea9a567b94
-songs.styx	SONG 5 TITLE	099e0674da448e5b
+songs.styx	SONG 1 TITLE	329311b85e50ea30
+songs.styx	SONG 2 TITLE	4766c1186de3425f
+songs.styx	SONG 3 TITLE	f4650e4aa19d10de
+songs.styx	SONG 4 TITLE	6db0bcbf1c711ba3
+songs.styx	SONG 5 TITLE	85311cfa0032c7fe
 setlists.styx	XR Wednesday 7-8-26	539e790718b5284d
 setlists.styx	CYA 7-9-26	de4214b33a156f09
 setlists.styx	HSM 10-6-26 Worship Night	bdfd13380d492e56
 setlists.styx	Kids Ministry 10-7-26 Worship Night	cc77c659c0a7b4d6
 setlists.styx	CYA 9-24-26	1d7908ab9a6696ae
 setlists.styx	SETLIST NAME	82ebbe38223a01db
-blues.styx	Blues	d8d88689b6cddcde
-metal.styx	Metal	d1bdd84c7265ec00
-rock.styx	Rock	83abedeeeebbd20a
-test.styx	Test	e8a17c5d3acff4ab
-worship.styx	Worship	f19984b81a62dfdc
-modules.styx	Amp :: Vibroverb + Dumble	219fa715bd9c47a7
-modules.styx	Amp :: Vibroverb 1964	6a0a5a6f00a96b22
-modules.styx	Amp :: Dumble SSS	80101529a55d223d
-modules.styx	Amp :: Two-Rock John Mayer	4d8a9fe03dcb2dcb
-modules.styx	Amp :: Fender Deluxe Reverb	db28000605f54056
-modules.styx	Amp :: Fender Twin Reverb	7e7ddaa488462098
-modules.styx	Amp :: Fender Bassman	6ea62fb0552c872b
-modules.styx	Amp :: Vox AC30	c0fb0f0ddc70ba6e
-modules.styx	Amp :: Dumble ODS	c99882412bbca224
-modules.styx	Amp :: Marshall Plexi	e0962c0631840d47
-modules.styx	Amp :: Marshall JCM800	63e8235836600e0b
-modules.styx	Amp :: Friedman BE-100	83776c17601705ad
-modules.styx	Amp :: Mesa Dual Rectifier	9c5dc11791f3bfb0
-modules.styx	Amp :: Mesa Mark IIC+	d676e270c4b2fb41
-modules.styx	Amp :: Peavey 5150/6505	be930ec2069b4a43
-modules.styx	Amp :: Bogner Uberschall	7963223db269ae0e
-modules.styx	Amp :: Diezel VH4	7ca5ce2eefb5e56f
-modules.styx	Amp :: Hiwatt DR103	c62b0e7df1781575
-modules.styx	Amp :: Deluxe + AC30	155b1a0ae8408f3b
-blocks.styx	compressor :: Swell Sustain	9aa139822296cae2
-presets.styx	Fender Bassman	39c38b43210aca20
-metal.styx	Metal	804b8cdb8ca8d71a
-rock.styx	Rock	2fba3c06e197d856
+worship.styx	Worship	94d3af91e29fc191

@@ -26,7 +26,8 @@ use crate::prefs;
 #[cfg(target_os = "ios")]
 pub fn available(rig: Rig) -> bool {
     match rig {
-        Rig::Guitar => cfg!(feature = "signal-guitar"),
+        // The bass is the guitar rig as another instrument.
+        Rig::Guitar | Rig::Bass => cfg!(feature = "signal-guitar"),
         // Not on the phone for now: the keys rig does not work there yet,
         // so its tile is greyed out rather than opening onto it.
         Rig::Keys => false,

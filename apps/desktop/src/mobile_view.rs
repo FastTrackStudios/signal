@@ -35,8 +35,8 @@ const ROOT_CSS: &str = "html, body { margin: 0; padding: 0; background: #0f1012;
 enum MobileScreen {
     /// The instrument menu — the front door.
     Menu,
-    /// The guitar rig.
-    Rig,
+    /// The guitar rig, or (`bass`) the same rig as the bass.
+    Rig { bass: bool },
     /// The keys rig (sampler engine + downloaded packs).
     #[cfg(feature = "signal-keys-rig")]
     Keys,
@@ -53,7 +53,8 @@ impl MobileScreen {
             return MobileScreen::Menu;
         }
         match rig {
-            Rig::Guitar => MobileScreen::Rig,
+            Rig::Guitar => MobileScreen::Rig { bass: false },
+            Rig::Bass => MobileScreen::Rig { bass: true },
             #[cfg(feature = "signal-keys-rig")]
             Rig::Keys => MobileScreen::Keys,
             _ => MobileScreen::Menu,
@@ -205,8 +206,8 @@ fn Router() -> Element {
                 },
             }
         },
-        MobileScreen::Rig => rsx! {
-            GuitarPage { on_home: to_menu }
+        MobileScreen::Rig { bass } => rsx! {
+            GuitarPage { bass, on_home: to_menu }
         },
         #[cfg(feature = "signal-keys-rig")]
         MobileScreen::Keys => rsx! {
@@ -229,10 +230,19 @@ fn MenuPage(on_pick: EventHandler<Rig>) -> Element {
 /// (frame's phone faces, a page at a time). Its rail's Rigs button comes
 /// back here.
 #[component]
-fn GuitarPage(on_home: EventHandler<()>) -> Element {
+fn GuitarPage(bass: bool, on_home: EventHandler<()>) -> Element {
     use_context_provider(|| PhoneHost {
         on_home: Callback::new(move |()| on_home.call(())),
     });
+    // The bass is this rig as another instrument: the engine is told which.
+    use_effect(use_reactive!(|bass| {
+        if let Some(rig) = try_consume_context::<signal_guitar_proto::rig::RigClient>() {
+            let id = if bass { "bass" } else { "guitar" };
+            spawn(async move {
+                let _ = rig.set_instrument(id.to_string()).await;
+            });
+        }
+    }));
     rsx! {
         div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
             GuitarRigRemote {}

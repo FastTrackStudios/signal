@@ -14271,46 +14271,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-bass"
-version = "0.1.0"
-dependencies = [
- "architect",
- "facet",
- "facet-styx",
- "midicore",
- "signal-bass-proto",
- "signal-proto",
- "signal-rig-host",
- "signal-rigs-proto",
- "signal-sampler",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "signal-bass-proto"
-version = "0.1.0"
-dependencies = [
- "architect",
- "facet",
- "midicore-proto",
- "signal-proto",
- "vox",
-]
-
-[[package]]
-name = "signal-bass-ui"
-version = "0.1.0"
-dependencies = [
- "architect",
- "dioxus",
- "fts-chrome",
- "midicore-proto",
- "midicore-ui",
- "signal-bass-proto",
-]
-
-[[package]]
 name = "signal-browser"
 version = "0.1.0"
 dependencies = [
@@ -14400,9 +14360,6 @@ dependencies = [
  "sha2 0.10.9",
  "signal-account",
  "signal-account-proto",
- "signal-bass",
- "signal-bass-proto",
- "signal-bass-ui",
  "signal-drums",
  "signal-drums-proto",
  "signal-drums-ui",

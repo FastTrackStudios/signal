@@ -81,7 +81,11 @@ fn refuse(why: impl Into<String>) {
 
 /// Rig whose audio prefs the settings service reads/writes (persisted to
 /// `<config>/signal/rigs/guitar-rig.styx` by `RigManager`).
-pub(crate) const AUDIO_RIG_NAME: &str = "Guitar Rig";
+/// The audio rig the playing instrument keeps its interface calibration
+/// and routing in (`Guitar Rig`, `Bass Rig`).
+pub(crate) fn audio_rig_name() -> &'static str {
+    crate::instrument::current().audio_rig_name()
+}
 
 /// The boost pedal's cycle: first press engages +1 dB, then each press
 /// advances — +2, +3, a −1 dB cut, and back around to +1.
@@ -540,6 +544,8 @@ impl Default for GuitarRigBackend {
 
 impl GuitarRigBackend {
     pub fn new() -> Self {
+        // The instrument first: it names the library read below.
+        crate::instrument::init();
         let lib = RigLibrary::load_or_bootstrap();
         let others = others_of(&lib.profiles, &lib.profile.name);
         let backend = Self {
@@ -587,7 +593,7 @@ impl GuitarRigBackend {
             last_switched: Arc::new(Mutex::new(String::new())),
             open_prefs: Arc::new(Mutex::new(None)),
             midi_map: Arc::new(Mutex::new(lib.midi_map)),
-            learn: Arc::new(Mutex::new(signal_rig_host::midi_learn::MidiLearn::load("guitar"))),
+            learn: Arc::new(Mutex::new(signal_rig_host::midi_learn::MidiLearn::load(crate::instrument::current().id()))),
             keymap: Arc::new(Mutex::new(lib.keymap)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
             master_trim: Arc::new(Mutex::new(DEFAULT_MASTER_TRIM_DB)),
@@ -615,6 +621,79 @@ impl GuitarRigBackend {
         backend.spawn_drive_calibration();
         backend.spawn_tempo_follow();
         backend
+    }
+
+    /// Make the rig `to` (the guitar or the bass): what is pending saved,
+    /// the audio closed, the other library loaded into every field the
+    /// library fills, and the rig opened again on it — at the position it
+    /// was left in there, as a launch would.
+    pub fn switch_instrument(&self, to: crate::instrument::Instrument) -> String {
+        use std::sync::atomic::Ordering;
+        let from = crate::instrument::current();
+        if from == to {
+            return format!("already the {}", to.id());
+        }
+        // What this instrument has pending, written to its own library.
+        RigLibrary::save_profile(&self.profile_def.lock_ok());
+        RigLibrary::save_songs(&self.songs_lib.lock_ok());
+        RigLibrary::save_last_state(&self.snapshot_last_state());
+        for flag in [&self.library_dirty, &self.songs_dirty, &self.state_dirty] {
+            flag.store(false, Ordering::Relaxed);
+        }
+        let playing = self.wants_audio.load(Ordering::Relaxed);
+        if playing {
+            Rig::stop(self);
+        }
+        crate::instrument::set(to);
+        crate::instrument::remember(to);
+        let lib = RigLibrary::load_or_bootstrap();
+        *self.other_profiles.lock_ok() = others_of(&lib.profiles, &lib.profile.name);
+        *self.profile_def.lock_ok() = lib.profile;
+        *self.songs_lib.lock_ok() = lib.songs;
+        *self.song_info.lock_ok() = lib.song_info;
+        *self.setup.lock_ok() = lib.setup;
+        *self.setlists.lock_ok() = lib.setlists;
+        *self.drive_presets.lock_ok() = lib.drive_presets;
+        *self.midi_map.lock_ok() = lib.midi_map;
+        *self.keymap.lock_ok() = lib.keymap;
+        *self.di_lib.lock_ok() = RigLibrary::di_lib().clips;
+        *self.learn.lock_ok() = signal_rig_host::midi_learn::MidiLearn::load(to.id());
+        *self.setlist_index.lock_ok() = 0;
+        *self.song_index.lock_ok() = 0;
+        *self.part_index.lock_ok() = 0;
+        *self.design_patch.lock_ok() = String::new();
+        self.blocks.lock_ok().clear();
+        // What the other instrument's songs and patches left behind: stack
+        // rotations, a held momentary, the last switch, undo, the audition,
+        // caches over its chains.
+        self.song_rotations.lock_ok().clear();
+        self.part_tuned.lock_ok().clear();
+        self.switch_modes.lock_ok().clear();
+        self.gate_lifted.lock_ok().clear();
+        *self.momentary_return.lock_ok() = None;
+        self.last_switched.lock_ok().clear();
+        self.live_view_patch.lock_ok().clear();
+        *self.audition.lock_ok() = None;
+        *self.browse_undo.lock_ok() = None;
+        self.sound_undo.lock_ok().clear();
+        *self.usage_cache.lock_ok() = None;
+        *self.design_cache.lock_ok() = None;
+        // The watcher starts over on the new directory (its files are not
+        // edits made under the rig).
+        self.reset_config_watch();
+        tracing::info!(instrument.from = from.id(), instrument.to = to.id(), "instrument switched");
+        if crate::library::rig_is_design() {
+            self.open_for_design();
+        } else if playing {
+            Rig::start(self);
+        } else {
+            // No audio open (none wanted, or no interface): the chain on
+            // screen from the new library's definition, as a stopped rig
+            // shows it.
+            self.resync_blocks();
+        }
+        self.publish_state();
+        format!("now the {}", to.id())
     }
 
     /// One meter-pump iteration (the [`RigBackend::on_tick`] body): MIDI
@@ -2734,7 +2813,7 @@ impl GuitarRigBackend {
     /// The chosen audio rig's rate, buffer and input into the device prefs,
     /// and the device reopened on them (when it is open).
     fn apply_audio_rig(&self, r: &signal_guitar_proto::AudioRigEntry) {
-        let mut mgr = RigManager::load(AUDIO_RIG_NAME);
+        let mut mgr = RigManager::load(audio_rig_name());
         if r.rate > 0 {
             mgr.audio.sample_rate = r.rate;
         }
@@ -4416,7 +4495,7 @@ impl GuitarRigBackend {
             std::thread::sleep(std::time::Duration::from_millis(250));
         }
 
-        let mut mgr = RigManager::load(AUDIO_RIG_NAME);
+        let mut mgr = RigManager::load(audio_rig_name());
         let cal = mgr.audio.nam_calibration();
         signal_sampler::nam::set_interface_calibration_dbu(cal);
         tracing::info!(nam.calibration_dbu = ?cal, "rig open: NAM level calibration");
@@ -5567,6 +5646,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         headphone: HeadphoneState::default(),
         master_trim_db: 0.0,
         revision: 0,
+        instrument: crate::instrument::current().id().to_string(),
         song_profile: String::new(),
         start_part: String::new(),
         start_patch: String::new(),
@@ -5892,7 +5972,7 @@ impl GuitarRigBackend {
                 // output-only rig is not the instrument's.)
                 let prefs = format!(
                     "{:?} output_only={}",
-                    RigManager::load(AUDIO_RIG_NAME).audio,
+                    RigManager::load(audio_rig_name()).audio,
                     backend.output_only.load(std::sync::atomic::Ordering::Relaxed)
                 );
                 let live = backend.rig.lock_ok().is_some();
@@ -6283,6 +6363,7 @@ impl Rig for GuitarRigBackend {
         m.headphone.mixer = self.phones_status.lock_ok().clone();
         m.master_trim_db = *self.master_trim.lock_ok();
         m.revision = *self.revision.lock_ok();
+        m.instrument = crate::instrument::current().id().to_string();
         m.learn = {
             let learn = self.learn.lock_ok();
             signal_rigs_proto::SwitchLearn {
@@ -7893,6 +7974,10 @@ impl Rig for GuitarRigBackend {
 
     fn reload_config(&self) -> String {
         self.reload_config_now()
+    }
+
+    fn set_instrument(&self, instrument: String) -> String {
+        self.switch_instrument(crate::instrument::Instrument::from_id(&instrument))
     }
 
     fn rename_preset(&self, old: String, new_name: String) {
@@ -11019,7 +11104,7 @@ impl AudioSettings for GuitarRigBackend {
     }
 
     fn prefs(&self) -> AudioPrefs {
-        let mgr = RigManager::load(AUDIO_RIG_NAME);
+        let mgr = RigManager::load(audio_rig_name());
         let a = &mgr.audio;
         let (main, phones, mix) = a.resolved_routing();
         AudioPrefs {
@@ -11040,7 +11125,7 @@ impl AudioSettings for GuitarRigBackend {
     }
 
     fn save_prefs(&self, prefs: AudioPrefs) {
-        let mut mgr = RigManager::load(AUDIO_RIG_NAME);
+        let mut mgr = RigManager::load(audio_rig_name());
         mgr.audio.input_device = prefs.input_device;
         mgr.audio.input_channel = prefs.input_channel as usize;
         mgr.audio.output_device = prefs.output_device;
@@ -11093,7 +11178,9 @@ fn detect_pitch(samples: &[f32], rate: f32) -> Option<f32> {
     }
 
     let min_lag = (rate / 500.0).floor().max(2.0) as usize;
-    let max_lag = ((rate / 60.0).ceil() as usize).min(n / 2);
+    // Down to the playing instrument's lowest note: 60 Hz for the guitar,
+    // a five-string bass's low B (31 Hz) for the bass.
+    let max_lag = ((rate / crate::instrument::current().tuner_floor_hz()).ceil() as usize).min(n / 2);
     let acf = |lag: usize| -> f32 {
         let mut ac = 0.0f32;
         for i in 0..(n - lag) {
@@ -11354,7 +11441,7 @@ enum LevelHome {
 /// and output devices are both enumerable (an empty name is the system
 /// default, present whenever any device is).
 fn audio_device_present() -> bool {
-    let prefs = RigManager::load(AUDIO_RIG_NAME).audio;
+    let prefs = RigManager::load(audio_rig_name()).audio;
     let has = |want: &str, list: Vec<signal_sampler::DeviceInfo>| {
         if want.is_empty() {
             !list.is_empty()
