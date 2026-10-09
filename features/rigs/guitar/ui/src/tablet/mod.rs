@@ -80,7 +80,22 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
         fx_on.set(picked);
         docked.set(!picked);
     });
-    use_context_provider(|| routing::BrowserFocus(Signal::new(None)));
+    let browser_focus = use_context_provider(|| routing::BrowserFocus(Signal::new(None)));
+    // A face's preset name: the browser, on that block's presets.
+    use_context_provider(|| {
+        crate::face_chrome::OpenPresets(Callback::new(move |(_block, block_type): (String, String)| {
+            let mut f = browser_focus.0;
+            f.set(Some(routing::Focus { kind: format!("block:{}", block_type.to_lowercase()), preset: String::new(), variation: String::new(), search: false }));
+            match view() {
+                View::Perform => {
+                    browser.set(true);
+                    routing_on.set(false);
+                }
+                View::Edit => left_browser.set(true),
+                _ => {}
+            }
+        }))
+    });
     // "Patch…" on a section or part, or the presets' search: bring the
     // browser up (in Edit it takes the sidebar; in Build it is already there).
     use_context_provider(|| setlist::PickPart {

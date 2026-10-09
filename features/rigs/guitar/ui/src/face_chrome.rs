@@ -29,6 +29,11 @@ pub fn shows_viz(viz: Option<VizMode>, block: &str) -> bool {
     viz.is_some_and(|v| v.0.read().contains(block))
 }
 
+/// Where a preset name's press goes, where the host has its own browser
+/// (the tablet's): (block, block type).
+#[derive(Clone, Copy)]
+pub struct OpenPresets(pub Callback<(String, String)>);
+
 /// A block's preset: ‹ name ›. The arrows step through its type's presets
 /// (wrapping); the name opens them in the browser.
 #[component]
@@ -45,7 +50,11 @@ pub fn PresetStepper(
     /// corner hides it instead.
     #[props(default)]
     show_empty: bool,
+    /// A finger's size: the arrows and the name tall enough to press.
+    #[props(default)]
+    touch: bool,
 ) -> Element {
+    let open = try_use_context::<OpenPresets>();
     let rig = use_hook(try_consume_context::<RigClient>);
     let select = try_use_context::<crate::module_sidebar::SelectedModule>();
     let comp = try_use_context::<FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
@@ -84,18 +93,29 @@ pub fn PresetStepper(
     if names.is_empty() && !show_empty {
         return rsx! {};
     }
-    let arrow = "font-size: 11px; line-height: 1; color: #a1a1aa; padding: 0 3px; cursor: pointer;";
+    let arrow = if touch {
+        "font-size: 20px; line-height: 1; color: #d4d4d8; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer;"
+    } else {
+        "font-size: 11px; line-height: 1; color: #a1a1aa; padding: 0 3px; cursor: pointer;"
+    };
+    let name_style = if touch {
+        format!("font-size: 14px; font-weight: 650; color: {accent}; max-width: 180px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,0.08);")
+    } else {
+        format!("font-size: 10px; font-weight: 600; color: {accent}; max-width: 118px; overflow: hidden; white-space: nowrap; cursor: pointer; padding: 1px 4px; border-radius: 3px; background: rgba(255,255,255,0.06);")
+    };
     rsx! {
         div { style: "display: flex; align-items: center; gap: 1px; min-width: 0;",
             onclick: move |e: MouseEvent| e.stop_propagation(),
             span { style: "{arrow}", onclick: { let step = step.clone(); move |_| step(-1) }, "‹" }
             span {
-                style: "font-size: 10px; font-weight: 600; color: {accent}; max-width: 118px; overflow: hidden; white-space: nowrap; cursor: pointer; padding: 1px 4px; border-radius: 3px; background: rgba(255,255,255,0.06);",
+                style: "{name_style}",
                 title: "Browse {block}'s presets",
                 onclick: {
                     let (block, block_type) = (block.clone(), block_type.clone());
                     move |_| {
-                        if let Some(s) = select {
+                        if let Some(OpenPresets(o)) = open {
+                            o.call((block.clone(), block_type.clone()));
+                        } else if let Some(s) = select {
                             s.set(crate::module_sidebar::Selection::Block { name: block.clone(), block_type: block_type.clone() });
                         }
                     }

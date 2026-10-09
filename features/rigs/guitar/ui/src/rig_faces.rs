@@ -1140,8 +1140,8 @@ fn self_viewing(f: &FaceEntry) -> bool {
 #[component]
 pub fn PresetCorner(block: String, block_type: String) -> Element {
     rsx! {
-        div { style: "position: absolute; right: 6px; top: 6px; z-index: 5; display: flex; align-items: center; padding: 2px 4px; border-radius: 4px; background: rgba(8,8,8,0.72);",
-            crate::face_chrome::PresetStepper { block, block_type, show_empty: true }
+        div { style: "position: absolute; right: 6px; top: 6px; z-index: 5; display: flex; align-items: center; padding: 2px; border-radius: 8px; background: rgba(8,8,8,0.72);",
+            crate::face_chrome::PresetStepper { block, block_type, touch: true }
         }
     }
 }
