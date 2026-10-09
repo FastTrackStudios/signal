@@ -410,6 +410,9 @@ mod native {
         /// Each block's open face, by the block's id (`None`: it would not
         /// open), with the face's name and the values last applied.
         surfaces: HashMap<String, Option<BlockSurface>>,
+        /// The faces this frame paints again (see `FACES_PER_FRAME`): of
+        /// those with something new, the ones that have waited longest.
+        repaint: Vec<String>,
     }
 
     /// A block face in the manifest.
@@ -425,7 +428,24 @@ mod native {
         face: String,
         live: frame_live::LiveSurface,
         applied: Vec<(String, f64)>,
+        /// Its picture as last painted, in the block's own units (its box
+        /// at the origin), and that box's size: appended under the grid's
+        /// pan and zoom each frame, painted again only when the face has
+        /// something new (`needs_redraw`, paced to `FACE_FPS`). A grid of
+        /// thirty faces otherwise rebuilt every one of them every frame.
+        recorded: Option<(Scene, (f64, f64))>,
+        /// When it was last painted: the longest waiting go first.
+        recorded_at: std::time::Instant,
     }
+
+    /// How often a moving face (an LFO, an echo) is painted again: its
+    /// motion reads smooth at this rate on a block this size, and the grid
+    /// itself still pans and zooms at the display's.
+    const FACE_FPS: u32 = 30;
+    /// How many faces one frame paints again, at most: the moving ones fall
+    /// due together (they share a clock), and painting them all in one
+    /// frame was that frame's whole budget. The rest wait a frame or two.
+    const FACES_PER_FRAME: u32 = 3;
 
     /// The manifest's block faces.
     fn load_block_faces() -> Vec<BlockFaceDef> {
@@ -485,6 +505,7 @@ mod native {
                 texts: HashMap::new(),
                 block_faces: load_block_faces(),
                 surfaces: HashMap::new(),
+                repaint: Vec::new(),
             }))
         });
         // A change of patch, selection or layout: drawn again (the
@@ -689,6 +710,13 @@ mod native {
             let t = Affine::scale(scale) * Affine::translate((s.pan.0, s.pan.1)) * Affine::scale(s.zoom);
             let mut hits: Vec<(Rect, Hit)> = Vec::new();
             let st = &mut *s;
+            let mut due: Vec<(std::time::Instant, String)> = st
+                .surfaces
+                .iter()
+                .filter_map(|(id, b)| b.as_ref().filter(|b| b.live.needs_redraw()).map(|b| (b.recorded_at, id.clone())))
+                .collect();
+            due.sort();
+            st.repaint = due.into_iter().take(FACES_PER_FRAME as usize).map(|(_, id)| id).collect();
 
             // Everything's place: each piece's box, the boxes inside it,
             // its cells.
@@ -814,7 +842,6 @@ mod native {
                 }
             }
             st.hits = hits;
-
             scene
         }
     }
@@ -962,7 +989,10 @@ mod native {
         };
         let slot = st.surfaces.entry(c.id.clone()).or_insert(None);
         if slot.as_ref().is_none_or(|s| s.face != face) {
-            *slot = open_block_face(&face).map(|live| BlockSurface { face: face.clone(), live, applied: Vec::new() });
+            *slot = open_block_face(&face).map(|mut live| {
+                live.set_max_fps(FACE_FPS);
+                BlockSurface { face: face.clone(), live, applied: Vec::new(), recorded: None, recorded_at: std::time::Instant::now() }
+            });
         }
         let Some(s) = slot.as_mut() else { return false };
         let values: Vec<(String, f64)> = c.params.iter().map(|(n, v)| (format!("{ns}/{n}"), *v)).collect();
@@ -976,7 +1006,19 @@ mod native {
             scene.fill(Fill::NonZero, t, Color::from_rgba8(0x17, 0x17, 0x1b, 0xff), None, &RoundedRect::from_rect(r, 9.0));
         }
         let at = if unit { Rect::new(r.x0 + 4.0, r.y0 + BAND + 2.0, r.x1 - 4.0, r.y1 - BAND - 2.0) } else { r.inflate(m, m) };
-        s.live.paint_vectors_at(scene, at.width(), at.height(), (t * Affine::translate((at.x0, at.y0))).as_coeffs());
+        let size = (at.width(), at.height());
+        // A face with no picture yet (or a new size) is painted at once; one
+        // that has only moved waits its turn.
+        let fresh = s.recorded.as_ref().is_none_or(|(_, was)| *was != size);
+        if fresh || st.repaint.contains(&c.id) {
+            s.recorded_at = std::time::Instant::now();
+            let mut rec = Scene::new();
+            s.live.paint_vectors_at(&mut rec, size.0, size.1, Affine::IDENTITY.as_coeffs());
+            s.recorded = Some((rec, size));
+        }
+        if let Some((rec, _)) = &s.recorded {
+            scene.append_scene(rec.clone(), t * Affine::translate((at.x0, at.y0)));
+        }
         true
     }
 
@@ -1111,3 +1153,4 @@ mod native {
         mix(c, Color::from_rgba8(0xff, 0xff, 0xff, 0xff), 0.78)
     }
 }
+
