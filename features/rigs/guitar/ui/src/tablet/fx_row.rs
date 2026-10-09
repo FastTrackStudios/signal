@@ -69,7 +69,7 @@ pub fn FxRow(state: RigViewState) -> Element {
     };
     let one = shown.len() == 1;
     rsx! {
-        div { style: "flex-shrink: 0; height: {FX_H}px; border-top: 1px solid #000; background: #0d0d10; overflow-x: auto; overflow-y: hidden;",
+        div { style: "flex-shrink: 0; height: {FX_H}px; box-sizing: border-box; border-top: 1px solid #000; background: #0d0d10; overflow-x: auto; overflow-y: hidden;",
             div { style: "height: 100%; display: flex; align-items: stretch; justify-content: {pick(one, \"center\", \"flex-start\")}; gap: 1px; width: max-content; min-width: 100%;",
                 for b in shown.into_iter() {
                     {

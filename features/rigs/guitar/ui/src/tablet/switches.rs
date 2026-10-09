@@ -44,6 +44,12 @@ fn LitRing() -> Element {
     rsx! { span { style: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; border: 2px solid rgba(255,255,255,0.85); box-sizing: border-box; pointer-events: none;" } }
 }
 
+/// The dock's two rows: the hold layer a third of it, the switches under
+/// the feet two thirds — of the FX row's height, less the hairline between
+/// and the border on top.
+const HOLD_H: f64 = (super::fx_row::FX_H - 2.0) / 3.0;
+const MAIN_H: f64 = (super::fx_row::FX_H - 2.0) * 2.0 / 3.0;
+
 macro_rules! call {
     ($rig:expr, |$r:ident| $body:expr) => {{
         if let Some($r) = $rig.clone() {
@@ -70,7 +76,9 @@ pub fn TouchSwitches(perf: PerformanceModel) -> Element {
             // One grid, two rows of five, the same columns: the hold layer
             // slim above, the switches under the feet tall below. Flush: a
             // hairline of the ground between.
-            div { style: "display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: 44px 124px; gap: 1px; background: #000; border-top: 1px solid #000;",
+            // As tall as the FX row it swaps with (a landscape iPhone's
+            // room): the grid above never moves.
+            div { style: "display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: {HOLD_H}px {MAIN_H}px; gap: 1px; background: #000; border-top: 1px solid #000; box-sizing: border-box; height: {super::fx_row::FX_H}px;",
                 if let Some(st) = stacks.get(4).cloned() {
                     StackTile { no: 6, stack: st, index: 4, compact: true }
                 } else {
