@@ -510,6 +510,20 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
         let _song = perf_sig.read().song_index;
         measure();
     });
+    // The song's last section playing: the next song kept in view, so what
+    // comes next is always on screen (a section before it keeps the next
+    // section in view itself — `SectionRow`).
+    use_effect(move || {
+        let p = perf_sig.read();
+        let (at, now) = (p.song_index as usize, p.part_index as usize);
+        let last = sections_of(&p.parts).last().is_some_and(|s| s.parts.contains(&now));
+        drop(p);
+        if last && let Some(Some(el)) = rows.peek().get(at + 1).cloned() {
+            spawn(async move {
+                let _ = el.scroll_to(ScrollBehavior::Smooth).await;
+            });
+        }
+    });
     let count = songs.len();
     rsx! {
         section { style: "position: relative; height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: {SHEET}; font-family: {FONT}; color: {INK};",
@@ -1201,6 +1215,18 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, parts: Vec<PerfPart>, s
         v.truncate(count);
         v
     };
+    // The section after the one playing: kept in view as the song moves
+    // on, so what comes next is always on screen.
+    let is_next = up && index > 0 && order.get(index - 1).is_some_and(|s| s.parts.contains(&now));
+    let mut anchor = use_signal(|| None::<Rc<MountedData>>);
+    use_effect(use_reactive!(|is_next, now| {
+        let _ = now;
+        if is_next && let Some(el) = anchor.peek().clone() {
+            spawn(async move {
+                let _ = el.scroll_to(ScrollBehavior::Smooth).await;
+            });
+        }
+    }));
 
     // Pick the part and open the browser on it (the patch picker when
     // there is no browser here).
@@ -1265,6 +1291,8 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, parts: Vec<PerfPart>, s
             items: items.clone(),
             on_pick: pick_handler,
             style: "{pin} display: flex; align-items: center; min-height: 50px; background: {row_bg};",
+            // The row's whole height, for keeping it in view.
+            span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 1px; pointer-events: none;", onmounted: move |e| anchor.set(Some(e.data())) }
             // The grip, in the section's colour: drag to move the section.
             span {
                 "aria-label": "Drag {section.name} to move it",

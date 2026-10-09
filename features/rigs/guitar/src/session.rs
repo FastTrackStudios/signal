@@ -2628,12 +2628,16 @@ impl GuitarRigBackend {
         let routed = self
             .phones_routing
             .load(std::sync::atomic::Ordering::Relaxed);
-        GuitarRig::set_main_pair_mute(routed && mute);
+        // The mute fades (8 ms) on the duplex engine's main pair, routed or
+        // not: one shared pair is everything. Where there is no duplex bus,
+        // the master trim drops instead.
+        let fades = cfg!(any(target_os = "linux", target_os = "macos", target_os = "ios"));
+        GuitarRig::set_main_pair_mute(if fades { mute } else { routed && mute });
         {
             let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
                 prig.rig()
-                    .set_output_trim_db(trim + if mute && !routed { -96.0 } else { 0.0 });
+                    .set_output_trim_db(trim + if mute && !routed && !fades { -96.0 } else { 0.0 });
             }
         }
     }

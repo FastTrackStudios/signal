@@ -221,6 +221,8 @@ pub struct Faces {
     /// The compressor pedal at the head of the drive board (the Pre Comp
     /// block).
     pub pre_comp_pedal: Option<FaceEntry>,
+    /// The Pre Comp's FX-row face: the compressor's scope.
+    pub comp: Option<FaceEntry>,
     /// The patch's level and pan (Patch Trim).
     pub trim: Option<FaceEntry>,
 }
@@ -328,7 +330,7 @@ impl Faces {
                 return Self::default();
             };
             let list = |k: &str| doc.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default();
-            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry), post_comp: doc.get("post_comp").and_then(entry), time_delay: doc.get("time").and_then(|t| t.get("delay")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), time_reverb: doc.get("time").and_then(|t| t.get("reverb")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), modulation: list("modulation"), pre_comp_pedal: doc.get("pre_comp_pedal").and_then(entry), trim: doc.get("trim").and_then(entry) }
+            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry), post_comp: doc.get("post_comp").and_then(entry), time_delay: doc.get("time").and_then(|t| t.get("delay")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), time_reverb: doc.get("time").and_then(|t| t.get("reverb")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), modulation: list("modulation"), pre_comp_pedal: doc.get("pre_comp_pedal").and_then(entry), comp: doc.get("comp").and_then(entry), trim: doc.get("trim").and_then(entry) }
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -356,6 +358,14 @@ impl Faces {
         let list = if reverb { &self.time_reverb } else { &self.time_delay };
         let name = algorithm.to_lowercase();
         list.iter().find(|e| e.words.iter().any(|w| *w == name))
+    }
+
+    /// The face for an input-stage block (the octaver and harmonizer, the
+    /// envelope filter, the volume pedal, the wah, the dive bomb), by its
+    /// preset's or its own name.
+    #[must_use]
+    pub fn input_for(&self, name: &str) -> Option<&FaceEntry> {
+        pick(&self.input, name)
     }
 
     /// The face for a pre effect's block preset.

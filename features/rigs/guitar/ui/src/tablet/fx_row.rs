@@ -23,6 +23,14 @@ fn is_pre(b: &LiveBlock) -> bool {
     b.name.to_lowercase().starts_with("pre ")
 }
 
+/// An input-stage block (ahead of the drives): the octaver and harmonizer,
+/// the envelope filter or wah, the volume pedal, the dive bomb, the
+/// transposer — each wears its own unit.
+fn is_input(b: &LiveBlock) -> bool {
+    let name = b.name.to_lowercase();
+    ["pitch", "harmon", "octav", "filter", "wah", "volume pedal", "dive", "transpose", "doubler"].iter().any(|w| name.contains(w))
+}
+
 /// The face a block wears, if the set has one: a drive slot's pedal, an
 /// amp's capture, the gate, the EQ, the compressors, a delay machine or
 /// reverb algorithm, a modulation effect, a pre effect's pedal, the trim.
@@ -32,6 +40,9 @@ pub fn face_for(b: &LiveBlock, faces: &Faces) -> Option<FaceEntry> {
     }
     let pedal = || faces.pre(&b.preset).or_else(|| faces.pre(&b.name)).cloned();
     let param = |name: &str| b.params.iter().find(|p| p.name == name).map(|p| p.value.round().max(0.0) as usize);
+    if is_input(b) {
+        return faces.input_for(&b.preset).or_else(|| faces.input_for(&b.name)).cloned();
+    }
     match b.block_type {
         // A drive slot: its pedal, by the preset's name or the capture's.
         BlockType::Drive | BlockType::Boost if !is_pre(b) => faces.drive(&b.preset).or_else(|| faces.drive(&b.detail)).cloned().or_else(pedal),
@@ -39,7 +50,9 @@ pub fn face_for(b: &LiveBlock, faces: &Faces) -> Option<FaceEntry> {
         BlockType::Cabinet => faces.cab.clone(),
         BlockType::Gate => faces.gate.clone(),
         BlockType::Eq => faces.eq.clone(),
-        BlockType::Compressor if b.name.to_lowercase().contains("pre") => faces.pre_comp_pedal.clone().or_else(pedal),
+        // The Pre Comp: the compressor's scope (its curve, its gain
+        // reduction), as its block in the grid shows it.
+        BlockType::Compressor if b.name.to_lowercase().contains("pre") => faces.comp.clone().or_else(|| faces.pre_comp_pedal.clone()).or_else(pedal),
         BlockType::Compressor => faces.post_comp.clone(),
         BlockType::Delay if !is_pre(b) => faces.time(false, crate::control::DELAY_ALGOS.get(param("style").unwrap_or(1)).copied().unwrap_or("")).cloned(),
         BlockType::Reverb if !is_pre(b) => faces.time(true, crate::control::VERB_ALGOS.get(param("algorithm").unwrap_or(1)).copied().unwrap_or("")).cloned(),
@@ -49,24 +62,51 @@ pub fn face_for(b: &LiveBlock, faces: &Faces) -> Option<FaceEntry> {
     }
 }
 
+/// An input-stage slot the patch leaves empty (`slot:Filter`), as a block
+/// of its kind, off: the row shows the unit it would be.
+fn slot_block(id: &str) -> Option<LiveBlock> {
+    let (name, block_type) = match id.strip_prefix("slot:")? {
+        "Filter" => ("Filter", BlockType::Filter),
+        "Pitch" => ("Pitch", BlockType::Pitch),
+        "Comp" => ("Pre Comp", BlockType::Compressor),
+        _ => return None,
+    };
+    Some(LiveBlock {
+        id: id.to_string(),
+        engine: 0,
+        block_type,
+        name: name.to_string(),
+        bypassed: true,
+        param_name: None,
+        param_value: 0.0,
+        param_min: 0.0,
+        param_max: 1.0,
+        output_level_db: None,
+        detail: String::new(),
+        asset: String::new(),
+        module: String::new(),
+        empty: false,
+        params: Vec::new(),
+        preset: String::new(),
+        options: Vec::new(),
+        option: 0,
+        overridden: false,
+    })
+}
+
 #[component]
 pub fn FxRow(state: RigViewState) -> Element {
     let sel = use_context::<RoutingSel>().0;
     let faces = use_faces();
     let blocks = state.blocks.read().clone();
-    // What it shows: the selection among the rest of its module (the drive
-    // board, the time column) — the row's width is the module's, the pick
-    // outlined — else the drive board, else the chain's first block's module.
-    let picked = match sel() {
-        Some(Selected::Block(id)) => Some(id),
-        _ => None,
-    };
+    // What it shows: a block picked, alone, the whole row its own; a module
+    // picked, its blocks side by side; nothing picked, the drive board's
+    // first pedal.
     let first = || blocks.iter().find(|b| b.block_type == BlockType::Drive && !b.empty).or_else(|| blocks.first()).map(|b| b.id.clone());
     let shown: Vec<LiveBlock> = match sel().or_else(|| first().map(Selected::Block)) {
-        Some(Selected::Block(id)) => {
-            let module = super::routing::canvas_modules(&blocks, &faces).into_iter().map(|m| m.ids()).find(|ids| ids.contains(&id)).unwrap_or_else(|| vec![id.clone()]);
-            module.iter().filter_map(|m| blocks.iter().find(|b| &b.id == m && (!b.empty || b.id == id))).cloned().collect()
-        }
+        // A block: the whole row its own. An empty slot of the input stage
+        // (the patch has no filter, say): its unit, off.
+        Some(Selected::Block(id)) => blocks.iter().filter(|b| b.id == id).cloned().collect::<Vec<_>>().into_iter().next().or_else(|| slot_block(&id)).into_iter().collect(),
         Some(Selected::Module(_, ids)) => blocks.iter().filter(|b| ids.contains(&b.id)).cloned().collect(),
         None => Vec::new(),
     };
@@ -77,12 +117,8 @@ pub fn FxRow(state: RigViewState) -> Element {
                 for b in shown.into_iter() {
                     {
                         let face = face_for(&b, &faces);
-                        let mark = !one && picked.as_deref() == Some(b.id.as_str());
                         rsx! {
                             div { key: "{b.id}", style: "position: relative; flex-shrink: 0; height: 100%; display: flex; align-items: stretch;",
-                                if mark {
-                                    span { style: "position: absolute; inset: 0; z-index: 2; border: 2px solid {INK}; border-radius: 4px; pointer-events: none;" }
-                                }
                                 match face {
                                     // One block: its face fills the row's box.
                                     Some(f) if one => rsx! {
@@ -90,8 +126,17 @@ pub fn FxRow(state: RigViewState) -> Element {
                                             BlockFace { block: b.clone(), face: f.at_box(FX_W, FX_H), fill: true, stepper: true }
                                         }
                                     },
-                                    // A module's: each at the row's height.
-                                    Some(f) => rsx! { BlockFace { block: b.clone(), face: f.at(crate::control::Tier::Ipad) } },
+                                    // A module's: each in a box the row's height
+                                    // and its own proportion, so each fits whole.
+                                    Some(f) => {
+                                        let f = f.at(crate::control::Tier::Ipad);
+                                        let w = (FX_H * f.size.0 / f.size.1.max(1.0)).round();
+                                        rsx! {
+                                            div { style: "width: {w}px; height: 100%;",
+                                                BlockFace { block: b.clone(), face: f, fill: true }
+                                            }
+                                        }
+                                    }
                                     None => rsx! {
                                         div { style: "width: {pick(one, FX_W, 260.0)}px; height: 100%; padding: 12px; box-sizing: border-box;",
                                             NameCard { block: b.clone(), aspect: (pick(one, FX_W, 260.0), FX_H) }
