@@ -64,8 +64,9 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut docked = use_signal(|| true);
     // Perform's middle: the routing grid, unless it's switched off.
     let mut routing_on = use_signal(|| true);
-    // Perform's FX row: the selected block's controls, docked over the
-    // switches; a block picked in the grid brings it up.
+    // Perform's FX row: the selected block's controls, in the switches'
+    // place — a block picked in the grid brings it up, nothing picked (a
+    // tap on the bare grid) puts the switches back.
     let mut fx_on = use_signal(|| false);
     let mut browser = use_signal(|| false);
     // Edit's left pane: the browser, or the sidebar a tap away.
@@ -74,11 +75,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let pick = use_context_provider(|| BuildPick { part: Signal::new(None), building: Signal::new(false) });
     // Edit's routing selection, and where it points the browser.
     let routing_sel = use_context_provider(|| routing::RoutingSel(Signal::new(None))).0;
-    use_effect(move || {
-        if routing_sel().is_some() {
-            fx_on.set(true);
-        }
-    });
+    use_effect(move || fx_on.set(routing_sel().is_some()));
     use_context_provider(|| routing::BrowserFocus(Signal::new(None)));
     // "Patch…" on a section or part: pick it and bring the browser up for
     // it (in Build it is already there).
@@ -159,8 +156,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                                 }
                                 if fx_on() {
                                     fx_row::FxRow { state }
-                                }
-                                if docked() {
+                                } else if docked() {
                                     div { style: "flex-shrink: 0;", switches::TouchSwitches { perf: model.clone() } }
                                 }
                             },
