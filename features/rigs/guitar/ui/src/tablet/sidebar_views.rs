@@ -55,6 +55,17 @@ fn Header(title: String, sub: String, icon: Option<String>) -> Element {
 
 // ── Presets ────────────────────────────────────────────────────────────────
 
+/// The kinds of sound a variation can be: what the list sorts by.
+const ROLES: [&str; 5] = ["Clean", "Crunch", "Drive", "Lead", "Ambient"];
+
+/// The role a variation's name says, if any.
+fn role_of(variation: &str) -> Option<&'static str> {
+    let v = variation.to_lowercase();
+    ROLES.iter().find(|r| v.contains(&r.to_lowercase())).copied()
+}
+
+/// The presets: the loaded one first, open on its variations; then the
+/// rest, sortable by the kind of sound their variations are.
 #[component]
 pub fn PresetView(state: RigViewState) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -64,46 +75,66 @@ pub fn PresetView(state: RigViewState) -> Element {
     let l = lib.read().clone();
     let perf: PerformanceModel = state.perf.read().clone();
     let mut open = use_signal(|| None::<String>);
+    let mut role = use_signal(|| None::<&'static str>);
     let playing = c.active_preset.clone();
-    let opened = open().or_else(|| (!playing.is_empty()).then(|| playing.clone()));
-    let variations: usize = c.presets.iter().map(|p| p.snapshots.len()).sum();
+    let loaded = c.presets.iter().find(|p| p.name == playing).cloned();
+    let fits = |p: &signal_guitar_proto::PresetEntry| role().is_none_or(|r| p.snapshots.iter().any(|s| role_of(&s.name) == Some(r)));
+    let rest: Vec<signal_guitar_proto::PresetEntry> = c.presets.iter().filter(|p| p.name != playing && fits(p)).cloned().collect();
+    let chip = |on: bool| format!("height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid {}; background: {}; color: {}; font-size: 13px; font-weight: 650; font-family: {FONT}; display: flex; align-items: center; gap: 6px; cursor: pointer; flex-shrink: 0;", pick(on, INK_2, RULE_STRONG), pick(on, "rgba(255,255,255,0.08)", "transparent"), pick(on, INK, INK_2));
     rsx! {
         section { style: "height: 100%; display: flex; flex-direction: column; min-height: 0; background: {SHEET}; font-family: {FONT}; color: {INK};",
-            Header { title: "Presets".to_string(), sub: format!("{} presets · {variations} variations", c.presets.len()), icon: None }
             div { style: "flex: 1; min-height: 0; overflow-y: auto;",
-                for p in c.presets.iter().cloned() {
+                // The one loaded: big, its variations under it.
+                if let Some(p) = loaded.clone() {
+                    div { style: "border-bottom: 1px solid {RULE}; background: {ROW_ON};",
+                        div { style: "display: flex; flex-direction: column; gap: 3px; padding: 16px 16px 10px;",
+                            span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: {LIVE};", "LOADED" }
+                            span { style: "font-size: 22px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
+                            span { style: "font-size: 13px; color: {INK_3};", "{c.active_snapshot} · {p.snapshots.len()} variations" }
+                        }
+                        Variations { preset: p.name.clone(), variations: p.snapshots.iter().map(|s| s.name.clone()).collect::<Vec<_>>(), playing: (c.active_preset.clone(), c.active_snapshot.clone()) }
+                    }
+                }
+                // Sort the rest by the kind of sound.
+                div { style: "display: flex; gap: 6px; padding: 12px 14px; overflow-x: auto; border-bottom: 1px solid {RULE};",
+                    button { style: "{chip(role().is_none())}", onclick: move |_| role.set(None), "All" }
+                    for r in ROLES {
+                        button { key: "{r}", style: "{chip(role() == Some(r))}", onclick: move |_| role.set(if role() == Some(r) { None } else { Some(r) }),
+                            span { style: "width: 8px; height: 8px; border-radius: 2px; background: {tape_mark(r)};" }
+                            "{r}"
+                        }
+                    }
+                }
+                for p in rest.into_iter() {
                     {
-                        let is_playing = p.name == playing;
-                        let is_open = opened.as_deref() == Some(p.name.as_str());
+                        let is_open = open().as_deref() == Some(p.name.as_str());
                         // The swatch: the tape of the stack it plays in.
                         let swatch = tape_mark(&stack_for(&perf, &l, &perf.profile_name, &p.name));
-                        let first = p.snapshots.first().map(|s| s.name.clone()).unwrap_or_default();
+                        let first = p.snapshots.iter().find(|s| role().is_none_or(|r| role_of(&s.name) == Some(r))).or(p.snapshots.first()).map(|s| s.name.clone()).unwrap_or_default();
                         let rig = rig.clone();
                         let name = p.name.clone();
+                        let shown: Vec<String> = p.snapshots.iter().map(|s| s.name.clone()).filter(|s| role().is_none_or(|r| role_of(s) == Some(r))).collect();
                         let n = p.snapshots.len();
                         rsx! {
                             div { key: "{p.name}", style: "border-bottom: 1px solid {RULE};",
                                 button {
-                                    style: "position: relative; width: 100%; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px 0 16px; text-align: left; border: none; background: {pick(is_playing, ROW_ON, CLEAR)}; color: {INK}; font-family: {FONT}; cursor: pointer;",
+                                    style: "position: relative; width: 100%; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px 0 16px; text-align: left; border: none; background: {CLEAR}; color: {INK}; font-family: {FONT}; cursor: pointer;",
                                     onclick: move |_| {
-                                        open.set(if is_open { Some(String::new()) } else { Some(name.clone()) });
-                                        if !is_playing {
+                                        open.set(if is_open { None } else { Some(name.clone()) });
+                                        if !is_open {
                                             let (n, f) = (name.clone(), first.clone());
                                             call!(rig, |r| r.choose_preset(n, f));
                                         }
                                     },
-                                    if is_playing {
-                                        span { style: "position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: {LIVE};" }
-                                    }
                                     span { style: "width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; background: {swatch};" }
-                                    span { style: "flex: 1; min-width: 0; font-size: 16px; font-weight: {pick(is_playing, 700, 600)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
-                                    span { style: "font-size: 13px; color: {INK_3};", "{n} {pick(n == 1, \"variation\", \"variations\")}" }
+                                    span { style: "flex: 1; min-width: 0; font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", "{p.name}" }
+                                    span { style: "font-size: 13px; color: {INK_3};", "{n}" }
                                     svg { key: "{is_open}", width: "10", height: "6", view_box: "0 0 10 6",
                                         path { d: pick(is_open, "M1 5 L5 1 L9 5", "M1 1 L5 5 L9 1"), fill: "none", stroke: INK_3, stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round" }
                                     }
                                 }
                                 if is_open {
-                                    Variations { preset: p.name.clone(), variations: p.snapshots.iter().map(|s| s.name.clone()).collect::<Vec<_>>(), playing: (c.active_preset.clone(), c.active_snapshot.clone()) }
+                                    Variations { preset: p.name.clone(), variations: shown, playing: (c.active_preset.clone(), c.active_snapshot.clone()) }
                                 }
                             }
                         }
@@ -136,6 +167,9 @@ fn Variations(preset: String, variations: Vec<String>, playing: (String, String)
                             },
                             span { style: "width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; box-sizing: border-box; {state_dot(on, INK_3)}" }
                             span { style: "flex: 1; font-size: 15px; font-weight: {pick(on, 700, 560)}; color: {pick(on, INK, INK_2)};", "{v}" }
+                            if let Some(r) = role_of(&v) {
+                                span { style: "width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; background: {tape_mark(r)};" }
+                            }
                             if on { span { style: "font-size: 12px; font-weight: 700; color: {LIVE};", "Playing" } }
                         }
                     }
