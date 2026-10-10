@@ -71,10 +71,6 @@ pub fn TopBar(model: PerformanceModel, state: RigViewState, sidebar: bool, on_si
                 ModeTabs { mode: model.perform_mode }
             }
             span { style: "flex: 1;" }
-            // Which instrument the rig is, and the way to the other (or back
-            // to the instrument menu).
-            InstrumentButton { instrument: model.instrument.clone() }
-            Rule {}
             // Audio not running: a badge that starts it (or, after a
             // failure, restarts it).
             if !*state.running.read() {
@@ -496,59 +492,3 @@ const AMBER: &str = "#fbbf24";
 /// A link that is up but struggling (the prototype's "warn").
 const WARN: &str = "#eab308";
 
-/// The instrument the rig is — Guitar or Bass — as a button whose menu
-/// switches to the other, or (inside the app) goes back to the instrument
-/// menu. Through the app when it hosts the rig, so the app remembers the
-/// instrument to open on; to the rig directly when nothing hosts it.
-#[component]
-fn InstrumentButton(instrument: String) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
-    let popup = PopupHost::try_use();
-    let host = try_use_context::<crate::phone::PhoneHost>();
-    let bass = instrument == "bass";
-    let label = if bass { "Bass" } else { "Guitar" };
-    let mut items = vec![
-        Item::head("Instrument"),
-        Item::run("guitar", "Guitar").checked(!bass),
-        Item::run("bass", "Bass").checked(bass),
-    ];
-    if host.is_some() {
-        items.push(Item::Sep);
-        items.push(Item::run("menu", "All instruments"));
-    }
-    let on_pick = EventHandler::new(move |p: Picked| {
-        let id: &'static str = match p.id.as_str() {
-            "guitar" => "guitar",
-            "bass" => "bass",
-            "menu" => {
-                if let Some(h) = host {
-                    h.on_home.call(());
-                }
-                return;
-            }
-            _ => return,
-        };
-        if let Some(h) = host {
-            h.on_instrument.call(id);
-        } else if let Some(r) = rig.clone() {
-            spawn(async move {
-                let _ = r.set_instrument(id.to_string()).await;
-            });
-        }
-    });
-    rsx! {
-        button {
-            "aria-label": "Instrument: {label}",
-            style: "height: {TOP_H}px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: none; background: transparent; color: {INK}; font-size: 15px; font-weight: 700; font-family: {FONT}; cursor: pointer;",
-            onclick: move |e: MouseEvent| {
-                let (c, el) = (e.client_coordinates(), e.element_coordinates());
-                let (left, top) = (c.x - el.x, c.y - el.y);
-                super::menu::open_menu_by(popup, left, top + f64::from(TOP_H) + 4.0, top, items.clone(), on_pick);
-            },
-            "{label}"
-            svg { width: "10", height: "6", view_box: "0 0 10 6",
-                path { d: "M1 1l4 4 4-4", fill: "none", stroke: INK_2, stroke_width: "1.6", stroke_linecap: "round", stroke_linejoin: "round" }
-            }
-        }
-    }
-}

@@ -377,8 +377,23 @@ fn SetupTabs(tab: SetupTab, options: bool, on_tab: EventHandler<SetupTab>) -> El
         (SetupTab::Audio, "Audio", r.name.clone(), format!("{} · {} · {:.1} ms", khz(r.rate), r.buffer, latency_ms(&r))),
         (SetupTab::Midi, "MIDI", c.name.clone(), format!("{} · {}", c.device, dev.map_or("USB", |d| d.1))),
     ];
+    // The way back to the app's instruments — here in Setup, two steps from
+    // the stage, so a rig is never left by accident mid-song.
+    let host = try_use_context::<crate::phone::PhoneHost>();
+    let columns = if host.is_some() { "auto repeat(3, minmax(0, 1fr))" } else { "repeat(3, minmax(0, 1fr))" };
     rsx! {
-        div { style: "flex-shrink: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); height: {HEADER_H}px; border-bottom: 1px solid {RULE}; background: {SHEET}; box-sizing: border-box;",
+        div { style: "flex-shrink: 0; display: grid; grid-template-columns: {columns}; height: {HEADER_H}px; border-bottom: 1px solid {RULE}; background: {SHEET}; box-sizing: border-box;",
+            if let Some(h) = host {
+                button {
+                    "aria-label": "Back to the instruments",
+                    style: "height: 100%; min-width: {HIT}px; display: flex; align-items: center; gap: 8px; padding: 0 18px; border: none; border-right: 1px solid {RULE}; background: transparent; color: {INK_2}; font-size: 15px; font-weight: 650; font-family: {FONT}; cursor: pointer;",
+                    onclick: move |_| h.on_home.call(()),
+                    svg { width: "9", height: "15", view_box: "0 0 9 15",
+                        path { d: "M7.5 1.5 1.5 7.5l6 6", fill: "none", stroke: INK_2, stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round" }
+                    }
+                    "Instruments"
+                }
+            }
             for (i, (id, label, name, sub)) in tabs.into_iter().enumerate() {
                 {
                     let on = id == tab;
