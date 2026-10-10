@@ -242,12 +242,15 @@ const RAIL_W: u32 = 60;
 /// island: 37 points wide, 11 in from the edge).
 const HOUSING: u32 = 54;
 
-/// What the app around the rig gives it on a phone: the way back to the
-/// instrument menu (the iPhone app's front door). Absent where the rig is
-/// the whole app (the Android remote, the desktop shot tool).
+/// What the app around the rig gives it on a phone or an iPad: the way
+/// back to the instrument menu (the app's front door), and a switch to the
+/// rig's other instrument (`guitar`, `bass`) that the app remembers as the
+/// one to open on. Absent where the rig is the whole app (the Android
+/// remote, the desktop shot tool).
 #[derive(Clone, Copy)]
 pub struct PhoneHost {
     pub on_home: Callback<()>,
+    pub on_instrument: Callback<&'static str>,
 }
 
 /// Which side the camera housing is on, for a phone on its side: `true`

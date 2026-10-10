@@ -207,7 +207,17 @@ fn Router() -> Element {
             }
         },
         MobileScreen::Rig { bass } => rsx! {
-            GuitarPage { bass, on_home: to_menu }
+            GuitarPage {
+                bass,
+                on_home: to_menu,
+                // The other instrument, from inside the rig: remembered as
+                // the one to open on, and the page told which it is.
+                on_instrument: move |id: &'static str| {
+                    let rig = if id == "bass" { Rig::Bass } else { Rig::Guitar };
+                    crate::rigs::store_last(Some(rig));
+                    screen.set(MobileScreen::for_rig(rig));
+                },
+            }
         },
         #[cfg(feature = "signal-keys-rig")]
         MobileScreen::Keys => rsx! {
@@ -230,9 +240,10 @@ fn MenuPage(on_pick: EventHandler<Rig>) -> Element {
 /// (frame's phone faces, a page at a time). Its rail's Rigs button comes
 /// back here.
 #[component]
-fn GuitarPage(bass: bool, on_home: EventHandler<()>) -> Element {
+fn GuitarPage(bass: bool, on_home: EventHandler<()>, on_instrument: EventHandler<&'static str>) -> Element {
     use_context_provider(|| PhoneHost {
         on_home: Callback::new(move |()| on_home.call(())),
+        on_instrument: Callback::new(move |id| on_instrument.call(id)),
     });
     // The bass is this rig as another instrument: the engine is told which.
     use_effect(use_reactive!(|bass| {
