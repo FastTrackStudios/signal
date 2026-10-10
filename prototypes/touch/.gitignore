@@ -1,0 +1,4 @@
+node_modules
+dist
+# Guitar photos are local only (third-party images; the repo is public).
+public/guitars/

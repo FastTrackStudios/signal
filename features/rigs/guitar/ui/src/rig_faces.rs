@@ -57,6 +57,9 @@ pub struct FaceEntry {
     /// face's flip arrow (`<ns>/flip`) turns it over.
     pub back: Option<String>,
     pub back_dark: Option<String>,
+    /// The face made for the iPad's FX row (`row` in the manifest): its
+    /// face and size. [`for_row`](Self::for_row) takes it.
+    pub row: Option<(String, (f64, f64))>,
 }
 
 /// A face's version for one tier — and its proportions there (`variants`:
@@ -79,11 +82,67 @@ pub struct FaceTier {
 impl FaceEntry {
     /// This face laid out for `tier`: its version for that room, or the
     /// nearest smaller one it has (a phone's in a strip's room), else
-    /// itself.
+    /// itself. The face itself IS the desktop design: a desktop room never
+    /// borrows a smaller tier's version (the Mac drew every amp as the
+    /// phone's upright combo).
     #[must_use]
     pub fn at(&self, tier: crate::control::Tier) -> Self {
-        let best = self.tiers.iter().filter(|(t, _)| *t >= tier && *t < crate::control::Tier::Desktop).min_by_key(|(t, _)| *t);
-        let best = best.or_else(|| self.tiers.iter().filter(|(t, _)| *t <= tier).max_by_key(|(t, _)| *t));
+        use crate::control::Tier;
+        let best = self.tiers.iter().filter(|(t, _)| *t >= tier && *t < Tier::Desktop).min_by_key(|(t, _)| *t);
+        let floor = if tier >= Tier::Desktop { Tier::Desktop } else { Tier::Strip };
+        let best = best.or_else(|| self.tiers.iter().filter(|(t, _)| *t <= tier && *t >= floor).max_by_key(|(t, _)| *t));
+        let mut f = self.clone();
+        if let Some((_, t)) = best {
+            f.face.clone_from(&t.face);
+            f.dark.clone_from(&t.dark);
+            f.size = t.size;
+            f.back.clone_from(&t.back);
+            f.back_dark.clone_from(&t.back_dark);
+            f.variants.clone_from(&t.variants);
+            if let Some(k) = t.time_knob {
+                f.time_knob = k;
+            }
+            if let Some(n) = t.nameplate {
+                f.nameplate = n;
+            }
+        }
+        f
+    }
+
+    /// The version of this face (the face itself, or a tier's) whose
+    /// proportions are nearest a `w` × `h` box: a wide, short lane draws the
+    /// lane version even on a desktop, a tall box the upright unit.
+    #[must_use]
+    /// For the iPad's FX row, `w` × `h`: the face made for it where there
+    /// is one, else the layout nearest its proportions ([`at_box`](Self::at_box)).
+    #[must_use]
+    pub fn for_row(&self, w: f64, h: f64) -> Self {
+        match &self.row {
+            Some((face, size)) => {
+                let mut f = self.clone();
+                f.face.clone_from(face);
+                f.size = *size;
+                f.variants.clear();
+                f.tiers.clear();
+                f.back = None;
+                f.dark = None;
+                f
+            }
+            None => self.at_box(w, h),
+        }
+    }
+
+    pub fn at_box(&self, w: f64, h: f64) -> Self {
+        if w <= 0.0 || h <= 0.0 {
+            return self.clone();
+        }
+        let want = (w / h).ln();
+        let off = |size: (f64, f64)| ((size.0 / size.1.max(1.0)).ln() - want).abs();
+        let best = self
+            .tiers
+            .iter()
+            .filter(|(_, t)| off(t.size) < off(self.size))
+            .min_by(|a, b| off(a.1.size).total_cmp(&off(b.1.size)));
         let mut f = self.clone();
         if let Some((_, t)) = best {
             f.face.clone_from(&t.face);
@@ -184,6 +243,8 @@ pub struct Faces {
     /// The compressor pedal at the head of the drive board (the Pre Comp
     /// block).
     pub pre_comp_pedal: Option<FaceEntry>,
+    /// The Pre Comp's FX-row face: the compressor's scope.
+    pub comp: Option<FaceEntry>,
     /// The patch's level and pan (Patch Trim).
     pub trim: Option<FaceEntry>,
 }
@@ -274,7 +335,11 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
     let time_knob = v.get("time_knob").and_then(serde_json::Value::as_bool).unwrap_or(false);
     let back = v.get("back").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
     let back_dark = v.get("back_dark").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
-    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark, tiers, nameplate, time_knob, back, back_dark })
+    let row = v.get("row").and_then(|r| {
+        let s = r.get("size")?.as_array()?;
+        Some((format!("{SET}/{}", r.get("face")?.as_str()?), (s.first()?.as_f64()?, s.get(1)?.as_f64()?)))
+    });
+    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark, tiers, nameplate, time_knob, back, back_dark, row })
 }
 
 impl Faces {
@@ -291,7 +356,7 @@ impl Faces {
                 return Self::default();
             };
             let list = |k: &str| doc.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default();
-            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry), post_comp: doc.get("post_comp").and_then(entry), time_delay: doc.get("time").and_then(|t| t.get("delay")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), time_reverb: doc.get("time").and_then(|t| t.get("reverb")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), modulation: list("modulation"), pre_comp_pedal: doc.get("pre_comp_pedal").and_then(entry), trim: doc.get("trim").and_then(entry) }
+            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry), post_comp: doc.get("post_comp").and_then(entry), time_delay: doc.get("time").and_then(|t| t.get("delay")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), time_reverb: doc.get("time").and_then(|t| t.get("reverb")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), modulation: list("modulation"), pre_comp_pedal: doc.get("pre_comp_pedal").and_then(entry), comp: doc.get("comp").and_then(entry), trim: doc.get("trim").and_then(entry) }
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -319,6 +384,14 @@ impl Faces {
         let list = if reverb { &self.time_reverb } else { &self.time_delay };
         let name = algorithm.to_lowercase();
         list.iter().find(|e| e.words.iter().any(|w| *w == name))
+    }
+
+    /// The face for an input-stage block (the octaver and harmonizer, the
+    /// envelope filter, the volume pedal, the wah, the dive bomb), by its
+    /// preset's or its own name.
+    #[must_use]
+    pub fn input_for(&self, name: &str) -> Option<&FaceEntry> {
+        pick(&self.input, name)
     }
 
     /// The face for a pre effect's block preset.
@@ -441,6 +514,9 @@ pub fn BlockFace(
     /// among them too.
     #[props(default)]
     members: Vec<(String, String)>,
+    /// Live readings for the face (see `FrameSurface::streams`).
+    #[props(default)]
+    streams: Vec<(String, Vec<f64>)>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     // The nameplate: the preset playing, printed by the face.
@@ -521,6 +597,7 @@ pub fn BlockFace(
                 variants: face.variants.clone(),
                 values,
                 texts,
+                streams,
                 on_edit: move |(addr, value): (String, f64)| {
                     // The flip arrow: the other side.
                     if addr.ends_with("/flip") {
@@ -793,6 +870,15 @@ pub fn DrivesRow(
     /// …and no taller than this (points).
     #[props(default)]
     fit_height: Option<f64>,
+    /// Only the pedals the board plays: no native boost, no empty slots
+    /// (the desktop's grid, where room is the pedals').
+    #[props(default)]
+    pedals_only: bool,
+    /// The `leading` unit's width (points), fixed — where the board fits
+    /// its pedals to a width, the rest is theirs. It takes the native
+    /// boost's slot.
+    #[props(default)]
+    leading_width: Option<f64>,
 ) -> Element {
     let faces = use_faces();
     // Each pedal at the window's tier (on a phone, its narrow version).
@@ -802,6 +888,12 @@ pub fn DrivesRow(
         blocks
             .iter()
             .filter(|b| matches!(b.block_type, BlockType::Boost | BlockType::Drive))
+            // A sized leading unit takes the native boost's slot: no pedal
+            // there to draw, and the room is the pedals'. (A captured boost
+            // is a Drive block, and stays.)
+            .filter(|b| !((pedals_only || (leading_width.is_some() && leading.is_some())) && b.block_type == BlockType::Boost))
+            // …and the board's empty slots: room for the pedals there are.
+            .filter(|b| !((pedals_only || (leading_width.is_some() && leading.is_some())) && b.empty))
             .map(|b| (b.clone(), (!b.empty).then(|| faces.drive(&b.preset).map(|f| f.at(tier))).flatten())),
     );
     let last = slots.len().saturating_sub(1);
@@ -811,7 +903,9 @@ pub fn DrivesRow(
         let aspects: f64 = slots.iter().map(|(_, f)| f.as_ref().map_or(PEDAL.0 / PEDAL.1, |f| f.size.0 / f.size.1)).sum();
         // Fitted, the cables take their least: the pedals get the room.
         let cables = TIGHT_CABLE * last as f64 + 2.0 * TIGHT_CABLE;
-        ((w - cables) / aspects.max(0.1)).max(60.0).min(fit_height.unwrap_or(f64::MAX))
+        // A leading unit of a known width, and its cable, come off the top.
+        let lead = leading_width.filter(|_| leading.is_some()).map_or(0.0, |l| l + TIGHT_CABLE);
+        ((w - cables - lead) / aspects.max(0.1)).max(60.0).min(fit_height.unwrap_or(f64::MAX))
     });
     let tight = fit_width.is_some();
     let slot_size = pedal_h.map_or_else(|| "height: 100%;".to_string(), |h| format!("height: {h:.0}px; align-self: center;"));
@@ -822,7 +916,13 @@ pub fn DrivesRow(
             Cable { end: CableEnd::In, tight }
             if let Some(lead) = leading {
                 // Its own dark ground: a unit on the board, not a hole in it.
-                div { style: "position: relative; height: 100%; min-height: 0; flex: 0 1 300px; min-width: 200px; display: flex; background: #0b0c0f; border-radius: 6px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,0.6);",
+                div { style: if let Some(lw) = leading_width {
+                        // At least its width; the board's spare room is
+                        // its too (the pedals stop at their height).
+                        format!("position: relative; height: 100%; min-height: 0; flex: 8 1 {lw:.0}px; min-width: {lw:.0}px; max-width: 420px; display: flex; background: #0b0c0f; border-radius: 6px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,0.6);")
+                    } else {
+                        "position: relative; height: 100%; min-height: 0; flex: 0 1 300px; min-width: 200px; display: flex; background: #0b0c0f; border-radius: 6px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,0.6);".to_string()
+                    },
                     {lead}
                 }
                 Cable { end: CableEnd::Between, tight }
@@ -841,6 +941,9 @@ pub fn DrivesRow(
         }
     }
 }
+
+/// Between the units of a fitted pane (points).
+const FIT_GAP: f64 = 4.0;
 
 /// The board under the pedals: dark anodised rails across it, barely lit
 /// along their top edges (the board stays behind the pedals; the black
@@ -921,6 +1024,13 @@ pub fn AmpRow(
     /// for those).
     #[props(default)]
     amps_only: bool,
+    /// The box the amps must fit (the phone's page: the screen less the
+    /// rail, the housing's clearance and the bars). At full height three
+    /// amp heads are wider than a phone, and ran on under the rail and off
+    /// the screen; given this, every amp shrinks by the same factor until
+    /// the row fits, centred.
+    #[props(default)]
+    fit: Option<(f64, f64)>,
 ) -> Element {
     let faces = use_faces();
     // Each amp at the window's tier (upright on a phone).
@@ -937,6 +1047,30 @@ pub fn AmpRow(
     let eq = blocks.iter().find(|b| b.block_type == BlockType::Eq && b.name.eq_ignore_ascii_case("Amp EQ")).cloned();
     let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned().filter(|_| !amps_only);
     let one = amps.len() == 1 && !amps_only;
+    // Fitted: each amp's box, in points — its face's proportion at the
+    // page's height, scaled down together until the row is no wider than
+    // the page.
+    if let Some((fw, fh)) = fit {
+        let face_of = |b: &LiveBlock| faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).map(|f| f.at(tier));
+        let aspect = |b: &LiveBlock| face_of(b).map_or(AMP.0 / AMP.1, |f| f.size.0 / f.size.1.max(1.0));
+        let total: f64 = amps.iter().map(|b| fh * aspect(b)).sum();
+        let scale = if total > fw && total > 0.0 { fw / total } else { 1.0 };
+        let h = (fh * scale).floor();
+        return rsx! {
+            div { style: "display: flex; flex-direction: row; align-items: center; justify-content: center; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden;",
+                for b in amps {
+                    {
+                        let w = (h * aspect(&b)).floor();
+                        rsx! {
+                            div { key: "{b.id}", style: "flex: 0 0 {w}px; width: {w}px; height: {h}px; display: flex; min-width: 0; min-height: 0;",
+                                BlockPanel { face: face_of(&b), block: b.clone(), card: AMP }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
     rsx! {
         Row {
             for b in amps {
@@ -1006,8 +1140,8 @@ fn self_viewing(f: &FaceEntry) -> bool {
 #[component]
 pub fn PresetCorner(block: String, block_type: String) -> Element {
     rsx! {
-        div { style: "position: absolute; right: 6px; top: 6px; z-index: 5; display: flex; align-items: center; padding: 2px 4px; border-radius: 4px; background: rgba(8,8,8,0.72);",
-            crate::face_chrome::PresetStepper { block, block_type, show_empty: true }
+        div { style: "position: absolute; right: 6px; top: 6px; z-index: 5; display: flex; align-items: center; padding: 2px; border-radius: 8px; background: rgba(8,8,8,0.72);",
+            crate::face_chrome::PresetStepper { block, block_type, touch: true }
         }
     }
 }
@@ -1024,6 +1158,13 @@ pub fn PreFxRow(
     /// the lanes (delay over reverb) — the phone shows them as two pages.
     #[props(default)]
     part: PrePart,
+    /// The box (points) of a desktop pane: the units stacked as lanes, as
+    /// the phone's, each face the version that fits a lane of it.
+    #[props(default)]
+    fit: Option<(f64, f64)>,
+    /// Only the lane of this type (the pre delay, or the pre reverb).
+    #[props(default)]
+    only: Option<BlockType>,
 ) -> Element {
     let faces = use_faces();
     let pre: Vec<LiveBlock> = blocks
@@ -1034,7 +1175,18 @@ pub fn PreFxRow(
     // By its preset, else by the block itself (Pre Mod's unit for any).
     // Each at the window's tier.
     let tier = crate::control::use_tier();
-    let picked: Vec<(LiveBlock, Option<FaceEntry>)> = pre.iter().map(|b| (b.clone(), faces.pre(&b.preset).or_else(|| faces.pre(&b.name)).map(|f| f.at(tier)))).collect();
+    // A pre tremolo with no preset of its own (Pre Motion, empty): the
+    // Gravity Tank, as any pre modulation is the Pre Mod unit.
+    let picked: Vec<(LiveBlock, Option<FaceEntry>)> = pre
+        .iter()
+        .map(|b| {
+            let face = faces
+                .pre(&b.preset)
+                .or_else(|| faces.pre(&b.name))
+                .or_else(|| (b.block_type == BlockType::Trem).then(|| faces.pre("gravity tank trem")).flatten());
+            (b.clone(), face.map(|f| f.at(tier)))
+        })
+        .collect();
     let absorbed: Vec<String> = picked
         .iter()
         .filter_map(|(_, f)| f.as_ref())
@@ -1060,8 +1212,15 @@ pub fn PreFxRow(
     // The delay and the reverb as lanes, stacked — delay on top — in the
     // Time module's form and one lane's width, at the right; the rest (the
     // tremolo) before them — for the look, not the chain's order.
-    let laned = |(b, f, _): &(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)| f.is_some() && matches!(b.block_type, BlockType::Delay | BlockType::Reverb);
-    let lanes: Vec<(LiveBlock, FaceEntry, Vec<(String, LiveBlock)>)> = items.iter().filter(|i| laned(i)).filter_map(|(b, f, e)| f.clone().map(|f| (b.clone(), f, e.clone()))).collect();
+    // A delay or reverb is a lane with a face or without (an empty slot is
+    // still the Delay/Verb page's, not the units').
+    let laned = |(b, _, _): &(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)| matches!(b.block_type, BlockType::Delay | BlockType::Reverb);
+    let lanes: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = items
+        .iter()
+        .filter(|i| laned(i) && only.is_none_or(|t| i.0.block_type == t))
+        .cloned()
+        .map(|(b, f, e)| (b, f.map(|f| fit.map_or(f.clone(), |(w, h)| f.at_box(w, h / if only.is_some() { 1.0 } else { 2.0 }))), e))
+        .collect();
     let items: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = if part == PrePart::Lanes { Vec::new() } else { items.into_iter().filter(|i| !laned(i)).collect() };
     let lanes = if part == PrePart::Units { Vec::new() } else { lanes };
     // The lanes on their own page take the width; in the row, one Time
@@ -1069,16 +1228,26 @@ pub fn PreFxRow(
     let lane_flex = if part == PrePart::Lanes { "1 1 0%" } else { "0 0 50.93%" };
     // Pre modulation takes what the tremolo and the lanes leave.
     let is_mod = |b: &LiveBlock| b.block_type == BlockType::Chorus;
+    // The units with a face: the lanes a fitted box is shared between.
+    let faced = items.iter().filter(|(_, f, _)| f.is_some()).count();
     rsx! {
         Row {
             // On a phone the units are lanes, stacked (as the Mod / Motion
             // page's): pre modulation over the tremolo.
-            if part == PrePart::Units && tier <= crate::control::Tier::Phone {
-                div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
+            if part == PrePart::Units && (tier <= crate::control::Tier::Phone || fit.is_some()) {
+                // Each lane at most half the page (a face lays itself out
+                // for its box, so one alone at full height came out twice
+                // its size and ran off both sides), centred when alone.
+                div { style: "display: flex; flex-direction: column; justify-content: center; width: 100%; height: 100%; min-height: 0;",
                     for (b, f, _) in items.iter().cloned() {
-                        if let Some(f) = f {
-                            div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
-                                BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some(b.block_type.as_str().to_string()), tempo_bpm: Some(tempo_bpm), algos: unit_algos(&b) }
+                        if let Some(f) = f.map(|f| fit.map_or(f.clone(), |(w, h)| f.at_box(w, h / faced.max(1) as f64))) {
+                            // In a fitted box the units share it, each near
+                            // its own proportions; on the phone's page each
+                            // takes at most half.
+                            div { key: "{b.id}", style: if fit.is_some() { "position: relative; flex: 1 1 0%; min-height: 0; display: flex;" } else { "flex: 0 1 50%; min-height: 0; display: flex;" },
+                                div { style: if fit.is_some() { crate::control::lane_fit(fit.map(|(w, h)| (w, h / faced.max(1) as f64)), f.size) } else { "display: flex; flex: 1 1 0%; min-width: 0; min-height: 0;".to_string() },
+                                BlockFace { block: b.clone(), face: f.clone(), fill: true, preset_type: Some(b.block_type.as_str().to_string()), tempo_bpm: Some(tempo_bpm), algos: unit_algos(&b) }
+                                }
                             }
                         }
                     }
@@ -1116,10 +1285,17 @@ pub fn PreFxRow(
                 // half of that (32.5 % × 1.15 / 2 = 18.69 % of the group),
                 // and this row is 36.7 % of the group (control.rs):
                 // 18.69 / 36.7.
-                div { style: "flex: {lane_flex}; min-width: 0; height: 100%; display: flex; flex-direction: column; border-left: 1px solid #1d1f24;",
+                // Each lane at most half the height, centred when alone (as
+                // the units above).
+                div { style: "flex: {lane_flex}; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: center; border-left: 1px solid #1d1f24;",
                     for (b, f, extra) in lanes {
-                        div { key: "{b.id}", style: "flex: 1 1 0%; min-height: 0; display: flex;",
-                            BlockFace { block: b.clone(), face: f, extra, fill: true, stepper: true, preset_type: Some(b.block_type.as_str().to_string()), tempo_bpm: Some(tempo_bpm) }
+                        // One lane alone in a fitted pane fills it.
+                        div { key: "{b.id}", style: if only.is_some() && fit.is_some() { "flex: 1 1 0%; min-height: 0; display: flex;" } else { "flex: 0 1 50%; min-height: 0; display: flex;" },
+                            if let Some(f) = f {
+                                BlockFace { block: b.clone(), face: f, extra, fill: true, stepper: true, preset_type: Some(b.block_type.as_str().to_string()), tempo_bpm: Some(tempo_bpm) }
+                            } else {
+                                BlockPanel { block: b.clone(), face: None, card: PEDAL }
+                            }
                         }
                     }
                 }
@@ -1202,6 +1378,11 @@ pub fn InputRow(
     /// `filter`) — a page of the phone's chain; empty for all.
     #[props(default)]
     only: Vec<String>,
+    /// The box (points) the units must fit — a pane of the desktop's grid:
+    /// every unit at its own proportions, one scale, wrapped into the rows
+    /// that let them be largest.
+    #[props(default)]
+    fit: Option<(f64, f64)>,
 ) -> Element {
     let faces = use_faces();
     let want = |k: &str| only.is_empty() || only.iter().any(|o| o == k);
@@ -1224,7 +1405,7 @@ pub fn InputRow(
     // On a phone a page's units are lanes, stacked, in the page's order:
     // each its face's phone tier, its preset on its nameplate.
     let tier = crate::control::use_tier();
-    if tier <= crate::control::Tier::Phone && !only.is_empty() {
+    if (tier <= crate::control::Tier::Phone || fit.is_some()) && !only.is_empty() {
         let lanes: Vec<(String, Option<LiveBlock>, Option<FaceEntry>)> = only
             .iter()
             .map(|k| {
@@ -1242,6 +1423,44 @@ pub fn InputRow(
                 (k.clone(), b, f.map(|f| f.at(tier)))
             })
             .collect();
+        if fit.is_some() {
+            let lanes: Vec<(String, Option<LiveBlock>, FaceEntry)> = lanes.into_iter().filter_map(|(k, b, f)| f.map(|f| (k, b, f))).collect();
+            // One unit alone fills the box: a face lays itself out for its
+            // room (the Q-Tron goes wide, its filter screen beside it).
+            if let [(k_, b, f)] = lanes.as_slice() {
+                let (k_, b, f) = (k_.clone(), b.clone(), f.clone());
+                return rsx! {
+                    div { key: "{k_}", style: "display: flex; width: 100%; height: 100%; min-height: 0; min-width: 0; overflow: hidden;",
+                        if let Some(b) = b {
+                            BlockFace { block: b.clone(), face: f, fill: true, stepper: true, preset_type: Some(b.block_type.as_str().to_string()) }
+                        } else {
+                            UnboundFace { face: f, fill: true }
+                        }
+                    }
+                };
+            }
+            // Several: side by side at the pane's height, each the version
+            // of its face that fits an even share of the pane (the octaver
+            // beside the harmonizer, not the four-voice ladder), then each
+            // its share of the width by that version's proportions, laid
+            // out for its box.
+            let (fw, fh) = fit.unwrap_or_default();
+            let share = fw / lanes.len().max(1) as f64;
+            let lanes: Vec<(String, Option<LiveBlock>, FaceEntry)> = lanes.into_iter().map(|(k, b, f)| (k, b, f.at_box(share, fh))).collect();
+            return rsx! {
+                div { style: "display: flex; flex-direction: row; gap: {FIT_GAP}px; width: 100%; height: 100%; min-height: 0; min-width: 0; overflow: hidden; box-sizing: border-box; padding: 2px;",
+                    for (k_, b, f) in lanes {
+                        div { key: "{k_}", style: "flex: {f.size.0 / f.size.1.max(1.0):.3} 1 0%; min-width: 0; min-height: 0; height: 100%; display: flex;",
+                            if let Some(b) = b {
+                                BlockFace { block: b.clone(), face: f.clone(), fill: true, preset_type: Some(b.block_type.as_str().to_string()) }
+                            } else {
+                                UnboundFace { face: f.clone(), fill: true }
+                            }
+                        }
+                    }
+                }
+            };
+        }
         // The pedal pages are a board: the pedals side by side at their
         // own proportions, all one scale, the largest that fits — as the
         // drives. The rest are lanes, stacked.

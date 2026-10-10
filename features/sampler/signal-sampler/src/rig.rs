@@ -611,6 +611,8 @@ struct InputMeterShared {
     /// Bumped when `inject` changes; the probe re-reads it (and restarts the
     /// loop) when it sees a new value, so the audio thread only locks then.
     inject_gen: std::sync::atomic::AtomicU64,
+    /// The guitar's trim and input EQ, applied before the chain.
+    tone: crate::input_stage::InputTone,
 }
 
 /// Mono window the tuner runs autocorrelation over. At 48 kHz this covers
@@ -738,6 +740,8 @@ struct InputProbe {
     /// Where the chain's input is kept for the output stage (a voice fading
     /// out goes on hearing the guitar — see `tail_stage`).
     share: Option<Arc<crate::tail_stage::InputShare>>,
+    /// The guitar's trim and input EQ.
+    stage: crate::input_stage::InputStage,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -753,6 +757,7 @@ impl InputProbe {
             inject_pos: 0,
             inject_gen: 0,
             share: None,
+            stage: crate::input_stage::InputStage::default(),
         }
     }
 
@@ -788,7 +793,8 @@ impl PluginInstance for InputProbe {
     fn latency(&mut self) -> u32 {
         0
     }
-    fn prepare(&mut self, _sr: f64, _bs: u32) -> Result<(), PluginError> {
+    fn prepare(&mut self, sr: f64, _bs: u32) -> Result<(), PluginError> {
+        self.stage.prepare(sr);
         self.prepared = true;
         Ok(())
     }
@@ -804,6 +810,11 @@ impl PluginInstance for InputProbe {
         _events: &PluginEvents<'_>,
     ) -> Result<(), PluginError> {
         let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
+        // The guitar's own trim and EQ first: everything after — the
+        // meters, the tuner, the gate's key, the chain — hears it trimmed.
+        out_l[..frames].copy_from_slice(&in_l[..frames]);
+        out_r[..frames].copy_from_slice(&in_r[..frames]);
+        self.stage.process(&self.shared.tone, &mut out_l[..frames], &mut out_r[..frames]);
         let muted = self.shared.input_muted.load(Ordering::Relaxed);
         // A new test signal (or its removal): re-read it, from the top. Only
         // locks when the generation moved, and never waits for the lock.
@@ -834,7 +845,7 @@ impl PluginInstance for InputProbe {
                         self.fake_pos = (self.fake_pos + 1) % w.len();
                         (v, v)
                     }
-                    None => (in_l[i], in_r[i]),
+                    None => (out_l[i], out_r[i]),
                 }
             };
             // Muted: the chain gets silence (trails keep ringing) while
@@ -2174,6 +2185,24 @@ impl GuitarRig {
         self.take_output_capture()
     }
 
+    /// What the audio session says about input, on one line — `None` where
+    /// there is no session (everywhere but iOS).
+    #[must_use]
+    pub fn session_report() -> Option<String> {
+        daw_audio_io::session_report()
+    }
+
+    /// Whether the app may read inputs at all — on iOS, the microphone
+    /// access the player gave: `"granted"`, `"denied"` or `"undetermined"`.
+    #[must_use]
+    pub fn input_access() -> &'static str {
+        match daw_audio_io::input_access() {
+            daw_audio_io::InputAccess::Granted => "granted",
+            daw_audio_io::InputAccess::Denied => "denied",
+            daw_audio_io::InputAccess::Undetermined => "undetermined",
+        }
+    }
+
     /// List available input devices (name + channel count + native rate).
     #[must_use]
     pub fn input_devices() -> Vec<DeviceInfo> {
@@ -2210,9 +2239,9 @@ impl GuitarRig {
     /// Live phones-bus levels (headphone volume + self-mix) — forwarded to
     /// the duplex engine's lock-free bus for routed interfaces.
     pub fn set_phones_levels(volume: f32, self_mix: f32) {
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
         daw::standalone::audio_engine::PhonesBus::shared().set(volume, self_mix);
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
         let _ = (volume, self_mix); // cpal fallback: no routed phones bus yet
     }
 
@@ -2220,18 +2249,27 @@ impl GuitarRig {
     /// itself — off while the separate headphone mixer (`signal-phones`)
     /// plays the mix.
     pub fn set_phones_blend(on: bool) {
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
         daw::standalone::audio_engine::PhonesBus::shared().set_blend_mix(on);
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
         let _ = on;
+    }
+
+    /// The output check: a tone on `output` (1 main, 2 phones), on its
+    /// `left` and/or `right` side; neither stops it.
+    pub fn set_test_tone(output: u32, left: bool, right: bool) {
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
+        daw::standalone::audio_engine::PhonesBus::shared().set_test_tone(output, left, right);
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
+        let _ = (output, left, right);
     }
 
     /// Mute the main output pair only (routed interfaces): the phones keep
     /// the signal.
     pub fn set_main_pair_mute(on: bool) {
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
         daw::standalone::audio_engine::PhonesBus::shared().set_main_mute(on);
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
         let _ = on;
     }
 
@@ -2836,6 +2874,11 @@ impl GuitarRig {
     /// Look up a slot by id.
     pub fn slot_info(&self, id: ModelId) -> Option<&SlotInfo> {
         self.slots.iter().find(|s| s.id == id)
+    }
+
+    /// The guitar's own trim and input EQ, before the chain (Setup).
+    pub fn set_input_tone(&self, v: crate::input_stage::ToneValues) {
+        self.input_meter.tone.set(v);
     }
 
     pub fn set_input_trim_db(&self, db: f32) {

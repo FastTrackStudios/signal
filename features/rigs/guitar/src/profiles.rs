@@ -187,7 +187,7 @@ pub fn drive_presets() -> Vec<DrivePresetDef> {
 /// One patch: a name in the profile + the preset it points at + the
 /// overrides that make it different from the preset (the domain's
 /// `Patch { target, overrides }` — see `signal_proto::overrides`).
-#[derive(Clone, Debug, Facet)]
+#[derive(Default, Clone, Debug, Facet)]
 pub struct PatchDef {
     pub name: String,
     /// The song this patch belongs to — empty for the profile's own. A
@@ -215,6 +215,16 @@ pub struct PatchDef {
     pub snapshot: String,
     /// This patch's own module picks, replacing the preset snapshot's for
     /// those modules — what choosing on the board saves.
+    /// The preset this patch plays (`tones.styx`): a sound made of picks
+    /// — a Core, a Time, block presets, a few edits — shared by every patch
+    /// naming it. The patch's own picks and edits go on top. Empty: none.
+    #[facet(default)]
+    pub tone: String,
+    /// What kind of sound it is — one of [`ROLES`]: Clean, Crunch, Drive,
+    /// Lead, Ambient — so its name needn't say it. Empty: as its stack or
+    /// its variation says (see [`PatchDef::role_in`]).
+    #[facet(default)]
+    pub role: String,
     #[facet(default)]
     pub modules: Vec<ModuleChoiceDef>,
     /// This patch's own block presets — a single delay, a reverb — over
@@ -376,10 +386,57 @@ impl OverrideDef {
     }
 }
 
+/// The kinds of sound a patch is tagged with: what a stack holds, what the
+/// browser sorts by.
+pub const ROLES: [&str; 5] = ["Clean", "Crunch", "Drive", "Lead", "Ambient"];
+
+/// `s` as a role, if it names one.
+#[must_use]
+pub fn role_named(s: &str) -> Option<&'static str> {
+    ROLES.iter().find(|r| r.eq_ignore_ascii_case(s.trim())).copied()
+}
+
 impl PatchDef {
+    /// The kind of sound this is: its own tag, else its stack's (`stack`,
+    /// when that names a role), else its variation's.
+    #[must_use]
+    pub fn role_in(&self, stack: &str) -> String {
+        role_named(&self.role).or_else(|| role_named(stack)).or_else(|| role_named(&self.snapshot)).unwrap_or_default().to_string()
+    }
+
     /// The unique module names this patch overrides (for the UI's
     /// override badges).
     #[must_use]
+    /// What a footswitch says the patch plays: its preset's name, where it
+    /// plays one; else its Core (`preset ·
+    /// snapshot`) — the amp it plays, for a patch on no Core yet — and its
+    /// Time module, when it picks one (`Worship · Clean + Dream Delay`).
+    #[must_use]
+    pub fn tone_label(&self) -> String {
+        // A patch playing a preset is that sound.
+        if !self.tone.is_empty() {
+            return self.tone.clone();
+        }
+        let core = if self.rig_preset.is_empty() {
+            // On no Core yet: the amp it plays.
+            self.preset.clone()
+        } else if self.snapshot.is_empty() || self.snapshot.eq_ignore_ascii_case(&self.rig_preset) {
+            self.rig_preset.clone()
+        } else {
+            format!("{} · {}", self.rig_preset, self.snapshot)
+        };
+        let time = self
+            .modules
+            .iter()
+            .find(|m| m.module.eq_ignore_ascii_case("Time") && !m.preset.is_empty())
+            .map(|m| m.preset.clone());
+        match time {
+            Some(t) if !core.is_empty() => format!("{core} + {t}"),
+            Some(t) => t,
+            None => core,
+        }
+    }
+
     pub fn override_modules(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for ov in &self.overrides {
@@ -393,7 +450,7 @@ impl PatchDef {
 
 /// The editable profile definition: the preset pool, the patches pointing
 /// into it, and the footswitch stacks grouping the patches.
-#[derive(Clone, Debug, Facet)]
+#[derive(Default, Clone, Debug, Facet)]
 pub struct ProfileDef {
     /// Drive-slot assignments (block → drive preset + selected option).
     pub drives: Vec<DriveSlotDef>,
@@ -413,7 +470,7 @@ pub struct ProfileDef {
 }
 
 /// A footswitch stack: a name and its patch rotation.
-#[derive(Clone, Debug, Facet)]
+#[derive(Default, Clone, Debug, Facet)]
 pub struct StackDef {
     pub name: String,
     pub patches: Vec<String>,
@@ -457,12 +514,14 @@ pub fn worship_def() -> ProfileDef {
         no_rotate: false,
     };
     let patch = |name: &str, preset: &str| PatchDef {
+        role: String::new(),
         song: String::new(),
         name: name.to_string(),
         preset: preset.to_string(),
         preset2: String::new(),
         rig_preset: String::new(),
         snapshot: String::new(),
+        tone: String::new(),
         modules: Vec::new(),
         blocks: Vec::new(),
         drives: Vec::new(),
@@ -732,6 +791,15 @@ fn drive_board(drives: &[DriveSlotDef], dps: &[DrivePresetDef], patch: RigPatch)
 }
 
 #[must_use]
+/// A chain fitted to its instrument: the bass's is the guitar's less what a
+/// bass has no use for — the Pre-FX in front of the amp, the Motion
+/// module; it keeps Modulation and Time.
+pub(crate) fn fit_to_instrument(patch: &mut RigPatch, instrument: crate::instrument::Instrument) {
+    if instrument == crate::instrument::Instrument::Bass {
+        patch.chain.retain(|b| b.module != PRE_FX && b.module != "Motion");
+    }
+}
+
 pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
     // One amp + its cab — the same shape for "Amp L" and "Amp R"; with both
     // loaded the engine runs the two stages in parallel. A `.nam` that is
@@ -812,6 +880,14 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 "Harmonizer",
                 &[("semitones", "4"), ("cents", "0"), ("a_level", "0.6"), ("b_semitones", "7"), ("b_level", "0.5"), ("dry", "1"), ("mix", "0.5")],
             ))
+            // The envelope filter (a Q-Tron, a bass's auto-wah, a synth
+            // sweep): a resonant band-pass low in the range that the
+            // playing opens three octaves up.
+            .with_block(off_fx(
+                BlockType::Filter,
+                "Filter",
+                &[("mode", "2"), ("cutoff", "0.43"), ("resonance", "0.45"), ("env_octaves", "3"), ("env_sens", "0.5"), ("env_attack", "4"), ("env_release", "140"), ("mix", "1")],
+            ))
             // Volume pedal (clean gain, unity default) — the Control view's
             // left pedal drives it.
             .with_block(on_fx(
@@ -883,18 +959,20 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 ),
                 "Amp",
             ))
-            // The amp EQ ships with the electric-guitar "magic frequencies"
-            // preset (eq-ui cheatsheet zones): low cut at 80 Hz, then flat
-            // named bells on body / character / honk / presence.
+            // The amp EQ is on and flat: bells at 0 dB on the electric
+            // guitar's "magic frequencies" (eq-ui cheatsheet zones) — low end,
+            // body, character, honk, presence — ready to be dialled, no low
+            // cut until one is wanted. Flat, it is the sound as it was
+            // bypassed.
             .with_block(in_module(
-                off_fx(
+                on_fx(
                     BlockType::Eq,
                     "Amp EQ",
                     &[
                         ("b1_used", "1"),
                         ("b1_on", "1"),
                         ("b1_freq", "80"),
-                        ("b1_shape", "3"),
+                        ("b1_shape", "0"),
                         ("b2_used", "1"),
                         ("b2_on", "1"),
                         ("b2_freq", "212"),
@@ -982,7 +1060,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     // Its algorithm stored (Hall, the engine's default) so
                     // a preset or snapshot can switch it: an override only
                     // sets a param the block has.
-                    &[("mix", "1"), ("level", "-20"), ("algorithm", "1"), ("decay", "0.85"), ("size", "0.92")],
+                    &[("mix", "1"), ("level", "-20"), ("algorithm", "1"), ("decay", "0.85"), ("size", "0.5")],
                 ),
                 "Time",
             ))
@@ -1029,6 +1107,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             nam_of(&p.preset2),
             cab_of(&p.preset2),
         );
+        fit_to_instrument(&mut patch, crate::instrument::current());
         set_patch_trim(&mut patch, p.level_db + p.trim_db);
         assign_meters(&mut patch);
         apply_overrides(&mut patch, &p.overrides);
@@ -1077,6 +1156,22 @@ pub fn assign_meters(patch: &mut RigPatch) {
         }
     }
 }
+/// The presets' module name in the composition model (the sidebar's
+/// "Preset" tab), and the one snapshot each shows.
+pub const TONE_MODULE: &str = "Preset";
+pub const TONE_SNAPSHOT: &str = "Main";
+/// The patch Preset mode edits a preset on: the active profile's while a
+/// preset is up, never saved with it.
+pub const PRESET_BENCH: &str = "\u{25C6} Preset";
+
+/// The Cloud reverb's index in the Reverb block's `algorithm` list.
+pub const CLOUD_ALGORITHM: usize = 4;
+
+/// Where a reverb switched to Cloud lands: 8 seconds. Cloud maps `decay`
+/// (0..1) onto 1–120 s logarithmically (reverb-dsp's `CLOUD_T60`), so
+/// 8 s is ln 8 / ln 120.
+pub const CLOUD_DEFAULT_DECAY: f32 = 0.434_35;
+
 /// The pedal-style compressor at the head of the chain.
 pub const PRE_COMP: &str = "Pre Comp";
 /// The studio-style compressor after the amp, in the Amp module.
@@ -1090,6 +1185,8 @@ pub const PRE_FX: &str = "Pre FX";
 /// its drive board (the Drive module), its amps (the Amp module), the gate,
 /// the amp EQ and the post compressor. A patch's preset *is* its Core.
 pub const CORE: &str = "Core";
+/// The amp module: Amp L (and R), their cabs.
+pub const AMP_MODULE: &str = "Amp";
 
 /// The transposer: the first block of the chain.
 pub const TRANSPOSE: &str = "Transpose";
@@ -1617,6 +1714,14 @@ pub struct PartRecallDef {
     /// common case: a chorus is usually the verse's sound with one or two
     /// things changed, not a different rig.
     pub patch: String,
+    /// The part plays a whole stack (its first patch, then wherever the
+    /// switch steps it) instead of a patch. Empty: [`patch`](Self::patch).
+    #[facet(default)]
+    pub stack: String,
+    /// The part plays a preset's variation (`Preset · Variation`) instead of
+    /// a patch. Empty: [`patch`](Self::patch).
+    #[facet(default)]
+    pub preset: String,
     /// What this section changes on top of the patch.
     ///
     /// The point of a section. Recalling a whole patch is the blunt version
@@ -1715,13 +1820,50 @@ pub struct SetlistEntryDef {
     pub key: String,
     /// Per-set tempo override; 0 = the song's default.
     pub bpm: u32,
+    /// The patch it starts on in this set; empty = the song's own start.
+    #[facet(default)]
+    pub start: String,
 }
 
 /// A named setlist (e.g. "XR Wednesday 7-8-26").
 #[derive(Clone, Debug, Facet)]
 pub struct SetlistDef {
     pub name: String,
+    /// The day it is played (`YYYY-MM-DD`): on that day the rig opens on it.
+    /// Empty: the date in the name, if there is one ("HSM 10-6-26").
+    #[facet(default)]
+    pub date: String,
+    /// The recurring event it is for ("HSM"); empty for a one-off.
+    #[facet(default)]
+    pub event: String,
+    /// A title of its own ("Worship Night"); empty: named by event and day.
+    #[facet(default)]
+    pub title: String,
+    /// The profile every song plays on unless it has its own; empty keeps
+    /// whatever is loaded.
+    #[facet(default)]
+    pub profile: String,
     pub entries: Vec<SetlistEntryDef>,
+}
+
+impl SetlistDef {
+    /// The day this set is played: `date`, else a `M-D-YY` (or `M/D/YYYY`)
+    /// in its name.
+    #[must_use]
+    pub fn day(&self) -> Option<chrono::NaiveDate> {
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(self.date.trim(), "%Y-%m-%d") {
+            return Some(d);
+        }
+        self.name.split_whitespace().find_map(|word| {
+            let parts: Vec<u32> = word
+                .split(['-', '/'])
+                .map(|p| p.parse().ok())
+                .collect::<Option<_>>()?;
+            let [m, d, y] = parts[..] else { return None };
+            let year = if y < 100 { 2000 + y } else { y };
+            chrono::NaiveDate::from_ymd_opt(i32::try_from(year).ok()?, m, d)
+        })
+    }
 }
 
 /// The song library — defaults live here; sets override per entry.
@@ -1767,11 +1909,16 @@ pub fn default_setlists() -> Vec<SetlistDef> {
             song: song.to_string(),
             key: String::new(),
             bpm: 0,
+            start: String::new(),
         }
     }
     vec![
         SetlistDef {
             name: "XR Wednesday 7-8-26".to_string(),
+            date: String::new(),
+            event: String::new(),
+            title: String::new(),
+            profile: String::new(),
             entries: vec![
                 entry("What a God"),
                 entry("No Other Name"),
@@ -1780,6 +1927,10 @@ pub fn default_setlists() -> Vec<SetlistDef> {
         },
         SetlistDef {
             name: "CYA 7-9-26".to_string(),
+            date: String::new(),
+            event: String::new(),
+            title: String::new(),
+            profile: String::new(),
             entries: vec![
                 entry("WASHED"),
                 entry("Who Else"),
@@ -1949,6 +2100,28 @@ pub fn import_drive_capture(
     DriveImport::Slot {
         preset: group.to_string(),
         block: (*block).to_string(),
+    }
+}
+
+#[cfg(test)]
+mod setlist_day_tests {
+    use super::SetlistDef;
+
+    fn set(name: &str, date: &str) -> SetlistDef {
+        SetlistDef { name: name.into(), date: date.into(), event: String::new(), title: String::new(), profile: String::new(), entries: Vec::new() }
+    }
+
+    #[test]
+    fn a_setlist_is_dated_by_its_date_or_the_date_in_its_name() {
+        let day = |y, m, d| chrono::NaiveDate::from_ymd_opt(y, m, d);
+        assert_eq!(set("HSM 10-6-26 Worship Night", "").day(), day(2026, 10, 6));
+        assert_eq!(set("Kids Ministry 10-7-26 Worship Night", "").day(), day(2026, 10, 7));
+        assert_eq!(set("XR Wednesday 7-8-26", "").day(), day(2026, 7, 8));
+        assert_eq!(set("Easter 4/5/2026", "").day(), day(2026, 4, 5));
+        // The date field wins over the name's.
+        assert_eq!(set("HSM 10-6-26", "2026-11-01").day(), day(2026, 11, 1));
+        assert_eq!(set("Sunday Set", "").day(), None);
+        assert_eq!(set("Set 13-40-26", "").day(), None, "no such day");
     }
 }
 
@@ -2754,5 +2927,92 @@ mod module_of_block_tests {
         assert_eq!(module_of_block("Chorus", BlockType::Chorus), None);
         assert_eq!(module_of_block("Tremolo", BlockType::Trem), None);
         assert_eq!(module_of_block("Pitch", BlockType::Pitch), None);
+    }
+}
+
+#[cfg(test)]
+mod tone_label_tests {
+    use super::{ModuleChoiceDef, PatchDef};
+
+    fn patch() -> PatchDef {
+        PatchDef {
+            role: String::new(),
+            song: String::new(),
+            name: "Clean Verb".into(),
+            preset: "Fender Clean".into(),
+            preset2: String::new(),
+            rig_preset: String::new(),
+            snapshot: String::new(),
+            tone: String::new(),
+            modules: Vec::new(),
+            blocks: Vec::new(),
+            drives: Vec::new(),
+            trim_db: 0.0,
+            level_db: 0.0,
+            boost_db: 0.0,
+            overrides: Vec::new(),
+            macros: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_switch_names_the_core_and_the_time_module() {
+        let mut p = patch();
+        // On no Core yet: the amp.
+        assert_eq!(p.tone_label(), "Fender Clean");
+        p.rig_preset = "Worship".into();
+        p.snapshot = "Clean".into();
+        assert_eq!(p.tone_label(), "Worship · Clean");
+        p.modules.push(ModuleChoiceDef { module: "Time".into(), preset: "Dream Delay".into(), snapshot: String::new() });
+        assert_eq!(p.tone_label(), "Worship · Clean + Dream Delay");
+    }
+}
+
+#[cfg(test)]
+mod cloud_default_tests {
+    /// Cloud's law (reverb-dsp `decay_to_t60` over `CLOUD_T60` = 1–120 s)
+    /// puts the default at 8 seconds.
+    #[test]
+    fn a_cloud_lands_at_eight_seconds() {
+        let t60 = 1.0_f64 * (120.0_f64 / 1.0).powf(f64::from(super::CLOUD_DEFAULT_DECAY));
+        assert!((t60 - 8.0).abs() < 0.01, "{t60}");
+    }
+}
+
+#[cfg(test)]
+mod role_tests {
+    use super::*;
+
+    #[test]
+    fn a_patch_is_the_kind_its_tag_or_stack_or_variation_says() {
+        let mut p = PatchDef { name: "Edge".into(), role: String::new(), snapshot: "Crunch".into(), ..patch_for_roles() };
+        assert_eq!(p.role_in(""), "Crunch", "its variation's, untagged and in no stack");
+        assert_eq!(p.role_in("Lead"), "Lead", "its stack's before its variation's");
+        assert_eq!(p.role_in("Special"), "Crunch", "a stack that names no role says nothing");
+        p.role = "ambient".into();
+        assert_eq!(p.role_in("Lead"), "Ambient", "its own tag first, as the role is spelled");
+        p.role = "Funky".into();
+        assert_eq!(p.role_in(""), "Crunch", "a tag that is no role is none");
+    }
+
+    fn patch_for_roles() -> PatchDef {
+        PatchDef {
+            role: String::new(),
+            song: String::new(),
+            name: String::new(),
+            preset: String::new(),
+            preset2: String::new(),
+            rig_preset: String::new(),
+            snapshot: String::new(),
+            tone: String::new(),
+            modules: Vec::new(),
+            blocks: Vec::new(),
+            drives: Vec::new(),
+            trim_db: 0.0,
+            level_db: 0.0,
+            boost_db: 0.0,
+            overrides: Vec::new(),
+            macros: Vec::new(),
+        }
     }
 }

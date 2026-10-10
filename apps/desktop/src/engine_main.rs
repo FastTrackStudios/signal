@@ -154,14 +154,12 @@ async fn async_main() {
     // wiring is identical.
     let guitar = GuitarRigBackend::new();
     guitar.start(); // worship rig: open audio + load profile off-thread
-    let bass = signal_bass::BassRigBackend::new(); // dormant until started
     let drums = signal_drums::DrumRigBackend::new(); // dormant until started
     let keys = signal_keys::KeysRigBackend::new(); // dormant until started
     let synth = signal_synth_rig::SynthRigBackend::new(); // dormant until started
 
     let router = guitar
         .router()
-        .merge_router(bass.router())
         .merge_router(drums.router())
         .merge_router(keys.router())
         .merge_router(synth.router());
@@ -187,7 +185,6 @@ async fn async_main() {
         }};
     }
     let router = mount_core!(router, Rig::Guitar, guitar.clone());
-    let router = mount_core!(router, Rig::Bass, bass.clone());
     let router = mount_core!(router, Rig::Drums, drums.clone());
     let router = mount_core!(router, Rig::Keys, keys.clone());
     let router = mount_core!(router, Rig::Synth, synth.clone());

@@ -21,6 +21,13 @@
 
 use dioxus::prelude::*;
 
+/// Whether the rig is playing — the faces' lamps, tape and wavefronts are
+/// the unit at work, so with it stopped they hold still and the window
+/// stops redrawing them (a phone sat idle at ~35 animated widgets, 30 times
+/// a second). Absent, faces animate as before.
+#[derive(Clone, Copy)]
+pub struct FacesMove(pub Signal<bool>);
+
 /// frame's generated faces in the frame checkout, unless
 /// `SIGNAL_FRAME_DIR` says otherwise.
 #[cfg(not(target_arch = "wasm32"))]
@@ -28,9 +35,15 @@ pub(crate) fn design_dir() -> std::path::PathBuf {
     if let Some(dir) = std::env::var_os("SIGNAL_FRAME_DIR") {
         return dir.into();
     }
+    // The frame checkout beside the repo: the nearest ancestor of this crate
+    // with `frame/examples/plugins` in it (features/rigs/guitar/ui → the repo
+    // root → its parent). A fixed count of `..` went one level too far and
+    // every face on the desktop drew as its plain fallback.
     let here = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    // features/rigs/guitar/ui → the repo root → its parent → frame.
-    here.join("../../../../../../frame/examples/plugins")
+    here.ancestors()
+        .map(|a| a.join("frame/examples/plugins"))
+        .find(|d| d.is_dir())
+        .unwrap_or_else(|| here.join("../../../../../frame/examples/plugins"))
 }
 
 /// One frame face, `name` (its path under the faces directory without
@@ -59,6 +72,10 @@ pub fn FrameSurface(
     /// Text the face shows (a nameplate's preset): (address, text).
     #[props(default)]
     texts: Vec<(String, String)>,
+    /// Live readings for its plots, meters and lamps: (stream id, values)
+    /// — a spectrum, a level, a gain reduction, a trace.
+    #[props(default)]
+    streams: Vec<(String, Vec<f64>)>,
 ) -> Element {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -68,21 +85,21 @@ pub fn FrameSurface(
         let key = format!("{name}|{}", variants.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(","));
         rsx! {
             for k in [key] {
-                NativeFace { key: "{k}", name: name.clone(), values: values.clone(), on_edit, stretch, variants: variants.clone(), responsive, texts: texts.clone() }
+                NativeFace { key: "{k}", name: name.clone(), values: values.clone(), on_edit, stretch, variants: variants.clone(), responsive, texts: texts.clone(), streams: streams.clone() }
             }
         }
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let _ = (name, values, on_edit, stretch, variants, responsive, texts);
+        let _ = (name, values, on_edit, stretch, variants, responsive, texts, streams);
         rsx! { div { style: "width: 100%; height: 100%;" } }
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[component]
-fn NativeFace(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool, texts: Vec<(String, String)>) -> Element {
-    native::mount(name, values, on_edit, stretch, variants, responsive, texts)
+fn NativeFace(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool, texts: Vec<(String, String)>, streams: Vec<(String, Vec<f64>)>) -> Element {
+    native::mount(name, values, on_edit, stretch, variants, responsive, texts, streams)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -171,7 +188,8 @@ mod native {
     /// How often the design's files are checked for a new version.
     const RELOAD_POLL: std::time::Duration = std::time::Duration::from_millis(250);
 
-    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool, texts: Vec<(String, String)>) -> Element {
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool, texts: Vec<(String, String)>, streams: Vec<(String, Vec<f64>)>) -> Element {
         let live: Shared = use_hook(|| {
             let opened = if variants.is_empty() {
                 open_face(&name, stretch, responsive).map(|l| Surfaces { all: vec![(1.0, l)], active: 0 })
@@ -211,13 +229,26 @@ mod native {
         // The block's values, whenever they differ from what was last
         // given (a param being dragged keeps the hand's).
         let mut applied: Signal<Vec<(String, f64)>> = use_signal(Vec::new);
-        if *applied.peek() != values {
+        if !crate::frame_surface::same_values(&applied.peek(), &values) {
             if let Ok(s) = live.borrow_mut().as_mut() {
                 for l in s.each_mut() {
                     l.apply_real(values.clone());
                 }
             }
             applied.set(values);
+        }
+        // Its live readings, each time they change (they arrive at meter
+        // rate; the same reading twice would push a history twice).
+        let mut applied_streams: Signal<Vec<(String, Vec<f64>)>> = use_signal(Vec::new);
+        if !streams.is_empty() && *applied_streams.peek() != streams {
+            if let Ok(s) = live.borrow_mut().as_mut() {
+                for l in s.each_mut() {
+                    for (id, v) in &streams {
+                        l.apply_stream(id, v.clone());
+                    }
+                }
+            }
+            applied_streams.set(streams);
         }
         // Its text, likewise.
         let mut applied_texts: Signal<Vec<(String, String)>> = use_signal(Vec::new);
@@ -234,12 +265,14 @@ mod native {
         // still when its effect is off (`param(<ns>/on)`). Only a face-less
         // visualiser waits for audio (`fts_audio_ui::animate`). A face is a
         // layer of its own, so moving costs one texture, not the page.
+        // Still while the rig is stopped (`FacesMove`).
+        let moving = try_use_context::<super::FacesMove>().is_none_or(|m| (m.0)());
         if let Ok(s) = live.borrow_mut().as_mut() {
             for l in s.each_mut() {
-                l.set_animate(true);
+                l.set_animate(moving);
             }
         }
-        let attr = use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(FrameWidget { live: Rc::clone(&live), edits: Rc::clone(&edits), update: update.clone(), target: None }));
+        let attr = use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(FrameWidget { live: Rc::clone(&live), edits: Rc::clone(&edits), update: update.clone(), target: None, fingers: Vec::new(), pinch: None }));
         // The edits go out from a task, not from inside a render.
         let heard: Vec<(String, f64)> = std::mem::take(&mut *edits.borrow_mut());
         if let Some(handler) = on_edit
@@ -268,6 +301,22 @@ mod native {
         update: std::sync::Arc<dyn Fn() + Send + Sync>,
         /// The texture Blitz holds for us, its size, and which variant's.
         target: Option<(ResourceId, (u32, u32), usize)>,
+        /// The fingers down on it, where each is (element coordinates).
+        fingers: Vec<(u64, (f64, f64))>,
+        /// Two fingers down: where the first was when the second landed
+        /// (the band it held), and the fingers' spread last seen.
+        pinch: Option<((f64, f64), f64)>,
+    }
+
+    /// How many wheel notches a doubling of the fingers' spread is: the
+    /// face's wheel rule turns it into the band's Q (a cut's slope).
+    const NOTCHES_PER_DOUBLING: f64 = 1.5;
+
+    fn spread(f: &[(u64, (f64, f64))]) -> f64 {
+        match f {
+            [(_, a), (_, b), ..] => ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt().max(1.0),
+            _ => 1.0,
+        }
     }
 
     /// The window's device and queue, from whatever the renderer boxed.
@@ -337,11 +386,65 @@ mod native {
             let mut guard = self.live.borrow_mut();
             let Ok(surfaces) = guard.as_mut() else { return };
             let live = surfaces.active_mut();
+            let finger = |id: &blitz_traits::events::BlitzPointerId| match id {
+                blitz_traits::events::BlitzPointerId::Finger(n) => Some(*n),
+                _ => None,
+            };
             match event {
-                UiEvent::PointerDown(e) => live.pointer_down(f64::from(e.element.x), f64::from(e.element.y), mods(e.mods)),
-                UiEvent::PointerMove(e) => live.pointer_move(f64::from(e.element.x), f64::from(e.element.y), mods(e.mods)),
-                UiEvent::PointerUp(_) => live.pointer_up(),
-                UiEvent::PointerCancel(_) => live.cancel(),
+                UiEvent::PointerDown(e) => {
+                    let at = (f64::from(e.element.x), f64::from(e.element.y));
+                    if let Some(n) = finger(&e.id) {
+                        self.fingers.retain(|f| f.0 != n);
+                        self.fingers.push((n, at));
+                    }
+                    if self.fingers.len() == 2 {
+                        // A second finger: a pinch. The first finger's drag
+                        // ends where it is; the band under it takes the pinch.
+                        let held = self.fingers[0].1;
+                        live.pointer_up();
+                        self.pinch = Some((held, spread(&self.fingers)));
+                    } else if self.pinch.is_none() {
+                        live.pointer_down(at.0, at.1, mods(e.mods));
+                    }
+                }
+                UiEvent::PointerMove(e) => {
+                    let at = (f64::from(e.element.x), f64::from(e.element.y));
+                    if let Some(n) = finger(&e.id)
+                        && let Some(f) = self.fingers.iter_mut().find(|f| f.0 == n)
+                    {
+                        f.1 = at;
+                    }
+                    match self.pinch {
+                        Some((held, last)) => {
+                            let now = spread(&self.fingers);
+                            // Apart: a wider band (a lower Q); together: narrower.
+                            // (The face's wheel raises Q on a notch down.)
+                            let notches = (now / last).log2() * NOTCHES_PER_DOUBLING;
+                            if notches.abs() > 0.01 {
+                                live.wheel(held.0, held.1, notches, mods(e.mods));
+                                self.pinch = Some((held, now));
+                            }
+                        }
+                        None => live.pointer_move(at.0, at.1, mods(e.mods)),
+                    }
+                }
+                UiEvent::PointerUp(e) => {
+                    if let Some(n) = finger(&e.id) {
+                        self.fingers.retain(|f| f.0 != n);
+                    }
+                    if self.pinch.is_some() {
+                        if self.fingers.is_empty() {
+                            self.pinch = None;
+                        }
+                    } else {
+                        live.pointer_up();
+                    }
+                }
+                UiEvent::PointerCancel(_) => {
+                    self.fingers.clear();
+                    self.pinch = None;
+                    live.cancel();
+                }
                 UiEvent::Wheel(e) => {
                     let notches = match e.delta {
                         BlitzWheelDelta::Lines(_, y) => -y,
@@ -428,3 +531,16 @@ mod native {
         }
     }
 }
+
+/// Whether two value lists are the same — NaN counting as itself. `!=` on
+/// floats calls a NaN different from every NaN, so a face carrying one (an
+/// amp's unset level) re-applied its values every render, and the re-apply
+/// asked for the next render: the Amp page redrew at the frame rate for as
+/// long as it was up, and the phone's main thread had no turn for taps.
+fn same_values(a: &[(String, f64)], b: &[(String, f64)]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|((na, va), (nb, vb))| {
+            na == nb && (va == vb || (va.is_nan() && vb.is_nan()))
+        })
+}
+

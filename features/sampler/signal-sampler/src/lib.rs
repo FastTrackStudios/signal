@@ -112,6 +112,8 @@ pub mod engine;
 pub mod engine_spec;
 pub mod from_node;
 pub mod gapless;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod input_stage;
 pub mod instrument;
 pub mod keys_rig;
 pub mod lane_health;

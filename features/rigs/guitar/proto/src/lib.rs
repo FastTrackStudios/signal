@@ -31,11 +31,90 @@ pub struct AudioDevice {
 /// them: a guitar played straight into an interface, shipped with the app.
 pub const DI_CLIPS: &[&str] = &["Chords", "Palm-mute picking", "Riff"];
 
+/// A recording the DI player loops through the chain in the guitar's
+/// place: one the app ships ([`DI_CLIPS`]), or one recorded
+/// ([`record_loop`](rig::Rig::record_loop)) into the library's `di/` —
+/// A downloaded capture to load into a slot of the playing patch.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct CaptureImport {
+    /// The capture's own name (a gain setting: "Gain 6").
+    pub name: String,
+    /// Where the file is.
+    pub path: String,
+    /// The catalog's category (`pedal`, `amp`, `amp-cab`, `full-rig`…).
+    pub gear: String,
+    /// The tone it belongs to: its captures become one preset's variations.
+    pub group: String,
+    /// The block to load it into (`Amp L`, `Drive 2`); empty: the gear
+    /// decides (a pedal the first drive slot, anything else the amp).
+    pub slot: String,
+}
+
+/// A capture on this device: a `.nam` the rig ships, one downloaded, or
+/// one copied in.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct LocalCapture {
+    /// The file's name, without `.nam`.
+    pub name: String,
+    pub path: String,
+    /// The tone it belongs to (its download's title, else its folder).
+    pub group: String,
+    /// `pedal`, `amp`, … when known (the catalog's, or what uses it).
+    pub gear: String,
+    pub creator: String,
+}
+
+/// What loading a capture did.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct ImportOutcome {
+    pub ok: bool,
+    /// The block it went to.
+    pub slot: String,
+    /// The preset it is in now, and its variation.
+    pub preset: String,
+    pub variation: String,
+    /// Why not, when it failed.
+    pub message: String,
+}
+
+/// with what it was played on and through, so a tone heard through it is
+/// heard at the gain it was recorded at.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct DiClip {
+    /// `builtin:<n>` for a shipped one; the recording's file stem else.
+    pub id: String,
+    pub name: String,
+    /// The guitar it was played on (`GuitarEntry::id`); empty: not known.
+    #[facet(default)]
+    pub guitar: String,
+    /// The patch playing while it was recorded.
+    #[facet(default)]
+    pub patch: String,
+    /// That patch's rig preset and snapshot (`Deluxe + AC30 · Clean`): the
+    /// gain structure it went through.
+    #[facet(default)]
+    pub rig_preset: String,
+    /// The gain it was played at, as the player notes it: "65%", "2
+    /// o'clock", "36 dB"…
+    #[facet(default)]
+    pub gain: String,
+    #[facet(default)]
+    pub seconds: f32,
+    /// Shipped with the app: not edited, not deleted.
+    #[facet(default)]
+    pub builtin: bool,
+}
+
 /// Enumerated inputs + outputs, fetched in one call.
 #[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct AudioDevices {
     pub inputs: Vec<AudioDevice>,
     pub outputs: Vec<AudioDevice>,
+    /// Whether the app may read inputs: `granted`, `denied` (iOS
+    /// microphone access turned off — every input is silent) or
+    /// `undetermined` (never asked). Empty from an older engine.
+    #[facet(default)]
+    pub input_access: String,
 }
 
 /// Audio I/O preferences. Empty-string / `0` mean "use the system/backend
@@ -203,9 +282,20 @@ pub struct RigStatus {
     /// instrument's place ([`Rig::play_di`](rig::Rig::play_di)).
     #[facet(default)]
     pub di_playing: bool,
-    /// Which of [`DI_CLIPS`] it plays.
+    /// Which of [`DI_CLIPS`] it plays (a recording: past them).
     #[facet(default)]
     pub di_clip: u32,
+    /// The [`DiClip`] it plays, by id.
+    #[facet(default)]
+    pub di_clip_id: String,
+    /// The DI player is recording a loop of the input.
+    #[facet(default)]
+    pub di_recording: bool,
+    /// What the time and modulation effects add now (linear peaks, the
+    /// loudest since the last status): delay, reverb, modulation, tremolo.
+    /// Empty from an older engine.
+    #[facet(default)]
+    pub fx_activity: Vec<f32>,
 }
 
 /// A compressor block's rolling telemetry.
@@ -271,7 +361,8 @@ pub struct PerfStack {
     pub available: bool,
     /// Whether this stack holds the currently-active patch.
     pub is_active: bool,
-    /// The preset the current patch points at.
+    /// What the current patch plays: its Core (`preset · snapshot`), and
+    /// its Time module when it picks one — the amp, for a patch on no Core.
     pub preset: String,
     /// Module names the current patch overrides (badge icons).
     pub override_modules: Vec<String>,
@@ -303,6 +394,12 @@ pub struct PerformanceModel {
     pub fx_bypass: bool,
     /// Boost pedal level in dB (`0.0` = off; cycles +1 → +2 → +3 → −1).
     pub boost_db: f32,
+    /// The level Boost switches on at (dB) — its own while it is off.
+    #[facet(default)]
+    pub boost_level: f32,
+    /// Panic is resetting everything: every remote's meters go flat.
+    #[facet(default)]
+    pub panicking: bool,
     /// Current tempo (BPM) — drives the tap-tempo blink.
     pub tempo_bpm: u32,
     /// Setlist song names, in order.
@@ -317,6 +414,9 @@ pub struct PerformanceModel {
     /// Fullscreen tuner overlay — model-driven so the footswitch (hold
     /// tap-tempo) and every remote stay in sync.
     pub tuner_visible: bool,
+    /// How many sound choices (a section's patch, a preset, a module or
+    /// block pick) `undo_sound` can take back — 0 greys the Undo.
+    pub undo_depth: u32,
     /// Perform-grid mode: 0 Preset (browse the pool), 1 Profile (stacks),
     /// 2 Setlist (song-adaptive: parts + stacks).
     pub perform_mode: u32,
@@ -340,6 +440,10 @@ pub struct PerformanceModel {
     /// (patch repoints, preset edits) that don't change the fields above,
     /// so clients can refetch derived data (patches/presets) on change.
     pub revision: u64,
+    /// The instrument the rig is (`guitar`, `bass`): its own library, the
+    /// same chain and the same screens.
+    #[facet(default)]
+    pub instrument: String,
     /// The current song's profile; empty when it keeps whatever is loaded.
     #[facet(default)]
     pub song_profile: String,
@@ -388,6 +492,10 @@ pub struct PatchInfo {
     pub default_in_stack: bool,
     /// Module names this patch overrides on its preset.
     pub override_modules: Vec<String>,
+    /// What kind of sound it is: Clean, Crunch, Drive, Lead or Ambient —
+    /// its own tag, else its stack's or variation's (empty: none).
+    #[facet(default)]
+    pub role: String,
 }
 
 /// One preset in the pool — a complete tone patches point at.
@@ -447,6 +555,12 @@ pub struct SongSlot {
     pub key: String,
     /// Tempo for this set.
     pub bpm: u32,
+    /// The patch it starts on — the setlist's badge. Empty: it keeps the
+    /// profile's default.
+    pub start: String,
+    /// Its colour (`#rrggbb`); empty: one picked from its name.
+    #[facet(default)]
+    pub colour: String,
 }
 
 /// [`LiveBlock::engine`] values.
@@ -477,6 +591,9 @@ pub struct HeadphoneState {
     pub mix_level: f32,
     /// Main output muted (rehearse silently; the phones keep playing).
     pub main_mute: bool,
+    /// The phones muted too — with the house, everything is silent.
+    #[facet(default)]
+    pub phones_mute: bool,
     /// The separate headphone-mixer process that plays the mix.
     #[facet(default)]
     pub mixer: PhonesMixer,
@@ -489,6 +606,7 @@ impl Default for HeadphoneState {
             self_mix: PHONES_UNITY,
             mix_level: PHONES_UNITY,
             main_mute: false,
+            phones_mute: false,
             mixer: PhonesMixer::default(),
         }
     }
@@ -597,6 +715,10 @@ pub struct ModuleSnapshotInfo {
     /// Its captures, by file name without the extension: amp, then cab,
     /// then the second amp and cab (empty ones left out).
     pub captures: Vec<String>,
+    /// The NAM models it loads, by role: `amp` and `cab` (its captures),
+    /// `drive` (a slot's pedal: the capture, the pedal and its option).
+    #[facet(default)]
+    pub models: Vec<CaptureModel>,
     /// The macro knobs it tunes on its blocks.
     #[facet(default)]
     pub macros: Vec<String>,
@@ -607,6 +729,20 @@ pub struct ModuleSnapshotInfo {
     /// It plays its frozen captures now.
     #[facet(default)]
     pub frozen: bool,
+}
+
+/// A NAM model a module snapshot loads.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct CaptureModel {
+    /// `amp`, `cab` or `drive`.
+    pub role: String,
+    /// The capture, by file stem (a drive: its option's, else the pedal).
+    pub name: String,
+    /// A drive's pedal and the option it plays; empty otherwise.
+    #[facet(default)]
+    pub pedal: String,
+    #[facet(default)]
+    pub option: String,
 }
 
 /// One parameter a block preset sets.
@@ -623,6 +759,13 @@ pub struct PresetSnapshotEntry {
     pub modules: Vec<ModulePick>,
     /// How many overrides it layers on top of its modules.
     pub overrides: u32,
+    /// The picks put over it (module kind or `block:<block>`), as they
+    /// play now.
+    #[facet(default)]
+    pub picks: Vec<PartPick>,
+    /// Its block presets, by block.
+    #[facet(default)]
+    pub blocks: Vec<BlockPick>,
 }
 
 /// A preset: a composition of module presets, with snapshots.
@@ -692,6 +835,195 @@ pub struct LibraryModel {
     pub songs: Vec<SongEntry>,
     pub setlists: Vec<SetlistEntry>,
     pub drives: Vec<DriveEntry>,
+    /// Song collections ("Church"…): a song can be in any number.
+    #[facet(default)]
+    pub collections: Vec<CollectionEntry>,
+}
+
+// ── Setup: guitars, audio rigs, MIDI controllers ──────────────────────────
+
+/// The player's setup (`setup.styx`): the guitars they play, the audio rigs
+/// they play through, the MIDI controllers they play with — and which of
+/// each is in use. Choosing a guitar and a rig sets the input.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SetupModel {
+    #[facet(default)]
+    pub guitars: Vec<GuitarEntry>,
+    #[facet(default)]
+    pub guitar_index: u32,
+    #[facet(default)]
+    pub rigs: Vec<AudioRigEntry>,
+    #[facet(default)]
+    pub rig_index: u32,
+    #[facet(default)]
+    pub controllers: Vec<ControllerEntry>,
+    #[facet(default)]
+    pub controller_index: u32,
+}
+
+/// A guitar: its photo, its pickups, and its tone into the rig.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct GuitarEntry {
+    pub id: String,
+    pub name: String,
+    /// A photo's file name in the library's `guitars/` folder; empty: none.
+    #[facet(default)]
+    pub image: String,
+    /// Its finish, `#rrggbb`, for when there is no photo.
+    #[facet(default)]
+    pub colour: String,
+    #[facet(default)]
+    pub pickups: Vec<Pickup>,
+    /// The guitar's default tone, on any rig.
+    #[facet(default)]
+    pub tone: GuitarTone,
+    /// What a rig overrides of it.
+    #[facet(default)]
+    pub overrides: Vec<ToneOverride>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct Pickup {
+    pub position: String,
+    pub model: String,
+}
+
+/// A guitar's tone into the rig — what a rig can override, part by part:
+/// `trim`, `gates`, `noisy`, `eq`.
+#[derive(Clone, PartialEq, Debug, Facet)]
+pub struct GuitarTone {
+    /// Input trim, dB: brings the guitar's peaks to the presets' level.
+    pub trim_db: f32,
+    /// The gate presets' thresholds, dBFS: Subtle, Default, Tight, Ultra.
+    pub gates: Vec<f32>,
+    /// Noisy input: Off plays Subtle and Subtle plays Default.
+    pub noisy: bool,
+    /// The input EQ: a low cut (Hz) and bass, mid, treble (dB).
+    pub low_cut_hz: f32,
+    pub bass_db: f32,
+    pub mid_db: f32,
+    pub treble_db: f32,
+}
+
+impl Default for GuitarTone {
+    fn default() -> Self {
+        Self {
+            trim_db: 0.0,
+            gates: vec![-75.0, -70.0, -64.0, -56.0],
+            noisy: false,
+            low_cut_hz: 60.0,
+            bass_db: 0.0,
+            mid_db: 0.0,
+            treble_db: 0.0,
+        }
+    }
+}
+
+/// A rig's override of parts of a guitar's tone: `parts` names which
+/// (`trim`, `gates`, `noisy`, `eq`); `tone` holds their values.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct ToneOverride {
+    pub rig: String,
+    #[facet(default)]
+    pub parts: Vec<String>,
+    #[facet(default)]
+    pub tone: GuitarTone,
+}
+
+impl GuitarEntry {
+    /// The tone the guitar plays on `rig`: its default, with the rig's
+    /// overrides over it.
+    #[must_use]
+    pub fn tone_on(&self, rig: &str) -> GuitarTone {
+        let mut t = self.tone.clone();
+        if let Some(o) = self.overrides.iter().find(|o| o.rig == rig) {
+            for part in &o.parts {
+                match part.as_str() {
+                    "trim" => t.trim_db = o.tone.trim_db,
+                    "gates" => t.gates = o.tone.gates.clone(),
+                    "noisy" => t.noisy = o.tone.noisy,
+                    "eq" => {
+                        t.low_cut_hz = o.tone.low_cut_hz;
+                        t.bass_db = o.tone.bass_db;
+                        t.mid_db = o.tone.mid_db;
+                        t.treble_db = o.tone.treble_db;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        t
+    }
+
+    /// The parts of its tone `rig` overrides.
+    #[must_use]
+    pub fn overridden_on(&self, rig: &str) -> Vec<String> {
+        self.overrides.iter().find(|o| o.rig == rig).map(|o| o.parts.clone()).unwrap_or_default()
+    }
+}
+
+/// An audio rig: an interface and how the rig uses it.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct AudioRigEntry {
+    pub id: String,
+    pub name: String,
+    pub device: String,
+    #[facet(default)]
+    pub input: String,
+    #[facet(default)]
+    pub rate: u32,
+    #[facet(default)]
+    pub buffer: u32,
+    #[facet(default)]
+    pub house: String,
+    #[facet(default)]
+    pub house_db: f32,
+    #[facet(default)]
+    pub phones: String,
+    #[facet(default)]
+    pub phones_db: f32,
+    /// Hear the input straight from the interface too.
+    #[facet(default)]
+    pub direct_monitor: bool,
+    /// Where presets expect the guitar's peaks, dBFS (−15 when a setup
+    /// file has none).
+    #[facet(default = -15.0_f32)]
+    pub target_db: f32,
+}
+
+/// A MIDI controller and how the rig listens to it.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct ControllerEntry {
+    pub id: String,
+    pub name: String,
+    pub device: String,
+    /// 1–16; 0 = omni.
+    #[facet(default)]
+    pub channel: u32,
+    #[facet(default)]
+    pub program_change: bool,
+    /// `off`, `send` or `receive`.
+    #[facet(default)]
+    pub clock: String,
+}
+
+/// A section's own pick: `kind` is a module kind (`Amp`, `Time`…) or
+/// `block:<block name>`; the preset, and the snapshot for a module.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct PartPick {
+    pub kind: String,
+    pub preset: String,
+    #[facet(default)]
+    pub snapshot: String,
+}
+
+/// A named group of songs, for finding them faster.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct CollectionEntry {
+    pub name: String,
+    /// `#rrggbb`.
+    pub colour: String,
+    pub songs: Vec<String>,
 }
 
 /// One profile: a rig's worth of presets, patches and stacks.
@@ -718,22 +1050,39 @@ pub struct ProfileEntry {
 pub struct ProfilePatch {
     pub name: String,
     pub stack: String,
+    /// The song whose own patch it is (merged into the profile while the
+    /// song plays); empty for the profile's own.
+    #[facet(default)]
+    pub song: String,
 }
 
 /// One song in the library, with its defaults.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct SongEntry {
     pub name: String,
     pub key: String,
     pub bpm: u32,
     /// Section names, in order.
     pub parts: Vec<String>,
+    /// Its parts as the setlist shows them (what each plays, its section,
+    /// its changes) — for a song that is not up.
+    #[facet(default)]
+    pub part_list: Vec<PerfPart>,
     /// Names of the setlists it appears in — why it cannot be deleted.
     pub setlists: Vec<String>,
     /// The profile it is played on; empty keeps whatever is loaded.
     pub profile: String,
     /// The part it starts on; empty = the profile's default patch.
     pub start_part: String,
+    /// Its colour (`#rrggbb`); empty: one picked from its name.
+    #[facet(default)]
+    pub colour: String,
+    /// Who it's by; empty when unknown.
+    #[facet(default)]
+    pub artist: String,
+    /// Its genre ("Worship", "Gospel", …); empty when unset.
+    #[facet(default)]
+    pub genre: String,
 }
 
 /// One setlist and its songs as the set plays them.
@@ -744,6 +1093,19 @@ pub struct SetlistEntry {
     pub active: bool,
     /// Entries with the set's key/tempo already resolved.
     pub songs: Vec<SongSlot>,
+    /// The day it is played (`YYYY-MM-DD`); empty when it has none.
+    #[facet(default)]
+    pub date: String,
+    /// The recurring event it is for ("HSM"); empty for a one-off.
+    #[facet(default)]
+    pub event: String,
+    /// A title of its own ("Worship Night"); empty: named by event and day.
+    #[facet(default)]
+    pub title: String,
+    /// The profile every song plays on unless it has its own; empty keeps
+    /// whatever is loaded.
+    #[facet(default)]
+    pub profile: String,
 }
 
 /// One drive block preset (a pedal) and its captures.
@@ -785,6 +1147,14 @@ pub struct PerfPart {
     /// is up — which, with [`overrides`](Self::overrides), is the common
     /// case: a chorus is usually the verse's sound with one thing changed.
     pub patch: String,
+    /// It plays this whole stack (its first patch, then the switch steps
+    /// it) — empty when it plays a patch.
+    #[facet(default)]
+    pub stack: String,
+    /// It plays this preset's variation (`Preset · Variation`) — empty when
+    /// it plays a patch.
+    #[facet(default)]
+    pub preset: String,
     /// What this section changes on top of that patch.
     #[facet(default)]
     pub overrides: Vec<PartOverride>,
@@ -805,6 +1175,10 @@ pub struct PerfPart {
     /// its own.
     #[facet(default)]
     pub repeat_of: String,
+    /// The section's own picks over its patch: module presets and block
+    /// presets it plays (their overrides are in `overrides`).
+    #[facet(default)]
+    pub picks: Vec<PartPick>,
 }
 
 /// One parameter a section changes.
@@ -895,6 +1269,11 @@ pub struct LiveBlock {
     /// The capture file it plays, for a tooltip.
     #[facet(default)]
     pub asset: String,
+    /// The module it belongs to, for grouping: `Core`, `Drive`, `Amp`,
+    /// `Delay`, `Reverb`; `Pre` for a pre effect; else its category
+    /// (`Dynamics`, `Modulation`, `Motion`…).
+    #[facet(default)]
+    pub module: String,
     /// A drive board slot with nothing in it: it does nothing.
     #[facet(default)]
     pub empty: bool,
@@ -946,6 +1325,15 @@ pub struct MacroKnobView {
     /// bar's positions can be kept — empty when it plays none.
     #[facet(default)]
     pub snapshot: String,
+    /// How a touch remote reads the knob: `level` (0–100%, 0 is off — Gate,
+    /// Drive, Comp, Mod, Boost…), `wet` (0–200%, its normal level in the
+    /// middle, past it the dry falls away — Delay, Reverb, Space) or
+    /// `relative` (± around its rest — Gain, Tone, Width, Output).
+    #[facet(default)]
+    pub scale: String,
+    /// Every block the knob drives is bypassed: a level knob reads `off`.
+    #[facet(default)]
+    pub off: bool,
     pub children: Vec<MacroChildView>,
 }
 
@@ -1066,6 +1454,30 @@ pub struct MacroSave {
     pub name: String,
 }
 
+/// Whether a pick took — what the browser shows on the row picked: Loaded,
+/// or Didn't load and why. A refusal the rig used to only log (no such
+/// preset, no patch playing, a block that has gone) comes back as `message`.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct Applied {
+    pub ok: bool,
+    /// Why not, when it did not take. Empty when it did.
+    pub message: String,
+}
+
+impl Applied {
+    /// It took.
+    #[must_use]
+    pub fn done() -> Self {
+        Self { ok: true, message: String::new() }
+    }
+
+    /// It did not, and why.
+    #[must_use]
+    pub fn refused(message: impl Into<String>) -> Self {
+        Self { ok: false, message: message.into() }
+    }
+}
+
 /// What a macro call did — shown in the panel's header.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct MacroResult {
@@ -1139,8 +1551,8 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, CompTrace, CompositionModel, LevelProgress, LibraryModel, LiveBlock, LiveNode,
-        MacroKnobView, MacroResult, MacroSave, MacroTune, PartOverride, PatchInfo,
+        SetupModel, Artwork, CaptureImport, CompTrace, CompositionModel, DiClip, ImportOutcome, LevelProgress, LocalCapture, LibraryModel, LiveBlock, LiveNode,
+        Applied, MacroKnobView, MacroResult, MacroSave, MacroTune, PartOverride, PatchInfo,
         PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
     };
 
@@ -1189,6 +1601,21 @@ pub mod rig {
         /// instrument (off) — tones dialled in with no guitar to hand. With no
         /// audio open, it opens the output only.
         fn play_di(&self, clip: u32, on: bool);
+        /// Record `seconds` (1–30) of the input into the DI library — with
+        /// the guitar in use, the patch and its rig preset — and loop it
+        /// through the chain: a phrase played once, then heard through
+        /// every tone. Needs the audio running.
+        fn record_loop(&self, seconds: u32);
+        /// The DI library: the shipped clips, then the recorded ones.
+        fn di_clips(&self) -> Vec<DiClip>;
+        /// Loop clip `id` through the chain in the guitar's place
+        /// ([`play_di`](Self::play_di) `false` stops it).
+        fn play_di_clip(&self, id: String);
+        /// Rewrite a recorded clip's name, guitar and gain note (its
+        /// recording and what it was played through stay).
+        fn edit_di_clip(&self, clip: DiClip);
+        /// Delete a recorded clip and its recording.
+        fn delete_di_clip(&self, id: String);
         /// Live transport + meter snapshot.
         fn status(&self) -> RigStatus;
         /// Current performance model (profile + footswitch stacks + state).
@@ -1220,9 +1647,14 @@ pub mod rig {
         fn hold_switch(&self, switch: u32);
         /// Step through the song: parts (`sections` false) or sections,
         /// forward (`dir` > 0) or back.
-        fn step_part(&self, dir: i32, sections: bool);
+        fn step_part(&self, dir: i32, sections: bool) -> Applied;
         /// Put `part` in section `section` (empty = its own).
         fn set_part_section(&self, part: String, section: String);
+        /// A section edit on any library song (up or not): `op` `add`
+        /// (`value` the new part), `rename` (`part` → `value`), `remove`,
+        /// `move` (`part` the index from, `value` the index to), `section`
+        /// (`part`'s section → `value`), `patch` (`part` plays `value`).
+        fn edit_song_part(&self, song: String, op: String, part: String, value: String);
         /// Whether `part` plays the profile's own switches.
         fn set_part_profile_switches(&self, part: String, on: bool);
         /// Make `part` a repeat of part `of` — it plays and edits `of`'s
@@ -1250,16 +1682,16 @@ pub mod rig {
         /// Jump to the previous song in the setlist.
         fn prev_song(&self);
         /// Jump straight to setlist entry `index`.
-        fn select_song(&self, index: u32);
+        fn select_song(&self, index: u32) -> Applied;
         /// Jump to section `index` of the current song.
-        fn select_part(&self, index: u32);
+        fn select_part(&self, index: u32) -> Applied;
         /// Move setlist entry `from` to position `to` (reorder).
         fn move_song(&self, from: u32, to: u32);
         /// Every patch in the loaded profile (the preset browser).
         fn patches(&self) -> Vec<PatchInfo>;
         /// Activate patch `index` directly (browser click), bypassing the
         /// footswitch stacks.
-        fn select_patch(&self, index: u32);
+        fn select_patch(&self, index: u32) -> Applied;
         /// The preset pool (what patches point at).
         fn presets(&self) -> Vec<PresetInfo>;
         /// Cover art for a pool preset, by name. Every field empty when the
@@ -1267,6 +1699,10 @@ pub mod rig {
         /// no photographs. Kept off [`PresetInfo`] so listing the pool does
         /// not drag every picture across the wire.
         fn preset_artwork(&self, preset: String) -> Artwork;
+        /// Cover art for what a block of the playing patch plays (a drive
+        /// slot's pedal, the amp): its capture's, from the catalog. Empty
+        /// when it has none.
+        fn block_artwork(&self, block: String) -> Artwork;
         /// Measure every patch through its whole chain and trim each to a
         /// common loudness.
         ///
@@ -1305,20 +1741,31 @@ pub mod rig {
         fn restart_phones_mixer(&self);
         /// Mute/unmute the main output (headphone cue survives).
         fn toggle_main_mute(&self);
+        /// Set both mutes at once: the house (main outputs), and the phones.
+        fn set_mutes(&self, house: bool, phones: bool);
+        /// Panic: everything silent at once — house and phones muted, the
+        /// test signal stopped — then the mutes as they were once the tails
+        /// have died away.
+        fn panic(&self);
         /// Master output trim in dB (how loud the rig is for FOH).
         fn set_master_trim(&self, db: f32);
         /// The most recent MIDI events seen by the core (newest last),
         /// formatted for the monitor.
         fn midi_recent(&self) -> Vec<String>;
+        /// The MIDI inputs the rig can see now, by name.
+        fn midi_ports(&self) -> Vec<String>;
+        /// The output check's tone: `output` `house` or `phones`, `side` 0
+        /// off, 1 left, 2 right, 3 both.
+        fn test_tone(&self, output: String, side: u32);
         /// Switch the active setlist (recalls its first song).
-        fn select_setlist(&self, index: u32);
+        fn select_setlist(&self, index: u32) -> Applied;
         /// Select a block preset's NAM option (e.g. a pedal's gain capture).
         /// Rebuilds the chains — an edit-time operation.
         ///
         /// Superseded by [`select_preset`](Self::select_preset), which
         /// addresses the same choice by node and variant id rather than by
         /// block name and list position.
-        fn set_block_option(&self, id: String, option: u32);
+        fn set_block_option(&self, id: String, option: u32) -> Applied;
         /// The live rig as nodes — every block **and every container**, in
         /// tree order, each with the presets it can be recalled as.
         ///
@@ -1354,6 +1801,17 @@ pub mod rig {
         /// Set what a section of the **current song** recalls. An empty
         /// `patch` clears it, making the section a label again.
         fn set_part_patch(&self, part: String, patch: String);
+        /// Section `part` of the current song plays the whole stack `stack`
+        /// (its first patch, then the switch steps it); empty: keeps what
+        /// plays.
+        fn set_part_stack(&self, part: String, stack: String);
+        /// Section `part` of the current song plays `preset`'s `snapshot`
+        /// (a variation) instead of a patch.
+        fn set_part_preset(&self, part: String, preset: String, snapshot: String);
+        /// Take back the last sound choice — a section's patch, a preset, a
+        /// module or block pick — putting the profile and songs back as
+        /// they were before it (saved, and rebuilt to be heard).
+        fn undo_sound(&self);
         /// Undo the active patch's override of one parameter, returning it
         /// to what the chain builds it as.
         fn clear_block_param(&self, id: String, param: String);
@@ -1387,6 +1845,16 @@ pub mod rig {
         /// The routing lives here rather than in a GUI because it is rig
         /// policy, and every GUI is a remote.
         fn import_capture(&self, name: String, nam_path: String, gear: String, group: String);
+        /// Load a downloaded capture into a slot of the playing patch: a
+        /// pedal into a drive slot (its tone a drive preset, the capture an
+        /// option of it), an amp into the Amp module (its tone an Amp module
+        /// preset, the capture a snapshot of it). Saved with the patch, and
+        /// heard at once.
+        fn load_capture(&self, import: CaptureImport) -> ImportOutcome;
+        /// Every capture on this device, by tone: the rig's shipped models,
+        /// the NAM library's downloads, and (iOS) any copied into the app's
+        /// documents through the Files app.
+        fn captures(&self) -> Vec<LocalCapture>;
         /// Re-read the styx library from disk and rebuild the live rig —
         /// the hook for external edits (text editor, LLM, git).
         fn reload_library(&self);
@@ -1397,18 +1865,39 @@ pub mod rig {
         /// does not parse changes nothing. One line per file applied, or a
         /// line saying nothing had changed.
         fn reload_config(&self) -> String;
+        /// Make the rig the guitar or the bass (`guitar`, `bass`): its
+        /// position saved, the other instrument's library loaded and played
+        /// from where it was left. What it did, in a line.
+        fn set_instrument(&self, instrument: String) -> String;
         /// Rename a pool preset (patch pointers follow).
         fn rename_preset(&self, old: String, new_name: String);
         /// Delete a pool preset — refused while any patch points at it.
         fn delete_preset(&self, name: String);
         /// Rename a patch (stack rotations follow). Rebuilds.
         fn rename_patch(&self, old: String, new_name: String);
+        /// Tag a patch with the kind of sound it is (Clean, Crunch, Drive,
+        /// Lead, Ambient; empty: untagged, as its stack or variation says).
+        fn set_patch_role(&self, patch: String, role: String);
         /// Delete a patch (removed from every stack). Rebuilds.
         fn delete_patch(&self, name: String);
         /// Rename a stack.
         fn rename_stack(&self, old: String, new_name: String);
+        /// Move the profile's stack `from` to position `to` (its switch
+        /// moves with it).
+        fn move_stack(&self, from: u32, to: u32);
+        /// Move patch `from` of stack `stack` to position `to` in its
+        /// rotation.
+        fn move_stack_patch(&self, stack: String, from: u32, to: u32);
         /// Delete a stack (its patches stay in the pool).
         fn delete_stack(&self, name: String);
+        /// Put `patch` in stack `stack`'s rotation (`on`), or take it out
+        /// (it stays in the pool). A patch the profile lacks comes in as a
+        /// copy — from another profile or a song — or, named fresh, as a
+        /// copy of the stack's first patch.
+        fn set_stack_patch(&self, stack: String, patch: String, on: bool);
+        /// Play stack `index`'s patch at `position` in its rotation: the
+        /// switch lands there, and steps on from it.
+        fn play_stack_patch(&self, index: u32, position: u32) -> Applied;
         /// Name a new section on the current song, appended at the end.
         ///
         /// Sections are the song's structure, so they are ordered and named
@@ -1432,6 +1921,25 @@ pub mod rig {
         /// a partial-update protocol for it would be more moving parts than
         /// the thing it edits.
         fn set_part_overrides(&self, part: String, overrides: Vec<PartOverride>);
+        /// Write section `part`'s own changes into the patch it plays,
+        /// everywhere it plays (they leave the section). The answer, in
+        /// words.
+        fn save_part_changes(&self, part: String) -> String;
+        /// Section `part` plays a module preset's snapshot over its patch —
+        /// the section's own (its overrides), not the patch's.
+        fn choose_part_module(&self, part: String, module: String, preset: String, snapshot: String) -> Applied;
+        /// Section `part` plays a block preset on `block`, its own.
+        fn choose_part_block(&self, part: String, block: String, preset: String) -> Applied;
+        /// Drop section `part`'s own pick of `kind` (a module kind, or
+        /// `block:<name>`): it plays its patch's again.
+        fn clear_part_pick(&self, part: String, kind: String);
+        /// Put a pick over preset `preset`'s variation `variation`: `kind`
+        /// a module (`Amp`) with `value` `Preset · Variation`, or
+        /// `block:<block>` with a block preset. An empty `value` clears it:
+        /// back to what the variation chose.
+        fn set_variation_pick(&self, preset: String, variation: String, kind: String, value: String);
+        /// Clear every pick put over a variation.
+        fn clear_variation_picks(&self, preset: String, variation: String);
         /// Add a song to the library with default key + tempo.
         fn add_song(&self, name: String, key: String, bpm: u32);
         /// Create an empty setlist.
@@ -1443,6 +1951,9 @@ pub mod rig {
         /// Set the ACTIVE setlist entry's per-set overrides: empty key /
         /// zero bpm fall back to the song's defaults.
         fn set_setlist_entry(&self, entry: u32, key: String, bpm: u32);
+        /// The patch setlist entry `entry` (of the active set) starts on in
+        /// this set; empty: the song's own start.
+        fn set_setlist_entry_start(&self, entry: u32, patch: String);
         /// Load a custom IR wav into a reverb block (Convolution engine);
         /// auto-saves as a patch override.
         fn set_block_ir(&self, id: String, path: String);
@@ -1479,7 +1990,7 @@ pub mod rig {
         /// not toggle, semantics).
         fn set_block_bypass(&self, id: String, bypassed: bool);
         /// Set a block's primary param.
-        fn set_block_param(&self, id: String, param: String, value: f32);
+        fn set_block_param(&self, id: String, param: String, value: f32) -> Applied;
         /// Set a NAM amp or pedal's Output Level (dB). `commit = false` moves
         /// the live block only (a drag in progress); `commit = true` saves it
         /// with the gear (amp module snapshot / drive option) and rebuilds,
@@ -1495,10 +2006,10 @@ pub mod rig {
         /// Play `module`'s preset `preset` (at `snapshot`; empty = its
         /// first) on the active patch — saved as the patch's own pick, over
         /// whatever its preset snapshot chose.
-        fn choose_module(&self, module: String, preset: String, snapshot: String);
+        fn choose_module(&self, module: String, preset: String, snapshot: String) -> Applied;
         /// Put block preset `preset` on the active patch's block `block`
         /// (`DLY 1`, `VERB 2`, …) — the patch's own pick, saved and rebuilt.
-        fn choose_block(&self, block: String, preset: String);
+        fn choose_block(&self, block: String, preset: String) -> Applied;
         /// Play Core snapshot `preset` · `snapshot` frozen (its NAM
         /// captures) or live (its settings). Both are kept; saved and
         /// rebuilt.
@@ -1515,19 +2026,19 @@ pub mod rig {
         /// Step the active patch's `module` pick through its preset's
         /// snapshots (`delta` −1 / +1, wrapping). With no pick yet, takes
         /// the module's first preset.
-        fn step_module(&self, module: String, delta: i32);
+        fn step_module(&self, module: String, delta: i32) -> Applied;
         /// Point the active patch at a preset snapshot.
         fn choose_preset(&self, preset: String, snapshot: String);
         /// Step the active patch through its preset's snapshots.
         fn step_preset_snapshot(&self, delta: i32);
         /// Play a different profile. Rebuilds the rig from it (an audio gap,
         /// like any rebuild) and remembers it across restarts.
-        fn select_profile(&self, name: String);
+        fn select_profile(&self, name: String) -> Applied;
         /// Put pedal `pedal` (a drive preset's name) in drive slot `slot`
         /// (`Drive 1`, `Boost`), on its first capture. On a patch that plays
         /// modules it is the patch's own pick over the module's — an
         /// override, reverted with the module — else the profile's board.
-        fn set_drive_pedal(&self, slot: String, pedal: String);
+        fn set_drive_pedal(&self, slot: String, pedal: String) -> Applied;
         /// Create a profile. With `from` naming a profile, a copy of it;
         /// empty, a starter holding the active profile's presets and drive
         /// slots with one stack and one patch, so it plays from the start.
@@ -1548,6 +2059,29 @@ pub mod rig {
         fn delete_setlist(&self, index: u32);
         /// The profile a song is played on (empty: keep whatever is loaded).
         fn set_song_profile(&self, song: String, profile: String);
+        /// A song's colour (`#rrggbb`); empty goes back to the one picked
+        /// from its name.
+        fn set_song_colour(&self, song: String, colour: String);
+        /// Who a song is by, and its genre (empty clears either).
+        fn set_song_info(&self, song: String, artist: String, genre: String);
+        /// Create collection `name`, or replace its colour and songs.
+        fn set_collection(&self, name: String, colour: String, songs: Vec<String>);
+        /// Put `song` in collection `name`, or take it out.
+        fn toggle_in_collection(&self, name: String, song: String);
+        fn rename_collection(&self, old: String, new_name: String);
+        fn delete_collection(&self, name: String);
+        /// The guitars, audio rigs and MIDI controllers, and which are in use.
+        fn setup(&self) -> SetupModel;
+        /// Write the setup whole (a remote edits its copy and sends it back).
+        fn save_setup(&self, setup: SetupModel);
+        /// A guitar photo's bytes (`GuitarEntry::image`, a file in the
+        /// library's `guitars/` folder); empty when there is none.
+        fn guitar_photo(&self, file: String) -> Vec<u8>;
+        /// Setlist `index`'s event, day (`YYYY-MM-DD`) and title.
+        fn set_setlist_details(&self, index: u32, event: String, date: String, title: String);
+        /// The profile every song of setlist `index` plays on unless it has
+        /// its own (empty: keep whatever is loaded).
+        fn set_setlist_profile(&self, index: u32, profile: String);
         /// The part a song starts on (empty: the profile's default patch).
         fn set_song_start_part(&self, song: String, part: String);
         /// The profile a part of the **current song** is played on (empty:
@@ -1568,6 +2102,14 @@ pub mod rig {
         /// patch's own edits on the module's blocks move into the snapshot
         /// and the patch plays it.
         fn save_module_snapshot(&self, module: String, preset: String, snapshot: String);
+        /// Save the live patch's core tone — its Drive and Amp, and its
+        /// edits on the core's blocks — as snapshot `snapshot` of Core
+        /// preset `preset` (each created when new; an existing snapshot is
+        /// replaced), and play it on the patch. A patch whose amp is a
+        /// profile preset, or that plays the profile's board, gets Amp and
+        /// Drive module presets made from them, so the Core carries the
+        /// whole tone.
+        fn save_core_snapshot(&self, preset: String, snapshot: String);
         /// Drop the live patch's own edits on `module`'s blocks: back to the
         /// module snapshot as saved.
         fn revert_module(&self, module: String);
@@ -1605,6 +2147,32 @@ pub mod rig {
         fn duplicate_rig_preset(&self, name: String, new_name: String);
         /// Delete a preset — refused while a patch plays it.
         fn delete_rig_preset(&self, name: String);
+        /// Play preset `name` (`tones.styx`: a sound made of a Core, a Time,
+        /// block presets and edits, shared by every patch naming it) on the
+        /// live patch: the patch names it and gives up its own picks and
+        /// edits on what the preset covers.
+        fn choose_tone(&self, name: String) -> Applied;
+        /// Save what the live patch plays as preset `name` — new, or
+        /// replacing it — and play it there (patches naming it hear the
+        /// update).
+        fn save_tone(&self, name: String);
+        /// Rename a preset; the patches naming it follow.
+        fn rename_tone(&self, old: String, new_name: String);
+        /// Copy a preset as `new_name`.
+        fn duplicate_tone(&self, name: String, new_name: String);
+        /// Delete a preset — refused while a patch plays it.
+        fn delete_tone(&self, name: String);
+        /// Preset mode: play preset `name` on the bench (a patch of the
+        /// session's, never saved), to hear and edit it — the bench's edits
+        /// go back to the preset with `save_tone`.
+        fn edit_tone(&self, name: String) -> Applied;
+        /// A new preset `name` from what plays now (the patch untouched),
+        /// up on the bench.
+        fn new_tone(&self, name: String) -> Applied;
+        /// A preset from each patch of the playing profile that has none —
+        /// named after the patch, holding the sound it plays. The patches
+        /// are left as they are (a library to choose from, not a change).
+        fn presets_from_patches(&self);
         /// Copy a song — sections, recalls, tuning — as `new_name`. Its own
         /// patches are copied under names of their own.
         fn duplicate_song(&self, name: String, new_name: String);

@@ -39,12 +39,106 @@ const ROW_H: u32 = 56;
 /// The buffer sizes offered: iOS's audio unit takes 256 frames and up.
 const BUFFERS: &[u32] = if cfg!(target_os = "ios") { &[256, 512, 1024] } else { &[64, 128, 256, 512] };
 
+/// The sample rates offered: Automatic (0 — whatever the interface runs at,
+/// asked for nothing) and the two an interface commonly runs. An interface
+/// that cannot run the one asked for runs its own, and the rig follows it.
+const RATES: &[(u32, &str)] = &[(0, "Auto"), (44_100, "44.1 kHz"), (48_000, "48 kHz")];
+
 /// The page's tabs.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Tab {
+pub(crate) enum Tab {
     Status,
     Interface,
     Di,
+    Log,
+}
+
+/// Which Audio tab is up — shared, because the phone's top bar shows the
+/// tabs (it is the mode's own bar) and the page shows the tab. Provided by
+/// the phone shell; without it the page keeps its own, with its own tab row.
+#[derive(Clone, Copy)]
+pub(crate) struct AudioTab(pub Signal<Tab>);
+
+impl AudioTab {
+    /// The tab to open on: `FTS_PHONE_AUDIO_TAB=interface|di|log` for the
+    /// shot tool, else Status.
+    pub(crate) fn initial() -> Tab {
+        #[cfg(not(target_arch = "wasm32"))]
+        match std::env::var("FTS_PHONE_AUDIO_TAB").as_deref() {
+            Ok("interface") => return Tab::Interface,
+            Ok("di") => return Tab::Di,
+            Ok("log") => return Tab::Log,
+            _ => {}
+        }
+        Tab::Status
+    }
+}
+
+/// The tabs, with their names: Log where the shell gives a log.
+fn tab_list(log: bool) -> Vec<(Tab, &'static str)> {
+    let mut tabs = vec![(Tab::Status, "Status"), (Tab::Interface, "Interface"), (Tab::Di, "DI player")];
+    if log {
+        tabs.push((Tab::Log, "Log"));
+    }
+    tabs
+}
+
+/// A tab's label colour: dark on the filled chip.
+fn chip_ink(on: bool) -> &'static str {
+    if on { "#0a0b0d" } else { TEXT }
+}
+
+/// A tab's chip: the one up filled.
+fn chip(on: bool) -> String {
+    if on {
+        "background: #f4f4f5; color: #0a0b0d; border: 1px solid #f4f4f5;".to_string()
+    } else {
+        format!("background: {RAISED}; color: {TEXT}; border: 1px solid {RULE};")
+    }
+}
+
+/// The Audio tabs as a row of chips — in the phone's top bar, which is the
+/// mode's own bar (the presets in Control, the macros in Switch).
+#[component]
+pub(crate) fn AudioTabBar() -> Element {
+    let Some(AudioTab(mut tab)) = try_use_context::<AudioTab>() else {
+        return rsx! {};
+    };
+    let tabs = tab_list(try_use_context::<LogFeed>().is_some());
+    rsx! {
+        div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: row; gap: 6px;",
+            for (t, label) in tabs {
+                {
+                    let look = chip(tab() == t);
+                    let ink = chip_ink(tab() == t);
+                    rsx! {
+                        div { key: "{label}", style: "flex: 1 1 0%; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; {look}",
+                            onclick: move |_| tab.set(t),
+                            // Its own colour: Blitz kept the inherited one
+                            // when the chip's style changed (white on white).
+                            span { style: "color: {ink};", "{label}" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The app's log, for the Audio mode's Log tab: its recent lines (oldest
+/// first) and a way to put text on the clipboard. Provided by the app shell,
+/// which owns the log ring; without it there is no Log tab.
+#[derive(Clone, Copy)]
+pub struct LogFeed {
+    pub lines: fn() -> Vec<String>,
+    pub copy: fn(&str),
+}
+
+/// One feed per app, set once: as a prop it never changes.
+impl PartialEq for LogFeed {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
 }
 
 /// Which list is open over the page.
@@ -63,16 +157,11 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     let mut devices = use_signal(AudioDevices::default);
     let mut status = use_signal(RigStatus::default);
     let mut list = use_signal(|| None::<List>);
-    // `FTS_PHONE_AUDIO_TAB=interface|di`: open on that tab, for the shot tool.
-    let mut tab = use_signal(|| {
-        #[cfg(not(target_arch = "wasm32"))]
-        match std::env::var("FTS_PHONE_AUDIO_TAB").as_deref() {
-            Ok("interface") => return Tab::Interface,
-            Ok("di") => return Tab::Di,
-            _ => {}
-        }
-        Tab::Status
-    });
+    // The tab up: the shell's (its top bar shows the tabs), else the page's
+    // own, with its own row.
+    let shared = try_use_context::<AudioTab>();
+    let own = use_signal(AudioTab::initial);
+    let mut tab = shared.map_or(own, |s| s.0);
 
     // The prefs once, then the devices and the rig's status on a short
     // timer while the page is up: an interface plugged in shows up, and the
@@ -189,6 +278,22 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     } else {
         "Start it — or play the DI player".to_string()
     };
+    // Why the guitar may not be heard, when it is something the player can
+    // fix: the phone's microphone access (an interface's input is a
+    // recording to iOS, silent without it), or an interface iOS does not
+    // offer. And what iOS does offer, so a missing one shows.
+    let access_note = match d.input_access.as_str() {
+        "denied" => Some((RED, "Microphone access is off, so every input is silent. Turn it on in Settings › Signal › Microphone, then come back.".to_string())),
+        "undetermined" => Some((AMBER, "Signal has not been allowed to hear inputs yet. Allow the microphone prompt — or close and reopen the app to see it again.".to_string())),
+        _ if d.inputs.is_empty() => Some((AMBER, "iOS offers no inputs. Unplug the interface and plug it back in; one that needs more power than the phone gives needs a powered hub.".to_string())),
+        _ => None,
+    };
+    let offered = if d.inputs.is_empty() {
+        String::new()
+    } else {
+        let names: Vec<String> = d.inputs.iter().map(|i| format!("{} ({} in)", i.name, i.channels)).collect();
+        format!("Inputs iOS offers: {}", names.join(", "))
+    };
     // The guitar input's choices: the chosen input's channels.
     let channels = d
         .inputs
@@ -202,13 +307,7 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     let rate = if st.perf.sample_rate > 0 { st.perf.sample_rate } else { 48_000 };
 
     let row = format!("min-height: {ROW_H}px; display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 0 16px; border-top: 1px solid {RULE};");
-    let chip = |on: bool| {
-        if on {
-            "background: #f4f4f5; color: #0a0b0d; border: 1px solid #f4f4f5;".to_string()
-        } else {
-            format!("background: {RAISED}; color: {TEXT}; border: 1px solid {RULE};")
-        }
-    };
+
     let button = |tone: &str| {
         format!("flex: 1 1 0%; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; background: {tone}; color: #0a0b0d;")
     };
@@ -223,17 +322,24 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     };
 
     let card = format!("display: flex; flex-direction: column; border-radius: 14px; background: {CARD}; border: 1px solid {RULE};");
+    // The Log tab, where the shell gives the app's log.
+    let feed = try_use_context::<LogFeed>();
+    let tabs = tab_list(feed.is_some());
     rsx! {
         div { style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; background: {BG}; color: {TEXT};",
-            // ── The tabs ──
-            div { style: "flex: 0 0 auto; display: flex; flex-direction: row; gap: 6px; padding: 8px 12px; border-bottom: 1px solid {RULE};",
-                for (t, label) in [(Tab::Status, "Status"), (Tab::Interface, "Interface"), (Tab::Di, "DI player")] {
-                    {
-                        let look = chip(tab() == t);
-                        rsx! {
-                            div { key: "{label}", style: "flex: 1 1 0%; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; {look}",
-                                onclick: move |_| tab.set(t),
-                                "{label}"
+            // ── The tabs (here only when the shell's top bar does not show
+            // them) ──
+            if shared.is_none() {
+                div { style: "flex: 0 0 auto; display: flex; flex-direction: row; gap: 6px; padding: 8px 12px; border-bottom: 1px solid {RULE};",
+                    for (t, label) in tabs.iter().copied() {
+                        {
+                            let look = chip(tab() == t);
+                            let ink = chip_ink(tab() == t);
+                            rsx! {
+                                div { key: "{label}", style: "flex: 1 1 0%; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; {look}",
+                                    onclick: move |_| tab.set(t),
+                                    span { style: "color: {ink};", "{label}" }
+                                }
                             }
                         }
                     }
@@ -250,6 +356,12 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
                                     span { style: "font-size: 20px; font-weight: 800;", "{headline}" }
                                     span { style: "font-size: 13px; color: {DIM};", "{detail}" }
                                 }
+                            }
+                            if let Some((color, note)) = access_note.clone() {
+                                span { style: "font-size: 13px; font-weight: 700; color: {color};", "{note}" }
+                            }
+                            if !offered.is_empty() {
+                                span { style: "font-size: 12px; color: {DIM};", "{offered}" }
                             }
                             div { style: "display: flex; flex-direction: row; align-items: center; gap: 10px;",
                                 span { style: "flex: 0 0 34px; font-size: 11px; font-weight: 800; color: {DIM};", "IN" }
@@ -313,12 +425,35 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
                                             let mut apply = apply.clone();
                                             let p = p.clone();
                                             let look = chip(p.buffer_size == frames);
+                                            let ink = chip_ink(p.buffer_size == frames);
                                             let ms = f64::from(frames) * 1000.0 / f64::from(rate);
                                             rsx! {
                                                 div { key: "{frames}", style: "min-width: 76px; height: 44px; padding: 0 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; {look}",
                                                     onclick: move |_| apply(AudioPrefs { buffer_size: frames, ..p.clone() }),
-                                                    span { style: "font-size: 15px; font-weight: 800;", "{frames}" }
-                                                    span { style: "font-size: 11px; font-weight: 600; opacity: 0.7;", "{ms:.1} ms" }
+                                                    span { style: "font-size: 15px; font-weight: 800; color: {ink};", "{frames}" }
+                                                    span { style: "font-size: 11px; font-weight: 600; opacity: 0.7; color: {ink};", "{ms:.1} ms" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            // The sample rate: Auto follows the interface; a
+                            // rate asked for that the interface cannot run
+                            // leaves it on its own (the status line says which).
+                            div { style: "{row} padding-top: 8px; padding-bottom: 8px;",
+                                span { style: "flex: 0 0 120px; font-size: 14px; color: {DIM};", "Sample rate" }
+                                div { style: "flex: 1 1 0%; display: flex; flex-direction: row; gap: 8px;",
+                                    for &(hz, label) in RATES {
+                                        {
+                                            let mut apply = apply.clone();
+                                            let p = p.clone();
+                                            let look = chip(p.sample_rate == hz);
+                                            let ink = chip_ink(p.sample_rate == hz);
+                                            rsx! {
+                                                div { key: "{hz}", style: "min-width: 76px; height: 44px; padding: 0 10px; display: flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; {look}",
+                                                    onclick: move |_| apply(AudioPrefs { sample_rate: hz, ..p.clone() }),
+                                                    span { style: "font-size: 15px; font-weight: 800; color: {ink};", "{label}" }
                                                 }
                                             }
                                         }
@@ -328,6 +463,11 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
                         }
                     },
                     // ── The DI player ──
+                    Tab::Log => rsx! {
+                        if let Some(feed) = feed {
+                            LogView { feed }
+                        }
+                    },
                     Tab::Di => rsx! {
                         div { style: "{card} gap: 12px; padding: 16px;",
                             span { style: "font-size: 13px; color: {DIM};",
@@ -426,6 +566,37 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// The app's log, newest at the top, read again every second, with a
+/// button that copies all of it — to paste into a message when the audio
+/// does something it should not.
+#[component]
+fn LogView(feed: LogFeed) -> Element {
+    let mut lines = use_signal(|| (feed.lines)());
+    use_future(move || async move {
+        loop {
+            architect::platform::sleep(std::time::Duration::from_secs(1)).await;
+            lines.set((feed.lines)());
+        }
+    });
+    let mut copied = use_signal(|| false);
+    rsx! {
+        div { style: "display: flex; flex-direction: column; gap: 10px; min-height: 0; flex: 1 1 0%;",
+            div { style: "height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: {CARD}; border: 1px solid {RULE}; color: {GREEN}; font-size: 15px; font-weight: 800; cursor: pointer;",
+                onclick: move |_| {
+                    (feed.copy)(&lines().join("\n"));
+                    copied.set(true);
+                },
+                if copied() { "Copied — paste it in a message" } else { "Copy the whole log" }
+            }
+            div { style: "display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px; background: #0a0a0c; border: 1px solid {RULE};",
+                for (i, line) in lines().iter().rev().enumerate() {
+                    span { key: "{i}", style: "font-family: ui-monospace, monospace; font-size: 10px; color: #a1a1aa; white-space: pre-wrap; word-break: break-all;", "{line}" }
                 }
             }
         }

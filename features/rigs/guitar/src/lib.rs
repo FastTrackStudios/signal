@@ -23,6 +23,7 @@ pub mod compose;
 pub mod config_watch;
 pub mod design;
 pub mod di_player;
+pub mod instrument;
 pub mod drop_log;
 pub mod freeze;
 pub mod levelling;
@@ -41,6 +42,14 @@ pub use session::GuitarRigBackend;
 // Re-export the wire contract so front-end/app crates get types + clients
 // from one place.
 pub use signal_guitar_proto as proto;
+
+/// What the audio session says about input, on one line — `None` where
+/// there is no session (everywhere but iOS). For the shell's own telemetry
+/// (route changes, access), beside the rig's at open.
+#[must_use]
+pub fn audio_session_report() -> Option<String> {
+    signal_sampler::rig::GuitarRig::session_report()
+}
 
 use signal_sampler::GuitarRig;
 use signal_sampler::RigAudioPrefs;

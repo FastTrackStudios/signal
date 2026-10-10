@@ -28,6 +28,9 @@ fn every_macro_call_reports_what_it_did() {
     }
     let rig = GuitarRigBackend::new();
     rig.open_blocking();
+    // The profile this was written against (Blues plays by default now, and
+    // its delay already has a block preset).
+    assert!(Rig::select_profile(&rig, "Worship".into()).ok);
 
     // Unknown knobs and ops say so.
     assert!(!Rig::set_macro(&rig, "nope".into(), 0.5).ok);
@@ -75,9 +78,10 @@ fn every_macro_call_reports_what_it_did() {
     );
 
     // No block preset on the block: an offer, and nothing written.
+    let before = RigLibrary::load_compositions().blocks.len();
     let r = Rig::save_macro_tune(&rig, save("space", "block", ""));
     assert!(!r.ok && r.offer == "new_block_preset", "{r:?}");
-    assert!(RigLibrary::load_compositions().blocks.is_empty());
+    assert_eq!(RigLibrary::load_compositions().blocks.len(), before, "nothing written");
     // Saved as a new one: the preset exists, with the tuning in it.
     let r = Rig::save_macro_tune(&rig, save("space", "block", "Test Wash"));
     assert!(r.ok && r.message.contains("Test Wash"), "{r:?}");

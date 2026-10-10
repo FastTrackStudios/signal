@@ -185,13 +185,35 @@ impl Page {
     }
 }
 
-/// What the rail picks: the chain's pages, the footswitches, or audio.
+/// What the rail picks: the chain's pages, the footswitches (to play, or to
+/// set up), or audio.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Mode {
     Control,
     Switch,
+    /// Rig edit: the footswitches, a tap opening a switch's menu instead of
+    /// pressing it — so the menus need no ⋯ on the switches that are
+    /// played, and setting one up never fires it.
+    Edit,
     Audio,
 }
+
+/// Rig edit is up (the rail's Edit): the switches open their menus, the
+/// macros their tuning. Provided by the phone; absent elsewhere.
+#[derive(Clone, Copy)]
+pub struct RigEdit(pub Signal<bool>);
+
+impl RigEdit {
+    /// Whether the phone is in rig edit — `None` off the phone.
+    #[must_use]
+    pub fn editing() -> Option<bool> {
+        try_consume_context::<Self>().map(|e| *e.0.peek())
+    }
+}
+
+/// The window height (points) from which the Control view shows two pages
+/// at once: a laptop's window, not a phone held sideways (402).
+const TWO_PANES_MIN_H: f64 = 560.0;
 
 /// The bars' colours (the Sessions app's, so the two read as one family).
 const BAR_BG: &str = "#17181b";
@@ -302,13 +324,28 @@ pub fn PhoneControl(
         }
         Page::Amps
     });
+    // A window tall enough (a laptop's, not a phone's) shows two pages at
+    // once, each picked on its own chain: this is the lower one's.
+    let page2 = use_signal(|| Page::Delays);
     let mut mode = use_signal(|| Mode::Control);
-    // `FTS_PHONE_OPEN=audio`: open on the Audio page, for the shot tool.
-    #[cfg(not(target_arch = "wasm32"))]
-    use_hook(|| {
-        if std::env::var("FTS_PHONE_OPEN").is_ok_and(|v| v == "audio") {
-            crate::settings::open_audio_settings();
+    let rig_edit = use_context_provider(|| RigEdit(Signal::new(false)));
+    use_effect(move || {
+        let on = mode() == Mode::Edit;
+        let mut edit = rig_edit.0;
+        if *edit.peek() != on {
+            edit.set(on);
         }
+    });
+    // The Audio tab up, shared by the top bar (where the tabs are, in Audio)
+    // and the page.
+    use_context_provider(|| crate::phone_audio::AudioTab(Signal::new(crate::phone_audio::AudioTab::initial())));
+    // `FTS_PHONE_OPEN=audio|switch`: open on that mode, for the shot tool.
+    #[cfg(not(target_arch = "wasm32"))]
+    use_hook(|| match std::env::var("FTS_PHONE_OPEN").as_deref() {
+        Ok("audio") => crate::settings::open_audio_settings(),
+        Ok("switch") => mode.set(Mode::Switch),
+        Ok("edit") => mode.set(Mode::Edit),
+        _ => {}
     });
     // Whatever asks for the audio settings (the badge, a banner, the shot
     // tool) gets the Audio mode: on a phone they live beside the rail.
@@ -508,8 +545,9 @@ pub fn PhoneControl(
     // The page with the chain down: dimmed, its presses its parent's.
     let page_veil = if chain_tall() { "opacity: 0.4; pointer-events: none;" } else { "" };
     // One chain segment: thin under the status line, a tall tile dropped down.
-    let segment = move |p: Page, tall: bool| {
-        let on = page() == p;
+    let segment = move |target: Signal<Page>, p: Page, tall: bool| {
+        let mut target = target;
+        let on = target() == p;
         let color = p.color();
         let look = if on { format!("background: {color}; color: #0a0b0d;") } else { format!("background: {RAISED}; color: {color};") };
         // Raised, the names sit along the tiles' tops, level with each other.
@@ -524,7 +562,7 @@ pub fn PhoneControl(
             div { key: "{p.short()}",
                 style: "min-width: 0; display: flex; box-sizing: border-box; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; overflow: hidden; {size} {look}",
                 onclick: move |_| {
-                    page.set(p);
+                    target.set(p);
                     chain_tall.set(false);
                 },
                 span { "{p.short()}" }
@@ -540,6 +578,24 @@ pub fn PhoneControl(
             }
         }
     };
+
+    // Two pages at once in a window tall enough for both (not a phone's),
+    // and the box each page is fitted to.
+    let (win_w, win_h) = try_use_context::<crate::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
+    let two_panes = win_h >= TWO_PANES_MIN_H && !chain_tall();
+    let pane_box = {
+        let w = win_w - f64::from(RAIL_W + HOUSING) - f64::from(CORNER);
+        let h = if two_panes {
+            (win_h - f64::from(LINE_H) - 2.0 * f64::from(CHAIN_H)) / 2.0 - 4.0
+        } else {
+            win_h - f64::from(LINE_H) - f64::from(CHAIN_H) - 4.0
+        };
+        (w, h)
+    };
+
+    // The bar's items: centred in the line, but stretched in Switch so the
+    // macro bar's own height (taller than the line) is the bar's.
+    let bar_align = if matches!(mode(), Mode::Switch | Mode::Edit) { "stretch" } else { "center" };
 
     rsx! {
         // The whole screen: the view runs under the camera housing on
@@ -567,9 +623,11 @@ pub fn PhoneControl(
             },
             onpointerup: move |_| swipe.set(None),
             // ── The status, along the top: what plays (tap for every profile
-            // and patch), the page's module presets — the top-level module,
-            // then the page's own — and the audio ──
-            div { style: "flex: 0 0 {LINE_H}px; display: flex; flex-direction: row; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 {status_right}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
+            // and patch), the page, and the page's module presets ──
+            // The mode's own bar: Control's presets, Audio's tabs, Switch's
+            // macros — the last as tall as its knobs need (the switches
+            // under it take the rest).
+            div { style: "position: relative; z-index: 3; flex: 0 0 auto; min-height: {LINE_H}px; display: flex; flex-direction: row; align-items: {bar_align}; gap: 6px; box-sizing: border-box; padding: 0 {status_right}px 0 0; background: {BAR_BG}; border-bottom: 1px solid {RULE}; min-width: 0;",
                 // The way back, over the rail and as wide as it: the corner
                 // the two make reads as one column.
                 div { style: "flex: 0 0 {RAIL_W + lead}px; align-self: stretch; box-sizing: border-box; padding-left: {back_left}px; display: flex; align-items: center; justify-content: center; border-right: 1px solid {RULE}; cursor: pointer;",
@@ -582,41 +640,60 @@ pub fn PhoneControl(
                         RailIcon { name: "Rigs", color: TEXT }
                     }
                 }
-                // Left: what plays, and the page that is up (its button
-                // drops the chain down — in Control; elsewhere it goes there).
-                div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 8px;",
-                    StatusName { label: playing, name: patch_name.clone(),
-                        on_open: move |()| browse.set(Some(if song { crate::phone_browser::BrowseTab::Songs } else { crate::phone_browser::BrowseTab::Patches })),
+                match mode() {
+                Mode::Audio => rsx! {
+                    div { style: "flex: 1 1 0%; min-width: 0; display: flex; padding: 4px 0;",
+                        crate::phone_audio::AudioTabBar {}
                     }
-                    ChainButton { title: page().short(), color: page().color(), open: chain_tall(),
-                        on_toggle: move |()| {
-                            if mode() == Mode::Control {
-                                chain_tall.toggle();
-                            } else {
-                                mode.set(Mode::Control);
-                                chain_tall.set(true);
-                            }
-                        },
+                },
+                Mode::Switch | Mode::Edit => rsx! {
+                    div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; justify-content: center;",
+                        crate::macro_bar::MacroBar { macros: state.macros }
+                    }
+                },
+                Mode::Control => rsx! {
+                // Three slots, each where it always is, whatever the page: what
+                // plays, then the page's two modules — the top-level one
+                // (Core, Time) and the page's own. A slot a page has no module
+                // for stays, dimmed, so nothing slides into its place; a long
+                // name is cut inside its slot rather than pushing the others.
+                // (The page is picked on the chain under the line.)
+                TopSlot { grow: 4, label: playing, name: patch_name.clone(),
+                    on_open: move |()| browse.set(Some(if song { crate::phone_browser::BrowseTab::Songs } else { crate::phone_browser::BrowseTab::Patches })),
+                }
+
+                for (slot, module) in [(0, top_module), (1, page_module)] {
+                    if let Some(module) = module {
+                        TopSlot { key: "{slot}", grow: 3, label: module.to_string(), name: name_of(module), modified: module_edited(module),
+                            on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)),
+                        }
+                    } else {
+                        TopSlot { key: "{slot}", grow: 3, label: "Module".to_string(), name: String::new() }
                     }
                 }
-                // Right: the page's modules — the top-level one (the Core,
-                // Time), then the page's own — and the audio.
-                div { style: "flex: 0 1 auto; min-width: 0; display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px;",
-                    if let Some(module) = top_module {
-                        StatusName { label: module.to_string(), name: name_of(module), modified: module_edited(module), on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)) }
-                    }
-                    if let Some(module) = page_module {
-                        StatusName { label: module.to_string(), name: name_of(module), modified: module_edited(module), on_open: move |()| browse.set(crate::phone_browser::BrowseTab::for_module(module)) }
-                    }
-                    AudioBadge { running: (state.running)(), error: (state.audio_error)() }
+                },
                 }
             }
             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;",
                 // ── The rail ──
                 // Bottom-aligned, the most used lowest, under the thumb:
                 // Audio, Switch, Profile/Setlist, Control.
-                div { style: "flex: 0 0 {RAIL_W + lead}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding: 0 0 {rail_foot}px {lead}px; background: {BAR_BG}; border-right: 1px solid {RULE};",
-                    RailButton { on: mode() == Mode::Audio, label: "Audio", icon: "Audio",
+                // Over the page (z-index): a page wider than its box — the
+                // Amps row of three — runs on under the rail, clipped from
+                // sight but not from taps (Blitz hit-tests clipped content),
+                // and drawn after the rail it took the rail's taps: on some
+                // pages, held one way round, the rail looked frozen.
+                div { style: "position: relative; z-index: 3; flex: 0 0 {RAIL_W + lead}px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; box-sizing: border-box; padding: 0 0 {rail_foot}px {lead}px; background: {BAR_BG}; border-right: 1px solid {RULE};",
+                    // Rig edit, least used, furthest from the thumb.
+                    RailButton { on: mode() == Mode::Edit, label: "Edit", icon: "Edit",
+                        onclick: move |()| {
+                            chain_tall.set(false);
+                            mode.set(if mode() == Mode::Edit { Mode::Switch } else { Mode::Edit });
+                        },
+                    }
+                    // Audio, with how it is: a dot on its speaker, and its
+                    // name saying Off or Error when it is not running.
+                    AudioRailButton { on: mode() == Mode::Audio, running: (state.running)(), error: (state.audio_error)(),
                         onclick: move |()| {
                             chain_tall.set(false);
                             mode.set(Mode::Audio);
@@ -646,13 +723,28 @@ pub fn PhoneControl(
                             if chain_tall() {
                                 div { style: "flex: 0 0 {CHAIN_TALL}; display: flex; flex-direction: row; gap: 4px; box-sizing: border-box; padding: 8px {CORNER}px 8px 8px; overflow-x: auto; overflow-y: hidden; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
                                     for p in Page::ALL {
-                                        {segment(p, true)}
+                                        {segment(page, p, true)}
+                                    }
+                                }
+                            } else if two_panes {
+                                // Two pages, one over the other, each with its
+                                // own chain to pick it.
+                                for (target, key) in [(page, "upper"), (page2, "lower")] {
+                                    div { key: "{key}-chain", style: "position: relative; z-index: 2; flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
+                                        for p in Page::ALL {
+                                            {segment(target, p, false)}
+                                        }
+                                    }
+                                    div { key: "{key}-page", style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
+                                        div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;",
+                                            PageView { page: target(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm, pane: pane_box }
+                                        }
                                     }
                                 }
                             } else {
-                                div { style: "flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
+                                div { style: "position: relative; z-index: 2; flex: 0 0 {CHAIN_H}px; display: flex; flex-direction: row; gap: 2px; box-sizing: border-box; padding: 3px {CORNER}px 3px 3px; background: {BAR_BG}; border-bottom: 1px solid {RULE};",
                                     for p in Page::ALL {
-                                        {segment(p, false)}
+                                        {segment(page, p, false)}
                                     }
                                 }
                             }
@@ -661,6 +753,7 @@ pub fn PhoneControl(
                             // back up — no layer over it: an absolute layer here
                             // was laid out against the whole view, over the
                             // chain's tiles, and took their presses.
+                            if !two_panes {
                             div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden; box-sizing: border-box; padding-right: {trail}px;",
                                 onclick: move |_| {
                                     if chain_tall() {
@@ -668,7 +761,7 @@ pub fn PhoneControl(
                                     }
                                 },
                                 div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; {page_veil}",
-                                    PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm }
+                                    PageView { page: page(), blocks: blocks.clone(), state, tempo_bpm: model.tempo_bpm, pane: pane_box }
                                 }
                                 // Swipe in from the right edge for the next
                                 // page, from the left for the one before.
@@ -681,13 +774,14 @@ pub fn PhoneControl(
                                     }
                                 }
                             }
+                            }
                         },
                         Mode::Audio => rsx! {
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex; box-sizing: border-box; padding-right: {trail}px;",
                                 crate::phone_audio::PhoneAudio { state }
                             }
                         },
-                        Mode::Switch => rsx! {
+                        Mode::Switch | Mode::Edit => rsx! {
                             div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; box-sizing: border-box; padding: 6px {trail}px 6px 6px;",
                                 {switches}
                             }
@@ -704,29 +798,263 @@ pub fn PhoneControl(
     }
 }
 
-/// Whether the audio is running, small, in the bottom line: the surface works
-/// without it (a phone with no interface plugged in plays nothing, but every
-/// patch and page is there to edit). Tap for Audio settings.
+/// One pane of the desktop's grid: a page of the chain, or a unit of one.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DeskPane {
+    Page(Page),
+    /// Input units, fitted to the pane (`InputRow`'s keys).
+    Units(&'static [&'static str]),
+    /// The pre modulation (and the pre tremolo, when it plays).
+    PreUnits,
+    /// The gate, with the patch's level and pan beside it.
+    Gate,
+    /// The Master module: its EQ and the limiter.
+    Master,
+    /// The pre delay over the pre reverb.
+    PreLanes,
+    /// The post compressor alone.
+    PostComp,
+}
+
+impl DeskPane {
+    /// Its key in the grid.
+    fn key(self) -> String {
+        match self {
+            Self::Page(p) => p.short().to_string(),
+            Self::Units(k) => k.join("+"),
+            Self::PreUnits => "pre-units".into(),
+            Self::Gate => "gate".into(),
+            Self::Master => "master".into(),
+            Self::PreLanes => "pre-lanes".into(),
+            Self::PostComp => "post-comp".into(),
+        }
+    }
+}
+
+/// A top-bar group's panes, as two columns of (pane, rows it spans): PRE
+/// the input side, CORE the tone, POST the effects after the amp. Three
+/// rows, six things at once.
+fn desk_columns(g: crate::control::Group) -> [Vec<(DeskPane, f64)>; 2] {
+    use crate::control::Group;
+    match g {
+        // A row each, in pairs: transpose and doubler beside pitch and
+        // harmonizer; the pedals (wah, dive bomb, volume) beside the Q-Tron;
+        // pre modulation and motion beside the pre delay and reverb.
+        Group::Pre => [
+            vec![
+                (DeskPane::Units(&["transpose", "doubler"]), 1.0),
+                (DeskPane::Units(&["wah", "dive", "volume"]), 1.0),
+                (DeskPane::PreUnits, 1.0),
+            ],
+            vec![
+                (DeskPane::Units(&["pitch", "harmony"]), 1.0),
+                (DeskPane::Units(&["filter"]), 1.0),
+                (DeskPane::PreLanes, 1.0),
+            ],
+        ],
+        // In signal order, a row each: the pre compressor and the gate,
+        // the drives and the amp, the post compressor and the EQ.
+        Group::Amp => [
+            vec![(DeskPane::Page(Page::PreComp), 1.0), (DeskPane::Page(Page::Drives), 1.0), (DeskPane::PostComp, 1.0)],
+            vec![(DeskPane::Gate, 1.0), (DeskPane::Page(Page::Amps), 1.0), (DeskPane::Page(Page::Eq), 1.0)],
+        ],
+        // Two rows: modulation over motion beside the Master module (its
+        // EQ and the limiter); the delays beside the reverbs.
+        Group::Post => [
+            vec![(DeskPane::Page(Page::ModMotion), 1.0), (DeskPane::Page(Page::Delays), 1.0)],
+            vec![(DeskPane::Master, 1.0), (DeskPane::Page(Page::Reverbs), 1.0)],
+        ],
+    }
+}
+
+/// The desktop's Control page: the top bar's group (PRE / CORE / POST) as
+/// two columns of three rows — one column when the window is narrow.
 #[component]
-fn AudioBadge(running: bool, error: String) -> Element {
-    let (dot, label, color) = if running {
-        ("#22c55e", "", DIM)
-    } else if !error.is_empty() && error != "Audio stopped" {
-        ("#ef4444", "Audio error", "#fca5a5")
-    } else {
-        ("#f59e0b", "No audio", "#fcd34d")
+pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32) -> Element {
+    // The group the top bar picked last (CORE until one is).
+    let groups = try_use_context::<crate::control::ShownGroups>();
+    let group = groups
+        .and_then(|g| (g.picked)().last().copied())
+        .unwrap_or(crate::control::Group::Amp);
+    // The box this has, measured: the pages fitted to it (amps, drives) need
+    // it, and here it is not the window.
+    let mut size = use_signal(|| (0.0f64, 0.0f64));
+    let mut mounted = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    let window = try_use_context::<crate::control::WindowSize>();
+    use_effect(move || {
+        let Some(el) = mounted() else { return };
+        // Kept measured: the box changes with the window and with what
+        // opens beside it (the sidebars), and a stale size fits the pedals
+        // and the amp to room the pane no longer has. Quick until the first
+        // layout lands, then a light poll; only a change re-renders.
+        spawn(async move {
+            loop {
+                let known = size.peek().0 > 0.0;
+                if let Ok(r) = el.get_client_rect().await
+                    && r.width() > 0.0
+                    && r.height() > 0.0
+                {
+                    let got = (r.width().round(), r.height().round());
+                    if *size.peek() != got {
+                        size.set(got);
+                    }
+                }
+                architect::platform::sleep(std::time::Duration::from_millis(if known { 400 } else { 50 })).await;
+            }
+        });
+    });
+    // Until measured, an estimate from the window (less the sidebar, the
+    // rails, the bars and the switches) — never a blank page.
+    let (w, h) = match size() {
+        (w, h) if w > 0.0 && h > 0.0 => (w, h),
+        _ => window.map_or((900.0, 420.0), |s| {
+            let (ww, wh) = (s.0)();
+            ((ww - 540.0).max(320.0), (wh * 0.5).max(240.0))
+        }),
     };
+    let [left, right] = desk_columns(group);
+    // Two columns — with the module sidebar open too; one only when even
+    // half the width is too little for a pane.
+    let columns: Vec<Vec<(DeskPane, f64)>> = if w >= 2.0 * DESKTOP_PANE_MIN_W { vec![left, right] } else { vec![left] };
+    let col_w = w / columns.len() as f64 - GRID_GAP;
     rsx! {
-        div { style: "flex: 0 0 auto; height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 13px; background: {RAISED}; cursor: pointer;",
-            title: if error.is_empty() { "Audio" } else { "{error}" },
-            onclick: move |_| crate::settings::open_audio_settings(),
-            span { style: "width: 7px; height: 7px; border-radius: 4px; background: {dot};" }
-            if !label.is_empty() {
-                span { style: "font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: {color}; white-space: nowrap;", "{label}" }
+        // Edge to edge: a hairline between the panes (the rule showing
+        // through the gap), no padding, no rounding.
+        div { style: "display: flex; flex-direction: row; gap: {GRID_GAP}px; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: {RULE};",
+            onmounted: move |e: MountedEvent| mounted.set(Some(e.data())),
+            for (c, col) in columns.into_iter().enumerate() {
+                div { key: "col-{c}", style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: {GRID_GAP}px;",
+                    {
+                        let rows: f64 = col.iter().map(|(_, r)| r).sum();
+                        let gaps = GRID_GAP * (col.len().saturating_sub(1)) as f64;
+                        rsx! {
+                            for (p, span) in col {
+                                {
+                                    let pane = (col_w, (h - gaps) * span / rows - 2.0);
+                                    rsx! {
+                                        div { key: "{p.key()}", style: "flex: {span} 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: #0b0c0f;",
+                                            div { style: "position: relative; flex: 1 1 0%; min-height: 0; display: flex; overflow: hidden;",
+                                                div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+                                                    DeskPaneView { pane_kind: p, blocks: blocks.clone(), state, tempo_bpm, pane }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
+
+/// One pane of the desktop's grid, drawn for its box (`pane`, points).
+#[component]
+fn DeskPaneView(pane_kind: DeskPane, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32, pane: (f64, f64)) -> Element {
+    let faces = crate::rig_faces::use_faces();
+    let tier = crate::control::use_tier();
+    match pane_kind {
+        DeskPane::Page(page) => rsx! { PageView { page, blocks, state, tempo_bpm, pane } },
+        DeskPane::Units(keys) => rsx! {
+            crate::rig_faces::InputRow {
+                blocks,
+                only: keys.iter().map(|k| (*k).to_string()).collect::<Vec<_>>(),
+                fit: Some(pane),
+            }
+        },
+        DeskPane::PreUnits => rsx! {
+            crate::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Units, fit: Some(pane) }
+        },
+        DeskPane::PreLanes => rsx! {
+            crate::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Lanes, fit: Some(pane) }
+        },
+        DeskPane::Gate => {
+            let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
+            let trim = find_block(&blocks, BlockType::Volume, "Patch Trim");
+            // The patch's level and pan: a slim strip at the gate's right,
+            // its face as tall as the pane.
+            let trim_w = 76.0;
+            let lane = (pane.0 - trim_w, pane.1);
+            rsx! {
+                div { style: "display: flex; flex-direction: row; width: 100%; height: 100%; min-height: 0; min-width: 0;",
+                    if let (Some(g), Some(f)) = (gate, faces.gate.clone().map(|f| f.at_box(lane.0, lane.1))) {
+                        // Its lane near its own proportions, centred.
+                        div { style: "position: relative; flex: 1 1 0%; min-width: 0; min-height: 0; display: flex;",
+                            div { style: crate::control::lane_fit(Some(lane), f.size),
+                                crate::rig_faces::GateFace { block: g, face: f.clone(), level: state.in_peak_db, fill: true }
+                            }
+                        }
+                    }
+                    if let Some(t) = trim {
+                        div { style: "flex: 0 0 {trim_w}px; width: {trim_w}px; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid {RULE};",
+                            if let Some(f) = faces.trim.clone() {
+                                crate::rig_faces::BlockFace { block: t, face: f, fill: true }
+                            } else {
+                                crate::control::PatchTrimPanel { block: t }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        DeskPane::PostComp => {
+            let post = find_block(&blocks, BlockType::Compressor, "Post Comp");
+            rsx! {
+                div { style: "flex: 1 1 0%; min-height: 0; display: flex; position: relative;",
+                    if let (Some(c), Some(f)) = (post.clone(), faces.post_comp.clone()) {
+                        crate::rig_faces::BlockFace { block: c, face: f.at(tier), fill: true, preset_type: Some("compressor".to_string()) }
+                    } else if let Some(c) = post {
+                        LiveComp { block: c, state }
+                    }
+                }
+            }
+        }
+        DeskPane::Master => {
+            let rig = use_hook(try_consume_context::<RigClient>);
+            let power = |b: &Option<LiveBlock>| {
+                b.as_ref().map(|b| {
+                    let (rig, id) = (rig.clone(), b.id.clone());
+                    Callback::new(move |()| {
+                        let (rig, id) = (rig.clone(), id.clone());
+                        spawn(async move {
+                            if let Some(r) = rig {
+                                let _ = r.toggle_block_bypass(id).await;
+                            }
+                        });
+                    })
+                })
+            };
+            let eq = find_block(&blocks, BlockType::Eq, "Master EQ");
+            let limiter = find_block(&blocks, BlockType::Compressor, "Limiter");
+            // The limiter square, the EQ the rest — as the Control view had
+            // them.
+            let lim_w = pane.1.min(pane.0 * 0.5).floor();
+            rsx! {
+                div { style: "display: flex; flex-direction: row; width: 100%; height: 100%; min-height: 0; min-width: 0;",
+                    div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+                        ZoomPanel { title: "Master EQ".to_string(), left_power_on: eq.as_ref().map(|b| !b.bypassed), on_left_power: power(&eq),
+                            if let Some(e) = eq.clone() { LiveEq { block: e, state } }
+                        }
+                    }
+                    div { style: "flex: 0 0 {lim_w}px; width: {lim_w}px; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid {RULE};",
+                        ZoomPanel { title: "Limiter".to_string(), left_power_on: limiter.as_ref().map(|b| !b.bypassed), on_left_power: power(&limiter),
+                            if let Some(l) = limiter.clone() { LiveComp { block: l, state } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The least height and width (points) a desktop page gets before the
+/// Control page shows fewer of them.
+const DESKTOP_PANE_MIN_H: f64 = 170.0;
+const DESKTOP_PANE_MIN_W: f64 = 300.0;
+/// Between the panes of the desktop's grid.
+const GRID_GAP: f64 = 1.0;
 
 /// A rail button: its icon, its name small under it; the one picked
 /// raised.
@@ -755,10 +1083,10 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
         "Profile" => &["M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M4 21c1-4 4-6 8-6s7 2 8 6"],
         // Back to the instrument menu.
         "Rigs" => &["M14 6l-6 6 6 6"],
+        "Edit" => &["M4 20h4L19 9l-4-4L4 16z", "M13.5 6.5l4 4"],
         // A speaker.
         "Audio" => &["M4 9h3l4-3.5v13L7 15H4z", "M15 9.5a4 4 0 0 1 0 5", "M17.5 7a7.5 7.5 0 0 1 0 10"],
-        // The chain: a row of segments, raised.
-        "Chain" => &["M3 4h4v5H3z", "M10 4h4v5h-4z", "M17 4h4v5h-4z", "M8 15l4 4 4-4"],
+
         // A note.
         _ => &["M9 18V5l11-2v13", "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z", "M20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"],
     };
@@ -771,54 +1099,80 @@ fn RailIcon(name: &'static str, color: &'static str) -> Element {
     }
 }
 
-/// One name on the status line: its kind small over it ("BLUES" over the
-/// patch, "CORE" over the Core's preset), a chevron for the browser it
-/// opens — where the steppers are; the line keeps only the names. 40
-/// points tall, in a 48-point line (a full-size target).
+/// The audio's state, as the rail's Audio button shows it: the dot on its
+/// speaker, and its name (Audio while it runs, else why not).
+fn audio_state(running: bool, error: &str) -> (&'static str, &'static str, &'static str) {
+    if running {
+        ("#22c55e", "Audio", "")
+    } else if !error.is_empty() && error != "Audio stopped" {
+        ("#ef4444", "Error", "#fca5a5")
+    } else {
+        ("#f59e0b", "Off", "#fcd34d")
+    }
+}
+
+/// The rail's Audio button: a rail button whose speaker carries the audio's
+/// state as a dot, and whose name says Off or Error when it is not running.
 #[component]
-fn StatusName(
+fn AudioRailButton(on: bool, running: bool, error: String, onclick: EventHandler<()>) -> Element {
+    let (fg, bg) = if on { (TEXT, RAISED) } else { (DIM, "transparent") };
+    let (dot, label, warn) = audio_state(running, &error);
+    let label_color = if warn.is_empty() { fg } else { warn };
+    rsx! {
+        div { style: "height: 48px; margin: 0 4px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: {bg}; cursor: pointer;",
+            onclick: move |_| onclick.call(()),
+            div { style: "position: relative; width: 20px; height: 20px;",
+                RailIcon { name: "Audio", color: fg }
+                span { style: "position: absolute; top: -2px; right: -4px; width: 8px; height: 8px; border-radius: 4px; background: {dot}; border: 2px solid {BAR_BG};" }
+            }
+            span { style: "font-size: 11px; font-weight: 600; color: {label_color};", "{label}" }
+        }
+    }
+}
+
+/// The slots' shared box: 40 points tall in the 48-point line (a full-size
+/// target), its kind small over its name.
+const SLOT: &str = "height: 40px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 0 10px 0 12px; border-radius: 10px; overflow: hidden;";
+
+/// A slot on the status line, `grow` shares of the line wide whatever it
+/// holds: its kind over its name, a chevron for the browser it opens. With
+/// no name it is a placeholder — dimmed, a dash, not a button — so a page
+/// with fewer modules keeps the same slots.
+#[component]
+fn TopSlot(
+    grow: u32,
     label: String,
     name: String,
     /// Changed from how it was saved: a `*` after the name.
     #[props(default)]
     modified: bool,
-    on_open: EventHandler<()>,
+    #[props(default)]
+    on_open: Option<EventHandler<()>>,
 ) -> Element {
+    let empty = name.is_empty();
+    let (bg, cursor, name_color, label_color) =
+        if empty { ("transparent", "default", DIM, "#4b5058") } else { (RAISED, "pointer", "#f4f4f5", DIM) };
+    let shown = if empty { "—".to_string() } else { name };
     rsx! {
-        div { style: "flex: 0 1 auto; min-width: 0; max-width: 240px; height: 40px; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 0 10px 0 12px; border-radius: 10px; background: {RAISED}; cursor: pointer; overflow: hidden;",
-            onclick: move |_| on_open.call(()),
-            div { style: "flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center;",
-                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: {DIM}; white-space: nowrap; overflow: hidden;", "{label}" }
-                span { style: "font-size: 14px; font-weight: 700; color: #f4f4f5; white-space: nowrap; overflow: hidden;",
-                    "{name}"
+        div { style: "flex: {grow} 1 0%; {SLOT} background: {bg}; border: 1px solid {RAISED}; cursor: {cursor};",
+            onclick: move |_| {
+                if let Some(open) = on_open {
+                    open.call(());
+                }
+            },
+            div { style: "flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; justify-content: center;",
+                span { style: "font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {label_color}; white-space: nowrap; overflow: hidden;", "{label}" }
+                span { style: "font-size: 14px; font-weight: 700; color: {name_color}; white-space: nowrap; overflow: hidden;",
+                    "{shown}"
                     if modified {
                         span { style: "color: #f59e0b;", " *" }
                     }
                 }
             }
-            svg { width: "12", height: "12", view_box: "0 0 24 24", fill: "none", stroke: DIM, stroke_width: "2.5", stroke_linecap: "round", stroke_linejoin: "round",
-                path { d: "M6 9l6 6 6-6" }
-            }
-        }
-    }
-}
-
-/// The chain's button on the status line: the page that is up, in its
-/// colour, and the arrow that drops the chain down from under the line
-/// (pointing up while it is down).
-#[component]
-fn ChainButton(title: &'static str, color: &'static str, open: bool, on_toggle: EventHandler<()>) -> Element {
-    let (bg, arrow) = if open { (format!("background: {color}; color: #0a0b0d;"), "M6 15l6-6 6 6") } else { (format!("background: {RAISED}; color: {color};"), "M6 9l6 6 6-6") };
-    let ink = if open { "#0a0b0d" } else { color };
-    rsx! {
-        div { style: "flex: 0 0 auto; height: 40px; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 0 12px; border-radius: 10px; cursor: pointer; {bg}",
-            onclick: move |_| on_toggle.call(()),
-            div { style: "display: flex; flex-direction: column; justify-content: center;",
-                span { style: "font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.7;", "Page" }
-                span { style: "font-size: 14px; font-weight: 800; white-space: nowrap;", "{title}" }
-            }
-            svg { width: "14", height: "14", view_box: "0 0 24 24", fill: "none", stroke: ink, stroke_width: "2.8", stroke_linecap: "round", stroke_linejoin: "round",
-                path { d: arrow }
+            if !empty {
+                svg { width: "12", height: "12", view_box: "0 0 24 24", fill: "none", stroke: DIM, stroke_width: "2.5", stroke_linecap: "round", stroke_linejoin: "round",
+                    path { d: "M6 9l6 6 6-6" }
+                }
             }
         }
     }
@@ -826,32 +1180,67 @@ fn ChainButton(title: &'static str, color: &'static str, open: bool, on_toggle: 
 
 /// One page of the chain, filling its box.
 #[component]
-fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32) -> Element {
+fn PageView(
+    page: Page,
+    blocks: Vec<LiveBlock>,
+    state: RigViewState,
+    tempo_bpm: u32,
+    /// The box the page has (width, height), for the pages fitted to it.
+    pane: (f64, f64),
+) -> Element {
     let only = |kinds: &[&str]| kinds.iter().map(|k| (*k).to_string()).collect::<Vec<_>>();
     match page {
         Page::Input => rsx! { crate::rig_faces::InputRow { blocks, only: only(&["transpose", "doubler"]) } },
         Page::Pedals => rsx! { crate::rig_faces::InputRow { blocks, only: only(&["wah", "dive", "volume"]) } },
         Page::Pitch => rsx! { crate::rig_faces::InputRow { blocks, only: only(&["pitch", "harmony"]) } },
         Page::Filter => rsx! { crate::rig_faces::InputRow { blocks, only: only(&["filter"]) } },
-        Page::PreModTrem => rsx! { crate::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Units } },
+        Page::PreModTrem => {
+            let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
+            rsx! { crate::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Units, fit: desk.then_some(pane) } }
+        }
         Page::PreDelayVerb => rsx! { crate::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Lanes } },
         Page::PreComp => {
             let comp = find_block(&blocks, BlockType::Compressor, "Pre Comp");
+            let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
+            let rig = use_hook(try_consume_context::<RigClient>);
+            let id = comp.as_ref().map(|c| c.id.clone());
             rsx! {
-                ZoomPanel { title: "Compressor".to_string(), left_power_on: comp.as_ref().map(|b| !b.bypassed),
-                    if let Some(c) = comp { LiveComp { block: c, state } }
+                ZoomPanel { title: "Pre Comp".to_string(), left_power_on: comp.as_ref().map(|b| !b.bypassed),
+                    on_left_power: id.map(|id| Callback::new(move |()| {
+                        let (rig, id) = (rig.clone(), id.clone());
+                        spawn(async move {
+                            if let Some(r) = rig {
+                                let _ = r.toggle_block_bypass(id).await;
+                            }
+                        });
+                    })),
+                    // The panel's title bar off the box's height.
+                    if let Some(c) = comp { LiveComp { block: c, state, fit: desk.then_some((pane.0, pane.1 - 22.0)) } }
                 }
             }
         }
         Page::Drives => {
-            // Every pedal across the page's width (the screen less the rail
-            // and the housing's clearance).
-            let (w, h) = try_use_context::<crate::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
-            // The page's height less the bars and the board's rails.
-            let page_h = h - f64::from(LINE_H) - f64::from(CHAIN_H) - 24.0;
-            rsx! { crate::rig_faces::DrivesRow { blocks, fit_width: Some(w - f64::from(RAIL_W + HOUSING)), fit_height: Some(page_h) } }
+            // Every pedal across the page's box, less the board's rails. On
+            // the desktop the pre compressor has a pane of its own, and the
+            // board shows only the pedals it plays (no native boost, no
+            // empty slots).
+            let (w, h) = pane;
+            let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
+            rsx! {
+                crate::rig_faces::DrivesRow {
+                    blocks: blocks.clone(),
+                    // The phone's page reaches under its housing's corner;
+                    // a desktop pane is its border's inside, no more.
+                    fit_width: Some(if desk { w - 4.0 } else { w + f64::from(CORNER) }),
+                    fit_height: Some(h - 20.0),
+                    pedals_only: desk,
+                }
+            }
         }
-        Page::Amps => rsx! { crate::rig_faces::AmpRow { blocks, amps_only: true } },
+        Page::Amps => {
+            // The amps fitted to the page's box, as the drives are.
+            rsx! { crate::rig_faces::AmpRow { blocks, amps_only: true, fit: Some(pane) } }
+        }
         Page::Eq => {
             let eq = find_block(&blocks, BlockType::Eq, "Amp EQ");
             rsx! {
@@ -867,7 +1256,12 @@ fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: 
         }
         Page::GatePostComp => {
             // Stacked, as the time pages: the gate over the post
-            // compressor, each its face's phone lane.
+            // compressor — the gate the version of its face that fits a lane
+            // half the page tall (the phone's lane; on a desktop too, where
+            // the upright gate unit stood tiny in a wide strip).
+            let lane = |f: crate::rig_faces::FaceEntry| f.at_box(pane.0, pane.1 / 2.0);
+            // The Distressor keeps the window's version: its lane cut its
+            // nameplate off at a desktop pane's width.
             let tier = crate::control::use_tier();
             let faces = crate::rig_faces::use_faces();
             let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
@@ -876,7 +1270,7 @@ fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: 
                 div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
                     if let (Some(g), Some(f)) = (gate, faces.gate.clone()) {
                         div { style: "flex: 1 1 0%; min-height: 0; display: flex;",
-                            crate::rig_faces::GateFace { block: g, face: f.at(tier), level: state.in_peak_db, fill: true }
+                            crate::rig_faces::GateFace { block: g, face: lane(f), level: state.in_peak_db, fill: true }
                         }
                     }
                     div { style: "flex: 1 1 0%; min-height: 0; display: flex; position: relative;",
@@ -889,27 +1283,38 @@ fn PageView(page: Page, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: 
                 }
             }
         }
-        Page::ModMotion => rsx! {
+        Page::ModMotion => {
             // Stacked, as the delays and reverbs: Modulation over Motion,
-            // each its face's lane (no panel chrome over the nameplate).
+            // each its face's lane (no panel chrome over the nameplate) — on
+            // a desktop pane, the version of the face that fits the lane.
+            let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
+            let lane = desk.then_some((pane.0, pane.1 / 2.0));
+            rsx! {
             div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",
                 div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column;",
-                    ModGroupPanel { title: "Mod", kinds: MOD_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm }
+                    ModGroupPanel { title: "Mod", kinds: MOD_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm, lane }
                 }
                 div { style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column;",
-                    ModGroupPanel { title: "Motion", kinds: MOTION_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm, tempo_divisions: true }
+                    ModGroupPanel { title: "Motion", kinds: MOTION_KINDS.to_vec(), blocks: blocks.clone(), tempo_bpm, tempo_divisions: true, lane }
                 }
             }
-        },
-        Page::Delays => rsx! {
+            }
+        }
+        Page::Delays => {
+            let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
+            rsx! {
             ZoomPanel { title: "Delay".to_string(), flush: true, module: Some("Delay"),
-                DelayPanel { blocks, tempo_bpm }
+                DelayPanel { blocks, tempo_bpm, lane: desk.then_some((pane.0, pane.1 / 2.0)) }
             }
-        },
-        Page::Reverbs => rsx! {
+            }
+        }
+        Page::Reverbs => {
+            let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
+            rsx! {
             ZoomPanel { title: "Reverb".to_string(), flush: true, module: Some("Reverb"),
-                ReverbPanel { blocks, tempo_bpm }
+                ReverbPanel { blocks, tempo_bpm, lane: desk.then_some((pane.0, pane.1 / 2.0)) }
             }
-        },
+            }
+        }
     }
 }

@@ -31,8 +31,10 @@ pub const LINE_STRONG: &str = "#2b2b31";
 
 pub const TEXT: &str = "#e4e4e7";
 pub const MUTED: &str = "#a1a1aa";
-pub const FAINT: &str = "#63636b";
-/// An idle dot, a disabled glyph.
+/// Secondary ink — counts, subs, hints. 4.6:1 on `SIDEBAR` (the old
+/// `#63636b` was 3.2:1, below the floor for text).
+pub const FAINT: &str = "#80808a";
+/// An idle dot, a disabled glyph — never text (1.8:1).
 pub const DIM: &str = "#3f3f46";
 
 // ── States ─────────────────────────────────────────────────────────────────
@@ -53,8 +55,9 @@ pub const DANGER_INK: &str = "#1a0505";
 
 // ── Type ───────────────────────────────────────────────────────────────────
 
-/// Counts, key · tempo, footnotes.
-pub const T_META: &str = "10px";
+/// Counts, key · tempo, footnotes — the floor for anything read (only the
+/// uppercase `EYEBROW` goes smaller).
+pub const T_META: &str = "11px";
 /// Buttons, menu rows, sub-lines.
 pub const T_SMALL: &str = "11px";
 /// Body text and list rows.
@@ -65,13 +68,50 @@ pub const T_BODY: &str = "12px";
 pub const R_SM: &str = "6px";
 /// Popovers and bars — the largest radius the rig uses.
 pub const R_MD: &str = "8px";
-/// A left sidebar's width.
-pub const SIDEBAR_W: &str = "272px";
-/// The right (module) sidebar's width.
-pub const INSPECTOR_W: &str = "300px";
+/// A phone's width: the iPhone 16 Pro's, 402pt portrait. Both sidebars are
+/// exactly this wide, so each is designed once — a sidebar on the desktop,
+/// the whole screen on a phone held upright (landscape phone layouts are
+/// their own).
+pub const PHONE_W: &str = "402px";
+/// A sidebar's minimal width: the names and the state, beside a rig that
+/// keeps the room.
+pub const SIDEBAR_MIN_W: &str = "232px";
+/// A left sidebar's full width — a phone's (see [`PHONE_W`]).
+pub const SIDEBAR_W: &str = PHONE_W;
+/// The right (module) sidebar's full width — a phone's (see [`PHONE_W`]).
+pub const INSPECTOR_W: &str = PHONE_W;
+
+/// A sidebar's width: full (a phone's) or minimal. Every sidebar has both;
+/// the bar's toggle steps closed → minimal → full.
+#[must_use]
+pub fn sidebar_w(full: bool) -> &'static str {
+    if full { PHONE_W } else { SIDEBAR_MIN_W }
+}
 
 // ── Fragments ──────────────────────────────────────────────────────────────
 
 /// The uppercase label over a group.
-pub const EYEBROW: &str = "font-size: 9px; font-weight: 700; letter-spacing: 0.14em; \
-                           text-transform: uppercase; color: #63636b; white-space: nowrap;";
+pub const EYEBROW: &str = "font-size: 10px; font-weight: 700; letter-spacing: 0.12em; \
+                           text-transform: uppercase; color: #80808a; white-space: nowrap;";
+
+/// The pick of a few tabs or views: pressed into its surface, never a box
+/// on it — the bar, the sidebars' tabs, a face's style selector.
+pub const PRESSED: &str = "background: rgba(0,0,0,0.5); color: #fafafa; \
+                           box-shadow: inset 0 1px 2px rgba(0,0,0,0.75), inset 0 -1px 0 rgba(255,255,255,0.05);";
+/// [`PRESSED`] for a pick that is rig state, not a view — the play mode,
+/// which every remote and the footswitches follow: a green floor under it.
+pub const PRESSED_LIVE: &str = "background: rgba(0,0,0,0.5); color: #fafafa; \
+                                box-shadow: inset 0 -2px 0 #22c55e, inset 0 1px 2px rgba(0,0,0,0.75);";
+
+/// The states a style attribute cannot carry (hover), as classes every
+/// surface shares. Mounted once at the rig's root (`document::Style`).
+///
+/// - `sg-hover`: a row, a menu item, a bare button — lifts on hover.
+/// - `sg-row` / `sg-reveal`: a row's ⋯ waits, faint, until the row is
+///   hovered (touch shows it always: see `reveal`).
+/// - `sg-ink`: bare text buttons brighten on hover.
+pub const CSS: &str = ".sg-hover:hover{background:rgba(255,255,255,0.05);}\
+.sg-row .sg-reveal{opacity:0.35;}\
+.sg-row:hover .sg-reveal{opacity:1;}\
+.sg-ink{color:#a1a1aa;}\
+.sg-ink:hover{color:#e4e4e7;}";

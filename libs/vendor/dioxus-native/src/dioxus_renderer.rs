@@ -5,13 +5,12 @@ use std::{any::Any, cell::RefCell};
 use anyrender::{RenderContext, WindowRenderer};
 
 // Renderer imports
-// FTS: full Vello needs indirect compute dispatch, which the iOS
-// simulator's Metal does not offer (wgpu: "DownlevelFlags(INDIRECT_EXECUTION)
-// are required but not supported"); real iPhones do. The simulator takes
-// `vello-hybrid` — plain render pipelines, what the web build draws with —
-// and everything else keeps the renderer the features ask for.
+// FTS: full Vello needs indirect compute dispatch. The iOS simulator reports
+// a GPU family without it, so it used to take `vello-hybrid` here; the
+// vendored wgpu-hal (libs/vendor/wgpu-hal) now enables it there, since the
+// simulator's Metal runs on the Mac's GPU — so it draws as the phone does.
 cfg_if::cfg_if! {
-    if #[cfg(all(feature = "vello", not(all(target_os = "ios", target_abi = "sim"))))] {
+    if #[cfg(feature = "vello")] {
         pub use anyrender_vello::{
             VelloRendererOptions as InnerRendererOptions, VelloWindowRenderer as InnerRenderer,
             wgpu::{Features, Limits},

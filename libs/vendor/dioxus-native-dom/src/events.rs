@@ -272,7 +272,17 @@ impl RenderedElementBacking for NodeHandle {
         &self,
         _options: ScrollToOptions,
     ) -> Pin<Box<dyn Future<Output = MountedResult<()>>>> {
-        Box::pin(async { Err(MountedError::NotSupported) })
+        // FTS: into view in its scrolling ancestor. As with focus, never
+        // borrow a busy document — park it for the next frame, which also
+        // waits out a node mounted but not yet laid out.
+        let done = match self.doc.try_borrow_mut() {
+            Ok(mut doc) => doc.scroll_node_into_view(self.node_id),
+            Err(_) => false,
+        };
+        if !done {
+            PENDING_SCROLL.with(|p| p.borrow_mut().push(self.node_id));
+        }
+        Box::pin(async { Ok(()) })
     }
 
     fn scroll(
@@ -750,8 +760,21 @@ fn apply_focus(doc: &mut BaseDocument, node_id: NodeId, focus: bool) {
     }
 }
 
+std::thread_local! {
+    /// The `scroll_to`s that could not run yet (the document busy, or the node
+    /// not laid out): applied by [`apply_pending_focus`] on a later frame.
+    static PENDING_SCROLL: std::cell::RefCell<Vec<NodeId>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
 /// Apply a focus change [`NodeHandle`]'s `set_focus` had to park.
 pub(crate) fn apply_pending_focus(doc: &mut BaseDocument) {
+    // Every parked scroll (several lists can open on a row at once), each
+    // kept until its node is laid out.
+    let parked = PENDING_SCROLL.with(|p| std::mem::take(&mut *p.borrow_mut()));
+    let waiting: Vec<NodeId> = parked.into_iter().filter(|&id| !doc.scroll_node_into_view(id)).collect();
+    if !waiting.is_empty() {
+        PENDING_SCROLL.with(|p| p.borrow_mut().extend(waiting));
+    }
     if let Some((node_id, focus)) = PENDING_FOCUS.with(|p| p.borrow_mut().take()) {
         apply_focus(doc, node_id, focus);
     }

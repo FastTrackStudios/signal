@@ -1,7 +1,8 @@
 //! Status indicators for the bar: a dot and a short label that say how a
-//! subsystem is doing at a glance, with a menu behind a right-click or a
-//! double-click — the way a DAW's audio and MIDI readouts work, instead of a
-//! row of buttons that each open one thing.
+//! subsystem is doing at a glance, with its menu a click away — the way a
+//! DAW's audio and MIDI readouts work, instead of a row of buttons that each
+//! open one thing. A subsystem that needs you (audio stopped) turns into an
+//! alarm pill whose click is the fix.
 //!
 //! Blitz notes (see the `blitz-design` skill): the menu is an absolute box
 //! under its indicator (there is no `position: fixed` for a click-outside
@@ -10,11 +11,18 @@
 
 use dioxus::prelude::*;
 
+use crate::theme::{DIM, FAINT, LINE_STRONG, LIVE, MENU, MUTED, R_MD, R_SM, T_BODY, T_SMALL, TEXT};
+
+/// The alarm red: an indicator that needs you. White on it is 4.8:1.
+const ALARM: &str = "#dc2626";
+
 /// One menu row: a label and what it does. `None` action = a disabled note.
 #[derive(Clone, PartialEq)]
 pub struct IndicatorItem {
     pub label: String,
     pub action: Option<Callback<()>>,
+    /// The current choice of a few (the buffer size): a drawn check.
+    pub checked: bool,
 }
 
 impl IndicatorItem {
@@ -22,7 +30,23 @@ impl IndicatorItem {
         Self {
             label: label.into(),
             action: Some(action),
+            checked: false,
         }
+    }
+
+    /// A heading over the rows after it — no action.
+    pub fn head(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            action: None,
+            checked: false,
+        }
+    }
+
+    #[must_use]
+    pub fn checked(mut self, on: bool) -> Self {
+        self.checked = on;
+        self
     }
 }
 
@@ -44,6 +68,12 @@ pub fn Indicator(
     /// attention — audio off — without a banner pushing the page down.
     #[props(default)]
     flash: bool,
+    /// An alarm: the indicator becomes a red pill reading this ("Audio
+    /// stopped · Start"), and a click runs `on_alarm` — the fix, not a menu.
+    /// The menu stays a right-click away.
+    #[props(default)]
+    alarm: Option<String>,
+    #[props(default)] on_alarm: Option<Callback<()>>,
 ) -> Element {
     let mut open = use_signal(|| false);
     let showing = open() || pinned;
@@ -65,8 +95,9 @@ pub fn Indicator(
         }
     });
     let on = !flash || lit();
-    let dot_now = if on { dot.clone() } else { "#3f3f46".to_string() };
-    let label_color = if flash && on { dot.clone() } else { "#a1a1aa".to_string() };
+    let dot_now = if on { dot.clone() } else { DIM.to_string() };
+    let label_color = if flash && on { dot.clone() } else { MUTED.to_string() };
+    let pill_dot = if on { "#ffffff" } else { ALARM };
     rsx! {
         div {
             style: "position: relative; display: flex; align-items: center; height: 28px;",
@@ -76,36 +107,56 @@ pub fn Indicator(
                     cb.call(());
                 }
             },
-            div {
-                title: "{title} — right-click or double-click (tap, by touch) for options",
-                style: "display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; \
-                        border-radius: 6px; cursor: default; user-select: none; \
-                        font-size: 11px; font-weight: 600; color: {label_color};",
-                class: "hover:bg-accent/30",
-                oncontextmenu: move |e: MouseEvent| {
-                    e.prevent_default();
-                    open.set(true);
-                },
-                ondoubleclick: move |_| open.set(true),
-                // Touch has neither: a tap opens it.
-                onclick: move |_| {
-                    if signal_widgets::is_touch() {
-                        open.toggle();
+            if let Some(alarm) = alarm.clone() {
+                // The alarm: loud, and its click is the fix.
+                div {
+                    title: "{title} — click to fix; right-click for options",
+                    style: "display: flex; align-items: center; gap: 7px; height: 24px; padding: 0 10px; \
+                            border-radius: {R_SM}; cursor: pointer; user-select: none; white-space: nowrap; \
+                            background: {ALARM}; color: #ffffff; font-size: {T_BODY}; font-weight: 700;",
+                    oncontextmenu: move |e: MouseEvent| {
+                        e.prevent_default();
+                        open.set(true);
+                    },
+                    onclick: move |_| {
+                        if let Some(cb) = on_alarm {
+                            cb.call(());
+                        } else {
+                            open.toggle();
+                        }
+                    },
+                    span {
+                        style: "width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; \
+                                background: {pill_dot};",
                     }
-                },
-                span {
-                    style: "width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; \
-                            background: {dot_now}; box-shadow: 0 0 6px {dot_now};",
+                    "{alarm}"
                 }
-                "{label}"
+            } else {
+                div {
+                    title: "{title} — click for options",
+                    style: "display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; \
+                            border-radius: {R_SM}; cursor: pointer; user-select: none; \
+                            font-size: {T_SMALL}; font-weight: 600; color: {label_color};",
+                    class: "sg-hover",
+                    oncontextmenu: move |e: MouseEvent| {
+                        e.prevent_default();
+                        open.set(true);
+                    },
+                    onclick: move |_| open.toggle(),
+                    span {
+                        style: "width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; \
+                                background: {dot_now}; box-shadow: 0 0 6px {dot_now};",
+                    }
+                    "{label}"
+                }
             }
             if showing {
                 div {
                     style: "position: absolute; top: 100%; right: 0; z-index: 300; \
                             min-width: 200px; padding: 4px; margin-top: 2px; \
                             display: flex; flex-direction: column; gap: 1px; \
-                            border: 1px solid #2b2b31; border-radius: 10px; \
-                            background: #0d0d10; box-shadow: 0 12px 32px #000c;",
+                            border: 1px solid {LINE_STRONG}; border-radius: {R_MD}; \
+                            background: {MENU}; box-shadow: 0 12px 32px #000c;",
                     for (i, item) in items.iter().enumerate() {
                         {
                             let action = item.action;
@@ -114,18 +165,27 @@ pub fn Indicator(
                                 div {
                                     key: "{i}",
                                     style: format!(
-                                        "padding: 6px 9px; border-radius: 6px; font-size: 11px; \
-                                         text-align: left; white-space: nowrap; cursor: {}; color: {};",
+                                        "display: flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: {R_SM}; \
+                                         font-size: {}; text-align: left; white-space: nowrap; cursor: {}; color: {}; {}",
+                                        if enabled { T_BODY } else { "10px" },
                                         if enabled { "pointer" } else { "default" },
-                                        if enabled { "#d4d4d8" } else { "#71717a" },
+                                        if enabled { TEXT } else { FAINT },
+                                        if enabled { "" } else { "padding-top: 8px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;" },
                                     ),
-                                    class: if enabled { "hover:bg-accent/40" } else { "" },
+                                    class: if enabled { "sg-hover" } else { "" },
                                     onclick: move |_| {
                                         if let Some(cb) = action {
                                             open.set(false);
                                             cb.call(());
                                         }
                                     },
+                                    if enabled {
+                                        span { style: "width: 12px; flex-shrink: 0; display: flex; color: {LIVE};",
+                                            if item.checked {
+                                                fts_chrome::Glyph { icon: fts_chrome::Icon::Check, size: 12 }
+                                            }
+                                        }
+                                    }
                                     "{item.label}"
                                 }
                             }

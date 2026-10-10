@@ -425,6 +425,8 @@ fn LevelRow(label: String, value: f32, readout: String, on_change: Callback<f32>
                 onpointerup: move |_| long.cancel(),
                 onpointercancel: move |_| long.cancel(),
                 onpointerdown: move |e: PointerEvent| {
+                    // The press is the knob's to drag: no panning under it (Blitz).
+                    e.prevent_default();
                     long.down(&e, move |_| {
                         if let Some(bus) = bus {
                             bus.end();

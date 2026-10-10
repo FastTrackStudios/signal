@@ -40,7 +40,7 @@ use daw::standalone::Standalone;
 use daw::standalone::audio_engine::AudioEngine;
 #[cfg(all(
     not(target_arch = "wasm32"),
-    any(target_os = "linux", target_os = "macos")
+    any(target_os = "linux", target_os = "macos", target_os = "ios")
 ))]
 use daw::standalone::audio_engine::DuplexAudioEngine;
 #[cfg(not(target_arch = "wasm32"))]
@@ -119,7 +119,7 @@ impl HostedEngine for AudioEngine {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
 impl HostedEngine for DuplexAudioEngine {
     fn open(
         daw: Standalone,
@@ -140,18 +140,18 @@ impl HostedEngine for DuplexAudioEngine {
 
 /// The duplex host's engine: one realtime callback that reads the input and
 /// writes the output in the same cycle — `PipeWire` `pw_filter` on Linux, a
-/// CoreAudio HAL IOProc on macOS. The cpal engine (elsewhere) runs input and
+/// CoreAudio HAL IOProc on macOS, one RemoteIO unit on iOS. The cpal engine (elsewhere) runs input and
 /// output as two streams bridged by a ring, and that ring is latency: it
 /// drains one block per output callback, so every frame queued in it by a
 /// stall or a start-up offset stays queued for as long as the stream runs.
 #[cfg(all(
     not(target_arch = "wasm32"),
-    any(target_os = "linux", target_os = "macos")
+    any(target_os = "linux", target_os = "macos", target_os = "ios")
 ))]
 pub type DuplexEngine = DuplexAudioEngine;
 #[cfg(all(
     not(target_arch = "wasm32"),
-    not(any(target_os = "linux", target_os = "macos"))
+    not(any(target_os = "linux", target_os = "macos", target_os = "ios"))
 ))]
 pub type DuplexEngine = AudioEngine;
 

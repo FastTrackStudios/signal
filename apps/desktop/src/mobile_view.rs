@@ -35,8 +35,8 @@ const ROOT_CSS: &str = "html, body { margin: 0; padding: 0; background: #0f1012;
 enum MobileScreen {
     /// The instrument menu — the front door.
     Menu,
-    /// The guitar rig.
-    Rig,
+    /// The guitar rig, or (`bass`) the same rig as the bass.
+    Rig { bass: bool },
     /// The keys rig (sampler engine + downloaded packs).
     #[cfg(feature = "signal-keys-rig")]
     Keys,
@@ -47,8 +47,14 @@ impl MobileScreen {
     /// the menu rather than opening a blank one — the menu already marks it
     /// as not-yet, so nothing needs saying twice.
     fn for_rig(rig: Rig) -> MobileScreen {
+        // A rig the phone does not offer (greyed out on the menu) — the
+        // last one played may be one — opens the menu.
+        if !crate::rigs::available(rig) {
+            return MobileScreen::Menu;
+        }
         match rig {
-            Rig::Guitar => MobileScreen::Rig,
+            Rig::Guitar => MobileScreen::Rig { bass: false },
+            Rig::Bass => MobileScreen::Rig { bass: true },
             #[cfg(feature = "signal-keys-rig")]
             Rig::Keys => MobileScreen::Keys,
             _ => MobileScreen::Menu,
@@ -87,6 +93,9 @@ pub fn MobileApp() -> Element {
     // largest — a smaller one only leaves a little to spare) or an iPad's.
     // UIKit does not publish it.
     let mut corners = use_context_provider(|| ScreenCorners(Signal::new(PHONE_CORNER_RADIUS)));
+    // The log ring, for the Audio mode's Log tab (copied for pasting into a
+    // message when the audio misbehaves).
+    use_context_provider(|| signal_guitar_ui::LogFeed { lines: crate::log_ring::snapshot, copy: copy_log });
     use_future(move || {
         let window = window.clone();
         async move {
@@ -135,6 +144,26 @@ pub fn MobileApp() -> Element {
                     let _ = provide_context(engine.settings.clone());
                     #[cfg(feature = "signal-keys-rig")]
                     let _ = provide_context(engine.keys.clone());
+                    // TONE3000 and the account: the browser's Tone3000 source
+                    // and the sign-in, the page opened in an in-app sheet.
+                    #[cfg(feature = "tone3000")]
+                    {
+                        if let Some(t) = engine.tones.clone() {
+                            let _ = provide_context(t);
+                        }
+                        if let Some(t) = engine.tones_stream.clone() {
+                            let _ = provide_context(t);
+                        }
+                        if let Some(a) = engine.account.clone() {
+                            let _ = provide_context(a);
+                        }
+                        let _ = provide_context(signal_tone3000_ui::UrlOpener::new(|url| {
+                            #[cfg(target_os = "ios")]
+                            crate::ios_safari::open(&url);
+                            #[cfg(not(target_os = "ios"))]
+                            let _ = url;
+                        }));
+                    }
                     rsx! { Router {} }
                 }
                 None => rsx! {
@@ -177,8 +206,8 @@ fn Router() -> Element {
                 },
             }
         },
-        MobileScreen::Rig => rsx! {
-            GuitarPage { on_home: to_menu }
+        MobileScreen::Rig { bass } => rsx! {
+            GuitarPage { bass, on_home: to_menu }
         },
         #[cfg(feature = "signal-keys-rig")]
         MobileScreen::Keys => rsx! {
@@ -201,13 +230,31 @@ fn MenuPage(on_pick: EventHandler<Rig>) -> Element {
 /// (frame's phone faces, a page at a time). Its rail's Rigs button comes
 /// back here.
 #[component]
-fn GuitarPage(on_home: EventHandler<()>) -> Element {
+fn GuitarPage(bass: bool, on_home: EventHandler<()>) -> Element {
     use_context_provider(|| PhoneHost {
         on_home: Callback::new(move |()| on_home.call(())),
     });
+    // The bass is this rig as another instrument: the engine is told which.
+    use_effect(use_reactive!(|bass| {
+        if let Some(rig) = try_consume_context::<signal_guitar_proto::rig::RigClient>() {
+            let id = if bass { "bass" } else { "guitar" };
+            spawn(async move {
+                let _ = rig.set_instrument(id.to_string()).await;
+            });
+        }
+    }));
     rsx! {
         div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
             GuitarRigRemote {}
         }
     }
+}
+
+/// Put the copied log on the clipboard (the phone's; elsewhere there is no
+/// shell clipboard to reach from here).
+fn copy_log(text: &str) {
+    #[cfg(target_os = "ios")]
+    crate::ios_orientation::set_clipboard(text);
+    #[cfg(not(target_os = "ios"))]
+    let _ = text;
 }

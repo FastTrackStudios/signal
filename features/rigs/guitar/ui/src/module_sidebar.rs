@@ -24,7 +24,7 @@ use signal_widgets::{BrowseChip, BrowseEntry, BrowseScope, SoundBrowser};
 
 use crate::kit::{Button, MenuItem, PickOption, Picked, PresetBar};
 use crate::preset_look::Look;
-use crate::theme::{FAINT, INSPECTOR_W, MUTED, TEXT};
+use crate::theme::{FAINT, MUTED, TEXT};
 
 /// What the right sidebar shows presets for.
 #[derive(Clone, PartialEq, Debug)]
@@ -187,6 +187,50 @@ pub fn preset_items(
     items
 }
 
+/// Whether the right sidebar is full (a phone's width) or minimal — the
+/// bar's toggle steps it; provided at the rig's root.
+#[derive(Clone, Copy)]
+pub struct RightFull(pub Signal<bool>);
+
+/// The sidebar's width now: a phone's when full, else the minimal width.
+fn sidebar_w() -> &'static str {
+    crate::kit::pane_w(try_consume_context::<RightFull>().is_some_and(|f| (f.0)()))
+}
+
+/// The sidebar's tabs, two levels deep: the three things a sound is made
+/// of, then the blocks a module holds ("All" is the module itself).
+const FAMILIES: [(&str, &[&str]); 3] = [
+    ("Preset", &[]),
+    ("Core", &["Drive", "Amp"]),
+    ("Time", &["Delay", "Reverb"]),
+];
+
+/// The family a module's tab sits under.
+fn family_of(module: &str) -> Option<(&'static str, &'static [&'static str])> {
+    FAMILIES.iter().copied().find(|(f, subs)| {
+        f.eq_ignore_ascii_case(module) || subs.iter().any(|m| m.eq_ignore_ascii_case(module))
+    })
+}
+
+/// Whether `module` is the Core (its presets are the rig presets).
+fn is_core(module: &str) -> bool {
+    module.eq_ignore_ascii_case("Core")
+}
+
+/// Whether `module` is the presets' (`tones.styx`): sounds made of a Core,
+/// a Time, block presets — shared by every patch naming one.
+fn is_tone(module: &str) -> bool {
+    module.eq_ignore_ascii_case("Preset")
+}
+
+/// The preset a module's menu acts on: the one the patch plays — or, for
+/// a patch that plays no Core, the Core its tone would be saved into.
+fn menu_target(module: &str, pick: Option<&ModulePick>, presets: &[ModulePresetEntry]) -> String {
+    pick.map(|p| p.preset.clone())
+        .or_else(|| is_core(module).then(|| presets.last().map(|p| p.name.clone())).flatten())
+        .unwrap_or_default()
+}
+
 /// The menu for what `module` plays: keep the live edits (save over the
 /// snapshot, as a new snapshot, as a new preset), drop them, then manage the
 /// preset and snapshot that play.
@@ -206,11 +250,27 @@ pub fn module_menu(
     let snap = pick
         .map(|p| played_snapshot(p, presets))
         .unwrap_or_default();
-    let no_edits = (!modified).then(|| "No edits on this patch".to_string());
+    // A preset is the whole patch: saving it always takes what plays.
+    let no_edits = (!modified && !is_tone(module)).then(|| "No edits on this patch".to_string());
+    let core = is_core(module) || is_tone(module);
     let mut items = vec![MenuItem::head(format!("{module} on this patch"))];
+    // A patch that plays no Core yet can still add its tone to one — the
+    // Core presets are built a patch at a time.
+    if is_core(module)
+        && entry.is_none()
+        && let Some(target) = presets.last()
+    {
+        items.push(MenuItem::name(
+            "save_snapshot",
+            format!("Save into “{}” as…", target.name),
+            "Save",
+            next_name("Snapshot", &target.snapshots),
+            target.snapshots.clone(),
+        ));
+    }
     match entry {
         Some(e) => {
-            items.push(MenuItem::run("save", format!("Save to “{snap}”")).unless(no_edits.clone()));
+            items.push(MenuItem::run("save", if is_tone(module) { format!("Save to “{}”", e.name) } else { format!("Save to “{snap}”") }).unless(no_edits.clone()));
             items.push(MenuItem::name(
                 "save_snapshot",
                 "Save as new snapshot…",
@@ -231,7 +291,8 @@ pub fn module_menu(
     items.push(MenuItem::run("revert", "Revert edits").unless(no_edits));
     if let Some(e) = entry {
         items.push(MenuItem::sep());
-        items.extend(preset_items(e, &names, Some(&snap)));
+        // A Core's snapshots are renamed and deleted in the library.
+        items.extend(preset_items(e, &names, (!core).then_some(snap.as_str())));
     }
     items.push(MenuItem::sep());
     items.push(MenuItem::run(
@@ -259,6 +320,55 @@ pub fn module_act(
         snapshot.to_string(),
         p.text,
     );
+    // The presets (`tones.styx`): their own calls.
+    if is_tone(module) {
+        match p.id {
+            "save" => send(rig, move |r| async move {
+                let _ = r.save_tone(pr).await;
+            }),
+            "save_preset" | "save_snapshot" => send(rig, move |r| async move {
+                let _ = r.save_tone(text).await;
+            }),
+            "rename_preset" => send(rig, move |r| async move {
+                let _ = r.rename_tone(pr, text).await;
+            }),
+            "duplicate_preset" => send(rig, move |r| async move {
+                let _ = r.duplicate_tone(pr, text).await;
+            }),
+            "delete_preset" => send(rig, move |r| async move {
+                let _ = r.delete_tone(pr).await;
+            }),
+            _ => {}
+        }
+        return;
+    }
+    // The Core's presets are the rig presets, not a module's: their own
+    // calls. (Revert and the library work as for any module; a Core's
+    // snapshots have no rename or delete call yet.)
+    if is_core(module) && !matches!(p.id, "revert" | "manage") {
+        match p.id {
+            "save" => send(rig, move |r| async move {
+                let _ = r.save_core_snapshot(pr, sn).await;
+            }),
+            "save_snapshot" => send(rig, move |r| async move {
+                let _ = r.save_core_snapshot(pr, text).await;
+            }),
+            "save_preset" => send(rig, move |r| async move {
+                let _ = r.save_core_snapshot(text, "Main".to_string()).await;
+            }),
+            "rename_preset" => send(rig, move |r| async move {
+                let _ = r.rename_rig_preset(pr, text).await;
+            }),
+            "duplicate_preset" => send(rig, move |r| async move {
+                let _ = r.duplicate_rig_preset(pr, text).await;
+            }),
+            "delete_preset" => send(rig, move |r| async move {
+                let _ = r.delete_rig_preset(pr).await;
+            }),
+            _ => {}
+        }
+        return;
+    }
     match p.id {
         "save" => send(rig, move |r| async move {
             let _ = r.save_module_snapshot(m, pr, sn).await;
@@ -410,7 +520,11 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             }
         }
     });
-    let Some(selection) = selected() else {
+    // Closed — except in a pane (Play's), which is never empty: there it
+    // falls back to the presets.
+    let Some(selection) = selected().or_else(|| {
+        try_consume_context::<crate::kit::FillPane>().map(|_| Selection::Module("Preset".to_string()))
+    }) else {
         return rsx! {};
     };
     let comp = comp.read().clone().flatten();
@@ -538,7 +652,7 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
         SoundBrowser {
             scopes: vec![BrowseScope {
                 id: "module".into(),
-                label: format!("{module} presets"),
+                label: if is_tone(&module) { "Presets".to_string() } else { format!("{module} presets") },
                 target: format!("→ {module} on this patch"),
             }],
             scope: "module",
@@ -571,7 +685,7 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             on_menu: {
                 let rig = rig.clone();
                 let module = module.clone();
-                let preset = pick.as_ref().map(|p| p.preset.clone()).unwrap_or_default();
+                let preset = menu_target(&module, pick.as_ref(), &presets);
                 let played = played.clone();
                 move |p: Picked| module_act(&rig, library, &module, &preset, &played, p)
             },
@@ -585,13 +699,92 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
             },
             art: art_of(arts),
             empty: if presets.is_empty() {
-                format!("No {module} presets yet — dial one in and use ⋯ › Save as new preset.")
+                if is_tone(&module) {
+                    "No presets yet. In Presets mode, ⋯ › Make presets from this profile's patches turns each patch's sound into one.".to_string()
+                } else {
+                    format!("No {module} presets yet — dial one in and use ⋯ › Save as new preset.")
+                }
             } else {
                 "No preset matches.".to_string()
             },
-            width: INSPECTOR_W,
+            width: sidebar_w(),
             right: true,
             on_close: move |()| selected.set(None),
+            // Preset · Core · Time, then the blocks of the one picked —
+            // the pick pressed in, as in the bar.
+            {
+                let family = family_of(&module);
+                let subs: &[&str] = family.map_or(&[], |(_, subs)| subs);
+                rsx! {
+                    div { style: "display: flex; gap: 2px; padding: 4px 0 2px;",
+                        for (f, _) in FAMILIES {
+                            {
+                                let on = family.is_some_and(|(x, _)| x == f);
+                                rsx! {
+                                    button { key: "{f}",
+                                        class: if on { "" } else { "sg-hover" },
+                                        style: format!(
+                                            "flex: 1 1 0; min-width: 0; padding: 5px 0; border: none; border-radius: {}; font-size: {}; \
+                                             font-weight: 600; cursor: pointer; {}",
+                                            crate::theme::R_SM,
+                                            crate::theme::T_BODY,
+                                            if on { crate::theme::PRESSED.to_string() } else { format!("background: transparent; color: {MUTED};") },
+                                        ),
+                                        onclick: move |_| selected.set(Some(Selection::Module(f.to_string()))),
+                                        "{f}"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let Some((f, _)) = family.filter(|_| !subs.is_empty()) {
+                        div { style: "display: flex; gap: 2px; padding: 2px 0 6px;",
+                            for (label, target) in std::iter::once(("All", f)).chain(subs.iter().map(|m| (*m, *m))) {
+                                {
+                                    let on = module.eq_ignore_ascii_case(target);
+                                    rsx! {
+                                        button { key: "{label}",
+                                            class: if on { "" } else { "sg-ink" },
+                                            style: format!(
+                                                "padding: 2px 9px; border: none; border-radius: {}; font-size: {}; font-weight: 600; \
+                                                 cursor: pointer; {}",
+                                                crate::theme::R_SM,
+                                                crate::theme::T_SMALL,
+                                                if on { crate::theme::PRESSED } else { "background: transparent;" },
+                                            ),
+                                            title: if label == "All" { format!("The {f} module") } else { label.to_string() },
+                                            onclick: move |_| selected.set(Some(Selection::Module(target.to_string()))),
+                                            "{label}"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // No presets yet: the one way to start, as a button, not a
+            // recipe — each patch's sound as a preset (the patches unchanged).
+            if is_tone(&module) && total == 0 {
+                div { style: "display: flex; flex-direction: column; gap: 6px; padding: 6px 0 10px;",
+                    crate::kit::Button {
+                        label: "Make presets from this profile's patches",
+                        primary: true,
+                        onclick: {
+                            let rig = rig.clone();
+                            let mut refresh = refresh;
+                            move |()| {
+                                if let Some(r) = rig.clone() {
+                                    spawn(async move {
+                                        let _ = r.presets_from_patches().await;
+                                        refresh += 1;
+                                    });
+                                }
+                            }
+                        },
+                    }
+                }
+            }
             // What the module plays, and every way to change or keep it.
             PresetBar {
                 label: module.clone(),
@@ -599,7 +792,9 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
                 sub: played.clone(),
                 modified,
                 live: pick.is_some(),
-                placeholder: "Nothing picked",
+                // A patch on no preset plays its own sound — say so,
+                // rather than "nothing", which reads as silence.
+                placeholder: if module.eq_ignore_ascii_case("Preset") { "Its own sound" } else { "Nothing picked" },
                 options,
                 on_pick: {
                     let choose = choose.clone();
@@ -627,7 +822,7 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
                 on_menu: {
                     let rig = rig.clone();
                     let module = module.clone();
-                    let preset = pick.as_ref().map(|p| p.preset.clone()).unwrap_or_default();
+                    let preset = menu_target(&module, pick.as_ref(), &presets);
                     let played = played.clone();
                     move |p: Picked| module_act(&rig, library, &module, &preset, &played, p)
                 },
@@ -705,7 +900,7 @@ fn SubPick(module: String, look: Look, lit: bool) -> Element {
         return rsx! {
             span { style: "{slot}", title: "{module}: off",
                 span { style: "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; border: 1px solid {crate::theme::DIM};" }
-                span { style: "font-size: 10px; color: {crate::theme::DIM};", "off" }
+                span { style: "font-size: {crate::theme::T_META}; color: {crate::theme::FAINT};", "off" }
             }
         };
     }
@@ -714,7 +909,7 @@ fn SubPick(module: String, look: Look, lit: bool) -> Element {
     rsx! {
         span { style: "{slot}", title: "{module}: {look.engine} {look.value}",
             span { style: "width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; background: {dot};" }
-            span { style: "font-size: 10px; font-family: monospace; color: {ink}; white-space: nowrap;", "{look.value}" }
+            span { style: "font-size: {crate::theme::T_META}; font-family: monospace; color: {ink}; white-space: nowrap;", "{look.value}" }
         }
     }
 }
@@ -790,10 +985,10 @@ fn PickPicture(look: Look) -> Element {
     }
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0;",
-            crate::preset_look::ShapeView { shape: look.shape.clone(), w: 268, h: 28, lit: true }
+            crate::preset_look::ShapeView { shape: look.shape.clone(), w: 370, h: 28, lit: true }
             div { style: "display: flex; align-items: center; gap: 6px;",
                 crate::preset_look::EngineChip { engine: look.engine.clone(), default: look.engine_default }
-                span { style: "font-size: 10px; color: {FAINT};", "{look.group}" }
+                span { style: "font-size: {crate::theme::T_META}; color: {FAINT};", "{look.group}" }
                 div { style: "flex: 1 1 0;" }
                 crate::preset_look::ValueChip { value: look.value.clone(), lit: true }
             }
@@ -992,7 +1187,7 @@ fn BlockPresets(
             } else {
                 "No preset matches.".to_string()
             },
-            width: INSPECTOR_W,
+            width: sidebar_w(),
             right: true,
             on_close: move |()| on_close.call(()),
             PresetBar {

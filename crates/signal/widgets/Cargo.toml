@@ -14,3 +14,8 @@ signal-proto.workspace = true
 dioxus.workspace = true
 # `platform::sleep` — the switches' hold timer, native and wasm alike.
 architect = { workspace = true, features = ["platform"] }
+
+[dev-dependencies]
+# Headless Blitz: presses hit-tested and delivered as the app gets them.
+dioxus-test.workspace = true
+tokio.workspace = true

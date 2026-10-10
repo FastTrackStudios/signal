@@ -1,0 +1,464 @@
+//! The macro bar, for fingers — the prototype's `dock/MacroBar.tsx` on the
+//! rig's macros (`Rig::macros`). Two rows of eight flush cells; each reads
+//! one of three ways (`MacroKnobView::scale`):
+//!
+//!   level     0–100%, 0 is off. Gate, Pre-Comp, Pitch, Drive, Comp, Mod,
+//!             Motion, Boost, Clarity.
+//!   wet       0–200%, its normal level in the middle; past it the dry falls
+//!             away (hatched). Delay, Reverb, Space.
+//!   relative  ± around its rest. Gain, Tone, Width, Output.
+//!
+//! Slide sideways anywhere on a cell to turn it (a full sweep is 2.5 cells);
+//! double-tap puts it back to rest; a tap on a knob with sub-macros (▾)
+//! opens them — a panel dropping over the main area, a row per block.
+//! A glow rises behind a knob while its effect works, and the gate shows
+//! the guitar's level against its threshold.
+
+use std::cell::Cell as Flag;
+use std::collections::BTreeMap;
+use std::rc::Rc;
+use std::time::Duration;
+
+use dioxus::prelude::*;
+use signal_guitar_proto::rig::RigClient;
+use signal_guitar_proto::{MacroChildView, MacroKnobView};
+use signal_widgets::drag_bus::{DragBus, DragEvent};
+
+use super::tokens::*;
+use crate::state::RigViewState;
+
+/// The bar's height with the rule under it: two 44pt rows, the hairline
+/// between, plus 1. The setlist's header matches it.
+pub const MACRO_BAR_H: u32 = 44 * 2 + 1 + 1;
+
+/// What the rig is hearing, as the bar reacts to it (0..1 each).
+#[derive(Clone, Copy, PartialEq, Default)]
+struct Heard {
+    input: f64,
+    output: f64,
+    squash: f64,
+    /// Delay, reverb, modulation, tremolo: what each adds now.
+    delay: f64,
+    reverb: f64,
+    modulation: f64,
+    tremolo: f64,
+}
+
+/// A knob's glow while its effect works, and the gate's meter.
+fn reaction(id: &str, v: f64, h: Heard) -> (f64, Option<(f64, f64)>) {
+    // A wet knob's normal level sits at the middle.
+    let wet = (v * 2.0).min(1.0);
+    match id {
+        "gate" => (0.0, Some((h.input, v))),
+        "pre-comp" | "comp" => (h.squash * v, None),
+        "drive" => (h.input * v, None),
+        "boost" | "pitch" => (if v > 0.0 { h.input * 0.7 } else { 0.0 }, None),
+        "gain" => (h.input * 0.35, None),
+        "output" => (h.output * 0.3, None),
+        "delay" => (h.delay * wet, None),
+        "reverb" => (h.reverb * wet, None),
+        "space" => (h.reverb * 0.6 * wet, None),
+        "clarity" => (h.delay * v, None),
+        "mod" => (if v > 0.0 { h.modulation * wet * 0.7 } else { 0.0 }, None),
+        "motion" => (if v > 0.0 { h.tremolo * v } else { 0.0 }, None),
+        _ => (0.0, None),
+    }
+}
+
+/// The colours the bar draws grey (its label in ink, not lifted).
+fn greyish(colour: &str) -> bool {
+    matches!(
+        colour.to_ascii_uppercase().as_str(),
+        "#6B7280" | "#94A3B8" | "#E5E7EB" | "#FAFAF9" | "#F3F4F6" | "#D1D5DB" | "#F9FAFB" | "#E2E8F0" | "#F1F5F9" | "#CBD5E1"
+    )
+}
+
+/// The open sub-macro panel, and the way a press outside it closes it: the
+/// bar marks a press as its own on the way up; the app's root, which every
+/// press reaches after, closes the panel for any other.
+#[derive(Clone)]
+pub struct MacroAway {
+    open: Signal<Option<String>>,
+    inside: Rc<Flag<bool>>,
+}
+
+impl MacroAway {
+    pub fn new() -> Self {
+        Self { open: Signal::new(None), inside: Rc::new(Flag::new(false)) }
+    }
+
+    /// A press reached the app's root.
+    pub fn press(&self) {
+        if self.inside.replace(false) {
+            return;
+        }
+        if self.open.peek().is_some() {
+            let mut open = self.open;
+            open.set(None);
+        }
+    }
+}
+
+#[component]
+pub fn TouchMacroBar(state: RigViewState) -> Element {
+    let knobs = state.macros.read().clone();
+    let away = use_hook(|| try_consume_context::<MacroAway>().unwrap_or_else(MacroAway::new));
+    let mut open = away.open;
+    let inside = away.inside.clone();
+    let fx = state.fx.read().clone();
+    let heard = Heard {
+        input: *state.in_level.read(),
+        output: *state.out_level.read(),
+        squash: (f64::from(*state.comp_gr_db.read()) / 12.0).clamp(0.0, 1.0),
+        delay: fx.first().copied().unwrap_or(0.0),
+        reverb: fx.get(1).copied().unwrap_or(0.0),
+        modulation: fx.get(2).copied().unwrap_or(0.0),
+        tremolo: fx.get(3).copied().unwrap_or(0.0),
+    };
+    let shown = open().and_then(|id| knobs.iter().find(|k| k.id == id).cloned());
+    rsx! {
+        div {
+            style: "position: relative;",
+            onpointerdown: move |_| inside.set(true),
+            if let Some(k) = shown.filter(|k| !k.children.is_empty()) {
+                Panel { knob: k, on_close: move |()| open.set(None) }
+            }
+            div { style: "display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 1px; background: #000;",
+                for k in knobs.iter().cloned() {
+                    Cell {
+                        key: "{k.id}",
+                        id: k.id.clone(),
+                        label: k.label.clone(),
+                        colour: k.color.clone(),
+                        value: f64::from(k.value),
+                        rest: f64::from(k.rest),
+                        scale: k.scale.clone(),
+                        level: level_of(&k),
+                        more: !k.children.is_empty(),
+                        open: open() == Some(k.id.clone()),
+                        heard,
+                        on_tap: {
+                            let id = k.id.clone();
+                            let more = !k.children.is_empty();
+                            move |()| if more {
+                                let now = open();
+                                open.set(if now.as_deref() == Some(id.as_str()) { None } else { Some(id.clone()) });
+                            }
+                        },
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A knob's sub-macros: a row per block (Delay: DLY 1, DLY 2), headed when
+/// there are several.
+#[component]
+fn Panel(knob: MacroKnobView, on_close: EventHandler<()>) -> Element {
+    let mut rows: BTreeMap<String, Vec<MacroChildView>> = BTreeMap::new();
+    let mut order: Vec<String> = Vec::new();
+    for c in &knob.children {
+        if !rows.contains_key(&c.group) {
+            order.push(c.group.clone());
+        }
+        rows.entry(c.group.clone()).or_default().push(c.clone());
+    }
+    let heads = order.iter().any(|g| !g.is_empty());
+    let cols = rows.values().map(Vec::len).max().unwrap_or(1);
+    let template = if heads { format!("64px repeat({cols}, minmax(0, 1fr))") } else { format!("repeat({cols}, minmax(0, 1fr))") };
+    let label_ink = lift(&knob.color);
+    rsx! {
+        div { style: "position: absolute; left: 0; right: 0; top: 100%; z-index: 5; background: {SHEET_2}; border-bottom: 2px solid {knob.color};",
+            div { style: "display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 6px 0 12px;",
+                span { style: "font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {label_ink};", "{knob.label}" }
+                span { style: "flex: 1;" }
+                button {
+                    "aria-label": "Close {knob.label}",
+                    style: "width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer;",
+                    onclick: move |_| on_close.call(()),
+                    svg { width: "12", height: "12", view_box: "0 0 12 12",
+                        path { d: "M2 2l8 8M10 2l-8 8", stroke: INK_3, stroke_width: "1.6", stroke_linecap: "round" }
+                    }
+                }
+            }
+            div { style: "display: grid; grid-template-columns: {template}; gap: 1px; background: #000; border-top: 1px solid #000;",
+                for g in order.iter() {
+                    if heads {
+                        span { key: "h{g}", style: "display: flex; align-items: center; padding: 0 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; color: {INK_3}; background: {SHEET_2};", "{g}" }
+                    }
+                    for c in rows.get(g).cloned().unwrap_or_default() {
+                        Cell {
+                            key: "{c.id}",
+                            id: c.id.clone(),
+                            label: c.label.clone(),
+                            colour: c.color.clone(),
+                            value: f64::from(c.value),
+                            rest: f64::from(c.rest),
+                            scale: "relative".to_string(),
+                            more: false,
+                            open: false,
+                            heard: Heard::default(),
+                            on_tap: move |()| {},
+                        }
+                    }
+                    if let Some(r) = rows.get(g) {
+                        for k in r.len()..cols {
+                            span { key: "pad{g}{k}", style: "background: {SHEET_2};" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A level knob's level, 0..1 — what the patch sets, not the knob's
+/// offset from rest:
+///
+///   a knob that sweeps its param from off to full (Drive, Mod, Motion…):
+///     where the param sits along that sweep
+///   a knob that moves its param around the patch's own (Gate, Pre-Comp,
+///     Comp, Boost — the patch sits mid-sweep whatever it is): where the
+///     param sits in its whole range, in the knob's direction
+///
+/// 0 when the knob's blocks are all off.
+fn level_of(k: &MacroKnobView) -> Option<f64> {
+    if k.scale != "level" {
+        return None;
+    }
+    if k.off || !k.children.is_empty() && k.children.iter().all(|c| c.bypassed) {
+        return Some(0.0);
+    }
+    let t = k.tune.iter().find(|t| !t.off)?;
+    let (lo, hi, x, base) = (f64::from(t.lo), f64::from(t.hi), f64::from(t.live), f64::from(t.base));
+    if (hi - lo).abs() < 1e-6 {
+        return None;
+    }
+    let along = |from: f64, to: f64| {
+        if t.log && from > 0.0 && to > 0.0 && x > 0.0 { (x / from).ln() / (to / from).ln() } else { (x - from) / (to - from) }
+    };
+    // Around the patch: the sweep is centred on its own value.
+    let centred = ((lo + hi) / 2.0 - base).abs() < (hi - lo).abs() * 0.05;
+    let n = if centred {
+        let (min, max) = (f64::from(t.min), f64::from(t.max));
+        if (max - min).abs() < 1e-6 {
+            return None;
+        }
+        if hi >= lo { along(min, max) } else { along(max, min) }
+    } else {
+        along(lo, hi)
+    };
+    Some(n.clamp(0.0, 1.0))
+}
+
+/// One macro: the whole cell is the control, drawn by its scale — a level
+/// fills from the left (0 is off); a wet knob fills from the left with its
+/// normal level marked in the middle and the stretch past it hatched; a
+/// relative knob fills from the centre (its rest).
+#[component]
+fn Cell(
+    id: String,
+    label: String,
+    colour: String,
+    value: f64,
+    rest: f64,
+    scale: String,
+    level: Option<f64>,
+    more: bool,
+    open: bool,
+    heard: Heard,
+    on_tap: EventHandler<()>,
+) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let bus = DragBus::try_use();
+    let active = use_signal(|| false);
+    // While a finger turns it, the cell shows where the finger is (the rig
+    // answers a moment later).
+    let mut live = use_signal(|| None::<f64>);
+    let mut width = use_signal(|| 120.0_f64);
+    // A press came down in the last 300 ms: the next is a double-tap. Each
+    // press its own window (a later one's timer leaves it be).
+    let mut recent = use_signal(|| false);
+    let mut presses = use_signal(|| 0u32);
+    // A level reads what the patch sets: its first param's live value
+    // (0 when its block is off), not the knob's offset from rest.
+    let v = match (scale == "level", live(), level) {
+        (_, Some(x), None) | (false, Some(x), _) => x,
+        (true, _, Some(l)) => l,
+        _ => value,
+    }
+    .clamp(0.0, 1.0);
+    let (wet, relative) = (scale == "wet", scale == "relative");
+    let offset = ((v - rest) * 200.0).round() as i32;
+    let pct = (v * if wet { 200.0 } else { 100.0 }).round() as i32;
+    let readout = if relative {
+        if offset > 0 { format!("+{offset}") } else { format!("{offset}") }
+    } else if pct == 0 {
+        "off".to_string()
+    } else if wet && pct == 200 {
+        "wet".to_string()
+    } else {
+        format!("{pct}%")
+    };
+    let quiet = if relative { offset == 0 } else { pct == 0 };
+    let (lo, hi) = if relative { (v.min(rest), v.max(rest)) } else { (0.0, v) };
+    let fill_hi = if wet { hi.min(0.5) } else { hi };
+    let (glow, meter) = reaction(&id, v, heard);
+    let label_ink = if greyish(&colour) { INK_2.to_string() } else { lift(&colour) };
+    let value_ink = if quiet { INK_3.to_string() } else if wet && v > 0.5 { lift(&colour) } else { INK.to_string() };
+    let bg = if open { UP } else if active() { FILL_ON } else { SHEET_2 };
+    let fill = format!("color-mix(in oklab, {colour} {}%, transparent)", if active() { 32 } else { 22 });
+    let hatch = format!(
+        "repeating-linear-gradient(135deg, color-mix(in oklab, {colour} {a}%, transparent) 0px, color-mix(in oklab, {colour} {a}%, transparent) 4px, color-mix(in oklab, {colour} {b}%, transparent) 4px, color-mix(in oklab, {colour} {b}%, transparent) 8px)",
+        a = if active() { 46 } else { 36 },
+        b = if active() { 24 } else { 16 }
+    );
+    let glow_bg = format!("color-mix(in oklab, {colour} {}%, transparent)", (glow * 26.0).round() as i32);
+    let mid_line = if wet { ("10px", INK_3) } else { ("8px", RULE_STRONG) };
+    let send = {
+        let rig = rig.clone();
+        let id = id.clone();
+        move |x: f64| {
+            if let Some(r) = rig.clone() {
+                let id = id.clone();
+                spawn(async move {
+                    let _ = r.set_macro(id, x as f32).await;
+                });
+            }
+        }
+    };
+    rsx! {
+        div {
+            role: "slider",
+            "aria-label": "{label}",
+            "aria-valuetext": "{readout}",
+            style: "position: relative; height: 44px; overflow: hidden; background: {bg}; touch-action: none; user-select: none; cursor: ew-resize;",
+            onmounted: move |e| {
+                let el = e.data();
+                spawn(async move {
+                    if let Ok(r) = el.get_client_rect().await {
+                        width.set(r.width().max(40.0));
+                    }
+                });
+            },
+            onpointerdown: {
+                let send = send.clone();
+                let rig = rig.clone();
+                let id = id.clone();
+                move |e: PointerEvent| {
+                    // The press is the cell's to drag: no panning under it.
+                    e.prevent_default();
+                    e.stop_propagation();
+                    // A second press within 300 ms of the last: back to rest.
+                    let mine = presses() + 1;
+                    presses.set(mine);
+                    if recent() {
+                        recent.set(false);
+                        live.set(None);
+                        if let Some(r) = rig.clone() {
+                            let id = id.clone();
+                            spawn(async move {
+                                let _ = r.reset_macro(id).await;
+                            });
+                        }
+                        return;
+                    }
+                    recent.set(true);
+                    spawn(async move {
+                        architect::platform::sleep(Duration::from_millis(300)).await;
+                        if presses() == mine {
+                            recent.set(false);
+                        }
+                    });
+                    let x0 = e.client_coordinates().x;
+                    // From the knob's own value (a level knob shows its
+                    // param's level, but turns the knob).
+                    let v0 = live().unwrap_or(value).clamp(0.0, 1.0);
+                    let span = width() * 2.5;
+                    let send = send.clone();
+                    let Some(bus) = bus else { return };
+                    let moved_cell = std::rc::Rc::new(std::cell::Cell::new(false));
+                    let flag = moved_cell.clone();
+                    bus.begin(move |ev| {
+                    // Signals are handles: copied in, set through the copy.
+                    let (mut active, mut live) = (active, live);
+                    match ev {
+                        DragEvent::Move { x, .. } => {
+                            if !flag.get() && (x - x0).abs() < 4.0 {
+                                return;
+                            }
+                            if !flag.get() {
+                                active.set(true);
+                            }
+                            flag.set(true);
+                            let nv = (v0 + (x - x0) / span).clamp(0.0, 1.0);
+                            live.set(Some(nv));
+                            send(nv);
+                        }
+                        DragEvent::End => {
+                            active.set(false);
+                            live.set(None);
+                            if !flag.get() {
+                                // A tap: its sub-macros, at once.
+                                on_tap.call(());
+                            }
+                        }
+                    }
+                    });
+                }
+            },
+            // Open: its colour along the foot (a bar — Blitz draws no inset shadow).
+            if open {
+                span { style: "position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: {colour};" }
+            }
+            // Its effect at work: a glow that rises and falls with it.
+            if glow > 0.01 {
+                span { style: "position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: {glow_bg};" }
+            }
+            // The gate's meter along the foot: the level, the threshold, green while open.
+            if let Some((level, mark)) = meter {
+                span { style: "position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,0.55);",
+                    span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: {pct_of(level)}%; background: {pick(level >= mark, LIVE, GATE_SHUT)};" }
+                    span { style: "position: absolute; top: -2px; bottom: 0; left: calc({pct_of(mark)}% - 1px); width: 2px; background: {INK};" }
+                }
+            }
+            // The middle: rest for a relative knob, the normal level for a
+            // wet one — a tick along the foot, clear of the words.
+            if scale != "level" {
+                span { style: "position: absolute; bottom: 0; height: {mid_line.0}; left: 50%; width: 1px; background: {mid_line.1};" }
+            }
+            span { style: "position: absolute; top: 0; bottom: 0; left: {pct_of(lo)}%; width: {pct_of(fill_hi - lo)}%; background: {fill};" }
+            if wet && v > 0.5 {
+                span { style: "position: absolute; top: 0; bottom: 0; left: 50%; width: {pct_of(v - 0.5)}%; background: {hatch};" }
+            }
+            // Where it sits: the fill's edge, a tick along the foot (a line
+            // the cell's height ran through its label).
+            if !quiet {
+                span { style: "position: absolute; bottom: 0; height: 10px; left: calc({pct_of(v)}% - 1px); width: 2px; background: {colour};" }
+            }
+            span { style: "position: relative; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 8px; box-sizing: border-box;",
+                span { style: "min-width: 0; display: flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: {label_ink}; white-space: nowrap; overflow: hidden;",
+                    span { style: "overflow: hidden; text-overflow: ellipsis;", "{label}" }
+                    if more {
+                        svg { key: "{open}", width: "8", height: "5", view_box: "0 0 8 5", style: "flex-shrink: 0; opacity: 0.8; {pick(open, ROTATED, NOTHING)}",
+                            path { d: "M1 1l3 3 3-3", fill: "none", stroke: "{label_ink}", stroke_width: "1.4", stroke_linecap: "round", stroke_linejoin: "round" }
+                        }
+                    }
+                }
+                span { style: "font-size: {pick(active(), 16, 13)}px; line-height: 1; font-weight: 700; color: {value_ink}; font-variant-numeric: tabular-nums;",
+                    "{readout}"
+                }
+            }
+        }
+    }
+}
+
+/// 0..1 as a whole percentage, for a style.
+fn pct_of(x: f64) -> f64 {
+    (x.clamp(0.0, 1.0) * 1000.0).round() / 10.0
+}
+
+const ROTATED: &str = "transform: rotate(180deg);";
+/// The gate's level while it is shut.
+const GATE_SHUT: &str = "#52525b";

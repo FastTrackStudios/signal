@@ -28,6 +28,9 @@ pub struct NamProcessor {
     in_mono: Vec<f64>,
     /// Mono output scratch the model writes into. Reused per block.
     out_mono: Vec<f64>,
+    /// The block the model was last reset for: its buffers hold no more,
+    /// so a longer block runs through it in pieces of this.
+    model_block: usize,
     /// Path the model was loaded from — for the UI label.
     pub model_path: String,
     /// Display name (filename stem) — cached so the UI doesn't touch the
@@ -79,6 +82,7 @@ impl NamProcessor {
             model,
             in_mono: vec![0.0; max_block],
             out_mono: vec![0.0; max_block],
+            model_block: max_block,
             model_path: path.to_string_lossy().to_string(),
             display_name,
             input_gain_db: 0.0,
@@ -110,6 +114,7 @@ impl NamProcessor {
             model,
             in_mono: vec![0.0; max_block],
             out_mono: vec![0.0; max_block],
+            model_block: max_block,
             display_name: crate::assets::stem(&name),
             model_path: name,
             input_gain_db: 0.0,
@@ -174,12 +179,14 @@ impl NamProcessor {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let path = std::path::PathBuf::from(&self.model_path);
-            crate::nam_calibrate::measured_loudness(
+            let loudness = crate::nam_calibrate::measured_loudness(
                 &mut self.model,
                 &path,
                 self.sample_rate,
                 max_block,
-            )
+            );
+            self.model_block = max_block;
+            loudness
         }
         // No DI render cache in the browser: the declared loudness stands in
         // (levels there come from the preset snapshots' own calibration).
@@ -198,6 +205,21 @@ impl NamProcessor {
         self.in_mono.resize(max_block, 0.0);
         self.out_mono.resize(max_block, 0.0);
         self.model.reset(sample_rate, max_block);
+        self.model_block = max_block;
+    }
+
+    /// Run the model over the first `frames` of the mono scratch, in pieces
+    /// no longer than it was prepared for — handed more, its buffers (sized
+    /// once, at reset) would be written past.
+    fn run_model(&mut self, frames: usize) {
+        let step = self.model_block.max(1);
+        let mut at = 0;
+        while at < frames {
+            let n = (frames - at).min(step);
+            self.model
+                .process(&self.in_mono[at..at + n], &mut self.out_mono[at..at + n]);
+            at += n;
+        }
     }
 
     /// Process one interleaved-stereo `[L, R, L, R, …]` `f32` buffer
@@ -225,8 +247,7 @@ impl NamProcessor {
             let r = inout[2 * i + 1] as f64;
             self.in_mono[i] = ((l + r) * 0.5) * gin;
         }
-        self.model
-            .process(&self.in_mono[..frames], &mut self.out_mono[..frames]);
+        self.run_model(frames);
         // Broadcast mono back to both channels with output gain.
         for i in 0..frames {
             let y = (self.out_mono[i] * gout) as f32;
@@ -331,8 +352,7 @@ impl PluginInstance for NamProcessor {
             let r = in_r[i] as f64;
             self.in_mono[i] = ((l + r) * 0.5) * gin;
         }
-        self.model
-            .process(&self.in_mono[..frames], &mut self.out_mono[..frames]);
+        self.run_model(frames);
         for i in 0..frames {
             let y = (self.out_mono[i] * gout) as f32;
             out_l[i] = y;
@@ -366,6 +386,34 @@ mod tests {
     /// process routes agree (so the rig hears the same tone on daw's engine).
     // r[verify sampler.nam.mono-fold]
     // r[verify sampler.nam.planar-interleaved-parity]
+    #[test]
+    fn a_block_longer_than_prepared_runs_in_pieces() {
+        // Prepared for 64, handed 1000: the model's buffers hold 64, so the
+        // block must go through in pieces — and sound as one run of 64s does.
+        let sr = 48_000.0;
+        let Ok(mut long) = NamProcessor::load(fixture("amp_a.nam"), sr, 64) else {
+            return;
+        };
+        let mut pieces = NamProcessor::load(fixture("amp_a.nam"), sr, 64).expect("load");
+        const N: usize = 1000;
+        let sig: Vec<f32> = (0..N).map(|i| (i as f32 * 0.05).sin() * 0.3).collect();
+        let (mut ll, mut lr) = (vec![0.0f32; N], vec![0.0f32; N]);
+        long.process_block(&sig, &sig, &mut ll, &mut lr, &PluginEvents::default())
+            .unwrap();
+        let mut pl = vec![0.0f32; N];
+        for at in (0..N).step_by(64) {
+            let end = (at + 64).min(N);
+            let mut pr = vec![0.0f32; end - at];
+            pieces
+                .process_block(&sig[at..end], &sig[at..end], &mut pl[at..end], &mut pr, &PluginEvents::default())
+                .unwrap();
+        }
+        assert!(ll.iter().any(|x| x.abs() > 1e-6), "the model was heard");
+        for i in 0..N {
+            assert!((ll[i] - pl[i]).abs() < 1e-6, "diverged at {i}: {} != {}", ll[i], pl[i]);
+        }
+    }
+
     #[test]
     fn process_block_matches_process_interleaved() {
         let sr = 48_000.0;

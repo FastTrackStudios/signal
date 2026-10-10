@@ -57,6 +57,9 @@ pub struct RigViewState {
     pub levelling: Signal<LevelProgress>,
     /// The active patch's macro bar, values included.
     pub macros: Signal<Vec<MacroKnobView>>,
+    /// What the time and modulation effects add now, 0..1 (perceptual):
+    /// delay, reverb, modulation, tremolo — the macro bar's glows.
+    pub fx: Signal<Vec<f64>>,
 }
 
 /// Seed the rig view-state with one `status`/`perf`/`chain` fetch, then fold
@@ -95,6 +98,7 @@ pub fn use_rig_state() -> RigViewState {
     let mut dsp = use_signal(RigPerf::default);
     let mut levelling = use_signal(LevelProgress::default);
     let mut macros = use_signal(Vec::<MacroKnobView>::new);
+    let fx = use_signal(Vec::<f64>::new);
 
     // Seed once — the event stream only carries *changes*; a fresh
     // subscriber needs the current state to start from.
@@ -177,6 +181,7 @@ pub fn use_rig_state() -> RigViewState {
                         dsp,
                         mut levelling,
                         mut macros,
+                        fx,
                     ) = (
                         running,
                         audio_error,
@@ -196,6 +201,7 @@ pub fn use_rig_state() -> RigViewState {
                         dsp,
                         levelling,
                         macros,
+                        fx,
                     );
                     match ev {
                         RigEvent::Status(s) => {
@@ -225,6 +231,7 @@ pub fn use_rig_state() -> RigViewState {
                             put(mix_db, (s.mix_db_l, s.mix_db_r));
                             put(active_patch, s.active_patch);
                             put(dsp, s.perf);
+                            put(fx, s.fx_activity.iter().map(|p| meter_level(*p)).collect());
                         }
                         RigEvent::Levelling(l) => levelling.set(l),
                         RigEvent::Macros(m) => macros.set(m),
@@ -308,6 +315,7 @@ pub fn use_rig_state() -> RigViewState {
         dsp,
         levelling,
         macros,
+        fx,
     }
 }
 
