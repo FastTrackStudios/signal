@@ -37,6 +37,8 @@ enum MobileScreen {
     Menu,
     /// The guitar rig, or (`bass`) the same rig as the bass.
     Rig { bass: bool },
+    /// The drum rig's pads and kit.
+    Drums,
     /// The keys rig (sampler engine + downloaded packs).
     #[cfg(feature = "signal-keys-rig")]
     Keys,
@@ -55,6 +57,7 @@ impl MobileScreen {
         match rig {
             Rig::Guitar => MobileScreen::Rig { bass: false },
             Rig::Bass => MobileScreen::Rig { bass: true },
+            Rig::Drums => MobileScreen::Drums,
             #[cfg(feature = "signal-keys-rig")]
             Rig::Keys => MobileScreen::Keys,
             _ => MobileScreen::Menu,
@@ -209,10 +212,27 @@ fn Router() -> Element {
         MobileScreen::Rig { bass } => rsx! {
             GuitarPage { bass, on_home: to_menu }
         },
+        MobileScreen::Drums => rsx! {
+            DrumPage { on_home: to_menu }
+        },
         #[cfg(feature = "signal-keys-rig")]
         MobileScreen::Keys => rsx! {
             keys_view::KeysShell { on_home: to_menu }
         },
+    }
+}
+
+/// The drum rig: its pads and its kit (the drum rig's client when the app
+/// provides one; its demo kit until then).
+#[component]
+fn DrumPage(on_home: EventHandler<()>) -> Element {
+    use_context_provider(|| PhoneHost {
+        on_home: Callback::new(move |()| on_home.call(())),
+    });
+    rsx! {
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+            signal_guitar_ui::DrumTablet {}
+        }
     }
 }
 

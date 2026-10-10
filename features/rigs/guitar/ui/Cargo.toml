@@ -25,6 +25,8 @@ dioxus.workspace = true
 signal-widgets.workspace = true
 lumen-blocks.workspace = true
 signal-guitar-proto.workspace = true
+# The drum rig's wire contract, for its iPad surface (tablet/drums.rs).
+signal-drums-proto.workspace = true
 # The TONE3000 catalog browser — mounted as the Tones page. Wasm-clean,
 # like everything else here.
 signal-tone3000-ui.workspace = true

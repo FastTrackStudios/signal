@@ -28,6 +28,8 @@ pub fn available(rig: Rig) -> bool {
     match rig {
         // The bass is the guitar rig as another instrument.
         Rig::Guitar | Rig::Bass => cfg!(feature = "signal-guitar"),
+        // The drums' pads and kit (the engine joins them on iOS later).
+        Rig::Drums => cfg!(feature = "signal-guitar"),
         // Not on the phone for now: the keys rig does not work there yet,
         // so its tile is greyed out rather than opening onto it.
         Rig::Keys => false,

@@ -67,6 +67,7 @@ pub use meters::{CpuMeter, DspReadout, MeterBar, MeterPair, meter_level};
 pub use module_sidebar::{InitialSelection, Selection as ModuleSelection};
 pub use perform::PerformGrid;
 pub use remote::GuitarRigRemote;
+pub use tablet::drums::DrumTablet;
 pub use setlist_bar::SetlistSidebar;
 pub use settings::{
     AUDIO_SETTINGS_OPEN, AudioSettingsBridge, AudioSettingsModal, open_audio_settings,

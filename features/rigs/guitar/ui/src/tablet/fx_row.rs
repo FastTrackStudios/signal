@@ -415,7 +415,7 @@ fn ArtCard(block: LiveBlock, aspect: (f64, f64)) -> Element {
 /// A step's chevron, drawn (a glyph set in the font sits off-centre and
 /// changes weight with it).
 #[component]
-pub(super) fn Chevron(left: bool) -> Element {
+pub(crate) fn Chevron(left: bool) -> Element {
     rsx! {
         svg { width: "10", height: "16", view_box: "0 0 10 16",
             path { d: pick(left, "M8 2 2 8l6 6", "M2 2l6 6-6 6"), fill: "none", stroke: FOCUS_FG, stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round" }

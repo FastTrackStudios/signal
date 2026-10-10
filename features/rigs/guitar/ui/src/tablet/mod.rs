@@ -17,6 +17,7 @@ mod browser;
 mod colors;
 pub(crate) mod splash;
 mod tones;
+pub(crate) mod drums;
 mod captures;
 mod edit;
 mod macros;
