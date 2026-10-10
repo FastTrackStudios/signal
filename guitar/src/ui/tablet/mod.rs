@@ -16,6 +16,7 @@
 mod browser;
 mod captures;
 mod colors;
+pub(crate) mod drums;
 mod edit;
 mod fx_row;
 mod macros;
