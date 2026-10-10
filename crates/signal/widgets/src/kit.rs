@@ -95,7 +95,7 @@ pub fn Button(
     let (bg, fg, border) = match (primary, disabled) {
         (_, true) => ("transparent", FAINT, LINE),
         (true, false) => (PRIMARY, "#ffffff", PRIMARY),
-        (false, false) => ("transparent", TEXT, "#34343c"),
+        (false, false) => ("transparent", TEXT, LINE_STRONG),
     };
     let cursor = if disabled { "default" } else { "pointer" };
     let flex = if grow {
@@ -105,6 +105,7 @@ pub fn Button(
     };
     rsx! {
         button {
+            class: if disabled || primary { "" } else { "sg-hover" },
             style: "{flex} padding: {pad}; border-radius: {R_SM}; font-size: {font}; font-weight: 600; \
                     background: {bg}; color: {fg}; border: 1px solid {border}; cursor: {cursor}; \
                     white-space: nowrap; overflow: hidden;",
@@ -549,10 +550,9 @@ pub fn MenuPanel(
     let mut armed = use_signal(|| None::<usize>);
     let row = format!(
         "display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: {R_SM}; \
-         font-size: {T_SMALL}; white-space: nowrap; overflow: hidden;"
+         font-size: {T_BODY}; white-space: nowrap; overflow: hidden;"
     );
-    let head = "padding: 6px 9px 3px; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; \
-                color: #71717a; white-space: nowrap; overflow: hidden;";
+    let head = format!("padding: 6px 9px 3px; overflow: hidden; {EYEBROW}");
     let panel = format!(
         "display: flex; flex-direction: column; gap: 1px; padding: 4px; min-width: {MENU_W}px; \
          max-width: 320px; border: 1px solid {LINE_STRONG}; border-radius: {R_MD}; background: {MENU}; \
@@ -615,7 +615,7 @@ pub fn MenuPanel(
                         let off = item.disabled.is_some();
                         let danger = kind == ItemKind::Delete;
                         let is_armed = armed() == Some(i);
-                        let colour = if off { DIM } else if danger { DANGER } else { "#d4d4d8" };
+                        let colour = if off { FAINT } else if danger { DANGER } else { TEXT };
                         let bg = if is_armed { DANGER } else { "transparent" };
                         let fg = if is_armed { DANGER_INK } else { colour };
                         let cursor = if off { "default" } else { "pointer" };
@@ -624,7 +624,7 @@ pub fn MenuPanel(
                         rsx! {
                             div { key: "{i}", style: "display: contents;",
                             div {
-                                class: if off || is_armed { "" } else { "hover:bg-accent/40" },
+                                class: if off || is_armed { "" } else { "sg-hover" },
                                 style: "{row} color: {fg}; background: {bg}; cursor: {cursor};",
                                 title: "{tip}",
                                 onclick: move |e: MouseEvent| {

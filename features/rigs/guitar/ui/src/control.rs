@@ -631,6 +631,8 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
                 onpointerdown: {
                     let set_thr = set_thr;
                     move |e: PointerEvent| {
+                        // The press is the knob's to drag: no panning under it (Blitz).
+                        e.prevent_default();
                         let y = e.client_coordinates().y;
                         let el = el();
                         let set_thr = set_thr.clone();
@@ -754,6 +756,8 @@ fn VFader(
                 class: "relative flex-1 w-2 bg-black/60 border border-border min-h-0 cursor-ns-resize touch-none",
                 onmounted: move |e| el.set(Some(e.data())),
                 onpointerdown: move |e: PointerEvent| {
+                    // The press is the knob's to drag: no panning under it (Blitz).
+                    e.prevent_default();
                     let y = e.client_coordinates().y;
                     let el = el();
                     let bus = signal_widgets::DragBus::try_use();
@@ -1087,7 +1091,7 @@ fn PKnob(
 /// version of it), the last thing before the delays and reverbs, so the
 /// whole dry sound moves and the tails take it from there.
 #[component]
-fn PatchTrimPanel(block: LiveBlock) -> Element {
+pub(crate) fn PatchTrimPanel(block: LiveBlock) -> Element {
     let param = |name: &str, lo: f32, hi: f32| {
         block
             .params
@@ -1142,11 +1146,33 @@ fn PatchTrimPanel(block: LiveBlock) -> Element {
     }
 }
 
+/// A face's box inside a lane of known size (`lane`, a whole pane's lane):
+/// no taller than ~1.05× its own proportions allow, centred — a face laid out
+/// for a box much squarer than it was drawn for crowds itself (the digital
+/// delay's readout ran into its Time knob). Unknown lanes: the whole lane.
+pub(crate) fn lane_fit(lane: Option<(f64, f64)>, size: (f64, f64)) -> String {
+    let full = "position: absolute; inset: 0; display: flex;".to_string();
+    let Some((w, h)) = lane else { return full };
+    let tallest = w / (size.0 / size.1.max(1.0) * 0.95);
+    if tallest >= h {
+        return full;
+    }
+    format!("position: absolute; left: 0; right: 0; top: 50%; height: {tallest:.0}px; margin-top: -{:.0}px; display: flex;", tallest / 2.0)
+}
+
 /// The stereo delay module, wide: one full-width visualizer per delay
 /// stacked (1 top, 2 bottom) — click a lane to select it — with the
 /// selected delay's controls in a strip beneath.
 #[component]
-pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
+pub(crate) fn DelayPanel(
+    blocks: Vec<LiveBlock>,
+    tempo_bpm: u32,
+    #[props(default)] pre: bool,
+    /// One lane's box (points), where the host knows it (a desktop pane):
+    /// each face the version that fits it, not the window's tier's.
+    #[props(default)]
+    lane: Option<(f64, f64)>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let pick_block = try_use_context::<crate::module_sidebar::SelectedModule>();
     let mut sel = use_signal(|| 0usize);
@@ -1168,7 +1194,7 @@ pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default
     let faces = crate::rig_faces::use_faces();
     // Drawn at the window's tier (a phone draws each face's phone layout).
     let tier = use_tier();
-    let face_of = |b: &LiveBlock| faces.time(false, DELAY_ALGOS.get(param_v(b, "style", 1.0) as usize).copied().unwrap_or("")).map(|f| f.at(tier));
+    let face_of = |b: &LiveBlock| faces.time(false, DELAY_ALGOS.get(param_v(b, "style", 1.0) as usize).copied().unwrap_or("")).map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h)));
     let all_faces = delays.iter().all(|b| face_of(b).is_some());
 
     rsx! {
@@ -1223,7 +1249,9 @@ pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default
                             },
                             if let Some(f) = lane_face.clone() {
                                 div { class: "absolute inset-0 flex justify-center", style: "background: #0b0c0f;",
-                                    crate::rig_faces::BlockFace { block: b.clone(), face: f, fill: true, preset_type: Some("delay".to_string()), algos: Some(("style", DELAY_ALGOS.to_vec())), tempo_bpm: Some(tempo_bpm) }
+                                    div { style: lane_fit(lane, f.size),
+                                        crate::rig_faces::BlockFace { block: b.clone(), face: f.clone(), fill: true, preset_type: Some("delay".to_string()), algos: Some(("style", DELAY_ALGOS.to_vec())), tempo_bpm: Some(tempo_bpm) }
+                                    }
                                 }
                             } else {
                                 {delay_lane(taps.clone(), win_ms, !dim, color, W, quarter, div_label(b),
@@ -1347,7 +1375,15 @@ pub(crate) fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default
 /// stacked — click a lane to select — with the selected reverb's controls
 /// beneath.
 #[component]
-pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(default)] pre: bool) -> Element {
+pub(crate) fn ReverbPanel(
+    blocks: Vec<LiveBlock>,
+    tempo_bpm: u32,
+    #[props(default)] pre: bool,
+    /// One lane's box (points), where the host knows it (a desktop pane):
+    /// each face the version that fits it, not the window's tier's.
+    #[props(default)]
+    lane: Option<(f64, f64)>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let pick_block = try_use_context::<crate::module_sidebar::SelectedModule>();
     let mut sel = use_signal(|| 0usize);
@@ -1366,7 +1402,7 @@ pub(crate) fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32, #[props(defaul
     let faces = crate::rig_faces::use_faces();
     // Drawn at the window's tier (a phone draws each face's phone layout).
     let tier = use_tier();
-    let face_of = |b: &LiveBlock| faces.time(true, VERB_ALGOS.get(param_v(b, "algorithm", 1.0) as usize).copied().unwrap_or("")).map(|f| f.at(tier));
+    let face_of = |b: &LiveBlock| faces.time(true, VERB_ALGOS.get(param_v(b, "algorithm", 1.0) as usize).copied().unwrap_or("")).map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h)));
     let all_faces = verbs.iter().all(|b| face_of(b).is_some());
     // On a phone the lane's bar is its preset and algorithm: the face shows
     // the time itself.
@@ -1600,6 +1636,10 @@ pub(crate) fn ModGroupPanel(
     /// Show the Pre FX module's blocks (in front of the amp) instead.
     #[props(default)]
     pre: bool,
+    /// Its box (points), where the host knows it (a desktop pane's lane):
+    /// the face the version that fits it, not the window's tier's.
+    #[props(default)]
+    lane: Option<(f64, f64)>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let members: Vec<LiveBlock> = kinds
@@ -1695,7 +1735,10 @@ pub(crate) fn ModGroupPanel(
     // knobs, in place of the trace and the loose knobs.
     // At the window's tier (a phone's own layout).
     let tier = use_tier();
-    let mod_face = crate::rig_faces::use_faces().modulation(cur.block_type.as_str()).map(|f| f.at(tier));
+    // In a known lane, less the members' tabs over the face.
+    let mod_face = crate::rig_faces::use_faces()
+        .modulation(cur.block_type.as_str())
+        .map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h)));
     // The face's nameplate opens the member's engines (or modes).
     let algos: Option<(&'static str, Vec<&'static str>)> = match cur.block_type {
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => Some(("engine", MOD_ENGINES.to_vec())),
@@ -1727,7 +1770,10 @@ pub(crate) fn ModGroupPanel(
             // With a face: the members as tabs over it (a press engages that
             // one), Motion's speed beside them; the face's own nameplate has
             // its preset, its engine and its On.
-            if mod_face.is_some() && tier > Tier::Phone {
+            // (Not in a known lane — a desktop pane: there the face's own
+            // nameplate picks the member, as on the phone, and the room is
+            // the face's.)
+            if mod_face.is_some() && tier > Tier::Phone && lane.is_none() {
                 div { style: "flex: 0 0 {tab_h}px; display: flex; align-items: stretch; gap: 2px; padding: 3px 6px; background: #0b0c0f; border-bottom: 1px solid #1d1f24;",
                     for (i, m) in members.iter().enumerate() {
                         {
@@ -1840,9 +1886,13 @@ pub(crate) fn ModGroupPanel(
             }
             if let Some(f) = mod_face.clone() {
                 div { class: "relative flex-1 min-h-0 flex",
-                    crate::rig_faces::BlockFace { block: cur.clone(), face: f, fill: true, preset_type: Some(cur.block_type.as_str().to_string()), algos: algos.clone(), tempo_bpm: Some(tempo_bpm),
+                    // In a known lane, the face's box near its own
+                    // proportions (as a delay lane's).
+                    div { style: lane_fit(lane, f.size),
+                    crate::rig_faces::BlockFace { block: cur.clone(), face: f.clone(), fill: true, preset_type: Some(cur.block_type.as_str().to_string()), algos: algos.clone(), tempo_bpm: Some(tempo_bpm),
                         // On a phone the members are picked from its name.
-                        members: if tier <= Tier::Phone { members.iter().map(|m| (m.name.clone(), m.id.clone())).collect() } else { Vec::new() },
+                        members: if tier <= Tier::Phone || lane.is_some() { members.iter().map(|m| (m.name.clone(), m.id.clone())).collect() } else { Vec::new() },
+                    }
                     }
                 }
             } else {
@@ -2285,6 +2335,8 @@ fn OutputLevel(block_id: String, level_db: f32) -> Element {
             style: "height: 18px; min-width: 52px; padding: 0 4px; background: rgba(0,0,0,0.35); font-size: 9px; font-family: ui-monospace, monospace;",
             title: "Output Level — drag up/down; saved with the amp or pedal",
             onpointerdown: move |e: PointerEvent| {
+                // The press is the knob's to drag: no panning under it (Blitz).
+                e.prevent_default();
                 // Not the row's fader underneath.
                 e.stop_propagation();
                 let (Some(bus), Some(r)) = (bus, rig.clone()) else { return };
@@ -2406,6 +2458,8 @@ fn DriveChunk(
                 let rig = rig.clone();
                 let block_id = block_id.clone();
                 move |e: PointerEvent| {
+                    // The press is the knob's to drag: no panning under it (Blitz).
+                    e.prevent_default();
                     if empty {
                         return;
                     }
@@ -2724,7 +2778,8 @@ const FRAME_ROWS: bool = true;
 pub enum Group {
     /// Before the amp: compression, pitch, EQ, and the pre effects.
     Pre,
-    /// The drives, then the amps (with the Amp EQ and the gate).
+    /// The Core: the drives, then the amps (with the Amp EQ, the post
+    /// compressor and the gate). Labelled CORE.
     Amp,
     /// After the amp: modulation, motion and the Time module.
     Post,
@@ -2737,7 +2792,7 @@ impl Group {
     pub fn label(self) -> &'static str {
         match self {
             Self::Pre => "PRE",
-            Self::Amp => "AMP",
+            Self::Amp => "CORE",
             Self::Post => "POST",
         }
     }
@@ -2792,6 +2847,7 @@ pub fn use_tier() -> Tier {
     let size = try_use_context::<WindowSize>().map_or((0.0, 0.0), |s| (s.0)());
     match FormFactor::of(size) {
         FormFactor::Phone => Tier::Phone,
+        FormFactor::Tablet => Tier::Ipad,
         FormFactor::Desktop => Tier::Desktop,
     }
 }
@@ -2802,6 +2858,9 @@ pub enum FormFactor {
     /// A phone held sideways (an iPhone 16 Pro: 874 × 402): the chain a
     /// page at a time.
     Phone,
+    /// An iPad: the touch layout (`tablet`) — the setlist beside the
+    /// performance, a foot bar of views.
+    Tablet,
     /// Everything larger: the Control view.
     Desktop,
 }
@@ -2812,11 +2871,28 @@ impl FormFactor {
     #[must_use]
     pub fn of(size: (f64, f64)) -> Self {
         #[cfg(not(target_arch = "wasm32"))]
-        if std::env::var("FTS_FORM_FACTOR").is_ok_and(|v| v.eq_ignore_ascii_case("phone")) {
-            return Self::Phone;
+        if let Ok(v) = std::env::var("FTS_FORM_FACTOR") {
+            if v.eq_ignore_ascii_case("phone") {
+                return Self::Phone;
+            }
+            if v.eq_ignore_ascii_case("tablet") {
+                return Self::Tablet;
+            }
         }
-        let (w, h) = size;
-        if h > 0.0 && h <= 500.0 && w > h { Self::Phone } else { Self::Desktop }
+        // By the short side, not by which way up it is: a phone is a phone
+        // held either way, and for a moment it is held "portrait" whatever
+        // the lock says (a system alert, the microphone prompt) — deciding
+        // on `w > h` dropped it into the desktop layout, chain at the
+        // bottom, and left it there.
+        let short = size.0.min(size.1);
+        if short > 0.0 && short <= 500.0 {
+            Self::Phone
+        } else if cfg!(target_os = "ios") {
+            // Anything bigger on iOS is an iPad.
+            Self::Tablet
+        } else {
+            Self::Desktop
+        }
     }
 }
 
@@ -3000,7 +3076,6 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
 
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
 
-    let hp = model.headphone.clone();
     // The groups the top bar picked (AMP alone by default; AMP over POST
     // with the switches hidden).
     let groups = try_use_context::<ShownGroups>().unwrap_or_default();
@@ -3024,7 +3099,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
         div { class: "flex gap-0 h-full min-h-0 overflow-hidden",
             style: "width: 100%; height: 100%; display: flex; min-height: 0; overflow: hidden;",
             // ── Input meter rail ──
-            div { class: "w-6 flex-shrink-0", LiveStereoMeter { label: "In", state, output: false, muted: false } }
+            InputRail { state }
 
             // ── Center surface ──
             div { class: "flex flex-col gap-1 flex-1 min-w-0 min-h-0",
@@ -3556,46 +3631,69 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                 // level with the meters either side.)
             }
 
-            // ── Output rail: mute on top, then FOH trim + out meter,
-            // then the phones group — mix fader | phones meter | guitar
-            // (self) fader.
-            div {
-                style: "width: 86px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 0; padding: 0 2px;",
-                button {
-                    class: if hp.main_mute {
-                        "w-9 rounded px-0.5 py-0.5 text-[8px] font-bold uppercase ring-2 ring-red-500"
-                    } else {
-                        "w-9 rounded px-0.5 py-0.5 text-[8px] font-bold uppercase border border-border text-muted-foreground hover:text-foreground"
-                    },
-                    style: if hp.main_mute { "background-color: #ef4444; color: #fff;" } else { "" },
-                    onclick: {
-                        let rig = rig;
-                        move |_| {
+            // ── Output rail ──
+            OutputRail { model: model.clone(), state }
+        }
+    }
+}
+
+/// The input's meter, down the left of the Control surface.
+#[component]
+pub fn InputRail(state: RigViewState) -> Element {
+    rsx! {
+        div { class: "w-6 flex-shrink-0", style: "width: 24px; flex-shrink: 0;",
+            LiveStereoMeter { label: "In", state, output: false, muted: false }
+        }
+    }
+}
+
+/// Down the right of the Control surface: the main mute, the FOH trim and
+/// output meter, then the phones (mix | meter | guitar).
+#[component]
+pub fn OutputRail(model: PerformanceModel, state: RigViewState) -> Element {
+    let cbs = crate::stable::use_stable();
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let hp = model.headphone.clone();
+    rsx! {
+        // ── Output rail: mute on top, then FOH trim + out meter,
+        // then the phones group — mix fader | phones meter | guitar
+        // (self) fader.
+        div {
+            style: "width: 86px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 0; padding: 0 2px;",
+            button {
+                class: if hp.main_mute {
+                    "w-9 rounded px-0.5 py-0.5 text-[8px] font-bold uppercase ring-2 ring-red-500"
+                } else {
+                    "w-9 rounded px-0.5 py-0.5 text-[8px] font-bold uppercase border border-border text-muted-foreground hover:text-foreground"
+                },
+                style: if hp.main_mute { "background-color: #ef4444; color: #fff;" } else { "" },
+                onclick: {
+                    let rig = rig;
+                    move |_| {
+                        if let Some(r) = rig.clone() {
+                            spawn(async move { let _ = r.toggle_main_mute().await; });
+                        }
+                    }
+                },
+                if hp.main_mute { "Muted" } else { "Mute" }
+            }
+            div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; justify-content: center; gap: 3px;",
+                VFader {
+                    label: "Trim",
+                    value: (model.master_trim_db + 24.0) / 36.0,
+                    readout: format!("{:+.0}dB", model.master_trim_db),
+                    on_change: cbs.cb({
+                        let rig = rig.clone();
+                        move |v: f32| {
                             if let Some(r) = rig.clone() {
-                                spawn(async move { let _ = r.toggle_main_mute().await; });
+                                spawn(async move { let _ = r.set_master_trim(v.mul_add(36.0, -24.0)).await; });
                             }
                         }
-                    },
-                    if hp.main_mute { "Muted" } else { "Mute" }
+                    }),
                 }
-                div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; justify-content: center; gap: 3px;",
-                    VFader {
-                        label: "Trim",
-                        value: (model.master_trim_db + 24.0) / 36.0,
-                        readout: format!("{:+.0}dB", model.master_trim_db),
-                        on_change: cbs.cb({
-                            let rig = rig.clone();
-                            move |v: f32| {
-                                if let Some(r) = rig.clone() {
-                                    spawn(async move { let _ = r.set_master_trim(v.mul_add(36.0, -24.0)).await; });
-                                }
-                            }
-                        }),
-                    }
-                    LiveStereoMeter { label: "Out", state, output: true, muted: hp.main_mute }
-                }
-                PhonesStrip { hp: hp.clone(), state }
+                LiveStereoMeter { label: "Out", state, output: true, muted: hp.main_mute }
             }
+            PhonesStrip { hp: hp.clone(), state }
         }
     }
 }
@@ -3676,14 +3774,20 @@ fn LiveStereoMeter(label: &'static str, state: RigViewState, output: bool, muted
 
 /// A compressor surface with its block's live trace and gain reduction.
 #[component]
-pub(crate) fn LiveComp(block: LiveBlock, state: RigViewState) -> Element {
+pub(crate) fn LiveComp(
+    block: LiveBlock,
+    state: RigViewState,
+    /// Its box, where the host knows it (see `CompSurface::fit`).
+    #[props(default)]
+    fit: Option<(f64, f64)>,
+) -> Element {
     let in_db = state.in_peak_db.cloned();
     let (wave, gr_db) = state.comp_wave.read().get(&block.name).map_or_else(
         || ((Vec::new(), Vec::new()), 0.0),
         |(i, g, gr)| ((i.clone(), g.clone()), *gr),
     );
     rsx! {
-        crate::comp_surface::CompSurface { block, wave, in_db, gr_db }
+        crate::comp_surface::CompSurface { block, wave, in_db, gr_db, fit }
     }
 }
 

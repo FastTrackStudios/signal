@@ -489,6 +489,16 @@ fn away(t: f32, e: f32) -> Option<f32> {
     }
 }
 
+/// How a touch remote reads a bar knob (see `MacroKnobView::scale`).
+#[must_use]
+pub fn knob_scale(id: &str) -> &'static str {
+    match id {
+        "delay" | "reverb" | "space" => "wet",
+        "gain" | "tone" | "width" | "output" | "input" => "relative",
+        _ => "level",
+    }
+}
+
 /// A knob's offset from its position: −1 at 0, 0 at `rest`, 1 at 1.
 #[must_use]
 pub fn offset_of(value: f32, rest: f32) -> f32 {
@@ -1307,7 +1317,7 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             .into_iter()
             .filter_map(|b| target(b, "depth", Curve::Lin, 1.0, 1.0))
             .collect();
-        add_single(&mut out, "motion", "Motion", "#EC4899", t, 0.5);
+        add_single(&mut out, "motion", "Motion", "#34D399", t, 0.5);
     }
 
     // ── Boost: the boost block's level, ±6 dB on what the pedal gives ──
@@ -1328,8 +1338,10 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
                 .collect()
         };
     {
-        // How strong and what character — never when: no time, no
-        // division, no tempo. Both delays run the patch's own times.
+        // How strong and what character — the Delay knob itself never
+        // moves when (no time, no tempo). The panel's Time is the one way
+        // in to the rhythm: a pick of the note (1/4, dotted 1/8…, or Free),
+        // set outright, not turned by the bar knob.
         let kids = dual(&delays, &|b, n| {
             [
                 select_child(
@@ -1339,6 +1351,14 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
                     "#60A5FA",
                     "style",
                     "delay_style",
+                ),
+                select_child(
+                    b,
+                    &format!("delay-time{n}"),
+                    &format!("Time {n}"),
+                    "#A5B4FC",
+                    "tap_div_l",
+                    "div",
                 ),
                 rel_child(
                     b,
@@ -1389,7 +1409,7 @@ pub fn build(blocks: &[LiveBlock]) -> Built {
             .flatten()
             .collect()
         });
-        let headers = ["Type", "Feedback", "Filter", "Level", "Mod"]
+        let headers = ["Type", "Time", "Feedback", "Filter", "Level", "Mod"]
             .map(String::from)
             .to_vec();
         add_parent(
@@ -1715,6 +1735,16 @@ fn spread_of(targets: &[Target], blocks: &[LiveBlock]) -> f32 {
 
 /// A live param write: `(block id, param, value)`.
 pub type Write = (String, String, f32);
+
+/// The params a choice on `param` sets: a delay's division is both its
+/// taps' (`tap_div_l` read, both written — as its face sets it).
+#[must_use]
+pub fn choice_params(param: &str) -> Vec<&str> {
+    match param {
+        "tap_div_l" => vec!["tap_div_l", "tap_div_r"],
+        p => vec![p],
+    }
+}
 
 /// The active patch's macro bar, and the baseline it sits on.
 #[derive(Clone, Debug, Default)]
@@ -2712,6 +2742,30 @@ impl MacroEngine {
         out
     }
 
+    /// Every block the knob turns — its own targets and its children's —
+    /// is bypassed (and it turns some): a level knob reads `off`.
+    fn knob_off(&self, k: &MacroKnob, blocks: &[LiveBlock]) -> bool {
+        let ids: Vec<&str> = std::iter::once(&k.id)
+            .chain(k.children.iter().map(|c| &c.id))
+            .filter_map(|id| self.built.meta.get(id))
+            .flat_map(|m| {
+                m.targets
+                    .iter()
+                    .map(|t| t.block.as_str())
+                    .chain(m.select.iter().map(|s| s.block.as_str()))
+                    .chain(m.show.iter().map(|s| s.0.as_str()))
+                    .chain(m.pad_block.as_deref())
+            })
+            .collect();
+        !ids.is_empty()
+            && ids.iter().all(|id| {
+                blocks
+                    .iter()
+                    .find(|b| b.id == *id)
+                    .is_some_and(|b| b.bypassed)
+            })
+    }
+
     /// The bar as the UI draws it; `blocks` is the live chain (values with
     /// the macros applied) for the readouts.
     #[must_use]
@@ -2743,6 +2797,7 @@ impl MacroEngine {
                 } else {
                     k.format_value()
                 };
+                let tune = self.tune_views(k, blocks);
                 MacroKnobView {
                     id: k.id.clone(),
                     label: k.label.clone(),
@@ -2755,9 +2810,11 @@ impl MacroEngine {
                     layout: panel.layout.to_string(),
                     headers: panel.headers.clone(),
                     anchor: panel.anchor.clone(),
-                    tune: self.tune_views(k, blocks),
                     tuned: self.has_edits(&k.id),
                     snapshot: self.snapshot.clone(),
+                    scale: knob_scale(&k.id).to_string(),
+                    off: self.knob_off(k, blocks),
+                    tune,
                     children: k
                         .children
                         .iter()
@@ -2801,6 +2858,7 @@ impl MacroEngine {
             .collect()
     }
 }
+
 
 /// A selector's knob position for the choice `v`.
 fn select_position(s: &Select, v: f32) -> f32 {
@@ -3524,6 +3582,7 @@ mod tests {
             output_level_db: None,
             detail: String::new(),
             asset: String::new(),
+            module: String::new(),
             empty: false,
         }
     }
@@ -3699,6 +3758,25 @@ mod tests {
             assert!(approx(a.2, b.2), "{}.{}: {} → {}", a.0, a.1, a.2, b.2);
         }
         assert!(e.saved().is_empty(), "rest is not stored: {:?}", e.saved());
+    }
+
+    /// The Delay panel's Time is a pick of the note for each delay — made
+    /// outright, as a write — and turning the Delay knob never touches it.
+    #[test]
+    fn the_delay_panel_picks_each_delays_note_and_the_knob_leaves_it() {
+        let mut e = engine();
+        let delay = e.built.bank.get_knob("delay").unwrap();
+        assert!(delay.children.iter().any(|c| c.id == "delay-time1"), "DLY 1 has a Time");
+        assert!(delay.children.iter().any(|c| c.id == "delay-time2"), "DLY 2 has a Time");
+        // 1/8. is division 1 of the eleven.
+        let w = e.set("delay-time1", 1.0 / 10.0).expect("a pick is a write");
+        assert_eq!((w.0.as_str(), w.1.as_str(), w.2), ("dly1", "tap_div_l", 1.0));
+        assert_eq!(choice_params(&w.1), vec!["tap_div_l", "tap_div_r"], "both taps");
+        for v in [1.0, 0.0, 0.5] {
+            assert!(e.set("delay", v).is_none(), "the Delay knob writes no timing");
+            assert_eq!(e.live("dly1", "tap_div_l"), Some(1.0), "the pick stands");
+            assert_eq!(e.live("dly1", "time"), Some(350.0));
+        }
     }
 
     /// Up is more of what the patch has, around each param's own value.
@@ -4027,12 +4105,14 @@ mod tests {
 
     fn patch_def(name: &str) -> PatchDef {
         PatchDef {
+            role: String::new(),
             name: name.into(),
             song: String::new(),
             preset: String::new(),
             preset2: String::new(),
             rig_preset: String::new(),
             snapshot: String::new(),
+            tone: String::new(),
             modules: Vec::new(),
             blocks: Vec::new(),
             drives: Vec::new(),

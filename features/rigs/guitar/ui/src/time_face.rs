@@ -191,6 +191,7 @@ mod tests {
             output_level_db: None,
             detail: String::new(),
             asset: String::new(),
+            module: String::new(),
             empty: false,
             params: params.iter().map(|(n, v)| BlockParam { name: (*n).to_string(), value: *v, min: 0.0, max: 1.0, overridden: false }).collect(),
             preset: String::new(),

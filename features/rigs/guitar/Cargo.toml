@@ -18,6 +18,8 @@ workspace = true
 pipewire = []
 
 [dependencies]
+# A setlist dated today opens on its own (`SetlistDef::day`).
+chrono.workspace = true
 # WAV output for the switch probe (`SIGNAL_SWITCH_PROBE`, session.rs).
 hound = "3.5"
 uuid.workspace = true

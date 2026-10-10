@@ -16,7 +16,10 @@ members = [
     # `[patch]` for DioxusLabs/dioxus below.
     "libs/vendor/dioxus-native-dom",
     "libs/vendor/dioxus-native",
+    "libs/vendor/dioxus-core",
     "libs/vendor/anyrender_vello_hybrid",
+    "libs/vendor/winit-uikit",
+    "libs/vendor/wgpu-hal",
     "apps/web",
     "apps/cli",
     "apps/fts-convert",
@@ -52,9 +55,6 @@ members = [
     "features/plugin-host",
     "features/reaper/signal-extension",
     "features/reaper/signal-reaper-controller",
-    "features/rigs/bass",
-    "features/rigs/bass/proto",
-    "features/rigs/bass/ui",
     "features/rigs/drums",
     "features/rigs/drums/proto",
     "features/rigs/drums/ui",
@@ -298,9 +298,6 @@ signal-plugin-host = { path = "features/plugin-host", default-features = false }
 signal-sampler = { path = "features/sampler/signal-sampler" }
 signal-packs-proto = { path = "features/sampler/packs-proto" }
 signal-pack-library = { path = "features/sampler/pack-library" }
-signal-bass = { path = "features/rigs/bass" }
-signal-bass-proto = { path = "features/rigs/bass/proto" }
-signal-bass-ui = { path = "features/rigs/bass/ui" }
 signal-guitar = { path = "features/rigs/guitar" }
 signal-guitar-proto = { path = "features/rigs/guitar/proto" }
 signal-guitar-ui = { path = "features/rigs/guitar/ui" }
@@ -862,6 +859,14 @@ anyrender_vello = { path = "../blitz/vendor/anyrender_vello" }
 # that rotates before the renderer is up otherwise keeps the portrait
 # surface. See libs/vendor/anyrender_vello_hybrid/UPSTREAM.md.
 anyrender_vello_hybrid = { path = "libs/vendor/anyrender_vello_hybrid" }
+# A tap that came while a frame was drawn is handled at once, not when the
+# next touch arrives (the proxy wake-up never drained winit's event queue).
+# See libs/vendor/winit-uikit/UPSTREAM.md.
+winit-uikit = { path = "libs/vendor/winit-uikit" }
+# The iOS Simulator with indirect dispatch (its Metal runs on the Mac's GPU),
+# so it draws with full Vello, as the phone does. See
+# libs/vendor/wgpu-hal/UPSTREAM.md.
+wgpu-hal = { path = "libs/vendor/wgpu-hal" }
 # Vendored one-line fix: quote scalars containing `<`/`>` — upstream
 # (facet-rs/facet) styx-format emits them bare but styx-parse rejects
 # them, so serialized keybind configs (`keys "<C-s>"`) could not be
@@ -1201,6 +1206,10 @@ codegen-units = 256
 [patch."https://github.com/DioxusLabs/dioxus"]
 dioxus-native-dom = { path = "libs/vendor/dioxus-native-dom" }
 dioxus-native = { path = "libs/vendor/dioxus-native" }
+# A component re-rendered after the scope owning one of its handlers dropped
+# panicked the app (`Callback::__point_to` unwrapped `Dropped`); the vendored
+# core takes the new handler instead. See libs/vendor/dioxus-core/UPSTREAM.md.
+dioxus-core = { path = "libs/vendor/dioxus-core" }
 
 # Local neural-amp-modeler-rs checkout (../neural-amp-modeler-rs): the pure
 # engine's wasm speed-up (5x, bit-identical) lives there until it is tagged.

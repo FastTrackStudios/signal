@@ -158,6 +158,66 @@ fn order_sensitive(block_type: BlockType, param: &str) -> bool {
         .any(|(t, p)| *t == block_type && p.eq_ignore_ascii_case(param))
 }
 
+/// Params whose declared default is not what a fresh build of the effect
+/// holds: dropped from a preset, they need the block built again rather
+/// than the default written. Kept honest by
+/// `tests::a_default_written_live_plays_as_a_fresh_build`.
+pub const NO_DEFAULT: &[(BlockType, &str)] = &[
+    // The constructor starts these elsewhere than the declared default.
+    (BlockType::Compressor, "knee"),
+    (BlockType::Compressor, "fold"),
+    (BlockType::Flanger, "rate"),
+    (BlockType::Vibrato, "rate"),
+    (BlockType::Reverb, "diffusion"),
+    (BlockType::Reverb, "decay_time"),
+    (BlockType::Reverb, "r2_mix"),
+    (BlockType::Reverb, "r2_diffusion"),
+    (BlockType::Reverb, "r2_decay_time"),
+];
+
+fn no_default(block_type: BlockType, param: &str) -> bool {
+    NO_DEFAULT
+        .iter()
+        .any(|(t, p)| *t == block_type && p.eq_ignore_ascii_case(param))
+}
+
+/// A built-in effect type's params' declared defaults, by lowercase name —
+/// what its fresh build holds for a param no preset sets. Built once per
+/// type, off any lock.
+#[must_use]
+pub fn live_param_defaults(block_type: BlockType) -> Option<&'static HashMap<String, f64>> {
+    static CACHE: OnceLock<std::sync::Mutex<HashMap<BlockType, &'static HashMap<String, f64>>>> =
+        OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    let mut cache = cache
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(d) = cache.get(&block_type) {
+        return Some(d);
+    }
+    if !is_fx(block_type) {
+        return None;
+    }
+    let mut inst = crate::native::build_native(&RigBlock::of_type(block_type), 48_000)?;
+    let defaults: HashMap<String, f64> = inst
+        .params()
+        .into_iter()
+        .map(|p| (p.name.to_ascii_lowercase(), p.default))
+        .collect();
+    let defaults: &'static HashMap<String, f64> = Box::leak(Box::new(defaults));
+    cache.insert(block_type, defaults);
+    Some(defaults)
+}
+
+/// The value a fresh build of a `block_type` effect holds for `param`, when
+/// writing it live is known to land where that build does.
+fn build_default(block_type: BlockType, param: &str) -> Option<f64> {
+    if no_default(block_type, param) {
+        return None;
+    }
+    live_param_defaults(block_type)?.get(&param.to_ascii_lowercase()).copied()
+}
+
 fn structural(block_type: BlockType, param: &str) -> bool {
     STRUCTURAL
         .iter()
@@ -406,27 +466,51 @@ pub fn block_delta(old: &RigBlock, new: &RigBlock) -> BlockDelta {
                     })
                     .collect()
             };
-            let (a, b) = (known(a), known(b));
+            let (a, mut b) = (known(a), known(b));
             if a == b {
                 return BlockDelta::Same;
             }
             // A param set and then no longer set keeps its old value live,
-            // but the default in a build: rebuild.
-            let names = |w: &[(String, f64)]| w.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>();
-            if names(&a) != names(&b) {
-                return BlockDelta::Structural;
+            // but holds its default in a build: write the default — first,
+            // as a build starts from the defaults — or, for a param whose
+            // default a fresh build does not hold, build again. Stepping
+            // presets that set different params rebuilt every chain that
+            // shared the block.
+            let has = |w: &[(String, f64)], n: &str| w.iter().any(|(m, _)| m.eq_ignore_ascii_case(n));
+            let mut dropped = Vec::new();
+            for (n, _) in &a {
+                if has(&b, n) {
+                    continue;
+                }
+                match build_default(new.block_type, n) {
+                    Some(d) => dropped.push((n.clone(), d)),
+                    None => return BlockDelta::Structural,
+                }
             }
-            let changed: Vec<(String, f64)> = a
+            dropped.extend(b);
+            b = dropped;
+            // What the block holds for `n` before the edit: as set, else as
+            // built.
+            let was = |n: &str| {
+                a.iter()
+                    .find(|(m, _)| m.eq_ignore_ascii_case(n))
+                    .map(|(_, v)| *v)
+                    .or_else(|| build_default(new.block_type, n))
+            };
+            let changed: Vec<(String, f64)> = b
                 .iter()
-                .zip(&b)
-                .filter(|(x, y)| x.1 != y.1)
-                .map(|(_, y)| y.clone())
+                .filter(|(n, v)| was(n) != Some(*v))
+                .cloned()
                 .collect();
+            if changed.is_empty() {
+                return BlockDelta::Same;
+            }
             // A param whose effect depends on where it falls among the
             // others (an alias the build lets a later param overrule, a
             // setting derived from the mode set before or after it): the
             // whole list, in the build's order, so the running block ends
-            // where the build does. Otherwise only what changed —
+            // where the build does (the defaults written for dropped params
+            // first, as a build starts from them). Otherwise only what changed —
             // re-sending an unchanged param is not free (a delay re-derives
             // its times) and a running block should hear only the edit.
             if changed

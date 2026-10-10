@@ -256,6 +256,74 @@ fn a_live_write_sets_every_builtin_effect_as_its_build_does() {
     assert!(checked > 100, "the sweep covered the params: {checked}");
 }
 
+/// A param a preset sets and the next one does not: the next build holds
+/// the effect's default for it, so the live write is that default — and must
+/// set the running block exactly as that build does. Stepping presets that
+/// set different params is what this is for: without it every chain sharing
+/// the block was built again. A param that cannot meet it is listed in
+/// `block_params::NO_DEFAULT` (and builds instead).
+#[test]
+fn a_param_dropped_from_a_preset_is_written_as_its_build_default() {
+    let x = input(SR as usize / 2);
+    let quiet = vec![0.0f32; SR as usize];
+    let mut checked = 0;
+    let mut failures = Vec::new();
+    let only = std::env::var("LIVE_PARAMS_ONLY").ok();
+    for &(bt, name) in TYPES
+        .iter()
+        .filter(|(_, n)| only.as_deref().is_none_or(|o| o == *n))
+    {
+        let infos = signal_sampler::native::build_native(&RigBlock::of_type(bt), SR)
+            .expect("registered")
+            .params();
+        let base = infos.iter().fold(RigBlock::effect(bt, name), |b, p| {
+            b.with_param(p.name.clone(), fmt(nudged(p.default, p.min, p.max)))
+        });
+        for p in &infos {
+            // Stored at its default already (a whole-number range the nudge
+            // rounds back): dropping it changes nothing.
+            let stored = nudged(p.default, p.min, p.max);
+            if !block_params::is_live(bt, &p.name) || (stored as f32) == (p.default as f32) {
+                continue;
+            }
+            let mut dropped = base.clone();
+            dropped.params.retain(|q| q.name != p.name);
+            let listed = block_params::NO_DEFAULT
+                .iter()
+                .any(|(t, n)| *t == bt && n.eq_ignore_ascii_case(&p.name));
+            let write = match block_params::block_delta(&base, &dropped) {
+                BlockDelta::Live(w) => w,
+                BlockDelta::Structural if listed => continue,
+                other => {
+                    failures.push(format!("{name}.{} dropped: {other:?}", p.name));
+                    continue;
+                }
+            };
+            let resolved = ResolvedWrite::resolve(bt, &write).expect("resolves");
+            let mut built = build(&dropped);
+            built.prepare(f64::from(SR), 512).unwrap();
+            let mut written = build(&base);
+            resolved.apply(written.as_mut());
+            written.prepare(f64::from(SR), 512).unwrap();
+            render(&mut built, &quiet);
+            render(&mut written, &quiet);
+            let (want, got) = (render(&mut built, &x), render(&mut written, &x));
+            let d = max_abs_diff(&got, &want);
+            if d != 0.0 || got.iter().any(|s| !s.is_finite()) {
+                failures.push(format!("{name}.{} dropped: differs from its build by {d:e}", p.name));
+            }
+            checked += 1;
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} params whose default written live is not their build (list them in NO_DEFAULT):\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+    assert!(checked > 100, "the sweep covered the params: {checked}");
+}
+
 /// A NAM block's trims — where a drive knob's constant-loudness
 /// compensation lands — written live, against a block built with them.
 #[test]

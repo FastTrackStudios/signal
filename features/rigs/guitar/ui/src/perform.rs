@@ -53,20 +53,37 @@ fn job_title(job: &str) -> &'static str {
 /// Tile background + text color for a folder (footswitch), by name. Also
 /// tints the header's active-patch lens, so "where you are in the set" reads
 /// at a glance from anywhere in the UI.
+///
+/// The usual names have their colours; any other stack (an amp's name — a
+/// Dumble, a Two-Rock) takes one of a vivid set, picked by its name so it is
+/// the same everywhere. Text is dark on the bright tiles: white on orange or
+/// red reads at under 4:1.
 pub fn folder_color(name: &str) -> (&'static str, &'static str) {
-    match name.to_ascii_lowercase().as_str() {
-        "clean" => ("#38bdf8", "#082f49"),   // light blue / dark text
-        "crunch" => ("#2563eb", "#ffffff"),  // darker blue / white
-        "drive" => ("#f97316", "#ffffff"),   // orange / white
-        "lead" => ("#ef4444", "#ffffff"),    // red / white
-        "ambient" => ("#06b6d4", "#04222a"), // cyan / dark text
-        _ => ("#3f3f46", "#e4e4e7"),         // zinc fallback
+    match name.trim().to_ascii_lowercase().as_str() {
+        "clean" => ("#38bdf8", "#082f49"),
+        "crunch" => ("#2563eb", "#ffffff"),
+        "drive" | "rhythm" => ("#f97316", "#1c0d02"),
+        "lead" | "fuzz" => ("#ef4444", "#1f0606"),
+        "ambient" => ("#06b6d4", "#04222a"),
+        "synth" => ("#a78bfa", "#1e1b4b"),
+        "" | "none" | "—" => ("#3f3f46", "#e4e4e7"),
+        other => {
+            const SET: [(&str, &str); 8] = [
+                ("#a78bfa", "#1e1b4b"), // violet
+                ("#f59e0b", "#1c1002"), // amber
+                ("#10b981", "#022c22"), // emerald
+                ("#ec4899", "#2a0616"), // pink
+                ("#6366f1", "#ffffff"), // indigo
+                ("#84cc16", "#1a2e05"), // lime
+                ("#14b8a6", "#042f2e"), // teal
+                ("#e11d48", "#ffffff"), // rose
+            ];
+            // FNV-1a: stable across runs and builds.
+            let h = other.bytes().fold(0x811c_9dc5_u32, |h, b| (h ^ u32::from(b)).wrapping_mul(0x0100_0193));
+            SET[h as usize % SET.len()]
+        }
     }
 }
-
-
-
-
 
 /// Perform-mode footswitch grid — see the module docs for the layout.
 #[component]
@@ -289,10 +306,13 @@ pub fn PerformGrid(
         .map(|s| s.name.clone())
         .unwrap_or_default();
     let song_pos = format!("{}/{}", model.song_index + 1, model.songs.len().max(1));
+    let desk = crate::control::use_tier() >= crate::control::Tier::Desktop;
 
     rsx! {
         div { class: "flex flex-col h-full min-h-0 gap-2",
-        if mode == 2 {
+        // The song and part line — on the desktop the setlist sidebar and
+        // the Song switch already say it, and the room is the switches'.
+        if mode == 2 && !desk {
             div { class: "flex items-center gap-2 flex-shrink-0",
                 span { class: "text-xs text-muted-foreground truncate", "{current_song} · {song_pos}" }
                 // The part that is up, and what it lays over the profile.
@@ -321,7 +341,7 @@ pub fn PerformGrid(
     // drawn across the gaps between the pair.
     div { style: "position: relative; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;",
         div {
-            class: "grid grid-cols-5 gap-3 flex-1 min-h-0",
+            class: "grid grid-cols-5 gap-2 flex-1 min-h-0",
             style: if compact {
                 "grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);"
             } else {
@@ -598,6 +618,47 @@ fn ChordMarks(chords: Vec<ChordMark>, #[props(default)] compact: bool) -> Elemen
     }
 }
 
+/// A switch's menu, by touch. On the phone it is rig edit's: nothing on the
+/// switches being played (no ⋯ to catch a foot or a thumb), and in rig edit
+/// the whole switch, a tap opening the menu instead of pressing it. Off the
+/// phone, the ⋯ in the corner.
+#[component]
+fn SwitchMenuCover(onclick: EventHandler<MouseEvent>) -> Element {
+    let Some(edit) = try_use_context::<crate::phone::RigEdit>() else {
+        return rsx! { signal_widgets::TouchMenuButton { onclick, title: "Switch menu" } };
+    };
+    if !(edit.0)() {
+        return rsx! {};
+    }
+    rsx! {
+        div {
+            style: "position: absolute; inset: 0; z-index: 5; box-sizing: border-box; border: 2px dashed rgba(255,255,255,0.55); \
+                    border-radius: 12px; display: flex; align-items: flex-start; justify-content: flex-end; padding: 6px; cursor: pointer;",
+            title: "Switch menu",
+            onpointerdown: move |e: PointerEvent| e.stop_propagation(),
+            onpointerup: move |e: PointerEvent| e.stop_propagation(),
+            onclick: move |e: MouseEvent| {
+                e.stop_propagation();
+                onclick.call(e);
+            },
+            span {
+                style: "display: flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; \
+                        background: rgba(0,0,0,0.55); color: #e5e7eb; font-size: 10px; font-weight: 700; letter-spacing: 0.06em;",
+                svg { width: "11", height: "11", view_box: "0 0 24 24", fill: "none", stroke: "#e5e7eb", stroke_width: "2.2",
+                    stroke_linecap: "round", stroke_linejoin: "round", style: "display: block;",
+                    path { d: "M4 20h4L19 9l-4-4L4 16z" }
+                }
+                "EDIT"
+            }
+        }
+    }
+}
+
+/// A switch's label: one line, cut with an ellipsis if it ever does not
+/// fit. Blitz kept a label broken into lines at a width it no longer had
+/// (an idle page: "Two-" over "Rock", "Tap" over "Tempo" over its BPM).
+const NOWRAP: &str = "white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;";
+
 /// One colored footswitch folder tile. Tap = press the stack; hold (row 1)
 /// = the row-2 function beneath it.
 #[component]
@@ -681,7 +742,9 @@ fn StackTile(
     });
     rsx! {
         div {
-            style: "position: relative; height: 100%; display: flex; flex-direction: column;",
+            // Its own text stays inside it: a long sound line used to run
+            // across the neighbouring switches.
+            style: "position: relative; height: 100%; display: flex; flex-direction: column; min-width: 0; overflow: hidden;",
             // Right-click: how this switch behaves, for the song that is up.
             oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
             onmouseleave: move |_| menu.set(false),
@@ -691,7 +754,7 @@ fn StackTile(
             }
         HoldButton {
             class: format!("{layout_cls} h-full {state_cls}"),
-            style: format!("background-color: {bg}; color: {text}; {state_style}"),
+            style: format!("background-color: {bg}; color: {text}; min-width: 0; overflow: hidden; padding: 0 8px; {state_style}"),
             on_tap: cbs.cb(move |(): ()| on_press.call(index)),
             on_hold,
             on_down: momentary.then(|| cbs.cb(move |(): ()| on_press.call(index))),
@@ -728,6 +791,7 @@ fn StackTile(
             }
             span {
                 class: if compact { "text-sm font-bold tracking-wide" } else { "text-2xl font-bold tracking-wide" },
+                style: NOWRAP,
                 "{stack.name}"
             }
             // Folder-as-main: the stack name IS the main sound — only
@@ -735,19 +799,33 @@ fn StackTile(
             if stack.current_patch != "Default" && !stack.current_patch.eq_ignore_ascii_case(&stack.name) {
                 span {
                     class: if compact { "text-[10px] font-semibold opacity-80" } else { "text-sm font-semibold opacity-90" },
+                    style: NOWRAP,
                     "{stack.current_patch}"
                 }
             }
             // The preset this patch points at + which modules it overrides.
             if !compact {
-                div { class: "flex items-center gap-1.5",
-                    span { class: "text-[10px] font-mono opacity-60", "{stack.preset}" }
-                    for m in stack.override_modules.iter() {
-                        span {
-                            key: "{m}",
-                            class: "opacity-80",
-                            title: "overrides {m}",
-                            crate::icons::ModuleGlyph { module: m.clone(), size: 11 }
+                // The sound, a line per part ("Deluxe + AC30" over "Clean +
+                // Ambience"): lines that never wrap size to themselves, so the
+                // switch's button centres them, and the tile clips what is
+                // left. (Wrapped text in the button collapsed a word wide.)
+                for (n, line) in stack.preset.split(" · ").enumerate() {
+                    div {
+                        key: "{n}",
+                        style: "max-width: 100%; white-space: nowrap; overflow: hidden; font-size: 11px; \
+                                line-height: 1.25; opacity: 0.7;",
+                        "{line}"
+                    }
+                }
+                if !stack.override_modules.is_empty() {
+                    div { style: "display: flex; justify-content: center; gap: 6px;",
+                        for m in stack.override_modules.iter() {
+                            span {
+                                key: "{m}",
+                                class: "opacity-80",
+                                title: "overrides {m}",
+                                crate::icons::ModuleGlyph { module: m.clone(), size: 11 }
+                            }
                         }
                     }
                 }
@@ -792,7 +870,7 @@ fn StackTile(
                 }
                 }
             }
-            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
+            SwitchMenuCover { onclick: move |e: MouseEvent| open_switch_menu.call(e) }
         }
     }
 }
@@ -881,12 +959,14 @@ fn ActionTile(
                     }
                     if !back.is_empty() {
                         span { class: if compact { "text-[9px] opacity-60 truncate max-w-full" } else { "text-[11px] opacity-60 truncate max-w-full" },
+                        style: NOWRAP,
                             "hold: ‹ {back}"
                         }
                     }
                 } else {
                     span {
                         class: if compact { "text-sm font-bold tracking-wide" } else { "text-xl font-bold tracking-wide" },
+                        style: NOWRAP,
                         "{job_title(&job)}"
                     }
                 }
@@ -904,7 +984,7 @@ fn ActionTile(
                     }
                 }
             }
-            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
+            SwitchMenuCover { onclick: move |e: MouseEvent| open_switch_menu.call(e) }
         }
     }
 }
@@ -1242,7 +1322,7 @@ fn Learnable(target: String, title: String, learn: SwitchLearn, children: Elemen
                     }
                 }
             }
-            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
+            SwitchMenuCover { onclick: move |e: MouseEvent| open_switch_menu.call(e) }
         }
     }
 }
@@ -1279,11 +1359,13 @@ fn FnTile(
             SwitchNo { no: switch_no }
             span {
                 class: if compact { "text-sm font-bold tracking-wide" } else { "text-xl font-bold tracking-wide" },
+                style: NOWRAP,
                 "{title}"
             }
             if !subtitle.is_empty() {
                 span {
                     class: if compact { "text-[10px] opacity-80" } else { "text-xs opacity-80" },
+                    style: NOWRAP,
                     "{subtitle}"
                 }
             }
@@ -1320,8 +1402,8 @@ fn BoostTile(
             on_tap: on_toggle,
             on_hold: Some(on_cycle),
             SwitchNo { no: switch_no }
-            span { class: "text-sm font-bold tracking-wide", "Boost" }
-            span { class: "text-[10px] opacity-80", "{subtitle}" }
+            span { class: "text-sm font-bold tracking-wide", style: NOWRAP, "Boost" }
+            span { class: "text-[10px] opacity-80", style: NOWRAP, "{subtitle}" }
         }
     }
 }
@@ -1409,10 +1491,12 @@ fn TapTempoTile(
             SwitchNo { no: 5 }
             span {
                 class: if compact { "text-sm font-bold tracking-wide" } else { "text-lg font-bold tracking-wide" },
+                style: NOWRAP,
                 "Tap Tempo"
             }
             span {
                 class: if compact { "text-[10px] text-zinc-500" } else { "text-[11px] text-zinc-500" },
+                style: NOWRAP,
                 "{tempo_bpm} BPM"
             }
         }
@@ -1431,7 +1515,7 @@ fn TapTempoTile(
                     }
                 }
             }
-            signal_widgets::TouchMenuButton { onclick: move |e: MouseEvent| open_switch_menu.call(e), title: "Switch menu" }
+            SwitchMenuCover { onclick: move |e: MouseEvent| open_switch_menu.call(e) }
         }
     }
 }
@@ -1462,7 +1546,7 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
     let needle = 50.0 + r.cents.clamp(-50.0, 50.0);
     rsx! {
         button {
-            class: "relative flex items-center gap-2 rounded-lg px-2 text-left min-h-0 overflow-hidden",
+            class: "relative flex flex-col justify-center gap-1 rounded-lg h-full px-2 pt-3 pb-1.5 text-left min-h-0 overflow-hidden",
             style: if in_tune {
                 "background-color: #14532d; border: 1px solid #22c55e;"
             } else {
@@ -1471,12 +1555,19 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
             onclick: move |_| onclick.call(()),
             span { class: "absolute top-0.5 left-1.5 text-[10px] font-mono opacity-40", "{switch_no}" }
             span { class: "absolute top-0.5 right-1.5 text-[8px] font-mono opacity-40", title: "Hold switches 3 and 4 together", "3+4" }
-            span {
-                class: "text-base font-bold w-7 text-center leading-none flex-shrink-0",
-                style: if in_tune { "color: #22c55e;" } else if r.active { "color: #e4e4e7;" } else { "color: #4b5563;" },
-                if r.active { "{r.note}" } else { fts_chrome::Glyph { icon: fts_chrome::Icon::Note, size: 16 } }
+            // Note and cents on one line, the needle under them — nothing
+            // shares a corner with the switch number or the 3+4 hint.
+            div { class: "flex items-baseline justify-center gap-2 min-w-0",
+                span {
+                    class: "text-sm font-bold leading-none",
+                    style: if in_tune { "color: #22c55e; white-space: nowrap;" } else if r.active { "color: #e4e4e7; white-space: nowrap;" } else { "color: #6b7280; white-space: nowrap;" },
+                    if r.active { "{r.note}" } else { "Tuner" }
+                }
+                if r.active {
+                    span { class: "text-[10px] font-mono opacity-70", style: NOWRAP, {format!("{:+.0}", r.cents)} }
+                }
             }
-            div { class: "relative flex-1 h-3 min-w-0",
+            div { class: "relative h-2 w-full min-w-0",
                 div { class: "absolute inset-x-0 top-1/2 h-px bg-white/20" }
                 div { class: "absolute left-1/2 top-0 bottom-0 w-px bg-white/40" }
                 if r.active {
@@ -1485,9 +1576,6 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
                         style: if in_tune { "left: {needle}%; background-color: #22c55e;" } else { "left: {needle}%; background-color: #eab308;" },
                     }
                 }
-            }
-            if r.active {
-                span { class: "text-[9px] font-mono opacity-70 flex-shrink-0", {format!("{:+.0}", r.cents)} }
             }
         }
     }

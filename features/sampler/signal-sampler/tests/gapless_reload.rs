@@ -276,6 +276,47 @@ fn an_edit_to_another_patch_leaves_the_output_untouched() {
     assert!(reloaded.activate_named("Clean"));
 }
 
+/// A block preset shared by every patch, stepped to one that sets fewer
+/// params (a delay preset without the mod depth the last one set): every
+/// chain is retuned — the dropped param written at its build default — and
+/// none is built. Building them all again was a whole profile's worth of
+/// chains, twice the memory, for a step through presets.
+#[test]
+fn a_shared_preset_that_drops_a_param_retunes_every_chain() {
+    const PATCHES: usize = 4;
+    let with = |fb: f32, mod_depth: Option<f32>| {
+        let mut p = RigProfile::new("Worship");
+        for i in 0..PATCHES {
+            let mut d = delay(350.0, fb);
+            if let Some(m) = mod_depth {
+                d = d.with_param("mod_depth", m.to_string());
+            }
+            p = p.with_patch(patch(&format!("P{i}"), vec![gain(i as f32), d]));
+        }
+        p
+    };
+    let mut reloaded = rig(with(0.4, Some(0.6)));
+    let report = reloaded.reload_profile(with(0.25, None), None);
+    assert_eq!(
+        (report.built, report.retuned, report.retired),
+        (0, PATCHES, 0),
+        "retuned in place, nothing built"
+    );
+    // And it plays as the new profile built from scratch.
+    let reference = rig(with(0.25, None));
+    for r in [&reloaded, &reference] {
+        r.rig().start_test_signal(sine(196.0, 0.2));
+    }
+    // A playing delay glides to its new feedback — no step — so the echoes
+    // it had settle out over a few seconds; after them, it is the build.
+    heard(reloaded.rig(), 3.0);
+    heard(reference.rig(), 3.0);
+    let (a, b) = (heard(reloaded.rig(), 1.0), heard(reference.rig(), 1.0));
+    let e = error_db(&a, &b);
+    println!("retuned vs built, after the echoes settle: {e:.1} dB");
+    assert!(e < -60.0, "the retuned chains play as built: {e:.1} dB");
+}
+
 fn stacked(lead_decay: f32) -> RigProfile {
     let mut p = RigProfile::new("Stacks")
         .with_patch(patch("Clean", vec![gain(0.0)]))

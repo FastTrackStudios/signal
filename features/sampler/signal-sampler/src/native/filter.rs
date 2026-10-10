@@ -18,6 +18,28 @@ pub enum FilterMode {
 }
 
 impl FilterMode {
+    /// Its number (the `mode` param): 0 low-pass, 1 high-pass, 2 band-pass,
+    /// 3 notch.
+    #[must_use]
+    pub fn index(self) -> u32 {
+        match self {
+            Self::Lowpass => 0,
+            Self::Highpass => 1,
+            Self::Bandpass => 2,
+            Self::Notch => 3,
+        }
+    }
+
+    #[must_use]
+    pub fn from_index(i: u32) -> Self {
+        match i {
+            1 => Self::Highpass,
+            2 => Self::Bandpass,
+            3 => Self::Notch,
+            _ => Self::Lowpass,
+        }
+    }
+
     /// Parse a mode name (`"lp"`, `"highpass"`, `"bp"`, `"notch"`, …).
     #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
@@ -252,6 +274,18 @@ pub struct NativeFilter {
     /// (1 = only the filtered signal).
     drive: f32,
     mix: f32,
+    /// An envelope filter (auto-wah, a synth's per-note sweep): how far the
+    /// playing's envelope moves the cutoff, in octaves (negative sweeps
+    /// down; 0 = a static filter), how hard the playing drives it (0..1),
+    /// and how fast it follows, attack and release (ms).
+    env_octaves: f32,
+    env_sens: f32,
+    env_attack_ms: f32,
+    env_release_ms: f32,
+    /// The follower's level, and its per-sample coefficients.
+    env: f32,
+    env_up: f32,
+    env_down: f32,
     prepared: bool,
 }
 
@@ -279,8 +313,16 @@ impl NativeFilter {
             knob: 0.0,
             drive: 0.0,
             mix: 1.0,
+            env_octaves: 0.0,
+            env_sens: 0.5,
+            env_attack_ms: 4.0,
+            env_release_ms: 120.0,
+            env: 0.0,
+            env_up: 0.0,
+            env_down: 0.0,
             prepared: false,
         };
+        f.update_env();
         f.update_coeffs();
         f
     }
@@ -424,8 +466,21 @@ impl NativeFilter {
     }
 
     fn update_coeffs(&mut self) {
+        self.set_corner(self.cutoff_hz);
+    }
+
+    /// The follower's attack and release as one-pole coefficients.
+    fn update_env(&mut self) {
+        let coef = |ms: f32, sr: f32| (-1.0 / (ms.max(0.1) * 0.001 * sr)).exp();
+        self.env_up = coef(self.env_attack_ms, self.sample_rate);
+        self.env_down = coef(self.env_release_ms, self.sample_rate);
+    }
+
+    /// The filter's coefficients for a cutoff of `hz` (the knob's, or where
+    /// the envelope has moved it).
+    fn set_corner(&mut self, hz: f32) {
         let q = self.svf_q();
-        let fc = self.cutoff_hz
+        let fc = hz.clamp(20.0, self.sample_rate * 0.45)
             * self
                 .res_shift
                 .powf(self.resonance.powf(self.res_shift_curve));
@@ -584,6 +639,45 @@ impl PluginInstance for NativeFilter {
                 max: 1.0,
                 default: 0.0,
             },
+            // The envelope: its sweep in octaves (− down, 0 off), how hard
+            // the playing drives it, its attack and release (ms).
+            PluginParamInfo {
+                id: 5,
+                name: "env_octaves".into(),
+                min: -4.0,
+                max: 4.0,
+                default: 0.0,
+            },
+            PluginParamInfo {
+                id: 6,
+                name: "env_sens".into(),
+                min: 0.0,
+                max: 1.0,
+                default: 0.5,
+            },
+            PluginParamInfo {
+                id: 7,
+                name: "env_attack".into(),
+                min: 0.5,
+                max: 100.0,
+                default: 4.0,
+            },
+            PluginParamInfo {
+                id: 8,
+                name: "env_release".into(),
+                min: 10.0,
+                max: 1000.0,
+                default: 120.0,
+            },
+            // The response, as a number a preset can store: 0 low-pass,
+            // 1 high-pass, 2 band-pass, 3 notch.
+            PluginParamInfo {
+                id: 9,
+                name: "mode".into(),
+                min: 0.0,
+                max: 3.0,
+                default: 0.0,
+            },
         ]
     }
     fn param_value(&mut self, id: u32) -> Option<f64> {
@@ -593,6 +687,11 @@ impl PluginInstance for NativeFilter {
             2 => Some(self.drive as f64),
             3 => Some(self.mix as f64),
             4 => Some(self.knob as f64),
+            5 => Some(self.env_octaves as f64),
+            6 => Some(self.env_sens as f64),
+            7 => Some(self.env_attack_ms as f64),
+            8 => Some(self.env_release_ms as f64),
+            9 => Some(f64::from(self.mode.index())),
             _ => None,
         }
     }
@@ -609,6 +708,7 @@ impl PluginInstance for NativeFilter {
     fn prepare(&mut self, sample_rate: f64, _block_size: u32) -> Result<(), PluginError> {
         self.sample_rate = sample_rate.max(1.0) as f32;
         self.update_coeffs();
+        self.update_env();
         self.reset_state();
         self.prepared = true;
         Ok(())
@@ -642,6 +742,23 @@ impl PluginInstance for NativeFilter {
                 3 => self.mix = (value as f32).clamp(0.0, 1.0),
                 // `set_knob` recomputes the coefficients itself.
                 4 => self.set_knob(value as f32),
+                5 => {
+                    self.env_octaves = (value as f32).clamp(-4.0, 4.0);
+                    dirty = true;
+                }
+                6 => self.env_sens = (value as f32).clamp(0.0, 1.0),
+                7 => {
+                    self.env_attack_ms = (value as f32).clamp(0.5, 100.0);
+                    self.update_env();
+                }
+                8 => {
+                    self.env_release_ms = (value as f32).clamp(10.0, 1000.0);
+                    self.update_env();
+                }
+                9 => {
+                    self.mode = FilterMode::from_index(value.round() as u32);
+                    dirty = true;
+                }
                 _ => {}
             }
         }
@@ -649,6 +766,9 @@ impl PluginInstance for NativeFilter {
             self.update_coeffs();
         }
         let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
+        if self.env_octaves.abs() > 1e-3 {
+            return self.process_enveloped(in_l, in_r, out_l, out_r, frames);
+        }
         if self.drive > 0.0 || self.mix < 1.0 {
             // Drive and/or a dry blend: the general path.
             let g = 1.0 + 7.0 * self.drive;
@@ -679,6 +799,44 @@ impl PluginInstance for NativeFilter {
     fn deactivate(&mut self) {
         self.prepared = false;
         self.reset_state();
+    }
+}
+
+impl NativeFilter {
+    /// Samples between cutoff updates while the envelope moves it.
+    const ENV_STRIDE: usize = 16;
+
+    /// The enveloped path: the playing's level (the louder channel, through
+    /// an attack/release follower) moves the cutoff up to `env_octaves`
+    /// from the knob's, re-set every [`Self::ENV_STRIDE`] samples. Drive
+    /// and mix apply as on the plain path.
+    fn process_enveloped(&mut self, in_l: &[f32], in_r: &[f32], out_l: &mut [f32], out_r: &mut [f32], frames: usize) -> Result<(), PluginError> {
+        // Sensitivity as the follower's input gain: 0.5 → ×8 (a bass's
+        // or a guitar's pick reaching the top of the sweep).
+        let sens = 1.0 + 30.0 * self.env_sens * self.env_sens;
+        let g = 1.0 + 7.0 * self.drive;
+        let comp = 1.0 / g.sqrt();
+        let (mix, driven, gain) = (self.mix, self.drive > 0.0, self.gain);
+        let mut f = 0;
+        while f < frames {
+            let end = (f + Self::ENV_STRIDE).min(frames);
+            for i in f..end {
+                let level = in_l[i].abs().max(in_r[i].abs()) * sens;
+                let c = if level > self.env { self.env_up } else { self.env_down };
+                self.env = level + (self.env - level) * c;
+            }
+            let hz = self.cutoff_hz * 2f32.powf(self.env_octaves * self.env.min(1.0));
+            self.set_corner(hz);
+            for i in f..end {
+                let (xl, xr) = (in_l[i], in_r[i]);
+                let (dl, dr) = if driven { ((xl * g).tanh() * comp, (xr * g).tanh() * comp) } else { (xl, xr) };
+                let (yl, yr) = self.tick_frame(dl, dr);
+                out_l[i] = xl + (yl * gain - xl) * mix;
+                out_r[i] = xr + (yr * gain - xr) * mix;
+            }
+            f = end;
+        }
+        Ok(())
     }
 }
 
@@ -722,6 +880,28 @@ mod tests {
             high < 0.1,
             "10 kHz through a 1 kHz LP is >20 dB down, rms={high}"
         );
+    }
+
+    /// An envelope filter opens with the playing: a loud note through a
+    /// low-set band-pass sweeping up comes out brighter (more 2 kHz) than a
+    /// quiet one.
+    #[test]
+    fn the_envelope_opens_the_filter_with_the_playing() {
+        let sr = 48_000.0;
+        let tone = |amp: f32| {
+            let mut f = NativeFilter::new(48_000).with_mode(FilterMode::Bandpass).with_cutoff(300.0);
+            f.prepare(48_000.0, 4_096).unwrap();
+            let ev = PluginEvents { params: &[(5, 3.0), (6, 0.6)], midi: &[], note_expressions: &[] };
+            f.process_block(&[], &[], &mut [], &mut [], &ev).unwrap();
+            let n = 8_192;
+            let input: Vec<f32> = (0..n).map(|i| amp * (core::f32::consts::TAU * 2_000.0 * i as f32 / sr).sin()).collect();
+            let (mut l, mut r) = (vec![0.0; n], vec![0.0; n]);
+            let none = PluginEvents { params: &[], midi: &[], note_expressions: &[] };
+            f.process_block(&input, &input, &mut l, &mut r, &none).unwrap();
+            rms(&l[n / 2..]) / amp
+        };
+        let (quiet, loud) = (tone(0.01), tone(0.5));
+        assert!(loud > quiet * 2.0, "a hard note opens the band toward 2 kHz: quiet {quiet}, loud {loud}");
     }
 
     #[test]

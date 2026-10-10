@@ -55,3 +55,7 @@ apps/web/.fts-theme-canonical.css
 # documents the variables and IS committed; `.env` holds real values and
 # never is.
 .env
+
+# Impeccable: per-developer consent and the hook cache
+.impeccable/config.local.json
+.impeccable/hook.cache.json

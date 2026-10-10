@@ -181,6 +181,12 @@ impl GuitarRigBackend {
     /// Re-read every library file that differs from what the rig holds and
     /// apply it now — the explicit reload (`reload_config`,
     /// `reload_library`). One line per file applied.
+    /// Watch the (new) library directory from scratch: a switch of
+    /// instrument, whose files are not edits made under the rig.
+    pub(super) fn reset_config_watch(&self) {
+        *self.hot.watcher.lock_ok() = Watcher::default();
+    }
+
     pub(super) fn reload_config_now(&self) -> String {
         // Wait out a reload already running (bounded: a reload is a chain
         // build, well under this).

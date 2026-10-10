@@ -429,6 +429,20 @@ fn settle_amp_stage(
         .find(|b| b.block_type == BlockType::Amp && !b.name.eq_ignore_ascii_case("Amp R"))
     {
         amp.name = "Amp L".to_string();
+        // Its settings — an amp snapshot's input trim (`drive`): the slot's
+        // leaf is whichever capture the patch swapped in, which carries only
+        // what its own preset set, so the patch's word on Amp L lands here.
+        for ov in patch.overrides.iter().filter(|o| {
+            o.block.eq_ignore_ascii_case("Amp L") && o.op.eq_ignore_ascii_case("set") && !o.param.is_empty()
+        }) {
+            match amp.params.iter_mut().find(|p| p.name == ov.param) {
+                Some(p) => p.value = ov.value.to_string(),
+                None => amp.params.push(signal_sampler::rig_node::Param {
+                    name: ov.param.clone(),
+                    value: ov.value.to_string(),
+                }),
+            }
+        }
     }
     for block in chain.iter_mut() {
         match block.name.as_str() {
@@ -933,8 +947,16 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
             let Some(range) = signal_sampler::native::range_of(target.block_type, &ov.param) else {
                 continue;
             };
-            let default = signal_sampler::native::default_of(target.block_type, &ov.param)
-                .unwrap_or(range.min);
+            // A capture's drive sits at 0.5 — the capture at unity — not at
+            // whatever a native block of its type would start from: a patch
+            // trimming Amp R would otherwise turn every other patch's down
+            // 12 dB.
+            let default = if ov.param == "drive" && !target.nam.is_empty() {
+                0.5
+            } else {
+                signal_sampler::native::default_of(target.block_type, &ov.param)
+                    .unwrap_or(range.min)
+            };
             let Some(node) = library
                 .nodes
                 .iter_mut()

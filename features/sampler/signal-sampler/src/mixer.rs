@@ -33,7 +33,16 @@ const METER_DECAY: f32 = 0.85;
 /// The cpal callback's actual block is normally 256–1024 frames; preparing
 /// for 8192 keeps us safe against larger upstream buffers + future variable-
 /// block-size paths without re-preparing per block.
+///
+/// On iOS, exactly what the RemoteIO backend hands the rig at most
+/// (`daw_audio_io::duplex_ios::MAX_PROCESS_FRAMES`, a bigger callback run in
+/// pieces of it): every block is sized by this, a neural amp model's every
+/// layer with it, and at 8192 the phone's eight resident patches took
+/// 2.9 GB — a patch load building eight more was the app killed for memory.
+#[cfg(not(target_os = "ios"))]
 pub const FX_PREPARE_BLOCK: u32 = 8192;
+#[cfg(target_os = "ios")]
+pub const FX_PREPARE_BLOCK: u32 = daw_audio_io::duplex_ios::MAX_PROCESS_FRAMES as u32;
 
 // ── FX chain (REAPER-style track FX) ────────────────────────────────────────
 

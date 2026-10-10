@@ -178,6 +178,8 @@ pub fn Knob(
                         display: flex; align-items: center; justify-content: center;",
                 // Touch: hold still to reset — a finger has no double-click.
                 onpointerdown: move |e: PointerEvent| {
+                    // The press is the knob's to drag: no panning under it (Blitz).
+                    e.prevent_default();
                     long.down(&e, move |_| {
                         if let Some(bus) = bus {
                             bus.end();

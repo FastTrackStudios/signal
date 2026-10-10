@@ -1,0 +1,499 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-07T01:43:34+00:00",
+  "title": "Design System: Signal Touch",
+  "extensions": {
+    "colorMeta": {
+      "desk": {
+        "role": "neutral",
+        "displayName": "Desk",
+        "canonical": "#0a0a0c",
+        "tonalRamp": [
+          "#23232a",
+          "#3a3a46",
+          "#515161",
+          "#68687d",
+          "#828297",
+          "#a6a6b5",
+          "#cdcdd5",
+          "#f1f1f3"
+        ]
+      },
+      "sheet": {
+        "role": "neutral",
+        "displayName": "Pane",
+        "canonical": "#0e0e11",
+        "tonalRamp": [
+          "#23232a",
+          "#3a3a46",
+          "#515162",
+          "#68687e",
+          "#818197",
+          "#a6a6b5",
+          "#cdcdd6",
+          "#f1f1f3"
+        ]
+      },
+      "sheet-2": {
+        "role": "neutral",
+        "displayName": "Pane Recess",
+        "canonical": "#141418",
+        "tonalRamp": [
+          "#23232a",
+          "#3a3a46",
+          "#515161",
+          "#68687d",
+          "#828297",
+          "#a6a6b5",
+          "#cdcdd5",
+          "#f1f1f3"
+        ]
+      },
+      "field": {
+        "role": "neutral",
+        "displayName": "Field",
+        "canonical": "#0a0a0d",
+        "tonalRamp": [
+          "#21212b",
+          "#373748",
+          "#4e4e65",
+          "#646482",
+          "#7d7d9b",
+          "#a3a3b8",
+          "#cbcbd7",
+          "#f1f1f4"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#222228",
+        "tonalRamp": [
+          "#232329",
+          "#3b3b45",
+          "#525260",
+          "#69697c",
+          "#838396",
+          "#a7a7b4",
+          "#cdcdd5",
+          "#f1f1f3"
+        ]
+      },
+      "rule-strong": {
+        "role": "neutral",
+        "displayName": "Strong Hairline",
+        "canonical": "#2b2b31",
+        "tonalRamp": [
+          "#242429",
+          "#3c3c44",
+          "#53535f",
+          "#6b6b7a",
+          "#858594",
+          "#a8a8b3",
+          "#ceced4",
+          "#f1f1f3"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#e4e4e7",
+        "tonalRamp": [
+          "#242428",
+          "#3c3c43",
+          "#54545e",
+          "#6c6c79",
+          "#868693",
+          "#a9a9b2",
+          "#ceced4",
+          "#f2f2f3"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "canonical": "#a1a1aa",
+        "tonalRamp": [
+          "#242428",
+          "#3d3d43",
+          "#55555e",
+          "#6d6d79",
+          "#868692",
+          "#a9a9b2",
+          "#cfcfd3",
+          "#f2f2f3"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Faint Ink",
+        "canonical": "#80808a",
+        "tonalRamp": [
+          "#252528",
+          "#3d3d42",
+          "#56565d",
+          "#6e6e77",
+          "#888891",
+          "#aaaab1",
+          "#cfcfd3",
+          "#f2f2f3"
+        ]
+      },
+      "dim": {
+        "role": "neutral",
+        "displayName": "Dim",
+        "canonical": "#3f3f46",
+        "tonalRamp": [
+          "#242428",
+          "#3c3c43",
+          "#55555e",
+          "#6d6d79",
+          "#868692",
+          "#a9a9b2",
+          "#cfcfd4",
+          "#f2f2f3"
+        ]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Rig Blue",
+        "canonical": "#2563eb",
+        "tonalRamp": [
+          "#061a46",
+          "#0b2c75",
+          "#0f3da3",
+          "#134fd2",
+          "#2d69ec",
+          "#6a94f1",
+          "#abc3f7",
+          "#e8eefd"
+        ]
+      },
+      "live": {
+        "role": "secondary",
+        "displayName": "Playing Green",
+        "canonical": "#22c55e",
+        "tonalRamp": [
+          "#0b411f",
+          "#136d34",
+          "#1a9849",
+          "#22c45d",
+          "#3bdd77",
+          "#74e79e",
+          "#b1f1c9",
+          "#e9fbf0"
+        ]
+      },
+      "live-bg": {
+        "role": "secondary",
+        "displayName": "Playing Wash",
+        "canonical": "rgba(34, 197, 94, 0.12)"
+      },
+      "up": {
+        "role": "secondary",
+        "displayName": "Picked Wash",
+        "canonical": "#1b2331",
+        "tonalRamp": [
+          "#1b2331",
+          "#2d3b52",
+          "#3f5273",
+          "#526a94",
+          "#6b83ad",
+          "#96a7c5",
+          "#c4cdde",
+          "#eff1f6"
+        ]
+      },
+      "focus-fg": {
+        "role": "secondary",
+        "displayName": "Picked Blue",
+        "canonical": "#bfdbfe",
+        "tonalRamp": [
+          "#01224b",
+          "#02397e",
+          "#0350b0",
+          "#0466e2",
+          "#1d80fb",
+          "#5ea5fc",
+          "#a5ccfe",
+          "#e6f1ff"
+        ]
+      },
+      "void": {
+        "role": "tertiary",
+        "displayName": "Out Red",
+        "canonical": "#f87171",
+        "tonalRamp": [
+          "#490404",
+          "#7a0606",
+          "#aa0808",
+          "#db0b0b",
+          "#f42424",
+          "#f76363",
+          "#fba8a8",
+          "#fee7e7"
+        ]
+      },
+      "pressed-bg": {
+        "role": "neutral",
+        "displayName": "Pressed Well",
+        "canonical": "rgba(0, 0, 0, 0.5)"
+      },
+      "tape-clean": {
+        "role": "tertiary",
+        "displayName": "Clean",
+        "canonical": "#38bdf8",
+        "tonalRamp": [
+          "#03344a",
+          "#04577b",
+          "#0679ac",
+          "#089cde",
+          "#21b5f7",
+          "#61cbf9",
+          "#a6e2fc",
+          "#e6f7fe"
+        ]
+      },
+      "tape-crunch": {
+        "role": "tertiary",
+        "displayName": "Crunch",
+        "canonical": "#2563eb",
+        "tonalRamp": [
+          "#061a46",
+          "#0b2c75",
+          "#0f3da3",
+          "#134fd2",
+          "#2d69ec",
+          "#6a94f1",
+          "#abc3f7",
+          "#e8eefd"
+        ]
+      },
+      "tape-drive": {
+        "role": "tertiary",
+        "displayName": "Drive",
+        "canonical": "#f97316",
+        "tonalRamp": [
+          "#4b2002",
+          "#7c3503",
+          "#ae4a04",
+          "#e05f06",
+          "#f9791f",
+          "#fb9f60",
+          "#fdc9a6",
+          "#fef0e6"
+        ]
+      },
+      "tape-lead": {
+        "role": "tertiary",
+        "displayName": "Lead",
+        "canonical": "#ef4444",
+        "tonalRamp": [
+          "#460606",
+          "#750a0a",
+          "#a40e0e",
+          "#d31212",
+          "#ed2c2c",
+          "#f26969",
+          "#f8aaaa",
+          "#fde8e8"
+        ]
+      },
+      "tape-ambient": {
+        "role": "tertiary",
+        "displayName": "Ambient",
+        "canonical": "#06b6d4",
+        "tonalRamp": [
+          "#02404a",
+          "#046a7c",
+          "#0595ae",
+          "#06c0df",
+          "#20d9f9",
+          "#60e4fb",
+          "#a6f0fc",
+          "#e6fbfe"
+        ]
+      },
+      "tape-special": {
+        "role": "tertiary",
+        "displayName": "Special / other",
+        "canonical": "#71717a",
+        "tonalRamp": [
+          "#252528",
+          "#3d3d42",
+          "#56565d",
+          "#6e6e77",
+          "#888891",
+          "#aaaab1",
+          "#cfcfd3",
+          "#f2f2f3"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Title of the item in the right-hand pane (song up, preset)."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Left-pane titles, variation names, side-sheet titles."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Sub-names, stepper values, empty states."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "List rows and picker items; the pick goes bolder."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Counts, block types, second lines."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Row status words, stack chips, chain module names."
+      }
+    },
+    "shadows": [
+      {
+        "name": "pressed",
+        "value": "inset 0 1px 2px rgba(0,0,0,0.75), inset 0 -1px 0 rgba(255,255,255,0.05)",
+        "purpose": "The pick of a tab group and the bar's profile chip, on rgba(0,0,0,0.5). Mirrors theme::PRESSED."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "purpose": "All state transitions."
+      },
+      {
+        "name": "press",
+        "value": "140ms",
+        "purpose": "Hover/press wash and 0.985 scale."
+      },
+      {
+        "name": "sheet-in",
+        "value": "220ms",
+        "purpose": "Side sheet slides 24px in from the right with a fade."
+      },
+      {
+        "name": "strike-draw",
+        "value": "260ms",
+        "purpose": "A strike draws once when it appears; none under reduced motion."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one thing you came to do on a surface.",
+      "html": "<button class=\"ds-btn-primary\">Add to set</button>",
+      "css": ".ds-btn-primary{min-height:48px;padding:0 18px;border-radius:6px;border:1px solid #2563eb;background:#2563eb;color:#fff;font:650 15px -apple-system,system-ui,sans-serif;cursor:pointer;transition:background 140ms cubic-bezier(0.2,0.8,0.2,1),transform 140ms cubic-bezier(0.2,0.8,0.2,1);}.ds-btn-primary:active{transform:scale(0.985);}.ds-btn-primary:focus-visible{outline:2px solid #bfdbfe;outline-offset:2px;}"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Every other action; destructive takes the out-red border and text.",
+      "html": "<button class=\"ds-btn\">Done</button> <button class=\"ds-btn ds-btn-danger\">Cancel preset</button>",
+      "css": ".ds-btn{min-height:48px;padding:0 18px;border-radius:6px;border:1px solid #2b2b31;background:transparent;color:#e4e4e7;font:650 15px -apple-system,system-ui,sans-serif;cursor:pointer;transition:background 140ms cubic-bezier(0.2,0.8,0.2,1),transform 140ms cubic-bezier(0.2,0.8,0.2,1);}.ds-btn:hover{background:rgba(255,255,255,0.05);}.ds-btn:active{background:rgba(255,255,255,0.07);transform:scale(0.985);}.ds-btn:focus-visible{outline:2px solid #bfdbfe;outline-offset:2px;}.ds-btn-danger{border-color:#f87171;color:#f87171;}"
+    },
+    {
+      "name": "Mode Tabs",
+      "kind": "nav",
+      "refersTo": "tab-pressed",
+      "description": "The bar's modes; the current one pressed into the surface (theme::PRESSED).",
+      "html": "<div class=\"ds-bar\"><span class=\"ds-mark\">signal</span><span class=\"ds-tab ds-tab-on\">Set</span><span class=\"ds-tab\">Sounds</span><span class=\"ds-tab\">Library</span><span class=\"ds-tab\">Routing</span></div>",
+      "css": ".ds-bar{display:flex;align-items:center;gap:4px;height:56px;padding:0 14px 0 20px;background:#0e0e11;border-bottom:1px solid #2b2b31;font-family:-apple-system,system-ui,sans-serif;}.ds-mark{font-size:24px;font-weight:750;letter-spacing:-0.03em;color:#e4e4e7;margin-right:16px;}.ds-tab{display:inline-flex;align-items:center;min-height:48px;padding:0 18px;border-radius:6px;color:#a1a1aa;font-size:17px;font-weight:560;cursor:pointer;}.ds-tab:hover{background:rgba(255,255,255,0.05);}.ds-tab-on,.ds-tab-on:hover{background:rgba(0,0,0,0.5);color:#fafafa;font-weight:700;box-shadow: inset 0 1px 2px rgba(0,0,0,0.75), inset 0 -1px 0 rgba(255,255,255,0.05);}"
+    },
+    {
+      "name": "Stack Chips",
+      "kind": "chip",
+      "refersTo": "stack-chip",
+      "description": "A sound's family: a 20% tint with a solid swatch.",
+      "html": "<span class=\"ds-chip\" style=\"--c:#38bdf8\"><i></i>Clean</span> <span class=\"ds-chip\" style=\"--c:#f97316\"><i></i>Drive</span> <span class=\"ds-chip\" style=\"--c:#ef4444\"><i></i>Lead</span> <span class=\"ds-chip ds-chip-pressed\">Worship rig</span>",
+      "css": ".ds-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:4px;background:color-mix(in srgb,var(--c) 20%,transparent);color:#e4e4e7;font:700 12px -apple-system,system-ui,sans-serif;letter-spacing:0.06em;text-transform:uppercase;}.ds-chip i{width:8px;height:8px;border-radius:2px;background:var(--c);}.ds-chip-pressed{background:rgba(0,0,0,0.5);color:#fafafa;box-shadow: inset 0 1px 2px rgba(0,0,0,0.75), inset 0 -1px 0 rgba(255,255,255,0.05);}"
+    },
+    {
+      "name": "Ruled Pane",
+      "kind": "card",
+      "refersTo": "pane",
+      "description": "A pane of ruled rows; the picked row on the blue wash, the playing one barred in green, the played one struck.",
+      "html": "<section class=\"ds-pane\"><div class=\"ds-row ds-row-up\"><span class=\"ds-up\">Way Maker</span></div><div class=\"ds-row\"><span>Goodness of God</span><span class=\"ds-lbl\">Next</span></div><div class=\"ds-row\"><span class=\"ds-struck\">Build My Life</span></div></section>",
+      "css": ".ds-pane{background:#0e0e11;border:1px solid #222228;border-radius:8px;overflow:hidden;font:560 17px -apple-system,system-ui,sans-serif;color:#e4e4e7;}.ds-row{display:flex;align-items:center;justify-content:space-between;min-height:64px;padding:0 22px;}.ds-row+.ds-row{border-top:1px solid #222228;}.ds-row:hover{background:rgba(255,255,255,0.05);}.ds-row-up{background:#1b2331;font-weight:820;}.ds-up{position:relative;}.ds-up::after{content:'';position:absolute;left:0;right:0;bottom:-5px;height:3px;border-radius:2px;background:#22c55e;}.ds-lbl{font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#a1a1aa;}.ds-struck{text-decoration:line-through;text-decoration-color:#a1a1aa;text-decoration-thickness:3px;color:#80808a;}"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A 48px field on the input well.",
+      "html": "<input class=\"ds-input\" placeholder=\"Find a song, preset, block\">",
+      "css": ".ds-input{width:340px;min-height:48px;padding:0 14px;border:1px solid #2b2b31;border-radius:6px;background:#0a0a0d;color:#e4e4e7;font:500 17px -apple-system,system-ui,sans-serif;}.ds-input::placeholder{color:#80808a;}.ds-input:focus-visible{outline:2px solid #bfdbfe;outline-offset:2px;}"
+    },
+    {
+      "name": "Chain Block",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "One block in the chain strip: name, what it plays, bypass dot (green in, dim ring out).",
+      "html": "<div class=\"ds-strip\"><div class=\"ds-blk\"><div class=\"ds-mod\">Amp</div><div class=\"ds-b\"><b>Deluxe</b><span>Edge of break-up</span></div><i class=\"ds-on\"></i></div><div class=\"ds-blk ds-off\"><div class=\"ds-mod\"></div><div class=\"ds-b\"><b><s>Fuzz</s></b><span>out</span></div><i></i></div></div>",
+      "css": ".ds-strip{display:flex;height:104px;background:#0e0e11;border-top:1px solid #2b2b31;font-family:-apple-system,system-ui,sans-serif;color:#e4e4e7;}.ds-blk{position:relative;min-width:138px;border-left:1px solid #222228;display:flex;flex-direction:column;padding-right:40px;}.ds-blk:hover{background:rgba(255,255,255,0.05);}.ds-mod{height:24px;padding:5px 10px 0;font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#80808a;}.ds-b{display:flex;flex-direction:column;justify-content:center;gap:3px;flex:1;padding:4px 6px 8px 10px;}.ds-b b{font-size:15px;font-weight:780;}.ds-b s{text-decoration-thickness:2.5px;text-decoration-color:#a1a1aa;}.ds-b span{font-size:13px;color:#80808a;}.ds-blk i{position:absolute;right:13px;top:54px;width:14px;height:14px;border-radius:999px;border:2px solid #3f3f46;box-sizing:border-box;}.ds-blk i.ds-on{border-color:#22c55e;background:#22c55e;}.ds-off .ds-b{opacity:0.55;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Rig's Own Room",
+    "overview": "Signal Touch is the Signal app's existing dark world, kept on purpose and polished for a hand instead of a cursor. Near-black zinc panes sit on a slightly darker desk, separated by hairlines rather than shadows. Colour is rationed to meaning: the stack colours say what kind of sound a thing is, green says what is playing, blue says what is picked, red says what is out. Everything else is grey.\n\nDensity is touch density, not DAW density: every target is at least 48px, list rows are 64px, section tiles 84px, and the chain strip is a fixed 104px band along the bottom of every page so the sound is always in view. State is drawn, not boxed: a hand-drawn strike through what is bypassed, played or cancelled, a short bar under what is up, and the current pick of a tab group pressed into the bar's surface.",
+    "keyCharacteristics": [
+      "Dark zinc greys from the incumbent app; flat panes with 1px hairlines.",
+      "Stack colours appear as tinted chips with a solid swatch, never as large fills.",
+      "Green (playing) and blue (picked) are the only state colours; red only for out/cancelled/destructive.",
+      "The selected tab is pressed in (inset shadow), not raised or outlined.",
+      "System sans throughout with tabular numerals."
+    ],
+    "rules": [
+      {
+        "name": "The Meaning-Only Colour Rule",
+        "body": "Every hue on screen means something: stack identity, playing, picked, or out. Surfaces and structure stay grey.",
+        "section": "colors"
+      },
+      {
+        "name": "The Green Plays, Blue Picks Rule",
+        "body": "Green marks only what is sounding; blue marks only what is selected. A picked thing that is not playing never goes green.",
+        "section": "colors"
+      },
+      {
+        "name": "The Weight-Marks-The-Pick Rule",
+        "body": "In a list, the current item is set bolder; it does not get a new colour or a box.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Numerals are always tabular.",
+        "section": "typography"
+      },
+      {
+        "name": "The Pressed-In Rule",
+        "body": "A selected choice among a few sinks into its surface; it is never lifted or boxed.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** take colours from the tokens only; they are the same values the Dioxus app reads from theme.rs and folder_color.",
+      "**Do** keep every touch target at least 48px (the hit token).",
+      "**Do** mark the current pick of a tab group pressed in (theme::PRESSED), never with a border or a raised fill.",
+      "**Do** strike what is out, played or cancelled instead of hiding it.",
+      "**Do** keep the chain strip visible on every page."
+    ],
+    "donts": [
+      "**Don't** use green for anything that is not sounding, or blue for anything that is not picked.",
+      "**Don't** fill large areas with stack colours; they are chips, swatches and tile bands.",
+      "**Don't** add drop shadows to panes or sheets; depth is tonal and hairline.",
+      "**Don't** open pickers as centred modals; use the right-hand side sheet."
+    ]
+  }
+}

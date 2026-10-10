@@ -11,7 +11,7 @@ use crate::library::RigLibrary;
 /// chain built from now on — the live rig and offline levelling alike, so
 /// what is measured is what is heard.
 pub fn apply_nam_calibration() -> Option<f32> {
-    let cal = signal_sampler::RigManager::load(crate::session::AUDIO_RIG_NAME)
+    let cal = signal_sampler::RigManager::load(crate::session::audio_rig_name())
         .audio
         .nam_calibration();
     signal_sampler::nam::set_interface_calibration_dbu(cal);

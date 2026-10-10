@@ -65,6 +65,8 @@ struct Wire {
     /// The last thing a call on a bar knob's panel said, by bar knob —
     /// shown in its header.
     status: Signal<Option<(String, MacroResult)>>,
+    /// The bar knob whose panel a touch has pinned open (one at a time).
+    pinned: Signal<Option<String>>,
 }
 
 /// The separator in a tuner key.
@@ -317,6 +319,7 @@ pub fn MacroBar(
     let forced = use_hook(|| try_consume_context::<MacroPanelOpen>().and_then(|o| o.0));
     let shot_status = use_hook(|| try_consume_context::<MacroShotStatus>().and_then(|s| s.0));
     let status = use_signal(move || shot_status);
+    let pinned = use_signal(|| None::<String>);
     use_context_provider(|| {
         let rig = rig.clone();
         let send = rig.clone();
@@ -373,6 +376,7 @@ pub fn MacroBar(
             ),
             macros,
             status,
+            pinned,
         }
     });
     let knobs = macros.read().clone();
@@ -386,9 +390,12 @@ pub fn MacroBar(
         style { {CSS} }
         div {
             // Above the grid it overhangs: a positioned layer of its own.
-            style: "flex-shrink: 0; padding: 8px 12px; position: relative; z-index: 40; \
+            // As wide as its box and no wider — the knobs share it: a row
+            // wider than the screen (a 6.3" phone, sixteen knobs) ran off
+            // its edge and panned under a finger instead of turning.
+            style: "flex-shrink: 0; width: 100%; min-width: 0; box-sizing: border-box; padding: 3px 12px; position: relative; z-index: 40; \
                     border-bottom: 1px solid rgba(39,39,42,0.5); background: rgba(9,9,11,0.3);",
-            div { style: "display: flex; align-items: flex-start; width: 100%;",
+            div { style: "display: flex; align-items: flex-start; width: 100%; min-width: 0;",
                 for (i, k) in knobs.iter().enumerate() {
                     MacroCell {
                         key: "{k.id}",
@@ -472,11 +479,13 @@ fn MacroCell(
             }
         });
     }
-    // Touch has no hover: a tap on the label pins the panel open (and a
-    // second tap lets it go).
-    let mut pinned = use_signal(|| false);
+    // Touch has no hover: a press-and-hold (or a tap on the label) pins the
+    // panel open — its sub-macros to hand — until the label is tapped or
+    // another knob's is pinned.
+    let mut pinned_bar = wire.pinned;
+    let pinned = pinned_bar.read().as_deref() == Some(id.as_str());
     let long = signal_widgets::use_long_press();
-    let open = forced || hovered() || pinned() || dragging() || tuning() || mine.is_some();
+    let open = forced || hovered() || pinned || dragging() || tuning() || mine.is_some();
     let color = if knob.color.is_empty() {
         MUTED.to_string()
     } else {
@@ -526,6 +535,20 @@ fn MacroCell(
         }
     };
 
+    // Held (the cell or its knob): the panel pinned open, its sub-macros to
+    // hand — or, in rig edit (or with no panel), the tune menu.
+    let hold = use_callback({
+        let open_tune_menu = open_tune_menu.clone();
+        let id = id.clone();
+        move |(x, y): (f64, f64)| {
+            if has_panel && crate::phone::RigEdit::editing() != Some(true) {
+                pinned_bar.set(Some(id.clone()));
+            } else {
+                open_tune_menu(x, y);
+            }
+        }
+    });
+
     rsx! {
         div {
             style: "position: relative; flex: 1 1 0%; min-width: 0;",
@@ -535,7 +558,7 @@ fn MacroCell(
             // Main knob cell
             div {
                 style: format!(
-                    "display: flex; flex-direction: column; align-items: center; gap: 2px; \
+                    "display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; \
                      padding: 6px 0; border-radius: 12px; cursor: pointer; \
                      border: 1px solid transparent; background: {};",
                     if over_cell() { "rgba(39,39,42,0.4)" } else { "transparent" },
@@ -552,34 +575,35 @@ fn MacroCell(
                         open_tune_menu(p.x, p.y);
                     }
                 },
-                // Touch: a long-press is the right-click.
-                onpointerdown: {
-                    let open_tune_menu = open_tune_menu.clone();
-                    move |e: PointerEvent| {
-                        let open_tune_menu = open_tune_menu.clone();
-                        long.down(&e, move |(x, y)| open_tune_menu(x, y));
-                    }
+                // Touch: a long-press pins the panel open; in rig edit (or
+                // with no panel) it is the right-click, the tune menu.
+                onpointerdown: move |e: PointerEvent| {
+                    long.down(&e, move |at| hold.call(at));
                 },
                 onpointermove: move |e: PointerEvent| long.moved(&e),
                 onpointerup: move |_| long.cancel(),
                 onpointercancel: move |_| long.cancel(),
 
                 // Label (above knob). By touch, a tap pins the panel.
-                div { style: "display: flex; align-items: center; justify-content: center; gap: 2px; width: 100%;",
-                    onclick: move |_| {
-                        if !long.fired() && has_panel && signal_widgets::is_touch() {
-                            pinned.toggle();
+                div { style: "display: flex; align-items: center; justify-content: center; gap: 2px; width: 100%; min-width: 0;",
+                    onclick: {
+                        let id = id.clone();
+                        move |_| {
+                            if !long.fired() && has_panel && signal_widgets::is_touch() {
+                                pinned_bar.set(if pinned { None } else { Some(id.clone()) });
+                            }
                         }
                     },
                     span {
-                        style: "font-size: 10px; font-weight: 500; max-width: 56px; overflow: hidden; \
+                        style: "font-size: 10px; font-weight: 500; min-width: 0; max-width: 56px; overflow: hidden; \
                                 white-space: nowrap; color: {color};",
                         "{knob.label}"
                     }
                     if has_panel {
-                        span {
-                            style: format!("font-size: 8px; color: {};", if open { "#a1a1aa" } else { "#52525b" }),
-                            "\u{25BE}"
+                        // Drawn, not a glyph: the app's font has no ▾, and
+                        // it came out an empty box.
+                        svg { width: "8", height: "8", view_box: "0 0 8 8", style: "flex-shrink: 0;",
+                            path { d: "M1.5 2.75 L4 5.25 L6.5 2.75", fill: "none", stroke: if open { "#a1a1aa" } else { "#52525b" }, stroke_width: "1.4", stroke_linecap: "round", stroke_linejoin: "round" }
                         }
                     }
                 }
@@ -591,6 +615,7 @@ fn MacroCell(
                     spread: knob.style == "spread",
                     rest: knob.rest,
                     dragging,
+                    on_hold: hold,
                     on_change: {
                         let wire = wire.clone();
                         let id = id.clone();
@@ -1364,6 +1389,8 @@ fn TuneKnob(
             },
             onmouseleave: move |_| hover.set(None),
             onpointerdown: move |e: PointerEvent| {
+                // The press is the knob's to drag: no panning under it (Blitz).
+                e.prevent_default();
                 let Some(bus) = bus else { return };
                 let p = e.element_coordinates();
                 let Some(h) = pick_handle(p.x, p.y, plo, phi) else { return };
@@ -1574,6 +1601,8 @@ fn EnterChip(parent: String, t: MacroTuneView) -> Element {
             title: "Comes in {pct}% of the way up the Drive knob — drag sideways, or right-click for a value",
             style: format!("{} cursor: ew-resize; touch-action: none;", chip("#a1a1aa")),
             onpointerdown: move |e: PointerEvent| {
+                // The press is the knob's to drag: no panning under it (Blitz).
+                e.prevent_default();
                 e.stop_propagation();
                 let Some(bus) = bus else { return };
                 let x0 = e.client_coordinates().x;
@@ -1615,7 +1644,7 @@ fn EnterChip(parent: String, t: MacroTuneView) -> Element {
 fn DualRowDropdown(
     /// Knob id prefix, `delay` or `reverb` — for the link mirror lookups.
     prefix: String,
-    /// The five column headers.
+    /// The column headers, one per column.
     headers: Vec<String>,
     children_knobs: Vec<MacroChildView>,
     dragging: Signal<bool>,
@@ -1631,12 +1660,14 @@ fn DualRowDropdown(
     }
     // The columns, by the knobs' ids (`delay-fb1`): a block without one
     // leaves its cell empty rather than shifting the row.
-    let keys: [&str; 5] = if prefix == "reverb" {
+    let keys: &[&str] = if prefix == "reverb" {
         // `reverb-time` is the decay: how much tail, not when.
-        ["type", "time", "character", "level", "mod"]
+        &["type", "time", "character", "level", "mod"]
     } else {
-        ["type", "fb", "filter", "level", "mod"]
+        // `delay-time` is the note (1/4, 1/8.…): the one way in to when.
+        &["type", "time", "fb", "filter", "level", "mod"]
     };
+    let columns = keys.len();
     let cols = |row: &[MacroChildView]| -> Vec<Option<MacroChildView>> {
         keys.iter()
             .map(|key| {
@@ -1673,7 +1704,7 @@ fn DualRowDropdown(
     };
 
     rsx! {
-        div { style: "display: grid; grid-template-columns: repeat(5, 68px); column-gap: 4px; row-gap: 0;",
+        div { style: "display: grid; grid-template-columns: repeat({columns}, 68px); column-gap: 4px; row-gap: 0;",
             // ── Header row ──
             for header in headers.iter() {
                 div {
@@ -1693,10 +1724,9 @@ fn DualRowDropdown(
                             LinkGlyph { on: type_linked() }
                         }
                     }
-                    div {}
-                    div {}
-                    div {}
-                    div {}
+                    for _ in 1..columns {
+                        div {}
+                    }
                 }
                 for c in cols(row) {
                     {cell(c)}
@@ -1808,6 +1838,10 @@ fn MiniKnob(
     /// Nothing to turn (an empty drive slot).
     #[props(default)]
     disabled: bool,
+    /// Held still (touch), at the client point: in place of the reset — a
+    /// bar knob's hold opens its panel. Double-tap still resets.
+    #[props(default)]
+    on_hold: Option<Callback<(f64, f64)>>,
 ) -> Element {
     let long = signal_widgets::use_long_press();
     let bus = DragBus::try_use();
@@ -1884,6 +1918,8 @@ fn MiniKnob(
         div {
             style: "width: 36px; height: 36px; position: relative; cursor: pointer; touch-action: none;",
             onpointerdown: move |e: PointerEvent| {
+                // The press is the knob's to drag: no panning under it (Blitz).
+                e.prevent_default();
                 if disabled {
                     return;
                 }
@@ -1891,13 +1927,14 @@ fn MiniKnob(
                 // menu) must not fire under a knob being held.
                 e.stop_propagation();
                 // Touch: holding still resets, as a double-click does.
-                long.down(&e, move |_| {
+                long.down(&e, move |at| {
                     if let Some(bus) = bus {
                         bus.end();
                     }
-                    match on_reset {
-                        Some(r) => r.call(()),
-                        None => apply(f64::from(rest)),
+                    match (on_hold, on_reset) {
+                        (Some(h), _) => h.call(at),
+                        (None, Some(r)) => r.call(()),
+                        (None, None) => apply(f64::from(rest)),
                     }
                 });
                 let y0 = e.client_coordinates().y;

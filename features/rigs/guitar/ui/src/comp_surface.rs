@@ -259,6 +259,11 @@ pub fn CompSurface(
     in_db: f32,
     /// Real detector gain reduction (dB, positive).
     gr_db: f32,
+    /// Its box (points), where the host knows it: a box much wider than
+    /// tall (a desktop pane) puts the controls in a column beside the
+    /// picture rather than over its foot.
+    #[props(default)]
+    fit: Option<(f64, f64)>,
 ) -> Element {
     // Callbacks made once per site, not once per render (see `stable`).
     let cbs = crate::stable::use_stable();
@@ -350,11 +355,20 @@ pub fn CompSurface(
     // On a phone the controls leave the picture for a strip of their own
     // under it, at a finger's size.
     let phone = crate::control::use_tier() <= crate::control::Tier::Phone;
-    let picture_box = if phone { format!("position:absolute; left:0; right:0; top:0; bottom:{STRIP_H}px;") } else { "position:absolute; inset:0;".to_string() };
+    // Wide (a desktop pane): the picture square at the left, the controls a
+    // column at the right.
+    let side = fit.filter(|(w, h)| !phone && *w > *h * 1.5).map(|(w, h)| (w - h).clamp(150.0, 240.0));
+    let picture_box = match side {
+        _ if phone => format!("position:absolute; left:0; right:0; top:0; bottom:{STRIP_H}px;"),
+        Some(cw) => format!("position:absolute; left:0; top:0; bottom:0; right:{cw}px;"),
+        None => "position:absolute; inset:0;".to_string(),
+    };
+    let root_style = side.map_or_else(|| "background: #080808;".to_string(), |cw| format!("background: #080808; padding-right: {cw}px; box-sizing: border-box;"));
+    let gr_right = side.map_or(8.0, |cw| cw + 8.0);
 
     rsx! {
         div { class: "relative flex flex-col h-full min-h-0 overflow-hidden",
-            style: "background: #080808;",
+            style: "{root_style}",
 
             // The picture, drawn by the compressor itself — the same widget
             // the plugin mounts, so the rig and the plugin cannot disagree
@@ -389,6 +403,8 @@ pub fn CompSurface(
                     let rig = rig.clone();
                     let id = block.id.clone();
                     move |e: PointerEvent| {
+                        // The press is the knob's to drag: no panning under it (Blitz).
+                        e.prevent_default();
                         let Some(y) = graph_y(&metrics, e.element_coordinates().y) else {
                             return;
                         };
@@ -470,7 +486,7 @@ pub fn CompSurface(
             }
 
             // GR readout, top right (real detector value).
-            div { class: "absolute top-1.5 right-2 flex items-baseline gap-1",
+            div { class: "absolute top-1.5 flex items-baseline gap-1", style: "right: {gr_right}px;",
                 span { style: "font-size:9px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "GR" }
                 span { style: "font-family:ui-monospace,monospace; font-size:12px; color:#ff9c9c;",
                     "{-gr_db:.1}"
@@ -496,11 +512,31 @@ pub fn CompSurface(
             }
             // ── Readouts + the two time knobs (threshold/ratio live on
             // the display itself) ──
-            if !phone {
+            if let Some(cw) = side {
+                // The controls' column: threshold and ratio, then every knob,
+                // then the circuit.
+                div { style: "position: absolute; top: 0; right: 0; bottom: 0; width: {cw}px; box-sizing: border-box; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; background: #0e0e10; border-left: 1px solid #1f1f23;",
+                    div { style: "display: flex; flex-direction: column; gap: 1px;",
+                        span { style: "font-size: 9px; font-weight: 700; letter-spacing: 0.08em; color: #8a8a92;", "THR · RATIO" }
+                        span { style: "font-family: ui-monospace, monospace; font-size: 14px; color: #e8e8ec; white-space: nowrap;", "{thr:.1} dB · {ratio:.1}:1" }
+                    }
+                    div { style: "display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; row-gap: 4px;",
+                        {knob("attack", "Atk", KnobSize::Small, Some(fmt_ms))}
+                        {knob("release", "Rel", KnobSize::Small, Some(fmt_ms))}
+                        {knob("knee", "Knee", KnobSize::Small, Some(fmt_db))}
+                        {knob("range", "Range", KnobSize::Small, Some(fmt_db))}
+                        {knob("fold", "Fold", KnobSize::Small, Some(fmt_pct))}
+                    }
+                    {style_picker(&block, rig.clone())}
+                }
+            }
+            if !phone && side.is_none() {
             div {
                 class: "absolute bottom-0 left-0 right-0 flex items-end px-2 py-1",
-                style: "background: linear-gradient(to top, rgba(8,8,8,0.9), transparent);",
-                div { class: "flex flex-col",
+                // Narrow (at the head of a drive board), the knobs wrap under
+                // the readout rather than run over it.
+                style: "background: linear-gradient(to top, rgba(8,8,8,0.9), transparent); flex-wrap: wrap; row-gap: 4px;",
+                div { class: "flex flex-col", style: "flex-shrink: 0; margin-right: 8px;",
                     span { style: "font-size:8px; color:#8a8a92; text-transform:uppercase;", "Thr · Ratio" }
                     span { style: "font-family:ui-monospace,monospace; font-size:11px; color:#e8e8ec;",
                         "{thr:.1} dB · {ratio:.1}:1"
@@ -510,7 +546,7 @@ pub fn CompSurface(
                 // the display itself; the rest are knobs, because a block
                 // with controls the surface does not offer is a block you
                 // have to leave the rig to set.
-                div { class: "ml-auto flex items-end gap-2",
+                div { class: "ml-auto flex items-end gap-2", style: "flex-wrap: wrap; justify-content: flex-end; row-gap: 4px;",
                     {knob("attack", "Atk", KnobSize::Small, Some(fmt_ms))}
                     {knob("release", "Rel", KnobSize::Small, Some(fmt_ms))}
                     {knob("knee", "Knee", KnobSize::Small, Some(fmt_db))}

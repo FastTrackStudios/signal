@@ -14,14 +14,14 @@
 use std::sync::{Arc, OnceLock};
 
 use architect::rig::RigBackend as _;
-#[cfg(feature = "signal")]
+#[cfg(feature = "tone3000")]
 use signal_account_proto::account::AccountAuthClient;
 use signal_guitar::GuitarRigBackend;
 use signal_guitar::proto::audio::AudioSettingsClient;
 use signal_guitar::proto::rig::{Rig as _, RigClient, RigStreamClient};
 #[cfg(feature = "signal-keys-rig")]
 use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
-#[cfg(feature = "signal")]
+#[cfg(feature = "tone3000")]
 use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
 
 /// The embedded rig: the backend + the established in-process clients.
@@ -32,16 +32,16 @@ pub struct RigEngine {
     pub settings: AudioSettingsClient,
     /// The TONE3000 catalog. `Option` for symmetry with the network path,
     /// where an older engine may not serve it; in-process it is always here.
-    #[cfg(feature = "signal")]
+    #[cfg(feature = "tone3000")]
     pub tones: Option<Tone3000Client>,
-    #[cfg(feature = "signal")]
+    #[cfg(feature = "tone3000")]
     pub tones_stream: Option<Tone3000StreamClient>,
     /// The `FastTrackStudio` account (sign in once, TONE3000 — and whatever
     /// else it gathers — works without a second per-machine authorization).
     /// `Option` for the same reason `tones` is: the RPC exists once this
     /// engine is up, but establishing a client is still one more thing that
     /// can fail, and a UI with no account button is the right degradation.
-    #[cfg(feature = "signal")]
+    #[cfg(feature = "tone3000")]
     pub account: Option<AccountAuthClient>,
     /// The in-process keys rig (sampler engine) — dormant until the keys
     /// view starts it.
@@ -98,11 +98,11 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         // `signal` feature: their sign-in lands on a localhost listener,
         // which the phone cannot offer (iOS needs ASWebAuthenticationSession
         // for that), so the iPhone build leaves them out for now.
-        #[cfg(feature = "signal")]
+        #[cfg(feature = "tone3000")]
         let (router, account, tone3000) = {
             // TONE3000 on the same in-process router: with no separate
             // engine process to hold the session, the embedded one holds it.
-            let config_dir = signal_sampler::rig_prefs::signal_config_dir();
+            let config_dir = signal_rig_host::store::signal_config_dir();
             // The FastTrackStudio account — same reasoning as engine_main.rs:
             // linking TONE3000 to it once means every machine signed in to the
             // account can download without its own authorization.
@@ -165,11 +165,11 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             backend.show_without_audio();
         }
 
-        #[cfg(feature = "signal")]
+        #[cfg(feature = "tone3000")]
         let tones: Option<Tone3000Client> = server.establish().await.ok();
-        #[cfg(feature = "signal")]
+        #[cfg(feature = "tone3000")]
         let tones_stream: Option<Tone3000StreamClient> = server.establish().await.ok();
-        #[cfg(feature = "signal")]
+        #[cfg(feature = "tone3000")]
         let account_client: Option<AccountAuthClient> = server.establish().await.ok();
 
         // The OAuth redirect (TONE3000's and the FastTrackStudio account's)
@@ -181,7 +181,7 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         // `Tone3000Backend` read and write the SAME session files, from the
         // same config dir, so either one completing a sign-in is enough),
         // and this one simply does not also try to bind it.
-        #[cfg(feature = "signal")]
+        #[cfg(feature = "tone3000")]
         {
             let addr = crate::engine_tone3000::callback_listen_addr(&account);
             let app = crate::engine_tone3000::standalone_callback_router(
@@ -208,11 +208,11 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         Ok::<_, eyre::Report>(RigEngine {
             rig,
             stream,
-            #[cfg(feature = "signal")]
+            #[cfg(feature = "tone3000")]
             tones,
-            #[cfg(feature = "signal")]
+            #[cfg(feature = "tone3000")]
             tones_stream,
-            #[cfg(feature = "signal")]
+            #[cfg(feature = "tone3000")]
             account: account_client,
             settings,
             #[cfg(feature = "signal-keys-rig")]
@@ -243,10 +243,87 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         std::thread::spawn(move || {
             let mut had = crate::ios_audio::has_external_input();
             let mut granted = crate::ios_audio::record_permission_granted();
+            // What the session says, at the start and whenever the route or
+            // the access changes: the one event that answers "why is the
+            // guitar not heard" (see `daw_audio_io::session_report`).
+            let report = |why: &str| {
+                if let Some(session) = signal_guitar::audio_session_report() {
+                    tracing::info!(audio.session = %session, audio.why = why, "audio session");
+                }
+            };
+            report("start");
+            crate::log_ring::restore_previous();
+            let mut tick: u32 = 0;
+            let mut stuck_logged = false;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(1000));
+                tick = tick.wrapping_add(1);
+                // The screen's frames, from off the main thread: a frame that
+                // has run for over a second and a half is a frozen screen,
+                // said while it is frozen (once per freeze).
+                let ui = blitz_shell::frame_stats::snapshot();
+                if ui.in_frame_ms > 1500 {
+                    if !stuck_logged {
+                        tracing::warn!(ui.in_frame_ms = ui.in_frame_ms, ui.layers = ui.layers, "ui frame stuck");
+                        stuck_logged = true;
+                    }
+                } else {
+                    stuck_logged = false;
+                }
+                if tick % 5 == 0 {
+                    // The app's memory, as the system counts it against its
+                    // limit (a run killed for memory shows it climbing).
+                    let mem_mb = {
+                        let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
+                        // SAFETY: a plain query of this process into a
+                        // struct of the flavour's size.
+                        let ok = unsafe {
+                            libc::proc_pid_rusage(libc::getpid(), libc::RUSAGE_INFO_V4, (&raw mut info).cast())
+                        } == 0;
+                        if ok { info.ri_phys_footprint / (1024 * 1024) } else { 0 }
+                    };
+                    tracing::info!(mem.footprint_mb = mem_mb, "memory");
+                    crate::log_ring::persist();
+                    tracing::info!(
+                        ui.fps = ui.fps,
+                        ui.mean_ms = ui.mean_ms,
+                        ui.worst_ms = ui.worst_ms,
+                        ui.update_worst_ms = ui.update_worst_ms,
+                        ui.layers = ui.layers,
+                        ui.again_unsettled = ui.again_unsettled,
+                        ui.again_animating = ui.again_animating,
+                        ui.again_widgets = ui.again_widgets,
+                        "ui frames"
+                    );
+                }
+                // Every five seconds, how the audio is: running, the levels
+                // in and out, the rate and buffer — a guitar that is not
+                // reaching the rig reads as an input level at the floor.
+                if tick % 5 == 0 {
+                    let rig = rig.clone();
+                    handle.spawn(async move {
+                        if let Ok(s) = rig.status().await {
+                            let db = |p: f32| if p > 0.0 { (20.0 * p.log10()).max(-90.0) } else { -90.0 };
+                            tracing::info!(
+                                audio.running = s.running,
+                                audio.in_db = db(s.input_peak),
+                                audio.in_l_db = db(s.input_peak_l),
+                                audio.in_r_db = db(s.input_peak_r),
+                                audio.out_db = db(s.output_peak),
+                                audio.rate = s.perf.sample_rate,
+                                audio.frames = s.perf.block_frames,
+                                audio.di = s.di_playing,
+                                audio.error = %s.audio_error,
+                                "audio heartbeat"
+                            );
+                        }
+                    });
+                }
                 let now = crate::ios_audio::has_external_input();
                 let perm = crate::ios_audio::record_permission_granted();
+                if now != had || perm != granted {
+                    report(if now != had { "route" } else { "access" });
+                }
                 if now != had {
                     had = now;
                     tracing::info!(external = now, "audio route changed");
@@ -265,6 +342,9 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
                     });
                 } else if perm && !granted && now {
                     tracing::info!("record permission granted — restarting the rig");
+                    // Inputs appear once access is given: set the session
+                    // up again (interface pinned, route waited for) first.
+                    crate::ios_audio::configure();
                     let rig = rig.clone();
                     handle.spawn(async move {
                         let _ = rig.restart().await;

@@ -48,7 +48,7 @@ async fn an_unbounded_drag_flood_breaks_the_link() {
     let failed = futures::future::join_all(calls)
         .await
         .into_iter()
-        .filter(|r| !matches!(r, Ok(Ok(()))))
+        .filter(|r| !matches!(r, Ok(Ok(_))))
         .count();
     assert_eq!(failed, 0, "{failed} of 2000 writes failed");
     assert!(rig.chain().await.is_ok(), "the link survived");

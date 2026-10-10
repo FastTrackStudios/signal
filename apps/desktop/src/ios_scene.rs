@@ -124,6 +124,48 @@ fn attach(mtm: MainThreadMarker) {
         ios.scene = "adopted",
         "ios: winit's window joined the scene"
     );
+    open_island_right(mtm);
+}
+
+/// Open with the camera housing on the right (the charging port on the
+/// left) — once, at launch, and only when the phone is not already held on
+/// its side: held sideways, it opens the way it is held. UIKit names an
+/// interface orientation by where the home button would be, so housing
+/// right is "landscape left" (mask bit 1 << 4); the device's own landscape
+/// orientations are 3 and 4.
+fn open_island_right(mtm: MainThreadMarker) {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if DONE.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    let scenes = UIApplication::sharedApplication(mtm).connectedScenes();
+    let Some(scene) = scenes.iter().find_map(|scene| scene.downcast::<UIWindowScene>().ok()) else {
+        return;
+    };
+    // SAFETY: plain UIKit messages on the main thread; the geometry
+    // preferences class exists from iOS 16 (looked up, not linked).
+    unsafe {
+        let device: *mut AnyObject = msg_send![class!(UIDevice), currentDevice];
+        let held: isize = msg_send![device, orientation];
+        if held == 3 || held == 4 {
+            return;
+        }
+        let Some(prefs_class) = objc2::runtime::AnyClass::get(c"UIWindowSceneGeometryPreferencesIOS") else {
+            return;
+        };
+        let prefs: *mut AnyObject = msg_send![prefs_class, alloc];
+        let landscape_left: usize = 1 << 4;
+        let prefs: *mut AnyObject = msg_send![prefs, initWithInterfaceOrientations: landscape_left];
+        if prefs.is_null() {
+            return;
+        }
+        let scene: &UIWindowScene = &scene;
+        let _: () = msg_send![scene, requestGeometryUpdateWithPreferences: prefs, errorHandler: std::ptr::null_mut::<AnyObject>()];
+        let _: () = msg_send![prefs, release];
+    }
+    tracing::info!("ios: opened with the housing on the right");
 }
 
 /// Which side the camera housing is on, for a phone on its side: `Some(true)`

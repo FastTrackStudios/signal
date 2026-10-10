@@ -123,8 +123,22 @@ fn resolve_template(base: &[GridSlot], live: &[LiveBlock]) -> Vec<GridSlot> {
 /// The rig graph: guitar-rig template canvas with the live chain resolved
 /// in, wired back to the rig service (param edits). Renders read-only if no
 /// client is in context.
+/// What a tap picked in the graph, by name: a block, or a module and the
+/// blocks in it.
+#[derive(Clone, PartialEq, Debug)]
+pub enum GraphPick {
+    Block(String),
+    Module(String, Vec<String>),
+}
+
 #[component]
-pub fn RigGraph(blocks: Vec<LiveBlock>, nodes: Vec<LiveNode>) -> Element {
+pub fn RigGraph(
+    blocks: Vec<LiveBlock>,
+    nodes: Vec<LiveNode>,
+    /// A block or module picked (None: the selection cleared).
+    #[props(default)]
+    on_pick: Option<EventHandler<Option<GraphPick>>>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let base_slots = use_hook(|| template_to_grid_slots(&guitar_rig_template()));
 
@@ -141,10 +155,25 @@ pub fn RigGraph(blocks: Vec<LiveBlock>, nodes: Vec<LiveNode>) -> Element {
         .filter_map(|s| s.preset_id.clone().map(|id| (s.id, id)))
         .collect();
 
+    // A grid selection, by name.
+    let names: Vec<(uuid::Uuid, String, Option<String>)> = slots
+        .iter()
+        .map(|s| (s.id, s.block_preset_name.clone().unwrap_or_default(), s.module_group.clone()))
+        .collect();
     rsx! {
         RigGridPanel {
             initial_slots: slots,
-            on_selection_change: move |_sel: Option<GridSelection>| {},
+            on_selection_change: move |sel: Option<GridSelection>| {
+                let Some(cb) = on_pick else { return };
+                let pick = sel.and_then(|s| match s {
+                    GridSelection::Block(id) => names.iter().find(|n| n.0 == id).map(|n| GraphPick::Block(n.1.clone())),
+                    GridSelection::Module(m) => Some(GraphPick::Module(
+                        m.clone(),
+                        names.iter().filter(|n| n.2.as_deref() == Some(m.as_str())).map(|n| n.1.clone()).collect(),
+                    )),
+                });
+                cb.call(pick);
+            },
             on_param_change: {
                 let rig = rig;
                 move |(uuid, name, value): (uuid::Uuid, String, f32)| {

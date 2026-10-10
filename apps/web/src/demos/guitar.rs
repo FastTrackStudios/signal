@@ -585,6 +585,7 @@ pub fn GuitarDemo() -> Element {
         dsp: Signal::new(Default::default()),
         levelling: Signal::new(Default::default()),
         macros: Signal::new(Vec::new()),
+        fx: Signal::new(Vec::new()),
     });
 
     // Feed it as a rig would. `use_hook` so the loop is started once per

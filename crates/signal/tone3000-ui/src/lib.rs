@@ -31,7 +31,7 @@ mod detail;
 mod state;
 mod style;
 
-pub use art::ToneArt;
+pub use art::{ToneArt, use_art_cache};
 pub use detail::ToneDetail;
 pub use state::{Tone3000State, UrlOpener, use_tone3000_state};
 

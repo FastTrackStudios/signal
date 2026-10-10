@@ -3998,7 +3998,6 @@ source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b
 [[package]]
 name = "dioxus-core"
 version = "0.8.0-alpha.0"
-source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
  "anyhow",
  "const_format",
@@ -4594,6 +4593,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "dioxus-test"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.24#e9566a9a023ca5b6d29956c4de374dcc2ef268d9"
+dependencies = [
+ "anyrender 0.11.1",
+ "anyrender_vello_cpu",
+ "blitz-dom",
+ "blitz-html",
+ "blitz-paint",
+ "blitz-traits",
+ "dioxus-core",
+ "dioxus-html",
+ "dioxus-native-dom",
+ "keyboard-types 0.7.0",
+ "peniko 0.6.1",
+ "png 0.17.16",
+ "smol_str 0.3.2",
+ "test-that",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "dioxus-web"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
@@ -4860,6 +4882,9 @@ name = "dpi"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "drm"
@@ -5164,6 +5189,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.118",
+]
+
+[[package]]
+name = "env_filter"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "900d271a03799a1ee8d1ca9b19893b48ca674a9284fefcfb85f05e74ed314217"
+dependencies = [
+ "log",
+ "regex",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.11.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de671bd27a75a797dc9ae289ba1e77276e75e2026408aab65185384e2d5cd3f6"
+dependencies = [
+ "env_filter",
+ "log",
 ]
 
 [[package]]
@@ -6461,6 +6506,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "glam"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f70749695b063ecbf6b62949ccccde2e733ec3ecbbd71d467dca4e5c6c97cca0"
+
+[[package]]
 name = "glib"
 version = "0.18.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6627,6 +6678,18 @@ dependencies = [
  "wayland-sys",
  "windows-sys 0.52.0",
  "x11-dl",
+]
+
+[[package]]
+name = "glutin-winit"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85edca7075f8fc728f28cb8fbb111a96c3b89e930574369e3e9c27eb75d3788f"
+dependencies = [
+ "cfg_aliases",
+ "glutin",
+ "raw-window-handle 0.6.2",
+ "winit 0.30.13",
 ]
 
 [[package]]
@@ -8441,6 +8504,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lhash"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "744a4c881f502e98c2241d2e5f50040ac73b30194d64452bb6260393b53f0dc9"
+
+[[package]]
 name = "libappindicator"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8983,6 +9052,15 @@ dependencies = [
  "nix 0.29.0",
  "serde",
  "winapi",
+]
+
+[[package]]
+name = "mach-dxcompiler-rs"
+version = "0.1.6+2026.09.16-48d5a66.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "699d5b85d279d172f6ea742c6c47342fdd7c388872cea2e137e2c6721ef2e6d6"
+dependencies = [
+ "lhash",
 ]
 
 [[package]]
@@ -14193,46 +14271,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-bass"
-version = "0.1.0"
-dependencies = [
- "architect",
- "facet",
- "facet-styx",
- "midicore",
- "signal-bass-proto",
- "signal-proto",
- "signal-rig-host",
- "signal-rigs-proto",
- "signal-sampler",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "signal-bass-proto"
-version = "0.1.0"
-dependencies = [
- "architect",
- "facet",
- "midicore-proto",
- "signal-proto",
- "vox",
-]
-
-[[package]]
-name = "signal-bass-ui"
-version = "0.1.0"
-dependencies = [
- "architect",
- "dioxus",
- "fts-chrome",
- "midicore-proto",
- "midicore-ui",
- "signal-bass-proto",
-]
-
-[[package]]
 name = "signal-browser"
 version = "0.1.0"
 dependencies = [
@@ -14322,9 +14360,6 @@ dependencies = [
  "sha2 0.10.9",
  "signal-account",
  "signal-account-proto",
- "signal-bass",
- "signal-bass-proto",
- "signal-bass-ui",
  "signal-drums",
  "signal-drums-proto",
  "signal-drums-ui",
@@ -14485,6 +14520,7 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "blake3",
+ "chrono",
  "facet",
  "facet-json",
  "facet-styx",
@@ -14528,10 +14564,12 @@ dependencies = [
  "anyrender_vello 0.12.0",
  "anyrender_vello_hybrid",
  "architect",
+ "base64 0.22.1",
  "blitz-dom",
  "blitz-paint",
  "blitz-traits",
  "bytemuck",
+ "chrono",
  "comp-ui",
  "delay-ui",
  "dioxus",
@@ -14547,15 +14585,18 @@ dependencies = [
  "lumen-blocks",
  "modulation-ui",
  "naga",
+ "parley 0.10.0",
  "reverb-dsp",
  "reverb-ui",
  "rustc-hash 2.1.3",
  "serde_json",
+ "signal-account-proto",
  "signal-grid",
  "signal-grid-ui",
  "signal-guitar",
  "signal-guitar-proto",
  "signal-proto",
+ "signal-tone3000-proto",
  "signal-tone3000-ui",
  "signal-widgets",
  "tokio",
@@ -15177,7 +15218,9 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "dioxus",
+ "dioxus-test",
  "signal-proto",
+ "tokio",
 ]
 
 [[package]]
@@ -16828,6 +16871,16 @@ dependencies = [
  "wezterm-dynamic",
  "wezterm-input-types",
  "winapi",
+]
+
+[[package]]
+name = "test-that"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "291f228058142bae421e0b4b014a7b18edd6137629550cc15da37feed66a7db6"
+dependencies = [
+ "num-traits",
+ "regex",
 ]
 
 [[package]]
@@ -19075,8 +19128,6 @@ dependencies = [
 [[package]]
 name = "wgpu-hal"
 version = "29.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97ace1c17727311c22a46e4e3faf56ea6de81af99dcc839bdfb54857b94d448d"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -19087,7 +19138,11 @@ dependencies = [
  "bytemuck",
  "cfg-if",
  "cfg_aliases",
+ "env_logger",
+ "glam",
  "glow",
+ "glutin",
+ "glutin-winit",
  "glutin_wgl_sys",
  "gpu-allocator",
  "gpu-descriptor",
@@ -19097,6 +19152,7 @@ dependencies = [
  "libc",
  "libloading 0.8.9",
  "log",
+ "mach-dxcompiler-rs",
  "naga",
  "ndk-sys",
  "objc2 0.6.4",
@@ -19124,6 +19180,7 @@ dependencies = [
  "windows 0.62.2",
  "windows-core 0.62.2",
  "windows-result 0.4.1",
+ "winit 0.30.13",
 ]
 
 [[package]]
@@ -19984,8 +20041,6 @@ dependencies = [
 [[package]]
 name = "winit-uikit"
 version = "0.31.0-beta.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "680a356e798837d8eb274d4556e83bceaf81698194e31aafc5cfb8a9f2fab643"
 dependencies = [
  "bitflags 2.13.0",
  "block2 0.6.2",
@@ -19996,6 +20051,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "objc2-ui-kit 0.3.2",
  "raw-window-handle 0.6.2",
+ "serde",
  "smol_str 0.3.2",
  "tracing",
  "winit-common",
@@ -20580,14 +20636,6 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "keyflow-proto"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "keyflow-syntax"
-version = "0.1.0"
-
-[[patch.unused]]
 name = "chord-tool"
 version = "0.1.0"
 
@@ -20597,4 +20645,12 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "session"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "keyflow-proto"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "keyflow-syntax"
 version = "0.1.0"

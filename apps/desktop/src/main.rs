@@ -29,8 +29,11 @@ mod engine_main;
 mod engine_watch;
 // The TONE3000 OAuth landing strip — the registered redirect URI, served
 // by the engine because no GUI here can host the authorization page.
-#[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
+#[cfg(all(feature = "tone3000", not(target_arch = "wasm32")))]
 mod engine_tone3000;
+// The sign-in page in an in-app Safari sheet (iOS).
+#[cfg(all(feature = "tone3000", target_os = "ios"))]
+mod ios_safari;
 #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 mod engines;
 /// In-memory log ring (tracing capture + panic hook) — rendered by the

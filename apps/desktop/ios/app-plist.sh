@@ -27,6 +27,10 @@ signal_app_plist() {
     # its background, and a dark launch screen rather than a white flash.
     $pb -c "Delete :UIUserInterfaceStyle" "$plist" 2>/dev/null || true
     $pb -c "Add :UIUserInterfaceStyle string Dark" "$plist"
+    # ProMotion: an iPhone holds an app to 60 Hz without this (an iPad
+    # lets it ask for 120); the window paces its animations to the screen.
+    $pb -c "Delete :CADisableMinimumFrameDurationOnPhone" "$plist" 2>/dev/null || true
+    $pb -c "Add :CADisableMinimumFrameDurationOnPhone bool true" "$plist"
 
     # An audio app: the rig keeps sounding with the screen locked or another
     # app in front.

@@ -22,15 +22,13 @@ use crate::state::use_rig_state;
 enum Mode {
     /// Wire the rig: the zoomable module/wire graph.
     Routing,
-    /// Play & shape it: the control surface (default).
+    /// Shape it: the control surface, a group at a time (PRE / CORE /
+    /// POST).
     Control,
-    /// Full-screen footswitch grid (Preset/Profile/Setlist select this
-    /// view AND the grid's perform mode).
-    #[expect(
-        dead_code,
-        reason = "not yet wired to a page switch — reserved for the Preset/Profile/Setlist full-screen perform view"
-    )]
-    Perform,
+    /// Play (the default): the switches across the bottom, and above them
+    /// the list the mode plays from beside the preset picker — choosing a
+    /// sound without the Control view.
+    Play,
     /// The TONE3000 catalog: find a capture, download it, load it as a
     /// preset. Lives beside the rig rather than behind a file dialog
     /// because picking an amp is a playing decision, not a filing one.
@@ -66,10 +64,12 @@ pub fn GuitarRigRemote() -> Element {
     crate::param_writer::use_param_writer(rig.clone());
     let settings = use_hook(try_consume_context::<AudioSettingsClient>);
     let state = use_rig_state();
+    // Faces animate only while the rig plays (see `frame_surface::FacesMove`).
+    use_context_provider(|| crate::frame_surface::FacesMove(state.running));
 
     // Control is home; Routing is where the wiring lives; Perform is the
     // stage view; Setlist manages the set (toggle away if unused).
-    let mut mode = use_signal(|| Mode::Control);
+    let mut mode = use_signal(|| Mode::Play);
     let mut switches = use_signal(|| Switches::Full);
     // The Control view's groups (PRE / AMP / POST): picked in the bar; two
     // fit when the switches and macros are hidden.
@@ -93,13 +93,23 @@ pub fn GuitarRigRemote() -> Element {
     // included) instead of stacking under it. No-op outside the app.
     fts_chrome::use_bar_claim();
     let mut left_open = use_signal(|| true);
+    // Each sidebar is minimal or full (a phone's width); the bar's toggles
+    // step closed → minimal → full. The left opens minimal (the names and
+    // the state), the right full (it is where a sound is dialled in).
+    let mut left_full = use_signal(|| false);
+    let mut right_full = use_signal(|| true);
+    use_context_provider(|| crate::module_sidebar::RightFull(right_full));
     let palette_open = use_signal(|| false);
     // The library picker, open on a kind — or closed.
     let library_open = use_signal(|| None::<crate::library::Kind>);
     use_context_provider(|| crate::library::OpenLibrary(library_open));
     // The module the right sidebar lists presets for (None: closed).
+    // On the Mac it opens on the Core: dialling a tone in is what the
+    // desktop is for, so the sidebar is mostly open.
     let selected_module = use_signal(|| {
-        try_consume_context::<crate::module_sidebar::InitialSelection>().and_then(|i| i.0)
+        try_consume_context::<crate::module_sidebar::InitialSelection>()
+            .and_then(|i| i.0)
+            .or_else(|| cfg!(target_os = "macos").then(|| crate::module_sidebar::Selection::Module("Core".to_string())))
     });
     use_context_provider(|| crate::module_sidebar::SelectedModule(selected_module));
     // The view actions the palette and the keymap can ask for.
@@ -177,6 +187,16 @@ pub fn GuitarRigRemote() -> Element {
     let blocks = state.blocks;
     let _connected = rig.is_some();
     let perf_now = perf();
+    // The page on show: Play or Control in every mode; Routing and Tones
+    // are preset work, so they exist only in Preset mode (elsewhere they
+    // fall back to Play). The pick made in Preset mode is kept for going
+    // back.
+    let view = match mode() {
+        Mode::Routing | Mode::Tones | Mode::Presets if perf_now.perform_mode != 0 => Mode::Play,
+        m => m,
+    };
+    // Play's switches take the whole bottom, whatever the toggle says.
+    let sw = if view == Mode::Play { Switches::Full } else { switches() };
 
     // The five rig controls, shared by the standalone Perform view and the
     // Edit view's bottom dock.
@@ -258,7 +278,38 @@ pub fn GuitarRigRemote() -> Element {
     });
 
     // A phone held sideways: the chain a page at a time, nothing else.
+    // The tablet's page waits for the opening logo to draw on (see below).
+    let mut tablet_drawn = use_signal(|| false);
+    use_hook(move || {
+        spawn(async move {
+            architect::platform::sleep(std::time::Duration::from_millis(crate::tablet::splash::DRAWN_MS)).await;
+            tablet_drawn.set(true);
+        });
+    });
     let size = try_use_context::<crate::control::WindowSize>().map_or((0.0, 0.0), |s| (s.0)());
+    // An iPad: the touch layout — setlist, macros, switches, a foot bar of
+    // views.
+    if crate::control::FormFactor::of(size) == crate::control::FormFactor::Tablet {
+        // Opening: the logo draws on first; the page (thirty faces opening,
+        // the main thread's for a moment) is built under it after, then it
+        // lifts once the rig's profile and chain are in.
+        let built = tablet_drawn();
+        let ready = built && !perf_now.profile_name.is_empty() && !state.blocks.read().is_empty();
+        return rsx! {
+            fts_audio_ui::drag::DragProvider { fill: true,
+                div { style: "position: relative; width: 100%; height: 100%; display: flex;",
+                    onpointermove: move |e: PointerEvent| drag_bus.root_move(&e),
+                    onpointerup: move |_| drag_bus.root_up(),
+                    onpointercancel: move |_| drag_bus.root_up(),
+                    if built {
+                        crate::tablet::TabletRemote { model: perf_now.clone(), state }
+                    }
+                    crate::tablet::splash::Splash { ready }
+                    document::Style { {crate::theme::CSS} }
+                }
+            }
+        };
+    }
     if crate::control::FormFactor::of(size) == crate::control::FormFactor::Phone {
         return rsx! {
             fts_audio_ui::drag::DragProvider { fill: true,
@@ -276,6 +327,8 @@ pub fn GuitarRigRemote() -> Element {
                     // a phone has no room beside it.
                     // (Audio is a rail mode of `PhoneControl`'s on a phone.)
                     signal_widgets::PopupLayer {}
+                    // The states inline styles cannot carry (hover).
+                    document::Style { {crate::theme::CSS} }
                 }
             }
         };
@@ -378,6 +431,8 @@ pub fn GuitarRigRemote() -> Element {
             // Where menus draw (see `PopupHost`): above everything via its
             // z-index, so first among the children is fine.
             signal_widgets::PopupLayer {}
+            // The states inline styles cannot carry (hover).
+            document::Style { {crate::theme::CSS} }
             // The bar — the app's and the rig's in one: crumbs, the rig's own
             // controls, the window's drag space and controls.
             header {
@@ -388,53 +443,71 @@ pub fn GuitarRigRemote() -> Element {
                 // window's own title bar would put them.
                 fts_chrome::TrafficLights {}
 
-                // Sidebar toggles bookend the bar: presets left, songs right.
+                // Sidebar toggles bookend the bar (not in Play, whose panes
+                // are the sidebars).
+                if view != Mode::Play {
                 button {
                     class: if left_open() {
-                        "flex items-center justify-center w-7 h-7 rounded-md bg-accent text-accent-foreground text-sm"
+                        "flex items-center justify-center w-7 h-7 text-sm"
                     } else {
-                        "flex items-center justify-center w-7 h-7 rounded-md border border-border text-muted-foreground hover:text-foreground text-sm"
+                        "flex items-center justify-center w-7 h-7 text-muted-foreground hover:text-foreground text-sm"
                     },
-                    title: "Preset sidebar",
-                    onclick: move |_| left_open.toggle(),
+                    style: bar_item(left_open()),
+                    title: match (left_open(), left_full()) {
+                        (false, _) => "Left sidebar — click for the minimal one",
+                        (true, false) => "Left sidebar (minimal) — click for the full one",
+                        (true, true) => "Left sidebar (full) — click to close",
+                    },
+                    onclick: move |_| match (left_open(), left_full()) {
+                        (false, _) => {
+                            left_full.set(false);
+                            left_open.set(true);
+                        }
+                        (true, false) => left_full.set(true),
+                        (true, true) => left_open.set(false),
+                    },
                     fts_chrome::Glyph { icon: fts_chrome::Icon::RailLeft, size: 15 }
+                }
                 }
 
                 // Where you are, and the way back (Signal ▾ ▸ Rigs ▸ Guitar ▾).
-                fts_chrome::Crumbs { current_only: true }
+                // Never squeezed under the mode buttons: the bar's slack gives.
+                div { style: "flex-shrink: 0; display: flex; align-items: center;",
+                    fts_chrome::Crumbs { current_only: true }
+                }
+                BarRule {}
 
-                // Play group: Profile / Setlist — jumps to the perform grid
-                // in that mode (synced to every remote). There is no Preset
-                // mode: presets are the Core, picked under a patch.
-                div { class: "flex items-center rounded-md border border-border bg-background/40 p-0.5 gap-0.5 ml-1",
+                // Play group: Presets / Profile / Setlist — jumps to the
+                // perform grid in that mode (synced to every remote). Presets
+                // edits the presets themselves, each up on the bench.
+                div { class: "flex items-center gap-0.5",
                     for (pm, label, icon) in [
-                        (1u32, "Profile", fts_chrome::Icon::Profile),
+                        (0u32, "Presets", fts_chrome::Icon::Preset),
+                        (1, "Profile", fts_chrome::Icon::Profile),
                         (2, "Setlist", fts_chrome::Icon::Setlist),
                     ] {
                         button {
                             key: "{label}",
-                            title: if perf_now.perform_mode == pm { format!("{label} — click to browse") } else { label.to_string() },
-                            style: "display: flex; align-items: center; gap: 5px;",
+                            title: format!("Play from {label} — every remote and the footswitches follow"),
+                            style: "display: flex; align-items: center; gap: 5px; {bar_item_live(perf_now.perform_mode == pm)}",
                             // The play mode is always one of the three —
                             // highlight it regardless of which work view is
                             // up (brighter when the grid itself is showing).
                             class: if perf_now.perform_mode == pm {
-                                "rounded px-2.5 py-1 text-xs font-semibold bg-accent text-accent-foreground"
+                                "px-2.5 py-1 text-xs font-semibold"
                             } else {
-                                "rounded px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                                "px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
                             },
-                            // A second click on the mode you are in opens the
-                            // picker for it: the mode names what you play
-                            // from, the picker is where you choose it.
+                            // The mode names what you play from; choosing
+                            // within it is the Library's (⌘L).
                             onclick: {
                                 let rig = rig.clone();
                                 let current = perf_now.perform_mode;
-                                let mut library_open = library_open;
                                 move |_| {
-                                    if current == pm {
-                                        library_open.set(Some(crate::library::Kind::for_perform_mode(pm)));
-                                    } else if let Some(r) = rig.clone() {
-                                        spawn(async move { let _ = r.set_perform_mode(pm).await; });
+                                    if current != pm {
+                                        if let Some(r) = rig.clone() {
+                                            spawn(async move { let _ = r.set_perform_mode(pm).await; });
+                                        }
                                     }
                                 }
                             },
@@ -446,11 +519,11 @@ pub fn GuitarRigRemote() -> Element {
                 // The library: setlists, songs, profiles, patches, presets.
                 button {
                     class: if library_open().is_some() {
-                        "flex items-center h-7 px-2 rounded-md bg-accent text-accent-foreground text-xs font-semibold"
+                        "flex items-center h-7 px-2 text-xs font-semibold"
                     } else {
-                        "flex items-center h-7 px-2 rounded-md border border-border text-muted-foreground hover:text-foreground text-xs"
+                        "flex items-center h-7 px-2 text-muted-foreground hover:text-foreground text-xs"
                     },
-                    style: "display: flex; align-items: center; gap: 5px;",
+                    style: "display: flex; align-items: center; gap: 5px; {bar_item(library_open().is_some())}",
                     title: "Library (⌘L)",
                     onclick: {
                         let mut library_open = library_open;
@@ -458,31 +531,31 @@ pub fn GuitarRigRemote() -> Element {
                         move |_| library_open.set(if library_open().is_some() { None } else { Some(at) })
                     },
                     fts_chrome::Glyph { icon: fts_chrome::Icon::Browser, size: 13 }
+                    "Library"
                 }
                 // The bar's slack moves the window (and double-click maximises).
                 fts_chrome::DragSpace {}
 
-                // Work views, on the right: they change with the mode on the left
-                // (Presets / Tones exist only in Preset mode).
-                div { class: "flex items-center rounded-md border border-border bg-background/40 p-0.5 gap-0.5 ml-1",
-                    // Presets and Tones choose the sound, so they only exist
-                    // in Preset mode; Routing and Control are always there.
+                // Work views, on the right (see `view`): Play and Control
+                // always, Routing and Tones in Preset mode.
+                div { class: "flex items-center gap-0.5",
                     for (m, label, icon) in [
-                        (Mode::Routing, "Routing", fts_chrome::Icon::Routing),
+                        (Mode::Play, "Play", fts_chrome::Icon::Perform),
                         (Mode::Control, "Control", fts_chrome::Icon::Control),
-                        (Mode::Presets, "Presets", fts_chrome::Icon::Browser),
+                        (Mode::Routing, "Routing", fts_chrome::Icon::Routing),
                         (Mode::Tones, "Tones", fts_chrome::Icon::Tones),
                     ]
                     .into_iter()
+                    .filter(|(m, ..)| perf_now.perform_mode == 0 || matches!(m, Mode::Play | Mode::Control))
                     {
                         button {
                             key: "{label}",
                             title: "{label}",
-                            style: "display: flex; align-items: center; gap: 5px;",
-                            class: if mode() == m {
-                                "rounded px-2.5 py-1 text-xs font-semibold bg-accent text-accent-foreground"
+                            style: "display: flex; align-items: center; gap: 5px; {bar_item(view == m)}",
+                            class: if view == m {
+                                "px-2.5 py-1 text-xs font-semibold"
                             } else {
-                                "rounded px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                                "px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
                             },
                             onclick: move |_| mode.set(m),
                             fts_chrome::Glyph { icon, size: 13 }
@@ -491,19 +564,45 @@ pub fn GuitarRigRemote() -> Element {
                     }
                 }
 
+                // Undo the last sound choice (a section's patch, a preset, a
+                // module or block pick) — for trying a sound and backing out.
+                {
+                    let depth = perf_now.undo_depth;
+                    let rig = rig.clone();
+                    rsx! {
+                        button {
+                            class: if depth > 0 { "px-2.5 py-1 text-xs font-semibold sg-hover" } else { "px-2.5 py-1 text-xs" },
+                            style: format!(
+                                "display: flex; align-items: center; gap: 5px; {} color: {};",
+                                bar_item(false),
+                                if depth > 0 { crate::theme::TEXT } else { crate::theme::DIM },
+                            ),
+                            disabled: depth == 0,
+                            title: if depth > 0 { format!("Undo the last sound choice ({depth} to go back through)") } else { "Nothing to undo".to_string() },
+                            onclick: move |_| {
+                                if let Some(r) = rig.clone() {
+                                    spawn(async move { let _ = r.undo_sound().await; });
+                                }
+                            },
+                            "Undo"
+                        }
+                    }
+                }
 
                 // The Control view's groups: which show (one with the
                 // switches up, two without), stacked in signal order.
-                if mode() == Mode::Control {
-                    div { class: "flex items-center rounded-md border border-border bg-background/40 p-0.5 gap-0.5 ml-1",
+                if view == Mode::Control {
+                    BarRule {}
+                    div { class: "flex items-center gap-0.5",
                         for g in crate::control::Group::ALL {
                             button {
                                 key: "{g.label()}",
                                 title: "Show {g.label()}",
+                                style: bar_item(groups.shown().contains(&g)),
                                 class: if groups.shown().contains(&g) {
-                                    "rounded px-2 py-1 text-xs font-semibold bg-accent text-accent-foreground"
+                                    "px-2 py-1 text-xs font-semibold"
                                 } else {
-                                    "rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                                    "px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
                                 },
                                 onclick: move |_| groups.pick(g),
                                 "{g.label()}"
@@ -515,22 +614,25 @@ pub fn GuitarRigRemote() -> Element {
                 // The footswitch grid and the macros: full, a compact strip,
                 // or hidden — click to cycle. Hidden gives the page all the
                 // height.
+                if view != Mode::Play {
+                BarRule {}
                 SwitchesToggle { mode: switches,
                     fts_chrome::Glyph { icon: fts_chrome::Icon::Perform, size: 13 }
+                }
                 }
 
                 // Global switch states — visible in every mode.
                 if perf_now.fx_bypass {
                     span {
-                        class: "text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5",
-                        style: "background-color: #ec4899; color: #ffffff;",
+                        style: "flex-shrink: 0; padding: 3px 9px; border-radius: {crate::theme::R_SM}; font-size: {crate::theme::T_BODY}; \
+                                font-weight: 700; white-space: nowrap; background: #ec4899; color: #1a0410;",
                         "FX off"
                     }
                 }
                 if perf_now.boost_db != 0.0 {
                     span {
-                        class: "text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5",
-                        style: "background-color: #fafafa; color: #0a0a0a;",
+                        style: "flex-shrink: 0; padding: 3px 9px; border-radius: {crate::theme::R_SM}; font-size: {crate::theme::T_BODY}; \
+                                font-weight: 700; white-space: nowrap; background: #fafafa; color: #0a0a0a;",
                         if perf_now.boost_db < 0.0 {
                             "Cut −{-perf_now.boost_db as i32} dB"
                         } else {
@@ -543,8 +645,10 @@ pub fn GuitarRigRemote() -> Element {
                 crate::sidebars::LevellingChip {}
 
                 // Command palette (also Cmd/Ctrl+P).
+                BarRule {}
                 button {
-                    class: "flex items-center justify-center h-7 px-2 rounded-md border border-border text-muted-foreground hover:text-foreground text-[10px] font-mono",
+                    class: "flex items-center justify-center w-7 h-7 text-muted-foreground hover:text-foreground",
+                    style: bar_item(false),
                     title: "Command palette",
                     onclick: {
                         let mut palette_open = palette_open;
@@ -553,55 +657,11 @@ pub fn GuitarRigRemote() -> Element {
                     fts_chrome::Glyph { icon: fts_chrome::Icon::Command, size: 13 }
                 }
 
-                // Reload the styx rig library (external edits: text
-                // editor, LLM, git pull).
-                button {
-                    class: "flex items-center justify-center w-7 h-7 rounded-md border border-border text-muted-foreground hover:text-foreground text-sm",
-                    title: "Reload the rig library (styx files)",
-                    onclick: {
-                        let rig = rig.clone();
-                        move |_| {
-                            if let Some(r) = rig.clone() {
-                                spawn(async move { let _ = r.reload_library().await; });
-                            }
-                        }
-                    },
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::Refresh, size: 14 }
-                }
-
+                BarRule {}
                 // Indicators, not buttons: MIDI and audio at a glance, their
-                // options behind a right-click or double-click.
-                // The buffer size, changeable live: a larger buffer is the
-                // quick way out of dropouts on a busy machine (the device
-                // reopens — a short gap). Latency shown for 48 kHz.
-                {
-                    let current = prefs().buffer_size;
-                    let sizes = crate::settings::BUFFER_SIZES;
-                    let options: Vec<String> = sizes
-                        .iter()
-                        .map(|b| format!("{b} · {:.1} ms", f64::from(*b) / 48.0))
-                        .collect();
-                    let selected = sizes.iter().position(|b| *b == current).map_or(u32::MAX, |i| i as u32);
-                    rsx! {
-                        div { style: "display: flex; align-items: center; gap: 6px; flex-shrink: 0;",
-                            title: "Audio buffer (frames) — changing it reopens the device",
-                            span { style: "font-size: 10px; font-weight: 600; letter-spacing: 0.04em; color: #71717a;", "BUF" }
-                            signal_widgets::Picker {
-                                options,
-                                selected,
-                                placeholder: format!("{current}"),
-                                size: signal_widgets::PickerSize::Tiny,
-                                on_select: move |i: u32| {
-                                    if let Some(b) = sizes.get(i as usize).copied() {
-                                        if b != prefs().buffer_size {
-                                            apply.call(AudioPrefs { buffer_size: b, ..prefs() });
-                                        }
-                                    }
-                                },
-                            }
-                        }
-                    }
-                }
+                // options a click away. What could stop the show mid-song —
+                // the buffer (reopens the device), reloading the library —
+                // lives in the Audio menu, not loose in the bar.
                 // The whole app's CPU, as a share of the machine.
                 LiveCpu { state }
                 crate::control::MidiIndicator {
@@ -610,52 +670,128 @@ pub fn GuitarRigRemote() -> Element {
                 {
                     let is_running = (state.running)();
                     let rig_toggle = rig.clone();
+                    let rig_start = rig.clone();
                     let rig_di = rig.clone();
+                    let rig_reload = rig.clone();
+                    // The buffer, changeable live: a larger one is the quick
+                    // way out of dropouts on a busy machine (the device
+                    // reopens — a short gap). Latency shown for 48 kHz.
+                    let current = prefs().buffer_size;
+                    let mut items = vec![
+                        crate::indicators::IndicatorItem::new(
+                            "Audio settings…",
+                            cbs.cb(move |()| audio_open.set(true)),
+                        ),
+                        crate::indicators::IndicatorItem::new(
+                            if is_running { "Stop audio" } else { "Start audio" },
+                            cbs.cb(move |()| {
+                                if let Some(r) = rig_toggle.clone() {
+                                    spawn(async move {
+                                        let _ = if is_running { r.stop().await } else { r.start().await };
+                                    });
+                                }
+                            }),
+                        ),
+                        // Play for ~15 s after choosing it; the library
+                        // re-measures loudness against it.
+                        crate::indicators::IndicatorItem::new(
+                            "Record DI reference (15 s)",
+                            cbs.cb(move |()| {
+                                if let Some(r) = rig_di.clone() {
+                                    spawn(async move { let _ = r.capture_di_reference(15).await; });
+                                }
+                            }),
+                        ),
+                        // The styx files, after an external edit (text
+                        // editor, LLM, git pull).
+                        crate::indicators::IndicatorItem::new(
+                            "Reload rig library",
+                            cbs.cb(move |()| {
+                                if let Some(r) = rig_reload.clone() {
+                                    spawn(async move { let _ = r.reload_library().await; });
+                                }
+                            }),
+                        ),
+                        crate::indicators::IndicatorItem::head("Buffer — reopens the device"),
+                    ];
+                    for (i, b) in crate::settings::BUFFER_SIZES.iter().copied().enumerate() {
+                        items.push(
+                            crate::indicators::IndicatorItem::new(
+                                format!("{b} · {:.1} ms", f64::from(b) / 48.0),
+                                cbs.keyed(i, move |()| {
+                                    if b != prefs().buffer_size {
+                                        apply.call(AudioPrefs { buffer_size: b, ..prefs() });
+                                    }
+                                }),
+                            )
+                            .checked(b == current),
+                        );
+                    }
                     rsx! {
                         crate::indicators::Indicator {
                             label: "Audio".to_string(),
                             dot: if is_running { "#22c55e".to_string() } else { "#ef4444".to_string() },
                             title: if is_running { "Audio running".to_string() } else { "Audio stopped".to_string() },
-                            // Off: the dot blinks rather than a banner
-                            // pushing the page down.
+                            // Off: a red pill whose click starts it again —
+                            // the worst moment of a gig gets the one loud
+                            // thing in the bar, and the fix is the click.
                             flash: !is_running,
+                            alarm: (!is_running).then(|| "Audio stopped · Start".to_string()),
+                            on_alarm: cbs.cb(move |()| {
+                                if let Some(r) = rig_start.clone() {
+                                    spawn(async move { let _ = r.start().await; });
+                                }
+                            }),
                             // What the rig spends of its realtime budget,
                             // measured on the chain actually playing.
                             extra: rsx! {
-                                div { style: "padding: 6px 8px 2px; border-top: 1px solid #1c1c21; margin-top: 4px;",
+                                div { style: "padding: 6px 8px 2px; border-top: 1px solid {crate::theme::LINE}; margin-top: 4px;",
                                     LiveDsp { state }
                                 }
                             },
-                            items: vec![
-                                crate::indicators::IndicatorItem::new(
-                                    "Audio settings…",
-                                    cbs.cb(move |()| audio_open.set(true)),
-                                ),
-                                crate::indicators::IndicatorItem::new(
-                                    if is_running { "Stop audio" } else { "Start audio" },
-                                    cbs.cb(move |()| {
-                                        if let Some(r) = rig_toggle.clone() {
-                                            spawn(async move {
-                                                let _ = if is_running { r.stop().await } else { r.start().await };
-                                            });
-                                        }
-                                    }),
-                                ),
-                                // Play for ~15 s after choosing it; the
-                                // library re-measures loudness against it.
-                                crate::indicators::IndicatorItem::new(
-                                    "Record DI reference (15 s)",
-                                    cbs.cb(move |()| {
-                                        if let Some(r) = rig_di.clone() {
-                                            spawn(async move { let _ = r.capture_di_reference(15).await; });
-                                        }
-                                    }),
-                                ),
-                            ],
+                            items,
                         }
                     }
                 }
 
+                // The right sidebar, mirroring the left toggle: the presets
+                // of what the page shows — the Core's on PRE / CORE, the Time
+                // module's on POST. (Picking a block on the page re-aims it.)
+                if view != Mode::Play {
+                {
+                    let mut sel = selected_module;
+                    let open = sel().is_some();
+                    let first = match groups.picked.read().last().copied().unwrap_or(crate::control::Group::Amp) {
+                        crate::control::Group::Post => "Time",
+                        _ => "Core",
+                    };
+                    rsx! {
+                        BarRule {}
+                        button {
+                            class: if open {
+                                "flex items-center justify-center w-7 h-7 text-sm"
+                            } else {
+                                "flex items-center justify-center w-7 h-7 text-muted-foreground hover:text-foreground text-sm"
+                            },
+                            style: bar_item(open),
+                            title: match (open, right_full()) {
+                                (false, _) => "Module sidebar — click for the minimal one",
+                                (true, false) => "Module sidebar (minimal) — click for the full one",
+                                (true, true) => "Module sidebar (full) — click to close",
+                            },
+                            onclick: move |_| match (open, right_full()) {
+                                (false, _) => {
+                                    right_full.set(false);
+                                    sel.set(Some(crate::module_sidebar::Selection::Module(first.to_string())));
+                                }
+                                (true, false) => right_full.set(true),
+                                (true, true) => sel.set(None),
+                            },
+                            fts_chrome::Glyph { icon: fts_chrome::Icon::RailRight, size: 15 }
+                        }
+                    }
+                }
+                }
                 // Settings + minimise / maximise / close.
                 fts_chrome::WindowCluster {}
             }
@@ -676,33 +812,51 @@ pub fn GuitarRigRemote() -> Element {
                 // The left sidebar follows the mode: the pool for Preset,
                 // the profile tree for Profile, the set and its songs for
                 // Setlist.
-                if left_open() {
-                    if perf_now.perform_mode == 2 {
+                if left_open() && view != Mode::Play {
+                    if perf_now.perform_mode == 0 {
+                        crate::preset_bar::PresetSidebar { revision: perf_now.revision, full: left_full() }
+                    } else if perf_now.perform_mode == 2 {
                         crate::setlist_bar::SetlistSidebar {
                             model: perf_now.clone(),
+                            full: left_full(),
                             on_browse: move |k: crate::library::Kind| {
                                 let mut library_open = library_open;
                                 library_open.set(Some(k));
                             },
                         }
                     } else {
-                        crate::sidebars::LeftSidebar { model: perf_now.clone() }
+                        crate::sidebars::LeftSidebar { model: perf_now.clone(), full: left_full() }
                     }
                 }
-                div { class: "flex-1 min-w-0 min-h-0 overflow-hidden", style: "padding: 0 10px 10px;",
+                div { class: "flex-1 min-w-0 min-h-0 overflow-hidden", style: if (view == Mode::Control && !control_collage()) || view == Mode::Play { "padding: 0;" } else { "padding: 0 10px 10px;" },
                 if let Some((on_press, on_toggle_fx, on_toggle_boost, on_cycle_boost, on_tap_tempo, on_prev_song, on_next_song, on_select_song)) = controls {
                         // Routing / Control / Session share the layout: the
                         // page on top (~2/3), the switch grid docked beneath.
-                        div { class: "flex flex-col gap-3 h-full min-h-0 overflow-hidden",
+                        div { class: "flex flex-col h-full min-h-0 overflow-hidden", style: "gap: 4px;",
                             div {
                                 class: "min-h-0 flex flex-col overflow-hidden",
+                                // The page keeps ~3/4; the switches stay the
+                                // height they are in every view.
                                 style: "flex: 3 1 0%; min-height: 0; display: flex; flex-direction: column; overflow: hidden;",
-                                if mode() == Mode::Routing {
+                                if view == Mode::Play {
+                                    PlayPanes {
+                                        model: perf_now.clone(),
+                                        chain: blocks
+                                            .read()
+                                            .iter()
+                                            .map(|b| (b.name.clone(), b.id.clone(), b.overridden))
+                                            .collect::<Vec<_>>(),
+                                        on_browse: move |k: crate::library::Kind| {
+                                            let mut library_open = library_open;
+                                            library_open.set(Some(k));
+                                        },
+                                    }
+                                } else if view == Mode::Routing {
                                     crate::grid::RigGraph {
                                         blocks: blocks(),
                                         nodes: state.nodes.read().clone(),
                                     }
-                                } else if mode() == Mode::Presets {
+                                } else if view == Mode::Presets {
                                     {
                                         // The tree is shared (signal-widgets);
                                         // this supplies what to do with it,
@@ -736,7 +890,7 @@ pub fn GuitarRigRemote() -> Element {
                                             }
                                         }
                                     }
-                                } else if mode() == Mode::Tones {
+                                } else if view == Mode::Tones {
                                     // A downloaded capture goes to the engine
                                     // as what it is — the browser reports the
                                     // gear and the tone it came from, and the
@@ -761,10 +915,29 @@ pub fn GuitarRigRemote() -> Element {
                                             }
                                         }
                                     }
-                                } else {
+                                } else if control_collage() {
                                     crate::control::ControlView {
                                         model: perf_now.clone(),
                                         state,
+                                    }
+                                } else {
+                                    // The chain a page at a time (two
+                                    // stacked when there is room), not every
+                                    // panel at once. `FTS_CONTROL=collage`
+                                    // brings back the old view.
+                                    // Between the input meter and the
+                                    // output / phones rail, as the
+                                    // collage had them.
+                                    div { style: "display: flex; flex-direction: row; gap: 1px; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden;",
+                                        crate::control::InputRail { state }
+                                        div { style: "flex: 1 1 0%; min-width: 0; min-height: 0; height: 100%; display: flex;",
+                                            crate::phone::DesktopPages {
+                                                blocks: blocks(),
+                                                state,
+                                                tempo_bpm: perf_now.tempo_bpm,
+                                            }
+                                        }
+                                        crate::control::OutputRail { model: perf_now.clone(), state }
                                     }
                                 }
                             }
@@ -772,20 +945,20 @@ pub fn GuitarRigRemote() -> Element {
                             // directly above the switches, in Profile and
                             // Setlist modes. Its panels drop over the grid,
                             // or rise over the page when the grid is short.
-                            if !wide() && perf_now.perform_mode != 0 && switches() != Switches::Hidden {
+                            if !wide() && perf_now.perform_mode != 0 && sw != Switches::Hidden {
                                 crate::macro_bar::MacroBar {
                                     macros: state.macros,
-                                    drop_up: switches() != Switches::Full,
+                                    drop_up: sw != Switches::Full,
                                 }
                             }
-                            if switches() != Switches::Hidden {
+                            if sw != Switches::Hidden {
                             // Wide: the switches, the macros beside them.
                             div {
-                                style: match (wide(), switches() == Switches::Compact) {
+                                style: match (wide(), sw == Switches::Compact) {
                                     (true, true) => "display: flex; flex-direction: row; align-items: stretch; flex: 0 0 116px; min-height: 0;",
                                     (true, false) => "display: flex; flex-direction: row; align-items: stretch; flex: 1 1 0%; min-height: 0;",
                                     (false, true) => "display: flex; flex-direction: column; flex: 0 0 116px; min-height: 0;",
-                                    (false, false) => "display: flex; flex-direction: column; flex: 1.2 1 0%; min-height: 0;",
+                                    (false, false) => "display: flex; flex-direction: column; flex: 1 1 0%; min-height: 0;",
                                 },
                             div {
                                 // A whisker of padding so tile rings render
@@ -794,7 +967,7 @@ pub fn GuitarRigRemote() -> Element {
                                 class: "min-h-0 p-1",
                                 style: if wide() { "flex: 1.4 1 0%; min-width: 0;" } else { "flex: 1 1 0%;" },
                                 PerformGrid {
-                                    compact: switches() == Switches::Compact,
+                                    compact: sw == Switches::Compact,
                                     model: perf(),
                                     on_press,
                                     on_toggle_fx,
@@ -825,7 +998,7 @@ pub fn GuitarRigRemote() -> Element {
                 }
                 // Right: the selected module's presets and variations, for
                 // dialling a patch in on the Control surface.
-                if mode() == Mode::Control {
+                if matches!(view, Mode::Control | Mode::Routing) && selected_module().is_some() {
                     crate::module_sidebar::ModuleSidebar {
                         revision: perf_now.revision,
                         chain: blocks
@@ -879,6 +1052,99 @@ pub fn GuitarRigRemote() -> Element {
 
 /// The CPU meter, reading the rig's perf itself (it changes every status
 /// tick; read in the shell it would re-render the whole rig view).
+/// The bar's item style: the one in use is pressed into the bar (a recess,
+/// not a box on it); the rest are bare. Groups are told apart by
+/// [`BarRule`]s, never by borders.
+pub(crate) fn bar_item(on: bool) -> String {
+    let pressed = if on { crate::theme::PRESSED } else { "" };
+    format!("border-radius: {}; {pressed}", crate::theme::R_SM)
+}
+
+/// [`bar_item`] for the play mode: rig state, not a view — every remote and
+/// the footswitches follow it — so the pick carries the live green.
+fn bar_item_live(on: bool) -> String {
+    let pressed = if on { crate::theme::PRESSED_LIVE } else { "" };
+    format!("border-radius: {}; {pressed}", crate::theme::R_SM)
+}
+
+/// Play: the list the mode plays from (the set, the profile, the
+/// presets) beside the preset picker, each a full sidebar filling half the
+/// width over the switches — choosing a sound without the Control view.
+#[component]
+fn PlayPanes(
+    model: signal_guitar_proto::PerformanceModel,
+    chain: Vec<crate::module_sidebar::ChainRef>,
+    on_browse: EventHandler<crate::library::Kind>,
+) -> Element {
+    // The sidebars inside fill their pane instead of their own width.
+    use_context_provider(|| crate::kit::FillPane);
+    // The picker opens on the presets.
+    let picker = try_use_context::<crate::module_sidebar::SelectedModule>();
+    use_effect(move || {
+        if let Some(crate::module_sidebar::SelectedModule(mut sel)) = picker {
+            sel.set(Some(crate::module_sidebar::Selection::Module("Preset".to_string())));
+        }
+    });
+    // Half each, as a 50% basis: Blitz lays wrapping text out at the flex
+    // basis, so a 0 basis wrapped every heading a word wide.
+    let pane = format!(
+        "flex: 1 1 50%; min-width: 0; min-height: 0; display: flex; background: {};",
+        crate::theme::SIDEBAR
+    );
+    // Setlist: the right pane is the playing section's patch, or the
+    // sound itself (presets, Core, Time).
+    let setlist = model.perform_mode == 2;
+    let mut tab = use_signal(|| 0u8);
+    rsx! {
+        div { style: "display: flex; flex-direction: row; width: 100%; height: 100%; min-height: 0; gap: 1px; background: {crate::theme::LINE};",
+            div { style: "{pane}",
+                if model.perform_mode == 0 {
+                    crate::preset_bar::PresetSidebar { revision: model.revision, full: true }
+                } else if model.perform_mode == 2 {
+                    crate::setlist_bar::SetlistSidebar { model: model.clone(), full: true, on_browse }
+                } else {
+                    crate::sidebars::LeftSidebar { model: model.clone(), full: true }
+                }
+            }
+            div { style: "{pane} flex-direction: column;",
+                if setlist {
+                    div { style: "display: flex; gap: 2px; padding: 6px 8px; flex-shrink: 0; border-bottom: 1px solid {crate::theme::LINE};",
+                        for (i, label) in [(0u8, "Section"), (1, "Sound")] {
+                            button {
+                                key: "{label}",
+                                class: if tab() == i { "" } else { "sg-hover" },
+                                style: format!(
+                                    "flex: 1 1 0; padding: 5px 0; border: none; border-radius: {}; font-size: {}; font-weight: 600; cursor: pointer; {}",
+                                    crate::theme::R_SM,
+                                    crate::theme::T_BODY,
+                                    if tab() == i { crate::theme::PRESSED.to_string() } else { format!("background: transparent; color: {};", crate::theme::MUTED) },
+                                ),
+                                onclick: move |_| tab.set(i),
+                                "{label}"
+                            }
+                        }
+                    }
+                }
+                div { style: "flex: 1 1 0; min-height: 0; display: flex;",
+                    if setlist && tab() == 0 {
+                        crate::setlist_bar::SectionPicker { model: model.clone() }
+                    } else {
+                        crate::module_sidebar::ModuleSidebar { revision: model.revision, chain }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A hairline between the bar's groups.
+#[component]
+fn BarRule() -> Element {
+    rsx! {
+        div { style: "width: 1px; height: 18px; flex-shrink: 0; background: #2a2a30;" }
+    }
+}
+
 #[component]
 fn LiveCpu(state: crate::state::RigViewState) -> Element {
     rsx! { crate::meters::CpuMeter { perf: (state.dsp)() } }
@@ -888,4 +1154,17 @@ fn LiveCpu(state: crate::state::RigViewState) -> Element {
 #[component]
 fn LiveDsp(state: crate::state::RigViewState) -> Element {
     rsx! { crate::meters::DspReadout { perf: (state.dsp)() } }
+}
+
+/// `FTS_CONTROL=collage`: the desktop Control view as every panel at once,
+/// as it was before the paged view.
+fn control_collage() -> bool {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::env::var("FTS_CONTROL").is_ok_and(|v| v.eq_ignore_ascii_case("collage"))
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        false
+    }
 }

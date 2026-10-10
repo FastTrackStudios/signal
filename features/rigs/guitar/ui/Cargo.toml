@@ -15,6 +15,8 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+base64.workspace = true
+chrono.workspace = true
 # The app chrome's bar pieces: the rig header claims the app bar and becomes
 # the one bar (crumbs, drag space, window controls). Inert outside the app.
 fts-chrome.workspace = true
@@ -26,6 +28,8 @@ signal-guitar-proto.workspace = true
 # The TONE3000 catalog browser — mounted as the Tones page. Wasm-clean,
 # like everything else here.
 signal-tone3000-ui.workspace = true
+signal-tone3000-proto.workspace = true
+signal-account-proto.workspace = true
 # The real FTS-EQ editor: the band model, the response maths and the
 # graph's own painters.
 #
@@ -64,6 +68,8 @@ serde_json.workspace = true
 architect = { workspace = true, features = ["atom", "vox", "platform"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Cover art (TONE3000 photographs) decoded for the routing grid's blocks.
+image.workspace = true
 # The custom-widget surface: a painted scene composited into Blitz's own
 # paint pass. Native only — a DOM renderer cannot be handed an `Any`
 # attribute at all (it panics); the browser replays the same scenes onto a
@@ -76,6 +82,8 @@ blitz-dom = { workspace = true, features = ["custom-widget"] }
 blitz-traits.workspace = true
 dioxus-native-dom.workspace = true
 vello.workspace = true
+# Text for the GPU routing grid (tablet/routing_canvas).
+parley.workspace = true
 # The shader path: a WGSL fragment shader rendered into a texture vello
 # composites. See `shader.rs` for why this is optional at runtime rather
 # than at build time.

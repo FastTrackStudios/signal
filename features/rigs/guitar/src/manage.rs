@@ -18,8 +18,9 @@ use signal_proto::block::{BlockCategory, BlockType};
 
 use crate::compose::{
     BlockChoiceDef, BlockPresetDef, Compositions, ModulePresetDef, ModuleSnapshotDef, ParamSetDef,
+    PresetSnapshotDef, RigPresetDef,
 };
-use crate::profiles::{ModuleChoiceDef, OverrideDef, PatchDef, ProfileDef, SongDef};
+use crate::profiles::{DriveSlotDef, ModuleChoiceDef, OverrideDef, PatchDef, PresetDef, ProfileDef, SongDef};
 
 fn eq(a: &str, b: &str) -> bool {
     a.eq_ignore_ascii_case(b)
@@ -551,6 +552,163 @@ pub fn save_module_snapshot(
     Ok(())
 }
 
+/// Save the live patch's core tone as snapshot `snapshot` of Core preset
+/// `preset` (each created when new; an existing snapshot is replaced — the
+/// "update from live"), and play it on the patch.
+///
+/// A Core snapshot is its Drive and Amp module picks plus the core blocks'
+/// presets, overrides and level. It starts from the Core the patch plays (if
+/// any), takes the Drive and Amp it plays now, then the patch's own edits on
+/// the core's blocks. A patch that plays no Amp module — its amp a profile
+/// preset (`preset`, `preset2`) — gets one made from that preset, named for
+/// it; one with no Drive module, a Drive snapshot of the board it plays
+/// (`board`: the profile's slots, the patch's own over them) in Core
+/// preset `{preset} Board`. So the Core carries the whole tone and plays the
+/// same under any patch.
+pub fn save_core_snapshot(
+    comp: &mut Compositions,
+    patch: &mut PatchDef,
+    amps: &[PresetDef],
+    board: &[DriveSlotDef],
+    preset: &str,
+    snapshot: &str,
+) -> Result<(), String> {
+    let (preset, snapshot) = (preset.trim(), snapshot.trim());
+    if preset.is_empty() || snapshot.is_empty() {
+        return Err("a blank name".to_string());
+    }
+    // What plays now: the Core snapshot as saved, if the patch has one.
+    let mut snap: PresetSnapshotDef = comp
+        .preset(&patch.rig_preset)
+        .and_then(|p| {
+            p.snapshots
+                .iter()
+                .find(|s| !patch.snapshot.is_empty() && eq(&s.name, &patch.snapshot))
+                .or_else(|| p.snapshots.first())
+        })
+        .cloned()
+        .unwrap_or_default();
+    snap.name = snapshot.to_string();
+    // The settings change: a frozen capture of the old ones is stale.
+    snap.frozen = false;
+    snap.frozen_nam.clear();
+    snap.frozen_nam2.clear();
+    let picks = crate::compose::module_picks(comp, patch);
+    let pick_of = |m: &str| picks.iter().find(|p| eq(&p.module, m)).cloned();
+    let amp = match pick_of("Amp") {
+        Some(p) => Some(p),
+        None => amp_module_from(comp, patch, amps),
+    };
+    let drive = match pick_of("Drive") {
+        Some(p) => Some(p),
+        None => drive_module_from(comp, board, &patch.drives, &format!("{preset} Board"), snapshot),
+    };
+    snap.modules = drive.into_iter().chain(amp).collect();
+    // The patch's own block presets and edits on the core's blocks.
+    let core = |b: &str| crate::compose::is_core_block(b);
+    for c in patch.blocks.iter().filter(|c| core(&c.block)) {
+        snap.overrides.retain(|o| !eq(&o.block, &c.block));
+        match snap.blocks.iter_mut().find(|x| eq(&x.block, &c.block)) {
+            Some(x) => *x = c.clone(),
+            None => snap.blocks.push(c.clone()),
+        }
+    }
+    for o in patch.overrides.iter().filter(|o| core(&o.block)) {
+        put_override(&mut snap.overrides, o.clone());
+    }
+    // Into the library.
+    let name = match comp.presets.iter_mut().find(|p| eq(&p.name, preset)) {
+        Some(p) => {
+            match p.snapshots.iter_mut().find(|s| eq(&s.name, snapshot)) {
+                Some(s) => {
+                    snap.name.clone_from(&s.name);
+                    *s = snap.clone();
+                }
+                None => p.snapshots.push(snap.clone()),
+            }
+            p.name.clone()
+        }
+        None => {
+            comp.presets.push(RigPresetDef { name: preset.to_string(), snapshots: vec![snap.clone()] });
+            preset.to_string()
+        }
+    };
+    crate::compose::put_core(patch, &name, &snap.name);
+    Ok(())
+}
+
+/// An Amp module pick for a patch whose amp is a profile preset: the Amp
+/// module preset named for it, made (or given this capture as a snapshot)
+/// when the library has none playing it. `None` with no amp to take.
+fn amp_module_from(comp: &mut Compositions, patch: &PatchDef, amps: &[PresetDef]) -> Option<ModuleChoiceDef> {
+    let left = amps.iter().find(|p| eq(&p.name, &patch.preset))?;
+    let right = amps.iter().find(|p| !patch.preset2.is_empty() && eq(&p.name, &patch.preset2));
+    let snap = ModuleSnapshotDef {
+        name: right.map_or_else(|| "Default".to_string(), |r| format!("+ {}", r.name)),
+        nam: left.nam.clone(),
+        cab: left.cab.clone(),
+        level_db: left.level_db,
+        nam2: right.map(|r| r.nam.clone()).unwrap_or_default(),
+        cab2: right.map(|r| r.cab.clone()).unwrap_or_default(),
+        level2_db: right.map_or(0.0, |r| r.level_db),
+        ..ModuleSnapshotDef::default()
+    };
+    let same = |s: &ModuleSnapshotDef| s.nam == snap.nam && s.cab == snap.cab && s.nam2 == snap.nam2 && s.cab2 == snap.cab2;
+    let name = left.name.clone();
+    let snapshot = match comp.modules.iter_mut().find(|m| eq(&m.module, "Amp") && eq(&m.name, &name)) {
+        Some(m) => match m.snapshots.iter().find(|s| same(s)) {
+            Some(s) => s.name.clone(),
+            None => {
+                let mut n = snap.name.clone();
+                let mut i = 2;
+                while m.snapshots.iter().any(|s| eq(&s.name, &n)) {
+                    n = format!("{} {i}", snap.name);
+                    i += 1;
+                }
+                m.snapshots.push(ModuleSnapshotDef { name: n.clone(), ..snap });
+                n
+            }
+        },
+        None => {
+            let n = snap.name.clone();
+            comp.modules.push(ModulePresetDef { module: "Amp".to_string(), name: name.clone(), snapshots: vec![snap] });
+            n
+        }
+    };
+    Some(ModuleChoiceDef { module: "Amp".to_string(), preset: name, snapshot })
+}
+
+/// A Drive module pick for a patch that plays the profile's board: snapshot
+/// `snapshot` of Drive preset `preset` holding the slots it plays (`board`,
+/// the patch's `own` over them). `None` for an empty board.
+fn drive_module_from(
+    comp: &mut Compositions,
+    board: &[DriveSlotDef],
+    own: &[DriveSlotDef],
+    preset: &str,
+    snapshot: &str,
+) -> Option<ModuleChoiceDef> {
+    let mut drives: Vec<DriveSlotDef> = board.to_vec();
+    for d in own {
+        match drives.iter_mut().find(|x| eq(&x.block, &d.block)) {
+            Some(x) => *x = d.clone(),
+            None => drives.push(d.clone()),
+        }
+    }
+    if drives.is_empty() {
+        return None;
+    }
+    let snap = ModuleSnapshotDef { name: snapshot.to_string(), drives, ..ModuleSnapshotDef::default() };
+    match comp.modules.iter_mut().find(|m| eq(&m.module, "Drive") && eq(&m.name, preset)) {
+        Some(m) => match m.snapshots.iter_mut().find(|s| eq(&s.name, snapshot)) {
+            Some(s) => *s = snap,
+            None => m.snapshots.push(snap),
+        },
+        None => comp.modules.push(ModulePresetDef { module: "Drive".to_string(), name: preset.to_string(), snapshots: vec![snap] }),
+    }
+    Some(ModuleChoiceDef { module: "Drive".to_string(), preset: preset.to_string(), snapshot: snapshot.to_string() })
+}
+
 /// Drop the patch's own edits on `owned` blocks — back to what the modules
 /// and preset say. Returns whether anything changed.
 pub fn revert_blocks(patch: &mut PatchDef, owned: &[String]) -> bool {
@@ -784,6 +942,170 @@ pub fn delete_rig_preset(
     Ok(())
 }
 
+// ── Presets (`tones.styx`) ────────────────────────────────────────────────
+
+/// The time modules: a Time pick covers its Delay and Reverb.
+fn is_time_module(m: &str) -> bool {
+    ["Time", "Delay", "Reverb"].iter().any(|t| eq(t, m))
+}
+
+/// Play preset `name` on `patch`: the patch names it, and gives up its own
+/// picks and edits on what the preset covers — its Core (with the Drive and
+/// Amp picked over it and the edits on the core's blocks) when the preset
+/// names one, its Time when the preset picks one, the blocks the preset
+/// sets — so the preset is heard; what the preset leaves alone stays the
+/// patch's.
+pub fn put_tone(comp: &Compositions, patch: &mut PatchDef, name: &str) -> Result<(), String> {
+    let t = comp.tone(name).ok_or_else(|| format!("no preset '{name}'"))?;
+    patch.tone.clone_from(&t.name);
+    if !t.rig_preset.is_empty() {
+        patch.rig_preset.clear();
+        patch.snapshot.clear();
+        patch.modules.retain(|m| !eq(&m.module, "Drive") && !eq(&m.module, "Amp"));
+        patch.blocks.retain(|c| !crate::compose::is_core_block(&c.block));
+        patch.overrides.retain(|o| !crate::compose::is_core_block(&o.block));
+    }
+    if !t.preset.is_empty() {
+        patch.preset.clear();
+        patch.preset2.clear();
+    }
+    let picks_time = t.modules.iter().any(|m| is_time_module(&m.module));
+    patch.modules.retain(|m| !t.modules.iter().any(|x| eq(&x.module, &m.module)) && !(picks_time && is_time_module(&m.module)));
+    let time_block = crate::compose::is_time_block;
+    let covered = |b: &str| {
+        t.blocks.iter().any(|c| eq(&c.block, b)) || t.overrides.iter().any(|o| eq(&o.block, b)) || (picks_time && time_block(b))
+    };
+    patch.blocks.retain(|c| !covered(&c.block));
+    patch.overrides.retain(|o| !covered(&o.block));
+    patch.drives.retain(|d| !t.drives.iter().any(|x| eq(&x.block, &d.block)));
+    Ok(())
+}
+
+/// Save what `patch` plays as preset `name` — new, or replacing that
+/// preset ("update from the patch") — and play it: the patch's whole sound
+/// (its Core or amp, its module picks, block presets, drive slots, edits,
+/// level and macro positions, with any preset it played under them) moves
+/// into the preset, and the patch names it. Patches already naming the
+/// preset hear the update.
+pub fn save_tone(comp: &mut Compositions, patch: &mut PatchDef, name: &str) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("a blank name".to_string());
+    }
+    let tone = tone_from(comp, patch, name);
+    let tone_name = tone.name.clone();
+    match comp.tones.iter_mut().find(|t| eq(&t.name, &tone_name)) {
+        Some(t) => *t = tone,
+        None => comp.tones.push(tone),
+    }
+    // The patch: nothing of its own left — it plays the preset.
+    patch.tone = tone_name;
+    patch.rig_preset.clear();
+    patch.snapshot.clear();
+    if !comp.tone(&patch.tone).is_some_and(|t| t.preset.is_empty()) {
+        patch.preset.clear();
+        patch.preset2.clear();
+    }
+    patch.modules.clear();
+    patch.blocks.clear();
+    patch.drives.clear();
+    patch.overrides.clear();
+    patch.level_db = 0.0;
+    patch.macros.clear();
+    Ok(())
+}
+
+/// What `patch` plays, as preset `name` (the patch untouched): its Core or
+/// amp, module picks, block presets, drive slots, edits, level and macro
+/// positions, with any preset it plays under them.
+#[must_use]
+pub fn tone_from(comp: &Compositions, patch: &PatchDef, name: &str) -> crate::compose::ToneDef {
+    let p = crate::compose::with_tone(comp, patch);
+    crate::compose::ToneDef {
+        name: comp.tone(name).map_or_else(|| name.trim().to_string(), |t| t.name.clone()),
+        rig_preset: p.rig_preset.clone(),
+        snapshot: p.snapshot.clone(),
+        preset: if p.rig_preset.is_empty() { p.preset.clone() } else { String::new() },
+        preset2: if p.rig_preset.is_empty() { p.preset2.clone() } else { String::new() },
+        modules: p.modules.clone(),
+        blocks: p.blocks.clone(),
+        drives: p.drives.clone(),
+        overrides: p.overrides.clone(),
+        level_db: p.level_db,
+        macros: p.macros.clone(),
+    }
+}
+
+/// Presets from patches: one per patch that plays none, named after it and
+/// holding the sound it plays — skipping a name a preset already has. The
+/// patches are not changed. Returns the names made.
+pub fn tones_from_patches(comp: &mut Compositions, patches: &[PatchDef]) -> Vec<String> {
+    let mut made = Vec::new();
+    for p in patches {
+        let name = p.name.trim();
+        if name.is_empty()
+            || p.name == crate::profiles::PRESET_BENCH
+            || !p.tone.is_empty()
+            || comp.tone(name).is_some()
+        {
+            continue;
+        }
+        let t = tone_from(comp, p, name);
+        made.push(t.name.clone());
+        comp.tones.push(t);
+    }
+    made
+}
+
+/// The patches playing preset `name`, by label.
+fn tone_users(profiles: &[&ProfileDef], name: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for prof in profiles {
+        for patch in prof.patches.iter().filter(|p| eq(&p.tone, name)) {
+            push_once(&mut out, patch_label(prof, patch));
+        }
+    }
+    out
+}
+
+/// Rename a preset; the patches naming it follow.
+pub fn rename_tone(comp: &mut Compositions, profiles: &mut [&mut ProfileDef], old: &str, new_name: &str) -> Result<Vec<usize>, String> {
+    let new_name = free(new_name, comp.tones.iter().filter(|t| !eq(&t.name, old)).map(|t| t.name.as_str()))?;
+    comp.tones
+        .iter_mut()
+        .find(|t| eq(&t.name, old))
+        .ok_or_else(|| format!("no preset '{old}'"))?
+        .name
+        .clone_from(&new_name);
+    Ok(each_profile(profiles, |patch| {
+        if eq(&patch.tone, old) {
+            patch.tone.clone_from(&new_name);
+            true
+        } else {
+            false
+        }
+    }))
+}
+
+/// Copy a preset as `new_name`.
+pub fn duplicate_tone(comp: &mut Compositions, name: &str, new_name: &str) -> Result<(), String> {
+    let new_name = free(new_name, comp.tones.iter().map(|t| t.name.as_str()))?;
+    let mut copy = comp.tone(name).cloned().ok_or_else(|| format!("no preset '{name}'"))?;
+    copy.name = new_name;
+    comp.tones.push(copy);
+    Ok(())
+}
+
+/// Delete a preset — refused while a patch plays it.
+pub fn delete_tone(comp: &mut Compositions, profiles: &[&ProfileDef], name: &str) -> Result<(), String> {
+    if comp.tone(name).is_none() {
+        return Err(format!("no preset '{name}'"));
+    }
+    refuse_if_used(&format!("preset '{name}'"), &tone_users(profiles, name))?;
+    comp.tones.retain(|t| !eq(&t.name, name));
+    Ok(())
+}
+
 // ── Songs ──────────────────────────────────────────────────────────────────
 
 /// A copy of song `name` as `new_name`: sections, recalls, switch tuning and
@@ -881,12 +1203,14 @@ mod tests {
 
     fn patch(name: &str) -> PatchDef {
         PatchDef {
+            role: String::new(),
             song: String::new(),
             name: name.into(),
             preset: String::new(),
             preset2: String::new(),
             rig_preset: String::new(),
             snapshot: String::new(),
+            tone: String::new(),
             modules: Vec::new(),
             blocks: Vec::new(),
             drives: Vec::new(),
@@ -896,6 +1220,165 @@ mod tests {
             overrides: Vec::new(),
             macros: Vec::new(),
         }
+    }
+
+    fn amp(name: &str, nam: &str) -> PresetDef {
+        PresetDef { name: name.into(), nam: nam.into(), hash: String::new(), cab: String::new(), cab_hash: String::new(), level_db: -3.0 }
+    }
+
+    fn slot(block: &str, preset: &str) -> DriveSlotDef {
+        DriveSlotDef { block: block.into(), preset: preset.into(), option: 0 }
+    }
+
+    /// A Worship-style patch: its amp a profile preset, the profile's board,
+    /// edits on the core's blocks and one on a delay.
+    fn worship_patch() -> PatchDef {
+        let mut p = patch("Clean Verb");
+        p.preset = "Fender Clean".into();
+        p.overrides = vec![
+            OverrideDef { module: "Drive".into(), block: "Drive 1".into(), param: String::new(), op: "bypass".into(), value: 0.0, text: String::new() },
+            OverrideDef::set("Amp", "Amp EQ", "low", 2.0),
+            OverrideDef::set("Time", "DLY 1", "mix", 0.3),
+        ];
+        p
+    }
+
+    #[test]
+    fn a_core_saved_from_a_profile_patch_carries_its_amp_and_board() {
+        let mut comp = Compositions::default();
+        let mut p = worship_patch();
+        let amps = [amp("Fender Clean", "/n/fender.nam")];
+        let board = [slot("Drive 1", "King of Tone"), slot("Drive 2", "Morning Glory")];
+        save_core_snapshot(&mut comp, &mut p, &amps, &board, "Worship", "Clean").unwrap();
+
+        let core = comp.preset("Worship").expect("the Core preset");
+        let s = &core.snapshots[0];
+        assert_eq!(s.name, "Clean");
+        assert_eq!(s.modules, vec![choice("Drive", "Worship Board", "Clean"), choice("Amp", "Fender Clean", "Default")]);
+        // The core's edits moved into the snapshot; the delay's stayed with
+        // the patch.
+        assert!(s.overrides.iter().any(|o| o.block == "Drive 1"));
+        assert!(s.overrides.iter().any(|o| o.block == "Amp EQ"));
+        assert!(!s.overrides.iter().any(|o| o.block == "DLY 1"));
+        assert_eq!(p.overrides.len(), 1);
+        assert_eq!(p.overrides[0].block, "DLY 1");
+        assert_eq!((p.rig_preset.as_str(), p.snapshot.as_str()), ("Worship", "Clean"));
+        // The modules it made.
+        let a = comp.module("Amp", "Fender Clean").expect("the amp module");
+        assert_eq!(a.snapshots[0].nam, "/n/fender.nam");
+        assert!((a.snapshots[0].level_db + 3.0).abs() < 1e-6);
+        let d = comp.module("Drive", "Worship Board").expect("the board");
+        assert_eq!(d.snapshots[0].drives.len(), 2);
+    }
+
+    #[test]
+    fn the_saved_core_plays_the_same_amp_and_board() {
+        let mut comp = Compositions::default();
+        let mut p = worship_patch();
+        let amps = [amp("Fender Clean", "/n/fender.nam")];
+        let board = [slot("Drive 1", "King of Tone")];
+        save_core_snapshot(&mut comp, &mut p, &amps, &board, "Worship", "Clean").unwrap();
+        let mut def = profile("Worship", vec![p]);
+        def.presets = amps.to_vec();
+        def.drives = board.to_vec();
+        let flat = crate::compose::flatten(&def, &comp);
+        let fp = &flat.patches[0];
+        let played = flat.presets.iter().find(|x| x.name == fp.preset).expect("the amp it plays");
+        assert_eq!(played.nam, "/n/fender.nam");
+        assert!(fp.drives.iter().any(|d| d.block == "Drive 1" && d.preset == "King of Tone"));
+        assert!(fp.overrides.iter().any(|o| o.block == "Drive 1" && o.op == "bypass"));
+        assert!(fp.overrides.iter().any(|o| o.block == "DLY 1"));
+    }
+
+    #[test]
+    fn saving_again_replaces_the_snapshot_and_reuses_the_amp() {
+        let mut comp = Compositions::default();
+        let amps = [amp("Fender Clean", "/n/fender.nam")];
+        let board = [slot("Drive 1", "King of Tone")];
+        let mut a = worship_patch();
+        save_core_snapshot(&mut comp, &mut a, &amps, &board, "Worship", "Clean").unwrap();
+        // Over the saved one: the same snapshot, updated.
+        a.overrides.push(OverrideDef::set("Amp", "Post Comp", "threshold", -20.0));
+        save_core_snapshot(&mut comp, &mut a, &amps, &board, "Worship", "Clean").unwrap();
+        assert_eq!(comp.preset("Worship").unwrap().snapshots.len(), 1);
+        assert!(comp.preset("Worship").unwrap().snapshots[0].overrides.iter().any(|o| o.block == "Post Comp"));
+        // Another patch on the same amp, as a new snapshot.
+        let mut b = worship_patch();
+        b.name = "Clean Dry".into();
+        save_core_snapshot(&mut comp, &mut b, &amps, &board, "Worship", "Clean Dry").unwrap();
+        assert_eq!(comp.preset("Worship").unwrap().snapshots.len(), 2);
+        assert_eq!(comp.module("Amp", "Fender Clean").unwrap().snapshots.len(), 1);
+        assert!(save_core_snapshot(&mut comp, &mut b, &amps, &board, " ", "x").is_err());
+    }
+
+    /// A patch saved as a preset plays the same, and so does any other
+    /// patch that chooses it — in another profile, with its own Core and
+    /// Time given up to the preset's.
+    #[test]
+    fn a_preset_plays_the_same_on_any_patch() {
+        let mut comp = Compositions::default();
+        comp.modules.push(ModulePresetDef { module: "Time".into(), name: "Flute".into(), snapshots: vec![snap("Cascade")] });
+        let mut washed = worship_patch();
+        washed.modules = vec![choice("Time", "Flute", "Cascade")];
+        washed.blocks = vec![BlockChoiceDef { block: "Pitch".into(), preset: "Octave Up".into() }];
+        washed.level_db = 1.5;
+        let mut before = profile("Worship", vec![washed.clone()]);
+        before.presets = vec![amp("Fender Clean", "/n/fender.nam")];
+        let heard = crate::compose::flatten(&before, &comp);
+
+        save_tone(&mut comp, &mut washed, "Ambient Delay Flute").unwrap();
+        assert_eq!(washed.tone, "Ambient Delay Flute");
+        assert!(washed.modules.is_empty() && washed.blocks.is_empty() && washed.overrides.is_empty());
+        let mut after = profile("Worship", vec![washed]);
+        after.presets = before.presets.clone();
+        let now = crate::compose::flatten(&after, &comp);
+        let show = |d: &ProfileDef| {
+            let p = &d.patches[0];
+            format!("{} {} {:?} {:?}", p.preset, p.level_db, p.overrides, d.presets.iter().map(|x| &x.nam).collect::<Vec<_>>())
+        };
+        assert_eq!(show(&heard), show(&now), "the patch plays as it did");
+
+        // Another patch, elsewhere, with a Time of its own: chooses it.
+        let mut other = patch("Bridge Swell");
+        other.preset = "Fender Clean".into();
+        other.modules = vec![choice("Time", "Slap", "Short")];
+        put_tone(&comp, &mut other, "Ambient Delay Flute").unwrap();
+        assert!(other.modules.is_empty(), "its own Time gives way");
+        let picks = crate::compose::module_picks(&comp, &other);
+        assert!(picks.iter().any(|m| m.module == "Time" && m.preset == "Flute"));
+    }
+
+    #[test]
+    fn presets_made_from_patches_hold_their_sound_and_leave_them_be() {
+        let mut comp = comp();
+        let mut washed = patch("Ambient Delay Flute");
+        washed.preset = "Fender Clean".into();
+        washed.modules = vec![choice("Time", "Ambience", "Delay Flute")];
+        let mut taken = patch("Wash");
+        taken.preset = "Fender Clean".into();
+        save_tone(&mut comp, &mut taken, "Wash").unwrap();
+        let before = washed.clone();
+        let made = tones_from_patches(&mut comp, &[washed.clone(), taken.clone()]);
+        assert_eq!(made, vec!["Ambient Delay Flute".to_string()], "one per patch with no preset yet");
+        assert_eq!(format!("{washed:?}"), format!("{before:?}"), "the patch is untouched");
+        let t = comp.tone("Ambient Delay Flute").unwrap();
+        assert!(t.modules.iter().any(|m| m.module == "Time" && m.snapshot == "Delay Flute"));
+        assert!(tones_from_patches(&mut comp, &[washed]).is_empty(), "a second pass makes nothing");
+    }
+
+    #[test]
+    fn a_preset_in_use_is_kept_and_renaming_follows() {
+        let mut comp = Compositions::default();
+        let mut a = worship_patch();
+        save_tone(&mut comp, &mut a, "Wash").unwrap();
+        let mut prof = profile("Worship", vec![a]);
+        assert!(delete_tone(&mut comp, &[&prof], "Wash").is_err());
+        let touched = rename_tone(&mut comp, &mut [&mut prof], "Wash", "Big Wash").unwrap();
+        assert_eq!(touched, vec![0]);
+        assert_eq!(prof.patches[0].tone, "Big Wash");
+        duplicate_tone(&mut comp, "Big Wash", "Big Wash 2").unwrap();
+        delete_tone(&mut comp, &[&prof], "Big Wash 2").unwrap();
+        assert_eq!(comp.tones.len(), 1);
     }
 
     fn profile(name: &str, patches: Vec<PatchDef>) -> ProfileDef {
@@ -911,6 +1394,7 @@ mod tests {
 
     fn comp() -> Compositions {
         Compositions {
+            tones: Vec::new(),
             modules: vec![
                 ModulePresetDef {
                     module: "Delay".into(),
