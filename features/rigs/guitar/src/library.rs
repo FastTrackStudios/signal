@@ -46,9 +46,25 @@ use crate::profiles::{
     default_midi_map, default_setlists, drive_presets, song_library, worship_def,
 };
 
-/// The library directory (`SIGNAL_RIG_DIR` overrides).
+/// The library directory a host chose for this process ([`use_rig_dir`]).
+static CHOSEN_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Play from `dir` for the rest of this process, instead of the player's
+/// library — a host that keeps its own copy (Session, whose scenes are a
+/// mix's, not the gig rig's). Seeded from the shipped defaults like any
+/// other library the first time it is read. Set once, before the library
+/// is first read; `false` if it was already set.
+pub fn use_rig_dir(dir: PathBuf) -> bool {
+    CHOSEN_DIR.set(dir).is_ok()
+}
+
+/// The library directory (a host's [`use_rig_dir`], else `SIGNAL_RIG_DIR`,
+/// else the instrument's own under the config root).
 #[must_use]
 pub fn rig_dir() -> PathBuf {
+    if let Some(dir) = CHOSEN_DIR.get() {
+        return dir.clone();
+    }
     if let Ok(p) = std::env::var("SIGNAL_RIG_DIR") {
         if !p.is_empty() {
             return PathBuf::from(p);
