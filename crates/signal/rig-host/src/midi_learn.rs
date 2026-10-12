@@ -99,7 +99,15 @@ impl MidiLearn {
     /// The table saved for `rig` (empty if none).
     #[must_use]
     pub fn load(rig: &str) -> Self {
-        let store = StyxDir::new(signal_config_dir().join(rig));
+        Self::load_in(signal_config_dir().join(rig))
+    }
+
+    /// The table saved in `dir` (empty if none) — for a rig that keeps its
+    /// own directory rather than one under the config root, so two rigs in
+    /// one process each learn their own pedals.
+    #[must_use]
+    pub fn load_in(dir: impl Into<PathBuf>) -> Self {
+        let store = StyxDir::new(dir);
         let file: LearnFile = store.read(FILE).unwrap_or_default();
         Self {
             store: Some(store),

@@ -34,9 +34,9 @@ use super::GuitarRigBackend;
 use crate::config_watch::{self, Change, Read, Watcher};
 use crate::library::{
     DrivePresetLib, KeymapLib, LastState, SetlistLib, SongLib, attach_song_patches, profile_file,
-    resolve_drive_presets, resolve_profile, rig_dir, rig_is_ephemeral,
+    rig_is_ephemeral,
 };
-use crate::nodes::profile_from_library;
+use crate::nodes::profile_from_library_in;
 use crate::profiles::{MidiMapDef, ProfileDef};
 
 /// The watcher and the one-reload-at-a-time guard.
@@ -133,15 +133,16 @@ struct Position {
 }
 
 impl GuitarRigBackend {
-    /// One look at the rig directory (the meter pump, twice a second). A
-    /// change is applied on its own thread; while one is being applied the
-    /// next look waits its turn.
+    /// One look at this rig's own directory (its
+    /// [`RigHome`](crate::library::RigHome)) — the meter pump, twice a
+    /// second. A change is applied on its own thread; while one is being
+    /// applied the next look waits its turn.
     pub(super) fn poll_config(&self) {
         if self.hot.busy.swap(true, Ordering::Acquire) {
             return;
         }
         let busy = Busy(&self.hot.busy);
-        let dir = rig_dir();
+        let dir = self.home().dir().to_path_buf();
         // `signal rig reload`: only the rig that saves answers it — a design
         // instance on the same directory must not take the request.
         let request_path = dir.join(config_watch::RELOAD_REQUEST);
@@ -198,7 +199,8 @@ impl GuitarRigBackend {
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
         let _busy = Busy(&self.hot.busy);
-        let changes = self.hot.watcher.lock_ok().force(&rig_dir());
+        let dir = self.home().dir().to_path_buf();
+        let changes = self.hot.watcher.lock_ok().force(&dir);
         let lines = self.apply_changes(changes, None);
         if lines.is_empty() {
             "nothing to reload: every config file is as the rig has it".to_string()
@@ -299,7 +301,7 @@ impl GuitarRigBackend {
             Read::Ok(p) => p,
             other => return bad_line(path, other),
         };
-        resolve_profile(&mut def);
+        self.home().resolve_profile(&mut def);
         attach_song_patches(&mut def, &self.songs_lib.lock_ok());
         let name = def.name.clone();
         if playing {
@@ -373,7 +375,7 @@ impl GuitarRigBackend {
             Read::Ok(l) => l.presets,
             other => return bad_line(path, other),
         };
-        resolve_drive_presets(&mut presets);
+        self.home().resolve_drive_presets(&mut presets);
         *self.drive_presets.lock_ok() = presets;
         let counts = self.rebuild_live();
         self.spawn_drive_calibration();
@@ -401,7 +403,7 @@ impl GuitarRigBackend {
         let rebuilt = {
             let def = self.profile_def.lock_ok();
             let dps = self.drive_presets.lock_ok();
-            profile_from_library(&def, &dps)
+            profile_from_library_in(&self.home(), &def, &dps)
         };
         self.reload_rebuilt_counted(rebuilt, ReloadMode::Keep)
     }

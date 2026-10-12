@@ -38,6 +38,7 @@ pub mod session;
 pub mod time_sync;
 pub mod web_bundle;
 
+pub use library::RigHome;
 pub use session::GuitarRigBackend;
 // Re-export the wire contract so front-end/app crates get types + clients
 // from one place.

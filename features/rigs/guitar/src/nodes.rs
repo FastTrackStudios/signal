@@ -37,6 +37,7 @@ use signal_proto::overrides::{NodeOverrideOp, NodePath, NodePathSegment, Overrid
 
 use signal_sampler::gapless::{Bank, InstallError, Resident, VariantBank};
 
+use crate::library::RigHome;
 use crate::profiles::{DrivePresetDef, OverrideDef, ProfileDef};
 
 /// The worship rig as nodes: every capture, every pedal, and the chain whose
@@ -560,30 +561,58 @@ pub(crate) fn drive_option_level(drives: &[DrivePresetDef], nam: &str) -> f32 {
 /// of this sees its output. The two are pinned equal for the shipped rig by
 /// `to_profile_matches_the_builder_for_the_shipped_rig`, patch for patch and
 /// parameter for parameter.
+///
+/// This reads the process's own library ([`RigHome::process_default`]); a
+/// rig with a home of its own builds through [`profile_from_library_in`].
 #[must_use]
 pub fn profile_from_library(
     def: &ProfileDef,
     drives: &[DrivePresetDef],
 ) -> signal_sampler::rig_profile::RigProfile {
-    let flat = crate::compose::flatten(def, &crate::library::RigLibrary::load_compositions());
-    to_nodes_with_store(&flat, drives).to_profile(&flat, drives)
+    profile_from_library_in(&RigHome::process_default(), def, drives)
+}
+
+/// [`profile_from_library`] out of `home`'s library: its compositions, its
+/// saved nodes, its instrument.
+#[must_use]
+pub fn profile_from_library_in(
+    home: &RigHome,
+    def: &ProfileDef,
+    drives: &[DrivePresetDef],
+) -> signal_sampler::rig_profile::RigProfile {
+    let flat = crate::compose::flatten(def, &home.load_compositions());
+    to_nodes_with_store_in(home, &flat, drives).to_profile(&flat, drives)
 }
 
 /// The rig's node library: derived from the profile, then everything saved
 /// about its nodes applied on top.
 ///
 /// One function, so no caller can accidentally use the bare derivation and
-/// silently lose a saved preset.
+/// silently lose a saved preset. The process's own library; a rig with a
+/// home of its own reads through [`library_for_in`].
 #[must_use]
 pub fn library_for(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
-    let flat = crate::compose::flatten(def, &crate::library::RigLibrary::load_compositions());
-    to_nodes_with_store(&flat, drives)
+    library_for_in(&RigHome::process_default(), def, drives)
 }
 
-/// [`to_nodes`] plus the saved node overlay, for a profile already flattened.
+/// [`library_for`] out of `home`'s library.
+#[must_use]
+pub fn library_for_in(home: &RigHome, def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
+    let flat = crate::compose::flatten(def, &home.load_compositions());
+    to_nodes_with_store_in(home, &flat, drives)
+}
+
+/// [`to_nodes`] plus the saved node overlay, for a profile already
+/// flattened — the process's own library.
 pub(crate) fn to_nodes_with_store(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
-    let mut rig = to_nodes(def, drives);
-    crate::library::RigLibrary::load_node_store().apply(&mut rig);
+    to_nodes_with_store_in(&RigHome::process_default(), def, drives)
+}
+
+/// [`to_nodes_with_store`] out of `home`'s library, fitted to its
+/// instrument.
+pub(crate) fn to_nodes_with_store_in(home: &RigHome, def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
+    let mut rig = to_nodes_for(def, drives, home.instrument());
+    home.load_node_store().apply(&mut rig);
     rig
 }
 
@@ -605,6 +634,17 @@ pub(crate) fn to_nodes_with_store(def: &ProfileDef, drives: &[DrivePresetDef]) -
 /// rather than a rebuild.
 #[must_use]
 pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
+    to_nodes_for(def, drives, crate::instrument::current())
+}
+
+/// [`to_nodes`] with the chain fitted to `instrument` (a rig's own, not
+/// the process's).
+#[must_use]
+pub fn to_nodes_for(
+    def: &ProfileDef,
+    drives: &[DrivePresetDef],
+    instrument: crate::instrument::Instrument,
+) -> RigNodes {
     let mut library = NodeLibrary::new();
 
     // ── Amp captures: one node each, because they are different amps ─────
@@ -723,7 +763,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
             .collect(),
         ..def.clone()
     };
-    let base = crate::profiles::build_profile(&unbent, drives);
+    let base = crate::profiles::build_profile_for(&unbent, drives, instrument);
     let base_chain: &[signal_sampler::RigBlock] = base
         .patches
         .first()

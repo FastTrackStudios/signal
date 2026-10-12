@@ -68,9 +68,17 @@ pub fn freeze_dir(preset: &str, snapshot: &str) -> PathBuf {
 /// Where a Core snapshot's frozen capture (`side` L or R) is kept: with
 /// the config, in the rig directory's `frozen/` — it is part of the Core
 /// preset, and goes where the preset goes.
+/// The process's own library; a rig with a home of its own keeps its
+/// freezes through [`capture_path_in`].
 #[must_use]
 pub fn capture_path(preset: &str, snapshot: &str, side: &str) -> PathBuf {
-    crate::library::rig_dir().join("frozen").join(format!("{}-{side}.nam", slug(preset, snapshot)))
+    capture_path_in(&crate::library::RigHome::process_default(), preset, snapshot, side)
+}
+
+/// [`capture_path`] in `home`'s library.
+#[must_use]
+pub fn capture_path_in(home: &crate::library::RigHome, preset: &str, snapshot: &str, side: &str) -> PathBuf {
+    home.dir().join("frozen").join(format!("{}-{side}.nam", slug(preset, snapshot)))
 }
 
 /// Play a frozen Core on `patch`: the captures in the amps, at their trim,

@@ -800,7 +800,20 @@ pub(crate) fn fit_to_instrument(patch: &mut RigPatch, instrument: crate::instrum
     }
 }
 
+/// [`build_profile_for`] the process's own instrument.
 pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
+    build_profile_for(def, dps, crate::instrument::current())
+}
+
+/// The profile's chains, built and fitted to `instrument` — a rig's own
+/// ([`crate::library::RigHome::instrument`]), not the process's, so a
+/// guitar rig and a bass rig side by side each build their own.
+#[must_use]
+pub fn build_profile_for(
+    def: &ProfileDef,
+    dps: &[DrivePresetDef],
+    instrument: crate::instrument::Instrument,
+) -> RigProfile {
     // One amp + its cab — the same shape for "Amp L" and "Amp R"; with both
     // loaded the engine runs the two stages in parallel. A `.nam` that is
     // already a full rig (`amp_cab`) leaves `cab` empty, and an
@@ -1107,7 +1120,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             nam_of(&p.preset2),
             cab_of(&p.preset2),
         );
-        fit_to_instrument(&mut patch, crate::instrument::current());
+        fit_to_instrument(&mut patch, instrument);
         set_patch_trim(&mut patch, p.level_db + p.trim_db);
         assign_meters(&mut patch);
         apply_overrides(&mut patch, &p.overrides);

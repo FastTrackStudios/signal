@@ -19,7 +19,7 @@
 //! ```
 
 use std::io::Write;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use signal_rig_host::lock::LockExt;
 use signal_sampler::{DropEvent, DropKind, clock_ns};
@@ -41,32 +41,50 @@ struct Switch {
     reported: bool,
 }
 
-/// Switches marked from any thread, for the pump to match drops against.
-static SWITCHES: Mutex<Vec<Switch>> = Mutex::new(Vec::new());
+/// One rig's switches, marked from any thread, for its pump to match its
+/// drops against — a rig's own, so two rigs in one process never count
+/// each other's drops against their switches. Cheap to clone (shared).
+#[derive(Clone, Debug, Default)]
+pub struct Switches(Arc<Mutex<Vec<Switch>>>);
 
-/// Mark a switch (`from` → `to`, via a stack / section / song / momentary),
-/// and how long its follow-up took. Cheap; call from the switch path.
+/// The process's switches, for callers with no rig of their own
+/// ([`switched`], [`DropLog::record`]).
+fn process_switches() -> &'static Switches {
+    static SWITCHES: OnceLock<Switches> = OnceLock::new();
+    SWITCHES.get_or_init(Switches::default)
+}
+
+/// Mark a switch on the process's own log ([`Switches::switched`]).
 pub fn switched(from: &str, to: &str, via: &str, settle_ms: f64) {
-    let at_ns = clock_ns();
-    {
-        let mut s = SWITCHES.lock_ok();
-        s.push(Switch {
+    process_switches().switched(from, to, via, settle_ms);
+}
+
+impl Switches {
+    /// Mark a switch (`from` → `to`, via a stack / section / song /
+    /// momentary), and how long its follow-up took. Cheap; call from the
+    /// switch path.
+    pub fn switched(&self, from: &str, to: &str, via: &str, settle_ms: f64) {
+        let at_ns = clock_ns();
+        {
+            let mut s = self.0.lock_ok();
+            s.push(Switch {
+                at_ns,
+                from: from.to_string(),
+                to: to.to_string(),
+                via: via.to_string(),
+                drops: [0; BUCKETS.len()],
+                worst_ns: 0,
+                reported: false,
+            });
+            // Only the last minute's matter.
+            let keep = at_ns.saturating_sub(60_000_000_000);
+            s.retain(|w| w.at_ns >= keep || !w.reported);
+        }
+        write_line(
             at_ns,
-            from: from.to_string(),
-            to: to.to_string(),
-            via: via.to_string(),
-            drops: [0; BUCKETS.len()],
-            worst_ns: 0,
-            reported: false,
-        });
-        // Only the last minute's matter.
-        let keep = at_ns.saturating_sub(60_000_000_000);
-        s.retain(|w| w.at_ns >= keep || !w.reported);
+            &format!("SWITCH\t{from} → {to}\tvia {via}\t(settle {settle_ms:.1} ms)"),
+        );
     }
-    write_line(
-        at_ns,
-        &format!("SWITCH\t{from} → {to}\tvia {via}\t(settle {settle_ms:.1} ms)"),
-    );
 }
 
 /// The pump's side: what it has collected so far.
@@ -81,8 +99,14 @@ pub struct DropLog {
 
 impl DropLog {
     /// Write the engine's new drops (`events`, collected from the rig) with
-    /// the rig's state (`patch` playing), and any switch summaries now due.
+    /// the rig's state (`patch` playing), and any switch summaries now due —
+    /// against the process's own switches ([`switched`]).
     pub fn record(&mut self, events: &[DropEvent], patch: &str) {
+        self.record_against(process_switches(), events, patch);
+    }
+
+    /// [`record`](Self::record) against one rig's own `switches`.
+    pub fn record_against(&mut self, switches: &Switches, events: &[DropEvent], patch: &str) {
         let now = clock_ns();
         for e in events {
             if self.seen > 0 && e.seq > self.seen {
@@ -109,7 +133,7 @@ impl DropLog {
             };
             // The switch it followed, if one was recent.
             let after = {
-                let mut s = SWITCHES.lock_ok();
+                let mut s = switches.0.lock_ok();
                 let hit = s
                     .iter_mut()
                     .rev()
@@ -137,7 +161,7 @@ impl DropLog {
         }
         // Switch summaries whose window has closed.
         let due: Vec<Switch> = {
-            let mut s = SWITCHES.lock_ok();
+            let mut s = switches.0.lock_ok();
             s.iter_mut()
                 .filter(|w| !w.reported && now.saturating_sub(w.at_ns) >= WINDOW_NS)
                 .map(|w| {
@@ -286,7 +310,7 @@ mod tests {
             }],
             "Drive",
         );
-        let s = SWITCHES.lock_ok();
+        let s = process_switches().0.lock_ok();
         let w = s.iter().rev().find(|w| w.to == "Drive").unwrap();
         assert_eq!(w.drops[0], 1);
         let text = std::fs::read_to_string(dir.join("d.log")).unwrap();
