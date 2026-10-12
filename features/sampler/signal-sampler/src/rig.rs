@@ -613,6 +613,12 @@ struct InputMeterShared {
     inject_gen: std::sync::atomic::AtomicU64,
     /// The guitar's trim and input EQ, applied before the chain.
     tone: crate::input_stage::InputTone,
+    /// A host's input ([`HostedAudio`]): set, the probe plays what the host
+    /// handed it this block instead of the rig track's own (silent) input.
+    hosted: AtomicBool,
+    /// The block the host handed over, left and right — written just before
+    /// the render that reads it, on the same thread.
+    host_feed: std::sync::Mutex<(Vec<f32>, Vec<f32>)>,
 }
 
 /// Mono window the tuner runs autocorrelation over. At 48 kHz this covers
@@ -810,10 +816,24 @@ impl PluginInstance for InputProbe {
         _events: &PluginEvents<'_>,
     ) -> Result<(), PluginError> {
         let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
+        // Hosted, the instrument is what the host handed over this block —
+        // the rig's own track has no input of its own.
+        let fed = self.shared.hosted.load(Ordering::Acquire)
+            && self.shared.host_feed.try_lock().is_ok_and(|feed| {
+                let (l, r) = &*feed;
+                if l.len() < frames || r.len() < frames {
+                    return false;
+                }
+                out_l.iter_mut().zip(l).for_each(|(o, s)| *o = *s);
+                out_r.iter_mut().zip(r).for_each(|(o, s)| *o = *s);
+                true
+            });
         // The guitar's own trim and EQ first: everything after — the
         // meters, the tuner, the gate's key, the chain — hears it trimmed.
-        out_l[..frames].copy_from_slice(&in_l[..frames]);
-        out_r[..frames].copy_from_slice(&in_r[..frames]);
+        if !fed {
+            out_l.iter_mut().zip(in_l).for_each(|(o, s)| *o = *s);
+            out_r.iter_mut().zip(in_r).for_each(|(o, s)| *o = *s);
+        }
         self.stage.process(&self.shared.tone, &mut out_l[..frames], &mut out_r[..frames]);
         let muted = self.shared.input_muted.load(Ordering::Relaxed);
         // A new test signal (or its removal): re-read it, from the top. Only
@@ -1824,6 +1844,68 @@ struct SwapState {
     bypass: bool,
 }
 
+/// The offline renderer and its playhead (frames).
+#[cfg(not(target_arch = "wasm32"))]
+type OfflineRenderer =
+    std::sync::Mutex<(daw::standalone::audio_engine::render::ProjectRenderer, u64)>;
+
+/// A rig's audio, driven by a host ([`GuitarRig::hosted_audio`]).
+///
+/// Its instrument in, the rig out, a host block at a time: what a plugin
+/// holding a signal rig plays. The control side (the rig service, its
+/// switches and browser) keeps the [`GuitarRig`] and changes what plays.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone)]
+pub struct HostedAudio {
+    renderer: Arc<OfflineRenderer>,
+    input: Arc<InputMeterShared>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl HostedAudio {
+    /// One host block: `in_*` played through the rig into `out_*`. In
+    /// pieces no longer than the rig's blocks are prepared for. A block the
+    /// rig cannot render now (its renderer busy — never in steady state) is
+    /// silence. Returns whether it rendered.
+    pub fn process(&self, in_l: &[f32], in_r: &[f32], out_l: &mut [f32], out_r: &mut [f32]) -> bool {
+        let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
+        let Ok(mut guard) = self.renderer.try_lock() else {
+            out_l.fill(0.0);
+            out_r.fill(0.0);
+            return false;
+        };
+        let (renderer, playhead) = &mut *guard;
+        // In pieces the rig's blocks are prepared for.
+        let pieces = in_l
+            .chunks(MAX_BLOCK)
+            .zip(in_r.chunks(MAX_BLOCK))
+            .zip(out_l.chunks_mut(MAX_BLOCK).zip(out_r.chunks_mut(MAX_BLOCK)))
+            .take(frames.div_ceil(MAX_BLOCK));
+        for ((piece_l, piece_r), (heard_l, heard_r)) in pieces {
+            let n = piece_l.len().min(heard_l.len());
+            if let Ok(mut feed) = self.input.host_feed.try_lock() {
+                let (l, r) = &mut *feed;
+                l.iter_mut().zip(piece_l).for_each(|(o, s)| *o = *s);
+                r.iter_mut().zip(piece_r).for_each(|(o, s)| *o = *s);
+            }
+            let block = renderer.render_block(*playhead, n);
+            *playhead = playhead.saturating_add(u64::try_from(n).unwrap_or(0));
+            for ((frame, l), r) in block
+                .samples
+                .chunks_exact(2)
+                .zip(heard_l.iter_mut())
+                .zip(heard_r.iter_mut())
+            {
+                if let [fl, fr] = frame {
+                    *l = *fl;
+                    *r = *fr;
+                }
+            }
+        }
+        true
+    }
+}
+
 /// A live guitar rig: a single input-armed daw track whose FX chain is the
 /// active patch, running on daw's realtime `AudioEngine`.
 #[cfg(not(target_arch = "wasm32"))]
@@ -1835,8 +1917,11 @@ pub struct GuitarRig {
     /// The offline rig's renderer and playhead — the same `ProjectRenderer`
     /// the realtime callback drives, pulled here by `render_offline` instead
     /// of by an audio device. `None` for a live rig.
-    offline:
-        Option<std::sync::Mutex<(daw::standalone::audio_engine::render::ProjectRenderer, u64)>>,
+    offline: Option<Arc<OfflineRenderer>>,
+    /// Whether a host drives the offline renderer ([`GuitarRig::hosted_audio`]):
+    /// then the device-free rig is live, rendered block by block by the host,
+    /// and nothing renders it from the control side.
+    hosted: AtomicBool,
     /// Live realtime metrics (render time / block size) from the duplex engine,
     /// driving the rig's DSP-load meter. `None` under the cpal fallback.
     engine_stats: Option<Arc<EngineStats>>,
@@ -2030,7 +2115,7 @@ impl GuitarRig {
         Ok(Self::assemble(
             daw,
             None,
-            Some(std::sync::Mutex::new((renderer, 0))),
+            Some(Arc::new(std::sync::Mutex::new((renderer, 0)))),
             None,
             meters,
             track_guid,
@@ -2100,9 +2185,7 @@ impl GuitarRig {
     fn assemble(
         daw: Standalone,
         host: Option<DuplexRigHost>,
-        offline: Option<
-            std::sync::Mutex<(daw::standalone::audio_engine::render::ProjectRenderer, u64)>,
-        >,
+        offline: Option<Arc<OfflineRenderer>>,
         engine_stats: Option<Arc<EngineStats>>,
         meters: Arc<Meters>,
         track_guid: String,
@@ -2117,6 +2200,7 @@ impl GuitarRig {
             daw,
             _host: host,
             offline,
+            hosted: AtomicBool::new(false),
             engine_stats,
             meters,
             track_guid,
@@ -2146,12 +2230,40 @@ impl GuitarRig {
         self.offline.is_some()
     }
 
+    /// Whether a host drives this rig ([`Self::hosted_audio`]).
+    #[must_use]
+    pub fn is_hosted(&self) -> bool {
+        self.hosted.load(Ordering::Acquire)
+    }
+
+    /// The rig's audio, for a host to drive: an offline rig (no device of
+    /// its own) played by whatever holds this — a plugin on a host's track,
+    /// a DAW's engine — one host block at a time ([`HostedAudio::process`]).
+    /// From here on the rig is live: the control side no longer renders it.
+    /// `None` for a rig with a device of its own.
+    #[must_use]
+    pub fn hosted_audio(&self) -> Option<HostedAudio> {
+        let renderer = self.offline.clone()?;
+        if let Ok(mut feed) = self.input_meter.host_feed.lock() {
+            feed.0 = vec![0.0; MAX_BLOCK];
+            feed.1 = vec![0.0; MAX_BLOCK];
+        }
+        self.input_meter.hosted.store(true, Ordering::Release);
+        self.hosted.store(true, Ordering::Release);
+        Some(HostedAudio {
+            renderer,
+            input: self.input_meter.clone(),
+        })
+    }
+
     /// Render `frames` through the offline rig (no-op for a live one).
     pub fn render_offline(&self, frames: usize) {
         /// Well under the slots' prepared maximum (`FX_PREPARE_BLOCK`), and
         /// the size a realtime callback would plausibly use.
         const BLOCK: usize = 512;
-        let Some(offline) = &self.offline else { return };
+        let Some(offline) = self.offline.as_ref().filter(|_| !self.is_hosted()) else {
+            return;
+        };
         let Ok(mut guard) = offline.lock() else {
             return;
         };
@@ -2174,7 +2286,7 @@ impl GuitarRig {
         timeout: std::time::Duration,
     ) -> (Vec<f32>, Vec<f32>) {
         self.arm_output_capture(frames);
-        if self.is_offline() {
+        if self.is_offline() && !self.is_hosted() {
             self.render_offline(frames);
         } else {
             let deadline = std::time::Instant::now() + timeout;

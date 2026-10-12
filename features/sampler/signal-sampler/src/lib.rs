@@ -202,7 +202,7 @@ pub use preset_spec::{
 };
 pub use rig::{BlockImpl, ModelId, RigBlock, SlotInfo};
 #[cfg(not(target_arch = "wasm32"))]
-pub use rig::{DeviceInfo, GuitarRig, RetiredChain};
+pub use rig::{DeviceInfo, GuitarRig, HostedAudio, RetiredChain};
 pub use rig_library::{Library, RigPreset, RigScene, RigSection, RigSong};
 #[cfg(not(target_arch = "wasm32"))]
 pub use rig_manager::RigManager;
