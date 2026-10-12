@@ -39,7 +39,7 @@ pub mod time_sync;
 pub mod web_bundle;
 
 pub use library::RigHome;
-pub use session::GuitarRigBackend;
+pub use session::{GuitarRigBackend, RigHost};
 // Re-export the wire contract so front-end/app crates get types + clients
 // from one place.
 pub use signal_guitar_proto as proto;

@@ -494,6 +494,52 @@ pub struct GuitarRigBackend {
     /// This rig's switches, for its drop log to line its drops up against
     /// (its own — another rig's switches are not why this one dropped).
     switches: crate::drop_log::Switches,
+    /// Played by a host rather than a device of its own ([`Self::hosted`]):
+    /// where its audio is handed over. `None` for a rig with a device.
+    host: Option<Arc<RigHost>>,
+}
+
+/// A host playing a rig — a plugin on a DAW's track: the rate it plays
+/// at, and the rig's audio as it was last opened, for the host to play
+/// a block at a time ([`RigHost::process`]).
+#[derive(Default)]
+pub struct RigHost {
+    sample_rate: std::sync::atomic::AtomicU32,
+    audio: std::sync::Mutex<Option<signal_sampler::HostedAudio>>,
+}
+
+impl RigHost {
+    /// One host block: `in_*` through the rig into `out_*` — silence while
+    /// the rig is not open (or is being opened again). Never waits.
+    pub fn process(&self, in_l: &[f32], in_r: &[f32], out_l: &mut [f32], out_r: &mut [f32]) -> bool {
+        match self.audio.try_lock() {
+            Ok(audio) if audio.is_some() => {
+                audio.as_ref().is_some_and(|a| a.process(in_l, in_r, out_l, out_r))
+            }
+            _ => {
+                out_l.fill(0.0);
+                out_r.fill(0.0);
+                false
+            }
+        }
+    }
+
+    /// The rate the rig is built at.
+    #[must_use]
+    pub fn sample_rate(&self) -> u32 {
+        self.sample_rate.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Play at `rate` from the next opening on.
+    pub fn set_sample_rate(&self, rate: u32) {
+        self.sample_rate.store(rate, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Whether the rig's audio is here to play.
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        self.audio.lock().is_ok_and(|a| a.is_some())
+    }
 }
 
 /// The process's CPU share, from its CPU time against the wall clock.
@@ -647,11 +693,33 @@ impl GuitarRigBackend {
             hot: Arc::default(),
             home: Arc::new(Mutex::new(home)),
             switches: crate::drop_log::Switches::default(),
+            host: None,
         };
         backend.spawn_meter_pump("rig-meter-pump");
         backend.spawn_drive_calibration();
         backend.spawn_tempo_follow();
         backend
+    }
+
+    /// A rig played by a host — a plugin on a DAW's track — from `home`, at
+    /// `sample_rate`: opening it builds the rig with no device of its own
+    /// and hands its audio to the host ([`RigHost`]), which plays it a block
+    /// at a time while this, the rig service, changes what plays. No audio
+    /// device, no phones mixer, no MIDI of its own: the host is all of
+    /// those.
+    #[must_use]
+    pub fn hosted(home: RigHome, sample_rate: u32) -> (Self, Arc<RigHost>) {
+        let host = Arc::new(RigHost::default());
+        host.set_sample_rate(sample_rate);
+        let mut backend = Self::with_home(home);
+        backend.host = Some(Arc::clone(&host));
+        (backend, host)
+    }
+
+    /// Whether a host plays this rig ([`Self::hosted`]).
+    #[must_use]
+    pub fn is_hosted(&self) -> bool {
+        self.host.is_some()
     }
 
     /// Where this rig keeps its library and which instrument it is, as it
@@ -4536,6 +4604,44 @@ impl GuitarRigBackend {
     /// Drops any existing rig *first* so the audio device is released before we
     /// re-acquire it — otherwise the re-open races the teardown into "device
     /// busy".
+    /// Open the rig for its host: built with no device, at the host's rate,
+    /// its audio handed over; the profile loaded and the rig where it was
+    /// left, as a device's rig opens.
+    fn open_hosted(&self, host: &RigHost) {
+        tracing::info!(rig.rate = host.sample_rate(), "rig open: hosted");
+        if let Ok(mut audio) = host.audio.lock() {
+            *audio = None;
+        }
+        let _ = self.rig.lock_ok().take();
+        let g = match GuitarRig::open_offline(host.sample_rate().max(8_000)) {
+            Ok(g) => g,
+            Err(e) => {
+                *self.audio_error.lock_ok() = audio_error_words(&format!("{e:#}"));
+                tracing::error!("hosted rig open failed: {e:#}");
+                return;
+            }
+        };
+        let audio = g.hosted_audio();
+        let mut prig = ProfileRig::new(g);
+        prig.set_level_match(false);
+        let profile = {
+            let def = self.profile_def.lock_ok();
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library_in(&self.home(), &self.effective_def(&def), &dps)
+        };
+        match prig.load_profile(profile, None) {
+            Ok(()) => tracing::info!("profile loaded ({} patches)", prig.patches().len()),
+            Err(e) => tracing::error!("profile load failed: {e}"),
+        }
+        *self.rig.lock_ok() = Some(prig);
+        if let Ok(mut slot) = host.audio.lock() {
+            *slot = audio;
+        }
+        self.audio_error.lock_ok().clear();
+        self.restore_last_state();
+        self.apply_guitar_input();
+    }
+
     pub fn open_blocking(&self) {
         // Design mode opens nothing.
         //
@@ -4551,6 +4657,10 @@ impl GuitarRigBackend {
         // synthesised by the pump.
         if crate::library::rig_is_design() {
             self.open_for_design();
+            return;
+        }
+        if let Some(host) = self.host.clone() {
+            self.open_hosted(&host);
             return;
         }
         tracing::info!("rig open: begin");
