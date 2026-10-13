@@ -58,7 +58,7 @@ members = [
     "vendor/anyrender_vello",
     "vendor/anyrender_vello_hybrid",
     "features/rigs/fx",
-    "features/ui/themer/fts-themer-ui",
+    "apps/themer",
     "features/adapters/reaper/daw-reaper-dioxus-ext",
     "features/adapters/reaper/daw-reaper-dioxus-ext-test",
     "apps/session/desktop",
@@ -313,7 +313,7 @@ daw-reaper-dioxus-ext = { path = "features/adapters/reaper/daw-reaper-dioxus-ext
 daw-reaper-embed = { path = "features/adapters/reaper/daw-reaper-embed" }
 reaper-launcher = { path = "features/adapters/reaper/reaper-launcher" }
 fts-icons = { path = "features/adapters/reaper/fts-icons" }
-fts-themer-ui = { path = "features/ui/themer/fts-themer-ui" }
+fts-themer-ui = { path = "apps/themer" }
 reaper-config = { path = "features/adapters/reaper/reaper-config" }
 reaper-kbd = { path = "features/adapters/reaper/reaper-kbd" }
 reaper-hwnd = { path = "features/adapters/reaper/reaper-hwnd" }
