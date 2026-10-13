@@ -13,8 +13,8 @@
 //! ```
 
 use daw::standalone::audio_engine::render::ProjectRenderer;
-use signal_sampler::KeysRig;
-use signal_sampler::keys_rig::Scope;
+use sampler::KeysRig;
+use sampler::keys_rig::Scope;
 
 fn main() {
     let _ = tracing_subscriber::fmt()
@@ -42,22 +42,22 @@ fn main() {
     // LANE_STRESS_SLOW=1: voices through their per-frame path only — to
     // check the fast path against it (the output hash must match).
     if std::env::var_os("LANE_STRESS_SLOW").is_some() {
-        signal_sampler::engine::voice::set_fast_path(false);
+        sampler::engine::voice::set_fast_path(false);
     }
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     let stats = std::env::var_os("LANE_STRESS_FAST_STATS").is_some();
-    signal_sampler::engine::voice::FAST_STATS.store(stats, std::sync::atomic::Ordering::Relaxed);
+    sampler::engine::voice::FAST_STATS.store(stats, std::sync::atomic::Ordering::Relaxed);
     let lanes: Vec<String> = rig
         .cell_peaks()
         .into_iter()
-        .filter(|(role, _, _)| *role == signal_sampler::rig_node::Role::Layer)
+        .filter(|(role, _, _)| *role == sampler::rig_node::Role::Layer)
         .map(|(_, name, _)| name)
         .collect();
     // As the backend holds it: behind a mutex, shared with the status poller.
     let rig = std::sync::Mutex::new(rig);
     renderer.connect_live_midi(256);
     let t0 = std::time::Instant::now();
-    while signal_sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 180 {
+    while sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 180 {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     for _ in 0..400 {
@@ -87,9 +87,9 @@ fn main() {
     // A UI polls the rig's status (voice count included) while it plays —
     // that must never cost the audio a block.
     let skips0 = daw::standalone::audio_engine::render::plugin_stage_skips();
-    let cuts0 = signal_sampler::keys_rig::guard_cuts();
-    let sheds0 = signal_sampler::keys_rig::guard_sheds();
-    let steals0 = signal_sampler::engine::voice::note_steals();
+    let cuts0 = sampler::keys_rig::guard_cuts();
+    let sheds0 = sampler::keys_rig::guard_sheds();
+    let steals0 = sampler::engine::voice::note_steals();
     let stop = std::sync::atomic::AtomicBool::new(false);
     std::thread::scope(|scope| {
     scope.spawn(|| {
@@ -100,7 +100,7 @@ fn main() {
                 let r = rig.lock().unwrap();
                 let v = if tick % 2 == 0 { 1.0 } else { 0.99 };
                 for lane in &lanes {
-                    r.set_lane_volume(signal_sampler::rig_node::Role::Layer, lane, v);
+                    r.set_lane_volume(sampler::rig_node::Role::Layer, lane, v);
                 }
                 drop(r);
                 std::thread::sleep(std::time::Duration::from_millis(10));
@@ -160,7 +160,7 @@ fn main() {
         } else {
             ((dt.as_secs_f64() / deadline.as_secs_f64()) as f32).max(floor)
         };
-        signal_sampler::keys_rig::publish_render_load(load);
+        sampler::keys_rig::publish_render_load(load);
         let voices_now = rig.lock().unwrap().active_voices();
         peak_voices = peak_voices.max(voices_now);
         cost.push((voices_now as f64, dt.as_secs_f64() * 1e3));
@@ -237,12 +237,12 @@ fn main() {
         }
         println!();
     }
-    let cuts = signal_sampler::keys_rig::guard_cuts() - cuts0;
+    let cuts = sampler::keys_rig::guard_cuts() - cuts0;
     println!("  {cuts} held notes cut by the CPU guard");
     println!(
         "  {} lane-blocks shed release tails; {} notes stolen at a polyphony limit",
-        signal_sampler::keys_rig::guard_sheds() - sheds0,
-        signal_sampler::engine::voice::note_steals() - steals0
+        sampler::keys_rig::guard_sheds() - sheds0,
+        sampler::engine::voice::note_steals() - steals0
     );
     // Ordinary chords must come through whole, whatever the load.
     let chord_cut = smash == 0 && cuts > 0;
@@ -251,7 +251,7 @@ fn main() {
     if stats {
         let names = ["not sounding", "start hold", "release hold", "attack delay", "gain ramp", "bloom", "decay",
                      "pitch shift", "filter", "flex env", "breakpoint env", "vibrato", "glide", "reverse", "ping-pong", "marker"];
-        for (n, c) in names.iter().zip(signal_sampler::engine::voice::FAST_MISS.iter()) {
+        for (n, c) in names.iter().zip(sampler::engine::voice::FAST_MISS.iter()) {
             let c = c.load(std::sync::atomic::Ordering::Relaxed);
             if c > 0 {
                 println!("  fast path missed ({n}): {c} voice-blocks");

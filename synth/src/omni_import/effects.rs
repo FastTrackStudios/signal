@@ -6,8 +6,8 @@
 //! fall back to the nearest block type at its defaults.
 
 use signal_proto::block::BlockType;
-use signal_sampler::rig::RigBlock;
-use signal_sampler::rig_node::Container;
+use sampler::rig::RigBlock;
+use sampler::rig_node::Container;
 
 use super::model::classify_effect;
 

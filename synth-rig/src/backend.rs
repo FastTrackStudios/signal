@@ -18,7 +18,7 @@ use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use audio::io::AudioIoPrefs;
 use midicore::MidiEvent;
 use keys::KeysRig;
-use signal_sampler::rig_node::{Container, RigNode, Role};
+use sampler::rig_node::{Container, RigNode, Role};
 use signal_synth::omni_import::{
     OmniPatch, SoundsourceIndex, load_patch_file, parse_patch, patch_to_container,
 };
@@ -864,9 +864,9 @@ fn project_layers(patch: &signal_synth::omni_import::OmniPatch) -> Vec<SynthLaye
                 // an empty reference means the layer runs in synth (DSP
                 // wavetable) mode — the Oscillator kind.
                 source_kind: if l.soundsource.is_empty() {
-                    signal_sampler::SoundsourceKind::Oscillator
+                    sampler::SoundsourceKind::Oscillator
                 } else {
-                    signal_sampler::SoundsourceKind::Sample
+                    sampler::SoundsourceKind::Sample
                 }
                 .tag()
                 .to_string(),
@@ -895,19 +895,19 @@ fn sample_blocks(c: &Container, out: &mut Vec<(String, PathBuf)>) {
 
 /// Read a soundsource's `LibrarySpec` from its `.signalpack` (header only, no
 /// audio decode) or raw `library.styx`.
-fn spec_of(path: &std::path::Path) -> Option<signal_sampler::LibrarySpec> {
+fn spec_of(path: &std::path::Path) -> Option<sampler::LibrarySpec> {
     if path
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("signalpack"))
     {
-        signal_sampler::read_pack_header(path).ok().map(|h| h.spec)
+        sampler::read_pack_header(path).ok().map(|h| h.spec)
     } else {
-        signal_sampler::LibrarySpec::from_file(path).ok()
+        sampler::LibrarySpec::from_file(path).ok()
     }
 }
 
 /// Project a `LibrarySpec` into the wire [`SynthMapping`].
-fn project_mapping(spec: &signal_sampler::LibrarySpec, name: &str) -> SynthMapping {
+fn project_mapping(spec: &sampler::LibrarySpec, name: &str) -> SynthMapping {
     let zones = spec
         .zones
         .iter()
@@ -1045,7 +1045,7 @@ mod tests {
             Container::preset("probe").add(Container::engine("e").add(
                 Container::layer("A").add(Container::module("src").sample_block("Source", pack)),
             ));
-        let mut rn = signal_sampler::node_render::RenderNode::compile(&tree, 48_000);
+        let mut rn = sampler::node_render::RenderNode::compile(&tree, 48_000);
         rn.prepare(48_000.0, 512);
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
         let midi = [PluginMidiEvent {
@@ -1227,7 +1227,7 @@ mod tests {
     }
 
     /// Recursively find a block by display name anywhere in the tree.
-    fn find_block(c: &Container, name: &str) -> Option<signal_sampler::rig::RigBlock> {
+    fn find_block(c: &Container, name: &str) -> Option<sampler::rig::RigBlock> {
         for n in &c.children {
             match n {
                 RigNode::Block { block } if block.display_name() == name => {
@@ -1278,7 +1278,7 @@ mod tests {
         // loop (baked into the pack), not decay to silence like a piano. We
         // render ~5 s holding note 60 and require the LAST second to still be
         // audible.
-        let mut rn = signal_sampler::node_render::RenderNode::compile(&tree, 48_000);
+        let mut rn = sampler::node_render::RenderNode::compile(&tree, 48_000);
         rn.prepare(48_000.0, 512);
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
         let midi = [PluginMidiEvent {

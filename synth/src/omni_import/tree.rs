@@ -13,11 +13,11 @@ use super::model::{
 /// Omnisphere's normalized cutoff → OUR normalized cutoff param, via the
 /// calibrated Hz curve.
 fn omni_cutoff_norm(v: f32) -> f32 {
-    signal_sampler::native::NativeFilter::norm_from_cutoff(omni_cutoff_hz(v))
+    sampler::native::NativeFilter::norm_from_cutoff(omni_cutoff_hz(v))
 }
 use super::{SoundsourceIndex, parse_patch};
-use signal_sampler::rig::RigBlock;
-use signal_sampler::rig_node::Container;
+use sampler::rig::RigBlock;
+use sampler::rig_node::Container;
 
 /// Configure a filter block as an Omnisphere filter model at a knob setting.
 fn modelled_filter(
@@ -52,7 +52,7 @@ fn modelled_filter(
     // The knob itself, so modulation moves it the way Omnisphere's does.
     let taper = (0..=30)
         .map(|i| {
-            let s = signal_sampler::native::NativeFilter::KNOB_MIN + 0.05 * i as f32;
+            let s = sampler::native::NativeFilter::KNOB_MIN + 0.05 * i as f32;
             format!("{s:.2}:{:.2}", model.corner_hz(s))
         })
         .collect::<Vec<_>>()
@@ -64,7 +64,7 @@ fn modelled_filter(
             "cutoff",
             format!(
                 "{:.4}",
-                signal_sampler::native::NativeFilter::norm_from_cutoff(hz)
+                sampler::native::NativeFilter::norm_from_cutoff(hz)
             ),
         )
         .with_param("resonance", format!("{:.4}", res.clamp(0.0, 1.0)))
@@ -184,7 +184,7 @@ pub fn translate_route(
         "freq" => (
             filter_labels.get(layer_idx)?.as_str(),
             "knob",
-            1.0 / signal_sampler::native::NativeFilter::KNOB_SPAN,
+            1.0 / sampler::native::NativeFilter::KNOB_SPAN,
         ),
         "res" => (filter_labels.get(layer_idx)?.as_str(), "resonance", 1.0),
         // Measured: a tune row moves ~96 semitones per unit of depth; our
@@ -712,7 +712,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             .iter()
             .any(|(_, target, _)| target == "Filter Env.amp");
         if layer.filter_active && (layer.filter_env_depth != 0.0 || depth_modulated) {
-            let span = signal_sampler::native::NativeFilter::KNOB_SPAN;
+            let span = sampler::native::NativeFilter::KNOB_SPAN;
             let depth = if depth_modulated {
                 layer.filter_env_depth.signum() / span
             } else {

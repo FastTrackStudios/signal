@@ -39,13 +39,13 @@ fn normal_playing_cuts_no_note_short() {
     renderer.set_realtime();
     renderer.connect_live_midi(1024);
     let t0 = std::time::Instant::now();
-    while signal_sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 240 {
+    while sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 240 {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     for _ in 0..400 {
         let _ = renderer.render_block(0, BLOCK);
     }
-    let _ = signal_sampler::lane_health::reports(); // a clean window
+    let _ = sampler::lane_health::reports(); // a clean window
 
     // 72 BPM: a bar is 3.33 s, an eighth 0.417 s. Four bars, played twice.
     let eighth = 60.0 / 72.0 / 2.0;
@@ -97,8 +97,8 @@ fn normal_playing_cuts_no_note_short() {
         let _ = renderer.render_block(0, BLOCK);
         // The load the live engine would report for this block.
         let load = (t.elapsed().as_secs_f64() / deadline) as f32;
-        signal_sampler::keys_rig::publish_render_load(load);
-        loads.push((load, signal_sampler::keys_rig::total_voices()));
+        sampler::keys_rig::publish_render_load(load);
+        loads.push((load, sampler::keys_rig::total_voices()));
     }
 
     {
@@ -113,7 +113,7 @@ fn normal_playing_cuts_no_note_short() {
             pct(0.5), pct(0.99), pct(1.0), busiest.1, busiest.0
         );
     }
-    let lanes = signal_sampler::lane_health::reports();
+    let lanes = sampler::lane_health::reports();
     let rig_peak: u32 = lanes.iter().map(|l| l.peak_voices).sum();
     for l in &lanes {
         eprintln!(
@@ -122,7 +122,7 @@ fn normal_playing_cuts_no_note_short() {
         );
     }
     eprintln!("rig peak (sum of lane peaks): {rig_peak} voices");
-    let faded: Vec<&signal_sampler::lane_health::LaneReport> =
+    let faded: Vec<&sampler::lane_health::LaneReport> =
         lanes.iter().filter(|l| l.faded > 0).collect();
     assert!(faded.is_empty(), "normal playing had voices faded by the CPU guard: {faded:?}");
     let dolceola = lanes.iter().find(|l| l.name == "Synth 1").expect("the Dolceola lane");

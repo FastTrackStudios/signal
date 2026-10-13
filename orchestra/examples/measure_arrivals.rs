@@ -56,8 +56,8 @@ use std::sync::Mutex;
 
 use signal_orchestra::timing::{pitch_share_curve, spectral_flux};
 use signal_orchestra::{CSS_CONFIG, CSS_ROOT};
-use signal_sampler::PlayerPatch;
-use signal_sampler::spec::{ArticulationKind, LibrarySpec, ZoneSpec};
+use sampler::PlayerPatch;
+use sampler::spec::{ArticulationKind, LibrarySpec, ZoneSpec};
 
 /// Longest plausible arrival (ms) — anything later is a measurement error
 /// (mis-tracked pitch, room-noise flux), not a marker.

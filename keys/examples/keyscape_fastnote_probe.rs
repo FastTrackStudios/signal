@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use signal_sampler::{SamplerRig, TraceKind};
+use sampler::{SamplerRig, TraceKind};
 
 const PACK: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/\
 Packs/Rhodes - LA Custom.signalpack";

@@ -28,7 +28,7 @@ midicore-ui = { workspace = true, optional = true }
 signal-plugin-host = { workspace = true }
 signal-rig-host = { workspace = true }
 signal-rigs-proto = { workspace = true }
-signal-sampler = { workspace = true }
+sampler = { workspace = true }
 signal-space = { workspace = true }
 signal-ui = { workspace = true, features = ["web"], optional = true }
 tracing = { workspace = true }

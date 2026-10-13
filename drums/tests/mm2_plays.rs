@@ -9,7 +9,7 @@
 use std::time::{Duration, Instant};
 
 use drums::{GM_DRUM_CHANNEL, load_preset_kit};
-use signal_sampler::SamplerRig;
+use sampler::SamplerRig;
 
 const PRESET: &str = "/run/media/AudioHaven/Signal/Libraries/Drum Kits/\
 GGD Modern and Massive 2/Presets/Metal Monster.signalpreset";

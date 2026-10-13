@@ -23,8 +23,8 @@ use std::sync::Arc;
 use guitar::library::RigLibrary;
 use guitar::measure::apply_chain_bypass;
 use guitar::nodes::profile_from_library;
-use signal_sampler::rig::GuitarRig;
-use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
+use sampler::rig::GuitarRig;
+use sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 
 const SR: u32 = 48_000;
 /// Where the impulse sits in the probe signal — far enough in that any

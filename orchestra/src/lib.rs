@@ -2,7 +2,7 @@
 //! sampler engine.
 //!
 //! There is no separate orchestra DSP: the sampler engine
-//! ([`signal_sampler::SamplerRig`]) already implements the CSS articulation
+//! ([`sampler::SamplerRig`]) already implements the CSS articulation
 //! behaviour (legato / shorts / sustain, see `signal-sampler`'s `engine`
 //! module). This crate owns the orchestra-specific *definitions* (how to load
 //! and drive a strings library), its behaviour *spec* (`spec/`), and the A/B
@@ -14,8 +14,8 @@ pub mod timing;
 use std::path::Path;
 
 use keyflow_orchestra::{Config, PartOutput, ProfileKind, process_part, score};
-use signal_sampler::SamplerRig;
-use signal_sampler::document::{
+use sampler::SamplerRig;
+use sampler::document::{
     DocCc, DocNote, DocumentRenderOptions, DocumentRenderResult, TempoPoint, TrackDocument,
 };
 

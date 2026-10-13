@@ -11,7 +11,7 @@ workspace = true
 [dependencies]
 daw-standalone = { workspace = true }
 daw-proto = { workspace = true }
-signal-sampler = { workspace = true }
+sampler = { workspace = true }
 guitar = { workspace = true }
 dirs = "6"
 serde = { workspace = true }

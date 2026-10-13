@@ -13,7 +13,7 @@
 //! mix decisions.
 //!
 //! The trim comes from a measured integrated loudness (ITU-R BS.1770 — the
-//! same measure [`signal_sampler::loudness`] uses to level-match amp models)
+//! same measure [`sampler::loudness`] uses to level-match amp models)
 //! written into `~/.config/signal/keys/pack-levels.styx`:
 //!
 //! ```styx

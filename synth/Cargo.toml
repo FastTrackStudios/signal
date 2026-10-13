@@ -12,7 +12,7 @@ workspace = true
 tracing.workspace = true
 # The shared sampler engine expresses the Omnisphere routing tree + render
 # nodes; synth is the Omnisphere definition + patch importer on top.
-signal-sampler.workspace = true
+sampler = { workspace = true }
 # BlockType — the composition tree's block tagging schema.
 signal-proto.workspace = true
 # The pack builder serializes the loop/tag-enriched styx before packing.

@@ -10,7 +10,7 @@
 //! cargo run --release -p signal-sampler --example render_css_live -- css_test_full.mid css_test_full_live.wav
 //! ```
 
-use signal_sampler::SamplerRig;
+use sampler::SamplerRig;
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;

@@ -31,7 +31,7 @@
 
 use signal_orchestra::timing::{dest_energy_curve, pitch_arrival, spectral_flux};
 use signal_orchestra::{CSS_CONFIG, CSS_ROOT};
-use signal_sampler::PlayerPatch;
+use sampler::PlayerPatch;
 
 fn load_wav(path: &str) -> eyre::Result<(Vec<f32>, u32)> {
     let mut r = hound::WavReader::open(path)?;

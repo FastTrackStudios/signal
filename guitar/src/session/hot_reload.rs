@@ -28,7 +28,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use signal_rig_host::lock::LockExt;
-use signal_sampler::rig_profile::ReloadMode;
+use sampler::rig_profile::ReloadMode;
 
 use super::GuitarRigBackend;
 use crate::config_watch::{self, Change, Read, Watcher};

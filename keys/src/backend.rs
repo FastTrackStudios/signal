@@ -24,8 +24,8 @@ use crate::proto::{
 
 use crate::profile::{KeysProfile, worship_profile};
 use signal_rig_host::mixer::{self as rig_mixer, db_to_linear};
-use signal_sampler::Container;
-use signal_sampler::rig_node::{RigNode, Role};
+use sampler::Container;
+use sampler::rig_node::{RigNode, Role};
 
 use crate::KeysRig;
 
@@ -1781,7 +1781,7 @@ fn keys_runtime() -> &'static tokio::runtime::Runtime {
 /// the process rather than per-rig, because the audio thread bumps them from
 /// wherever it happens to be rendering.
 fn artefacts() -> crate::proto::KeysRealtime {
-    let g = signal_sampler::engine::output_glitches();
+    let g = sampler::engine::output_glitches();
     crate::proto::KeysRealtime {
         holes: g.gap_runs as u64,
         hole_frames: g.gap_frames as u64,
@@ -1806,7 +1806,7 @@ impl KeysRigBackend {
     /// lanes seeded, knobs applied — without opening audio
     /// (`examples/lane_stress`).
     #[doc(hidden)]
-    pub fn debug_profile_lane_program(&self) -> Option<signal_sampler::keys_rig::LaneProgram> {
+    pub fn debug_profile_lane_program(&self) -> Option<sampler::keys_rig::LaneProgram> {
         self.prepare_lanes();
         self.profile_lane_program()
     }
@@ -2191,7 +2191,7 @@ impl KeysRigBackend {
     /// (an effect switched on or off, a reverb algorithm or decay, which
     /// build a new engine) — and the caller rebuilds.
     fn push_module_dsp(&self, layer: &str, module_idx: usize) -> bool {
-        use signal_sampler::native::AdsrParams;
+        use sampler::native::AdsrParams;
         let set = {
             let Ok(s) = self.inner.state.lock() else {
                 return false;
@@ -2223,7 +2223,7 @@ impl KeysRigBackend {
                 sustain: sus.clamp(0.0, 1.0),
                 release_s: (r / 1000.0).max(0.0),
             };
-            let cutoff_norm = f64::from(signal_sampler::native::NativeFilter::norm_from_cutoff(
+            let cutoff_norm = f64::from(sampler::native::NativeFilter::norm_from_cutoff(
                 set.cutoff_hz,
             ));
             for module in &modules {
@@ -2248,11 +2248,11 @@ impl KeysRigBackend {
                 for (n, &(rate, depth, wave)) in set.lfos.iter().enumerate() {
                     let name = format!("LFO {}", n + 1);
                     let wave = match wave.round() as u32 {
-                        1 => signal_sampler::native::LfoWave::Triangle,
-                        2 => signal_sampler::native::LfoWave::Saw,
-                        3 => signal_sampler::native::LfoWave::Square,
-                        4 => signal_sampler::native::LfoWave::SampleHold,
-                        _ => signal_sampler::native::LfoWave::Sine,
+                        1 => sampler::native::LfoWave::Triangle,
+                        2 => sampler::native::LfoWave::Saw,
+                        3 => sampler::native::LfoWave::Square,
+                        4 => sampler::native::LfoWave::SampleHold,
+                        _ => sampler::native::LfoWave::Sine,
                     };
                     let fade = Some(set.lfo_fade_ms[n].max(0.0) / 1000.0);
                     render.set_lfo(lfo_scope, &name, rate, Some(wave), fade);
@@ -2346,7 +2346,7 @@ impl KeysRigBackend {
                 // Per-voice synth sources (the oscillator / the wavetable):
                 // ADSRs over an 8 s range, vibrato, tuning, their own filter.
                 let seg = |ms: f32| f64::from(((ms.max(0.0) / 1000.0) / 8.0).clamp(0.0, 1.0));
-                let ss = |r: &mut signal_sampler::node_render::RenderNode, p: &str, v: f64| {
+                let ss = |r: &mut sampler::node_render::RenderNode, p: &str, v: f64| {
                     r.set_leaf_param(module, "Soundsource", p, v)
                 };
                 applied |= ss(render, "amp_attack", seg(set.amp_env.0));
@@ -2398,7 +2398,7 @@ impl KeysRigBackend {
                 // a rebuild; one in place takes its values live, in its own
                 // units. A reverb's algorithm and decay build a new engine,
                 // so a change to either rebuilds too.
-                let want: Vec<signal_sampler::rig::RigBlock> = set.fx_blocks();
+                let want: Vec<sampler::rig::RigBlock> = set.fx_blocks();
                 for name in ["Chorus", "Delay", "Ambience"] {
                     let wanted = want.iter().find(|b| b.display_name() == name);
                     let present = render.has_leaf(module, name);
@@ -2671,7 +2671,7 @@ impl KeysRigBackend {
     /// Omnisphere filters (the cutoff overlay, which the filter envelope's
     /// routes ride on) and its sampler's per-voice filter.
     fn wheel_cutoff(&self, value: u8) {
-        use signal_sampler::native::NativeFilter;
+        use sampler::native::NativeFilter;
         const LEAVES: [&str; 2] = ["Filter 1", "Filter 2"];
         type Key = (String, String, String);
         let w = f32::from(value.min(127)) / 127.0;
@@ -3173,7 +3173,7 @@ impl KeysRigBackend {
 
     /// Build the profile as a per-lane daw-track program — the fully
     /// daw-based mixer (each layer/engine a real track).
-    fn profile_lane_program(&self) -> Option<signal_sampler::keys_rig::LaneProgram> {
+    fn profile_lane_program(&self) -> Option<sampler::keys_rig::LaneProgram> {
         let (profile, index, lanes) = self.profile_inputs()?;
         Some(profile.build_lane_program(
             |patch| index.get(patch).map(|p| p.to_string_lossy().into_owned()),
@@ -3266,7 +3266,7 @@ impl KeysRigBackend {
         }
         rig.set_output_gain(db_to_linear(s.master_db));
         // Each scope's Tone and Limiter onto its track's stage.
-        use signal_sampler::keys_rig::Scope;
+        use sampler::keys_rig::Scope;
         let scope = |map: &BTreeMap<String, f32>, prefix: &str| {
             let v = |k: &str| map.get(&format!("{prefix}{k}")).copied().unwrap_or(0.0);
             (
@@ -3311,7 +3311,7 @@ impl KeysRigBackend {
             .rig
             .lock()
             .ok()
-            .and_then(|r| r.as_ref().map(signal_sampler::KeysRig::is_lanes))
+            .and_then(|r| r.as_ref().map(sampler::KeysRig::is_lanes))
             .unwrap_or(false)
             .then(|| self.profile_lane_program())
             .flatten();
@@ -3725,11 +3725,11 @@ impl KeysRigBackend {
                 if rig.is_lanes() {
                     // Whole-rig preset audition while hosted per lane: one
                     // engine, one lane, the preset's tree.
-                    let prog = signal_sampler::keys_rig::LaneProgram {
+                    let prog = sampler::keys_rig::LaneProgram {
                         name: tree.name.clone(),
-                        engines: vec![signal_sampler::keys_rig::LaneEngine {
+                        engines: vec![sampler::keys_rig::LaneEngine {
                             name: tree.name.clone(),
-                            layers: vec![signal_sampler::keys_rig::LaneLayer {
+                            layers: vec![sampler::keys_rig::LaneLayer {
                                 name: tree.name.clone(),
                                 tree: tree.clone(),
                             }],
@@ -4008,7 +4008,7 @@ impl KeysRigSvc for KeysRigBackend {
                 .rig
                 .lock()
                 .ok()
-                .and_then(|r| r.as_ref().and_then(signal_sampler::KeysRig::engine_stats))
+                .and_then(|r| r.as_ref().and_then(sampler::KeysRig::engine_stats))
                 .map(|st| {
                     use std::sync::atomic::Ordering::Relaxed;
                     let (last_ms, peak_ms) = st.render_ms();
@@ -4061,7 +4061,7 @@ impl KeysRigSvc for KeysRigBackend {
         // because the callback IS on time — it is just rendering silence.
         {
             use architect_telemetry::wide;
-            let g = signal_sampler::engine::output_glitches();
+            let g = sampler::engine::output_glitches();
             wide::set("rig", "keys");
             wide::set("audio.running", running);
             wide::set("audio.voices", i64::from(voices));
@@ -4076,7 +4076,7 @@ impl KeysRigSvc for KeysRigBackend {
             wide::set("audio.nonfinite_frames", g.nonfinite_frames as i64);
             wide::set(
                 "audio.notes_dropped",
-                signal_sampler::engine::notes_dropped() as i64,
+                sampler::engine::notes_dropped() as i64,
             );
         }
         KeysStatus {
@@ -4150,7 +4150,7 @@ impl KeysRigSvc for KeysRigBackend {
         let Some(program) = self.profile_lane_program() else {
             return KeysLaneProgram::default();
         };
-        let wire = signal_sampler::keys_rig::WireProgram::from_program(&program);
+        let wire = sampler::keys_rig::WireProgram::from_program(&program);
         let program_json = match facet_json::to_string(&wire) {
             Ok(json) => json,
             Err(e) => {
@@ -4189,7 +4189,7 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn reset_rt_peak(&self) {
         if let Ok(r) = self.inner.rig.lock() {
-            if let Some(st) = r.as_ref().and_then(signal_sampler::KeysRig::engine_stats) {
+            if let Some(st) = r.as_ref().and_then(sampler::KeysRig::engine_stats) {
                 st.reset_peak();
             }
         }
@@ -6096,13 +6096,13 @@ mod tests {
             |patch| Some(format!("/packs/{patch}.signalpack")),
             |_, _| Default::default(),
         );
-        let wire = signal_sampler::keys_rig::WireProgram::from_program(&program);
+        let wire = sampler::keys_rig::WireProgram::from_program(&program);
         let json = facet_json::to_string(&wire).expect("wire program serializes");
-        let back: signal_sampler::keys_rig::WireProgram =
+        let back: sampler::keys_rig::WireProgram =
             facet_json::from_str(&json).expect("wire program parses back");
         let back = back.into_lane_program();
         assert_eq!(back.name, program.name);
-        let shape = |p: &signal_sampler::keys_rig::LaneProgram| -> Vec<(String, Vec<String>)> {
+        let shape = |p: &sampler::keys_rig::LaneProgram| -> Vec<(String, Vec<String>)> {
             p.engines
                 .iter()
                 .map(|e| {
@@ -6166,7 +6166,7 @@ mod tests {
 /// CoreAudio property (AVAudioSession owns the IO buffer there), so the
 /// backend default is asked for instead.
 fn keys_audio_prefs() -> AudioIoPrefs {
-    let mgr = signal_sampler::rig_manager::RigManager::load(KEYS_RIG_NAME);
+    let mgr = sampler::rig_manager::RigManager::load(KEYS_RIG_NAME);
     let mut prefs = AudioIoPrefs::from(&mgr.audio);
     prefs.want_input = false;
     prefs.input_device = String::new();
@@ -6200,7 +6200,7 @@ fn spawn_engine_watch(
             let (mut over0, mut xrun0, mut calls0, mut total0) = (0u64, 0u64, 0u64, 0u64);
             let skips = daw::standalone::audio_engine::render::plugin_stage_skips;
             let mut skip0 = skips();
-            let mut cut0 = signal_sampler::keys_rig::guard_cuts();
+            let mut cut0 = sampler::keys_rig::guard_cuts();
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 let Some(st) = weak.upgrade() else {
@@ -6217,12 +6217,12 @@ fn spawn_engine_watch(
                     0.0
                 };
                 let skipped = skips();
-                let cuts = signal_sampler::keys_rig::guard_cuts();
+                let cuts = sampler::keys_rig::guard_cuts();
                 // Notes cut short: by the guard fading voices (because the
                 // rig ran hot, or held more voices than its budget), or by a
                 // lane's polyphony limit. Each sounds like a sample ending
                 // early, so say which — and in which lane.
-                let lanes = signal_sampler::lane_health::reports();
+                let lanes = sampler::lane_health::reports();
                 let peak_rig: u32 = lanes.iter().map(|l| l.peak_voices).sum();
                 for l in lanes.iter().filter(|l| l.cut_anything()) {
                     tracing::warn!(
@@ -6266,7 +6266,7 @@ fn spawn_engine_watch(
                         silent_blocks = skipped - skip0,
                         // Held notes the CPU guard cut to keep up.
                         guard_cuts = cuts - cut0,
-                        voices = signal_sampler::keys_rig::total_voices(),
+                        voices = sampler::keys_rig::total_voices(),
                         peak_ms = format!("{peak_ms:.2}"),
                         mean_ms = format!("{mean_ms:.2}"),
                         budget_ms = format!("{budget_ms:.2}"),

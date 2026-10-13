@@ -11,7 +11,7 @@ workspace = true
 [features]
 default = ["native"]
 # Filesystem pack scanning. Off for browser builds.
-native = ["dep:signal", "dep:signal-sampler", "dep:walkdir", "dep:rayon"]
+native = ["dep:signal", "dep:sampler", "dep:walkdir", "dep:rayon"]
 
 [dependencies]
 # Headless types + grid conversion are wasm-safe: they only touch the
@@ -21,7 +21,7 @@ native = ["dep:signal", "dep:signal-sampler", "dep:walkdir", "dep:rayon"]
 signal = { workspace = true, optional = true }
 signal-proto.workspace = true
 signal-grid.workspace = true
-signal-sampler = { workspace = true, optional = true }
+sampler = { workspace = true, optional = true }
 uuid = { version = "1", features = ["v4"] }
 walkdir = { version = "2", optional = true }
 rayon = { version = "1", optional = true }

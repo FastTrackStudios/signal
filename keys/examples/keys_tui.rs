@@ -22,7 +22,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Gauge, Paragraph};
 use keys::KeysRig;
-use signal_sampler::{
+use sampler::{
     Container, MidiEvent, MidiInputHandle, MidiSelection, PresetRegistry, RigNode,
 };
 
@@ -47,7 +47,7 @@ fn main() -> eyre::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     // Default to the sample-realized program when the machine has the piano
     // libraries; the placeholder program otherwise.
-    let default_preset = if signal_sampler::nord::nord_stage_piano_preset().is_some() {
+    let default_preset = if sampler::nord::nord_stage_piano_preset().is_some() {
         "Nord Stage (Piano)"
     } else {
         "Nord Stage"
@@ -241,7 +241,7 @@ fn run(
     rig: &mut KeysRig,
     registry: &PresetRegistry,
     tree: &Container,
-    monitor: &signal_sampler::MidiMonitor,
+    monitor: &sampler::MidiMonitor,
     preset_name: &str,
     midi_choices: &[MidiChoice],
     midi_idx: &mut usize,
@@ -354,7 +354,7 @@ fn note_for_key(c: char, octave: i32) -> Option<u8> {
 }
 
 /// Approximate currently-held hardware notes by folding the monitor's recent log.
-fn fold_monitor_held(monitor: &signal_sampler::MidiMonitor, held: &mut HashSet<u8>) {
+fn fold_monitor_held(monitor: &sampler::MidiMonitor, held: &mut HashSet<u8>) {
     for msg in monitor.recent() {
         match msg {
             MidiEvent::NoteOn { key, velocity, .. } if velocity.get() > 0 => {
@@ -377,7 +377,7 @@ fn ui(
     vels: &[VelLayer],
     held: &HashSet<u8>,
     peak: f32,
-    monitor: &signal_sampler::MidiMonitor,
+    monitor: &sampler::MidiMonitor,
     octave: i32,
     midi_label: &str,
     midi_open: bool,

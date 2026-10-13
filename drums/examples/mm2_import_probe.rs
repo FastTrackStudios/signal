@@ -4,7 +4,7 @@
 //!   cargo run -p signal-drums --example `mm2_import_probe` -- <MM2.preset>
 
 use drums::{cradle, mm2fx};
-use signal_sampler::{FxTarget, SamplerRig};
+use sampler::{FxTarget, SamplerRig};
 
 const KIT: &str = "kit";
 const PRESET: &str = "/run/media/AudioHaven/Signal/Libraries/Drum Kits/\

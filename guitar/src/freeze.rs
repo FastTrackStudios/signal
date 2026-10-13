@@ -20,7 +20,7 @@
 
 use std::path::{Path, PathBuf};
 
-use signal_sampler::rig_profile::RigPatch;
+use sampler::rig_profile::RigPatch;
 
 use crate::compose::{Compositions, PresetSnapshotDef, flatten, snapshot_patch};
 use crate::profiles::{DrivePresetDef, OverrideDef, PresetDef, ProfileDef, UNFROZEN_CORE_BLOCKS};
@@ -259,7 +259,7 @@ fn check_side(live: &[f32], frozen: &[f32]) -> Check {
 /// # Errors
 /// When either chain does not build or render.
 pub fn compare(comp: &Compositions, base: &ProfileDef, drives: &[DrivePresetDef], preset: &str, snapshot: &str, nam_l: &str, nam_r: &str) -> Result<(Check, Check), String> {
-    let di = signal_sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(RATE));
+    let di = sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(RATE));
     let di: Vec<f32> = di.samples.iter().map(|&s| s as f32).collect();
     let live = snapshot_chain(comp, base, drives, preset, snapshot, None).ok_or("the live Core does not build")?;
     let frozen = snapshot_chain(comp, base, drives, preset, snapshot, Some((nam_l, nam_r))).ok_or("the frozen Core does not build")?;

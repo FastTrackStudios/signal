@@ -577,7 +577,7 @@ pub struct FilterModel {
     /// their own rates) — see [`FilterModel::corner_hz`].
     pub taper: [f32; 5],
     /// Resonance knob → Q (SVF) or loop feedback (ladder): `(lo, hi, curve)`
-    /// (see `signal_sampler::native::ResonanceMap`).
+    /// (see `sampler::native::ResonanceMap`).
     pub res: (f32, f32, f32),
     /// Corner multiplier at full resonance (resonance pulls some models'
     /// corners down), arriving as `res_shift^(resonance^res_shift_curve)`.

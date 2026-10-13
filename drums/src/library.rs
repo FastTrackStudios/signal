@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::proto::LibraryPiece;
-use signal_sampler::{EngineSpec, PresetSpec};
+use sampler::{EngineSpec, PresetSpec};
 
 /// Recursively collect every `.signalengine` under `root` as a [`LibraryPiece`].
 ///

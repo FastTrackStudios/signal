@@ -13,8 +13,8 @@
 
 use std::sync::Arc;
 
-use signal_sampler::rig::GuitarRig;
-use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
+use sampler::rig::GuitarRig;
+use sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 
 /// Name of this renderer in the levelling cache — a measurement from a
 /// different renderer is a different measurement. Bump it when what happens
@@ -72,7 +72,7 @@ pub fn patch_lufs(patch: &RigPatch, sample_rate: u32) -> Option<f32> {
     // would otherwise come back several dB hotter on the side it went to.
     let centred = centre_pans(patch);
     let patch = &centred;
-    signal_sampler::patch_level::level_cached(&patch.chain, sample_rate, ENGINE, |di| {
+    sampler::patch_level::level_cached(&patch.chain, sample_rate, ENGINE, |di| {
         render(patch, sample_rate, di)
     })
     .filter(|l| l.is_finite())
@@ -99,7 +99,7 @@ fn centre_pans(patch: &RigPatch) -> RigPatch {
 fn render(
     patch: &RigPatch,
     sample_rate: u32,
-    di: &signal_sampler::nam_calibrate::DiReference,
+    di: &sampler::nam_calibrate::DiReference,
 ) -> Option<f64> {
     let rig = GuitarRig::open_offline(sample_rate)
         .map_err(|e| tracing::warn!(error = %e, "patch level: no offline rig"))
@@ -136,7 +136,7 @@ fn render(
         .zip(&r)
         .map(|(&a, &b)| f64::midpoint(f64::from(a), f64::from(b)))
         .collect();
-    let lufs = signal_sampler::loudness::integrated_lufs(&mixed, f64::from(sample_rate));
+    let lufs = sampler::loudness::integrated_lufs(&mixed, f64::from(sample_rate));
     let peak = l.iter().chain(&r).fold(0.0f32, |m, s| m.max(s.abs()));
     tracing::info!(
         patch = %patch.name,

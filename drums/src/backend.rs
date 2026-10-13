@@ -16,7 +16,7 @@ use midicore::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMon
 use crate::proto::drum::{DrumEvent, DrumRig, DrumRigStreamSource};
 use crate::proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
 use signal_rig_host::mixer::db_to_linear;
-use signal_sampler::{MidiInputHandle, PreloadProfile, PresetSpec, SamplerRig};
+use sampler::{MidiInputHandle, PreloadProfile, PresetSpec, SamplerRig};
 
 use crate::GM_DRUM_CHANNEL;
 
@@ -115,7 +115,7 @@ struct KitMix {
 
 impl KitMix {
     /// Build the strip model from the loaded kit's track set.
-    fn from_kit(kit: &signal_sampler::kit_tracks::KitState) -> Self {
+    fn from_kit(kit: &sampler::kit_tracks::KitState) -> Self {
         let mut mix = Self::default();
         let bus_index: std::collections::HashMap<&str, usize> = kit
             .buses

@@ -25,8 +25,8 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use daw_standalone::plugin::{PluginError, PluginEvents, PluginInstance};
-use signal_sampler::rig::{RigBlock, prepare_chain};
-use signal_sampler::rig_profile::RigProfile;
+use sampler::rig::{RigBlock, prepare_chain};
+use sampler::rig_profile::RigProfile;
 
 /// A switch's crossfade, seconds.
 pub const FADE_SECS: f64 = 0.008;
@@ -141,7 +141,7 @@ impl Chain {
     /// leaves the scene without it, said once.
     #[must_use]
     pub fn build(
-        patch: &signal_sampler::rig_profile::RigPatch,
+        patch: &sampler::rig_profile::RigPatch,
         dir: &Path,
         sample_rate: f64,
         block_size: u32,

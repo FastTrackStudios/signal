@@ -12,7 +12,7 @@
 //!    `start_offset` so that `fire_frame + (lead_in − offset)/rate` — the
 //!    heard arrival — lands exactly on the note's grid tick. The engine
 //!    reports that prediction per transition
-//!    ([`signal_sampler::LegatoFireEvent::arrival`]); tests assert
+//!    ([`sampler::LegatoFireEvent::arrival`]); tests assert
 //!    `arrival == grid` for EVERY note, sample-accurately (± a couple of
 //!    frames of ms→frame rounding). Shorts carry the same contract as a
 //!    constant: the schedule pre-rolls them by `short_note_timing.
@@ -23,8 +23,8 @@
 //! 3. **Ears** — the same tempo map drives a session-guide click render
 //!    mixed over the music, so the owner can HEAR the grid.
 
-use signal_sampler::SamplerRig;
-use signal_sampler::document::{DocCc, DocNote, TempoPoint, TrackDocument, qn_to_sec};
+use sampler::SamplerRig;
+use sampler::document::{DocCc, DocNote, TempoPoint, TrackDocument, qn_to_sec};
 
 // ── Tempo-map helpers ────────────────────────────────────────────────────────
 

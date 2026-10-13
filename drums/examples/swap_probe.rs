@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use signal_sampler::{EngineSpec, PresetSpec, SamplerRig};
+use sampler::{EngineSpec, PresetSpec, SamplerRig};
 
 const KIT: &str = "kit";
 const LIB: &str = "/run/media/AudioHaven/Signal/Libraries/Drum Kits/GGD Modern and Massive 2";

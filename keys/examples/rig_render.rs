@@ -45,7 +45,7 @@ fn main() {
         .expect("rig");
     renderer.connect_live_midi(256);
     let t0 = std::time::Instant::now();
-    while signal_sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 180 {
+    while sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 180 {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     for _ in 0..400 {
@@ -57,7 +57,7 @@ fn main() {
     let (up_at, down_at) = (2 * SR as usize / BLOCK, 4 * SR as usize / BLOCK);
     let (mut l, mut r) = (Vec::new(), Vec::new());
     for b in 0..total {
-        let note = |f: &dyn Fn(&signal_sampler::KeysRig)| backend.debug_with_rig(f);
+        let note = |f: &dyn Fn(&sampler::KeysRig)| backend.debug_with_rig(f);
         if b == 0 {
             note(&|rig| chord.iter().for_each(|&k| rig.note_on(k, 90)));
         }
@@ -71,7 +71,7 @@ fn main() {
         // RIG_REBUILD=1: rebuild the program at 2 s (then let it load).
         if b == up_at && std::env::var_os("RIG_REBUILD").is_some() {
             backend.debug_rebuild();
-            while signal_sampler::rig::preloads_pending() > 0 {
+            while sampler::rig::preloads_pending() > 0 {
                 std::thread::sleep(std::time::Duration::from_millis(20));
             }
         }

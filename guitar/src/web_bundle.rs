@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use facet::Facet;
-use signal_sampler::RigBlock;
+use sampler::RigBlock;
 
 /// Bumped when the shape changes incompatibly.
 pub const BUNDLE_VERSION: u32 = 1;

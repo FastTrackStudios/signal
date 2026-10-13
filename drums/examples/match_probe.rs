@@ -4,7 +4,7 @@
 //!   cargo run -p signal-drums --example `match_probe` -- <kit.signalpreset> <mm2.preset>
 
 use drums::{cradle, library, mm2fx};
-use signal_sampler::SamplerRig;
+use sampler::SamplerRig;
 
 const KIT: &str = "kit";
 

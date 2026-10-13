@@ -11,7 +11,7 @@
 //!   `note_on.frame == grid`, `short.frame == grid − pre_delay`);
 //! * engine level (CSS-gated) — the engine reports the arrival it actually
 //!   produced from the zone it actually chose
-//!   ([`signal_sampler::LegatoFireEvent::arrival`] = fire frame + remaining
+//!   ([`sampler::LegatoFireEvent::arrival`] = fire frame + remaining
 //!   in-sample lead at playback rate); it must equal the grid tick to
 //!   within ms→frame rounding (≤ 2 frames ≈ 0.04 ms);
 //! * acoustic cross-check (CSS-gated) — spectral-flux onsets over the real
@@ -28,12 +28,12 @@ use signal_orchestra::timing::{
     OnsetKind, TimingCase, pitch_arrival, spectral_flux, timing_corpus,
 };
 use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
-use signal_sampler::PlayerPatch;
-use signal_sampler::SamplerRig;
-use signal_sampler::document::{
+use sampler::PlayerPatch;
+use sampler::SamplerRig;
+use sampler::document::{
     DocEvent, DocumentRenderOptions, MarkerKind, annotate, qn_to_frame,
 };
-use signal_sampler::spec::LibrarySpec;
+use sampler::spec::LibrarySpec;
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;

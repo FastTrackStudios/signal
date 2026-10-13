@@ -11,7 +11,7 @@
 
 use std::path::{Path, PathBuf};
 
-use signal_sampler::SamplerRig;
+use sampler::SamplerRig;
 use signal_space::{SPACE_VERSION, Space, SpaceItem, analyze, knn};
 
 /// The space built under `<library>/Space/pieces.space`.
