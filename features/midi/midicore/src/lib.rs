@@ -58,25 +58,3 @@ pub use native::{input_ports, input_sources, MidiInput, DEFAULT_INPUT_NAME};
 #[cfg(feature = "midir")]
 pub mod attach;
 
-/// The **native PipeWire** MIDI backend, by name. Prefer [`MidiInput`]
-/// (feature `native`), which is this on Linux and the platform's own backend
-/// elsewhere.
-///
-/// The **native PipeWire** MIDI backend (`MidiInput`, `input_ports`, …).
-///
-/// Enabled by the `pipewire` feature; Linux only. Prefer this over
-/// [`midir`] on a PipeWire host: it is one graph node rather than one per
-/// port, it discovers hot-plug from the registry instead of polling (which
-/// on the midir/JACK path meant creating and destroying a client several
-/// times a second), and it needs no `pw-jack` wrapper.
-#[cfg(all(feature = "pipewire", target_os = "linux"))]
-pub mod pipewire {
-    pub use midicore_pipewire::*;
-}
-
-/// The midir-backed OS MIDI backend (`MidiInput`, `MidiStream`, `input_ports`,
-/// …). Enabled by the `midir` feature; native platforms only.
-#[cfg(feature = "midir")]
-pub mod midir {
-    pub use midicore_midir::*;
-}
