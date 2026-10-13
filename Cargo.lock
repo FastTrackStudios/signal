@@ -6325,13 +6325,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "engine-launcher"
-version = "0.1.0"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "engraver"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/keyflow?tag=v0.2.4#0c4c3cd5e13f7f12e263cfeb21ebae3ccadce871"
@@ -7906,27 +7899,6 @@ dependencies = [
  "serde_json",
  "toml 0.8.2",
  "ureq 2.12.1",
-]
-
-[[package]]
-name = "fts-launcher"
-version = "0.1.0"
-dependencies = [
- "architect-launcher-core",
- "architect-launcher-providers",
- "architect-launcher-ui",
- "architect-ui",
- "daw",
- "dioxus-native",
- "facet",
- "facet-styx",
- "reaper-high",
- "reaper-medium",
- "serde",
- "serde_json",
- "tracing",
- "tracing-subscriber",
- "winit 0.31.0-beta.2",
 ]
 
 [[package]]
@@ -10057,26 +10029,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "installer-core"
-version = "0.1.0"
-dependencies = [
- "ab_glyph",
- "dpp",
- "eyre",
- "futures",
- "icns 0.4.0",
- "image",
- "libc",
- "reqwest 0.12.28",
- "serde_json",
- "tempfile",
- "tiny-skia 0.11.4",
- "tokio",
- "tracing",
- "utils",
-]
-
-[[package]]
 name = "interpolate_name"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10857,6 +10809,39 @@ name = "lab"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf36173d4167ed999940f804952e6b08197cae5ad5d572eb4db150ce8ad5d58f"
+
+[[package]]
+name = "launcher"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "architect-launcher-core",
+ "architect-launcher-providers",
+ "architect-launcher-ui",
+ "architect-ui",
+ "daw",
+ "dioxus-native",
+ "dpp",
+ "eyre",
+ "facet",
+ "facet-styx",
+ "futures",
+ "icns 0.4.0",
+ "image",
+ "libc",
+ "reaper-high",
+ "reaper-medium",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tiny-skia 0.11.4",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "utils",
+ "winit 0.31.0-beta.2",
+]
 
 [[package]]
 name = "lazy-js-bundle"
@@ -18450,7 +18435,6 @@ dependencies = [
  "dioxus",
  "dioxus-native",
  "dioxus-native-dom",
- "engine-launcher",
  "eyre",
  "facet",
  "facet-json",
@@ -18461,6 +18445,7 @@ dependencies = [
  "getrandom 0.3.4",
  "include_dir",
  "js-sys",
+ "launcher",
  "libc",
  "midicore-proto",
  "objc2 0.6.4",

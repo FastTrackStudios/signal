@@ -5,7 +5,7 @@ use std::path::Path;
 use eyre::Context;
 use tracing::info;
 
-use crate::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
 
 /// Copy FTS-Control.app from the DMG volume to the install root.
 pub async fn install_fts_control(

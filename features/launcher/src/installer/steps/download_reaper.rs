@@ -7,9 +7,9 @@ use eyre::Context;
 use futures::StreamExt;
 use tracing::info;
 
-use crate::plan::InstallPlan;
-use crate::progress::{EventSender, InstallEvent, InstallStep};
-use crate::retry::with_retry;
+use crate::installer::plan::InstallPlan;
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::retry::with_retry;
 
 /// Build a shared reqwest client.
 ///

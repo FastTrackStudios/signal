@@ -108,7 +108,7 @@ signal = [
     "dep:signal-synth-ui",
     # The embedded rig remote (rig_view.rs) — vox over a native WebSocket —
     # and the engine supervisor (engines.rs).
-    "dep:engine-launcher",
+    "dep:launcher",
     # The headless engine itself (`fasttrackstudio --engine`,
     # engine_main.rs — the former apps/signal-engine). These optional
     # deps only exist in the not(wasm32) target table, so enabling them
@@ -294,7 +294,7 @@ session-ui = { workspace = true, features = ["desktop"], optional = true }
 # REAPER-project (.rpp) export for the "Open in REAPER" button — the
 # standalone project round-trips through dawfile. Native-only.
 # Engine supervisor (spawn/stop/probe the engine) — shared with fts-cli.
-engine-launcher = { workspace = true, optional = true }
+launcher = { workspace = true, optional = true }
 # Async runtime: session's in-process engine AND engine mode's server.
 tokio = { workspace = true, optional = true }
 

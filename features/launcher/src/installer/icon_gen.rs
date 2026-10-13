@@ -107,7 +107,7 @@ pub fn generate_rig_icns(
     // Load the largest base icon for scaling
     let base_image = load_best_base_image(&family)?;
 
-    let font_data: &[u8] = include_bytes!("../assets/fonts/Inter-Bold.ttf");
+    let font_data: &[u8] = include_bytes!("../../installer-assets/fonts/Inter-Bold.ttf");
     let font = FontRef::try_from_slice(font_data)?;
 
     let mut out_family = icns::IconFamily::new();

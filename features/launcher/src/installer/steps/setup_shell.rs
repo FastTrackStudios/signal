@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use eyre::Context;
 use tracing::info;
 
-use crate::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
 
 const GUARD_START: &str = "# >>> FastTrackStudio FTS CLI >>>";
 const GUARD_END: &str = "# <<< FastTrackStudio FTS CLI <<<";

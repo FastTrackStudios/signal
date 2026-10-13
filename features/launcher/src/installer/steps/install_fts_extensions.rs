@@ -9,7 +9,7 @@ use std::path::Path;
 use eyre::Context;
 use tracing::info;
 
-use crate::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
 
 /// A named extension binary to install.
 #[derive(Clone)]

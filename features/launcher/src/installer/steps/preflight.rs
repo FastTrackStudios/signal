@@ -5,8 +5,8 @@ use std::path::Path;
 use eyre::Context;
 use tracing::info;
 
-use crate::plan::InstallPlan;
-use crate::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::plan::InstallPlan;
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
 
 /// Minimum free disk space required (500 MB).
 const MIN_FREE_SPACE_BYTES: u64 = 500 * 1024 * 1024;

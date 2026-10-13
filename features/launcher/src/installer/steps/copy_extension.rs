@@ -5,7 +5,7 @@ use std::path::Path;
 use eyre::Context;
 use tracing::info;
 
-use crate::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
 
 /// Extension binary bytes, embedded at compile time by the installer app.
 ///

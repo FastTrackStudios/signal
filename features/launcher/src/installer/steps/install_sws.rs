@@ -10,9 +10,9 @@ use std::time::Duration;
 use eyre::Context;
 use tracing::info;
 
-use crate::progress::{EventSender, InstallEvent, InstallStep};
-use crate::retry::with_retry;
-use crate::steps::download_reaper::http_client;
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::retry::with_retry;
+use crate::installer::steps::download_reaper::http_client;
 
 /// SWS version + commit to download.
 const SWS_VERSION: &str = "2.14.0.7";

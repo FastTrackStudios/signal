@@ -23,9 +23,9 @@ use eyre::Context;
 use futures::StreamExt;
 use tracing::info;
 
-use crate::progress::{EventSender, InstallEvent, InstallStep};
-use crate::retry::with_retry;
-use crate::steps::download_reaper::http_client;
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::retry::with_retry;
+use crate::installer::steps::download_reaper::http_client;
 
 /// Download the library archive and extract it into `install_root`.
 ///

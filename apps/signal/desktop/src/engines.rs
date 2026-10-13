@@ -43,7 +43,7 @@ pub const SIGNAL_ENGINE: Engine = Engine {
 use std::process::Child;
 use std::sync::Mutex;
 
-use engine_launcher::{
+use launcher::engine::{
     Engine, KillSignal, LaunchSource, kill_group, probe, spawn, systemd_active, systemd_available,
     systemd_start, systemd_stop,
 };

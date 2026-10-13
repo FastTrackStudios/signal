@@ -5,7 +5,7 @@ use std::path::Path;
 use eyre::Context;
 use tracing::info;
 
-use crate::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
 
 /// Write `reaper.ini` to make the REAPER instance portable.
 pub async fn write_reaper_ini(reaper_dir: &Path, tx: &EventSender) -> eyre::Result<()> {

@@ -1,0 +1,53 @@
+[package]
+name = "launcher"
+version.workspace = true
+edition.workspace = true
+license = "GPL-3.0-or-later"
+repository = "https://github.com/FastTrackStudios/FastTrackStudio"
+description = "Launching and installing the apps and their engines"
+
+[lints]
+workspace = true
+
+[features]
+default = ["native"]
+desktop = []
+installer = ["dep:ab_glyph", "dep:dpp", "dep:eyre", "dep:futures", "dep:icns", "dep:image", "dep:reqwest", "dep:tempfile", "dep:tiny-skia", "dep:tokio", "dep:utils"]
+native = ["daw/reaper-ui"]
+standalone = ["dep:tracing-subscriber", "dep:winit", "native"]
+
+[dependencies]
+ab_glyph = { version = "0.2", optional = true }
+architect-launcher-core = { workspace = true }
+architect-launcher-providers = { workspace = true }
+architect-launcher-ui = { workspace = true }
+architect-ui = { workspace = true }
+daw = { workspace = true }
+dioxus-native = { workspace = true }
+dpp = { version = "0.4", features = ["extract"], optional = true }
+eyre = { workspace = true, optional = true }
+facet = { workspace = true }
+facet-styx = { workspace = true }
+futures = { workspace = true, optional = true }
+icns = { version = "0.4", optional = true }
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+reaper-high = { workspace = true }
+reaper-medium = { workspace = true }
+reqwest = { version = "0.12", features = ["stream", "rustls-tls"], default-features = false, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { version = "3", optional = true }
+tiny-skia = { version = "0.11", optional = true }
+tokio = { workspace = true, optional = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, optional = true }
+utils = { workspace = true, optional = true }
+winit = { version = "=0.31.0-beta.2", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[[bin]]
+name = "fts-launcher-standalone"
+path = "fts-launcher/src/main.rs"
+required-features = ["standalone"]

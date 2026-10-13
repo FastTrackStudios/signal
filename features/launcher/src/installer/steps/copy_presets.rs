@@ -5,7 +5,7 @@ use std::path::Path;
 use eyre::Context;
 use tracing::info;
 
-use crate::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
 
 /// A bundled file to be copied into the installation.
 pub struct BundledFile {

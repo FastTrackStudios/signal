@@ -2,10 +2,10 @@
 
 use tracing::info;
 
-use crate::plan::{self, InstallPlan};
-use crate::progress::{EventSender, InstallEvent, InstallStep};
-use crate::steps;
-use crate::steps::install_fts_extensions::BundledExtension;
+use crate::installer::plan::{self, InstallPlan};
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::steps;
+use crate::installer::steps::install_fts_extensions::BundledExtension;
 
 /// Context for a running installation. The installer app populates this
 /// with the extension binary before calling `run_all_steps`.

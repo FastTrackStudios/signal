@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/launcher",
     "features/preset-browser",
     "features/control-surfaces",
     "features/chords",
@@ -117,7 +118,6 @@ members = [
     "features/formats/dawfile-reaper",
     "features/formats/dawfile-standalone",
     "features/formats/dawfile-store",
-    "features/launcher/fts-launcher",
     "features/adapters/reaper/daw-bridge",
     "features/adapters/reaper/daw-extension-runtime",
     "features/adapters/reaper/daw-perf-test",
@@ -145,9 +145,7 @@ members = [
     "xtask/devtools",
     "features/ui/dock/dock-dioxus",
     "features/ui/dock/dock-proto",
-    "features/launcher/engine-launcher",
     "features/ui/fts-chrome",
-    "features/launcher/installer-core",
     "crates/daw/utils",
     "vendor/dioxus-test",
     "vendor/world",
@@ -307,6 +305,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+launcher = { path = "features/launcher" }
 preset-browser = { path = "features/preset-browser" }
 control-surfaces = { path = "features/control-surfaces" }
 chords = { path = "features/chords" }
@@ -350,8 +349,6 @@ utils = { path = "crates/daw/utils" }
 # the arrange view and the expression editor can agree on it without
 # either depending on the other.
 adaptive-grid = { path = "features/ui/adaptive-grid" }
-installer-core = { path = "features/launcher/installer-core" }
-engine-launcher = { path = "features/launcher/engine-launcher" }
 neural-amp-modeler = { git = "https://github.com/FastTrackStudios/neural-amp-modeler-rs", tag = "v0.1.1" }
 audiocore-core = { path = "features/audio/audiocore-core" }
 audiocore-dsp = { path = "features/dsp/core/audiocore-dsp", default-features = false }
@@ -447,7 +444,6 @@ reaper-dioxus = { path = "features/adapters/reaper/reaper-dioxus" }
 # eagerly, which OOMs when loaded at REAPER plugin_main time. The only
 # consumer (fts-extensions) wants it off; enable per-member if needed.
 reaper-input = { path = "features/adapters/reaper/reaper-input", default-features = false }
-fts-launcher = { path = "features/launcher/fts-launcher" }
 daw-standalone = { path = "crates/daw/standalone" }
 daw-ui = { path = "features/ui/daw-ui/daw-ui", default-features = false }
 daw-theme = { path = "features/ui/daw-ui/daw-theme" }

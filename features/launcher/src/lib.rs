@@ -7,16 +7,21 @@
 //!
 //! ```rust,ignore
 //! // In your extension's plugin_main:
-//! let engine = fts_launcher::LauncherEngine::new();
+//! let engine = crate::LauncherEngine::new();
 //!
 //! // Register launcher actions with REAPER
 //! for (id, name, handler) in engine.action_defs() { ... }
 //!
 //! // The Launcher Dioxus component can be embedded in a reaper-dioxus panel:
-//! use fts_launcher::ui::{Launcher, LauncherState};
+//! use crate::ui::{Launcher, LauncherState};
 //! let state = engine.into_state();
 //! // Render: Launcher { state, on_close: ... }
 //! ```
+
+
+pub mod engine;
+#[cfg(feature = "installer")]
+pub mod installer;
 
 pub mod daw_module;
 pub mod reaper;

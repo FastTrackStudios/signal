@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use eyre::Context;
 use tracing::info;
 
-use crate::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
 
 /// Extract REAPER.app from a DMG into `reaper_dir`.
 pub async fn extract_dmg(dmg_path: &Path, reaper_dir: &Path, tx: &EventSender) -> eyre::Result<()> {

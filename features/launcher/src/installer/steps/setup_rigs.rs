@@ -8,8 +8,8 @@ use std::path::Path;
 use eyre::Context;
 use tracing::info;
 
-use crate::profiles::ALL_PROFILES;
-use crate::progress::{EventSender, InstallEvent, InstallStep};
+use crate::installer::profiles::ALL_PROFILES;
+use crate::installer::progress::{EventSender, InstallEvent, InstallStep};
 
 /// Create wrapper .app bundles for each selected profile.
 ///
@@ -157,7 +157,7 @@ pub async fn setup_rigs(
         let base_icon = reaper_dir.join("REAPER.app/Contents/Resources/main-mac.icns");
         let dest_icon = resources_app_dir.join("main-mac.icns");
         if base_icon.exists() {
-            match crate::icon_gen::generate_rig_icns(&base_icon, &dest_icon, profile.id) {
+            match crate::installer::icon_gen::generate_rig_icns(&base_icon, &dest_icon, profile.id) {
                 Ok(()) => info!("Generated icon for {app_name}"),
                 Err(e) => {
                     tracing::warn!("Icon generation failed for {app_name}: {e:#}, using base icon");
