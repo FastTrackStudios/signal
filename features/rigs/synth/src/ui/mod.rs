@@ -18,7 +18,7 @@ use dioxus::prelude::*;
 use midi::proto::MidiEvent;
 use midi::ui::MidiMonitorPanel;
 use signal_proto::tagging::{StructuredTag, TagCategory, TagSet};
-use signal_ui::components::Piano;
+use signal_widgets::Piano;
 
 /// Which top-level view the remote is showing.
 #[derive(Clone, Copy, PartialEq, Eq)]

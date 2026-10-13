@@ -11,7 +11,7 @@ workspace = true
 
 [features]
 default = ["vox"]
-ui = ["dep:dioxus", "dep:fts-chrome", "midi/ui", "dep:signal-ui", "dep:signal-widgets", "architect/atom", "architect/platform", "architect/vox"]
+ui = ["dep:dioxus", "dep:fts-chrome", "midi/ui", "signal-widgets/piano", "dep:signal-widgets", "architect/atom", "architect/platform", "architect/vox"]
 vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
@@ -24,7 +24,6 @@ fts-chrome = { workspace = true, optional = true }
 midi = { workspace = true, features = ["ui"] }
 sampler = { workspace = true }
 signal-proto = { workspace = true }
-signal-ui = { workspace = true, features = ["web"], optional = true }
 signal-widgets = { workspace = true, optional = true }
 tracing = { workspace = true }
 vox = { workspace = true, optional = true }

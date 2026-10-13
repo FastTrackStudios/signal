@@ -5839,7 +5839,7 @@ dependencies = [
  "signal-rig-host",
  "signal-rigs-proto",
  "signal-space",
- "signal-ui",
+ "signal-widgets",
  "tracing",
  "tracing-subscriber",
  "vox",
@@ -10273,7 +10273,6 @@ dependencies = [
  "signal-proto",
  "signal-rig-host",
  "signal-rigs-proto",
- "signal-ui",
  "signal-widgets",
  "synth",
  "tokio",
@@ -18134,8 +18133,10 @@ name = "signal-widgets"
 version = "0.1.0"
 dependencies = [
  "architect",
+ "audiocore-gui",
  "dioxus",
  "dioxus-test",
+ "nice-plug-dioxus",
  "signal-proto",
  "tokio",
 ]
@@ -19738,7 +19739,6 @@ dependencies = [
  "sampler",
  "signal-plugin-host",
  "signal-proto",
- "signal-ui",
  "signal-widgets",
  "song",
  "tracing",

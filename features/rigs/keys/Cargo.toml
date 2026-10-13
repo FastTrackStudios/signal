@@ -12,7 +12,7 @@ workspace = true
 [features]
 default = ["vox"]
 pipewire = []
-ui = ["dep:dioxus", "dep:fts-chrome", "midi/ui", "dep:signal-browser", "dep:signal-ui", "dep:signal-widgets", "architect/atom", "architect/platform"]
+ui = ["dep:dioxus", "dep:fts-chrome", "midi/ui", "dep:signal-browser", "signal-widgets/piano", "dep:signal-widgets", "architect/atom", "architect/platform"]
 vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
@@ -34,7 +34,6 @@ signal-rig-host = { workspace = true }
 signal-rigs-proto = { workspace = true }
 sampler = { workspace = true }
 synth = { workspace = true }
-signal-ui = { workspace = true, features = ["web"], optional = true }
 signal-widgets = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing = { workspace = true }
