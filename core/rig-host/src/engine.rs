@@ -61,8 +61,10 @@ impl<E: HostedEngine + Send> Running for E {
 pub struct Engine {
     daw: Standalone,
     project_guid: String,
-    /// The project's own transport (what the daw Transport service drives).
-    shared: Arc<TransportShared>,
+    /// The project's own transport (what the daw Transport service drives),
+    /// fetched when first needed: making it starts the project's soft clock,
+    /// which a headless engine (the browser's, a test's) has no runtime for.
+    shared: std::sync::OnceLock<Arc<TransportShared>>,
     /// The device, once [`start_audio`](Self::start_audio) opened it, or
     /// `None` while the engine is someone else's (see [`on`](Self::on)) or
     /// not started.
@@ -75,7 +77,14 @@ impl Engine {
     /// Rigs can be added before or after [`start_audio`](Self::start_audio).
     #[must_use]
     pub fn new(name: &str) -> Arc<Self> {
-        let daw = Standalone::new();
+        Self::new_on(&Standalone::new(), name)
+    }
+
+    /// A fresh project named `name` on an existing `Standalone`, made
+    /// current, as an engine — the browser worklet's: its `WebRenderer`
+    /// renders the daw it was given, so the rigs go into a project there.
+    #[must_use]
+    pub fn new_on(daw: &Standalone, name: &str) -> Arc<Self> {
         let project_guid = uuid_string();
         daw.seed_project(ProjectInfo {
             guid: project_guid.clone(),
@@ -83,7 +92,7 @@ impl Engine {
             path: String::new(),
         });
         daw.set_current_project(&project_guid);
-        Self::on(&daw, &project_guid)
+        Self::on(daw, &project_guid)
     }
 
     /// The engine of a `Standalone` and project that already exist — Session's
@@ -92,11 +101,10 @@ impl Engine {
     /// must not be called while another engine drives the project).
     #[must_use]
     pub fn on(daw: &Standalone, project_guid: &str) -> Arc<Self> {
-        let shared = daw.transport_engine_for(project_guid).shared.clone();
         Arc::new(Self {
             daw: daw.clone(),
             project_guid: project_guid.to_string(),
-            shared,
+            shared: std::sync::OnceLock::new(),
             #[cfg(not(target_arch = "wasm32"))]
             audio: Mutex::new(None),
         })
@@ -115,18 +123,15 @@ impl Engine {
         crate::request_low_latency_quantum(prefs);
         let bundle = self.daw.transport_engine_for(&self.project_guid);
         bundle.disable_soft_clock();
+        let shared = self.shared.get_or_init(|| bundle.shared.clone()).clone();
         let tracks = self
             .daw
             .read_project(&self.project_guid, |p| p.tracks.len())
             .unwrap_or(0);
         // A bank for the tracks there now; it grows as rigs add theirs.
         self.daw.set_meters(Meters::new(tracks));
-        let engine = DuplexEngine::open(
-            self.daw.clone(),
-            self.project_guid.clone(),
-            self.shared.clone(),
-            prefs,
-        )?;
+        let engine =
+            DuplexEngine::open(self.daw.clone(), self.project_guid.clone(), shared, prefs)?;
         *self.audio.lock_ok() = Some(Box::new(engine));
         Ok(())
     }
@@ -151,8 +156,13 @@ impl Engine {
 
     /// The project's transport.
     #[must_use]
-    pub const fn transport(&self) -> &Arc<TransportShared> {
-        &self.shared
+    pub fn transport(&self) -> &Arc<TransportShared> {
+        self.shared.get_or_init(|| {
+            self.daw
+                .transport_engine_for(&self.project_guid)
+                .shared
+                .clone()
+        })
     }
 
     #[cfg(not(target_arch = "wasm32"))]

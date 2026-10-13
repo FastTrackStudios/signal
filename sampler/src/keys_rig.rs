@@ -24,8 +24,7 @@ use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
 #[cfg(not(target_arch = "wasm32"))]
-use signal_rig_host::OutputRigHost;
-use signal_rig_host::RigProject;
+use signal_rig_host::engine::{Engine, Rig};
 
 use crate::MidiMonitor;
 use crate::node_render::{GainCells, RenderNode};
@@ -1113,8 +1112,8 @@ struct LaneHost {
     scope_fx: String,
     /// Each engine folder's [`ScopeStage`] slot: `(engine, fx guid)`.
     engine_scopes: Vec<(String, String)>,
-    /// Engine folder tracks: `(name, guid, meter index)`.
-    engines: Vec<(String, String, usize)>,
+    /// Engine folder tracks: `(name, guid)`.
+    engines: Vec<(String, String)>,
     layers: Vec<LaneTrack>,
 }
 
@@ -1126,7 +1125,6 @@ struct LaneTrack {
     fx: String,
     /// The layer track's [`ScopeStage`] slot, after the instrument.
     scope_fx: String,
-    meter: usize,
     /// The lane instrument's module fader/peak cells (module mixing stays
     /// in-tree; layer/engine mixing is the daw track).
     cells: GainCells,
@@ -1156,16 +1154,14 @@ enum Hosting {
 /// A live, device-backed keys rig playing a composition-tree preset.
 pub struct KeysRig {
     daw: Standalone,
-    /// The shared daw host (project + output engine + transport); drop =
-    /// stop audio. `None` for a headless rig
-    /// ([`open_headless`](Self::open_headless)) — the caller owns rendering.
-    #[cfg(not(target_arch = "wasm32"))]
-    _host: Option<OutputRigHost>,
-    /// The rig project's guid — a headless caller renders it through daw's
-    /// own render path (`ProjectRenderer`).
-    project_guid: String,
+    /// The engine the rig plays on — its own (dropping the rig closes the
+    /// device) or one it shares with other rigs. Headless, it has no
+    /// device and the caller renders the project.
+    engine: Arc<Engine>,
+    /// The rig's folder of tracks in the engine's project (`None` only
+    /// while [`load_lanes`](Self::load_lanes) swaps it).
+    rig: Option<Rig>,
     hosting: Hosting,
-    meters: Arc<Meters>,
     sample_rate: u32,
     preset_name: String,
     midi_monitor: MidiMonitor,
@@ -1201,12 +1197,12 @@ impl KeysRig {
     /// of times a second while its average load read a comfortable 20%.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn engine_stats(&self) -> Option<std::sync::Arc<audio::io::duplex::EngineStats>> {
-        self._host
-            .as_ref()
-            .and_then(signal_rig_host::RigHost::stats)
+        self.engine.stats()
     }
 
-    /// Open a device, build the project, and host `tree` as the playable preset.
+    /// Open a device, build the project, and host `tree` as the playable
+    /// preset — on an engine of its own; [`open_in`](Self::open_in) joins one
+    /// shared with other rigs.
     ///
     /// # Errors
     ///
@@ -1215,17 +1211,35 @@ impl KeysRig {
     // r[impl keys.rig.output-only]
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open(prefs: &AudioIoPrefs, tree: &Container) -> eyre::Result<Self> {
-        // One instrument track carrying the KeysInstrument, on the shared
-        // output-only host (a synth generates, never records).
-        let project = RigProject::new(KEYS_PROJECT_NAME);
-        let track_guid = project.add_track(KEYS_TRACK_NAME)?;
-        let fx_guid = project.add_fx_slot(&track_guid, "keys")?;
-        let scope_fx = project.add_fx_slot(&track_guid, "keys-scope")?;
-        let out_fx = project.add_fx_slot(&track_guid, "keys-out")?;
-        let host = project.start_output_native(prefs, KEYS_NODE_NAME)?;
-        let sample_rate = host.sample_rate();
-        let meters = host.install_meters(1);
-        let daw = host.daw().clone();
+        let engine = Engine::new(KEYS_PROJECT_NAME);
+        let slots = single_tracks(&engine, tree)?;
+        engine.start_audio(&output_prefs(prefs))?;
+        Self::open_single(engine, slots, tree)
+    }
+
+    /// [`open`](Self::open) as one more rig on a running `engine`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the engine has no device, or track setup fails.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn open_in(engine: &Arc<Engine>, tree: &Container) -> eyre::Result<Self> {
+        let slots = single_tracks(engine, tree)?;
+        Self::open_single(engine.clone(), slots, tree)
+    }
+
+    /// One instrument track carrying the `KeysInstrument`, its scope and its
+    /// output stage, in the rig's folder.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn open_single(
+        engine: Arc<Engine>,
+        slots: SingleSlots,
+        tree: &Container,
+    ) -> eyre::Result<Self> {
+        let sample_rate = engine
+            .sample_rate()
+            .ok_or_else(|| eyre::eyre!("keys rig: the engine has no device"))?;
+        let daw = engine.daw().clone();
 
         // Compile + install the preset instrument. The master gain is the
         // track's output stage (not baked into the instrument), so it applies
@@ -1234,31 +1248,28 @@ impl KeysRig {
         let mut inst = KeysInstrument::new(tree, sample_rate);
         let cells = inst.gain_cells();
         let _ = inst.prepare(sample_rate as f64, PREPARE_BLOCK);
-        daw.insert_plugin_instance(fx_guid.clone(), Box::new(inst));
-        daw.insert_plugin_instance(out_fx, Box::new(OutputStage::new(gain.clone())));
+        daw.insert_plugin_instance(slots.fx_guid.clone(), Box::new(inst));
+        daw.insert_plugin_instance(slots.out_fx, Box::new(OutputStage::new(gain.clone())));
         let scopes = Scopes::default();
         daw.insert_plugin_instance(
-            scope_fx,
+            slots.scope_fx,
             Box::new(ScopeStage::new(
                 scopes.cells(&Scope::Rig),
                 sample_rate as f32,
             )),
         );
 
-        host.play();
         tracing::info!(sample_rate, preset = %tree.name, "keys rig started on daw engine");
 
-        let project_guid = host.project_guid().to_string();
         Ok(Self {
             daw,
-            _host: Some(host),
-            project_guid,
+            engine,
+            rig: Some(slots.rig),
             hosting: Hosting::Single {
-                track_guid,
-                fx_guid,
+                track_guid: slots.track_guid,
+                fx_guid: slots.fx_guid,
                 cells,
             },
-            meters,
             sample_rate,
             preset_name: tree.name.clone(),
             midi_monitor: MidiMonitor::default(),
@@ -1272,7 +1283,9 @@ impl KeysRig {
     /// daw-based mixer: engine folders sum their layer tracks, the rig folder
     /// sums the engines (and carries the tail FX + master fader), and every
     /// fader/mute/solo is a daw track op the renderer resolves natively
-    /// (folder-aware solo, folder mute, per-track post-fader meters).
+    /// (folder-aware solo, folder mute, per-track post-fader meters). On an
+    /// engine of its own; [`open_lanes_in`](Self::open_lanes_in) joins one
+    /// shared with other rigs.
     ///
     /// # Errors
     ///
@@ -1280,44 +1293,44 @@ impl KeysRig {
     // r[impl keys.rig.lane-tracks]
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open_lanes(prefs: &AudioIoPrefs, program: &LaneProgram) -> eyre::Result<Self> {
-        let project = RigProject::new(KEYS_PROJECT_NAME);
-        let lanes = build_lane_tracks(project.daw(), program)?;
-        let track_count = 1 + lanes.engines.len() + lanes.layers.len();
-        let host = project.start_output_native(prefs, KEYS_NODE_NAME)?;
-        if let Some(st) = host.stats() {
+        let engine = Engine::new(KEYS_PROJECT_NAME);
+        let (rig, lanes) = lane_rig(&engine, program)?;
+        engine.start_audio(&output_prefs(prefs))?;
+        if let Some(st) = engine.stats() {
             set_engine_stats(st);
         }
-        let sample_rate = host.sample_rate();
-        let meters = host.install_meters(track_count);
-        let daw = host.daw().clone();
+        let sample_rate = engine
+            .sample_rate()
+            .ok_or_else(|| eyre::eyre!("keys rig: the engine has no device"))?;
+        Ok(Self::with_lanes(
+            engine,
+            rig,
+            lanes,
+            sample_rate,
+            program,
+            "keys rig started on daw engine (lane tracks)",
+        ))
+    }
 
-        let gain = Arc::new(std::sync::atomic::AtomicU32::new(1.0f32.to_bits()));
-        let project_guid = host.project_guid().to_string();
-        let mut rig = Self {
-            daw,
-            _host: Some(host),
-            project_guid,
-            hosting: Hosting::Lanes(lanes),
-            meters,
+    /// [`open_lanes`](Self::open_lanes) as one more rig on a running `engine`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the engine has no device, or track setup fails.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn open_lanes_in(engine: &Arc<Engine>, program: &LaneProgram) -> eyre::Result<Self> {
+        let (rig, lanes) = lane_rig(engine, program)?;
+        let sample_rate = engine
+            .sample_rate()
+            .ok_or_else(|| eyre::eyre!("keys rig: the engine has no device"))?;
+        Ok(Self::with_lanes(
+            engine.clone(),
+            rig,
+            lanes,
             sample_rate,
-            preset_name: program.name.clone(),
-            midi_monitor: MidiMonitor::default(),
-            gain,
-            scopes: Scopes::default(),
-            applied: std::sync::Mutex::default(),
-        };
-        rig.install_lane_instruments(program);
-        if let Some(host) = &rig._host {
-            host.play();
-        }
-        tracing::info!(
-            sample_rate,
-            profile = %program.name,
-            engines = program.engines.len(),
-            layers = program.engines.iter().map(|e| e.layers.len()).sum::<usize>(),
-            "keys rig started on daw engine (lane tracks)"
-        );
-        Ok(rig)
+            program,
+            "keys rig joined the engine (lane tracks)",
+        ))
     }
 
     /// Host `program` as per-layer daw tracks WITHOUT opening any audio
@@ -1338,8 +1351,7 @@ impl KeysRig {
     ///
     /// Returns an error if track setup or project configuration fails.
     pub fn open_headless(sample_rate: u32, program: &LaneProgram) -> eyre::Result<Self> {
-        let project = RigProject::new(KEYS_PROJECT_NAME);
-        Self::open_headless_impl(project, sample_rate, program)
+        Self::open_headless_in(&Engine::new(KEYS_PROJECT_NAME), sample_rate, program)
     }
 
     /// [`open_headless`](Self::open_headless) on an EXISTING `Standalone` —
@@ -1355,29 +1367,56 @@ impl KeysRig {
         sample_rate: u32,
         program: &LaneProgram,
     ) -> eyre::Result<Self> {
-        let project = RigProject::on(daw, KEYS_PROJECT_NAME);
-        Self::open_headless_impl(project, sample_rate, program)
+        Self::open_headless_in(
+            &Engine::new_on(daw, KEYS_PROJECT_NAME),
+            sample_rate,
+            program,
+        )
     }
 
-    fn open_headless_impl(
-        project: RigProject,
+    /// [`open_headless`](Self::open_headless) as one more rig on `engine`,
+    /// whose renderer someone else drives.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if track setup or project configuration fails.
+    pub fn open_headless_in(
+        engine: &Arc<Engine>,
         sample_rate: u32,
         program: &LaneProgram,
     ) -> eyre::Result<Self> {
-        let lanes = build_lane_tracks(project.daw(), program)?;
-        let track_count = 1 + lanes.engines.len() + lanes.layers.len();
-        let daw = project.daw().clone();
-        let meters = Meters::new(track_count);
-        daw.set_meters(meters.clone());
+        let (rig, lanes) = lane_rig(engine, program)?;
+        // No device to install a meter bank: install one, so the renderer
+        // meters; it grows as tracks are added.
+        let daw = engine.daw();
+        let tracks = daw
+            .read_project(engine.project_guid(), |p| p.tracks.len())
+            .unwrap_or(0);
+        daw.set_meters(Meters::new(tracks));
+        Ok(Self::with_lanes(
+            engine.clone(),
+            rig,
+            lanes,
+            sample_rate,
+            program,
+            "keys rig opened headless (lane tracks, no audio device)",
+        ))
+    }
 
+    fn with_lanes(
+        engine: Arc<Engine>,
+        rig: Rig,
+        lanes: LaneHost,
+        sample_rate: u32,
+        program: &LaneProgram,
+        what: &str,
+    ) -> Self {
         let gain = Arc::new(std::sync::atomic::AtomicU32::new(1.0f32.to_bits()));
-        let mut rig = Self {
-            daw,
-            #[cfg(not(target_arch = "wasm32"))]
-            _host: None,
-            project_guid: project.project_guid().to_string(),
+        let mut keys = Self {
+            daw: engine.daw().clone(),
+            engine,
+            rig: Some(rig),
             hosting: Hosting::Lanes(lanes),
-            meters,
             sample_rate,
             preset_name: program.name.clone(),
             midi_monitor: MidiMonitor::default(),
@@ -1385,15 +1424,15 @@ impl KeysRig {
             scopes: Scopes::default(),
             applied: std::sync::Mutex::default(),
         };
-        rig.install_lane_instruments(program);
+        keys.install_lane_instruments(program);
         tracing::info!(
             sample_rate,
             profile = %program.name,
             engines = program.engines.len(),
             layers = program.engines.iter().map(|e| e.layers.len()).sum::<usize>(),
-            "keys rig opened headless (lane tracks, no audio device)"
+            "{what}"
         );
-        Ok(rig)
+        keys
     }
 
     /// The backing daw handle (cheap to clone) — the headless caller's
@@ -1402,9 +1441,14 @@ impl KeysRig {
         &self.daw
     }
 
-    /// The rig project's guid.
+    /// The project the rig's tracks are in (its engine's).
     pub fn project_guid(&self) -> &str {
-        &self.project_guid
+        self.engine.project_guid()
+    }
+
+    /// The engine the rig plays on.
+    pub const fn engine(&self) -> &Arc<Engine> {
+        &self.engine
     }
 
     /// True when the rig hosts per-layer daw tracks.
@@ -1526,7 +1570,7 @@ impl KeysRig {
                 let hosted: Vec<(String, Vec<String>)> = l
                     .engines
                     .iter()
-                    .map(|(name, _, _)| {
+                    .map(|(name, _)| {
                         (
                             name.clone(),
                             l.layers
@@ -1542,19 +1586,13 @@ impl KeysRig {
             Hosting::Single { .. } => false,
         };
         if !same_shape {
-            // Rebuild the whole track set on the running project.
-            self.daw
-                .current()
-                .remove_all()
-                .map_err(|e| eyre::eyre!("keys rig: clear tracks failed: {e}"))?;
-            let lanes = build_lane_tracks(&self.daw, program)?;
-            let track_count = 1 + lanes.engines.len() + lanes.layers.len();
-            // Same as `RigHost::install_meters`, but valid for a headless
-            // rig too: install a freshly-sized bank on the daw; the
-            // renderer reads it per block.
-            let meters = Meters::new(track_count);
-            self.daw.set_meters(meters.clone());
-            self.meters = meters;
+            // A fresh rig in place of this one — only this rig's tracks go;
+            // the engine's other rigs (and Session's tracks) stay.
+            if let Some(old) = self.rig.take() {
+                old.remove()?;
+            }
+            let (rig, lanes) = lane_rig(&self.engine, program)?;
+            self.rig = Some(rig);
             self.hosting = Hosting::Lanes(lanes);
             // The master gain is the shared cell the fresh rig track's
             // output stage reads, so it carries over as is.
@@ -1575,8 +1613,8 @@ impl KeysRig {
             Role::Engine => l
                 .engines
                 .iter()
-                .find(|(n, _, _)| n == name)
-                .map(|(_, g, _)| g.as_str()),
+                .find(|(n, _)| n == name)
+                .map(|(_, g)| g.as_str()),
             Role::Layer => l
                 .layers
                 .iter()
@@ -1611,7 +1649,11 @@ impl KeysRig {
         if let Some(guid) = self.lane_guid(role, name) {
             let v = f64::from(linear.max(0.0));
             if self.mix_changed(guid, |m| m.volume != Some(v), |m| m.volume = Some(v)) {
-                let _ = self.daw.current().track(guid).set_volume(v);
+                let _ = self
+                    .daw
+                    .project(self.project_guid().to_string())
+                    .track(guid)
+                    .set_volume(v);
             }
         }
     }
@@ -1620,7 +1662,11 @@ impl KeysRig {
     pub fn set_lane_mute(&self, role: Role, name: &str, muted: bool) {
         if let Some(guid) = self.lane_guid(role, name) {
             if self.mix_changed(guid, |m| m.muted != Some(muted), |m| m.muted = Some(muted)) {
-                let _ = self.daw.current().track(guid).set_muted(muted);
+                let _ = self
+                    .daw
+                    .project(self.project_guid().to_string())
+                    .track(guid)
+                    .set_muted(muted);
             }
         }
     }
@@ -1633,7 +1679,11 @@ impl KeysRig {
                 |m| m.soloed != Some(soloed),
                 |m| m.soloed = Some(soloed),
             ) {
-                let _ = self.daw.current().track(guid).set_soloed(soloed);
+                let _ = self
+                    .daw
+                    .project(self.project_guid().to_string())
+                    .track(guid)
+                    .set_soloed(soloed);
             }
         }
     }
@@ -2085,15 +2135,18 @@ impl KeysRig {
     /// Post-fader output peak (linear) of the rig's output track (the keys
     /// track in single mode, the rig folder in lane mode), for a level meter.
     pub fn output_peak(&self) -> f32 {
-        self.meters
-            .cell(0)
-            .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
+        self.rig
+            .as_ref()
+            .map_or(0.0, |rig| self.meter_peak(rig.folder_guid()))
     }
 
-    fn meter_peak(&self, idx: usize) -> f32 {
-        self.meters
-            .cell(idx)
-            .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
+    /// A track's post-fader peak (linear, the louder channel), by guid: its
+    /// position in the engine's project moves as other rigs add tracks.
+    fn meter_peak(&self, guid: &str) -> f32 {
+        self.rig
+            .as_ref()
+            .and_then(|rig| rig.peak(guid))
+            .map_or(0.0, |(l, r)| l.max(r))
     }
 
     /// Every metered container in the loaded program — engines, layers and
@@ -2109,11 +2162,11 @@ impl KeysRig {
             Hosting::Single { cells, .. } => cells.peaks(),
             Hosting::Lanes(l) => {
                 let mut out = Vec::new();
-                for (name, _, meter) in &l.engines {
-                    out.push((Role::Engine, name.clone(), self.meter_peak(*meter)));
+                for (name, guid) in &l.engines {
+                    out.push((Role::Engine, name.clone(), self.meter_peak(guid)));
                 }
                 for t in &l.layers {
-                    out.push((Role::Layer, t.name.clone(), self.meter_peak(t.meter)));
+                    out.push((Role::Layer, t.name.clone(), self.meter_peak(&t.guid)));
                     out.extend(
                         t.cells
                             .peaks()
@@ -2134,77 +2187,37 @@ impl KeysRig {
 /// layers collapses to a plain (silent) track automatically.
 ///
 /// [`TrackTree`]: daw::service::handle::TrackTree
-fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<LaneHost> {
-    let project = daw.current();
-    let mut tree = project.tree();
-    let err = |what: &str, e: daw::service::DawError| eyre::eyre!("keys rig: {what} failed: {e}");
-
-    // Meter cells are indexed by project track order.
-    let mut meter = 0usize;
-    let rig_name = if program.name.is_empty() {
-        "Keys Rig"
-    } else {
-        &program.name
-    };
-    let rig = tree.folder(rig_name).map_err(|e| err("rig folder", e))?;
+fn build_lane_tracks(rig: &Rig, program: &LaneProgram) -> eyre::Result<LaneHost> {
+    let folder = rig.folder_guid().to_string();
     let tail_fx = match &program.tail {
-        Some(_) => Some(
-            rig.add_fx_slot("keys-tail")
-                .map_err(|e| err("tail fx slot", e))?
-                .into_guid(),
-        ),
+        Some(_) => Some(rig.add_fx_slot(&folder, "keys-tail")?),
         None => None,
     };
-    let scope_fx = rig
-        .add_fx_slot("keys-scope")
-        .map_err(|e| err("rig scope slot", e))?
-        .into_guid();
-    let out_fx = rig
-        .add_fx_slot("keys-out")
-        .map_err(|e| err("output fx slot", e))?
-        .into_guid();
-    meter += 1;
+    let scope_fx = rig.add_fx_slot(&folder, "keys-scope")?;
+    let out_fx = rig.add_fx_slot(&folder, "keys-out")?;
 
     let mut engines = Vec::new();
     let mut engine_scopes = Vec::new();
     let mut layers = Vec::new();
     for engine in &program.engines {
-        let eng = tree
-            .folder(&engine.name)
-            .map_err(|e| err("engine folder", e))?;
-        engine_scopes.push((
-            engine.name.clone(),
-            eng.add_fx_slot("keys-scope")
-                .map_err(|e| err("engine scope slot", e))?
-                .into_guid(),
-        ));
-        engines.push((engine.name.clone(), eng.guid().to_string(), meter));
-        meter += 1;
+        let eng = rig.add_track(&engine.name)?;
+        engine_scopes.push((engine.name.clone(), rig.add_fx_slot(&eng, "keys-scope")?));
+        engines.push((engine.name.clone(), eng.clone()));
         for layer in &engine.layers {
-            let track = tree.track(&layer.name).map_err(|e| err("layer track", e))?;
-            let fx = track
-                .add_fx_slot("keys-lane")
-                .map_err(|e| err("lane fx slot", e))?
-                .into_guid();
-            let scope_fx = track
-                .add_fx_slot("keys-scope")
-                .map_err(|e| err("lane scope slot", e))?
-                .into_guid();
+            let track = rig.add_track_in(&eng, &layer.name)?;
+            let fx = rig.add_fx_slot(&track, "keys-lane")?;
+            let scope_fx = rig.add_fx_slot(&track, "keys-scope")?;
             layers.push(LaneTrack {
                 engine: engine.name.clone(),
                 name: layer.name.clone(),
-                guid: track.guid().to_string(),
+                guid: track,
                 fx,
                 scope_fx,
-                meter,
                 cells: GainCells::default(),
                 voices: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             });
-            meter += 1;
         }
-        tree.end().map_err(|e| err("close engine folder", e))?;
     }
-    tree.finish().map_err(|e| err("close rig folder", e))?;
 
     Ok(LaneHost {
         tail_fx,
@@ -2214,6 +2227,70 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
         engines,
         layers,
     })
+}
+
+/// The tracks of a single-tree keys rig: the rig's folder and one instrument
+/// track in it, with the instrument, scope and output slots.
+struct SingleSlots {
+    rig: Rig,
+    track_guid: String,
+    fx_guid: String,
+    scope_fx: String,
+    out_fx: String,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn single_tracks(engine: &Arc<Engine>, tree: &Container) -> eyre::Result<SingleSlots> {
+    let rig = engine.add_rig(if tree.name.is_empty() {
+        "Keys Rig"
+    } else {
+        &tree.name
+    })?;
+    let track_guid = rig.add_track(KEYS_TRACK_NAME)?;
+    let fx_guid = rig.add_fx_slot(&track_guid, "keys")?;
+    let scope_fx = rig.add_fx_slot(&track_guid, "keys-scope")?;
+    let out_fx = rig.add_fx_slot(&track_guid, "keys-out")?;
+    Ok(SingleSlots {
+        rig,
+        track_guid,
+        fx_guid,
+        scope_fx,
+        out_fx,
+    })
+}
+
+/// A lane program's rig: its folder, named for the program, and the lane
+/// tracks in it.
+fn lane_rig(engine: &Arc<Engine>, program: &LaneProgram) -> eyre::Result<(Rig, LaneHost)> {
+    let name = if program.name.is_empty() {
+        "Keys Rig"
+    } else {
+        &program.name
+    };
+    let rig = engine.add_rig(name)?;
+    let lanes = build_lane_tracks(&rig, program)?;
+    Ok((rig, lanes))
+}
+
+/// What a keys rig asks of its own device: output only (a synth generates,
+/// never records), on the native backend under the keys node name.
+#[cfg(not(target_arch = "wasm32"))]
+fn output_prefs(prefs: &AudioIoPrefs) -> AudioIoPrefs {
+    let mut io = prefs.clone();
+    io.want_input = false;
+    io.node_name = KEYS_NODE_NAME.to_string();
+    io
+}
+
+impl Drop for KeysRig {
+    /// A rig leaving a shared engine takes its tracks with it.
+    fn drop(&mut self) {
+        if let Some(rig) = self.rig.take()
+            && let Err(e) = rig.remove()
+        {
+            tracing::warn!(error = %e, "keys rig: removing its tracks failed");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2408,7 +2485,6 @@ mod tests {
     #[test]
     fn lane_tracks_build_the_folder_layout() {
         use daw::service::{ProjectContext, Tracks};
-        use signal_rig_host::RigProject;
 
         let program = LaneProgram {
             name: "Worship".into(),
@@ -2436,8 +2512,10 @@ mod tests {
             ],
             tail: Some(Container::module("Global")),
         };
-        let project = RigProject::new("Lane Layout Test");
-        let lanes = build_lane_tracks(project.daw(), &program).expect("lane tracks build");
+        let runtime = tokio::runtime::Runtime::new().expect("a runtime");
+        let _inside = runtime.enter();
+        let engine = Engine::new("Lane Layout Test");
+        let (_rig, lanes) = lane_rig(&engine, &program).expect("lane tracks build");
 
         assert_eq!(lanes.engines.len(), 2);
         assert_eq!(lanes.layers.len(), 3);
@@ -2446,13 +2524,13 @@ mod tests {
             "tail chain gets a rig-track fx slot"
         );
 
-        let tracks = <Standalone as Tracks>::all(project.daw(), ProjectContext::Current);
+        let tracks = <Standalone as Tracks>::all(engine.daw(), ProjectContext::Current);
         let names: Vec<&str> = tracks.iter().map(|t| t.name.as_str()).collect();
         assert_eq!(names, ["Worship", "Keys", "Piano", "Pad", "Organ", "Organ"]);
-        // Meter indices follow project track order.
-        assert_eq!(lanes.engines[0].2, 1);
-        assert_eq!(lanes.layers[0].meter, 2);
-        assert_eq!(lanes.layers[2].meter, 5);
+        // Lanes are addressed by track guid (positions move as rigs join).
+        assert_eq!(lanes.engines[0].1, tracks[1].guid);
+        assert_eq!(lanes.layers[0].guid, tracks[2].guid);
+        assert_eq!(lanes.layers[2].guid, tracks[5].guid);
         // Folder depths: rig + engines open, last children close — balanced
         // overall (sum of depths = 0 ⇒ every folder is closed).
         let depths: Vec<i32> = tracks.iter().map(|t| t.folder_depth).collect();
