@@ -14,7 +14,7 @@ use super::grid_model::{BlockWidget, GRID_COLS, GRID_ROWS, GridBlock, GridJack, 
 
 use audio_controls::widgets::{CompressorGraph, CompressorParams, GateGraph, GateParams, Knob};
 // EqBand/EqBandShape/EqGraph moved to audiocore-gui in the newer daw stack.
-use audiocore_gui::prelude::{EqBand, EqBandShape, EqGraph};
+use plugin_core::canvas::prelude::{EqBand, EqBandShape, EqGraph};
 
 /// Cell size in pixels for the grid.
 const CELL_SIZE: u32 = 64;

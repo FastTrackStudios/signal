@@ -3,8 +3,8 @@
 use nice_plug_dioxus::prelude::*;
 
 use crate::ProcessingChain;
-use audiocore_gui::meters::GrMeter;
-use audiocore_gui::viz::{EqBand, EqBandShape, EqGraph};
+use plugin_core::canvas::meters::GrMeter;
+use plugin_core::canvas::viz::{EqBand, EqBandShape, EqGraph};
 
 // ── Top-level FX view ──────────────────────────────────────────────────────────
 
@@ -250,7 +250,7 @@ fn ParamRow(
                     "{display}"
                 }
             }
-            audiocore_gui::controls::Slider {
+            plugin_core::canvas::controls::Slider {
                 value: value,
                 min: min,
                 max: max,
