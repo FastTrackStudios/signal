@@ -504,7 +504,7 @@ pub mod keys {
         /// The performance model changed (stack pressed, mode switched).
         Perform(KeysPerform),
         /// Recent MIDI activity (oldest first), for the monitor.
-        Midi(Vec<midicore_proto::MidiEvent>),
+        Midi(Vec<midi::proto::MidiEvent>),
     }
 
     #[architect::rpc]
@@ -676,7 +676,7 @@ pub mod keys {
         /// Attach a hardware MIDI input by name (empty = omni / all inputs).
         fn set_midi_port(&self, name: String);
         /// Recent MIDI events seen by the core (oldest first), for the monitor.
-        fn midi_recent(&self) -> Vec<midicore_proto::MidiEvent>;
+        fn midi_recent(&self) -> Vec<midi::proto::MidiEvent>;
 
         /// Every rig change, as it happens.
         #[subscribe]

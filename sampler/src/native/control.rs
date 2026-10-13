@@ -195,7 +195,7 @@ impl ControlEnv {
     }
 
     fn advance(&mut self, events: &PluginEvents<'_>, frames: usize) -> f32 {
-        use midicore::MidiEvent;
+        use midi::MidiEvent;
         for ev in events.midi {
             match &ev.message {
                 MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0 => {
@@ -315,13 +315,13 @@ impl ControlSource for ControlMultiseg {
     fn tick(&mut self, events: &PluginEvents<'_>, frames: usize, tempo_bpm: f32) -> f32 {
         for ev in events.midi {
             match &ev.message {
-                midicore::MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0 => {
+                midi::MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0 => {
                     self.held += 1;
                     self.player.note_on();
                     self.vel_scale =
                         1.0 - self.vel_sens + self.vel_sens * f32::from(velocity.get()) / 127.0;
                 }
-                midicore::MidiEvent::NoteOn { .. } | midicore::MidiEvent::NoteOff { .. } => {
+                midi::MidiEvent::NoteOn { .. } | midi::MidiEvent::NoteOff { .. } => {
                     self.held = self.held.saturating_sub(1);
                     if self.held == 0 {
                         self.player.note_off(&self.bp);
@@ -443,7 +443,7 @@ impl ControlSource for ControlLfo {
         let note_on = events.midi.iter().any(|ev| {
             matches!(
                 &ev.message,
-                midicore::MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0
+                midi::MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0
             )
         });
         if note_on {
@@ -511,7 +511,7 @@ impl MidiSource {
 
 impl ControlSource for MidiSource {
     fn tick(&mut self, events: &PluginEvents<'_>, _frames: usize, _tempo_bpm: f32) -> f32 {
-        use midicore::MidiEvent;
+        use midi::MidiEvent;
         let m = self.mode;
         let mut v = self.value;
         for ev in events.midi {
@@ -721,7 +721,7 @@ mod multiseg_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use midicore::{Channel, ControllerNumber, ControllerValue, KeyNumber, MidiEvent, Velocity};
+    use midi::{Channel, ControllerNumber, ControllerValue, KeyNumber, MidiEvent, Velocity};
     use signal_plugin_host::PluginMidiEvent;
 
     fn ev_note_on(note: u8, vel: u8) -> MidiEvent {

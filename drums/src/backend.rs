@@ -14,7 +14,7 @@ use crate::proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKi
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
-use midicore::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMonitor, Velocity};
+use midi::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMonitor, Velocity};
 use sampler::{MidiInputHandle, PreloadProfile, PresetSpec, SamplerRig};
 use signal_rig_host::mixer::db_to_linear;
 
@@ -705,7 +705,7 @@ impl DrumRigBackend {
             "drums",
             trigger,
             port.as_deref(),
-            midicore::input_ports().len(),
+            midi::input_ports().len(),
             || {
                 if let Ok(mut s) = self.inner.state.lock() {
                     s.midi_handle = None;

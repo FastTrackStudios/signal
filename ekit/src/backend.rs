@@ -788,7 +788,7 @@ impl EkitRig for EkitBackend {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(rig) = rig.as_ref() {
-            let _ = rig.attach_midi(midicore::selector_for(Some(&name)));
+            let _ = rig.attach_midi(midi::selector_for(Some(&name)));
         }
     }
 }

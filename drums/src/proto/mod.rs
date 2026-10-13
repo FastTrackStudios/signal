@@ -131,7 +131,7 @@ pub struct MeterSnapshot {
 }
 
 /// Which physical drum-map the attached hardware sends (so the converter knows
-/// how to remap it onto the loaded kit). Mirrors `midicore::DrumMap`.
+/// how to remap it onto the loaded kit). Mirrors `midi::DrumMap`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Facet)]
 #[repr(u8)]
 #[derive(Default)]
@@ -203,7 +203,7 @@ pub mod drum {
         Library(Vec<KitInfo>),
         /// Recent MIDI activity (oldest first), for the monitor — raw events,
         /// rendered by `midicore-ui`'s panel.
-        Midi(Vec<midicore_proto::MidiEvent>),
+        Midi(Vec<midi::proto::MidiEvent>),
     }
 
     #[architect::rpc]
@@ -279,7 +279,7 @@ pub mod drum {
         /// Set how the attached hardware maps onto the kit (converter source).
         fn set_input_map(&self, map: InputMap);
         /// Recent MIDI events seen by the core (oldest first), for the monitor.
-        fn midi_recent(&self) -> Vec<midicore_proto::MidiEvent>;
+        fn midi_recent(&self) -> Vec<midi::proto::MidiEvent>;
 
         /// Every rig change, as it happens: meters at meter rate, kit/mixer on
         /// mutation. Remotes render from this stream instead of polling.

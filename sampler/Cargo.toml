@@ -30,7 +30,7 @@ facet-toml = { workspace = true }
 fts-sample = { workspace = true, features = ["load", "engine-core"] }
 hound = { version = "3.5" }
 keyflow-annotate = { workspace = true }
-midicore = { workspace = true, features = ["vox"] }
+midi = { workspace = true, features = ["vox"] }
 neural-amp-modeler = { workspace = true }
 openwurli-dsp = { workspace = true }
 realfft = { workspace = true }
@@ -68,7 +68,7 @@ clap = { workspace = true }
 cpal = { workspace = true }
 daw = { workspace = true, features = ["standalone-audio", "clap-host"] }
 fts-sample = { workspace = true, features = ["engine"] }
-midicore = { workspace = true, features = ["midir", "pipewire", "native"] }
+midi = { workspace = true, features = ["midir", "native", "pipewire"] }
 rayon = { version = "1" }
 signal-plugin-host = { workspace = true, features = ["clap-host"] }
 walkdir = { version = "2" }

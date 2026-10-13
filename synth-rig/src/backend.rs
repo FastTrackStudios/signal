@@ -17,7 +17,7 @@ use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use audio::io::AudioIoPrefs;
 use keys::KeysRig;
-use midicore::MidiEvent;
+use midi::MidiEvent;
 use sampler::rig_node::{Container, RigNode, Role};
 use synth::omni_import::{
     OmniPatch, SoundsourceIndex, load_patch_file, parse_patch, patch_to_container,
@@ -640,7 +640,7 @@ impl Services for SynthRigBackend {
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 const fn note_ev(note: u8, velocity: u8) -> MidiEvent {
-    use midicore::{Channel, KeyNumber, Velocity};
+    use midi::{Channel, KeyNumber, Velocity};
     MidiEvent::NoteOn {
         channel: Channel::new(0),
         key: KeyNumber::new(note),

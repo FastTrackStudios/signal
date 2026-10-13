@@ -12,7 +12,7 @@ workspace = true
 [features]
 default = ["vox"]
 pipewire = []
-ui = ["dep:dioxus", "dep:fts-chrome", "dep:midicore-ui", "dep:signal-browser", "dep:signal-ui", "dep:signal-widgets"]
+ui = ["dep:dioxus", "dep:fts-chrome", "midi/ui", "dep:signal-browser", "dep:signal-ui", "dep:signal-widgets"]
 vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
@@ -26,9 +26,7 @@ facet = { workspace = true }
 facet-json = { workspace = true }
 facet-styx = { workspace = true }
 fts-chrome = { workspace = true, optional = true }
-midicore = { workspace = true, features = ["vox", "midir"] }
-midicore-proto = { workspace = true }
-midicore-ui = { workspace = true, optional = true }
+midi = { workspace = true, features = ["midir", "ui", "vox"] }
 signal-browser = { workspace = true, default-features = false, optional = true }
 signal-plugin-host = { workspace = true }
 signal-proto = { workspace = true }
@@ -53,4 +51,4 @@ vox-core = { workspace = true }
 vox-websocket = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }
+midi = { workspace = true, features = ["midir", "pipewire", "vox"] }

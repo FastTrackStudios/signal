@@ -41,7 +41,7 @@ pub const GM_DRUM_CHANNEL: u8 = 9;
 /// Returns an error if MIDI attachment fails.
 pub fn attach_converted_kit(
     rig: &SamplerRig,
-    selection: midicore::PortSelector,
+    selection: midi::PortSelector,
     from: DrumMap,
     to: DrumMap,
 ) -> Result<sampler::MidiInputHandle, String> {

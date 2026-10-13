@@ -15,8 +15,8 @@ use crate::proto::{
     SynthPreset, SynthStatus, SynthZone,
 };
 use dioxus::prelude::*;
-use midicore_proto::MidiEvent;
-use midicore_ui::MidiMonitorPanel;
+use midi::proto::MidiEvent;
+use midi::ui::MidiMonitorPanel;
 use signal_proto::tagging::{StructuredTag, TagCategory, TagSet};
 use signal_ui::components::Piano;
 

@@ -243,8 +243,8 @@ impl KitState {
     }
 
     /// Dispatch one MIDI event through the routing table.
-    pub fn dispatch(&self, ev: &midicore::MidiEvent) {
-        use midicore::MidiEvent;
+    pub fn dispatch(&self, ev: &midi::MidiEvent) {
+        use midi::MidiEvent;
         match ev {
             MidiEvent::NoteOn { key, velocity, .. } => {
                 self.dispatch_note(key.get(), velocity.get());

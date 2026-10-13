@@ -20,7 +20,7 @@ architect = { workspace = true, features = ["atom", "platform", "rig", "vox"] }
 daw = { workspace = true }
 dioxus = { workspace = true, optional = true }
 facet = { workspace = true }
-midicore = { workspace = true, features = ["vox", "midir"] }
+midi = { workspace = true, features = ["midir", "vox"] }
 signal-rigs-proto = { workspace = true }
 sampler = { workspace = true }
 signal-space = { workspace = true }
@@ -31,4 +31,4 @@ vox = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }
+midi = { workspace = true, features = ["midir", "pipewire", "vox"] }

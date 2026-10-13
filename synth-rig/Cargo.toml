@@ -30,7 +30,7 @@ signal-browser = { workspace = true, features = ["native"] }
 audio = { workspace = true, features = ["io", "monitor"] }
 # Shared cross-rig utilities — here for the instrumented MIDI attach.
 signal-rig-host.workspace = true
-midicore = { workspace = true, features = ["vox", "midir"] }
+midi = { workspace = true, features = ["midir", "vox"] }
 # The wire contract this crate's headless backend implements (SynthRig service)
 # + the architect Layer/Services/PubSub machinery to serve it as a vox remote.
 architect = { workspace = true, features = ["vox", "rig"] }
@@ -45,4 +45,4 @@ daw.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 # Hardware MIDI as a routable PipeWire graph node (midir on the
 # pipewire-jack backend) — the Linux default, matching the audio host.
-midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }
+midi = { workspace = true, features = ["midir", "pipewire", "vox"] }

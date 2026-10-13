@@ -4,7 +4,7 @@
 use crate::proto::keys::{KeysEvent, KeysRigClient, KeysRigStreamClient};
 use crate::proto::{KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStatus};
 use dioxus::prelude::*;
-use midicore_proto::MidiEvent;
+use midi::proto::MidiEvent;
 
 /// The whole rig, as the remote sees it. `PartialEq` compares the signal
 /// handles (cheap + stable), so it can ride as a component prop.

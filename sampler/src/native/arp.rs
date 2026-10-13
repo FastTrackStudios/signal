@@ -11,8 +11,8 @@
 use signal_plugin_host::PluginMidiEvent;
 
 /// Build a channel-0 note-on `MidiEvent` from raw note/velocity.
-fn ev_note_on(note: u8, vel: u8) -> midicore::MidiEvent {
-    use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+fn ev_note_on(note: u8, vel: u8) -> midi::MidiEvent {
+    use midi::{Channel, KeyNumber, MidiEvent, Velocity};
     MidiEvent::NoteOn {
         channel: Channel::new(0),
         key: KeyNumber::new(note),
@@ -21,8 +21,8 @@ fn ev_note_on(note: u8, vel: u8) -> midicore::MidiEvent {
 }
 
 /// Build a channel-0 note-off `MidiEvent` from a raw note.
-fn ev_note_off(note: u8) -> midicore::MidiEvent {
-    use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+fn ev_note_off(note: u8) -> midi::MidiEvent {
+    use midi::{Channel, KeyNumber, MidiEvent, Velocity};
     MidiEvent::NoteOff {
         channel: Channel::new(0),
         key: KeyNumber::new(note),
@@ -97,7 +97,7 @@ impl ArpEngine {
         sample_rate: f32,
         tempo_bpm: f32,
     ) -> Vec<PluginMidiEvent> {
-        use midicore::MidiEvent;
+        use midi::MidiEvent;
         let mut out = Vec::new();
         for ev in events {
             match &ev.message {
@@ -198,7 +198,7 @@ impl ArpEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use midicore::MidiEvent;
+    use midi::MidiEvent;
 
     fn note_on(note: u8) -> PluginMidiEvent {
         PluginMidiEvent {

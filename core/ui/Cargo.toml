@@ -30,7 +30,7 @@ signal-grid-ui.workspace = true
 # `use_stream` (atom + vox): subscribe components to `#[subscribe]` event
 # streams instead of polling.
 architect = { workspace = true, features = ["atom", "vox"] }
-midicore = { workspace = true, features = ["vox"] }
+midi = { workspace = true, features = ["vox"] }
 uuid = { version = "1", features = ["v4"] }
 tracing.workspace = true
 audio-controls.workspace = true
@@ -49,7 +49,7 @@ signal-controller.workspace = true
 signal-daw-bridge.workspace = true
 audiocore-gui.workspace = true
 nice-plug-dioxus.workspace = true
-midicore = { workspace = true, features = ["vox", "midir"] }
+midi = { workspace = true, features = ["midir", "vox"] }
 tokio = { workspace = true }
 
 # uuid v4 → getrandom 0.3 on wasm needs the wasm_js backend (browser crypto);

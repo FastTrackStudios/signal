@@ -134,8 +134,8 @@ impl SamplerInstrument {
     /// Apply one MIDI message to the engine. Channel is ignored — the
     /// engine is monotimbral. Split out so it can be unit-tested without
     /// driving a full [`render`](Soundsource::render).
-    pub(crate) fn apply_midi(&mut self, message: &midicore::MidiEvent) {
-        use midicore::MidiEvent;
+    pub(crate) fn apply_midi(&mut self, message: &midi::MidiEvent) {
+        use midi::MidiEvent;
         match message {
             MidiEvent::NoteOn { key, velocity, .. } => {
                 // velocity 0 is a Note-Off by convention; `note_on` already
@@ -336,7 +336,7 @@ zones (
     }
 
     fn note_on_event(note: u8, velocity: u8) -> PluginMidiEvent {
-        use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+        use midi::{Channel, KeyNumber, MidiEvent, Velocity};
         PluginMidiEvent {
             offset: 0,
             message: MidiEvent::NoteOn {
@@ -410,7 +410,7 @@ zones (
     /// velocity 0 is treated as a `NoteOff`.
     #[test]
     fn apply_midi_maps_every_handled_variant() {
-        use midicore::{
+        use midi::{
             Channel, ControllerNumber, ControllerValue, KeyNumber, MidiEvent, PitchBend, Pressure,
             ProgramNumber, Velocity,
         };

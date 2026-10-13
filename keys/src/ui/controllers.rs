@@ -12,7 +12,7 @@
 //! incoming MIDI, not a control: you play these on the keyboard.
 
 use dioxus::prelude::*;
-use midicore_proto::MidiEvent;
+use midi::proto::MidiEvent;
 
 /// The continuous controllers, folded out of the MIDI monitor.
 #[derive(Clone, Copy, PartialEq, Debug)]
