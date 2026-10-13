@@ -51,7 +51,7 @@ pub use state::{KeysViewState, held_notes, use_keys_state};
 pub use zoom::{OpenButton, Zoom};
 
 // The wire contract, re-exported for convenience.
-pub use crate::proto as proto;
+pub use crate::proto;
 
 /// The keys-rig remote view. Mount inside a host that has provided
 /// `KeysRigClient` + `KeysRigStreamClient` in context.

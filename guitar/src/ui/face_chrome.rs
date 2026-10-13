@@ -9,8 +9,8 @@
 
 use std::collections::HashSet;
 
-use dioxus::prelude::*;
 use crate::proto::CompositionModel;
+use dioxus::prelude::*;
 
 use crate::proto::rig::RigClient;
 
@@ -57,14 +57,21 @@ pub fn PresetStepper(
     let open = try_use_context::<OpenPresets>();
     let rig = use_hook(try_consume_context::<RigClient>);
     let select = try_use_context::<crate::ui::module_sidebar::SelectedModule>();
-    let comp = try_use_context::<FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
+    let comp = try_use_context::<FacePresets>()
+        .map(|c| c.0.read().clone())
+        .unwrap_or_default();
     let names: Vec<String> = comp
         .block_presets
         .iter()
         .filter(|p| p.block_type.eq_ignore_ascii_case(&block_type) && preset_fits(&block, &p.name))
         .map(|p| p.name.clone())
         .collect();
-    let playing = comp.active_blocks.iter().find(|b| b.block.eq_ignore_ascii_case(&block)).map(|b| b.preset.clone()).unwrap_or_default();
+    let playing = comp
+        .active_blocks
+        .iter()
+        .find(|b| b.block.eq_ignore_ascii_case(&block))
+        .map(|b| b.preset.clone())
+        .unwrap_or_default();
     let at = names.iter().position(|n| n.eq_ignore_ascii_case(&playing));
     let label = if !playing.is_empty() {
         playing.clone()
@@ -99,9 +106,13 @@ pub fn PresetStepper(
         "font-size: 11px; line-height: 1; color: #a1a1aa; padding: 0 3px; cursor: pointer;"
     };
     let name_style = if touch {
-        format!("font-size: 14px; font-weight: 650; color: {accent}; max-width: 180px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,0.08);")
+        format!(
+            "font-size: 14px; font-weight: 650; color: {accent}; max-width: 180px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,0.08);"
+        )
     } else {
-        format!("font-size: 10px; font-weight: 600; color: {accent}; max-width: 118px; overflow: hidden; white-space: nowrap; cursor: pointer; padding: 1px 4px; border-radius: 3px; background: rgba(255,255,255,0.06);")
+        format!(
+            "font-size: 10px; font-weight: 600; color: {accent}; max-width: 118px; overflow: hidden; white-space: nowrap; cursor: pointer; padding: 1px 4px; border-radius: 3px; background: rgba(255,255,255,0.06);"
+        )
     };
     rsx! {
         div { style: "display: flex; align-items: center; gap: 1px; min-width: 0;",
@@ -135,7 +146,11 @@ pub fn VizToggle(block: String) -> Element {
         return rsx! {};
     };
     let on = mode.0.read().contains(&block);
-    let (bg, fg) = if on { ("rgba(125,211,252,0.22)", "#7dd3fc") } else { ("rgba(255,255,255,0.06)", "#a1a1aa") };
+    let (bg, fg) = if on {
+        ("rgba(125,211,252,0.22)", "#7dd3fc")
+    } else {
+        ("rgba(255,255,255,0.06)", "#a1a1aa")
+    };
     rsx! {
         span {
             style: "font-size: 9px; font-weight: 700; letter-spacing: 0.06em; line-height: 1; color: {fg}; background: {bg}; padding: 3px 5px; border-radius: 3px; cursor: pointer;",
@@ -159,16 +174,29 @@ pub fn VizToggle(block: String) -> Element {
 #[component]
 pub fn CoreFreeze() -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let comp = try_use_context::<FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
-    let Some(pick) = comp.active_modules.iter().find(|m| m.module.eq_ignore_ascii_case("Core")).cloned() else {
+    let comp = try_use_context::<FacePresets>()
+        .map(|c| c.0.read().clone())
+        .unwrap_or_default();
+    let Some(pick) = comp
+        .active_modules
+        .iter()
+        .find(|m| m.module.eq_ignore_ascii_case("Core"))
+        .cloned()
+    else {
         return rsx! {};
     };
     let info = comp
         .modules
         .iter()
-        .find(|m| m.module.eq_ignore_ascii_case("Core") && m.name.eq_ignore_ascii_case(&pick.preset))
+        .find(|m| {
+            m.module.eq_ignore_ascii_case("Core") && m.name.eq_ignore_ascii_case(&pick.preset)
+        })
         .and_then(|m| {
-            let i = m.snapshots.iter().position(|s| s.eq_ignore_ascii_case(&pick.snapshot)).unwrap_or(0);
+            let i = m
+                .snapshots
+                .iter()
+                .position(|s| s.eq_ignore_ascii_case(&pick.snapshot))
+                .unwrap_or(0);
             m.snapshot_info.get(i).cloned()
         });
     let Some(info) = info.filter(|i| i.frozen_available) else {
@@ -184,7 +212,9 @@ pub fn CoreFreeze() -> Element {
     };
     let seg = |on: bool, color: &str| {
         if on {
-            format!("flex: 1 1 0%; text-align: center; font-size: 9px; font-weight: 800; letter-spacing: 0.08em; padding: 3px 0; border-radius: 3px; cursor: pointer; color: {color}; background: rgba(255,255,255,0.10);")
+            format!(
+                "flex: 1 1 0%; text-align: center; font-size: 9px; font-weight: 800; letter-spacing: 0.08em; padding: 3px 0; border-radius: 3px; cursor: pointer; color: {color}; background: rgba(255,255,255,0.10);"
+            )
         } else {
             "flex: 1 1 0%; text-align: center; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; padding: 3px 0; border-radius: 3px; cursor: pointer; color: #71717a;".to_string()
         }

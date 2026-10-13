@@ -13,9 +13,9 @@
 //! (dB), `<ns>/on` its bypass (on = not bypassed), `<ns>/option` its
 //! capture choice. `<ns>/tone` is the drive block's EQ, still to come.
 
-use dioxus::prelude::*;
 use crate::proto::LiveBlock;
 use crate::proto::rig::RigClient;
+use dioxus::prelude::*;
 use signal_proto::BlockType;
 
 use crate::ui::frame_surface::FrameSurface;
@@ -88,9 +88,22 @@ impl FaceEntry {
     #[must_use]
     pub fn at(&self, tier: crate::ui::control::Tier) -> Self {
         use crate::ui::control::Tier;
-        let best = self.tiers.iter().filter(|(t, _)| *t >= tier && *t < Tier::Desktop).min_by_key(|(t, _)| *t);
-        let floor = if tier >= Tier::Desktop { Tier::Desktop } else { Tier::Strip };
-        let best = best.or_else(|| self.tiers.iter().filter(|(t, _)| *t <= tier && *t >= floor).max_by_key(|(t, _)| *t));
+        let best = self
+            .tiers
+            .iter()
+            .filter(|(t, _)| *t >= tier && *t < Tier::Desktop)
+            .min_by_key(|(t, _)| *t);
+        let floor = if tier >= Tier::Desktop {
+            Tier::Desktop
+        } else {
+            Tier::Strip
+        };
+        let best = best.or_else(|| {
+            self.tiers
+                .iter()
+                .filter(|(t, _)| *t <= tier && *t >= floor)
+                .max_by_key(|(t, _)| *t)
+        });
         let mut f = self.clone();
         if let Some((_, t)) = best {
             f.face.clone_from(&t.face);
@@ -196,7 +209,11 @@ impl ParamMap {
     fn to_block(&self, face: f64) -> f64 {
         match &self.kind {
             MapKind::Linear(a, b) => face * a + b,
-            MapKind::Table(t) => t.get(face.round().max(0.0) as usize).or(t.last()).copied().unwrap_or(face),
+            MapKind::Table(t) => t
+                .get(face.round().max(0.0) as usize)
+                .or(t.last())
+                .copied()
+                .unwrap_or(face),
         }
     }
 
@@ -257,7 +274,11 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
     let words = v
         .get("match")
         .and_then(|m| m.as_array())
-        .map(|a| a.iter().filter_map(|w| w.as_str().map(str::to_lowercase)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|w| w.as_str().map(str::to_lowercase))
+                .collect()
+        })
         .unwrap_or_default();
     let size = v
         .get("size")
@@ -267,7 +288,11 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
     let also = v
         .get("also")
         .and_then(|a| a.as_object())
-        .map(|o| o.iter().filter_map(|(k, b)| Some((k.clone(), b.as_str()?.to_string()))).collect())
+        .map(|o| {
+            o.iter()
+                .filter_map(|(k, b)| Some((k.clone(), b.as_str()?.to_string())))
+                .collect()
+        })
         .unwrap_or_default();
     let variants = v
         .get("variants")
@@ -294,14 +319,23 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
                     let kind = if let Some(l) = m.get("linear").and_then(|l| l.as_array()) {
                         MapKind::Linear(l.first()?.as_f64()?, l.get(1)?.as_f64()?)
                     } else {
-                        MapKind::Table(m.get("table")?.as_array()?.iter().filter_map(serde_json::Value::as_f64).collect())
+                        MapKind::Table(
+                            m.get("table")?
+                                .as_array()?
+                                .iter()
+                                .filter_map(serde_json::Value::as_f64)
+                                .collect(),
+                        )
                     };
                     Some(ParamMap { face, param, kind })
                 })
                 .collect()
         })
         .unwrap_or_default();
-    let dark = v.get("dark").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
+    let dark = v
+        .get("dark")
+        .and_then(|d| d.as_str())
+        .map(|d| format!("{SET}/{d}"));
     let tiers = v
         .get("tiers")
         .and_then(|t| t.as_object())
@@ -310,7 +344,11 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
                 .filter_map(|(name, t)| {
                     let tier = crate::ui::control::Tier::from_name(name)?;
                     let face = format!("{SET}/{}", t.get("face")?.as_str()?);
-                    let named = |k: &str| t.get(k).and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
+                    let named = |k: &str| {
+                        t.get(k)
+                            .and_then(|d| d.as_str())
+                            .map(|d| format!("{SET}/{d}"))
+                    };
                     let s = t.get("size")?.as_array()?;
                     let variants = t
                         .get("variants")
@@ -326,20 +364,62 @@ fn entry(v: &serde_json::Value) -> Option<FaceEntry> {
                                 .collect()
                         })
                         .unwrap_or_default();
-                    Some((tier, FaceTier { face, dark: named("dark"), size: (s.first()?.as_f64()?, s.get(1)?.as_f64()?), back: named("back"), back_dark: named("back_dark"), variants, time_knob: t.get("time_knob").and_then(serde_json::Value::as_bool), nameplate: t.get("nameplate").and_then(serde_json::Value::as_bool) }))
+                    Some((
+                        tier,
+                        FaceTier {
+                            face,
+                            dark: named("dark"),
+                            size: (s.first()?.as_f64()?, s.get(1)?.as_f64()?),
+                            back: named("back"),
+                            back_dark: named("back_dark"),
+                            variants,
+                            time_knob: t.get("time_knob").and_then(serde_json::Value::as_bool),
+                            nameplate: t.get("nameplate").and_then(serde_json::Value::as_bool),
+                        },
+                    ))
                 })
                 .collect()
         })
         .unwrap_or_default();
-    let nameplate = v.get("nameplate").and_then(serde_json::Value::as_bool).unwrap_or(false);
-    let time_knob = v.get("time_knob").and_then(serde_json::Value::as_bool).unwrap_or(false);
-    let back = v.get("back").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
-    let back_dark = v.get("back_dark").and_then(|d| d.as_str()).map(|d| format!("{SET}/{d}"));
+    let nameplate = v
+        .get("nameplate")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let time_knob = v
+        .get("time_knob")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let back = v
+        .get("back")
+        .and_then(|d| d.as_str())
+        .map(|d| format!("{SET}/{d}"));
+    let back_dark = v
+        .get("back_dark")
+        .and_then(|d| d.as_str())
+        .map(|d| format!("{SET}/{d}"));
     let row = v.get("row").and_then(|r| {
         let s = r.get("size")?.as_array()?;
-        Some((format!("{SET}/{}", r.get("face")?.as_str()?), (s.first()?.as_f64()?, s.get(1)?.as_f64()?)))
+        Some((
+            format!("{SET}/{}", r.get("face")?.as_str()?),
+            (s.first()?.as_f64()?, s.get(1)?.as_f64()?),
+        ))
     });
-    Some(FaceEntry { face: format!("{SET}/{face}"), ns, words, size, also, variants, maps, dark, tiers, nameplate, time_knob, back, back_dark, row })
+    Some(FaceEntry {
+        face: format!("{SET}/{face}"),
+        ns,
+        words,
+        size,
+        also,
+        variants,
+        maps,
+        dark,
+        tiers,
+        nameplate,
+        time_knob,
+        back,
+        back_dark,
+        row,
+    })
 }
 
 impl Faces {
@@ -349,14 +429,50 @@ impl Faces {
     pub fn load() -> Self {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let path = crate::ui::frame_surface::design_dir().join(SET).join("faces.json");
-            let Ok(text) = std::fs::read_to_string(&path) else { return Self::default() };
+            let path = crate::ui::frame_surface::design_dir()
+                .join(SET)
+                .join("faces.json");
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                return Self::default();
+            };
             let Ok(doc) = serde_json::from_str::<serde_json::Value>(&text) else {
                 tracing::warn!(target: "frame", manifest = %path.display(), "faces.json does not parse");
                 return Self::default();
             };
-            let list = |k: &str| doc.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default();
-            Self { drives: list("drives"), amps: list("amps"), gate: doc.get("gate").and_then(entry), eq: doc.get("eq").and_then(entry), cab: doc.get("cab").and_then(entry), pre: list("pre"), pictures: list("pictures"), input: list("input"), filter_picture: doc.get("filter_picture").and_then(entry), post_comp: doc.get("post_comp").and_then(entry), time_delay: doc.get("time").and_then(|t| t.get("delay")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), time_reverb: doc.get("time").and_then(|t| t.get("reverb")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(entry).collect()).unwrap_or_default(), modulation: list("modulation"), pre_comp_pedal: doc.get("pre_comp_pedal").and_then(entry), comp: doc.get("comp").and_then(entry), trim: doc.get("trim").and_then(entry) }
+            let list = |k: &str| {
+                doc.get(k)
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(entry).collect())
+                    .unwrap_or_default()
+            };
+            Self {
+                drives: list("drives"),
+                amps: list("amps"),
+                gate: doc.get("gate").and_then(entry),
+                eq: doc.get("eq").and_then(entry),
+                cab: doc.get("cab").and_then(entry),
+                pre: list("pre"),
+                pictures: list("pictures"),
+                input: list("input"),
+                filter_picture: doc.get("filter_picture").and_then(entry),
+                post_comp: doc.get("post_comp").and_then(entry),
+                time_delay: doc
+                    .get("time")
+                    .and_then(|t| t.get("delay"))
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(entry).collect())
+                    .unwrap_or_default(),
+                time_reverb: doc
+                    .get("time")
+                    .and_then(|t| t.get("reverb"))
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(entry).collect())
+                    .unwrap_or_default(),
+                modulation: list("modulation"),
+                pre_comp_pedal: doc.get("pre_comp_pedal").and_then(entry),
+                comp: doc.get("comp").and_then(entry),
+                trim: doc.get("trim").and_then(entry),
+            }
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -375,13 +491,19 @@ impl Faces {
     #[must_use]
     pub fn modulation(&self, block_type: &str) -> Option<&FaceEntry> {
         let name = block_type.to_lowercase();
-        self.modulation.iter().find(|e| e.words.iter().any(|w| *w == name))
+        self.modulation
+            .iter()
+            .find(|e| e.words.iter().any(|w| *w == name))
     }
 
     /// The face for a delay machine (`style` name) or reverb algorithm.
     #[must_use]
     pub fn time(&self, reverb: bool, algorithm: &str) -> Option<&FaceEntry> {
-        let list = if reverb { &self.time_reverb } else { &self.time_delay };
+        let list = if reverb {
+            &self.time_reverb
+        } else {
+            &self.time_delay
+        };
         let name = algorithm.to_lowercase();
         list.iter().find(|e| e.words.iter().any(|w| *w == name))
     }
@@ -420,7 +542,11 @@ fn pick<'a>(list: &'a [FaceEntry], name: &str) -> Option<&'a FaceEntry> {
         return None;
     }
     // `a+b` needs every word; otherwise any one.
-    list.iter().find(|e| e.words.iter().any(|w| w.split('+').all(|part| name.contains(part.trim()))))
+    list.iter().find(|e| {
+        e.words
+            .iter()
+            .any(|w| w.split('+').all(|part| name.contains(part.trim())))
+    })
 }
 
 /// The manifest, read once per mount (a regenerated set is picked up by
@@ -431,7 +557,11 @@ pub fn use_faces() -> Faces {
 
 /// A block's values as its face's params, in their own units.
 fn values_of(block: &LiveBlock, ns: &str) -> Vec<(String, f64)> {
-    let mut v: Vec<(String, f64)> = block.params.iter().map(|p| (format!("{ns}/{}", p.name), f64::from(p.value))).collect();
+    let mut v: Vec<(String, f64)> = block
+        .params
+        .iter()
+        .map(|p| (format!("{ns}/{}", p.name), f64::from(p.value)))
+        .collect();
     if let Some(db) = block.output_level_db {
         v.push((format!("{ns}/level"), f64::from(db)));
     }
@@ -443,7 +573,9 @@ fn values_of(block: &LiveBlock, ns: &str) -> Vec<(String, f64)> {
 /// An edit on a face, sent to its block.
 fn send(rig: Option<RigClient>, block: &LiveBlock, ns: &str, addr: &str, value: f64) {
     let Some(rig) = rig else { return };
-    let Some(name) = addr.strip_prefix(ns).and_then(|s| s.strip_prefix('/')) else { return };
+    let Some(name) = addr.strip_prefix(ns).and_then(|s| s.strip_prefix('/')) else {
+        return;
+    };
     let id = block.id.clone();
     match name {
         "on" => {
@@ -504,8 +636,7 @@ pub fn BlockFace(
     /// with the options (`algorithm`, the reverb algorithms).
     #[props(default)]
     preset_type: Option<String>,
-    #[props(default)]
-    algos: Option<(&'static str, Vec<&'static str>)>,
+    #[props(default)] algos: Option<(&'static str, Vec<&'static str>)>,
     /// The tempo, for a face with the Time knob (its Beat side).
     #[props(default)]
     tempo_bpm: Option<u32>,
@@ -520,12 +651,33 @@ pub fn BlockFace(
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     // The nameplate: the preset playing, printed by the face.
-    let comp = try_use_context::<crate::ui::face_chrome::FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
-    let playing = comp.active_blocks.iter().find(|b| b.block.eq_ignore_ascii_case(&block.name)).map(|b| b.preset.clone()).unwrap_or_default();
-    let mut texts = if face.nameplate { vec![(format!("{}/preset", face.ns), if playing.is_empty() { "—".to_string() } else { playing.clone() })] } else { Vec::new() };
+    let comp = try_use_context::<crate::ui::face_chrome::FacePresets>()
+        .map(|c| c.0.read().clone())
+        .unwrap_or_default();
+    let playing = comp
+        .active_blocks
+        .iter()
+        .find(|b| b.block.eq_ignore_ascii_case(&block.name))
+        .map(|b| b.preset.clone())
+        .unwrap_or_default();
+    let mut texts = if face.nameplate {
+        vec![(
+            format!("{}/preset", face.ns),
+            if playing.is_empty() {
+                "—".to_string()
+            } else {
+                playing.clone()
+            },
+        )]
+    } else {
+        Vec::new()
+    };
     // The Time knob: its position, switch and readout, from the block.
     let bpm = tempo_bpm.unwrap_or(120) as f32;
-    let timed = face.time_knob.then(|| crate::ui::time_face::view(&block, bpm)).flatten();
+    let timed = face
+        .time_knob
+        .then(|| crate::ui::time_face::view(&block, bpm))
+        .flatten();
     // Turned over to its back (the advanced controls) by its flip arrow.
     // `FTS_FACE_BACK=1` starts every face turned over (to look at backs).
     let mut flipped = use_signal(|| {
@@ -543,12 +695,24 @@ pub fn BlockFace(
     // Where the last press on the face landed (window coordinates): the
     // algorithm menu opens there.
     let mut pressed_at = use_signal(|| (0.0, 0.0));
-    let nameplate = face.nameplate.then(|| (block.clone(), preset_type.clone().unwrap_or_default(), algos.clone(), comp.clone(), playing.clone(), members.clone()));
+    let nameplate = face.nameplate.then(|| {
+        (
+            block.clone(),
+            preset_type.clone().unwrap_or_default(),
+            algos.clone(),
+            comp.clone(),
+            playing.clone(),
+            members.clone(),
+        )
+    });
     let mut values = values_of(&block, &face.ns);
     values.extend(live);
     for m in &face.maps {
         if let Some(p) = block.params.iter().find(|p| p.name == m.param) {
-            values.push((format!("{}/{}", face.ns, m.face), m.to_face(f64::from(p.value))));
+            values.push((
+                format!("{}/{}", face.ns, m.face),
+                m.to_face(f64::from(p.value)),
+            ));
         }
     }
     if let Some(t) = &timed {
@@ -666,13 +830,21 @@ fn nameplate_press(
 ) {
     match press {
         "preset_prev" | "preset_next" => {
-            let names: Vec<String> = comp.block_presets.iter().filter(|p| p.block_type.eq_ignore_ascii_case(kind)).map(|p| p.name.clone()).collect();
+            let names: Vec<String> = comp
+                .block_presets
+                .iter()
+                .filter(|p| p.block_type.eq_ignore_ascii_case(kind))
+                .map(|p| p.name.clone())
+                .collect();
             if names.is_empty() {
                 return;
             }
             let n = names.len() as i64;
             let dir = if press == "preset_next" { 1 } else { -1 };
-            let next = names.iter().position(|x| x.eq_ignore_ascii_case(playing)).map_or(0, |i| (i as i64 + dir).rem_euclid(n) as usize);
+            let next = names
+                .iter()
+                .position(|x| x.eq_ignore_ascii_case(playing))
+                .map_or(0, |i| (i as i64 + dir).rem_euclid(n) as usize);
             let (block, name) = (block.name.clone(), names[next].clone());
             spawn(async move {
                 if let Some(r) = rig {
@@ -682,22 +854,38 @@ fn nameplate_press(
         }
         "preset_browse" => {
             if let Some(s) = try_consume_context::<crate::ui::module_sidebar::SelectedModule>() {
-                s.set(crate::ui::module_sidebar::Selection::Block { name: block.name.clone(), block_type: kind.to_string() });
+                s.set(crate::ui::module_sidebar::Selection::Block {
+                    name: block.name.clone(),
+                    block_type: kind.to_string(),
+                });
             }
         }
         "algo_menu" => {
             // A face picked by its preset (a Pre FX pedal): its name opens
             // the presets. On a phone, every pick opens the browser on the
             // block (its algorithm and its presets) — no popup grid.
-            if algos.is_none() || try_consume_context::<crate::ui::phone::PhoneBrowses>().is_some() {
-                if let Some(s) = try_consume_context::<crate::ui::module_sidebar::SelectedModule>() {
-                    s.set(crate::ui::module_sidebar::Selection::Block { name: block.name.clone(), block_type: kind.to_string() });
+            if algos.is_none() || try_consume_context::<crate::ui::phone::PhoneBrowses>().is_some()
+            {
+                if let Some(s) = try_consume_context::<crate::ui::module_sidebar::SelectedModule>()
+                {
+                    s.set(crate::ui::module_sidebar::Selection::Block {
+                        name: block.name.clone(),
+                        block_type: kind.to_string(),
+                    });
                 }
                 return;
             }
-            let (Some((param, options)), Some(host)) = (algos, signal_widgets::PopupHost::try_use()) else { return };
+            let (Some((param, options)), Some(host)) =
+                (algos, signal_widgets::PopupHost::try_use())
+            else {
+                return;
+            };
             let (param, options) = (*param, options.clone());
-            let current = block.params.iter().find(|p| p.name == param).map_or(0, |p| p.value.round().max(0.0) as usize);
+            let current = block
+                .params
+                .iter()
+                .find(|p| p.name == param)
+                .map_or(0, |p| p.value.round().max(0.0) as usize);
             let id = block.id.clone();
             let members = members.to_vec();
             let playing_id = block.id.clone();
@@ -763,11 +951,23 @@ fn nameplate_press(
 pub fn NameCard(block: LiveBlock, aspect: (f64, f64)) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let (w, h) = aspect;
-    let title = if block.empty { "Empty".to_string() } else if block.preset.is_empty() { block.name.clone() } else { block.preset.clone() };
+    let title = if block.empty {
+        "Empty".to_string()
+    } else if block.preset.is_empty() {
+        block.name.clone()
+    } else {
+        block.preset.clone()
+    };
     let detail = if !block.detail.is_empty() {
         block.detail.clone()
     } else {
-        block.asset.rsplit(['/', '\\']).next().unwrap_or_default().trim_end_matches(".nam").to_string()
+        block
+            .asset
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or_default()
+            .trim_end_matches(".nam")
+            .to_string()
     };
     let on = !block.bypassed && !block.empty;
     let id = block.id.clone();
@@ -810,7 +1010,11 @@ const AMP: (f64, f64) = (792.0, 392.0);
 /// panel of weight 0 is exactly its faces.
 #[component]
 fn Panel(weight: f64, children: Element) -> Element {
-    let flex = if weight > 0.0 { format!("{weight} 1 auto") } else { "0 0 auto".to_string() };
+    let flex = if weight > 0.0 {
+        format!("{weight} 1 auto")
+    } else {
+        "0 0 auto".to_string()
+    };
     rsx! {
         div {
             style: "flex: {flex}; height: 100%; min-height: 0; display: flex; flex-direction: row; align-items: stretch; justify-content: center; background: #121317; border-right: 1px solid #1d1f24; box-sizing: border-box; overflow: hidden;",
@@ -891,24 +1095,49 @@ pub fn DrivesRow(
             // A sized leading unit takes the native boost's slot: no pedal
             // there to draw, and the room is the pedals'. (A captured boost
             // is a Drive block, and stays.)
-            .filter(|b| !((pedals_only || (leading_width.is_some() && leading.is_some())) && b.block_type == BlockType::Boost))
+            .filter(|b| {
+                !((pedals_only || (leading_width.is_some() && leading.is_some()))
+                    && b.block_type == BlockType::Boost)
+            })
             // …and the board's empty slots: room for the pedals there are.
-            .filter(|b| !((pedals_only || (leading_width.is_some() && leading.is_some())) && b.empty))
-            .map(|b| (b.clone(), (!b.empty).then(|| faces.drive(&b.preset).map(|f| f.at(tier))).flatten())),
+            .filter(|b| {
+                !((pedals_only || (leading_width.is_some() && leading.is_some())) && b.empty)
+            })
+            .map(|b| {
+                (
+                    b.clone(),
+                    (!b.empty)
+                        .then(|| faces.drive(&b.preset).map(|f| f.at(tier)))
+                        .flatten(),
+                )
+            }),
     );
     let last = slots.len().saturating_sub(1);
     // Fitted: the pedals' height that puts them all across `fit_width`,
     // after the cables' least room.
     let pedal_h = fit_width.map(|w| {
-        let aspects: f64 = slots.iter().map(|(_, f)| f.as_ref().map_or(PEDAL.0 / PEDAL.1, |f| f.size.0 / f.size.1)).sum();
+        let aspects: f64 = slots
+            .iter()
+            .map(|(_, f)| {
+                f.as_ref()
+                    .map_or(PEDAL.0 / PEDAL.1, |f| f.size.0 / f.size.1)
+            })
+            .sum();
         // Fitted, the cables take their least: the pedals get the room.
         let cables = TIGHT_CABLE * last as f64 + 2.0 * TIGHT_CABLE;
         // A leading unit of a known width, and its cable, come off the top.
-        let lead = leading_width.filter(|_| leading.is_some()).map_or(0.0, |l| l + TIGHT_CABLE);
-        ((w - cables - lead) / aspects.max(0.1)).max(60.0).min(fit_height.unwrap_or(f64::MAX))
+        let lead = leading_width
+            .filter(|_| leading.is_some())
+            .map_or(0.0, |l| l + TIGHT_CABLE);
+        ((w - cables - lead) / aspects.max(0.1))
+            .max(60.0)
+            .min(fit_height.unwrap_or(f64::MAX))
     });
     let tight = fit_width.is_some();
-    let slot_size = pedal_h.map_or_else(|| "height: 100%;".to_string(), |h| format!("height: {h:.0}px; align-self: center;"));
+    let slot_size = pedal_h.map_or_else(
+        || "height: 100%;".to_string(),
+        |h| format!("height: {h:.0}px; align-self: center;"),
+    );
     rsx! {
         div { style: "position: relative; display: flex; flex-direction: row; align-items: stretch; width: 100%; height: 100%; min-height: 0; box-sizing: border-box; padding: {BOARD_PAD_TOP}px 0 {BOARD_PAD_BOTTOM}px 0; background: {BOARD};",
             // The power: one lead along the top, a drop into each pedal.
@@ -980,8 +1209,16 @@ fn Cable(end: CableEnd, #[props(default)] tight: bool) -> Element {
         (false, false) => "0 1 36px; min-width: 18px;".to_string(),
         (_, true) => format!("1 1 0%; min-width: {TIGHT_CABLE}px;"),
     };
-    let plug = |side: &str| format!("position: absolute; {side}: 0; top: {JACK_AT}%; width: 12px; height: 12px; margin-top: -6px; border-radius: 2px; background: linear-gradient(180deg, #e9eaec 0%, #8e9196 55%, #4a4c50 100%); pointer-events: none;");
-    let boot = |side: &str| format!("position: absolute; {side}: 10px; top: {JACK_AT}%; width: 10px; height: 16px; margin-top: -8px; border-radius: 3px; background: linear-gradient(90deg, #1b1b1d 0%, #2c2c30 50%, #151517 100%); pointer-events: none;");
+    let plug = |side: &str| {
+        format!(
+            "position: absolute; {side}: 0; top: {JACK_AT}%; width: 12px; height: 12px; margin-top: -6px; border-radius: 2px; background: linear-gradient(180deg, #e9eaec 0%, #8e9196 55%, #4a4c50 100%); pointer-events: none;"
+        )
+    };
+    let boot = |side: &str| {
+        format!(
+            "position: absolute; {side}: 10px; top: {JACK_AT}%; width: 10px; height: 16px; margin-top: -8px; border-radius: 3px; background: linear-gradient(90deg, #1b1b1d 0%, #2c2c30 50%, #151517 100%); pointer-events: none;"
+        )
+    };
     rsx! {
         div { style: "position: relative; flex: {flex} height: 100%; pointer-events: none;",
             match end {
@@ -1044,17 +1281,34 @@ pub fn AmpRow(
         .filter(|(i, b)| *i == 0 || !b.asset.is_empty())
         .map(|(_, b)| b.clone())
         .collect();
-    let eq = blocks.iter().find(|b| b.block_type == BlockType::Eq && b.name.eq_ignore_ascii_case("Amp EQ")).cloned();
-    let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned().filter(|_| !amps_only);
+    let eq = blocks
+        .iter()
+        .find(|b| b.block_type == BlockType::Eq && b.name.eq_ignore_ascii_case("Amp EQ"))
+        .cloned();
+    let gate = blocks
+        .iter()
+        .find(|b| b.block_type == BlockType::Gate)
+        .cloned()
+        .filter(|_| !amps_only);
     let one = amps.len() == 1 && !amps_only;
     // Fitted: each amp's box, in points — its face's proportion at the
     // page's height, scaled down together until the row is no wider than
     // the page.
     if let Some((fw, fh)) = fit {
-        let face_of = |b: &LiveBlock| faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).map(|f| f.at(tier));
-        let aspect = |b: &LiveBlock| face_of(b).map_or(AMP.0 / AMP.1, |f| f.size.0 / f.size.1.max(1.0));
+        let face_of = |b: &LiveBlock| {
+            faces
+                .amp(&b.asset)
+                .or_else(|| faces.amp(&b.preset))
+                .map(|f| f.at(tier))
+        };
+        let aspect =
+            |b: &LiveBlock| face_of(b).map_or(AMP.0 / AMP.1, |f| f.size.0 / f.size.1.max(1.0));
         let total: f64 = amps.iter().map(|b| fh * aspect(b)).sum();
-        let scale = if total > fw && total > 0.0 { fw / total } else { 1.0 };
+        let scale = if total > fw && total > 0.0 {
+            fw / total
+        } else {
+            1.0
+        };
         let h = (fh * scale).floor();
         return rsx! {
             div { style: "display: flex; flex-direction: row; align-items: center; justify-content: center; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden;",
@@ -1111,7 +1365,10 @@ pub fn AmpRow(
 #[component]
 pub fn GateUnit(blocks: Vec<LiveBlock>, in_db: Signal<f32>) -> Element {
     let faces = use_faces();
-    let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
+    let gate = blocks
+        .iter()
+        .find(|b| b.block_type == BlockType::Gate)
+        .cloned();
     rsx! {
         if let (Some(g), Some(f)) = (gate, faces.gate.clone()) {
             Panel { weight: 1.0,
@@ -1124,7 +1381,12 @@ pub fn GateUnit(blocks: Vec<LiveBlock>, in_db: Signal<f32>) -> Element {
 /// The gate's face with the input's level in its meter: its own
 /// component, so only it redraws as the level moves.
 #[component]
-pub(crate) fn GateFace(block: LiveBlock, face: FaceEntry, level: Signal<f32>, #[props(default)] fill: bool) -> Element {
+pub(crate) fn GateFace(
+    block: LiveBlock,
+    face: FaceEntry,
+    level: Signal<f32>,
+    #[props(default)] fill: bool,
+) -> Element {
     let live = vec![(format!("{}/in", face.ns), f64::from(level()))];
     let preset_type = fill.then(|| "gate".to_string());
     rsx! { BlockFace { block, face, live, fill, preset_type } }
@@ -1183,7 +1445,11 @@ pub fn PreFxRow(
             let face = faces
                 .pre(&b.preset)
                 .or_else(|| faces.pre(&b.name))
-                .or_else(|| (b.block_type == BlockType::Trem).then(|| faces.pre("gravity tank trem")).flatten());
+                .or_else(|| {
+                    (b.block_type == BlockType::Trem)
+                        .then(|| faces.pre("gravity tank trem"))
+                        .flatten()
+                });
             (b.clone(), face.map(|f| f.at(tier)))
         })
         .collect();
@@ -1201,7 +1467,11 @@ pub fn PreFxRow(
                 .map(|f| {
                     f.also
                         .iter()
-                        .filter_map(|(ns, name)| pre.iter().find(|x| x.name.eq_ignore_ascii_case(name)).map(|x| (ns.clone(), x.clone())))
+                        .filter_map(|(ns, name)| {
+                            pre.iter()
+                                .find(|x| x.name.eq_ignore_ascii_case(name))
+                                .map(|x| (ns.clone(), x.clone()))
+                        })
                         .collect()
                 })
                 .unwrap_or_default();
@@ -1214,18 +1484,43 @@ pub fn PreFxRow(
     // tremolo) before them — for the look, not the chain's order.
     // A delay or reverb is a lane with a face or without (an empty slot is
     // still the Delay/Verb page's, not the units').
-    let laned = |(b, _, _): &(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)| matches!(b.block_type, BlockType::Delay | BlockType::Reverb);
+    let laned = |(b, _, _): &(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)| {
+        matches!(b.block_type, BlockType::Delay | BlockType::Reverb)
+    };
     let lanes: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = items
         .iter()
         .filter(|i| laned(i) && only.is_none_or(|t| i.0.block_type == t))
         .cloned()
-        .map(|(b, f, e)| (b, f.map(|f| fit.map_or(f.clone(), |(w, h)| f.at_box(w, h / if only.is_some() { 1.0 } else { 2.0 }))), e))
+        .map(|(b, f, e)| {
+            (
+                b,
+                f.map(|f| {
+                    fit.map_or(f.clone(), |(w, h)| {
+                        f.at_box(w, h / if only.is_some() { 1.0 } else { 2.0 })
+                    })
+                }),
+                e,
+            )
+        })
         .collect();
-    let items: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> = if part == PrePart::Lanes { Vec::new() } else { items.into_iter().filter(|i| !laned(i)).collect() };
-    let lanes = if part == PrePart::Units { Vec::new() } else { lanes };
+    let items: Vec<(LiveBlock, Option<FaceEntry>, Vec<(String, LiveBlock)>)> =
+        if part == PrePart::Lanes {
+            Vec::new()
+        } else {
+            items.into_iter().filter(|i| !laned(i)).collect()
+        };
+    let lanes = if part == PrePart::Units {
+        Vec::new()
+    } else {
+        lanes
+    };
     // The lanes on their own page take the width; in the row, one Time
     // lane's.
-    let lane_flex = if part == PrePart::Lanes { "1 1 0%" } else { "0 0 50.93%" };
+    let lane_flex = if part == PrePart::Lanes {
+        "1 1 0%"
+    } else {
+        "0 0 50.93%"
+    };
     // Pre modulation takes what the tremolo and the lanes leave.
     let is_mod = |b: &LiveBlock| b.block_type == BlockType::Chorus;
     // The units with a face: the lanes a fitted box is shared between.
@@ -1318,7 +1613,9 @@ pub enum PrePart {
 /// A pre unit's menu from its name: a chorus's engines, a tremolo's modes.
 fn unit_algos(b: &LiveBlock) -> Option<(&'static str, Vec<&'static str>)> {
     match b.block_type {
-        BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => Some(("engine", crate::ui::control::MOD_ENGINES.to_vec())),
+        BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => {
+            Some(("engine", crate::ui::control::MOD_ENGINES.to_vec()))
+        }
         BlockType::Trem => Some(("mode", crate::ui::control::TREM_MODES.to_vec())),
         _ => None,
     }
@@ -1333,8 +1630,12 @@ fn shows_viz(b: &LiveBlock) -> bool {
 /// What a pre effect is doing, drawn by the effect's own visualiser.
 fn viz_of(b: &LiveBlock, tempo_bpm: u32) -> Element {
     match b.block_type {
-        BlockType::Delay => rsx! { crate::ui::control::DelayBlockViz { block: b.clone(), tempo_bpm } },
-        BlockType::Reverb => rsx! { crate::ui::control::ReverbBlockViz { block: b.clone(), tempo_bpm } },
+        BlockType::Delay => {
+            rsx! { crate::ui::control::DelayBlockViz { block: b.clone(), tempo_bpm } }
+        }
+        BlockType::Reverb => {
+            rsx! { crate::ui::control::ReverbBlockViz { block: b.clone(), tempo_bpm } }
+        }
         _ => rsx! { crate::ui::control::ModBlockViz { block: b.clone() } },
     }
 }
@@ -1354,7 +1655,11 @@ fn UnboundFace(
 ) -> Element {
     let (w, h) = face.size;
     let off = vec![(format!("{}/on", face.ns), 0.0)];
-    let boxed = if fill { "width: 100%; height: 100%; min-width: 0; min-height: 0;".to_string() } else { format!("height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0;") };
+    let boxed = if fill {
+        "width: 100%; height: 100%; min-width: 0; min-height: 0;".to_string()
+    } else {
+        format!("height: 100%; aspect-ratio: {w} / {h}; flex: 0 0 auto; min-height: 0;")
+    };
     rsx! {
         div { style: "position: relative; {boxed} opacity: 0.9;",
             if let Some((block, block_type)) = stepper {
@@ -1387,12 +1692,21 @@ pub fn InputRow(
     let faces = use_faces();
     let want = |k: &str| only.is_empty() || only.iter().any(|o| o == k);
     let unit = |kind: &str, bt: BlockType| -> (Option<LiveBlock>, Option<FaceEntry>) {
-        (blocks.iter().find(|b| b.block_type == bt).cloned(), pick(&faces.input, kind).cloned())
+        (
+            blocks.iter().find(|b| b.block_type == bt).cloned(),
+            pick(&faces.input, kind).cloned(),
+        )
     };
     // The pitch blocks by name: the transposer and the dive bomb are pitch
     // blocks too.
     let named = |kind: &str, name: &str| -> (Option<LiveBlock>, Option<FaceEntry>) {
-        (blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)).cloned(), pick(&faces.input, kind).cloned())
+        (
+            blocks
+                .iter()
+                .find(|b| b.name.eq_ignore_ascii_case(name))
+                .cloned(),
+            pick(&faces.input, kind).cloned(),
+        )
     };
     let (pitch, pitch_face) = named("pitch", "Pitch");
     let (transpose, transpose_face) = named("transpose", "Transpose");
@@ -1424,7 +1738,10 @@ pub fn InputRow(
             })
             .collect();
         if fit.is_some() {
-            let lanes: Vec<(String, Option<LiveBlock>, FaceEntry)> = lanes.into_iter().filter_map(|(k, b, f)| f.map(|f| (k, b, f))).collect();
+            let lanes: Vec<(String, Option<LiveBlock>, FaceEntry)> = lanes
+                .into_iter()
+                .filter_map(|(k, b, f)| f.map(|f| (k, b, f)))
+                .collect();
             // One unit alone fills the box: a face lays itself out for its
             // room (the Q-Tron goes wide, its filter screen beside it).
             if let [(k_, b, f)] = lanes.as_slice() {
@@ -1446,7 +1763,10 @@ pub fn InputRow(
             // out for its box.
             let (fw, fh) = fit.unwrap_or_default();
             let share = fw / lanes.len().max(1) as f64;
-            let lanes: Vec<(String, Option<LiveBlock>, FaceEntry)> = lanes.into_iter().map(|(k, b, f)| (k, b, f.at_box(share, fh))).collect();
+            let lanes: Vec<(String, Option<LiveBlock>, FaceEntry)> = lanes
+                .into_iter()
+                .map(|(k, b, f)| (k, b, f.at_box(share, fh)))
+                .collect();
             return rsx! {
                 div { style: "display: flex; flex-direction: row; gap: {FIT_GAP}px; width: 100%; height: 100%; min-height: 0; min-width: 0; overflow: hidden; box-sizing: border-box; padding: 2px;",
                     for (k_, b, f) in lanes {
@@ -1464,14 +1784,21 @@ pub fn InputRow(
         // The pedal pages are a board: the pedals side by side at their
         // own proportions, all one scale, the largest that fits — as the
         // drives. The rest are lanes, stacked.
-        let board = only.iter().any(|k| matches!(k.as_str(), "wah" | "dive" | "volume"));
+        let board = only
+            .iter()
+            .any(|k| matches!(k.as_str(), "wah" | "dive" | "volume"));
         if board {
-            let (ww, wh) = try_use_context::<crate::ui::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
+            let (ww, wh) = try_use_context::<crate::ui::control::WindowSize>()
+                .map_or((874.0, 381.0), |s| (s.0)());
             // The page: the window less the rail, the housing, the bars.
             let (room_w, room_h) = (ww - 60.0 - 54.0 - 24.0, wh - 44.0 - 30.0 - 30.0);
-            let sizes: Vec<(f64, f64)> = lanes.iter().map(|(_, _, f)| f.as_ref().map_or((1.0, 1.0), |f| (f.size.0, f.size.1))).collect();
+            let sizes: Vec<(f64, f64)> = lanes
+                .iter()
+                .map(|(_, _, f)| f.as_ref().map_or((1.0, 1.0), |f| (f.size.0, f.size.1)))
+                .collect();
             let gaps = 14.0 * (sizes.len().saturating_sub(1)) as f64;
-            let k = ((room_w - gaps) / sizes.iter().map(|s| s.0).sum::<f64>().max(1.0)).min(room_h / sizes.iter().map(|s| s.1).fold(1.0, f64::max));
+            let k = ((room_w - gaps) / sizes.iter().map(|s| s.0).sum::<f64>().max(1.0))
+                .min(room_h / sizes.iter().map(|s| s.1).fold(1.0, f64::max));
             return rsx! {
                 div { style: "display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 14px; width: 100%; height: 100%; min-height: 0; background: linear-gradient(180deg, #121316, #0b0c0e); border-top: 3px solid #1c1d21; border-bottom: 3px solid #1c1d21;",
                     for ((k_, b, f), (fw, fh)) in lanes.into_iter().zip(sizes) {
@@ -1572,6 +1899,10 @@ fn cab_of(blocks: &[LiveBlock], amp: &LiveBlock) -> Option<LiveBlock> {
     let side = amp.name.rsplit(' ').next().unwrap_or("L");
     blocks
         .iter()
-        .find(|b| b.block_type == BlockType::Cabinet && b.name.eq_ignore_ascii_case(&format!("Cab {side}")) && !b.preset.is_empty())
+        .find(|b| {
+            b.block_type == BlockType::Cabinet
+                && b.name.eq_ignore_ascii_case(&format!("Cab {side}"))
+                && !b.preset.is_empty()
+        })
         .cloned()
 }

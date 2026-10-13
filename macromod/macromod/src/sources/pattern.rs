@@ -100,7 +100,8 @@ impl PatternConfig {
             self.points
                 .iter()
                 .map(|p| {
-                    let mut point = dsp_core::modulation::Point::new(f64::from(p.x), f64::from(p.y));
+                    let mut point =
+                        dsp_core::modulation::Point::new(f64::from(p.x), f64::from(p.y));
                     point.tension = f64::from(p.tension);
                     point.curve_type = dsp_core::modulation::CurveType::from_u8(p.curve_type);
                     point.clear_tails = p.clear_tails;

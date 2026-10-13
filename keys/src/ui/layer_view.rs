@@ -14,13 +14,13 @@
 //! - **Edit** — the Signal Editor: the lane's articulations / zones and the
 //!   engine program it's running through.
 
-use dioxus::prelude::*;
 use crate::proto::keys::KeysRigClient;
 use crate::proto::{KeysLayerDetail, KeysNode};
+use dioxus::prelude::*;
 
+use crate::proto::KeysMixer;
 use crate::ui::control::engine_color;
 use crate::ui::zoom::Zoom;
-use crate::proto::KeysMixer;
 
 /// Which page of the layer zoom.
 #[derive(Clone, Copy, PartialEq, Eq)]

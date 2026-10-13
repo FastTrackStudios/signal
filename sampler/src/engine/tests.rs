@@ -503,7 +503,9 @@ fn a_piano_release_plays_the_layer_the_law_picks() {
     assert!(vel > 0, "the strike is remembered for the release");
 
     let law = ReleaseLaw::of(NiPiano::Grandeur);
-    let short = law.release(60, vel, 50.0).expect("a short hold plays a release");
+    let short = law
+        .release(60, vel, 50.0)
+        .expect("a short hold plays a release");
     let long = law.release(60, vel, 20_000.0).expect("so does a long one");
     let file = |layer: u8| {
         let picks = eng.piano_release_zones(60, layer);
@@ -516,7 +518,10 @@ fn a_piano_release_plays_the_layer_the_law_picks() {
     // group's own volume); the long hold's layer 1 is the softest
     // recording, so it needs less cut.
     assert!(short.gain_db < -6.0, "{short:?}");
-    assert!(long.fade_in_ms > short.fade_in_ms, "softer layers fade in slower");
+    assert!(
+        long.fade_in_ms > short.fade_in_ms,
+        "softer layers fade in slower"
+    );
 }
 
 #[test]

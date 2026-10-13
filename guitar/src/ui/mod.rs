@@ -21,9 +21,9 @@ mod eq_vello;
 mod face_chrome;
 /// Pages designed in frame, running live (hot-reloaded from their files).
 mod frame_surface;
+pub(crate) mod grid;
 /// The rig's blocks drawn with frame faces, chosen by what is loaded.
 mod rig_faces;
-pub(crate) mod grid;
 /// The shared audio-gui knob (moved to signal-widgets).
 pub use signal_widgets::knob;
 mod icons;
@@ -47,18 +47,16 @@ mod setlist_bar;
 mod settings;
 mod sidebars;
 mod stable;
-mod time_face;
 mod state;
 /// The iPad layout: the touch prototype on the live rig.
 mod tablet;
 mod theme;
+mod time_face;
 mod wire_param;
 
 pub use chain::ChainStrip;
 pub use comp_surface::CompSurface;
 pub use control::{ControlView, FormFactor, MidiIndicator, WindowAspect, WindowSize, ZoomPanel};
-pub use phone::{IslandLeft, PhoneHost, ScreenCorners};
-pub use phone_audio::LogFeed;
 pub use grid::RigGraph;
 pub use icons::module_icon;
 pub use library::{Kind as LibraryKind, LibraryPicker};
@@ -66,6 +64,8 @@ pub use macro_bar::{MacroBar, MacroPanelOpen, MacroShotStatus, MacroTuneMode};
 pub use meters::{CpuMeter, DspReadout, MeterBar, MeterPair, meter_level};
 pub use module_sidebar::{InitialSelection, Selection as ModuleSelection};
 pub use perform::PerformGrid;
+pub use phone::{IslandLeft, PhoneHost, ScreenCorners};
+pub use phone_audio::LogFeed;
 pub use remote::GuitarRigRemote;
 pub use setlist_bar::SetlistSidebar;
 pub use settings::{
@@ -79,4 +79,4 @@ pub use state::{RigViewState, use_rig_state};
 pub use wire_param::{EditSink, WireParam, use_wire_params};
 
 // The wire contract, re-exported for convenience.
-pub use crate::proto as proto;
+pub use crate::proto;

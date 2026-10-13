@@ -15,8 +15,8 @@
 
 use std::sync::Arc;
 
-use signal_proto::block::BlockType;
 use sampler::{GuitarRig, ModelId, RigBlock};
+use signal_proto::block::BlockType;
 
 const SR: u32 = 48_000;
 

@@ -15,16 +15,14 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 use audio::io::AudioIoPrefs;
+use keys::KeysRig;
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Gauge, Paragraph};
-use keys::KeysRig;
-use sampler::{
-    Container, MidiEvent, MidiInputHandle, MidiSelection, PresetRegistry, RigNode,
-};
+use sampler::{Container, MidiEvent, MidiInputHandle, MidiSelection, PresetRegistry, RigNode};
 
 const NORD_RED: Color = Color::Rgb(206, 38, 38);
 /// Distinct colors for key-split bands / layers, reused on the keyboard + panels.
@@ -67,9 +65,8 @@ fn main() -> eyre::Result<()> {
     let mut preset_name = preset_name;
     if let Some(patch_path) = arg(&args, "--omni") {
         let index = synth::omni_import::SoundsourceIndex::scan_default();
-        let tree =
-            synth::omni_import::load_patch_file(std::path::Path::new(&patch_path), &index)
-                .map_err(|e| eyre::eyre!("omni import: {e}"))?;
+        let tree = synth::omni_import::load_patch_file(std::path::Path::new(&patch_path), &index)
+            .map_err(|e| eyre::eyre!("omni import: {e}"))?;
         preset_name = tree.name.clone();
         registry.register_code(tree);
     }

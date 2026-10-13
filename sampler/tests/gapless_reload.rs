@@ -18,11 +18,9 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use signal_proto::block::BlockType;
 use sampler::rig_profile::RigStack;
-use sampler::{
-    CommitStatus, GuitarRig, ProfileRig, ReloadMode, RigBlock, RigPatch, RigProfile,
-};
+use sampler::{CommitStatus, GuitarRig, ProfileRig, ReloadMode, RigBlock, RigPatch, RigProfile};
+use signal_proto::block::BlockType;
 
 const SR: u32 = 48_000;
 

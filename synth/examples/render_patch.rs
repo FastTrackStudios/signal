@@ -8,8 +8,8 @@
 //!     [--note 48 --vel 100 --hold 1.5 --tail 0.3 --sr 48000 --cc 1=127]
 //! ```
 
-use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use sampler::node_render::RenderNode;
+use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use synth::omni_import::{SoundsourceIndex, load_patch_file};
 
 fn note_event(on: bool, key: u8, vel: u8) -> PluginMidiEvent {
@@ -110,15 +110,22 @@ fn main() {
         src.name = "Soundsource".into();
         // `--source-param name=value`: build-time params on the Sampler
         // block, as a keys layer sets them (e.g. `piano_snapshot=worship`).
-        for kv in args.windows(2).filter(|w| w[0] == "--source-param").map(|w| &w[1]) {
+        for kv in args
+            .windows(2)
+            .filter(|w| w[0] == "--source-param")
+            .map(|w| &w[1])
+        {
             if let Some((k, v)) = kv.split_once('=') {
                 src = src.with_param(k, v);
             }
         }
         Container::preset("pack").add(Container::module("Oscillator").add(src))
     } else {
-        load_patch_file(std::path::Path::new(patch), &SoundsourceIndex::scan_default())
-            .unwrap_or_else(|e| panic!("import {patch}: {e}"))
+        load_patch_file(
+            std::path::Path::new(patch),
+            &SoundsourceIndex::scan_default(),
+        )
+        .unwrap_or_else(|e| panic!("import {patch}: {e}"))
     };
     if std::env::var_os("RENDER_DEBUG").is_some() {
         if let Ok(xml) = std::fs::read_to_string(patch) {

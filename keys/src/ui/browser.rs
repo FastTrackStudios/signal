@@ -18,9 +18,9 @@
 //! duplicated and deleted. ↑ ↓ in the search field audition (the rig
 //! remembers how it was and Esc puts it back), Enter keeps.
 
-use dioxus::prelude::*;
 use crate::proto::keys::KeysRigClient;
 use crate::proto::{KeysMixer, KeysPreset};
+use dioxus::prelude::*;
 use signal_widgets::kit::{MenuItem, Picked};
 use signal_widgets::{BrowseChip, BrowseEntry, BrowseScope, SoundBrowser};
 
@@ -112,7 +112,12 @@ fn lane_now(mixer: &KeysMixer, layer: &str) -> (String, Vec<String>) {
         .iter()
         .flat_map(|e| &e.layers)
         .find(|l| l.name == layer)
-        .map(|l| (l.preset.clone(), l.modules.iter().map(|m| m.patch.clone()).collect()))
+        .map(|l| {
+            (
+                l.preset.clone(),
+                l.modules.iter().map(|m| m.patch.clone()).collect(),
+            )
+        })
         .unwrap_or_default()
 }
 
@@ -134,7 +139,11 @@ fn is_live(p: &KeysPreset, level: Level, sel: &Selection, mixer: &KeysMixer) -> 
             if p.user {
                 return preset == p.name;
             }
-            let m = if level == Level::Layer { 0 } else { sel.module() as usize };
+            let m = if level == Level::Layer {
+                0
+            } else {
+                sel.module() as usize
+            };
             sources.get(m).is_some_and(|s| *s == p.name)
         }),
     }
@@ -227,8 +236,16 @@ fn rows(
             live: is_live(p, level, sel, mixer),
             modified: false,
             user: p.user,
-            group: if p.user { "Saved".into() } else { "Library".into() },
-            menu: if p.user { user_menu(p, &taken(p)) } else { Vec::new() },
+            group: if p.user {
+                "Saved".into()
+            } else {
+                "Library".into()
+            },
+            menu: if p.user {
+                user_menu(p, &taken(p))
+            } else {
+                Vec::new()
+            },
             children: p
                 .variants
                 .iter()
@@ -368,7 +385,10 @@ pub fn Browser(state: KeysViewState) -> Element {
         .unwrap_or_default();
     let empty = match lvl {
         Level::Stacks => "This profile has no stacks yet.".to_string(),
-        Level::Engine => "No engine presets yet — ⋯ › Save engine preset keeps this engine as it sounds.".to_string(),
+        Level::Engine => {
+            "No engine presets yet — ⋯ › Save engine preset keeps this engine as it sounds."
+                .to_string()
+        }
         _ if state.presets.read().is_empty() => {
             "The library is empty — build a pack, or point the rig at one.".to_string()
         }
@@ -469,7 +489,10 @@ pub fn Browser(state: KeysViewState) -> Element {
 fn load(rig: Option<KeysRigClient>, sel: Selection, level: Level, id: String, audition: bool) {
     spawn(async move {
         let Some(r) = rig else { return };
-        if let Some(i) = id.strip_prefix("stack:").and_then(|i| i.parse::<u32>().ok()) {
+        if let Some(i) = id
+            .strip_prefix("stack:")
+            .and_then(|i| i.parse::<u32>().ok())
+        {
             let _ = r.press_stack(i).await;
             return;
         }
@@ -492,7 +515,11 @@ fn load(rig: Option<KeysRigClient>, sel: Selection, level: Level, id: String, au
                 let Some(layer) = sel.layer().map(ToString::to_string) else {
                     return;
                 };
-                let module = if level == Level::Layer { 0 } else { sel.module() };
+                let module = if level == Level::Layer {
+                    0
+                } else {
+                    sel.module()
+                };
                 match variant {
                     Some(n) => {
                         let _ = r.set_layer_variant(layer, module, index, n).await;
@@ -546,7 +573,10 @@ mod tests {
         let (e, _) = rows(&lib, Level::Engine, &sel, &mixer, "", false);
         assert_eq!(e.len(), 1);
         // Search is every word, over name and kind.
-        assert_eq!(rows(&lib, Level::Layer, &sel, &mixer, "grand c7", false).1, 1);
+        assert_eq!(
+            rows(&lib, Level::Layer, &sel, &mixer, "grand c7", false).1,
+            1
+        );
     }
 
     #[test]

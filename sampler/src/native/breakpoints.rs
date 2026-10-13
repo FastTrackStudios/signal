@@ -17,7 +17,10 @@ static TEMPO_BPM: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::n
 
 /// Set the tempo synced envelopes follow.
 pub fn set_tempo_bpm(bpm: f32) {
-    TEMPO_BPM.store(bpm.clamp(1.0, 999.0).to_bits(), std::sync::atomic::Ordering::Relaxed);
+    TEMPO_BPM.store(
+        bpm.clamp(1.0, 999.0).to_bits(),
+        std::sync::atomic::Ordering::Relaxed,
+    );
 }
 
 /// The tempo synced envelopes follow.

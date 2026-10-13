@@ -151,7 +151,11 @@ fn render(
 /// and play `input` through it once (after a warm-up pass): what comes out,
 /// left and right, as long as the input.
 #[must_use]
-pub fn render_through(patch: &RigPatch, sample_rate: u32, input: &[f32]) -> Option<(Vec<f32>, Vec<f32>)> {
+pub fn render_through(
+    patch: &RigPatch,
+    sample_rate: u32,
+    input: &[f32],
+) -> Option<(Vec<f32>, Vec<f32>)> {
     let rig = GuitarRig::open_offline(sample_rate)
         .map_err(|e| tracing::warn!(error = %e, "render: no offline rig"))
         .ok()?;

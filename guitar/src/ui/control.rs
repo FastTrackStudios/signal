@@ -122,11 +122,8 @@ fn decay_t60_secs(decay: f32) -> f64 {
 /// the engine rings for 12.
 pub(crate) fn verb_seconds(algorithm: f32, variant: f32, decay: f32) -> (f64, bool) {
     let alg = reverb::algorithm::AlgorithmType::from_index(algorithm.round().max(0.0) as usize);
-    match reverb::algorithm::decay_seconds(
-        alg,
-        variant.round().max(0.0) as usize,
-        f64::from(decay),
-    ) {
+    match reverb::algorithm::decay_seconds(alg, variant.round().max(0.0) as usize, f64::from(decay))
+    {
         Some(t) => (t, true),
         None => (decay_t60_secs(decay), false),
     }
@@ -553,8 +550,8 @@ pub(crate) const MOD_ENGINES: [&str; 11] = [
 pub(crate) const TREM_MODES: [&str; 3] = ["Mono", "Stereo", "Harmonic"];
 
 pub(crate) const DELAY_ALGOS: [&str; 13] = [
-    "Tape", "Digital", "Analog", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum",
-    "Oil Can", "MultiTap", "Spectral", "Filter",
+    "Tape", "Digital", "Analog", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum", "Oil Can",
+    "MultiTap", "Spectral", "Filter",
 ];
 /// `reverb::AlgorithmType::ALL` order.
 pub(crate) const VERB_ALGOS: [&str; 15] = [
@@ -1157,7 +1154,10 @@ pub(crate) fn lane_fit(lane: Option<(f64, f64)>, size: (f64, f64)) -> String {
     if tallest >= h {
         return full;
     }
-    format!("position: absolute; left: 0; right: 0; top: 50%; height: {tallest:.0}px; margin-top: -{:.0}px; display: flex;", tallest / 2.0)
+    format!(
+        "position: absolute; left: 0; right: 0; top: 50%; height: {tallest:.0}px; margin-top: -{:.0}px; display: flex;",
+        tallest / 2.0
+    )
 }
 
 /// The stereo delay module, wide: one full-width visualizer per delay
@@ -1194,7 +1194,17 @@ pub(crate) fn DelayPanel(
     let faces = crate::ui::rig_faces::use_faces();
     // Drawn at the window's tier (a phone draws each face's phone layout).
     let tier = use_tier();
-    let face_of = |b: &LiveBlock| faces.time(false, DELAY_ALGOS.get(param_v(b, "style", 1.0) as usize).copied().unwrap_or("")).map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h)));
+    let face_of = |b: &LiveBlock| {
+        faces
+            .time(
+                false,
+                DELAY_ALGOS
+                    .get(param_v(b, "style", 1.0) as usize)
+                    .copied()
+                    .unwrap_or(""),
+            )
+            .map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h)))
+    };
     let all_faces = delays.iter().all(|b| face_of(b).is_some());
 
     rsx! {
@@ -1402,7 +1412,17 @@ pub(crate) fn ReverbPanel(
     let faces = crate::ui::rig_faces::use_faces();
     // Drawn at the window's tier (a phone draws each face's phone layout).
     let tier = use_tier();
-    let face_of = |b: &LiveBlock| faces.time(true, VERB_ALGOS.get(param_v(b, "algorithm", 1.0) as usize).copied().unwrap_or("")).map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h)));
+    let face_of = |b: &LiveBlock| {
+        faces
+            .time(
+                true,
+                VERB_ALGOS
+                    .get(param_v(b, "algorithm", 1.0) as usize)
+                    .copied()
+                    .unwrap_or(""),
+            )
+            .map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h)))
+    };
     let all_faces = verbs.iter().all(|b| face_of(b).is_some());
     // On a phone the lane's bar is its preset and algorithm: the face shows
     // the time itself.
@@ -1741,7 +1761,9 @@ pub(crate) fn ModGroupPanel(
         .map(|f| lane.map_or_else(|| f.at(tier), |(w, h)| f.at_box(w, h)));
     // The face's nameplate opens the member's engines (or modes).
     let algos: Option<(&'static str, Vec<&'static str>)> = match cur.block_type {
-        BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => Some(("engine", MOD_ENGINES.to_vec())),
+        BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => {
+            Some(("engine", MOD_ENGINES.to_vec()))
+        }
         BlockType::Trem => Some(("mode", TREM_MODES.to_vec())),
         _ => None,
     };
@@ -2638,7 +2660,16 @@ pub(crate) fn DelayBlockViz(block: LiveBlock, tempo_bpm: u32) -> Element {
     };
     let mut taps = stems(t_l, true);
     taps.extend(stems(t_r, false));
-    delay_lane(taps, win_ms, !b.bypassed, DELAY_COLORS[0], 0.0, quarter, div_label(b), param_v(b, "style", 1.0) as u32)
+    delay_lane(
+        taps,
+        win_ms,
+        !b.bypassed,
+        DELAY_COLORS[0],
+        0.0,
+        quarter,
+        div_label(b),
+        param_v(b, "style", 1.0) as u32,
+    )
 }
 
 /// One reverb block's picture — its tail — for a panel beside its pedal.
@@ -2648,7 +2679,11 @@ pub(crate) fn ReverbBlockViz(block: LiveBlock, tempo_bpm: u32) -> Element {
     let decay = param_v(b, "decay", 0.4).clamp(0.02, 1.0);
     let size = param_v(b, "size", 0.5);
     let mix = level_gain(b).clamp(0.02, 1.0).max(0.15);
-    let t60 = match verb_seconds(param_v(b, "algorithm", 1.0), param_v(b, "variant", 0.0), decay) {
+    let t60 = match verb_seconds(
+        param_v(b, "algorithm", 1.0),
+        param_v(b, "variant", 0.0),
+        decay,
+    ) {
         (t, true) => t,
         (t, false) => t * 0.8f64.mul_add(f64::from(size), 0.6),
     };
@@ -2675,7 +2710,15 @@ pub(crate) fn ReverbBlockViz(block: LiveBlock, tempo_bpm: u32) -> Element {
 pub(crate) fn ModBlockViz(block: LiveBlock) -> Element {
     let rate = param_v(&block, "rate", 4.0);
     let depth = param_v(&block, "depth", 0.5);
-    mod_lane(&block, rate, depth, !block.bypassed, "#ec4899", "", "#ec4899")
+    mod_lane(
+        &block,
+        rate,
+        depth,
+        !block.bypassed,
+        "#ec4899",
+        "",
+        "#ec4899",
+    )
 }
 
 /// Which of the effect's engines a rig block is.
@@ -2689,8 +2732,10 @@ pub(crate) fn ModBlockViz(block: LiveBlock) -> Element {
 /// Stated here as one list per slot so the pickers below and the visualiser
 /// cannot disagree about which machines belong where — `modulation-ui` owns
 /// the grouping and `modulation_slots` is checked against it.
-pub(crate) const MOD_KINDS: [BlockType; 3] = [BlockType::Chorus, BlockType::Phaser, BlockType::Flanger];
-pub(crate) const MOTION_KINDS: [BlockType; 3] = [BlockType::Trem, BlockType::Vibrato, BlockType::Rotary];
+pub(crate) const MOD_KINDS: [BlockType; 3] =
+    [BlockType::Chorus, BlockType::Phaser, BlockType::Flanger];
+pub(crate) const MOTION_KINDS: [BlockType; 3] =
+    [BlockType::Trem, BlockType::Vibrato, BlockType::Rotary];
 
 fn engine_of(block_type: BlockType) -> Option<crate::ui::mod_viz::Engine> {
     use crate::ui::mod_viz::Engine;
@@ -2910,7 +2955,10 @@ impl ShownGroups {
     /// AMP with the switches up; AMP over POST without them.
     #[must_use]
     pub fn new() -> Self {
-        Self { picked: Signal::new(vec![Group::Post, Group::Amp]), two: Signal::new(false) }
+        Self {
+            picked: Signal::new(vec![Group::Post, Group::Amp]),
+            two: Signal::new(false),
+        }
     }
 
     /// The groups showing, in signal order.
@@ -2919,7 +2967,10 @@ impl ShownGroups {
         let picked = (self.picked)();
         let n = if (self.two)() { 2 } else { 1 };
         let last: Vec<Group> = picked.iter().rev().take(n).copied().collect();
-        Group::ALL.into_iter().filter(|g| last.contains(g)).collect()
+        Group::ALL
+            .into_iter()
+            .filter(|g| last.contains(g))
+            .collect()
     }
 
     /// Pick `g`: it becomes the most recent.
@@ -3030,8 +3081,12 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     });
     // For the faces: the libraries and what plays (their preset
     // steppers), and which faces show their visualiser instead.
-    let face_presets = use_context_provider(|| crate::ui::face_chrome::FacePresets(Signal::new(Default::default())));
-    use_context_provider(|| crate::ui::face_chrome::VizMode(Signal::new(std::collections::HashSet::new())));
+    let face_presets = use_context_provider(|| {
+        crate::ui::face_chrome::FacePresets(Signal::new(Default::default()))
+    });
+    use_context_provider(|| {
+        crate::ui::face_chrome::VizMode(Signal::new(std::collections::HashSet::new()))
+    });
     use_effect(move || {
         if let Some(c) = compositions.read().as_ref() {
             let mut s = face_presets.0;
@@ -3081,7 +3136,11 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     let groups = try_use_context::<ShownGroups>().unwrap_or_default();
     let wide = try_use_context::<WideLayout>().is_some_and(|w| (w.0)());
     // Wide: the whole rig, every group, each on one row.
-    let shown = if wide { Group::ALL.to_vec() } else { groups.shown() };
+    let shown = if wide {
+        Group::ALL.to_vec()
+    } else {
+        groups.shown()
+    };
     // A group's two rows: stacked, or side by side on one row when wide.
     let group_style = if wide {
         "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: row;"

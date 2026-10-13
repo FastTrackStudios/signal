@@ -10,10 +10,12 @@
 //! as the tail. The same pieces draw the sidebar rows, the current pick's
 //! header at full width, and the chips on a Time snapshot.
 
-use dioxus::prelude::*;
 use crate::proto::{BlockPresetEntry, PresetParam};
+use dioxus::prelude::*;
 
-use crate::ui::control::{DELAY_ALGOS, DIV_LABELS, MOD_ENGINES, VERB_ALGOS, div_factor, verb_seconds};
+use crate::ui::control::{
+    DELAY_ALGOS, DIV_LABELS, MOD_ENGINES, VERB_ALGOS, div_factor, verb_seconds,
+};
 use crate::ui::theme::{DIM, FAINT, LIVE, MUTED, TEXT};
 
 /// A saved param, or `default`.
@@ -420,7 +422,6 @@ fn usage(used_by: &[String]) -> (String, String) {
         (String::new(), used_by.join("\n"))
     }
 }
-
 
 #[cfg(test)]
 mod tests {

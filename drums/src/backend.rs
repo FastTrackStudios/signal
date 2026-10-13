@@ -9,14 +9,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use crate::proto::drum::{DrumEvent, DrumRig, DrumRigStreamSource};
+use crate::proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use midicore::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMonitor, Velocity};
-use crate::proto::drum::{DrumEvent, DrumRig, DrumRigStreamSource};
-use crate::proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
-use signal_rig_host::mixer::db_to_linear;
 use sampler::{MidiInputHandle, PreloadProfile, PresetSpec, SamplerRig};
+use signal_rig_host::mixer::db_to_linear;
 
 use crate::GM_DRUM_CHANNEL;
 

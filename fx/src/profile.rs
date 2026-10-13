@@ -75,9 +75,7 @@ pub fn library() -> &'static Library {
         let profiles = library
             .profiles
             .iter()
-            .map(|def| {
-                guitar::nodes::profile_from_library_in(&home, def, &library.drive_presets)
-            })
+            .map(|def| guitar::nodes::profile_from_library_in(&home, def, &library.drive_presets))
             .collect();
         Library { dir, profiles }
     })

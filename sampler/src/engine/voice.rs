@@ -350,7 +350,11 @@ pub struct Voice {
     /// A breakpoint amplitude envelope (`with_amp_points` — an Omnisphere
     /// layer's AENV), in place of the linear release fade: it holds at its
     /// sustain point while the key is down and runs its own release after.
-    amp_bp: Option<(Arc<crate::native::breakpoints::Breakpoints>, crate::native::breakpoints::EnvPlayer, f32)>,
+    amp_bp: Option<(
+        Arc<crate::native::breakpoints::Breakpoints>,
+        crate::native::breakpoints::EnvPlayer,
+        f32,
+    )>,
     /// The breakpoint envelope at control rate: evaluated every
     /// [`ENV_CONTROL_FRAMES`] frames and interpolated between (`a` → `b`,
     /// `i` frames into the period). Per-sample evaluation made the envelope
@@ -588,7 +592,11 @@ impl FlexEnv {
             }
         }
         let a = self.curve[self.seg].0;
-        self.eat = if a == 0.0 { 1.0 } else { (a * self.t / len).exp() };
+        self.eat = if a == 0.0 {
+            1.0
+        } else {
+            (a * self.t / len).exp()
+        };
     }
 
     /// Current envelope level for the present `pos`, without advancing.
@@ -1720,7 +1728,10 @@ impl Voice {
             let frac = (position - idx as f64) as f32;
             let (a, b) = ((idx - base) * ch, (idx + 1 - base) * ch);
             let ((l0, r0), (l1, r1)) = if ch >= 2 {
-                ((span.get(a), span.get(a + 1)), (span.get(b), span.get(b + 1)))
+                (
+                    (span.get(a), span.get(a + 1)),
+                    (span.get(b), span.get(b + 1)),
+                )
             } else {
                 let (x, y) = (span.get(a), span.get(b));
                 ((x, x), (y, y))
@@ -1845,20 +1856,34 @@ pub static FAST_STATS: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 /// release hold, attack delay, gain ramp, bloom, decay, pitch shift,
 /// filter, flex envelope, breakpoint envelope, vibrato, glide, reverse,
 /// ping-pong loop, marker.
-pub static FAST_MISS: [std::sync::atomic::AtomicU64; 16] = [const { std::sync::atomic::AtomicU64::new(0) }; 16];
+pub static FAST_MISS: [std::sync::atomic::AtomicU64; 16] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 16];
 
 fn fast_stats(v: &Voice) {
     use std::sync::atomic::Ordering::Relaxed;
     let reasons = [
-        !(matches!(v.state, VoiceState::Playing) || matches!(v.state, VoiceState::Releasing { frames_remaining } if frames_remaining > 0)),
-        v.start_hold != 0, v.release_hold != 0, v.attack_delay != 0, false,
-        v.bloom_frames != 0, v.decay_left != 0, v.pitch.is_some(), v.filter.is_some(),
-        false, false, v.vib_cents > 0.0, v.glide_frames != 0, v.reverse,
+        !(matches!(v.state, VoiceState::Playing)
+            || matches!(v.state, VoiceState::Releasing { frames_remaining } if frames_remaining > 0)),
+        v.start_hold != 0,
+        v.release_hold != 0,
+        v.attack_delay != 0,
+        false,
+        v.bloom_frames != 0,
+        v.decay_left != 0,
+        v.pitch.is_some(),
+        v.filter.is_some(),
+        false,
+        false,
+        v.vib_cents > 0.0,
+        v.glide_frames != 0,
+        v.reverse,
         v.alternating_loop && v.loop_range.is_some(),
         !(v.marker_arrival_file.is_none() || v.arrival_emitted.is_some()),
     ];
     for (i, r) in reasons.iter().enumerate() {
-        if *r { FAST_MISS[i].fetch_add(1, Relaxed); }
+        if *r {
+            FAST_MISS[i].fetch_add(1, Relaxed);
+        }
     }
 }
 
@@ -2078,9 +2103,17 @@ impl VoicePool {
         let (now, max) = self
             .voices
             .iter()
-            .filter(|v| v.note == note && v.kind != VoiceKind::Release && v.state != VoiceState::Done)
-            .fold((0.0f32, 0.0f32), |(n, m), v| (n + v.env_peak, m + v.max_peak));
-        if max <= 1e-9 { 1.0 } else { (now / max).clamp(0.0, 1.0) }
+            .filter(|v| {
+                v.note == note && v.kind != VoiceKind::Release && v.state != VoiceState::Done
+            })
+            .fold((0.0f32, 0.0f32), |(n, m), v| {
+                (n + v.env_peak, m + v.max_peak)
+            });
+        if max <= 1e-9 {
+            1.0
+        } else {
+            (now / max).clamp(0.0, 1.0)
+        }
     }
 
     pub fn note_body_peak(&self, note: u8) -> f32 {
@@ -2448,13 +2481,15 @@ impl VoicePool {
         const STEAL_NOTE_FADE: usize = 240; // 5 ms: fast, not a click
         // A voice with no more than a repeat fade left — a steal, a repeat,
         // a release nearly over — no longer counts.
-        let fading = |v: &Voice| {
-            matches!(v.state, VoiceState::Releasing { frames_remaining } if frames_remaining <= REPEAT_FADE)
-        };
+        let fading = |v: &Voice| matches!(v.state, VoiceState::Releasing { frames_remaining } if frames_remaining <= REPEAT_FADE);
         // The same key: keep the latest strike, fade the older ones.
         let mut strikes: Vec<u32> = Vec::new();
         for v in &self.voices {
-            if v.note == incoming && v.state != VoiceState::Done && !fading(v) && !strikes.contains(&v.strike) {
+            if v.note == incoming
+                && v.state != VoiceState::Done
+                && !fading(v)
+                && !strikes.contains(&v.strike)
+            {
                 strikes.push(v.strike);
             }
         }
@@ -2465,7 +2500,9 @@ impl VoicePool {
             }) {
                 if !fading(v) {
                     v.ramp_gain(0.0, REPEAT_FADE);
-                    v.state = VoiceState::Releasing { frames_remaining: REPEAT_FADE };
+                    v.state = VoiceState::Releasing {
+                        frames_remaining: REPEAT_FADE,
+                    };
                 }
             }
         }
@@ -2479,7 +2516,8 @@ impl VoicePool {
                 if v.state == VoiceState::Done || v.note == incoming || fading(v) {
                     continue;
                 }
-                let released = matches!(v.state, VoiceState::Releasing { .. }) || v.kind == VoiceKind::Release;
+                let released =
+                    matches!(v.state, VoiceState::Releasing { .. }) || v.kind == VoiceKind::Release;
                 match notes.iter_mut().find(|(n, _)| *n == v.note) {
                     Some(e) => e.1 &= released,
                     None => notes.push((v.note, released)),
@@ -2496,9 +2534,15 @@ impl VoicePool {
             let Some(victim) = victim else {
                 return stolen;
             };
-            for v in self.voices.iter_mut().filter(|v| v.note == victim && v.state != VoiceState::Done) {
+            for v in self
+                .voices
+                .iter_mut()
+                .filter(|v| v.note == victim && v.state != VoiceState::Done)
+            {
                 v.ramp_gain(0.0, STEAL_NOTE_FADE);
-                v.state = VoiceState::Releasing { frames_remaining: STEAL_NOTE_FADE };
+                v.state = VoiceState::Releasing {
+                    frames_remaining: STEAL_NOTE_FADE,
+                };
             }
             self.stolen = self.stolen.saturating_add(1);
             NOTE_STEALS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -2527,14 +2571,18 @@ impl VoicePool {
                     let old = frames_remaining < v.release_frames / 2;
                     if frames_remaining > SHED_FADE && (level >= 2 || old) {
                         v.ramp_gain(0.0, SHED_FADE);
-                        v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                        v.state = VoiceState::Releasing {
+                            frames_remaining: SHED_FADE,
+                        };
                         faded += 1;
                     }
                 }
                 _ if v.kind == VoiceKind::Release => {
                     if level >= 2 {
                         v.ramp_gain(0.0, SHED_FADE);
-                        v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                        v.state = VoiceState::Releasing {
+                            frames_remaining: SHED_FADE,
+                        };
                         faded += 1;
                     }
                 }
@@ -2560,7 +2608,9 @@ impl VoicePool {
                     let v = &mut self.voices[i];
                     if v.note == victim {
                         v.ramp_gain(0.0, SHED_FADE);
-                        v.state = VoiceState::Releasing { frames_remaining: SHED_FADE };
+                        v.state = VoiceState::Releasing {
+                            frames_remaining: SHED_FADE,
+                        };
                         cut += 1;
                     }
                 }
@@ -2595,7 +2645,7 @@ impl VoicePool {
 
         self.stolen = self.stolen.saturating_add(1);
         tracing::debug!(
-            target: "crate::trigger",
+            target: "sampler::trigger",
             active = self.voices.len(),
             max = self.max_voices,
             incoming_note,
@@ -2666,7 +2716,14 @@ mod tests {
     fn strike(pool: &mut VoicePool, note: u8, mics: usize) {
         pool.begin_strike();
         for _ in 0..mics {
-            pool.spawn(Voice::new(sample(), note, VoiceKind::SustainLo, 0, 1.0, 128));
+            pool.spawn(Voice::new(
+                sample(),
+                note,
+                VoiceKind::SustainLo,
+                0,
+                1.0,
+                128,
+            ));
         }
     }
 
@@ -2734,7 +2791,10 @@ mod tests {
         }
         for n in [48, 55, 60] {
             assert!(
-                pool.voices.iter().filter(|v| v.note == n).all(|v| v.state == VoiceState::Playing),
+                pool.voices
+                    .iter()
+                    .filter(|v| v.note == n)
+                    .all(|v| v.state == VoiceState::Playing),
                 "chord note {n} kept"
             );
         }
@@ -2755,7 +2815,12 @@ mod tests {
         pool.make_room_for_note(76, 4);
         strike(&mut pool, 76, 3);
         assert_eq!(sounding(&pool), 12);
-        assert!(pool.voices.iter().filter(|v| v.note == 60).all(|v| v.state != VoiceState::Playing));
+        assert!(
+            pool.voices
+                .iter()
+                .filter(|v| v.note == 60)
+                .all(|v| v.state != VoiceState::Playing)
+        );
     }
 
     /// A mono sine `freq_hz` recorded at `sr`, `secs` long.

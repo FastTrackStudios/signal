@@ -69,7 +69,10 @@ fn main() {
     let paced_from = std::time::Instant::now();
     // LANE_STRESS_SMASH=N: N keys across the keyboard struck inside ~50 ms,
     // sustain pedal down the whole time — a forearm on the keys.
-    let smash: usize = std::env::var("LANE_STRESS_SMASH").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let smash: usize = std::env::var("LANE_STRESS_SMASH")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
     let chord: Vec<u8> = if smash > 0 {
         (0..smash).map(|i| (36 + (i * 53) % 60) as u8).collect()
     } else {
@@ -92,119 +95,131 @@ fn main() {
     let steals0 = sampler::engine::voice::note_steals();
     let stop = std::sync::atomic::AtomicBool::new(false);
     std::thread::scope(|scope| {
-    scope.spawn(|| {
-        let mut tick = 0u32;
-        while !stop.load(std::sync::atomic::Ordering::Relaxed) {
-            if control {
-                tick += 1;
-                let r = rig.lock().unwrap();
-                let v = if tick % 2 == 0 { 1.0 } else { 0.99 };
-                for lane in &lanes {
-                    r.set_lane_volume(sampler::rig_node::Role::Layer, lane, v);
+        scope.spawn(|| {
+            let mut tick = 0u32;
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                if control {
+                    tick += 1;
+                    let r = rig.lock().unwrap();
+                    let v = if tick % 2 == 0 { 1.0 } else { 0.99 };
+                    for lane in &lanes {
+                        r.set_lane_volume(sampler::rig_node::Role::Layer, lane, v);
+                    }
+                    drop(r);
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    continue;
                 }
-                drop(r);
-                std::thread::sleep(std::time::Duration::from_millis(10));
-                continue;
+                if std::env::var_os("LANE_STRESS_OLD_POLL").is_some() {
+                    // The old status poll: every lane visited UNDER the daw's
+                    // plugin lock (warm_note walks them the same way).
+                    let _ = rig.lock().unwrap().warm_note(0, 1);
+                } else {
+                    let _ = rig.lock().unwrap().active_voices();
+                }
+                std::thread::sleep(std::time::Duration::from_millis(33));
             }
-            if std::env::var_os("LANE_STRESS_OLD_POLL").is_some() {
-                // The old status poll: every lane visited UNDER the daw's
-                // plugin lock (warm_note walks them the same way).
-                let _ = rig.lock().unwrap().warm_note(0, 1);
+        });
+        for b in 0..hits * per_hit {
+            let phase = b % per_hit;
+            if phase == 0 {
+                let r = rig.lock().unwrap();
+                for &k in &chord {
+                    r.note_on(k, 127);
+                }
+            } else if smash > 0 && phase < 20 {
+                // The rest of the forearm lands over the next few blocks.
+                let r = rig.lock().unwrap();
+                for &k in chord.iter().skip(phase).step_by(20) {
+                    r.note_on(k, 110);
+                }
+            } else if phase == held {
+                let r = rig.lock().unwrap();
+                for &k in &chord {
+                    r.note_off(k);
+                }
+            }
+            // LANE_STRESS_PACE=1: one block per deadline, as a device clocks
+            // them — unpaced, a fast render outruns the sample streamer (a
+            // harness artefact: its reads land before any device would ask).
+            if pace {
+                let due = paced_from + deadline * b as u32;
+                while std::time::Instant::now() < due {
+                    std::thread::sleep(std::time::Duration::from_micros(100));
+                }
+            }
+            let t = std::time::Instant::now();
+            let out = renderer.render_block(0, block as usize);
+            let dt = t.elapsed();
+            times.push(dt);
+            // Headless: publish the load the CPU guard would read from the
+            // audio engine, so the guard runs here exactly as in the app.
+            // LANE_STRESS_NO_GUARD=1 leaves the guard blind (load 0), for A/B.
+            // LANE_STRESS_LOAD_FLOOR=0.9: the app runs heavier than this bare
+            // harness (UI, meters, other rigs); publish at least this load so
+            // the guard is tested where the app actually sits.
+            let floor: f32 = std::env::var("LANE_STRESS_LOAD_FLOOR")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0.0);
+            let load = if std::env::var_os("LANE_STRESS_NO_GUARD").is_some() {
+                0.0
             } else {
-                let _ = rig.lock().unwrap().active_voices();
+                ((dt.as_secs_f64() / deadline.as_secs_f64()) as f32).max(floor)
+            };
+            sampler::keys_rig::publish_render_load(load);
+            let voices_now = rig.lock().unwrap().active_voices();
+            peak_voices = peak_voices.max(voices_now);
+            cost.push((voices_now as f64, dt.as_secs_f64() * 1e3));
+            // Realtime mode: where the block went (reset every block).
+            let profile = rig.lock().unwrap().daw().take_block_profile();
+            if dt > deadline {
+                over += 1;
+                println!(
+                    "  late block {:.2} ms at hit {} +{} ms{}",
+                    dt.as_secs_f64() * 1e3,
+                    b / per_hit,
+                    phase * block as usize * 1000 / sr as usize,
+                    profile.map_or(String::new(), |p| format!(
+                        " — snapshot {} µs, plugin lock {} µs, fx {} µs, slowest track #{} {} µs",
+                        p.snapshot_us,
+                        p.plugin_lock_us,
+                        p.fx_us,
+                        p.slowest_track,
+                        p.slowest_track_us
+                    ))
+                );
             }
-            std::thread::sleep(std::time::Duration::from_millis(33));
-        }
-    });
-    for b in 0..hits * per_hit {
-        let phase = b % per_hit;
-        if phase == 0 {
-            let r = rig.lock().unwrap();
-            for &k in &chord {
-                r.note_on(k, 127);
+            for v in &out.samples {
+                hash = (hash ^ u64::from(v.to_bits())).wrapping_mul(0x0100_0000_01b3);
+                if !v.is_finite() {
+                    nonfinite += 1;
+                } else {
+                    peak = peak.max(v.abs());
+                }
             }
-        } else if smash > 0 && phase < 20 {
-            // The rest of the forearm lands over the next few blocks.
-            let r = rig.lock().unwrap();
-            for &k in chord.iter().skip(phase).step_by(20) {
-                r.note_on(k, 110);
-            }
-        } else if phase == held {
-            let r = rig.lock().unwrap();
-            for &k in &chord {
-                r.note_off(k);
-            }
-        }
-        // LANE_STRESS_PACE=1: one block per deadline, as a device clocks
-        // them — unpaced, a fast render outruns the sample streamer (a
-        // harness artefact: its reads land before any device would ask).
-        if pace {
-            let due = paced_from + deadline * b as u32;
-            while std::time::Instant::now() < due {
-                std::thread::sleep(std::time::Duration::from_micros(100));
-            }
-        }
-        let t = std::time::Instant::now();
-        let out = renderer.render_block(0, block as usize);
-        let dt = t.elapsed();
-        times.push(dt);
-        // Headless: publish the load the CPU guard would read from the
-        // audio engine, so the guard runs here exactly as in the app.
-        // LANE_STRESS_NO_GUARD=1 leaves the guard blind (load 0), for A/B.
-        // LANE_STRESS_LOAD_FLOOR=0.9: the app runs heavier than this bare
-        // harness (UI, meters, other rigs); publish at least this load so
-        // the guard is tested where the app actually sits.
-        let floor: f32 = std::env::var("LANE_STRESS_LOAD_FLOOR").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
-        let load = if std::env::var_os("LANE_STRESS_NO_GUARD").is_some() {
-            0.0
-        } else {
-            ((dt.as_secs_f64() / deadline.as_secs_f64()) as f32).max(floor)
-        };
-        sampler::keys_rig::publish_render_load(load);
-        let voices_now = rig.lock().unwrap().active_voices();
-        peak_voices = peak_voices.max(voices_now);
-        cost.push((voices_now as f64, dt.as_secs_f64() * 1e3));
-        // Realtime mode: where the block went (reset every block).
-        let profile = rig.lock().unwrap().daw().take_block_profile();
-        if dt > deadline {
-            over += 1;
-            println!(
-                "  late block {:.2} ms at hit {} +{} ms{}",
-                dt.as_secs_f64() * 1e3,
-                b / per_hit,
-                phase * block as usize * 1000 / sr as usize,
-                profile.map_or(String::new(), |p| format!(
-                    " — snapshot {} µs, plugin lock {} µs, fx {} µs, slowest track #{} {} µs",
-                    p.snapshot_us, p.plugin_lock_us, p.fx_us, p.slowest_track, p.slowest_track_us
-                ))
-            );
-        }
-        for v in &out.samples {
-            hash = (hash ^ u64::from(v.to_bits())).wrapping_mul(0x0100_0000_01b3);
-            if !v.is_finite() {
-                nonfinite += 1;
-            } else {
-                peak = peak.max(v.abs());
+            // LANE_STRESS_BUSY=1: no sleeping — pure throughput, stable enough
+            // to compare optimisations (a sleeping thread gets moved to
+            // efficiency cores and down-clocked, which swamps small changes).
+            if !busy {
+                if let Some(rest) = deadline.checked_sub(dt) {
+                    std::thread::sleep(rest);
+                }
             }
         }
-        // LANE_STRESS_BUSY=1: no sleeping — pure throughput, stable enough
-        // to compare optimisations (a sleeping thread gets moved to
-        // efficiency cores and down-clocked, which swamps small changes).
-        if !busy {
-            if let Some(rest) = deadline.checked_sub(dt) {
-                std::thread::sleep(rest);
-            }
-        }
-    }
-    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
     });
     let silent = daw::standalone::audio_engine::render::plugin_stage_skips() - skips0;
-    println!("  {silent} blocks rendered without instruments (plugin map held by a control thread)");
+    println!(
+        "  {silent} blocks rendered without instruments (plugin map held by a control thread)"
+    );
     let mut sorted = times.clone();
     sorted.sort();
     let pct = |p: f64| sorted[((sorted.len() - 1) as f64 * p) as usize].as_secs_f64() * 1e3;
     let mean = times.iter().map(|d| d.as_secs_f64()).sum::<f64>() / times.len() as f64 * 1e3;
-    println!("  mean {mean:.3} ms per block ({:.0}% of the deadline)", mean / (deadline.as_secs_f64() * 1e3) * 100.0);
+    println!(
+        "  mean {mean:.3} ms per block ({:.0}% of the deadline)",
+        mean / (deadline.as_secs_f64() * 1e3) * 100.0
+    );
     println!(
         "lanes: {} blocks of {block} (deadline {:.2} ms) — median {:.3} ms, p99 {:.3} ms, max {:.3} ms; {over} over deadline",
         times.len(),
@@ -217,7 +232,9 @@ fn main() {
     // Least squares: block ms = base + per_voice × voices.
     {
         let n = cost.len() as f64;
-        let (sx, sy) = cost.iter().fold((0.0, 0.0), |(a, b), (x, y)| (a + x, b + y));
+        let (sx, sy) = cost
+            .iter()
+            .fold((0.0, 0.0), |(a, b), (x, y)| (a + x, b + y));
         let (mx, my) = (sx / n, sy / n);
         let (sxy, sxx) = cost.iter().fold((0.0, 0.0), |(a, b), (x, y)| {
             (a + (x - mx) * (y - my), b + (x - mx) * (x - mx))
@@ -246,11 +263,31 @@ fn main() {
     );
     // Ordinary chords must come through whole, whatever the load.
     let chord_cut = smash == 0 && cuts > 0;
-    println!("  output peak {:.3} ({:+.1} dBFS); {nonfinite} non-finite samples", peak, 20.0 * peak.max(1e-9).log10());
+    println!(
+        "  output peak {:.3} ({:+.1} dBFS); {nonfinite} non-finite samples",
+        peak,
+        20.0 * peak.max(1e-9).log10()
+    );
     println!("  output hash {hash:016x}");
     if stats {
-        let names = ["not sounding", "start hold", "release hold", "attack delay", "gain ramp", "bloom", "decay",
-                     "pitch shift", "filter", "flex env", "breakpoint env", "vibrato", "glide", "reverse", "ping-pong", "marker"];
+        let names = [
+            "not sounding",
+            "start hold",
+            "release hold",
+            "attack delay",
+            "gain ramp",
+            "bloom",
+            "decay",
+            "pitch shift",
+            "filter",
+            "flex env",
+            "breakpoint env",
+            "vibrato",
+            "glide",
+            "reverse",
+            "ping-pong",
+            "marker",
+        ];
         for (n, c) in names.iter().zip(sampler::engine::voice::FAST_MISS.iter()) {
             let c = c.load(std::sync::atomic::Ordering::Relaxed);
             if c > 0 {

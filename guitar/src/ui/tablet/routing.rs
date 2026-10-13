@@ -4,14 +4,14 @@
 //! shows its controls, and the browser beside it opens on it — its kind,
 //! and the preset it plays.
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{CompositionModel, LiveBlock};
+use dioxus::prelude::*;
 
 use super::routing_canvas::{CanvasCell, CanvasItem, CanvasModule, CanvasPick, CanvasSel};
 use super::tokens::*;
-use signal_proto::block::BlockType;
 use crate::ui::state::RigViewState;
+use signal_proto::block::BlockType;
 
 /// What is selected in the routing grid.
 #[derive(Clone, PartialEq, Debug)]
@@ -46,8 +46,13 @@ pub struct BrowserFocus(pub Signal<Option<Focus>>);
 /// patch plays there).
 pub fn focus_for(sel: &Selected, blocks: &[LiveBlock], comp: &CompositionModel) -> Option<Focus> {
     let module_focus = |m: &str| {
-        let kind = ["Core", "Amp", "Drive", "Time", "Delay", "Reverb"].iter().find(|k| k.eq_ignore_ascii_case(m))?;
-        let pick = comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m));
+        let kind = ["Core", "Amp", "Drive", "Time", "Delay", "Reverb"]
+            .iter()
+            .find(|k| k.eq_ignore_ascii_case(m))?;
+        let pick = comp
+            .active_modules
+            .iter()
+            .find(|p| p.module.eq_ignore_ascii_case(m));
         Some(Focus {
             kind: format!("module:{kind}"),
             preset: pick.map(|p| p.preset.clone()).unwrap_or_default(),
@@ -60,8 +65,17 @@ pub fn focus_for(sel: &Selected, blocks: &[LiveBlock], comp: &CompositionModel) 
         Selected::Block(id) => {
             let b = blocks.iter().find(|b| b.id == *id)?;
             let t = b.block_type.as_str().to_lowercase();
-            if comp.block_presets.iter().any(|p| p.block_type.eq_ignore_ascii_case(&t)) {
-                return Some(Focus { kind: format!("block:{t}"), preset: b.preset.clone(), variation: String::new(), search: false });
+            if comp
+                .block_presets
+                .iter()
+                .any(|p| p.block_type.eq_ignore_ascii_case(&t))
+            {
+                return Some(Focus {
+                    kind: format!("block:{t}"),
+                    preset: b.preset.clone(),
+                    variation: String::new(),
+                    search: false,
+                });
             }
             module_focus(&b.module)
         }
@@ -91,7 +105,16 @@ pub fn Routing(state: RigViewState) -> Element {
     let faces = crate::ui::rig_faces::use_faces();
     // The amps' and drives' cover art (their captures', from TONE3000), by
     // block: what a block with no face of its own is drawn as.
-    let art_key: Vec<(String, String)> = blocks.iter().filter(|b| matches!(b.block_type, BlockType::Drive | BlockType::Boost | BlockType::Amp) && !b.empty).map(|b| (b.name.clone(), b.preset.clone())).collect();
+    let art_key: Vec<(String, String)> = blocks
+        .iter()
+        .filter(|b| {
+            matches!(
+                b.block_type,
+                BlockType::Drive | BlockType::Boost | BlockType::Amp
+            ) && !b.empty
+        })
+        .map(|b| (b.name.clone(), b.preset.clone()))
+        .collect();
     let rig_art = rig.clone();
     let arts = use_resource(use_reactive!(|art_key| {
         let rig = rig_art.clone();
@@ -111,13 +134,20 @@ pub fn Routing(state: RigViewState) -> Element {
     }));
     let mut modules = canvas_modules(&blocks, &faces);
     if let Some(arts) = arts.read().as_ref().filter(|a| !a.is_empty()) {
-        let by_id: std::collections::HashMap<String, String> = blocks.iter().map(|b| (b.id.clone(), b.name.clone())).collect();
+        let by_id: std::collections::HashMap<String, String> = blocks
+            .iter()
+            .map(|b| (b.id.clone(), b.name.clone()))
+            .collect();
         for m in &mut modules {
             for item in &mut m.items {
                 let cells: Vec<&mut CanvasCell> = match item {
                     CanvasItem::Col(c) => c.iter_mut().collect(),
                     CanvasItem::Lanes(c) => c.iter_mut().map(|(_, c)| c).collect(),
-                    CanvasItem::Merge(c, into) => c.iter_mut().map(|(_, c)| c).chain(std::iter::once(&mut into.1)).collect(),
+                    CanvasItem::Merge(c, into) => c
+                        .iter_mut()
+                        .map(|(_, c)| c)
+                        .chain(std::iter::once(&mut into.1))
+                        .collect(),
                 };
                 for cell in cells {
                     if let Some(img) = by_id.get(&cell.id).and_then(|n| arts.get(n)) {
@@ -166,42 +196,64 @@ const AMP_EQ: &str = "Amp EQ";
 /// chain order. The pre effects run in a line; delays and reverbs sit
 /// either side of the dry; the Amp is its two amps into two cabs, then
 /// what shapes it. The Core is a tag on what it owns, not a box.
-pub(super) fn canvas_modules(blocks: &[LiveBlock], faces: &crate::ui::rig_faces::Faces) -> Vec<CanvasModule> {
+pub(super) fn canvas_modules(
+    blocks: &[LiveBlock],
+    faces: &crate::ui::rig_faces::Faces,
+) -> Vec<CanvasModule> {
     let mut runs: Vec<(String, Vec<CanvasCell>)> = Vec::new();
     // Everything ahead of the drive board is the Input column.
     let mut past_input = false;
     // The amps show loaded or not; a cab is part of its amp, and the
     // patch's trim is a level, not a block to edit here.
-    for b in blocks.iter().filter(|b| (!b.empty || b.module == "Amp" || b.module == "Drive") && b.block_type != BlockType::Cabinet) {
+    for b in blocks.iter().filter(|b| {
+        (!b.empty || b.module == "Amp" || b.module == "Drive") && b.block_type != BlockType::Cabinet
+    }) {
         let is = |names: &[&str]| names.iter().any(|n| n.eq_ignore_ascii_case(&b.name));
         // The Core's blocks: the amp EQ with the amps, the rest (the
         // compressors and the gate) dynamics of their own.
         past_input |= b.module == "Drive";
-        let module = if b.name.eq_ignore_ascii_case("Master EQ") || b.name.eq_ignore_ascii_case("Limiter") {
-            // The master: the patch's last EQ and the limiter.
-            "Master".to_string()
-        } else if !past_input {
-            // What the guitar meets first, in its four slots (see
-            // `input_items`), no module's.
-            "Input".to_string()
-        } else if matches!(b.module.as_str(), "Delay" | "Reverb") {
-            // The delays and the reverbs: one Time column.
-            "Time".to_string()
-        } else if b.name.eq_ignore_ascii_case(AMP_EQ) {
-            "Amp".to_string()
-        } else if b.module == "Core" || (b.name.eq_ignore_ascii_case("Boost") && b.module != "Drive") || b.name.eq_ignore_ascii_case("Patch Trim") {
-            // The post-amp boost and the patch's trim (what levels the
-            // patches) sit with the dynamics.
-            "Dynamics".to_string()
-        } else {
-            b.module.clone()
-        };
+        let module =
+            if b.name.eq_ignore_ascii_case("Master EQ") || b.name.eq_ignore_ascii_case("Limiter") {
+                // The master: the patch's last EQ and the limiter.
+                "Master".to_string()
+            } else if !past_input {
+                // What the guitar meets first, in its four slots (see
+                // `input_items`), no module's.
+                "Input".to_string()
+            } else if matches!(b.module.as_str(), "Delay" | "Reverb") {
+                // The delays and the reverbs: one Time column.
+                "Time".to_string()
+            } else if b.name.eq_ignore_ascii_case(AMP_EQ) {
+                "Amp".to_string()
+            } else if b.module == "Core"
+                || (b.name.eq_ignore_ascii_case("Boost") && b.module != "Drive")
+                || b.name.eq_ignore_ascii_case("Patch Trim")
+            {
+                // The post-amp boost and the patch's trim (what levels the
+                // patches) sit with the dynamics.
+                "Dynamics".to_string()
+            } else {
+                b.module.clone()
+            };
         let cell = CanvasCell {
             id: b.id.clone(),
-            name: if b.module == "Pre" { pre_name(b) } else { b.name.clone() },
-            sub: if b.preset.is_empty() || b.preset == b.name { b.detail.clone() } else { b.preset.clone() },
+            name: if b.module == "Pre" {
+                pre_name(b)
+            } else {
+                b.name.clone()
+            },
+            sub: if b.preset.is_empty() || b.preset == b.name {
+                b.detail.clone()
+            } else {
+                b.preset.clone()
+            },
             kind: b.block_type.as_str().to_lowercase(),
-            colour: if b.module == "Motion" { MOTION } else { type_colour(b.block_type) }.to_string(),
+            colour: if b.module == "Motion" {
+                MOTION
+            } else {
+                type_colour(b.block_type)
+            }
+            .to_string(),
             lit: !b.bypassed,
             edited: b.overridden,
             empty: b.empty,
@@ -209,18 +261,24 @@ pub(super) fn canvas_modules(blocks: &[LiveBlock], faces: &crate::ui::rig_faces:
             // Its block face, else its unit's own (a drive's pedal).
             keys: face_keys(b),
             fallback: pedal(b, faces),
-                art: None,
+            art: None,
             value: level_of(b),
             // The trim levels the patch: under the dynamics, not theirs.
             loose: b.name.eq_ignore_ascii_case("Patch Trim"),
-            params: b.params.iter().map(|p| (p.name.clone(), f64::from(p.value))).chain([("on".to_string(), if b.bypassed { 0.0 } else { 1.0 })]).collect(),
+            params: b
+                .params
+                .iter()
+                .map(|p| (p.name.clone(), f64::from(p.value)))
+                .chain([("on".to_string(), if b.bypassed { 0.0 } else { 1.0 })])
+                .collect(),
         };
         // The amp EQ joins the amps it follows, though the gate and the
         // post compressor sit between them in the chain: the amps into
         // their EQ, then the dynamics.
         // So does the patch's trim with the dynamics, though the modulation
         // sits between them.
-        let levels = b.name.eq_ignore_ascii_case("Patch Trim") || b.name.eq_ignore_ascii_case("Boost");
+        let levels =
+            b.name.eq_ignore_ascii_case("Patch Trim") || b.name.eq_ignore_ascii_case("Boost");
         if (module == "Amp" || (module == "Dynamics" && levels))
             && let Some((_, cells)) = runs.iter_mut().rev().find(|(m, _)| *m == module)
         {
@@ -236,14 +294,31 @@ pub(super) fn canvas_modules(blocks: &[LiveBlock], faces: &crate::ui::rig_faces:
         .map(|(name, cells)| {
             let items = match name.as_str() {
                 // The pre effects down one column: the grid is four rows.
-                "Pre" => cells.chunks(4).map(|c| CanvasItem::Col(c.to_vec())).collect(),
+                "Pre" => cells
+                    .chunks(4)
+                    .map(|c| CanvasItem::Col(c.to_vec()))
+                    .collect(),
                 // The delays and reverbs side by side with the dry, one column.
-                "Time" => cells.chunks(4).map(|c| CanvasItem::Lanes(c.iter().cloned().zip(-1..).map(|(c, l)| (l, c)).collect())).collect(),
+                "Time" => cells
+                    .chunks(4)
+                    .map(|c| {
+                        CanvasItem::Lanes(
+                            c.iter().cloned().zip(-1..).map(|(c, l)| (l, c)).collect(),
+                        )
+                    })
+                    .collect(),
                 "Amp" => amp_items(cells),
                 "Input" => input_items(cells),
-                _ => cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect(),
+                _ => cells
+                    .chunks(MODULE_ROWS)
+                    .map(|c| CanvasItem::Col(c.to_vec()))
+                    .collect(),
             };
-            let name = if name == "Pre" { "Pre-FX".to_string() } else { name };
+            let name = if name == "Pre" {
+                "Pre-FX".to_string()
+            } else {
+                name
+            };
             CanvasModule {
                 colour: module_colour(&name).to_string(),
                 label: String::new(),
@@ -267,7 +342,8 @@ fn pre_name(b: &LiveBlock) -> String {
         t => {
             let n = t.as_str();
             let mut c = n.chars();
-            c.next().map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
+            c.next()
+                .map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
         }
     }
 }
@@ -278,13 +354,20 @@ fn pedal(b: &LiveBlock, faces: &crate::ui::rig_faces::Faces) -> Option<(String, 
     if b.empty {
         return None;
     }
-    let stem = |f: &crate::ui::rig_faces::FaceEntry| f.face.trim_start_matches("rig-faces/").to_string();
+    let stem =
+        |f: &crate::ui::rig_faces::FaceEntry| f.face.trim_start_matches("rig-faces/").to_string();
     let name = b.name.to_lowercase();
     match b.module.as_str() {
         // The input stage's units: the dive bomb, the transposer, the volume
         // pedal (the octaver, the filter wear their pictures).
-        _ if ["dive", "transpose", "volume pedal"].iter().any(|w| name.contains(w)) => {
-            let f = faces.input.iter().find(|e| e.words.iter().any(|w| name.contains(w.as_str())))?;
+        _ if ["dive", "transpose", "volume pedal"]
+            .iter()
+            .any(|w| name.contains(w)) =>
+        {
+            let f = faces
+                .input
+                .iter()
+                .find(|e| e.words.iter().any(|w| name.contains(w.as_str())))?;
             Some((stem(f), f.ns.clone(), false))
         }
         "Drive" | "Pre" => super::fx_row::face_for(b, faces).map(|f| (stem(&f), f.ns, false)),
@@ -310,16 +393,26 @@ fn level_of(b: &LiveBlock) -> Option<String> {
 /// machine, a reverb by its algorithm, then its type.
 fn face_keys(b: &LiveBlock) -> Vec<String> {
     let kind = b.block_type.as_str().to_lowercase();
-    let param = |n: &str| b.params.iter().find(|p| p.name == n).map(|p| p.value.round().max(0.0) as usize);
+    let param = |n: &str| {
+        b.params
+            .iter()
+            .find(|p| p.name == n)
+            .map(|p| p.value.round().max(0.0) as usize)
+    };
     let named = match b.block_type {
         BlockType::Delay => param("style").and_then(|i| crate::ui::control::DELAY_ALGOS.get(i)),
         BlockType::Reverb => param("algorithm").and_then(|i| crate::ui::control::VERB_ALGOS.get(i)),
         _ => None,
     };
-    let mut keys: Vec<String> = named.map(|n| format!("{kind}:{}", n.to_lowercase())).into_iter().collect();
+    let mut keys: Vec<String> = named
+        .map(|n| format!("{kind}:{}", n.to_lowercase()))
+        .into_iter()
+        .collect();
     match b.module.as_str() {
         // A drive slot by the pedal it plays (`drive:klon centaur`).
-        "Drive" if !b.preset.is_empty() => keys.insert(0, format!("drive:{}", b.preset.to_lowercase())),
+        "Drive" if !b.preset.is_empty() => {
+            keys.insert(0, format!("drive:{}", b.preset.to_lowercase()))
+        }
         // A pre effect by its kind first (`pre:chorus`).
         "Pre" => keys.insert(0, format!("pre:{kind}")),
         // The post compressor by its unit, the Distressor.
@@ -337,41 +430,69 @@ fn face_keys(b: &LiveBlock) -> Vec<String> {
 /// filter's wearing the Q-Tron, the last a Special for what comes later.
 fn input_items(cells: Vec<CanvasCell>) -> Vec<CanvasItem> {
     let mut left = cells;
-    let mut slot = |names: &[&str], kinds: &[&str], lit_only: bool, empty: (&str, &str, &[&str])| {
-        let of = |c: &CanvasCell| names.iter().any(|n| c.name.eq_ignore_ascii_case(n)) || kinds.contains(&c.kind.as_str());
-        // The first named that is on (in the names' order), else any of
-        // its kinds on, else (unless only on will do) any off.
-        let named = names.iter().find_map(|n| left.iter().position(|c| c.lit && c.name.eq_ignore_ascii_case(n)));
-        let at = named.or_else(|| left.iter().position(|c| of(c) && c.lit)).or_else(|| (!lit_only).then(|| left.iter().position(of)).flatten());
-        match at {
-            Some(i) => left.remove(i),
-            None => CanvasCell {
-                id: format!("slot:{}", empty.0),
-                name: empty.0.to_string(),
-                sub: String::new(),
-                kind: empty.1.to_string(),
-                colour: GREY.to_string(),
-                lit: false,
-                edited: false,
-                empty: empty.2.is_empty(),
-                core: false,
-                keys: empty.2.iter().map(|k| (*k).to_string()).collect(),
-                params: vec![("on".to_string(), 0.0)],
-                value: None,
-                loose: false,
-                fallback: None,
-                art: None,
-            },
-        }
-    };
+    let mut slot =
+        |names: &[&str], kinds: &[&str], lit_only: bool, empty: (&str, &str, &[&str])| {
+            let of = |c: &CanvasCell| {
+                names.iter().any(|n| c.name.eq_ignore_ascii_case(n))
+                    || kinds.contains(&c.kind.as_str())
+            };
+            // The first named that is on (in the names' order), else any of
+            // its kinds on, else (unless only on will do) any off.
+            let named = names.iter().find_map(|n| {
+                left.iter()
+                    .position(|c| c.lit && c.name.eq_ignore_ascii_case(n))
+            });
+            let at = named
+                .or_else(|| left.iter().position(|c| of(c) && c.lit))
+                .or_else(|| (!lit_only).then(|| left.iter().position(of)).flatten());
+            match at {
+                Some(i) => left.remove(i),
+                None => CanvasCell {
+                    id: format!("slot:{}", empty.0),
+                    name: empty.0.to_string(),
+                    sub: String::new(),
+                    kind: empty.1.to_string(),
+                    colour: GREY.to_string(),
+                    lit: false,
+                    edited: false,
+                    empty: empty.2.is_empty(),
+                    core: false,
+                    keys: empty.2.iter().map(|k| (*k).to_string()).collect(),
+                    params: vec![("on".to_string(), 0.0)],
+                    value: None,
+                    loose: false,
+                    fallback: None,
+                    art: None,
+                },
+            }
+        };
     vec![CanvasItem::Col(vec![
-        slot(&["Pre Comp"], &["compressor"], false, ("Comp", "compressor", &[])),
-        slot(&["Pitch", "Harmonizer"], &["doubler"], false, ("Pitch", "pitch", &["pitch"])),
-        slot(&[], &["filter", "wah"], false, ("Filter", "filter", &["filter"])),
-        slot(&["Volume Pedal", "Dive Bomb"], &[], true, ("Special", "special", &[])),
+        slot(
+            &["Pre Comp"],
+            &["compressor"],
+            false,
+            ("Comp", "compressor", &[]),
+        ),
+        slot(
+            &["Pitch", "Harmonizer"],
+            &["doubler"],
+            false,
+            ("Pitch", "pitch", &["pitch"]),
+        ),
+        slot(
+            &[],
+            &["filter", "wah"],
+            false,
+            ("Filter", "filter", &["filter"]),
+        ),
+        slot(
+            &["Volume Pedal", "Dive Bomb"],
+            &[],
+            true,
+            ("Special", "special", &[]),
+        ),
     ])]
 }
-
 
 const GREY: &str = INK_2;
 /// Motion (tremolo, vibrato, rotary): green, apart from the cool modulation
@@ -381,9 +502,17 @@ const MOTION: &str = "#34d399";
 /// The Amp module: one column — Amp L and Amp R (each with its cab) on
 /// the top two rows, into the amp EQ on the third.
 fn amp_items(cells: Vec<CanvasCell>) -> Vec<CanvasItem> {
-    let find = |n: &str| cells.iter().find(|c| c.name.eq_ignore_ascii_case(n)).cloned();
+    let find = |n: &str| {
+        cells
+            .iter()
+            .find(|c| c.name.eq_ignore_ascii_case(n))
+            .cloned()
+    };
     let (Some(al), Some(ar)) = (find("Amp L"), find("Amp R")) else {
-        return cells.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())).collect();
+        return cells
+            .chunks(MODULE_ROWS)
+            .map(|c| CanvasItem::Col(c.to_vec()))
+            .collect();
     };
     let amps = vec![(-1, al), (0, ar)];
     let mut items = vec![match find(AMP_EQ) {
@@ -391,8 +520,15 @@ fn amp_items(cells: Vec<CanvasCell>) -> Vec<CanvasItem> {
         None => CanvasItem::Lanes(amps),
     }];
     let placed = ["Amp L", "Amp R", AMP_EQ];
-    let rest: Vec<CanvasCell> = cells.iter().filter(|c| !placed.iter().any(|n| c.name.eq_ignore_ascii_case(n))).cloned().collect();
-    items.extend(rest.chunks(MODULE_ROWS).map(|c| CanvasItem::Col(c.to_vec())));
+    let rest: Vec<CanvasCell> = cells
+        .iter()
+        .filter(|c| !placed.iter().any(|n| c.name.eq_ignore_ascii_case(n)))
+        .cloned()
+        .collect();
+    items.extend(
+        rest.chunks(MODULE_ROWS)
+            .map(|c| CanvasItem::Col(c.to_vec())),
+    );
     items
 }
 
@@ -426,7 +562,10 @@ fn type_colour(t: BlockType) -> &'static str {
 /// A cover photograph decoded small enough for a block (its longer side
 /// 256 px).
 fn thumbnail(bytes: &[u8]) -> Option<vello::peniko::ImageData> {
-    let img = image::load_from_memory(bytes).ok()?.thumbnail(256, 256).to_rgba8();
+    let img = image::load_from_memory(bytes)
+        .ok()?
+        .thumbnail(256, 256)
+        .to_rgba8();
     let (width, height) = img.dimensions();
     Some(vello::peniko::ImageData {
         data: vello::peniko::Blob::new(std::sync::Arc::new(img.into_raw())),

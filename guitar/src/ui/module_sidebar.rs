@@ -16,9 +16,9 @@
 //! same menus sit on the control surface's module strips (`control.rs`),
 //! built by [`module_menu`] and handled by [`module_act`].
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{BlockPresetEntry, CompositionModel, ModulePick, ModulePresetEntry};
+use dioxus::prelude::*;
 
 use signal_widgets::{BrowseChip, BrowseEntry, BrowseScope, SoundBrowser};
 
@@ -227,7 +227,11 @@ fn is_tone(module: &str) -> bool {
 /// a patch that plays no Core, the Core its tone would be saved into.
 fn menu_target(module: &str, pick: Option<&ModulePick>, presets: &[ModulePresetEntry]) -> String {
     pick.map(|p| p.preset.clone())
-        .or_else(|| is_core(module).then(|| presets.last().map(|p| p.name.clone())).flatten())
+        .or_else(|| {
+            is_core(module)
+                .then(|| presets.last().map(|p| p.name.clone()))
+                .flatten()
+        })
         .unwrap_or_default()
 }
 
@@ -270,7 +274,17 @@ pub fn module_menu(
     }
     match entry {
         Some(e) => {
-            items.push(MenuItem::run("save", if is_tone(module) { format!("Save to “{}”", e.name) } else { format!("Save to “{snap}”") }).unless(no_edits.clone()));
+            items.push(
+                MenuItem::run(
+                    "save",
+                    if is_tone(module) {
+                        format!("Save to “{}”", e.name)
+                    } else {
+                        format!("Save to “{snap}”")
+                    },
+                )
+                .unless(no_edits.clone()),
+            );
             items.push(MenuItem::name(
                 "save_snapshot",
                 "Save as new snapshot…",
@@ -464,7 +478,9 @@ fn RowArt(look: Look, subs: Vec<(String, Look)>, lit: bool) -> Element {
             }
         };
     }
-    if look.group == crate::ui::preset_look::OFF || look.shape == crate::ui::preset_look::Shape::None {
+    if look.group == crate::ui::preset_look::OFF
+        || look.shape == crate::ui::preset_look::Shape::None
+    {
         return rsx! { crate::ui::preset_look::ValueChip { value: look.value.clone(), lit } };
     }
     rsx! {
@@ -474,7 +490,9 @@ fn RowArt(look: Look, subs: Vec<(String, Look)>, lit: bool) -> Element {
 }
 
 /// Pictures by row id, for the browser's `art`.
-fn art_of(arts: std::collections::HashMap<String, (Look, Vec<(String, Look)>, bool)>) -> Callback<String, Element> {
+fn art_of(
+    arts: std::collections::HashMap<String, (Look, Vec<(String, Look)>, bool)>,
+) -> Callback<String, Element> {
     Callback::new(move |id: String| match arts.get(&id).cloned() {
         Some((look, subs, lit)) => rsx! { RowArt { look, subs, lit } },
         None => rsx! {},
@@ -523,7 +541,8 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
     // Closed — except in a pane (Play's), which is never empty: there it
     // falls back to the presets.
     let Some(selection) = selected().or_else(|| {
-        try_consume_context::<crate::ui::kit::FillPane>().map(|_| Selection::Module("Preset".to_string()))
+        try_consume_context::<crate::ui::kit::FillPane>()
+            .map(|_| Selection::Module("Preset".to_string()))
     }) else {
         return rsx! {};
     };
@@ -597,7 +616,9 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
     let mut arts = std::collections::HashMap::new();
     let mut entries = Vec::new();
     for entry in &presets {
-        let here = pick.as_ref().is_some_and(|p| p.preset.eq_ignore_ascii_case(&entry.name));
+        let here = pick
+            .as_ref()
+            .is_some_and(|p| p.preset.eq_ignore_ascii_case(&entry.name));
         let children: Vec<BrowseEntry> = entry
             .snapshots
             .iter()
@@ -625,7 +646,13 @@ pub fn ModuleSidebar(revision: u64, #[props(default)] chain: Vec<ChainRef>) -> E
                 BrowseEntry {
                     id,
                     name: snap.clone(),
-                    sub: info.captures.iter().take(2).cloned().collect::<Vec<_>>().join(" · "),
+                    sub: info
+                        .captures
+                        .iter()
+                        .take(2)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(" · "),
                     live: lit,
                     modified: lit && modified,
                     menu: preset_items(entry, &names, Some(snap)),
@@ -888,7 +915,6 @@ fn pick_look(comp: &CompositionModel, pick: &ModulePick) -> Option<Look> {
     block_look(comp, &block.preset)
 }
 
-
 /// A Time snapshot's Delay or Reverb pick, compact: a dot in its engine's
 /// family colour (delay blue, reverb purple) and its one value, in a
 /// fixed-width slot so the values line up down the list and the name keeps
@@ -913,7 +939,6 @@ fn SubPick(module: String, look: Look, lit: bool) -> Element {
         }
     }
 }
-
 
 /// The menu for one block preset: rename, duplicate, delete.
 fn block_preset_items(p: &BlockPresetEntry, siblings: &[String]) -> Vec<MenuItem> {
@@ -975,12 +1000,13 @@ fn hit(words: &[String], parts: &[&str]) -> bool {
     words.iter().all(|w| hay.contains(w))
 }
 
-
 /// The current pick, large: its picture across the sidebar's width, the
 /// value and engine under it.
 #[component]
 fn PickPicture(look: Look) -> Element {
-    if look.group == crate::ui::preset_look::OFF || look.shape == crate::ui::preset_look::Shape::None {
+    if look.group == crate::ui::preset_look::OFF
+        || look.shape == crate::ui::preset_look::Shape::None
+    {
         return rsx! {};
     }
     rsx! {
@@ -1114,7 +1140,9 @@ fn BlockPresets(
             if !hit(&words, &[&p.name, &look.group, &look.engine]) {
                 continue;
             }
-            let lit = playing.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(&p.name));
+            let lit = playing
+                .as_deref()
+                .is_some_and(|x| x.eq_ignore_ascii_case(&p.name));
             arts.insert(p.name.clone(), (look.clone(), Vec::new(), lit));
             entries.push(BrowseEntry {
                 id: p.name.clone(),
@@ -1127,7 +1155,11 @@ fn BlockPresets(
                 live: lit,
                 modified: lit && modified,
                 // Off sits alone at the top, without a heading.
-                group: if group == crate::ui::preset_look::OFF { String::new() } else { group.clone() },
+                group: if group == crate::ui::preset_look::OFF {
+                    String::new()
+                } else {
+                    group.clone()
+                },
                 menu: block_preset_items(&p, &names),
                 ..BrowseEntry::default()
             });

@@ -4,9 +4,7 @@
 use dioxus::prelude::*;
 
 use crate::proto::rig::{RigClient, RigEvent, RigStreamClient};
-use crate::proto::{
-    LevelProgress, LiveBlock, LiveNode, MacroKnobView, PerformanceModel, RigPerf,
-};
+use crate::proto::{LevelProgress, LiveBlock, LiveNode, MacroKnobView, PerformanceModel, RigPerf};
 
 use crate::ui::meters::meter_level;
 
@@ -79,7 +77,11 @@ pub fn use_rig_state() -> RigViewState {
     // `FTS_ANIMATE=1` lets them move regardless (designing, measuring).
     let always = use_signal(|| true);
     use_context_provider(|| {
-        fts_audio_ui::animate::Animate(if std::env::var_os("FTS_ANIMATE").is_some() { always } else { running })
+        fts_audio_ui::animate::Animate(if std::env::var_os("FTS_ANIMATE").is_some() {
+            always
+        } else {
+            running
+        })
     });
     let mut audio_error = use_signal(String::new);
     let mut in_level = use_signal(|| 0.0f64);

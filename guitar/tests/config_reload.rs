@@ -94,7 +94,10 @@ fn a_config_file_edited_under_the_running_rig_applies_live_and_sticks() {
     write(&songs_path, &lib);
     logged(
         &log,
-        &format!("songs.styx: {} songs; on No Other Name / Chorus", lib.songs.len()),
+        &format!(
+            "songs.styx: {} songs; on No Other Name / Chorus",
+            lib.songs.len()
+        ),
     );
     let perf = Rig::perf(&rig);
     assert_eq!(library_bpm(&rig, "No Other Name"), Some(91));
@@ -224,7 +227,9 @@ fn a_config_file_edited_under_the_running_rig_applies_live_and_sticks() {
     let report = Rig::reload_config(&rig);
     let n_sets = sets.setlists.len();
     assert!(
-        report.contains(&format!("setlists.styx: {n_sets} setlists; on No Other Name / Chorus")),
+        report.contains(&format!(
+            "setlists.styx: {n_sets} setlists; on No Other Name / Chorus"
+        )),
         "{report}"
     );
     let perf = Rig::perf(&rig);
@@ -265,18 +270,16 @@ fn a_config_file_edited_under_the_running_rig_applies_live_and_sticks() {
     let mut sets: SetlistLib = read(&sets_path);
     sets.setlists[0].name = "Renamed Set".into();
     write(&sets_path, &sets);
-    std::fs::write(
-        dir.join(guitar::config_watch::RELOAD_REQUEST),
-        "req-42",
-    )
-    .unwrap();
+    std::fs::write(dir.join(guitar::config_watch::RELOAD_REQUEST), "req-42").unwrap();
     eventually("the request is answered", || {
-        !dir.join(guitar::config_watch::RELOAD_REQUEST)
-            .exists()
+        !dir.join(guitar::config_watch::RELOAD_REQUEST).exists()
     });
     let logged = std::fs::read_to_string(&log).unwrap();
     assert!(
-        logged.contains(&format!("[req-42] setlists.styx: {} setlists", sets.setlists.len())),
+        logged.contains(&format!(
+            "[req-42] setlists.styx: {} setlists",
+            sets.setlists.len()
+        )),
         "{logged}"
     );
     assert!(

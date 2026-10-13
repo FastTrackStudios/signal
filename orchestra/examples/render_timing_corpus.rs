@@ -20,13 +20,13 @@
 use std::io::Write as _;
 use std::path::PathBuf;
 
+use sampler::SamplerRig;
+use sampler::document::{DocumentRenderOptions, qn_to_frame, qn_to_sec};
 use signal_orchestra::timing::{
     CountIn, OnsetKind, mix_click, pitch_arrival, render_click, render_live_replay, spectral_flux,
     timing_corpus,
 };
 use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
-use sampler::SamplerRig;
-use sampler::document::{DocumentRenderOptions, qn_to_frame, qn_to_sec};
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;

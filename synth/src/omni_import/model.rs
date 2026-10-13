@@ -179,7 +179,11 @@ pub fn filter_gain_db(g: f32) -> f32 {
     let g = g.clamp(0.0, 1.0);
     if g < 0.05 {
         // Toward silence along the 40·log10 law.
-        return if g <= 0.0 { -120.0 } else { (40.0 * (g / 0.05).log10() - 47.1).max(-120.0) };
+        return if g <= 0.0 {
+            -120.0
+        } else {
+            (40.0 * (g / 0.05).log10() - 47.1).max(-120.0)
+        };
     }
     for w in LAW.windows(2) {
         let ((g0, d0), (g1, d1)) = (w[0], w[1]);
@@ -222,7 +226,11 @@ impl OmniLayer {
         if v <= 0.0 {
             return None;
         }
-        let i = LAW.iter().position(|&(x, _)| x >= v).unwrap_or(LAW.len() - 1).max(1);
+        let i = LAW
+            .iter()
+            .position(|&(x, _)| x >= v)
+            .unwrap_or(LAW.len() - 1)
+            .max(1);
         let ((x0, y0), (x1, y1)) = (LAW[i - 1], LAW[i]);
         Some(y0 + (y1 - y0) * (v - x0) / (x1 - x0).max(1e-6))
     }
@@ -270,11 +278,56 @@ impl OmniLfo {
     #[must_use]
     pub fn sync_beats(&self) -> f32 {
         const T: [f32; 51] = [
-            128.0, 128.0, 128.0, 128.0, 128.0, 64.0, 64.0, 48.0, 48.0, 32.0, // 0.00–0.18
-            32.0, 24.0, 24.0, 16.0, 16.0, 12.0, 12.0, 8.0, 8.0, 4.0, // 0.20–0.38
-            4.0, 2.0, 2.0, 1.0, 1.0, 0.5, 0.25, 0.25, 0.125, 0.125, // 0.40–0.58
-            0.0625, 0.0625, 1.0 / 24.0, 1.0 / 24.0, 6.0, 6.0, 3.0, 3.0, 1.5, 0.75, // 0.60–0.78
-            0.75, 0.375, 0.375, 8.0 / 3.0, 8.0 / 3.0, 4.0 / 3.0, 4.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0, 1.0 / 3.0, // 0.80–0.98
+            128.0,
+            128.0,
+            128.0,
+            128.0,
+            128.0,
+            64.0,
+            64.0,
+            48.0,
+            48.0,
+            32.0, // 0.00–0.18
+            32.0,
+            24.0,
+            24.0,
+            16.0,
+            16.0,
+            12.0,
+            12.0,
+            8.0,
+            8.0,
+            4.0, // 0.20–0.38
+            4.0,
+            2.0,
+            2.0,
+            1.0,
+            1.0,
+            0.5,
+            0.25,
+            0.25,
+            0.125,
+            0.125, // 0.40–0.58
+            0.0625,
+            0.0625,
+            1.0 / 24.0,
+            1.0 / 24.0,
+            6.0,
+            6.0,
+            3.0,
+            3.0,
+            1.5,
+            0.75, // 0.60–0.78
+            0.75,
+            0.375,
+            0.375,
+            8.0 / 3.0,
+            8.0 / 3.0,
+            4.0 / 3.0,
+            4.0 / 3.0,
+            2.0 / 3.0,
+            2.0 / 3.0,
+            1.0 / 3.0, // 0.80–0.98
             1.0 / 6.0, // 1.00
         ];
         T[((self.rate.clamp(0.0, 1.0) * 50.0).round() as usize).min(50)]
@@ -435,7 +488,12 @@ pub fn wavetable_path(name: &str) -> Option<std::path::PathBuf> {
 pub enum ClassicOsc {
     /// Tables either side of the Symmetry, their crossfade, and the Shape
     /// (the frame scan).
-    Tables { lo: std::path::PathBuf, hi: std::path::PathBuf, mix: f32, shape: f32 },
+    Tables {
+        lo: std::path::PathBuf,
+        hi: std::path::PathBuf,
+        mix: f32,
+        shape: f32,
+    },
     /// The Noise type (0.04): not a waveform at all.
     Noise { shape: f32, symmetry: f32 },
 }
@@ -453,10 +511,18 @@ pub fn classic_osc(wave_type: f32, shape: f32, symmetry: f32) -> Option<ClassicO
     }
     let dir = wavetable_path("Classic")?;
     let pos = symmetry.clamp(0.0, 1.0) * (CLASSIC_SYMMETRY_STEPS - 1) as f32;
-    let (j0, j1) = (pos.floor() as usize, (pos.ceil() as usize).min(CLASSIC_SYMMETRY_STEPS - 1));
+    let (j0, j1) = (
+        pos.floor() as usize,
+        (pos.ceil() as usize).min(CLASSIC_SYMMETRY_STEPS - 1),
+    );
     let table = |j: usize| dir.join(format!("t{idx:02}_s{j}.wav"));
     let (lo, hi) = (table(j0), table(j1));
-    (lo.exists() && hi.exists()).then(|| ClassicOsc::Tables { lo, hi, mix: pos - j0 as f32, shape })
+    (lo.exists() && hi.exists()).then(|| ClassicOsc::Tables {
+        lo,
+        hi,
+        mix: pos - j0 as f32,
+        shape,
+    })
 }
 
 pub fn classify_effect(name: &str) -> Option<BlockType> {
@@ -1212,7 +1278,8 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
                             // ±100 cents about 0.5 (measured, noisily — the
                             // test voice was a synced classic oscillator).
                             // pan 0..1 → ±1.
-                            let semis = ((h.num(&format!("smi{i}")).unwrap_or(0.48) - 0.48) / 0.02).round();
+                            let semis =
+                                ((h.num(&format!("smi{i}")).unwrap_or(0.48) - 0.48) / 0.02).round();
                             let cents = (h.num(&format!("tun{i}")).unwrap_or(0.5) - 0.5) * 200.0;
                             let smi = semis + cents / 100.0;
                             let pan = h.num(&format!("pan{i}")).unwrap_or(0.5).mul_add(2.0, -1.0);

@@ -255,9 +255,7 @@ fn Shot() -> Element {
         let _ = provide_context(guitar::ui::MacroTuneMode(
             std::env::var("RIG_SHOT_TUNE").map_or(0, |v| v.parse::<u8>().unwrap_or(1)),
         ));
-        let _ = provide_context(guitar::ui::MacroShotStatus(
-            SHOT_STATUS.get().cloned(),
-        ));
+        let _ = provide_context(guitar::ui::MacroShotStatus(SHOT_STATUS.get().cloned()));
     });
     rsx! {
         // The same two stylesheets the window mounts. Without them the shot is

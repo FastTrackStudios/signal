@@ -20,15 +20,18 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{LibraryModel, PerfPart, PerformanceModel};
-use signal_widgets::drag_bus::{DragBus, DragEvent};
+use dioxus::prelude::*;
 use signal_widgets::PopupHost;
+use signal_widgets::drag_bus::{DragBus, DragEvent};
 
-use super::colors::{date_label, name_colour, section_colour, set_heading, set_meta, song_colour, suggest_section, tape_for, when_label, TAPE_GAFFER};
-use super::marks::{module_colour, OverrideIcon, Strike};
-use super::menu::{open_naming_under, Item, MoreButton, Picked, PressMenu};
+use super::colors::{
+    TAPE_GAFFER, date_label, name_colour, section_colour, set_heading, set_meta, song_colour,
+    suggest_section, tape_for, when_label,
+};
+use super::marks::{OverrideIcon, Strike, module_colour};
+use super::menu::{Item, MoreButton, Picked, PressMenu, open_naming_under};
 use super::panels::{Panel, PanelView};
 use super::tokens::*;
 use crate::ui::state::RigViewState;
@@ -67,7 +70,12 @@ pub fn use_library(state: RigViewState) -> Signal<LibraryModel> {
 
 /// The stack a patch of `profile` lives in.
 pub fn stack_of(lib: &LibraryModel, profile: &str, patch: &str) -> String {
-    let in_profile = |p: &crate::proto::ProfileEntry| p.patch_list.iter().find(|x| x.name.eq_ignore_ascii_case(patch)).map(|x| x.stack.clone());
+    let in_profile = |p: &crate::proto::ProfileEntry| {
+        p.patch_list
+            .iter()
+            .find(|x| x.name.eq_ignore_ascii_case(patch))
+            .map(|x| x.stack.clone())
+    };
     lib.profiles
         .iter()
         .find(|p| p.name.eq_ignore_ascii_case(profile))
@@ -80,8 +88,18 @@ pub fn stack_of(lib: &LibraryModel, profile: &str, patch: &str) -> String {
 /// whose rotation holds it, else the stack the library files it under —
 /// when that is a stack (a song's own patch files under the song) — else
 /// the stack its name says ("Ambient Delay Flute" → Ambient).
-pub fn stack_for(perf: &PerformanceModel, lib: &LibraryModel, profile: &str, patch: &str) -> String {
-    let real = |st: String| perf.stacks.iter().find(|s| s.name.eq_ignore_ascii_case(&st)).map(|s| s.name.clone());
+pub fn stack_for(
+    perf: &PerformanceModel,
+    lib: &LibraryModel,
+    profile: &str,
+    patch: &str,
+) -> String {
+    let real = |st: String| {
+        perf.stacks
+            .iter()
+            .find(|s| s.name.eq_ignore_ascii_case(&st))
+            .map(|s| s.name.clone())
+    };
     perf.stacks
         .iter()
         .find(|s| s.patches.iter().any(|p| p.eq_ignore_ascii_case(patch)))
@@ -89,14 +107,20 @@ pub fn stack_for(perf: &PerformanceModel, lib: &LibraryModel, profile: &str, pat
         .or_else(|| real(stack_of(lib, profile, patch)))
         .or_else(|| {
             let words: Vec<String> = patch.split_whitespace().map(str::to_lowercase).collect();
-            perf.stacks.iter().find(|s| words.contains(&s.name.to_lowercase())).map(|s| s.name.clone())
+            perf.stacks
+                .iter()
+                .find(|s| words.contains(&s.name.to_lowercase()))
+                .map(|s| s.name.clone())
         })
         .unwrap_or_default()
 }
 
 /// The profile the rig has active (the one a set without its own plays).
 pub fn active_profile(perf: &PerformanceModel, lib: &LibraryModel) -> String {
-    lib.profiles.iter().find(|p| p.active).map_or_else(|| perf.profile_name.clone(), |p| p.name.clone())
+    lib.profiles
+        .iter()
+        .find(|p| p.active)
+        .map_or_else(|| perf.profile_name.clone(), |p| p.name.clone())
 }
 
 /// A section: consecutive parts that share a `section` name (a part with
@@ -111,10 +135,17 @@ pub struct Section {
 pub fn sections_of(parts: &[PerfPart]) -> Vec<Section> {
     let mut out: Vec<Section> = Vec::new();
     for (i, p) in parts.iter().enumerate() {
-        let name = if p.section.is_empty() { p.name.clone() } else { p.section.clone() };
+        let name = if p.section.is_empty() {
+            p.name.clone()
+        } else {
+            p.section.clone()
+        };
         match out.last_mut() {
             Some(last) if !p.section.is_empty() && last.name == name => last.parts.push(i),
-            _ => out.push(Section { name, parts: vec![i] }),
+            _ => out.push(Section {
+                name,
+                parts: vec![i],
+            }),
         }
     }
     out
@@ -127,7 +158,9 @@ pub fn reorder_parts(rig: Option<RigClient>, want: Vec<usize>) {
     let _ = dioxus_core::spawn_forever(async move {
         let mut now: Vec<usize> = (0..want.len()).collect();
         for (pos, &part) in want.iter().enumerate() {
-            let Some(at) = now.iter().position(|&p| p == part) else { continue };
+            let Some(at) = now.iter().position(|&p| p == part) else {
+                continue;
+            };
             if at != pos {
                 let _ = r.move_part(at as u32, pos as u32).await;
                 let p = now.remove(at);
@@ -163,7 +196,15 @@ pub fn keep_row(rows: Rows, i: usize, e: &MountedEvent) {
 /// Drag row `from` by its grip: the rows' tops are measured as it starts,
 /// and it lands on the last row whose top (plus `grace`) the pointer is
 /// below — the prototype's measured drop.
-pub fn begin_row_drag(bus: Option<DragBus>, drag: Signal<Option<(usize, usize)>>, rows: Rows, count: usize, from: usize, grace: f64, on_drop: impl Fn(usize, usize) + 'static) {
+pub fn begin_row_drag(
+    bus: Option<DragBus>,
+    drag: Signal<Option<(usize, usize)>>,
+    rows: Rows,
+    count: usize,
+    from: usize,
+    grace: f64,
+    on_drop: impl Fn(usize, usize) + 'static,
+) {
     let tops: Rc<RefCell<Vec<f64>>> = Rc::default();
     let els: Vec<Option<Rc<MountedData>>> = rows.peek().iter().take(count).cloned().collect();
     {
@@ -172,7 +213,10 @@ pub fn begin_row_drag(bus: Option<DragBus>, drag: Signal<Option<(usize, usize)>>
             let mut out = Vec::with_capacity(els.len());
             for e in els {
                 out.push(match e {
-                    Some(e) => e.get_client_rect().await.map_or(f64::INFINITY, |r| r.min_y()),
+                    Some(e) => e
+                        .get_client_rect()
+                        .await
+                        .map_or(f64::INFINITY, |r| r.min_y()),
                     None => f64::INFINITY,
                 });
             }
@@ -266,13 +310,29 @@ impl Src {
 
 /// Where `patch` in a stack of `profile` comes from.
 pub fn source_of(lib: &LibraryModel, profile: &str, patch: &str) -> Src {
-    let own = lib.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(profile));
-    if let Some((p, x)) = own.and_then(|p| p.patch_list.iter().find(|x| x.name.eq_ignore_ascii_case(patch)).map(|x| (p, x))) {
-        return if x.song.is_empty() { Src::Profile(p.name.clone()) } else { Src::Song };
+    let own = lib
+        .profiles
+        .iter()
+        .find(|p| p.name.eq_ignore_ascii_case(profile));
+    if let Some((p, x)) = own.and_then(|p| {
+        p.patch_list
+            .iter()
+            .find(|x| x.name.eq_ignore_ascii_case(patch))
+            .map(|x| (p, x))
+    }) {
+        return if x.song.is_empty() {
+            Src::Profile(p.name.clone())
+        } else {
+            Src::Song
+        };
     }
     lib.profiles
         .iter()
-        .find(|p| p.patch_list.iter().any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch)))
+        .find(|p| {
+            p.patch_list
+                .iter()
+                .any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch))
+        })
         .map_or(Src::Song, |p| Src::Other(p.name.clone()))
 }
 
@@ -299,7 +359,11 @@ pub fn part_patch(perf: &PerformanceModel) -> Option<String> {
         for p in perf.parts[..=at].iter().rev() {
             if !p.stack.is_empty() {
                 // A stack plays its first patch.
-                let first = perf.stacks.iter().find(|s| s.name.eq_ignore_ascii_case(&p.stack)).and_then(|s| s.patches.first().cloned());
+                let first = perf
+                    .stacks
+                    .iter()
+                    .find(|s| s.name.eq_ignore_ascii_case(&p.stack))
+                    .and_then(|s| s.patches.first().cloned());
                 return Some(first.unwrap_or_else(|| p.stack.clone()));
             }
             if !p.preset.is_empty() {
@@ -310,13 +374,22 @@ pub fn part_patch(perf: &PerformanceModel) -> Option<String> {
             }
         }
     }
-    let start = perf.songs.get(perf.song_index as usize).map(|s| s.start.clone()).unwrap_or_default();
+    let start = perf
+        .songs
+        .get(perf.song_index as usize)
+        .map(|s| s.start.clone())
+        .unwrap_or_default();
     (!start.is_empty()).then_some(start)
 }
 
 /// The patch playing: the active switch's.
 fn playing(perf: &PerformanceModel) -> Option<String> {
-    perf.stacks.iter().find(|s| s.is_active).map(|s| s.patches.get(s.position as usize).cloned().unwrap_or_else(|| s.current_patch.clone()))
+    perf.stacks.iter().find(|s| s.is_active).map(|s| {
+        s.patches
+            .get(s.position as usize)
+            .cloned()
+            .unwrap_or_else(|| s.current_patch.clone())
+    })
 }
 
 /// Something other than the part's patch plays — picked by hand.
@@ -328,10 +401,19 @@ pub fn is_live(perf: &PerformanceModel, own: Option<&str>) -> bool {
 /// what "Keep for …" and "Make … default for …" speak of.
 pub fn where_label(perf: &PerformanceModel) -> String {
     let now = perf.part_index as usize;
-    let song = perf.songs.get(perf.song_index as usize).map(|s| s.name.clone());
-    match sections_of(&perf.parts).into_iter().find(|s| s.parts.contains(&now)) {
+    let song = perf
+        .songs
+        .get(perf.song_index as usize)
+        .map(|s| s.name.clone());
+    match sections_of(&perf.parts)
+        .into_iter()
+        .find(|s| s.parts.contains(&now))
+    {
         None => song.unwrap_or_else(|| "this song".to_string()),
-        Some(sec) if sec.parts.len() > 1 => perf.parts.get(now).map_or(sec.name.clone(), |p| p.name.clone()),
+        Some(sec) if sec.parts.len() > 1 => perf
+            .parts
+            .get(now)
+            .map_or(sec.name.clone(), |p| p.name.clone()),
         Some(sec) => sec.name,
     }
 }
@@ -362,7 +444,11 @@ pub fn song_stacks(perf: &PerformanceModel, lib: &LibraryModel) -> Vec<StackView
         .map(|(i, s)| StackView {
             index: i,
             name: s.name.clone(),
-            patches: s.patches.iter().map(|p| (p.clone(), source_of(lib, &perf.profile_name, p))).collect(),
+            patches: s
+                .patches
+                .iter()
+                .map(|p| (p.clone(), source_of(lib, &perf.profile_name, p)))
+                .collect(),
             at: (0..s.patches.len()).collect(),
             on: s.is_active,
             cursor: s.position as usize % s.patches.len(),
@@ -376,13 +462,30 @@ pub fn profile_stacks(perf: &PerformanceModel, lib: &LibraryModel) -> Vec<StackV
         .into_iter()
         .zip(perf.stacks.iter().filter(|s| !s.patches.is_empty()))
         .filter_map(|(v, s)| {
-            let at = s.patches.get(s.position as usize).cloned().unwrap_or_default();
-            let (patches, at_pos): (Vec<(String, Src)>, Vec<usize>) = v.patches.into_iter().zip(v.at).filter(|((_, src), _)| *src != Src::Song).unzip();
+            let at = s
+                .patches
+                .get(s.position as usize)
+                .cloned()
+                .unwrap_or_default();
+            let (patches, at_pos): (Vec<(String, Src)>, Vec<usize>) = v
+                .patches
+                .into_iter()
+                .zip(v.at)
+                .filter(|((_, src), _)| *src != Src::Song)
+                .unzip();
             if patches.is_empty() {
                 return None;
             }
-            let found = patches.iter().position(|(p, _)| p.eq_ignore_ascii_case(&at));
-            Some(StackView { on: v.on && found.is_some(), cursor: found.unwrap_or(0), patches, at: at_pos, ..v })
+            let found = patches
+                .iter()
+                .position(|(p, _)| p.eq_ignore_ascii_case(&at));
+            Some(StackView {
+                on: v.on && found.is_some(),
+                cursor: found.unwrap_or(0),
+                patches,
+                at: at_pos,
+                ..v
+            })
         })
         .collect()
 }
@@ -411,7 +514,9 @@ pub fn play_patch(rig: Option<RigClient>, patch: String) {
     let Some(r) = rig else { return };
     let _ = dioxus_core::spawn_forever(async move {
         if let Ok(list) = r.patches().await
-            && let Some(i) = list.iter().position(|p| p.name.eq_ignore_ascii_case(&patch))
+            && let Some(i) = list
+                .iter()
+                .position(|p| p.name.eq_ignore_ascii_case(&patch))
         {
             let _ = r.select_patch(i as u32).await;
         }
@@ -424,7 +529,11 @@ fn part_modules(all: &[PerfPart], parts: &[usize]) -> Vec<String> {
     for &k in parts {
         let Some(p) = all.get(k) else { continue };
         for pk in &p.picks {
-            let kind = pk.kind.strip_prefix("block:").unwrap_or(&pk.kind).to_string();
+            let kind = pk
+                .kind
+                .strip_prefix("block:")
+                .unwrap_or(&pk.kind)
+                .to_string();
             if !out.contains(&kind) {
                 out.push(kind);
             }
@@ -446,8 +555,16 @@ fn song_parts(perf: &PerformanceModel, lib: &LibraryModel, i: usize) -> Vec<Perf
     if i == perf.song_index as usize {
         return perf.parts.clone();
     }
-    let name = perf.songs.get(i).map(|s| s.name.clone()).unwrap_or_default();
-    lib.songs.iter().find(|s| s.name.eq_ignore_ascii_case(&name)).map(|s| s.part_list.clone()).unwrap_or_default()
+    let name = perf
+        .songs
+        .get(i)
+        .map(|s| s.name.clone())
+        .unwrap_or_default();
+    lib.songs
+        .iter()
+        .find(|s| s.name.eq_ignore_ascii_case(&name))
+        .map(|s| s.part_list.clone())
+        .unwrap_or_default()
 }
 
 // ── The sidebar ────────────────────────────────────────────────────────────
@@ -481,7 +598,9 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
     let measure = move || {
         let at = perf_sig.peek().song_index as usize;
         let up = rows.peek().get(at).cloned().flatten();
-        let (Some(list), Some(up)) = (list_el.peek().clone(), up) else { return };
+        let (Some(list), Some(up)) = (list_el.peek().clone(), up) else {
+            return;
+        };
         // A handle's copy, so the closure stays `Fn`.
         let mut flight = flight;
         if *flight.peek() > 0 {
@@ -490,42 +609,44 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
         }
         flight.set(1);
         spawn(async move {
-          loop {
-            // Mounted before laid out: wait for a layout to measure.
-            for _ in 0..10 {
-                if let (Ok(l), Ok(u)) = (list.get_client_rect().await, up.get_client_rect().await)
-                    && l.height() > 1.0
-                    && u.height() > 1.0
-                {
-                    break;
+            loop {
+                // Mounted before laid out: wait for a layout to measure.
+                for _ in 0..10 {
+                    if let (Ok(l), Ok(u)) =
+                        (list.get_client_rect().await, up.get_client_rect().await)
+                        && l.height() > 1.0
+                        && u.height() > 1.0
+                    {
+                        break;
+                    }
+                    architect::platform::sleep(std::time::Duration::from_millis(50)).await;
                 }
-                architect::platform::sleep(std::time::Duration::from_millis(50)).await;
-            }
-            let (Ok(l), Ok(u)) = (list.get_client_rect().await, up.get_client_rect().await) else {
+                let (Ok(l), Ok(u)) = (list.get_client_rect().await, up.get_client_rect().await)
+                else {
+                    flight.set(0);
+                    return;
+                };
+                if l.height() <= 1.0 || u.height() <= 1.0 {
+                    flight.set(0);
+                    return;
+                }
+                let now = if u.max_y() < l.min_y() + 1.0 {
+                    Some(true)
+                } else if u.min_y() > l.max_y() - 1.0 {
+                    Some(false)
+                } else {
+                    None
+                };
+                if *away.peek() != now {
+                    away.set(now);
+                }
+                if *flight.peek() == 2 {
+                    flight.set(1);
+                    continue;
+                }
                 flight.set(0);
-                return;
-            };
-            if l.height() <= 1.0 || u.height() <= 1.0 {
-                flight.set(0);
-                return;
+                break;
             }
-            let now = if u.max_y() < l.min_y() + 1.0 {
-                Some(true)
-            } else if u.min_y() > l.max_y() - 1.0 {
-                Some(false)
-            } else {
-                None
-            };
-            if *away.peek() != now {
-                away.set(now);
-            }
-            if *flight.peek() == 2 {
-                flight.set(1);
-                continue;
-            }
-            flight.set(0);
-            break;
-          }
         });
     };
     // The song up moves on: measure where the new one is.
@@ -539,7 +660,9 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
     use_effect(move || {
         let p = perf_sig.read();
         let (at, now) = (p.song_index as usize, p.part_index as usize);
-        let last = sections_of(&p.parts).last().is_some_and(|s| s.parts.contains(&now));
+        let last = sections_of(&p.parts)
+            .last()
+            .is_some_and(|s| s.parts.contains(&now));
         drop(p);
         if last && let Some(Some(el)) = rows.peek().get(at + 1).cloned() {
             spawn(async move {
@@ -633,10 +756,26 @@ pub fn TabletSetlist(state: RigViewState) -> Element {
 /// and the section playing, and a tap back to them.
 #[component]
 fn NowBar(perf: PerformanceModel, above: bool, on_back: EventHandler<()>) -> Element {
-    let Some(song) = perf.songs.get(perf.song_index as usize).cloned() else { return rsx! {} };
+    let Some(song) = perf.songs.get(perf.song_index as usize).cloned() else {
+        return rsx! {};
+    };
     let colour = song_colour(&song.name, &song.colour);
-    let section = perf.parts.get(perf.part_index as usize).map(|p| if p.section.is_empty() { p.name.clone() } else { p.section.clone() }).unwrap_or_default();
-    let edge = if above { format!("top: 0px; border-bottom: 1px solid {RULE_STRONG};") } else { format!("bottom: 0px; border-top: 1px solid {RULE_STRONG};") };
+    let section = perf
+        .parts
+        .get(perf.part_index as usize)
+        .map(|p| {
+            if p.section.is_empty() {
+                p.name.clone()
+            } else {
+                p.section.clone()
+            }
+        })
+        .unwrap_or_default();
+    let edge = if above {
+        format!("top: 0px; border-bottom: 1px solid {RULE_STRONG};")
+    } else {
+        format!("bottom: 0px; border-top: 1px solid {RULE_STRONG};")
+    };
     rsx! {
         button {
             style: "position: absolute; left: 0px; right: 0px; z-index: 5; height: {HIT}px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 0 14px; border: none; {edge} text-align: left; background: {tint(&colour, 16)}; color: {INK}; font-family: {FONT}; cursor: pointer;",
@@ -692,11 +831,20 @@ pub fn PrimaryButton(label: String, onclick: EventHandler<()>, disabled: Option<
 // ── Header ─────────────────────────────────────────────────────────────────
 
 #[component]
-fn SetHeader(perf: PerformanceModel, lib: LibraryModel, panel: Signal<Option<Panel>>, reordering: Signal<bool>) -> Element {
+fn SetHeader(
+    perf: PerformanceModel,
+    lib: LibraryModel,
+    panel: Signal<Option<Panel>>,
+    reordering: Signal<bool>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let set_index = perf.setlist_index as usize;
     let entry = lib.setlists.get(set_index).cloned().unwrap_or_default();
-    let name = perf.setlists.get(set_index).cloned().unwrap_or_else(|| entry.name.clone());
+    let name = perf
+        .setlists
+        .get(set_index)
+        .cloned()
+        .unwrap_or_else(|| entry.name.clone());
     let meta = set_meta(&name, &entry.event, &entry.date, &entry.title);
     let heading = set_heading(&meta);
     let date = date_label(&meta.date);
@@ -704,7 +852,11 @@ fn SetHeader(perf: PerformanceModel, lib: LibraryModel, panel: Signal<Option<Pan
     // Only today and tomorrow are worth a word beside the date.
     let soon = (when == "Today" || when == "Tomorrow").then(|| when.clone());
     // The set's profile, else the rig's.
-    let profile = if entry.profile.is_empty() { active_profile(&perf, &lib) } else { entry.profile.clone() };
+    let profile = if entry.profile.is_empty() {
+        active_profile(&perf, &lib)
+    } else {
+        entry.profile.clone()
+    };
     let count = perf.songs.len();
     let at = perf.song_index as usize;
     let sets = perf.setlists.len();
@@ -713,13 +865,19 @@ fn SetHeader(perf: PerformanceModel, lib: LibraryModel, panel: Signal<Option<Pan
         Item::head(name.clone()),
         Item::run("add", "Add songs…"),
         Item::run("edit", "Edit details…").detail("event · date · title"),
-        Item::run("profile", "Default profile…").detail(if entry.profile.is_empty() { "the rig's".to_string() } else { entry.profile.clone() }),
+        Item::run("profile", "Default profile…").detail(if entry.profile.is_empty() {
+            "the rig's".to_string()
+        } else {
+            entry.profile.clone()
+        }),
         Item::run("new", "New set…"),
         Item::run("duplicate", "Duplicate for next week"),
         Item::run("sets", "All sets…").detail(format!("{sets}")),
-        Item::run("reorder", "Reorder songs").unless((count < 2).then(|| "Fewer than two songs".to_string())),
+        Item::run("reorder", "Reorder songs")
+            .unless((count < 2).then(|| "Fewer than two songs".to_string())),
         Item::Sep,
-        Item::delete("delete", "Delete set").unless((sets <= 1).then(|| "The only set — make another first".to_string())),
+        Item::delete("delete", "Delete set")
+            .unless((sets <= 1).then(|| "The only set — make another first".to_string())),
     ];
     let mut panel_w = panel;
     let mut reorder_w = reordering;
@@ -824,7 +982,9 @@ fn SongRow(
     on_grip: EventHandler<PointerEvent>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let Some(song) = perf.songs.get(index).cloned() else { return rsx! {} };
+    let Some(song) = perf.songs.get(index).cloned() else {
+        return rsx! {};
+    };
     let at = perf.song_index as usize;
     let up = index == at;
     let played = index < at;
@@ -832,11 +992,22 @@ fn SongRow(
     let count = perf.songs.len();
     let last = count.saturating_sub(1);
     let colour = song_colour(&song.name, &song.colour);
-    let lib_song = lib.songs.iter().find(|s| s.name.eq_ignore_ascii_case(&song.name)).cloned();
+    let lib_song = lib
+        .songs
+        .iter()
+        .find(|s| s.name.eq_ignore_ascii_case(&song.name))
+        .cloned();
     let parts = song_parts(&perf, &lib, index);
     let sections = sections_of(&parts).len();
-    let own_profile = lib_song.as_ref().map(|s| s.profile.clone()).unwrap_or_default();
-    let set_profile = lib.setlists.get(perf.setlist_index as usize).map(|s| s.profile.clone()).unwrap_or_default();
+    let own_profile = lib_song
+        .as_ref()
+        .map(|s| s.profile.clone())
+        .unwrap_or_default();
+    let set_profile = lib
+        .setlists
+        .get(perf.setlist_index as usize)
+        .map(|s| s.profile.clone())
+        .unwrap_or_default();
     let shown_profile = if !own_profile.is_empty() {
         own_profile.clone()
     } else if !set_profile.is_empty() {
@@ -856,11 +1027,31 @@ fn SongRow(
         Item::head(format!("{} · {}", index + 1, song.name)),
         Item::run("go", "Play from here").unless(up.then(|| "It's up now".to_string())),
         Item::Sep,
-        Item::run("key", "Key…").detail(if song.key.is_empty() { "—".to_string() } else { song.key.clone() }),
-        Item::run("tempo", "Tempo…").detail(if song.bpm > 0 { format!("{} BPM", song.bpm) } else { "—".to_string() }),
-        Item::run("start", "Starts on…").detail(if start.is_empty() { "default".to_string() } else { start.clone() }),
-        Item::run("profile", "Profile…").detail(if own_profile.is_empty() { format!("{shown_profile} (set's)") } else { own_profile.clone() }),
-        Item::run("colour", "Colour…").detail(if song.colour.is_empty() { "from its name" } else { "set" }),
+        Item::run("key", "Key…").detail(if song.key.is_empty() {
+            "—".to_string()
+        } else {
+            song.key.clone()
+        }),
+        Item::run("tempo", "Tempo…").detail(if song.bpm > 0 {
+            format!("{} BPM", song.bpm)
+        } else {
+            "—".to_string()
+        }),
+        Item::run("start", "Starts on…").detail(if start.is_empty() {
+            "default".to_string()
+        } else {
+            start.clone()
+        }),
+        Item::run("profile", "Profile…").detail(if own_profile.is_empty() {
+            format!("{shown_profile} (set's)")
+        } else {
+            own_profile.clone()
+        }),
+        Item::run("colour", "Colour…").detail(if song.colour.is_empty() {
+            "from its name"
+        } else {
+            "set"
+        }),
         Item::Sep,
         Item::run("up", "Move up").unless((index == 0).then(|| "Already first".to_string())),
         Item::run("down", "Move down").unless((index == last).then(|| "Already last".to_string())),
@@ -878,9 +1069,21 @@ fn SongRow(
         CLEAR.to_string()
     };
     // The song up stays at the top while you scroll through it.
-    let pin = if up && !reordering { STICK_SONG } else { UNSTUCK };
-    let top_rule = if drop_above { format!("border-top: 3px solid {FOCUS_FG};") } else { format!("border-top: 1px solid {RULE};") };
-    let number_bg = if played { format!("color-mix(in srgb, {colour} 35%, {SHEET})") } else { colour.clone() };
+    let pin = if up && !reordering {
+        STICK_SONG
+    } else {
+        UNSTUCK
+    };
+    let top_rule = if drop_above {
+        format!("border-top: 3px solid {FOCUS_FG};")
+    } else {
+        format!("border-top: 1px solid {RULE};")
+    };
+    let number_bg = if played {
+        format!("color-mix(in srgb, {colour} 35%, {SHEET})")
+    } else {
+        colour.clone()
+    };
 
     let pick_handler = EventHandler::new({
         let rig = rig.clone();
@@ -891,8 +1094,16 @@ fn SongRow(
             "start" => panel_w.set(Some(Panel::Start(index))),
             "profile" => panel_w.set(Some(Panel::Profile(Some(index)))),
             "colour" => panel_w.set(Some(Panel::Colour(index))),
-            "up" => call!(rig, |r| r.move_setlist_entry(set_index, index as u32, index as u32 - 1)),
-            "down" => call!(rig, |r| r.move_setlist_entry(set_index, index as u32, index as u32 + 1)),
+            "up" => call!(rig, |r| r.move_setlist_entry(
+                set_index,
+                index as u32,
+                index as u32 - 1
+            )),
+            "down" => call!(rig, |r| r.move_setlist_entry(
+                set_index,
+                index as u32,
+                index as u32 + 1
+            )),
             "remove" => call!(rig, |r| r.remove_setlist_entry(set_index, index as u32)),
             _ => {}
         }
@@ -1022,10 +1233,24 @@ fn Badge(live: bool, children: Element) -> Element {
 /// A patch with the stack it lands on: the stack named in its colour; a
 /// patch borrowed from another profile says from where.
 #[component]
-pub fn PatchChip(patch: String, stack: String, small: bool, lit: bool, borrowed: Option<String>) -> Element {
+pub fn PatchChip(
+    patch: String,
+    stack: String,
+    small: bool,
+    lit: bool,
+    borrowed: Option<String>,
+) -> Element {
     let tape = tape_for(&stack);
-    let stack_ink = if tape == TAPE_GAFFER { INK_3.to_string() } else { format!("color-mix(in oklab, {tape} 80%, white)") };
-    let (pad, size, stack_size) = if small { ("2px 8px 2px 7px", 12, 10.5) } else { ("5px 9px 5px 8px", 13, 11.0) };
+    let stack_ink = if tape == TAPE_GAFFER {
+        INK_3.to_string()
+    } else {
+        format!("color-mix(in oklab, {tape} 80%, white)")
+    };
+    let (pad, size, stack_size) = if small {
+        ("2px 8px 2px 7px", 12, 10.5)
+    } else {
+        ("5px 9px 5px 8px", 13, 11.0)
+    };
     rsx! {
         span { style: "display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; padding: {pad}; border-radius: 4px; background: {pick(lit, FILL_ON, FILL)}; color: {pick(lit, INK, INK_2)}; font-size: {size}px; font-weight: 600; white-space: nowrap; box-sizing: border-box;",
             if !stack.is_empty() {
@@ -1042,21 +1267,38 @@ pub fn PatchChip(patch: String, stack: String, small: bool, lit: bool, borrowed:
 // ── Its sections ───────────────────────────────────────────────────────────
 
 #[component]
-fn Sections(perf: PerformanceModel, lib: LibraryModel, song: usize, panel: Signal<Option<Panel>>) -> Element {
+fn Sections(
+    perf: PerformanceModel,
+    lib: LibraryModel,
+    song: usize,
+    panel: Signal<Option<Panel>>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let host = PopupHost::try_use();
     let bus = DragBus::try_use();
     let parts = song_parts(&perf, &lib, song);
     let sections = sections_of(&parts);
     let up = song == perf.song_index as usize;
-    let colour = perf.songs.get(song).map(|s| song_colour(&s.name, &s.colour)).unwrap_or_default();
-    let now = if up { perf.part_index as usize } else { usize::MAX };
+    let colour = perf
+        .songs
+        .get(song)
+        .map(|s| song_colour(&s.name, &s.colour))
+        .unwrap_or_default();
+    let now = if up {
+        perf.part_index as usize
+    } else {
+        usize::MAX
+    };
     let drag = use_signal(|| None::<(usize, usize)>);
     let rows: Rows = use_signal(Vec::new);
     let mut add_el = use_signal(|| None::<Rc<MountedData>>);
     let names: Vec<String> = sections.iter().map(|s| s.name.clone()).collect();
     let count = sections.len();
-    let song_name = perf.songs.get(song).map(|s| s.name.clone()).unwrap_or_default();
+    let song_name = perf
+        .songs
+        .get(song)
+        .map(|s| s.name.clone())
+        .unwrap_or_default();
     rsx! {
         div { style: "position: relative; padding: 2px 0 10px; background: {tint(&colour, pick(up, 7, 4))};",
             if up {
@@ -1156,9 +1398,18 @@ fn reorder_song_parts(rig: Option<RigClient>, song: String, want: Vec<usize>) {
     let _ = dioxus_core::spawn_forever(async move {
         let mut now: Vec<usize> = (0..want.len()).collect();
         for (pos, &part) in want.iter().enumerate() {
-            let Some(at) = now.iter().position(|&p| p == part) else { continue };
+            let Some(at) = now.iter().position(|&p| p == part) else {
+                continue;
+            };
             if at != pos {
-                let _ = r.edit_song_part(song.clone(), "move".to_string(), at.to_string(), pos.to_string()).await;
+                let _ = r
+                    .edit_song_part(
+                        song.clone(),
+                        "move".to_string(),
+                        at.to_string(),
+                        pos.to_string(),
+                    )
+                    .await;
                 let p = now.remove(at);
                 now.insert(pos, p);
             }
@@ -1183,7 +1434,18 @@ pub struct PickPart {
 }
 
 #[component]
-fn SectionRow(perf: PerformanceModel, lib: LibraryModel, parts: Vec<PerfPart>, song: usize, section: Section, index: usize, count: usize, names: Vec<String>, panel: Signal<Option<Panel>>, on_grip: EventHandler<PointerEvent>) -> Element {
+fn SectionRow(
+    perf: PerformanceModel,
+    lib: LibraryModel,
+    parts: Vec<PerfPart>,
+    song: usize,
+    section: Section,
+    index: usize,
+    count: usize,
+    names: Vec<String>,
+    panel: Signal<Option<Panel>>,
+    on_grip: EventHandler<PointerEvent>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let build_pick = try_use_context::<super::BuildPick>();
     let pick_part = try_use_context::<PickPart>();
@@ -1205,14 +1467,30 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, parts: Vec<PerfPart>, s
     // The part being built into is ringed (a one-part section's).
     let picked = up && !several && build_pick.is_some_and(|b| (b.part)() == Some(first));
     let part = parts.get(first).cloned().unwrap_or_default();
-    let colour = perf.songs.get(song).map(|s| song_colour(&s.name, &s.colour)).unwrap_or_default();
-    let profile = if part.profile.is_empty() { perf.profile_name.clone() } else { part.profile.clone() };
+    let colour = perf
+        .songs
+        .get(song)
+        .map(|s| song_colour(&s.name, &s.colour))
+        .unwrap_or_default();
+    let profile = if part.profile.is_empty() {
+        perf.profile_name.clone()
+    } else {
+        part.profile.clone()
+    };
     let stack = stack_for(&perf, &lib, &profile, &part.patch);
     let borrowed = (!part.profile.is_empty()).then(|| part.profile.clone());
     let modules = part_modules(&parts, &section.parts);
-    let part_names: Vec<String> = section.parts.iter().filter_map(|&k| parts.get(k).map(|p| p.name.clone())).collect();
+    let part_names: Vec<String> = section
+        .parts
+        .iter()
+        .filter_map(|&k| parts.get(k).map(|p| p.name.clone()))
+        .collect();
     let grouped = !part.section.is_empty();
-    let song_name = perf.songs.get(song).map(|s| s.name.clone()).unwrap_or_default();
+    let song_name = perf
+        .songs
+        .get(song)
+        .map(|s| s.name.clone())
+        .unwrap_or_default();
 
     let mut items = vec![
         Item::head(section.name.clone()),
@@ -1223,18 +1501,27 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, parts: Vec<PerfPart>, s
         items.push(if several {
             Item::run("parts", "Its parts").detail(format!("{}", section.parts.len()))
         } else {
-            Item::run("patch", "Patch…").detail(sound_of(&part).unwrap_or_else(|| "keeps".to_string()))
+            Item::run("patch", "Patch…")
+                .detail(sound_of(&part).unwrap_or_else(|| "keeps".to_string()))
         });
     }
     {
-    items.extend([
-        Item::name("rename", "Rename…", section.name.clone(), "Rename", names.clone()),
-        Item::Sep,
-        Item::run("earlier", "Move earlier").unless((index == 0).then(|| "Already first".to_string())),
-        Item::run("later", "Move later").unless((index + 1 == count).then(|| "Already last".to_string())),
-        Item::Sep,
-        Item::delete("delete", "Delete section"),
-    ]);
+        items.extend([
+            Item::name(
+                "rename",
+                "Rename…",
+                section.name.clone(),
+                "Rename",
+                names.clone(),
+            ),
+            Item::Sep,
+            Item::run("earlier", "Move earlier")
+                .unless((index == 0).then(|| "Already first".to_string())),
+            Item::run("later", "Move later")
+                .unless((index + 1 == count).then(|| "Already last".to_string())),
+            Item::Sep,
+            Item::delete("delete", "Delete section"),
+        ]);
     }
     let ink = match state {
         "done" => INK_3,
@@ -1242,9 +1529,17 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, parts: Vec<PerfPart>, s
         _ => INK_2,
     };
     let grip = section_colour(&section.name);
-    let row_bg = pick(is_now, tint(&colour, pick(several, 10, 18)), CLEAR.to_string());
+    let row_bg = pick(
+        is_now,
+        tint(&colour, pick(several, 10, 18)),
+        CLEAR.to_string(),
+    );
     // The section playing stays under the song while its stacks scroll.
-    let pin = if is_now { format!("{STICK_SECTION} box-shadow: 0 1px 0 {RULE_STRONG};") } else { UNSTUCK.to_string() };
+    let pin = if is_now {
+        format!("{STICK_SECTION} box-shadow: 0 1px 0 {RULE_STRONG};")
+    } else {
+        UNSTUCK.to_string()
+    };
     let order: Vec<Section> = {
         let mut v = sections_of(&parts);
         v.truncate(count);
@@ -1286,17 +1581,38 @@ fn SectionRow(perf: PerformanceModel, lib: LibraryModel, parts: Vec<PerfPart>, s
                 "patch" => choose(),
                 "rename" if !up => {
                     let (song, new_name) = (song_name.clone(), p.text.clone());
-                    for n in if grouped { part_names } else { part_names.into_iter().take(1).collect() } {
-                        let (song, new_name, op) = (song.clone(), new_name.clone(), if grouped { "section" } else { "rename" });
+                    for n in if grouped {
+                        part_names
+                    } else {
+                        part_names.into_iter().take(1).collect()
+                    } {
+                        let (song, new_name, op) = (
+                            song.clone(),
+                            new_name.clone(),
+                            if grouped { "section" } else { "rename" },
+                        );
                         call!(rig, |r| r.edit_song_part(song, op.to_string(), n, new_name));
                     }
                 }
-                "earlier" if !up => reorder_song_parts(rig.clone(), song_name.clone(), section_moved(&order, index, index - 1)),
-                "later" if !up => reorder_song_parts(rig.clone(), song_name.clone(), section_moved(&order, index, index + 1)),
+                "earlier" if !up => reorder_song_parts(
+                    rig.clone(),
+                    song_name.clone(),
+                    section_moved(&order, index, index - 1),
+                ),
+                "later" if !up => reorder_song_parts(
+                    rig.clone(),
+                    song_name.clone(),
+                    section_moved(&order, index, index + 1),
+                ),
                 "delete" if !up => {
                     for n in part_names {
                         let song = song_name.clone();
-                        call!(rig, |r| r.edit_song_part(song, "remove".to_string(), n, String::new()));
+                        call!(rig, |r| r.edit_song_part(
+                            song,
+                            "remove".to_string(),
+                            n,
+                            String::new()
+                        ));
                     }
                 }
                 "rename" => {
@@ -1409,8 +1725,15 @@ pub fn Stacks(perf: PerformanceModel, lib: LibraryModel, left: u32) -> Element {
     let own = part_patch(&perf);
     let live = is_live(&perf, own.as_deref());
     let where_ = where_label(&perf);
-    let colour = perf.songs.get(perf.song_index as usize).map_or_else(|| name_colour(&perf.profile_name).to_string(), |s| song_colour(&s.name, &s.colour));
-    let part = perf.parts.get(perf.part_index as usize).cloned().unwrap_or_default();
+    let colour = perf.songs.get(perf.song_index as usize).map_or_else(
+        || name_colour(&perf.profile_name).to_string(),
+        |s| song_colour(&s.name, &s.colour),
+    );
+    let part = perf
+        .parts
+        .get(perf.part_index as usize)
+        .cloned()
+        .unwrap_or_default();
     let in_song = !perf.parts.is_empty();
     let count = views.len();
     rsx! {
@@ -1466,24 +1789,47 @@ pub fn StackRow(
     let on = view.on;
     let n = view.patches.len();
     // The part's own patch, while something else plays by hand: home.
-    let saved = own.as_ref().and_then(|o| view.patches.iter().position(|(p, _)| p.eq_ignore_ascii_case(o)));
+    let saved = own.as_ref().and_then(|o| {
+        view.patches
+            .iter()
+            .position(|(p, _)| p.eq_ignore_ascii_case(o))
+    });
     let home = live && saved.is_some();
     let by_hand = on && live;
-    let pos = if on { view.cursor } else { saved.filter(|_| home).unwrap_or(view.cursor) };
+    let pos = if on {
+        view.cursor
+    } else {
+        saved.filter(|_| home).unwrap_or(view.cursor)
+    };
     let showing = view.patches.get(pos).cloned();
     let showing_name = showing.as_ref().map(|s| s.0.clone()).unwrap_or_default();
     let is_default = saved.is_some_and(|s| s == pos);
     let next_patch = (n > 1).then(|| view.patches[(pos + 1) % n].0.clone());
     let tape = tape_for(&view.name);
     // Only the profile's own patches are the profile's to rename or remove.
-    let mine = showing.as_ref().is_some_and(|(_, src)| matches!(src, Src::Profile(_)));
+    let mine = showing
+        .as_ref()
+        .is_some_and(|(_, src)| matches!(src, Src::Profile(_)));
     let names: Vec<String> = view.patches.iter().map(|p| p.0.clone()).collect();
-    let stack_names: Vec<String> = lib.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(&profile)).map(|p| p.stacks.clone()).unwrap_or_default();
+    let stack_names: Vec<String> = lib
+        .profiles
+        .iter()
+        .find(|p| p.name.eq_ignore_ascii_case(&profile))
+        .map(|p| p.stacks.clone())
+        .unwrap_or_default();
 
-    let head = if showing.is_some() { format!("{} · {showing_name}", view.name) } else { format!("{} · empty", view.name) };
+    let head = if showing.is_some() {
+        format!("{} · {showing_name}", view.name)
+    } else {
+        format!("{} · empty", view.name)
+    };
     let mut items = vec![Item::head(head)];
     for (k, (p, src)) in view.patches.iter().enumerate() {
-        items.push(Item::run(format!("p{k}"), p.clone()).detail(src.label()).checked(k == pos && on));
+        items.push(
+            Item::run(format!("p{k}"), p.clone())
+                .detail(src.label())
+                .checked(k == pos && on),
+        );
     }
     if by_hand {
         items.push(Item::Sep);
@@ -1493,28 +1839,68 @@ pub fn StackRow(
     // The section (or part) playing gets this patch as its own.
     if in_song && showing.is_some() {
         items.push(Item::Sep);
-        items.push(Item::run("default", format!("Make “{showing_name}” default for {where_}")).unless(is_default.then(|| format!("It's {where_}'s already"))));
+        items.push(
+            Item::run(
+                "default",
+                format!("Make “{showing_name}” default for {where_}"),
+            )
+            .unless(is_default.then(|| format!("It's {where_}'s already"))),
+        );
     }
     items.push(Item::Sep);
-    items.push(Item::name("add", "Add a patch…", format!("{} {}", view.name, n + 1), "Add", names.clone()));
+    items.push(Item::name(
+        "add",
+        "Add a patch…",
+        format!("{} {}", view.name, n + 1),
+        "Add",
+        names.clone(),
+    ));
     if mine {
-        items.push(Item::name("rename_patch", format!("Rename “{showing_name}”…"), showing_name.clone(), "Rename", names.clone()));
+        items.push(Item::name(
+            "rename_patch",
+            format!("Rename “{showing_name}”…"),
+            showing_name.clone(),
+            "Rename",
+            names.clone(),
+        ));
     }
-    items.push(Item::name("rename", "Rename stack…", view.name.clone(), "Rename", stack_names));
-    items.push(Item::run("up", "Move up").unless((shown == 0).then(|| "Already first".to_string())));
-    items.push(Item::run("down", "Move down").unless((shown + 1 == count).then(|| "Already last".to_string())));
+    items.push(Item::name(
+        "rename",
+        "Rename stack…",
+        view.name.clone(),
+        "Rename",
+        stack_names,
+    ));
+    items
+        .push(Item::run("up", "Move up").unless((shown == 0).then(|| "Already first".to_string())));
+    items.push(
+        Item::run("down", "Move down")
+            .unless((shown + 1 == count).then(|| "Already last".to_string())),
+    );
     if mine {
         items.push(Item::Sep);
-        items.push(Item::delete("remove_patch", format!("Remove “{showing_name}”")).unless((n <= 1).then(|| "A stack keeps at least one patch".to_string())));
+        items.push(
+            Item::delete("remove_patch", format!("Remove “{showing_name}”"))
+                .unless((n <= 1).then(|| "A stack keeps at least one patch".to_string())),
+        );
     }
 
     // Green bar: what plays (amber when picked by hand). A ring: the part's
     // own patch, while something else plays — tap it to go back.
-    let fill = if on { format!("background: {};", pick(by_hand, MODIFIED, LIVE)) } else { String::new() };
-    let ring = if home { format!("border: 1.25px solid {LIVE}; box-sizing: border-box;") } else { String::new() };
+    let fill = if on {
+        format!("background: {};", pick(by_hand, MODIFIED, LIVE))
+    } else {
+        String::new()
+    };
+    let ring = if home {
+        format!("border: 1.25px solid {LIVE}; box-sizing: border-box;")
+    } else {
+        String::new()
+    };
     let pick_handler = EventHandler::new({
         let rig = rig.clone();
-        let (part, own, showing, rig_at) = (part.clone(), own.clone(), showing.clone(), view.at.clone());
+        let (part, own, showing, rig_at) =
+            (part.clone(), own.clone(), showing.clone(), view.at.clone());
         let stack_name = view.name.clone();
         move |p: Picked| {
             let stack_name = stack_name.clone();
@@ -1564,7 +1950,9 @@ pub fn StackRow(
                 }
                 other => {
                     // Land the stack on that patch and play it.
-                    if let Some(k) = other.strip_prefix('p').and_then(|k| k.parse::<usize>().ok())
+                    if let Some(k) = other
+                        .strip_prefix('p')
+                        .and_then(|k| k.parse::<usize>().ok())
                         && let Some(&at) = rig_at.get(k)
                     {
                         call!(rig, |r| r.play_stack_patch(index as u32, at as u32));
@@ -1573,7 +1961,11 @@ pub fn StackRow(
             }
         }
     });
-    let label = if showing.is_some() { showing_name.clone() } else { "Empty".to_string() };
+    let label = if showing.is_some() {
+        showing_name.clone()
+    } else {
+        "Empty".to_string()
+    };
     let grip_ink = super::colors::tape_mark(&view.name);
     rsx! {
         PressMenu {
@@ -1660,7 +2052,10 @@ pub fn StackRow(
 #[component]
 fn RotationDot(lit: bool, source: Src, song_colour: String) -> Element {
     let style = match &source {
-        Src::Song => format!("background: {song_colour}; opacity: {};", pick(lit, 1.0, 0.55)),
+        Src::Song => format!(
+            "background: {song_colour}; opacity: {};",
+            pick(lit, 1.0, 0.55)
+        ),
         Src::Other(p) => format!("background: {};", name_colour(p)),
         Src::Profile(_) if lit => format!("background: {INK_2};"),
         Src::Profile(_) => format!("border: 1.25px solid {INK_3}; box-sizing: border-box;"),

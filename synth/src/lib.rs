@@ -17,7 +17,6 @@ pub mod proto;
 #[cfg(feature = "ui")]
 pub mod ui;
 
-
 /// The Signal Engine.
 ///
 /// The canonical layer program every rig loads patches into

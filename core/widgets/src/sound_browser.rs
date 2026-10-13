@@ -611,7 +611,11 @@ fn Row(
         (true, true) => "10px 8px 10px 22px",
         (false, true) => "11px 8px",
     };
-    let edge = if lit { accent.clone() } else { "transparent".to_string() };
+    let edge = if lit {
+        accent.clone()
+    } else {
+        "transparent".to_string()
+    };
     let size = if indent { T_SMALL } else { T_BODY };
     let id = entry.id.clone();
     let menu = entry.menu.clone();
@@ -792,7 +796,11 @@ fn AuditionBar(accent: String, h: Handlers, ui: Ui) -> Element {
 
 #[component]
 fn Chip(chip: BrowseChip, on_chip: EventHandler<String>) -> Element {
-    let pad = if crate::touch::use_touch() { "9px 14px" } else { "2px 9px" };
+    let pad = if crate::touch::use_touch() {
+        "9px 14px"
+    } else {
+        "2px 9px"
+    };
     let (border, bg, fg) = if chip.on {
         ("#1f2b3a", FOCUS_BG, FOCUS_FG)
     } else {
@@ -889,7 +897,11 @@ mod tests {
     #[test]
     fn arrows_walk_rows_and_their_children_from_what_plays() {
         let m = Model {
-            entries: vec![e("a", false, &["a1", "a2"]), e("b", true, &[]), e("c", false, &[])],
+            entries: vec![
+                e("a", false, &["a1", "a2"]),
+                e("b", true, &[]),
+                e("c", false, &[]),
+            ],
             ..Model::default()
         };
         // Nothing highlighted: start from the live row.

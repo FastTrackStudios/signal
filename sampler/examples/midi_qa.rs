@@ -405,18 +405,10 @@ fn main() -> eyre::Result<()> {
             mode_label: "DOCUMENT (prefire)".into(),
             reactive_fallbacks: res.reactive_fallbacks,
         };
-        let data = sampler::report::render_report_json(
-            &format!("qa_{name}"),
-            &res.audio,
-            2,
-            SR,
-            &sources,
-        );
-        sampler::report::write_report_html(
-            &PathBuf::from(format!("target/qa_{name}.html")),
-            &data,
-        )
-        .map_err(|e| eyre::eyre!("report: {e}"))?;
+        let data =
+            sampler::report::render_report_json(&format!("qa_{name}"), &res.audio, 2, SR, &sources);
+        sampler::report::write_report_html(&PathBuf::from(format!("target/qa_{name}.html")), &data)
+            .map_err(|e| eyre::eyre!("report: {e}"))?;
 
         println!(
             "── {name}: {} notes, {} transitions fired, {} reactive fallbacks, {}s",

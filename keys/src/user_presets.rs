@@ -17,8 +17,8 @@
 
 use std::path::{Path, PathBuf};
 
-use facet::Facet;
 use crate::proto::KeysPreset;
+use facet::Facet;
 
 use crate::profile::{EngineDef, LayerDef};
 
@@ -81,7 +81,9 @@ pub fn root() -> PathBuf {
 /// The file a preset named `name` of `kind` is kept in.
 #[must_use]
 pub fn path_for(kind: Kind, name: &str) -> PathBuf {
-    root().join(kind.dir()).join(format!("{}.styx", file_stem(name)))
+    root()
+        .join(kind.dir())
+        .join(format!("{}.styx", file_stem(name)))
 }
 
 /// A name made safe as a file name (path separators and the like become
@@ -96,7 +98,11 @@ fn file_stem(name: &str) -> String {
             c => c,
         })
         .collect();
-    if s.is_empty() { "Untitled".to_string() } else { s }
+    if s.is_empty() {
+        "Untitled".to_string()
+    } else {
+        s
+    }
 }
 
 /// Which kind a saved preset's file is, from where it lives.
@@ -127,7 +133,10 @@ fn write(path: &Path, text: Result<String, String>) -> Result<(), String> {
 /// When the file cannot be written.
 pub fn save_layer(preset: &LayerPreset) -> Result<PathBuf, String> {
     let path = path_for(Kind::Layer, &preset.name);
-    write(&path, facet_styx::to_string(preset).map_err(|e| e.to_string()))?;
+    write(
+        &path,
+        facet_styx::to_string(preset).map_err(|e| e.to_string()),
+    )?;
     Ok(path)
 }
 
@@ -137,7 +146,10 @@ pub fn save_layer(preset: &LayerPreset) -> Result<PathBuf, String> {
 /// When the file cannot be written.
 pub fn save_engine(preset: &EnginePreset) -> Result<PathBuf, String> {
     let path = path_for(Kind::Engine, &preset.name);
-    write(&path, facet_styx::to_string(preset).map_err(|e| e.to_string()))?;
+    write(
+        &path,
+        facet_styx::to_string(preset).map_err(|e| e.to_string()),
+    )?;
     Ok(path)
 }
 

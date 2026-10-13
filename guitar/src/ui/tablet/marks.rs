@@ -66,7 +66,16 @@ pub fn ModuleIcon(kind: String, size: u32, colour: String) -> Element {
         "Drive" => &["M13 2 4 14h7l-1 8 9-12h-7z"],
         "Time" => &["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", "M12 7v5l3 2"],
         "Delay" => &["M21 12a9 9 0 1 1-3-6.7", "M21 4v5h-5"],
-        "Reverb" => &["M12 3v4", "M12 17v4", "M3 12h4", "M17 12h4", "M6 6l2.5 2.5", "M15.5 15.5 18 18", "M18 6l-2.5 2.5", "M8.5 15.5 6 18"],
+        "Reverb" => &[
+            "M12 3v4",
+            "M12 17v4",
+            "M3 12h4",
+            "M17 12h4",
+            "M6 6l2.5 2.5",
+            "M15.5 15.5 18 18",
+            "M18 6l-2.5 2.5",
+            "M8.5 15.5 6 18",
+        ],
         "edits" => &["M6 20V10", "M12 20V4", "M18 20v-6"],
         _ => &["M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"],
     };
@@ -139,11 +148,22 @@ pub fn ProfileIcon(name: String, colour: String, size: u32) -> Element {
 /// profile's own icon — quiet for the profile the song plays on
 /// ("profile"), in its colour for one it borrows from ("other").
 #[component]
-pub fn SourceIcon(from: &'static str, colour: String, size: u32, profile: Option<String>) -> Element {
-    if from != "song" && let Some(p) = profile {
+pub fn SourceIcon(
+    from: &'static str,
+    colour: String,
+    size: u32,
+    profile: Option<String>,
+) -> Element {
+    if from != "song"
+        && let Some(p) = profile
+    {
         return rsx! { ProfileIcon { name: p, colour, size } };
     }
-    let fill = if from == "other" { colour.clone() } else { "none".to_string() };
+    let fill = if from == "other" {
+        colour.clone()
+    } else {
+        "none".to_string()
+    };
     rsx! {
         svg { width: "{size}", height: "{size}", view_box: "0 0 12 12", style: "flex-shrink: 0; display: block;",
             if from == "song" {

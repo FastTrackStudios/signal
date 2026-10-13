@@ -14,9 +14,9 @@ use std::sync::{Arc, Mutex};
 
 use std::collections::HashMap;
 
-use architect::{Layer, Services, layers};
 use crate::packs::packs::PackLibrary;
 use crate::packs::{PackChunk, PackError, PackInfo, PackRange, PackSegment};
+use architect::{Layer, Services, layers};
 use tokio::io::{AsyncReadExt as _, AsyncSeekExt as _};
 
 /// Default library root scanned when `FTS_PACK_LIBRARY` is unset.
@@ -280,12 +280,11 @@ impl PackLibrary for PackLibraryBackend {
             json
         } else {
             let path = entry.path.clone();
-            let planned = tokio::task::spawn_blocking(move || {
-                crate::pack_plan::plan_pack_file(&path)
-            })
-            .await
-            .map_err(|e| PackError::Io(e.to_string()))?
-            .map_err(|e| PackError::Io(e.to_string()))?;
+            let planned =
+                tokio::task::spawn_blocking(move || crate::pack_plan::plan_pack_file(&path))
+                    .await
+                    .map_err(|e| PackError::Io(e.to_string()))?
+                    .map_err(|e| PackError::Io(e.to_string()))?;
             if planned.total != total {
                 return Err(PackError::Io(format!(
                     "pack size changed under the library ({} planned vs {total} listed)",

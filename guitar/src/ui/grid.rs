@@ -10,12 +10,12 @@
 use crate::ui::param_writer::WriteParam;
 use dioxus::prelude::*;
 
+use crate::proto::rig::RigClient;
+use crate::proto::{LiveBlock, LiveNode};
 use signal_grid::GridSlot;
 use signal_grid::conversion::template_to_grid_slots;
 use signal_grid_ui::RigGridPanel;
 use signal_grid_ui::dynamic_grid::GridSelection;
-use crate::proto::rig::RigClient;
-use crate::proto::{LiveBlock, LiveNode};
 use signal_proto::defaults::guitar::guitar_rig_template;
 
 /// Stable Uuid derived from a block's string id (so the grid keeps a
@@ -158,7 +158,13 @@ pub fn RigGraph(
     // A grid selection, by name.
     let names: Vec<(uuid::Uuid, String, Option<String>)> = slots
         .iter()
-        .map(|s| (s.id, s.block_preset_name.clone().unwrap_or_default(), s.module_group.clone()))
+        .map(|s| {
+            (
+                s.id,
+                s.block_preset_name.clone().unwrap_or_default(),
+                s.module_group.clone(),
+            )
+        })
         .collect();
     rsx! {
         RigGridPanel {

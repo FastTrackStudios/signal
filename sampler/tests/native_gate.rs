@@ -4,8 +4,8 @@
 //! under the threshold, and the hold keeping it open after the level
 //! drops.
 
-use daw::plugin::{PluginEvents, PluginInstance};
 use builtin::NativeGate;
+use daw::plugin::{PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;
 
@@ -15,7 +15,8 @@ fn settled(fx: &mut NativeGate, db: f64) -> f64 {
     let x = vec![a; 4800];
     let (mut l, mut r) = (vec![0.0; 4800], vec![0.0; 4800]);
     for _ in 0..20 {
-        fx.process_block(&x, &x, &mut l, &mut r, &PluginEvents::EMPTY).unwrap();
+        fx.process_block(&x, &x, &mut l, &mut r, &PluginEvents::EMPTY)
+            .unwrap();
     }
     f64::from(l[4799] / a)
 }
@@ -39,7 +40,11 @@ fn above_the_threshold_it_is_open() {
 fn closed_it_falls_to_the_range() {
     let mut fx = gate(&[("threshold", -30.0), ("range", 20.0)]);
     let g = settled(&mut fx, -40.0);
-    assert!((20.0 * g.log10() + 20.0).abs() < 0.5, "closed at {} dB", 20.0 * g.log10());
+    assert!(
+        (20.0 * g.log10() + 20.0).abs() < 0.5,
+        "closed at {} dB",
+        20.0 * g.log10()
+    );
 }
 
 #[test]
@@ -47,7 +52,11 @@ fn the_expander_falls_two_to_one() {
     // 10 dB under the threshold: the level falls another 10 dB.
     let mut fx = gate(&[("threshold", -30.0), ("mode", 1.0)]);
     let g = settled(&mut fx, -40.0);
-    assert!((20.0 * g.log10() + 10.0).abs() < 1.0, "expanded to {} dB", 20.0 * g.log10());
+    assert!(
+        (20.0 * g.log10() + 10.0).abs() < 1.0,
+        "expanded to {} dB",
+        20.0 * g.log10()
+    );
 }
 
 #[test]
@@ -65,9 +74,11 @@ fn the_hold_keeps_it_open_after_the_level_drops() {
     // 50 ms of quiet: still held open.
     let x = vec![0.0f32; 2400];
     let (mut l, mut r) = (vec![0.0; 2400], vec![0.0; 2400]);
-    fx.process_block(&x, &x, &mut l, &mut r, &PluginEvents::EMPTY).unwrap();
+    fx.process_block(&x, &x, &mut l, &mut r, &PluginEvents::EMPTY)
+        .unwrap();
     let y = vec![0.001f32; 1];
     let (mut l1, mut r1) = (vec![0.0; 1], vec![0.0; 1]);
-    fx.process_block(&y, &y, &mut l1, &mut r1, &PluginEvents::EMPTY).unwrap();
+    fx.process_block(&y, &y, &mut l1, &mut r1, &PluginEvents::EMPTY)
+        .unwrap();
     assert!(l1[0] / 0.001 > 0.9, "held gain {}", l1[0] / 0.001);
 }

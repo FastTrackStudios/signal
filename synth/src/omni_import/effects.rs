@@ -5,9 +5,9 @@
 //! in the part's first Common FX slot). Effects without a translation here
 //! fall back to the nearest block type at its defaults.
 
-use signal_proto::block::BlockType;
 use sampler::rig::RigBlock;
 use sampler::rig_node::Container;
+use signal_proto::block::BlockType;
 
 use super::model::classify_effect;
 
@@ -45,9 +45,8 @@ const CE_DIVISIONS: [f32; 15] = [
 /// single-block ones in [`effect_block`].
 #[must_use]
 pub fn effect_chain(name: &str, p: &[f32; 15]) -> Option<Container> {
-    let gain = |db: f32| {
-        RigBlock::of_type(BlockType::Volume).with_param("gain_db", format!("{db:.2}"))
-    };
+    let gain =
+        |db: f32| RigBlock::of_type(BlockType::Volume).with_param("gain_db", format!("{db:.2}"));
     // A mono tremolo swinging `swing_db` once every `beats` (following the
     // tempo), and the makeup that puts its average at `mean_db` (the tremolo
     // alone averages 1 − depth/2).

@@ -170,7 +170,13 @@ pub fn LeftSidebar(
     let mut header_menu = vec![
         MenuItem::name("new_stack", "New stack…", "Create", "", stack_names.clone()),
         MenuItem::run("new_patch", "New patch…"),
-        MenuItem::name("new_profile", "New profile…", "Create", "", profile_names.clone()),
+        MenuItem::name(
+            "new_profile",
+            "New profile…",
+            "Create",
+            "",
+            profile_names.clone(),
+        ),
     ];
     if let Some(p) = &current {
         header_menu.push(MenuItem::sep());

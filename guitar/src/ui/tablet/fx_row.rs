@@ -3,13 +3,13 @@
 //! module's blocks side by side; a block with no face its name card. With
 //! nothing picked in the routing strip, the drive board's first pedal.
 
-use dioxus::prelude::*;
 use crate::proto::LiveBlock;
+use dioxus::prelude::*;
 use signal_proto::block::BlockType;
 
 use super::routing::{RoutingSel, Selected};
 use super::tokens::*;
-use crate::ui::rig_faces::{use_faces, BlockFace, FaceEntry, Faces, NameCard};
+use crate::ui::rig_faces::{BlockFace, FaceEntry, Faces, NameCard, use_faces};
 use crate::ui::state::RigViewState;
 
 /// The row's box, pt — what a landscape iPhone 16 Pro leaves for it: its
@@ -28,7 +28,19 @@ fn is_pre(b: &LiveBlock) -> bool {
 /// transposer — each wears its own unit.
 fn is_input(b: &LiveBlock) -> bool {
     let name = b.name.to_lowercase();
-    ["pitch", "harmon", "octav", "filter", "wah", "volume pedal", "dive", "transpose", "doubler"].iter().any(|w| name.contains(w))
+    [
+        "pitch",
+        "harmon",
+        "octav",
+        "filter",
+        "wah",
+        "volume pedal",
+        "dive",
+        "transpose",
+        "doubler",
+    ]
+    .iter()
+    .any(|w| name.contains(w))
 }
 
 /// The face a block wears, if the set has one: a drive slot's pedal, an
@@ -39,30 +51,67 @@ pub fn face_for(b: &LiveBlock, faces: &Faces) -> Option<FaceEntry> {
         return None;
     }
     let pedal = || faces.pre(&b.preset).or_else(|| faces.pre(&b.name)).cloned();
-    let param = |name: &str| b.params.iter().find(|p| p.name == name).map(|p| p.value.round().max(0.0) as usize);
+    let param = |name: &str| {
+        b.params
+            .iter()
+            .find(|p| p.name == name)
+            .map(|p| p.value.round().max(0.0) as usize)
+    };
     if is_input(b) {
-        return faces.input_for(&b.preset).or_else(|| faces.input_for(&b.name)).cloned();
+        return faces
+            .input_for(&b.preset)
+            .or_else(|| faces.input_for(&b.name))
+            .cloned();
     }
     match b.block_type {
         // A drive slot: its pedal, by the preset's name or the capture's.
-        BlockType::Drive | BlockType::Boost if !is_pre(b) => faces.drive(&b.preset).or_else(|| faces.drive(&b.detail)).cloned().or_else(pedal),
-        BlockType::Amp => faces.amp(&b.asset).or_else(|| faces.amp(&b.preset)).cloned(),
+        BlockType::Drive | BlockType::Boost if !is_pre(b) => faces
+            .drive(&b.preset)
+            .or_else(|| faces.drive(&b.detail))
+            .cloned()
+            .or_else(pedal),
+        BlockType::Amp => faces
+            .amp(&b.asset)
+            .or_else(|| faces.amp(&b.preset))
+            .cloned(),
         BlockType::Cabinet => faces.cab.clone(),
         BlockType::Gate => faces.gate.clone(),
         BlockType::Eq => faces.eq.clone(),
         // The Pre Comp: the compressor's scope (its curve, its gain
         // reduction), as its block in the grid shows it.
-        BlockType::Compressor if b.name.to_lowercase().contains("pre") => faces.comp.clone().or_else(|| faces.pre_comp_pedal.clone()).or_else(pedal),
+        BlockType::Compressor if b.name.to_lowercase().contains("pre") => faces
+            .comp
+            .clone()
+            .or_else(|| faces.pre_comp_pedal.clone())
+            .or_else(pedal),
         // The post compressor is the Distressor; any other (the master's
         // limiter) the compressor scope.
         BlockType::Compressor if b.name.to_lowercase().contains("post") => faces.post_comp.clone(),
         BlockType::Compressor => faces.comp.clone().or_else(|| faces.post_comp.clone()),
         // A delay or reverb: its machine's face (a pre one: its pedal, if
         // its preset has one).
-        BlockType::Delay => (if is_pre(b) { pedal() } else { None })
-            .or_else(|| faces.time(false, crate::ui::control::DELAY_ALGOS.get(param("style").unwrap_or(1)).copied().unwrap_or("")).cloned()),
-        BlockType::Reverb => (if is_pre(b) { pedal() } else { None })
-            .or_else(|| faces.time(true, crate::ui::control::VERB_ALGOS.get(param("algorithm").unwrap_or(1)).copied().unwrap_or("")).cloned()),
+        BlockType::Delay => (if is_pre(b) { pedal() } else { None }).or_else(|| {
+            faces
+                .time(
+                    false,
+                    crate::ui::control::DELAY_ALGOS
+                        .get(param("style").unwrap_or(1))
+                        .copied()
+                        .unwrap_or(""),
+                )
+                .cloned()
+        }),
+        BlockType::Reverb => (if is_pre(b) { pedal() } else { None }).or_else(|| {
+            faces
+                .time(
+                    true,
+                    crate::ui::control::VERB_ALGOS
+                        .get(param("algorithm").unwrap_or(1))
+                        .copied()
+                        .unwrap_or(""),
+                )
+                .cloned()
+        }),
         // A level (the patch's trim, the post-amp boost): the level face.
         BlockType::Volume if b.params.iter().any(|p| p.name == "gain_db") => faces.trim.clone(),
         // A pre effect: its pedal, else its type's face (a pre tremolo the
@@ -108,22 +157,47 @@ fn slot_block(id: &str) -> Option<LiveBlock> {
 /// under an EQ, a compressor's level and gain reduction and their traces,
 /// a gate's level, the Distressor's lamps.
 fn streams_for(b: &LiveBlock, ns: &str, state: &RigViewState) -> Vec<(String, Vec<f64>)> {
-    let db = |lin: f32| if lin <= 1e-6 { -90.0 } else { f64::from(20.0 * lin.log10()).max(-90.0) };
+    let db = |lin: f32| {
+        if lin <= 1e-6 {
+            -90.0
+        } else {
+            f64::from(20.0 * lin.log10()).max(-90.0)
+        }
+    };
     let in_db = f64::from(*state.in_peak_db.read());
     match b.block_type {
         BlockType::Eq => {
-            let spectrum: Vec<f64> = state.spectrum.read().iter().map(|v| f64::from(*v)).collect();
-            if spectrum.is_empty() { Vec::new() } else { vec![(format!("{ns}/spectrum"), spectrum)] }
+            let spectrum: Vec<f64> = state
+                .spectrum
+                .read()
+                .iter()
+                .map(|v| f64::from(*v))
+                .collect();
+            if spectrum.is_empty() {
+                Vec::new()
+            } else {
+                vec![(format!("{ns}/spectrum"), spectrum)]
+            }
         }
         BlockType::Compressor | BlockType::Gate => {
             let waves = state.comp_wave.read();
             let trace = waves.get(&b.name);
-            let gr_db = trace.map_or_else(|| f64::from(*state.comp_gr_db.read()), |t| f64::from(t.2));
-            let mut out = vec![(format!("{ns}/in"), vec![in_db]), (format!("{ns}/gr"), vec![-gr_db.abs()])];
+            let gr_db =
+                trace.map_or_else(|| f64::from(*state.comp_gr_db.read()), |t| f64::from(t.2));
+            let mut out = vec![
+                (format!("{ns}/in"), vec![in_db]),
+                (format!("{ns}/gr"), vec![-gr_db.abs()]),
+            ];
             match trace {
                 Some((input, gr, _)) => {
-                    out.push((format!("{ns}/in_history"), input.iter().map(|v| db(*v)).collect()));
-                    out.push((format!("{ns}/gr_history"), gr.iter().map(|v| -f64::from(*v) * 40.0).collect()));
+                    out.push((
+                        format!("{ns}/in_history"),
+                        input.iter().map(|v| db(*v)).collect(),
+                    ));
+                    out.push((
+                        format!("{ns}/gr_history"),
+                        gr.iter().map(|v| -f64::from(*v) * 40.0).collect(),
+                    ));
                 }
                 // No trace of its own (a gate): its level, a reading at a time.
                 None => out.push((format!("{ns}/in_history"), vec![in_db])),
@@ -142,12 +216,31 @@ pub fn FxRow(state: RigViewState) -> Element {
     // What it shows: a block picked, alone, the whole row its own; a module
     // picked, its blocks side by side; nothing picked, the drive board's
     // first pedal.
-    let first = || blocks.iter().find(|b| b.block_type == BlockType::Drive && !b.empty).or_else(|| blocks.first()).map(|b| b.id.clone());
+    let first = || {
+        blocks
+            .iter()
+            .find(|b| b.block_type == BlockType::Drive && !b.empty)
+            .or_else(|| blocks.first())
+            .map(|b| b.id.clone())
+    };
     let shown: Vec<LiveBlock> = match sel().or_else(|| first().map(Selected::Block)) {
         // A block: the whole row its own. An empty slot of the input stage
         // (the patch has no filter, say): its unit, off.
-        Some(Selected::Block(id)) => blocks.iter().filter(|b| b.id == id).cloned().collect::<Vec<_>>().into_iter().next().or_else(|| slot_block(&id)).into_iter().collect(),
-        Some(Selected::Module(_, ids)) => blocks.iter().filter(|b| ids.contains(&b.id)).cloned().collect(),
+        Some(Selected::Block(id)) => blocks
+            .iter()
+            .filter(|b| b.id == id)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .next()
+            .or_else(|| slot_block(&id))
+            .into_iter()
+            .collect(),
+        Some(Selected::Module(_, ids)) => blocks
+            .iter()
+            .filter(|b| ids.contains(&b.id))
+            .cloned()
+            .collect(),
         None => Vec::new(),
     };
     let one = shown.len() == 1;
@@ -181,8 +274,13 @@ pub fn FxRow(state: RigViewState) -> Element {
         }
         None => 260.0,
     };
-    let total: f64 = shown.iter().map(natural).sum::<f64>() + (shown.len().saturating_sub(1)) as f64;
-    let fit = if !one && total > w { (w / total).min(1.0) } else { 1.0 };
+    let total: f64 =
+        shown.iter().map(natural).sum::<f64>() + (shown.len().saturating_sub(1)) as f64;
+    let fit = if !one && total > w {
+        (w / total).min(1.0)
+    } else {
+        1.0
+    };
     rsx! {
         div { style: "flex-shrink: 0; height: {FX_H}px; box-sizing: border-box; border-top: 1px solid {WELL}; background: {SHEET}; display: flex; flex-direction: column;",
             div { style: "flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden;",
@@ -243,8 +341,16 @@ pub fn FxPresetBar(state: RigViewState) -> Element {
     let rig = use_hook(try_consume_context::<crate::proto::rig::RigClient>);
     let sel = use_context::<RoutingSel>().0;
     let blocks = state.blocks.read().clone();
-    let first = || blocks.iter().find(|b| b.block_type == BlockType::Drive && !b.empty).or_else(|| blocks.first()).map(|b| b.id.clone());
-    let comp = try_use_context::<crate::ui::face_chrome::FacePresets>().map(|c| c.0.read().clone()).unwrap_or_default();
+    let first = || {
+        blocks
+            .iter()
+            .find(|b| b.block_type == BlockType::Drive && !b.empty)
+            .or_else(|| blocks.first())
+            .map(|b| b.id.clone())
+    };
+    let comp = try_use_context::<crate::ui::face_chrome::FacePresets>()
+        .map(|c| c.0.read().clone())
+        .unwrap_or_default();
     let open = try_use_context::<crate::ui::face_chrome::OpenPresets>();
     let picked_module = match sel() {
         Some(Selected::Module(m, _)) => Some(m),
@@ -254,46 +360,128 @@ pub fn FxPresetBar(state: RigViewState) -> Element {
         None
     } else {
         match sel().or_else(|| first().map(Selected::Block)) {
-            Some(Selected::Block(id)) => blocks.iter().find(|b| b.id == id).cloned().or_else(|| slot_block(&id)),
+            Some(Selected::Block(id)) => blocks
+                .iter()
+                .find(|b| b.id == id)
+                .cloned()
+                .or_else(|| slot_block(&id)),
             _ => None,
         }
     };
     // The module it saves into: the one picked, or a drive's or amp's own.
     let module_pick = match (&picked_module, &bar_block) {
-        (Some(m), _) => comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m)).cloned(),
-        (None, Some(b)) if matches!(b.block_type, BlockType::Drive | BlockType::Boost | BlockType::Amp) => {
-            let owns = |p: &&crate::proto::ModulePick| p.blocks.iter().any(|x| x.eq_ignore_ascii_case(&b.name));
+        (Some(m), _) => comp
+            .active_modules
+            .iter()
+            .find(|p| p.module.eq_ignore_ascii_case(m))
+            .cloned(),
+        (None, Some(b))
+            if matches!(
+                b.block_type,
+                BlockType::Drive | BlockType::Boost | BlockType::Amp
+            ) =>
+        {
+            let owns = |p: &&crate::proto::ModulePick| {
+                p.blocks.iter().any(|x| x.eq_ignore_ascii_case(&b.name))
+            };
             // Its own module (Drive, Amp) before the Core that holds them all.
-            comp.active_modules.iter().filter(owns).find(|p| !p.module.eq_ignore_ascii_case("Core")).or_else(|| comp.active_modules.iter().find(owns)).cloned()
+            comp.active_modules
+                .iter()
+                .filter(owns)
+                .find(|p| !p.module.eq_ignore_ascii_case("Core"))
+                .or_else(|| comp.active_modules.iter().find(owns))
+                .cloned()
         }
         _ => None,
     };
-    let label = picked_module.clone().or_else(|| bar_block.as_ref().map(|b| b.name.clone())).unwrap_or_default();
-    let tag = format!("font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_2}; white-space: nowrap;");
-    let chip = format!("height: {HIT}px; max-width: 300px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: none; border-radius: {R}; background: {FILL_ON}; color: {INK}; font-size: 15px; font-weight: 650; white-space: nowrap; overflow: hidden; cursor: pointer;");
-    let arrow = format!("width: {HIT}px; height: {HIT}px; display: flex; align-items: center; justify-content: center; border: none; border-radius: {R}; background: transparent; cursor: pointer;");
+    let label = picked_module
+        .clone()
+        .or_else(|| bar_block.as_ref().map(|b| b.name.clone()))
+        .unwrap_or_default();
+    let tag = format!(
+        "font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: {INK_2}; white-space: nowrap;"
+    );
+    let chip = format!(
+        "height: {HIT}px; max-width: 300px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: none; border-radius: {R}; background: {FILL_ON}; color: {INK}; font-size: 15px; font-weight: 650; white-space: nowrap; overflow: hidden; cursor: pointer;"
+    );
+    let arrow = format!(
+        "width: {HIT}px; height: {HIT}px; display: flex; align-items: center; justify-content: center; border: none; border-radius: {R}; background: transparent; cursor: pointer;"
+    );
 
     if let Some(pick) = module_pick {
         let module = pick.module.clone();
-        let edited = blocks.iter().any(|b| b.overridden && pick.blocks.iter().any(|x| x.eq_ignore_ascii_case(&b.name)));
-        let entry = comp.modules.iter().find(|m| m.module.eq_ignore_ascii_case(&module) && m.name == pick.preset).cloned();
-        let variations = entry.as_ref().map(|e| e.snapshots.clone()).unwrap_or_default();
-        let presets: Vec<String> = comp.modules.iter().filter(|m| m.module.eq_ignore_ascii_case(&module)).map(|m| m.name.clone()).collect();
-        let shown = if pick.snapshot.is_empty() { pick.preset.clone() } else { format!("{} · {}", pick.preset, pick.snapshot) };
-        let var_name = if pick.snapshot.is_empty() { "Main".to_string() } else { pick.snapshot.clone() };
+        let edited = blocks
+            .iter()
+            .any(|b| b.overridden && pick.blocks.iter().any(|x| x.eq_ignore_ascii_case(&b.name)));
+        let entry = comp
+            .modules
+            .iter()
+            .find(|m| m.module.eq_ignore_ascii_case(&module) && m.name == pick.preset)
+            .cloned();
+        let variations = entry
+            .as_ref()
+            .map(|e| e.snapshots.clone())
+            .unwrap_or_default();
+        let presets: Vec<String> = comp
+            .modules
+            .iter()
+            .filter(|m| m.module.eq_ignore_ascii_case(&module))
+            .map(|m| m.name.clone())
+            .collect();
+        let shown = if pick.snapshot.is_empty() {
+            pick.preset.clone()
+        } else {
+            format!("{} · {}", pick.preset, pick.snapshot)
+        };
+        let var_name = if pick.snapshot.is_empty() {
+            "Main".to_string()
+        } else {
+            pick.snapshot.clone()
+        };
         let items = vec![
             Item::head(shown.clone()),
-            Item::run("update", format!("Save to {var_name}")).unless((!edited).then(|| "Nothing changed".to_string())),
-            Item::name("new_var", "New variation…", format!("{var_name} 2"), "Save", variations.clone()),
-            Item::name("new_preset", "New preset…", format!("{} 2", pick.preset), "Save", presets.clone()),
-            Item::name("ren_var", "Rename variation…", var_name.clone(), "Rename", variations.clone()),
-            Item::name("ren_preset", "Rename preset…", pick.preset.clone(), "Rename", presets),
+            Item::run("update", format!("Save to {var_name}"))
+                .unless((!edited).then(|| "Nothing changed".to_string())),
+            Item::name(
+                "new_var",
+                "New variation…",
+                format!("{var_name} 2"),
+                "Save",
+                variations.clone(),
+            ),
+            Item::name(
+                "new_preset",
+                "New preset…",
+                format!("{} 2", pick.preset),
+                "Save",
+                presets.clone(),
+            ),
+            Item::name(
+                "ren_var",
+                "Rename variation…",
+                var_name.clone(),
+                "Rename",
+                variations.clone(),
+            ),
+            Item::name(
+                "ren_preset",
+                "Rename preset…",
+                pick.preset.clone(),
+                "Rename",
+                presets,
+            ),
             Item::Sep,
-            Item::delete("del_var", "Delete variation").unless((variations.len() <= 1).then(|| "Its only variation".to_string())),
+            Item::delete("del_var", "Delete variation")
+                .unless((variations.len() <= 1).then(|| "Its only variation".to_string())),
             Item::delete("del_preset", "Delete preset"),
         ];
         let on_pick = {
-            let (rig, module, preset, var) = (rig.clone(), module.clone(), pick.preset.clone(), var_name.clone());
+            let (rig, module, preset, var) = (
+                rig.clone(),
+                module.clone(),
+                pick.preset.clone(),
+                var_name.clone(),
+            );
             EventHandler::new(move |x: Picked| {
                 let (m, p, v, t) = (module.clone(), preset.clone(), var.clone(), x.text.clone());
                 match x.id.as_str() {
@@ -337,15 +525,48 @@ pub fn FxPresetBar(state: RigViewState) -> Element {
         return rsx! { span { style: "flex: 1;" } };
     };
     let kind = b.block_type.as_str().to_lowercase();
-    let mine: Vec<String> = comp.block_presets.iter().filter(|p| p.block_type.eq_ignore_ascii_case(&kind)).map(|p| p.name.clone()).collect();
-    let playing = comp.active_blocks.iter().find(|x| x.block.eq_ignore_ascii_case(&b.name)).map(|x| x.preset.clone()).unwrap_or_default();
-    let mut items = vec![Item::head(if playing.is_empty() { b.name.clone() } else { playing.clone() })];
+    let mine: Vec<String> = comp
+        .block_presets
+        .iter()
+        .filter(|p| p.block_type.eq_ignore_ascii_case(&kind))
+        .map(|p| p.name.clone())
+        .collect();
+    let playing = comp
+        .active_blocks
+        .iter()
+        .find(|x| x.block.eq_ignore_ascii_case(&b.name))
+        .map(|x| x.preset.clone())
+        .unwrap_or_default();
+    let mut items = vec![Item::head(if playing.is_empty() {
+        b.name.clone()
+    } else {
+        playing.clone()
+    })];
     if !playing.is_empty() {
-        items.push(Item::run("update", format!("Save to {playing}")).unless((!b.overridden).then(|| "Nothing changed".to_string())));
+        items.push(
+            Item::run("update", format!("Save to {playing}"))
+                .unless((!b.overridden).then(|| "Nothing changed".to_string())),
+        );
     }
-    items.push(Item::name("new", "New preset…", if playing.is_empty() { format!("{} 1", b.name) } else { format!("{playing} 2") }, "Save", mine.clone()));
+    items.push(Item::name(
+        "new",
+        "New preset…",
+        if playing.is_empty() {
+            format!("{} 1", b.name)
+        } else {
+            format!("{playing} 2")
+        },
+        "Save",
+        mine.clone(),
+    ));
     if !playing.is_empty() {
-        items.push(Item::name("rename", "Rename…", playing.clone(), "Rename", mine.clone()));
+        items.push(Item::name(
+            "rename",
+            "Rename…",
+            playing.clone(),
+            "Rename",
+            mine.clone(),
+        ));
         items.push(Item::Sep);
         items.push(Item::delete("delete", "Delete preset"));
     }
@@ -380,7 +601,10 @@ pub fn FxPresetBar(state: RigViewState) -> Element {
 #[component]
 fn ArtCard(block: LiveBlock, aspect: (f64, f64)) -> Element {
     let rig = use_hook(try_consume_context::<crate::proto::rig::RigClient>);
-    let has_art = matches!(block.block_type, BlockType::Drive | BlockType::Boost | BlockType::Amp);
+    let has_art = matches!(
+        block.block_type,
+        BlockType::Drive | BlockType::Boost | BlockType::Amp
+    );
     let name = block.name.clone();
     let preset = block.preset.clone();
     let art = use_resource(use_reactive!(|name, preset| {
@@ -395,7 +619,11 @@ fn ArtCard(block: LiveBlock, aspect: (f64, f64)) -> Element {
                 return None;
             }
             use base64::Engine as _;
-            Some(format!("data:{};base64,{}", a.mime, base64::engine::general_purpose::STANDARD.encode(&a.bytes)))
+            Some(format!(
+                "data:{};base64,{}",
+                a.mime,
+                base64::engine::general_purpose::STANDARD.encode(&a.bytes)
+            ))
         }
     }));
     match art.read().clone().flatten() {

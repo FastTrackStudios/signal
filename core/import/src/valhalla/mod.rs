@@ -548,8 +548,7 @@ pub fn to_native_reverb_params(v: &ValhallaState) -> Vec<(String, f64)> {
     let remaps_predelay = matches!(
         chosen,
         Some(
-            reverb::algorithm::AlgorithmType::Magneto
-                | reverb::algorithm::AlgorithmType::NonLinear
+            reverb::algorithm::AlgorithmType::Magneto | reverb::algorithm::AlgorithmType::NonLinear
         )
     );
     if let Some(pd) = v.num_any(&["PreDelay", "predelay"]) {

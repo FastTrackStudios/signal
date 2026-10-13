@@ -810,7 +810,14 @@ impl NativeFilter {
     /// an attack/release follower) moves the cutoff up to `env_octaves`
     /// from the knob's, re-set every [`Self::ENV_STRIDE`] samples. Drive
     /// and mix apply as on the plain path.
-    fn process_enveloped(&mut self, in_l: &[f32], in_r: &[f32], out_l: &mut [f32], out_r: &mut [f32], frames: usize) -> Result<(), PluginError> {
+    fn process_enveloped(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        frames: usize,
+    ) -> Result<(), PluginError> {
         // Sensitivity as the follower's input gain: 0.5 → ×8 (a bass's
         // or a guitar's pick reaching the top of the sweep).
         let sens = 1.0 + 30.0 * self.env_sens * self.env_sens;
@@ -822,14 +829,22 @@ impl NativeFilter {
             let end = (f + Self::ENV_STRIDE).min(frames);
             for i in f..end {
                 let level = in_l[i].abs().max(in_r[i].abs()) * sens;
-                let c = if level > self.env { self.env_up } else { self.env_down };
+                let c = if level > self.env {
+                    self.env_up
+                } else {
+                    self.env_down
+                };
                 self.env = level + (self.env - level) * c;
             }
             let hz = self.cutoff_hz * 2f32.powf(self.env_octaves * self.env.min(1.0));
             self.set_corner(hz);
             for i in f..end {
                 let (xl, xr) = (in_l[i], in_r[i]);
-                let (dl, dr) = if driven { ((xl * g).tanh() * comp, (xr * g).tanh() * comp) } else { (xl, xr) };
+                let (dl, dr) = if driven {
+                    ((xl * g).tanh() * comp, (xr * g).tanh() * comp)
+                } else {
+                    (xl, xr)
+                };
                 let (yl, yr) = self.tick_frame(dl, dr);
                 out_l[i] = xl + (yl * gain - xl) * mix;
                 out_r[i] = xr + (yr * gain - xr) * mix;
@@ -889,19 +904,35 @@ mod tests {
     fn the_envelope_opens_the_filter_with_the_playing() {
         let sr = 48_000.0;
         let tone = |amp: f32| {
-            let mut f = NativeFilter::new(48_000).with_mode(FilterMode::Bandpass).with_cutoff(300.0);
+            let mut f = NativeFilter::new(48_000)
+                .with_mode(FilterMode::Bandpass)
+                .with_cutoff(300.0);
             f.prepare(48_000.0, 4_096).unwrap();
-            let ev = PluginEvents { params: &[(5, 3.0), (6, 0.6)], midi: &[], note_expressions: &[] };
+            let ev = PluginEvents {
+                params: &[(5, 3.0), (6, 0.6)],
+                midi: &[],
+                note_expressions: &[],
+            };
             f.process_block(&[], &[], &mut [], &mut [], &ev).unwrap();
             let n = 8_192;
-            let input: Vec<f32> = (0..n).map(|i| amp * (core::f32::consts::TAU * 2_000.0 * i as f32 / sr).sin()).collect();
+            let input: Vec<f32> = (0..n)
+                .map(|i| amp * (core::f32::consts::TAU * 2_000.0 * i as f32 / sr).sin())
+                .collect();
             let (mut l, mut r) = (vec![0.0; n], vec![0.0; n]);
-            let none = PluginEvents { params: &[], midi: &[], note_expressions: &[] };
-            f.process_block(&input, &input, &mut l, &mut r, &none).unwrap();
+            let none = PluginEvents {
+                params: &[],
+                midi: &[],
+                note_expressions: &[],
+            };
+            f.process_block(&input, &input, &mut l, &mut r, &none)
+                .unwrap();
             rms(&l[n / 2..]) / amp
         };
         let (quiet, loud) = (tone(0.01), tone(0.5));
-        assert!(loud > quiet * 2.0, "a hard note opens the band toward 2 kHz: quiet {quiet}, loud {loud}");
+        assert!(
+            loud > quiet * 2.0,
+            "a hard note opens the band toward 2 kHz: quiet {quiet}, loud {loud}"
+        );
     }
 
     #[test]

@@ -24,16 +24,14 @@
 //! zones, intervals up/down through the octave, re-bows, phrase starts,
 //! and a staccato calibration case.
 
+use sampler::PlayerPatch;
+use sampler::SamplerRig;
+use sampler::document::{DocEvent, DocumentRenderOptions, MarkerKind, annotate, qn_to_frame};
+use sampler::spec::LibrarySpec;
 use signal_orchestra::timing::{
     OnsetKind, TimingCase, pitch_arrival, spectral_flux, timing_corpus,
 };
 use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
-use sampler::PlayerPatch;
-use sampler::SamplerRig;
-use sampler::document::{
-    DocEvent, DocumentRenderOptions, MarkerKind, annotate, qn_to_frame,
-};
-use sampler::spec::LibrarySpec;
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;

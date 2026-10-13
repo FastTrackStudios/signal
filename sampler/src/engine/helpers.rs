@@ -75,7 +75,7 @@ impl SampleEngine {
                 "section={section} artic={artic_id} mic={mic} dynamic={dynamic} note={note} direction={direction:?} rr={rr_idx}"
             ));
             tracing::debug!(
-                target: "crate::trigger",
+                target: "sampler::trigger",
                 section, artic = artic_id, mic, dynamic, note,
                 direction = ?direction, rr = rr_idx,
                 "sample miss: no matching sample"
@@ -106,7 +106,7 @@ impl SampleEngine {
             crate::engine::note_dropped();
             self.record_cache_miss(&path);
             tracing::debug!(
-                target: "crate::trigger",
+                target: "sampler::trigger",
                 artic = artic_id, note, dynamic, rr = rr_idx,
                 path = %path.display(),
                 "sample miss: not yet loaded"
@@ -193,13 +193,13 @@ impl SampleEngine {
         // ever fires during play, a resolution path is picking the click layer.
         if fname.contains("rel_2") || fname.contains("relm") {
             tracing::warn!(
-                target: "crate::trigger",
+                target: "sampler::trigger",
                 note, dynamic, rr = rr_idx, gain, file = %fname,
                 "REL_2/RELM click-layer release played (should be rel/relsl)"
             );
         }
         tracing::debug!(
-            target: "crate::trigger",
+            target: "sampler::trigger",
             artic = artic_id, dynamic, note, sampled_note, rr = rr_idx,
             kind = kind.trace_name(), rate, gain,
             file = %fname,

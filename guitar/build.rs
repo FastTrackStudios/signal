@@ -14,8 +14,17 @@ fn files(dir: &Path, exts: &[&str]) -> Vec<(String, String)> {
         .map(|rd| {
             rd.filter_map(Result::ok)
                 .map(|e| e.path())
-                .filter(|p| p.extension().and_then(|e| e.to_str()).is_some_and(|e| exts.contains(&e)))
-                .map(|p| (p.file_name().unwrap().to_string_lossy().into_owned(), p.to_string_lossy().into_owned()))
+                .filter(|p| {
+                    p.extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(|e| exts.contains(&e))
+                })
+                .map(|p| {
+                    (
+                        p.file_name().unwrap().to_string_lossy().into_owned(),
+                        p.to_string_lossy().into_owned(),
+                    )
+                })
                 .collect()
         })
         .unwrap_or_default();
@@ -37,8 +46,16 @@ fn tables(src: &mut String, root: &Path, prefix: &str) {
         }
         writeln!(src, "];").unwrap();
     };
-    bytes(src, &format!("{prefix}_MODELS"), &files(&root.join("models"), &["nam", "wav"]));
-    bytes(src, &format!("{prefix}_FROZEN"), &files(&root.join("frozen"), &["nam"]));
+    bytes(
+        src,
+        &format!("{prefix}_MODELS"),
+        &files(&root.join("models"), &["nam", "wav"]),
+    );
+    bytes(
+        src,
+        &format!("{prefix}_FROZEN"),
+        &files(&root.join("frozen"), &["nam"]),
+    );
     writeln!(src, "const {prefix}_PROFILES: &[(&str, &str)] = &[").unwrap();
     for (file, path) in files(&root.join("profiles"), &["styx"]) {
         writeln!(src, "    ({file:?}, include_str!({path:?})),").unwrap();

@@ -12,4 +12,4 @@
 
 mod backend;
 pub use backend::SynthRigBackend;
-pub use synth::proto as proto;
+pub use synth::proto;

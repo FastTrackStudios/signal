@@ -8,7 +8,6 @@
 //! (engine/layer mixer shape + footswitch stacks), Keyscape preset scanning /
 //! normalization, and the [`KeysRigBackend`] wire service.
 
-
 pub mod proto;
 #[cfg(feature = "ui")]
 pub mod ui;

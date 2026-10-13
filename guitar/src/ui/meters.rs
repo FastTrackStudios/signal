@@ -1,7 +1,7 @@
 //! Compact IN/OUT level meters for the top bar.
 
-use dioxus::prelude::*;
 use crate::proto::RigPerf;
+use dioxus::prelude::*;
 
 /// Map a linear peak (0..1) to a perceptual meter level (0..1) via a sqrt
 /// curve, so quiet-but-present signal is clearly visible.

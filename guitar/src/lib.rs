@@ -17,11 +17,10 @@
 //! # Ok::<(), String>(())
 //! ```
 
+pub mod phones;
 pub mod proto;
 #[cfg(feature = "ui")]
 pub mod ui;
-pub mod phones;
-
 
 use std::path::Path;
 
@@ -29,9 +28,9 @@ pub mod compose;
 pub mod config_watch;
 pub mod design;
 pub mod di_player;
-pub mod instrument;
 pub mod drop_log;
 pub mod freeze;
+pub mod instrument;
 pub mod levelling;
 pub mod library;
 pub mod macros;

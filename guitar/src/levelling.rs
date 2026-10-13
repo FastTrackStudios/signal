@@ -182,8 +182,8 @@ pub struct ModuleLevel {
 /// balance what is left — the effects around the amp.
 #[must_use]
 pub fn level_modules(sample_rate: u32, dry_run: bool) -> Vec<ModuleLevel> {
-    use signal_proto::BlockType;
     use sampler::rig::RigBlock;
+    use signal_proto::BlockType;
     apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
     let mut comp = RigLibrary::load_compositions();

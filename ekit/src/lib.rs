@@ -13,7 +13,6 @@
 //! [`morph_kit`](proto::ekit::EkitRig::morph_kit) stepping every pad at once
 //! (XO "Kit Similarity").
 
-
 pub mod proto;
 #[cfg(feature = "ui")]
 pub mod ui;

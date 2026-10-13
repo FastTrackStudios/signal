@@ -47,13 +47,13 @@ use signal_proto::block::{BlockCategory, BlockType};
 use facet::Facet;
 
 #[cfg(not(target_arch = "wasm32"))]
+use audio::io::duplex::EngineStats;
+#[cfg(not(target_arch = "wasm32"))]
 use daw::service::{FxChainContext, FxParams, ProjectContext, TrackRef, Tracks};
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::Standalone;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::metering::{Meters, linear_to_db};
-#[cfg(not(target_arch = "wasm32"))]
-use audio::io::duplex::EngineStats;
 // The shared daw-backed host: project seeding, track/FX-slot reservation, the
 // realtime engine (native duplex `pw_filter` on Linux with the `pipewire`
 // feature, cpal fallback elsewhere), meters, transport.
@@ -834,7 +834,11 @@ impl PluginInstance for InputProbe {
             out_l.iter_mut().zip(in_l).for_each(|(o, s)| *o = *s);
             out_r.iter_mut().zip(in_r).for_each(|(o, s)| *o = *s);
         }
-        self.stage.process(&self.shared.tone, &mut out_l[..frames], &mut out_r[..frames]);
+        self.stage.process(
+            &self.shared.tone,
+            &mut out_l[..frames],
+            &mut out_r[..frames],
+        );
         let muted = self.shared.input_muted.load(Ordering::Relaxed);
         // A new test signal (or its removal): re-read it, from the top. Only
         // locks when the generation moved, and never waits for the lock.
@@ -1637,7 +1641,10 @@ pub(crate) fn build_sample_source(
     if let Some(v) = block.param_f32("zone_velocity") {
         engine.set_zone_velocity(Some(v.round() as u8));
     }
-    if block.param_str("transpose_mode").is_some_and(|m| m == "resample") {
+    if block
+        .param_str("transpose_mode")
+        .is_some_and(|m| m == "resample")
+    {
         engine.set_resample_transpose(true);
     }
     // Harmonia voices (an Omnisphere sample layer's).
@@ -1867,7 +1874,13 @@ impl HostedAudio {
     /// pieces no longer than the rig's blocks are prepared for. A block the
     /// rig cannot render now (its renderer busy — never in steady state) is
     /// silence. Returns whether it rendered.
-    pub fn process(&self, in_l: &[f32], in_r: &[f32], out_l: &mut [f32], out_r: &mut [f32]) -> bool {
+    pub fn process(
+        &self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+    ) -> bool {
         let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
         let Ok(mut guard) = self.renderer.try_lock() else {
             out_l.fill(0.0);

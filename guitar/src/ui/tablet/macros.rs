@@ -19,9 +19,9 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::time::Duration;
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{MacroChildView, MacroKnobView};
+use dioxus::prelude::*;
 use signal_widgets::drag_bus::{DragBus, DragEvent};
 
 use super::tokens::*;
@@ -59,7 +59,14 @@ fn reaction(id: &str, v: f64, h: Heard) -> (f64, Option<(f64, f64)>) {
         "reverb" => (h.reverb * wet, None),
         "space" => (h.reverb * 0.6 * wet, None),
         "clarity" => (h.delay * v, None),
-        "mod" => (if v > 0.0 { h.modulation * wet * 0.7 } else { 0.0 }, None),
+        "mod" => (
+            if v > 0.0 {
+                h.modulation * wet * 0.7
+            } else {
+                0.0
+            },
+            None,
+        ),
         "motion" => (if v > 0.0 { h.tremolo * v } else { 0.0 }, None),
         _ => (0.0, None),
     }
@@ -69,7 +76,16 @@ fn reaction(id: &str, v: f64, h: Heard) -> (f64, Option<(f64, f64)>) {
 fn greyish(colour: &str) -> bool {
     matches!(
         colour.to_ascii_uppercase().as_str(),
-        "#6B7280" | "#94A3B8" | "#E5E7EB" | "#FAFAF9" | "#F3F4F6" | "#D1D5DB" | "#F9FAFB" | "#E2E8F0" | "#F1F5F9" | "#CBD5E1"
+        "#6B7280"
+            | "#94A3B8"
+            | "#E5E7EB"
+            | "#FAFAF9"
+            | "#F3F4F6"
+            | "#D1D5DB"
+            | "#F9FAFB"
+            | "#E2E8F0"
+            | "#F1F5F9"
+            | "#CBD5E1"
     )
 }
 
@@ -84,7 +100,10 @@ pub struct MacroAway {
 
 impl MacroAway {
     pub fn new() -> Self {
-        Self { open: Signal::new(None), inside: Rc::new(Flag::new(false)) }
+        Self {
+            open: Signal::new(None),
+            inside: Rc::new(Flag::new(false)),
+        }
     }
 
     /// A press reached the app's root.
@@ -166,7 +185,11 @@ fn Panel(knob: MacroKnobView, on_close: EventHandler<()>) -> Element {
     }
     let heads = order.iter().any(|g| !g.is_empty());
     let cols = rows.values().map(Vec::len).max().unwrap_or(1);
-    let template = if heads { format!("64px repeat({cols}, minmax(0, 1fr))") } else { format!("repeat({cols}, minmax(0, 1fr))") };
+    let template = if heads {
+        format!("64px repeat({cols}, minmax(0, 1fr))")
+    } else {
+        format!("repeat({cols}, minmax(0, 1fr))")
+    };
     let label_ink = lift(&knob.color);
     rsx! {
         div { style: "position: absolute; left: 0; right: 0; top: 100%; z-index: 5; background: {SHEET_2}; border-bottom: 2px solid {knob.color};",
@@ -231,12 +254,21 @@ fn level_of(k: &MacroKnobView) -> Option<f64> {
         return Some(0.0);
     }
     let t = k.tune.iter().find(|t| !t.off)?;
-    let (lo, hi, x, base) = (f64::from(t.lo), f64::from(t.hi), f64::from(t.live), f64::from(t.base));
+    let (lo, hi, x, base) = (
+        f64::from(t.lo),
+        f64::from(t.hi),
+        f64::from(t.live),
+        f64::from(t.base),
+    );
     if (hi - lo).abs() < 1e-6 {
         return None;
     }
     let along = |from: f64, to: f64| {
-        if t.log && from > 0.0 && to > 0.0 && x > 0.0 { (x / from).ln() / (to / from).ln() } else { (x - from) / (to - from) }
+        if t.log && from > 0.0 && to > 0.0 && x > 0.0 {
+            (x / from).ln() / (to / from).ln()
+        } else {
+            (x - from) / (to - from)
+        }
     };
     // Around the patch: the sweep is centred on its own value.
     let centred = ((lo + hi) / 2.0 - base).abs() < (hi - lo).abs() * 0.05;
@@ -245,7 +277,11 @@ fn level_of(k: &MacroKnobView) -> Option<f64> {
         if (max - min).abs() < 1e-6 {
             return None;
         }
-        if hi >= lo { along(min, max) } else { along(max, min) }
+        if hi >= lo {
+            along(min, max)
+        } else {
+            along(max, min)
+        }
     } else {
         along(lo, hi)
     };
@@ -293,7 +329,11 @@ fn Cell(
     let offset = ((v - rest) * 200.0).round() as i32;
     let pct = (v * if wet { 200.0 } else { 100.0 }).round() as i32;
     let readout = if relative {
-        if offset > 0 { format!("+{offset}") } else { format!("{offset}") }
+        if offset > 0 {
+            format!("+{offset}")
+        } else {
+            format!("{offset}")
+        }
     } else if pct == 0 {
         "off".to_string()
     } else if wet && pct == 200 {
@@ -302,20 +342,50 @@ fn Cell(
         format!("{pct}%")
     };
     let quiet = if relative { offset == 0 } else { pct == 0 };
-    let (lo, hi) = if relative { (v.min(rest), v.max(rest)) } else { (0.0, v) };
+    let (lo, hi) = if relative {
+        (v.min(rest), v.max(rest))
+    } else {
+        (0.0, v)
+    };
     let fill_hi = if wet { hi.min(0.5) } else { hi };
     let (glow, meter) = reaction(&id, v, heard);
-    let label_ink = if greyish(&colour) { INK_2.to_string() } else { lift(&colour) };
-    let value_ink = if quiet { INK_3.to_string() } else if wet && v > 0.5 { lift(&colour) } else { INK.to_string() };
-    let bg = if open { UP } else if active() { FILL_ON } else { SHEET_2 };
-    let fill = format!("color-mix(in oklab, {colour} {}%, transparent)", if active() { 32 } else { 22 });
+    let label_ink = if greyish(&colour) {
+        INK_2.to_string()
+    } else {
+        lift(&colour)
+    };
+    let value_ink = if quiet {
+        INK_3.to_string()
+    } else if wet && v > 0.5 {
+        lift(&colour)
+    } else {
+        INK.to_string()
+    };
+    let bg = if open {
+        UP
+    } else if active() {
+        FILL_ON
+    } else {
+        SHEET_2
+    };
+    let fill = format!(
+        "color-mix(in oklab, {colour} {}%, transparent)",
+        if active() { 32 } else { 22 }
+    );
     let hatch = format!(
         "repeating-linear-gradient(135deg, color-mix(in oklab, {colour} {a}%, transparent) 0px, color-mix(in oklab, {colour} {a}%, transparent) 4px, color-mix(in oklab, {colour} {b}%, transparent) 4px, color-mix(in oklab, {colour} {b}%, transparent) 8px)",
         a = if active() { 46 } else { 36 },
         b = if active() { 24 } else { 16 }
     );
-    let glow_bg = format!("color-mix(in oklab, {colour} {}%, transparent)", (glow * 26.0).round() as i32);
-    let mid_line = if wet { ("10px", INK_3) } else { ("8px", RULE_STRONG) };
+    let glow_bg = format!(
+        "color-mix(in oklab, {colour} {}%, transparent)",
+        (glow * 26.0).round() as i32
+    );
+    let mid_line = if wet {
+        ("10px", INK_3)
+    } else {
+        ("8px", RULE_STRONG)
+    };
     let send = {
         let rig = rig.clone();
         let id = id.clone();

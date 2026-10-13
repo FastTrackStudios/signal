@@ -4,8 +4,8 @@
 //! and prefs over the `AudioSettings` service, builds an [`AudioSettingsBridge`]
 //! carrying them plus a save callback, and hands it to the modal.
 
-use dioxus::prelude::*;
 use crate::proto::{AudioDevice, AudioPrefs};
+use dioxus::prelude::*;
 
 /// Devices + prefs + save callback handed to the settings modal / pickers.
 ///

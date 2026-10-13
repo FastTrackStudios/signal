@@ -22,10 +22,12 @@
 //! whole band — and the mixer above it — down. Pinned, every card's knobs sit
 //! on one line and the band costs the same room whatever is selected.
 
-use dioxus::prelude::*;
 use crate::proto::KeysMacro;
+use dioxus::prelude::*;
 
-use crate::ui::graphs::{ModuleCurve, StackedEnvelopes, StackedFilters, StackedUnison, StackedVibrato};
+use crate::ui::graphs::{
+    ModuleCurve, StackedEnvelopes, StackedFilters, StackedUnison, StackedVibrato,
+};
 use crate::ui::knob::Knob;
 use crate::ui::module_edit::{KnobRow, Panel};
 

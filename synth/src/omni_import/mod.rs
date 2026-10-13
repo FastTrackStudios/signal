@@ -743,8 +743,10 @@ mod tests {
     /// imported tree exactly — the knob model is coarser than the patch.
     #[test]
     fn untouched_knobs_leave_the_imported_tree_alone() {
-        let before =
-            patch_to_container(&parse_patch(MINI_PATCH).unwrap(), &SoundsourceIndex::default());
+        let before = patch_to_container(
+            &parse_patch(MINI_PATCH).unwrap(),
+            &SoundsourceIndex::default(),
+        );
         let mut after = before.clone();
         let mut set = crate::engine::ModuleSettings {
             cutoff_hz: 900.0,
@@ -768,5 +770,4 @@ mod tests {
         crate::engine::apply_settings_to_omni_layer(&mut tweaked, 0, &moved);
         assert_ne!(format!("{before:?}"), format!("{tweaked:?}"));
     }
-
 }

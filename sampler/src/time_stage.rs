@@ -31,7 +31,11 @@ use signal_plugin_host::{
 /// The stages, by block name: (tap, add). Not only the Time module's:
 /// the octaver (Pitch) and the harmonizer are a stage too, so the
 /// harmonizer's voices are of the note, not of the octaves.
-pub const PAIRS: [(&str, &str); 3] = [("DLY 1", "DLY 2"), ("VERB 1", "VERB 2"), ("Pitch", "Harmonizer")];
+pub const PAIRS: [(&str, &str); 3] = [
+    ("DLY 1", "DLY 2"),
+    ("VERB 1", "VERB 2"),
+    ("Pitch", "Harmonizer"),
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role {

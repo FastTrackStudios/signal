@@ -12,16 +12,18 @@
 
 use std::rc::Rc;
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{CompositionModel, LibraryModel, PatchInfo, PerformanceModel};
+use dioxus::prelude::*;
 use signal_widgets::PopupHost;
 
-use super::colors::{name_colour, section_colour, song_colour, tape_for, tape_mark, TAPE_GAFFER};
-use super::marks::{block_colour, module_colour, InheritIcon, ModuleIcon, OverrideIcon, ProfileIcon, SourceIcon};
-use super::menu::{open_menu, open_naming, Item as MenuEntry, MoreButton, Picked, MENU_W};
-use super::tokens::*;
 use super::BuildPick;
+use super::colors::{TAPE_GAFFER, name_colour, section_colour, song_colour, tape_for, tape_mark};
+use super::marks::{
+    InheritIcon, ModuleIcon, OverrideIcon, ProfileIcon, SourceIcon, block_colour, module_colour,
+};
+use super::menu::{Item as MenuEntry, MENU_W, MoreButton, Picked, open_menu, open_naming};
+use super::tokens::*;
 use crate::ui::state::RigViewState;
 
 macro_rules! call {
@@ -38,9 +40,13 @@ macro_rules! call {
 
 const MODULES: [&str; 6] = ["Core", "Amp", "Drive", "Time", "Delay", "Reverb"];
 const GENRES: [&str; 7] = ["Worship", "Gospel", "Hymn", "Pop", "Rock", "Country", "R&B"];
-const KEY_ORDER: [&str; 17] = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"];
+const KEY_ORDER: [&str; 17] = [
+    "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B",
+];
 /// A new collection's colour, by how many there are.
-const COLLECTION_COLOURS: [&str; 7] = ["#f472b6", "#a78bfa", "#38bdf8", "#34d399", "#fbbf24", "#fb923c", "#f87171"];
+const COLLECTION_COLOURS: [&str; 7] = [
+    "#f472b6", "#a78bfa", "#38bdf8", "#34d399", "#fbbf24", "#fb923c", "#f87171",
+];
 
 /// The browser's own width below which its kinds and things are steps.
 const NARROW_W: f64 = 560.0;
@@ -90,7 +96,8 @@ fn use_data(state: RigViewState) -> Signal<Data> {
         let perf = state.perf.read().clone();
         if let Some(r) = rig.clone() {
             spawn(async move {
-                let (lib, comp, patches) = (r.library().await, r.compositions().await, r.patches().await);
+                let (lib, comp, patches) =
+                    (r.library().await, r.compositions().await, r.patches().await);
                 data.set(Data {
                     perf: Rc::new(perf),
                     lib: Rc::new(lib.unwrap_or_default()),
@@ -117,16 +124,29 @@ fn apply_now(rig: Option<RigClient>, ctx: BrowserCtx, build: BuildPick, kind: &K
 
 fn target_of(d: &Data, pick: Option<usize>) -> Target {
     match d.perf.perform_mode {
-        2 => pick.filter(|k| *k < d.perf.parts.len()).map_or(Target::None, Target::Part),
-        1 => d.perf.stacks.iter().position(|s| s.is_active).map_or(Target::None, Target::Stack),
-        _ if !d.comp.active_preset.is_empty() => Target::Preset(d.comp.active_preset.clone(), d.comp.active_snapshot.clone()),
+        2 => pick
+            .filter(|k| *k < d.perf.parts.len())
+            .map_or(Target::None, Target::Part),
+        1 => d
+            .perf
+            .stacks
+            .iter()
+            .position(|s| s.is_active)
+            .map_or(Target::None, Target::Stack),
+        _ if !d.comp.active_preset.is_empty() => {
+            Target::Preset(d.comp.active_preset.clone(), d.comp.active_snapshot.clone())
+        }
         _ => Target::None,
     }
 }
 
 /// The current song's name.
 fn song_now(d: &Data) -> String {
-    d.perf.songs.get(d.perf.song_index as usize).map(|s| s.name.clone()).unwrap_or_default()
+    d.perf
+        .songs
+        .get(d.perf.song_index as usize)
+        .map(|s| s.name.clone())
+        .unwrap_or_default()
 }
 
 /// The profile a song plays on (the prototype's `profileOf`): its own,
@@ -138,32 +158,71 @@ fn profile_of(d: &Data, song: bool) -> String {
             return d.perf.song_profile.clone();
         }
         let name = song_now(d);
-        if let Some(p) = d.lib.songs.iter().find(|s| s.name == name).map(|s| s.profile.clone()).filter(|p| !p.is_empty()) {
+        if let Some(p) = d
+            .lib
+            .songs
+            .iter()
+            .find(|s| s.name == name)
+            .map(|s| s.profile.clone())
+            .filter(|p| !p.is_empty())
+        {
             return p;
         }
     }
-    let set = d.lib.setlists.get(d.perf.setlist_index as usize).or_else(|| d.lib.setlists.iter().find(|s| s.active));
+    let set = d
+        .lib
+        .setlists
+        .get(d.perf.setlist_index as usize)
+        .or_else(|| d.lib.setlists.iter().find(|s| s.active));
     if let Some(p) = set.map(|s| s.profile.clone()).filter(|p| !p.is_empty()) {
         return p;
     }
-    d.lib.profiles.iter().find(|p| p.active).or_else(|| d.lib.profiles.first()).map(|p| p.name.clone()).unwrap_or_default()
+    d.lib
+        .profiles
+        .iter()
+        .find(|p| p.active)
+        .or_else(|| d.lib.profiles.first())
+        .map(|p| p.name.clone())
+        .unwrap_or_default()
 }
 
 /// The stack a name belongs to (the prototype's `stackOf`), for its tape:
 /// the switch holding it, else the stack a patch of that name is in, else
 /// the stack its name says.
 fn stack_of(d: &Data, name: &str) -> String {
-    let real = |st: &str| d.perf.stacks.iter().any(|s| s.name == st).then(|| st.to_string());
+    let real = |st: &str| {
+        d.perf
+            .stacks
+            .iter()
+            .any(|s| s.name == st)
+            .then(|| st.to_string())
+    };
     d.perf
         .stacks
         .iter()
         .find(|s| s.patches.iter().any(|p| p.eq_ignore_ascii_case(name)))
         .map(|s| s.name.clone())
-        .or_else(|| d.patches.iter().find(|p| p.name.eq_ignore_ascii_case(name)).and_then(|p| real(&p.stack)))
-        .or_else(|| d.lib.profiles.iter().flat_map(|p| p.patch_list.iter()).find(|p| p.name.eq_ignore_ascii_case(name)).and_then(|p| real(&p.stack)))
+        .or_else(|| {
+            d.patches
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(name))
+                .and_then(|p| real(&p.stack))
+        })
+        .or_else(|| {
+            d.lib
+                .profiles
+                .iter()
+                .flat_map(|p| p.patch_list.iter())
+                .find(|p| p.name.eq_ignore_ascii_case(name))
+                .and_then(|p| real(&p.stack))
+        })
         .or_else(|| {
             let words: Vec<String> = name.split_whitespace().map(str::to_lowercase).collect();
-            d.perf.stacks.iter().find(|s| words.contains(&s.name.to_lowercase())).map(|s| s.name.clone())
+            d.perf
+                .stacks
+                .iter()
+                .find(|s| words.contains(&s.name.to_lowercase()))
+                .map(|s| s.name.clone())
         })
         .unwrap_or_default()
 }
@@ -201,7 +260,9 @@ impl Kind {
             Self::Block(b) if b == "eq" => "EQ".into(),
             Self::Block(b) => {
                 let mut c = b.chars();
-                c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+                c.next()
+                    .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+                    .unwrap_or_default()
             }
         }
     }
@@ -318,7 +379,11 @@ struct ChosenBlock {
 
 /// The preset (and variation) a patch plays.
 fn patch_preset(d: &Data, patch: &str) -> (String, String) {
-    match d.patches.iter().find(|p| p.name.eq_ignore_ascii_case(patch)) {
+    match d
+        .patches
+        .iter()
+        .find(|p| p.name.eq_ignore_ascii_case(patch))
+    {
         Some(p) if !p.rig_preset.is_empty() => (p.rig_preset.clone(), p.variation.clone()),
         _ => (patch.to_string(), String::new()),
     }
@@ -331,17 +396,35 @@ fn sound_of(d: &Data, target: &Target) -> Option<(String, String)> {
         Target::Part(k) => {
             let part = d.perf.parts.get(*k)?;
             if !part.preset.is_empty() {
-                let (p, v) = part.preset.split_once(" · ").unwrap_or((part.preset.as_str(), ""));
+                let (p, v) = part
+                    .preset
+                    .split_once(" · ")
+                    .unwrap_or((part.preset.as_str(), ""));
                 Some((p.to_string(), v.to_string()))
             } else if !part.stack.is_empty() {
-                let profile = if part.profile.is_empty() { profile_of(d, true) } else { part.profile.clone() };
+                let profile = if part.profile.is_empty() {
+                    profile_of(d, true)
+                } else {
+                    part.profile.clone()
+                };
                 let first = d
                     .lib
                     .profiles
                     .iter()
                     .find(|p| p.name == profile)
-                    .and_then(|p| p.patch_list.iter().find(|x| x.song.is_empty() && x.stack == part.stack).map(|x| x.name.clone()))
-                    .or_else(|| d.perf.stacks.iter().find(|s| s.name == part.stack).and_then(|s| s.patches.first().cloned()))?;
+                    .and_then(|p| {
+                        p.patch_list
+                            .iter()
+                            .find(|x| x.song.is_empty() && x.stack == part.stack)
+                            .map(|x| x.name.clone())
+                    })
+                    .or_else(|| {
+                        d.perf
+                            .stacks
+                            .iter()
+                            .find(|s| s.name == part.stack)
+                            .and_then(|s| s.patches.first().cloned())
+                    })?;
                 Some(patch_preset(d, &first))
             } else if !part.patch.is_empty() {
                 Some(patch_preset(d, &part.patch))
@@ -358,20 +441,70 @@ fn sound_of(d: &Data, target: &Target) -> Option<(String, String)> {
 /// variations, and block presets by block type — each picked by a preset
 /// higher up (the preset, its Core, its Time…). Followed down, first
 /// choice wins.
-fn inherited(d: &Data, target: &Target) -> (Vec<(String, Chosen)>, Vec<(String, Vec<ChosenBlock>)>) {
+fn inherited(
+    d: &Data,
+    target: &Target,
+) -> (Vec<(String, Chosen)>, Vec<(String, Vec<ChosenBlock>)>) {
     let mut modules: Vec<(String, Chosen)> = Vec::new();
     let mut blocks: Vec<(String, Vec<ChosenBlock>)> = Vec::new();
-    let Some((preset, variation)) = sound_of(d, target) else { return (modules, blocks) };
-    let Some(root) = d.comp.presets.iter().find(|p| p.name == preset) else { return (modules, blocks) };
-    let at = root.snapshots.iter().position(|s| s.name == variation).unwrap_or(0);
-    let mut queue: Vec<(String, String, String, String)> =
-        root.snapshots.get(at).map(|s| s.modules.iter().map(|m| (m.module.clone(), m.preset.clone(), m.snapshot.clone(), root.name.clone())).collect()).unwrap_or_default();
+    let Some((preset, variation)) = sound_of(d, target) else {
+        return (modules, blocks);
+    };
+    let Some(root) = d.comp.presets.iter().find(|p| p.name == preset) else {
+        return (modules, blocks);
+    };
+    let at = root
+        .snapshots
+        .iter()
+        .position(|s| s.name == variation)
+        .unwrap_or(0);
+    let mut queue: Vec<(String, String, String, String)> = root
+        .snapshots
+        .get(at)
+        .map(|s| {
+            s.modules
+                .iter()
+                .map(|m| {
+                    (
+                        m.module.clone(),
+                        m.preset.clone(),
+                        m.snapshot.clone(),
+                        root.name.clone(),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     // The variation's own block picks come first.
-    for b in root.snapshots.get(at).map(|s| s.blocks.clone()).unwrap_or_default() {
-        let Some(ty) = d.comp.block_presets.iter().find(|p| p.name == b.preset).map(|p| p.block_type.to_lowercase()) else { continue };
+    for b in root
+        .snapshots
+        .get(at)
+        .map(|s| s.blocks.clone())
+        .unwrap_or_default()
+    {
+        let Some(ty) = d
+            .comp
+            .block_presets
+            .iter()
+            .find(|p| p.name == b.preset)
+            .map(|p| p.block_type.to_lowercase())
+        else {
+            continue;
+        };
         match blocks.iter_mut().find(|x| x.0 == ty) {
-            Some(x) => x.1.push(ChosenBlock { preset: b.preset.clone(), block: b.block.clone(), from: root.name.clone() }),
-            None => blocks.push((ty, vec![ChosenBlock { preset: b.preset.clone(), block: b.block.clone(), from: root.name.clone() }])),
+            Some(x) => x.1.push(ChosenBlock {
+                preset: b.preset.clone(),
+                block: b.block.clone(),
+                from: root.name.clone(),
+            }),
+            None => blocks.push((
+                ty,
+                vec![ChosenBlock {
+                    preset: b.preset.clone(),
+                    block: b.block.clone(),
+                    from: root.name.clone(),
+                }],
+            )),
         }
     }
     while !queue.is_empty() {
@@ -379,16 +512,33 @@ fn inherited(d: &Data, target: &Target) -> (Vec<(String, Chosen)>, Vec<(String, 
         if modules.iter().any(|o| o.0 == module) {
             continue;
         }
-        let comp = d.comp.modules.iter().find(|m| m.module == module && m.name == preset);
+        let comp = d
+            .comp
+            .modules
+            .iter()
+            .find(|m| m.module == module && m.name == preset);
         // An unnamed snapshot is the module's first.
-        let snapshot = if snapshot.is_empty() { comp.and_then(|m| m.snapshots.first().cloned()).unwrap_or_else(|| preset.clone()) } else { snapshot };
+        let snapshot = if snapshot.is_empty() {
+            comp.and_then(|m| m.snapshots.first().cloned())
+                .unwrap_or_else(|| preset.clone())
+        } else {
+            snapshot
+        };
         if let Some(m) = comp
             && let Some(k) = m.snapshots.iter().position(|s| *s == snapshot)
             && let Some(info) = m.snapshot_info.get(k)
         {
             // The module's own block picks (Core: its gate, its comps, its EQ).
             for b in &info.blocks {
-                let Some(ty) = d.comp.block_presets.iter().find(|p| p.name == b.preset).map(|p| p.block_type.to_lowercase()) else { continue };
+                let Some(ty) = d
+                    .comp
+                    .block_presets
+                    .iter()
+                    .find(|p| p.name == b.preset)
+                    .map(|p| p.block_type.to_lowercase())
+                else {
+                    continue;
+                };
                 let at = match blocks.iter().position(|x| x.0 == ty) {
                     Some(i) => i,
                     None => {
@@ -397,14 +547,30 @@ fn inherited(d: &Data, target: &Target) -> (Vec<(String, Chosen)>, Vec<(String, 
                     }
                 };
                 if !blocks[at].1.iter().any(|x| x.block == b.block) {
-                    blocks[at].1.push(ChosenBlock { preset: b.preset.clone(), block: b.block.clone(), from: module.clone() });
+                    blocks[at].1.push(ChosenBlock {
+                        preset: b.preset.clone(),
+                        block: b.block.clone(),
+                        from: module.clone(),
+                    });
                 }
             }
             for sub in &info.modules {
-                queue.push((sub.module.clone(), sub.preset.clone(), sub.snapshot.clone(), module.clone()));
+                queue.push((
+                    sub.module.clone(),
+                    sub.preset.clone(),
+                    sub.snapshot.clone(),
+                    module.clone(),
+                ));
             }
         }
-        modules.push((module, Chosen { preset, variation: snapshot, from }));
+        modules.push((
+            module,
+            Chosen {
+                preset,
+                variation: snapshot,
+                from,
+            },
+        ));
     }
     (modules, blocks)
 }
@@ -419,8 +585,17 @@ fn block_chips(d: &Data, info: &crate::proto::ModuleSnapshotInfo, follow: bool) 
     let mut picks: Vec<crate::proto::BlockPick> = info.blocks.clone();
     if follow {
         for sub in &info.modules {
-            if let Some(m) = d.comp.modules.iter().find(|m| m.module == sub.module && m.name == sub.preset) {
-                let k = if sub.snapshot.is_empty() { Some(0) } else { m.snapshots.iter().position(|s| *s == sub.snapshot) };
+            if let Some(m) = d
+                .comp
+                .modules
+                .iter()
+                .find(|m| m.module == sub.module && m.name == sub.preset)
+            {
+                let k = if sub.snapshot.is_empty() {
+                    Some(0)
+                } else {
+                    m.snapshots.iter().position(|s| *s == sub.snapshot)
+                };
                 if let Some(i) = k.and_then(|k| m.snapshot_info.get(k)) {
                     picks.extend(i.blocks.iter().cloned());
                 }
@@ -434,7 +609,12 @@ fn block_chips(d: &Data, info: &crate::proto::ModuleSnapshotInfo, follow: bool) 
         .filter_map(|b| {
             let algo = algo_of(d, &b.preset).filter(|a| a != "off")?;
             let verb = b.block.to_uppercase().starts_with("VERB");
-            Some(Chip { icon: if verb { "Reverb" } else { "Delay" }, tint: if verb { "#8B5CF6" } else { "#3B82F6" }, bold: algo, text: b.preset })
+            Some(Chip {
+                icon: if verb { "Reverb" } else { "Delay" },
+                tint: if verb { "#8B5CF6" } else { "#3B82F6" },
+                bold: algo,
+                text: b.preset,
+            })
         })
         .collect()
 }
@@ -446,7 +626,12 @@ fn algo_of(d: &Data, preset: &str) -> Option<String> {
     if b.bypass {
         return Some("off".to_string());
     }
-    let at = |param: &str| b.params.iter().find(|p| p.name == param).map(|p| p.value.round().max(0.0) as usize);
+    let at = |param: &str| {
+        b.params
+            .iter()
+            .find(|p| p.name == param)
+            .map(|p| p.value.round().max(0.0) as usize)
+    };
     let name = match b.block_type.to_lowercase().as_str() {
         "delay" => crate::ui::control::DELAY_ALGOS.get(at("style")?),
         "reverb" => crate::ui::control::VERB_ALGOS.get(at("algorithm")?),
@@ -462,7 +647,12 @@ fn things(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Vec<T
     let mut out = things_of(kind, d, target, set_songs);
     if matches!(kind, Kind::Patches) {
         for t in &mut out {
-            if let Some(p) = d.patches.iter().find(|p| p.name.eq_ignore_ascii_case(&t.name)) && !p.role.is_empty() {
+            if let Some(p) = d
+                .patches
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&t.name))
+                && !p.role.is_empty()
+            {
                 t.search = format!("{} {}", t.search, p.role.to_lowercase());
             }
         }
@@ -482,12 +672,26 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
             .iter()
             .map(|s| {
                 let mut t = Thing::new(&s.name, &s.name, song_colour(&s.name, &s.colour));
-                t.from = [s.artist.clone(), s.key.clone(), if s.bpm > 0 { format!("{} bpm", s.bpm) } else { String::new() }]
-                    .into_iter()
-                    .filter(|x| !x.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(" · ");
-                let cols: Vec<String> = d.lib.collections.iter().filter(|c| c.songs.iter().any(|x| x.eq_ignore_ascii_case(&s.name))).map(|c| c.name.clone()).collect();
+                t.from = [
+                    s.artist.clone(),
+                    s.key.clone(),
+                    if s.bpm > 0 {
+                        format!("{} bpm", s.bpm)
+                    } else {
+                        String::new()
+                    },
+                ]
+                .into_iter()
+                .filter(|x| !x.is_empty())
+                .collect::<Vec<_>>()
+                .join(" · ");
+                let cols: Vec<String> = d
+                    .lib
+                    .collections
+                    .iter()
+                    .filter(|c| c.songs.iter().any(|x| x.eq_ignore_ascii_case(&s.name)))
+                    .map(|c| c.name.clone())
+                    .collect();
                 t.search = format!("{} {} {}", s.artist, s.genre, cols.join(" ")).to_lowercase();
                 if set_songs.iter().any(|x| x.eq_ignore_ascii_case(&s.name)) {
                     t.state = Some(State::In);
@@ -499,7 +703,9 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
             if let Target::Stack(i) = target {
                 // Filling a stack: every patch there is, this stack's first,
                 // marked where it is in already.
-                let Some(st) = d.perf.stacks.get(*i) else { return Vec::new() };
+                let Some(st) = d.perf.stacks.get(*i) else {
+                    return Vec::new();
+                };
                 let mut all = all_patches(d);
                 all.sort_by_key(|p| p.1 != st.name);
                 return all
@@ -518,22 +724,55 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
             // The song's stacks as they play it: the song's own patches, the
             // profile's, and those it borrows, each saying whose it is.
             let song = song_now(d);
-            let song_ink = d.perf.songs.get(d.perf.song_index as usize).map(|s| song_colour(&s.name, &s.colour)).unwrap_or_else(|| INK_3.to_string());
+            let song_ink = d
+                .perf
+                .songs
+                .get(d.perf.song_index as usize)
+                .map(|s| song_colour(&s.name, &s.colour))
+                .unwrap_or_else(|| INK_3.to_string());
             // What the part plays, when it plays a patch.
-            let now = part.filter(|p| p.stack.is_empty() && p.preset.is_empty()).map(|p| p.patch.clone()).unwrap_or_default();
+            let now = part
+                .filter(|p| p.stack.is_empty() && p.preset.is_empty())
+                .map(|p| p.patch.clone())
+                .unwrap_or_default();
             let mut out = Vec::new();
             for st in d.perf.stacks.iter().filter(|st| !st.patches.is_empty()) {
                 let mut rows: Vec<(u8, Thing)> = st
                     .patches
                     .iter()
                     .map(|name| {
-                        let mut t = Thing::new(format!("{}/{name}", st.name), name, tape_for(&st.name));
+                        let mut t =
+                            Thing::new(format!("{}/{name}", st.name), name, tape_for(&st.name));
                         t.group = st.name.clone();
                         let (mine, borrowed) = source_of(&d.lib, &d.perf.profile_name, name);
                         let (rank, from, source) = match (mine, borrowed) {
-                            (true, _) => (1, d.perf.profile_name.clone(), Source { from: "profile", colour: INK_3.to_string(), profile: Some(d.perf.profile_name.clone()) }),
-                            (false, Some(p)) => (2, format!("from {p}"), Source { from: "other", colour: name_colour(&p).to_string(), profile: Some(p) }),
-                            (false, None) => (0, format!("{song}'s own"), Source { from: "song", colour: song_ink.clone(), profile: None }),
+                            (true, _) => (
+                                1,
+                                d.perf.profile_name.clone(),
+                                Source {
+                                    from: "profile",
+                                    colour: INK_3.to_string(),
+                                    profile: Some(d.perf.profile_name.clone()),
+                                },
+                            ),
+                            (false, Some(p)) => (
+                                2,
+                                format!("from {p}"),
+                                Source {
+                                    from: "other",
+                                    colour: name_colour(&p).to_string(),
+                                    profile: Some(p),
+                                },
+                            ),
+                            (false, None) => (
+                                0,
+                                format!("{song}'s own"),
+                                Source {
+                                    from: "song",
+                                    colour: song_ink.clone(),
+                                    profile: None,
+                                },
+                            ),
                         };
                         t.from = from;
                         t.source = Some(source);
@@ -555,7 +794,13 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
                 .iter()
                 .map(|p| {
                     let mut t = Thing::new(&p.name, &p.name, name_colour(&p.name));
-                    t.from = p.stacks.iter().filter(|st| p.patch_list.iter().any(|x| &x.stack == *st)).cloned().collect::<Vec<_>>().join(" · ");
+                    t.from = p
+                        .stacks
+                        .iter()
+                        .filter(|st| p.patch_list.iter().any(|x| &x.stack == *st))
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(" · ");
                     t.profile_mark = true;
                     if p.name == on {
                         t.state = Some(State::Playing);
@@ -575,7 +820,10 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
                     let mut t = Thing::new(&id, &s.name, colour);
                     t.group = p.name.clone();
                     t.nested = true;
-                    let playing = part.is_some_and(|x| x.preset == id) || ((d.perf.perform_mode == 0 || matches!(target, Target::Stack(_))) && d.comp.active_preset == p.name && d.comp.active_snapshot == s.name);
+                    let playing = part.is_some_and(|x| x.preset == id)
+                        || ((d.perf.perform_mode == 0 || matches!(target, Target::Stack(_)))
+                            && d.comp.active_preset == p.name
+                            && d.comp.active_snapshot == s.name);
                     if playing {
                         t.state = Some(State::Playing);
                     }
@@ -588,18 +836,35 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
             // The part's own pick here. (A preset variation's picks are not
             // on the wire.)
             let swapped = part
-                .and_then(|p| p.picks.iter().find(|x| x.kind.eq_ignore_ascii_case(kind)).cloned())
-                .or_else(|| variation_picks(d, target).into_iter().find(|x| x.kind.eq_ignore_ascii_case(kind)));
+                .and_then(|p| {
+                    p.picks
+                        .iter()
+                        .find(|x| x.kind.eq_ignore_ascii_case(kind))
+                        .cloned()
+                })
+                .or_else(|| {
+                    variation_picks(d, target)
+                        .into_iter()
+                        .find(|x| x.kind.eq_ignore_ascii_case(kind))
+                });
             // What a preset higher up chose here — shown with an override
             // too, so clearing one shows what comes back.
-            let chosen = inherited(d, target).0.into_iter().find(|c| c.0 == *kind).map(|c| c.1);
+            let chosen = inherited(d, target)
+                .0
+                .into_iter()
+                .find(|c| c.0 == *kind)
+                .map(|c| c.1);
             let playing_patch = matches!(target, Target::Stack(_) | Target::None);
             d.comp
                 .modules
                 .iter()
                 .filter(|m| m.module == *kind)
                 .flat_map(|m| {
-                    let snaps: Vec<String> = if m.snapshots.is_empty() { vec![m.name.clone()] } else { m.snapshots.clone() };
+                    let snaps: Vec<String> = if m.snapshots.is_empty() {
+                        vec![m.name.clone()]
+                    } else {
+                        m.snapshots.clone()
+                    };
                     let (swapped, chosen) = (swapped.clone(), chosen.clone());
                     snaps.into_iter().enumerate().map(move |(k, v)| {
                         let mut t = Thing::new(format!("{} · {}", m.name, v), &v, colour);
@@ -618,22 +883,46 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
                                             "drive" => ("Drive", "#ef4444"),
                                             _ => ("Amp", INK_2),
                                         };
-                                        let (bold, text) = if m.role == "drive" && !m.pedal.is_empty() { (m.pedal.clone(), m.option.clone()) } else { (String::new(), m.name.clone()) };
-                                        t.chips.push(Chip { icon, tint, bold, text });
+                                        let (bold, text) =
+                                            if m.role == "drive" && !m.pedal.is_empty() {
+                                                (m.pedal.clone(), m.option.clone())
+                                            } else {
+                                                (String::new(), m.name.clone())
+                                            };
+                                        t.chips.push(Chip {
+                                            icon,
+                                            tint,
+                                            bold,
+                                            text,
+                                        });
                                     }
                                 }
-                                "Delay" | "Reverb" | "Time" => t.chips = block_chips(d, info, *kind == "Time"),
+                                "Delay" | "Reverb" | "Time" => {
+                                    t.chips = block_chips(d, info, *kind == "Time")
+                                }
                                 _ => {}
                             }
                         }
-                        if swapped.as_ref().is_some_and(|p| p.preset == m.name && p.snapshot == v) {
+                        if swapped
+                            .as_ref()
+                            .is_some_and(|p| p.preset == m.name && p.snapshot == v)
+                        {
                             t.state = Some(State::Swapped);
-                        } else if playing_patch && d.comp.active_modules.iter().any(|a| a.module.eq_ignore_ascii_case(kind) && a.preset == m.name && (a.snapshot == v || a.snapshot.is_empty() && k == 0)) {
+                        } else if playing_patch
+                            && d.comp.active_modules.iter().any(|a| {
+                                a.module.eq_ignore_ascii_case(kind)
+                                    && a.preset == m.name
+                                    && (a.snapshot == v || a.snapshot.is_empty() && k == 0)
+                            })
+                        {
                             // What the playing patch picks (Profile mode, or
                             // nothing picked): it is in.
                             t.state = Some(State::In);
                         }
-                        if let Some(c) = chosen.as_ref().filter(|c| c.preset == m.name && c.variation == v) {
+                        if let Some(c) = chosen
+                            .as_ref()
+                            .filter(|c| c.preset == m.name && c.variation == v)
+                        {
                             t.inherited = c.from.clone();
                         }
                         if k == 0 && !m.used_by.is_empty() {
@@ -646,7 +935,12 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
         }
         Kind::Block(kind) => {
             let colour = block_colour(kind);
-            let chosen: Vec<ChosenBlock> = inherited(d, target).1.into_iter().find(|b| b.0 == *kind).map(|b| b.1).unwrap_or_default();
+            let chosen: Vec<ChosenBlock> = inherited(d, target)
+                .1
+                .into_iter()
+                .find(|b| b.0 == *kind)
+                .map(|b| b.1)
+                .unwrap_or_default();
             let playing_patch = matches!(target, Target::Stack(_) | Target::None);
             let on_block = chain_block(d, kind);
             d.comp
@@ -659,20 +953,43 @@ fn things_of(kind: &Kind, d: &Data, target: &Target, set_songs: &[String]) -> Ve
                     t.from = if b.bypass {
                         "off".into()
                     } else {
-                        [algo_of(d, &b.name).unwrap_or_default(), if b.used_by.is_empty() { String::new() } else { format!("in {}", plural(b.used_by.len(), "preset")) }]
-                            .into_iter()
-                            .filter(|x| !x.is_empty())
-                            .collect::<Vec<_>>()
-                            .join(" · ")
+                        [
+                            algo_of(d, &b.name).unwrap_or_default(),
+                            if b.used_by.is_empty() {
+                                String::new()
+                            } else {
+                                format!("in {}", plural(b.used_by.len(), "preset"))
+                            },
+                        ]
+                        .into_iter()
+                        .filter(|x| !x.is_empty())
+                        .collect::<Vec<_>>()
+                        .join(" · ")
                     };
-                    let picked = |x: &crate::proto::PartPick| x.kind.starts_with("block:") && x.preset == b.name;
-                    if part.is_some_and(|p| p.picks.iter().any(picked)) || variation_picks(d, target).iter().any(picked) {
+                    let picked = |x: &crate::proto::PartPick| {
+                        x.kind.starts_with("block:") && x.preset == b.name
+                    };
+                    if part.is_some_and(|p| p.picks.iter().any(picked))
+                        || variation_picks(d, target).iter().any(picked)
+                    {
                         t.state = Some(State::Swapped);
-                    } else if playing_patch && on_block.as_ref().is_some_and(|blk| d.comp.active_blocks.iter().any(|a| a.block.eq_ignore_ascii_case(blk) && a.preset == b.name)) {
+                    } else if playing_patch
+                        && on_block.as_ref().is_some_and(|blk| {
+                            d.comp
+                                .active_blocks
+                                .iter()
+                                .any(|a| a.block.eq_ignore_ascii_case(blk) && a.preset == b.name)
+                        })
+                    {
                         // What the playing patch's block plays: it is in.
                         t.state = Some(State::In);
                     }
-                    t.inherited = chosen.iter().filter(|c| c.preset == b.name).map(|c| format!("{} · {}", c.from, c.block)).collect::<Vec<_>>().join(", ");
+                    t.inherited = chosen
+                        .iter()
+                        .filter(|c| c.preset == b.name)
+                        .map(|c| format!("{} · {}", c.from, c.block))
+                        .collect::<Vec<_>>()
+                        .join(", ");
                     t
                 })
                 .collect()
@@ -709,7 +1026,11 @@ fn measure(el: Rc<MountedData>, mut width: Signal<Option<f64>>) {
 }
 
 #[component]
-pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: Option<bool>) -> Element {
+pub fn Browser(
+    state: RigViewState,
+    on_close: Option<EventHandler<()>>,
+    narrow: Option<bool>,
+) -> Element {
     // Narrow (a sidebar, or measured under 560): the kinds, then a kind's
     // things, as steps.
     let mut root = use_signal(|| None::<Rc<MountedData>>);
@@ -764,7 +1085,8 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
     // A block or module picked in Edit's routing opens it here: its kind,
     // and inside, the preset (and variation) it plays.
     let mut reveal = use_context_provider(|| Reveal(Signal::new(None))).0;
-    if let Some(super::routing::BrowserFocus(mut focus)) = try_use_context::<super::routing::BrowserFocus>()
+    if let Some(super::routing::BrowserFocus(mut focus)) =
+        try_use_context::<super::routing::BrowserFocus>()
         && let Some(at) = focus()
     {
         focus.set(None);
@@ -779,7 +1101,11 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
     }
     let filter = use_signal(SongFilter::default);
     let all = kinds(&d);
-    let kind = all.iter().find(|k| k.id() == kind_id()).cloned().unwrap_or(Kind::Songs);
+    let kind = all
+        .iter()
+        .find(|k| k.id() == kind_id())
+        .cloned()
+        .unwrap_or(Kind::Songs);
     let set_songs: Vec<String> = d.perf.songs.iter().map(|s| s.name.clone()).collect();
     let raw = query();
     let q = raw.trim().to_lowercase();
@@ -788,16 +1114,38 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
     // The song filters, with Songs open (narrow: once inside it).
     let filters = kind == Kind::Songs && (!narrow || opened());
     // A new list (kind, target, search, step) opens on what is in use.
-    let list_key = format!("{}|{}|{}|{}", kind.id(), target.key(), if q.is_empty() { "" } else { "q" }, opened());
+    let list_key = format!(
+        "{}|{}|{}|{}",
+        kind.id(),
+        target.key(),
+        if q.is_empty() { "" } else { "q" },
+        opened()
+    );
 
     // The target, in words.
     let title = match &target {
         Target::Part(k) => {
             let part = d.perf.parts.get(*k).cloned().unwrap_or_default();
-            let song = d.perf.songs.get(d.perf.song_index as usize).cloned().unwrap_or_default();
-            let section_of = |p: &crate::proto::PerfPart| if p.section.is_empty() { p.name.clone() } else { p.section.clone() };
+            let song = d
+                .perf
+                .songs
+                .get(d.perf.song_index as usize)
+                .cloned()
+                .unwrap_or_default();
+            let section_of = |p: &crate::proto::PerfPart| {
+                if p.section.is_empty() {
+                    p.name.clone()
+                } else {
+                    p.section.clone()
+                }
+            };
             let section = section_of(&part);
-            let parts_in = d.perf.parts.iter().filter(|p| section_of(p) == section).count();
+            let parts_in = d
+                .perf
+                .parts
+                .iter()
+                .filter(|p| section_of(p) == section)
+                .count();
             rsx! {
                 span { style: "font-size: 13px; color: {INK_3};", "For" }
                 span { style: "font-size: 15px; font-weight: 650; color: {song_colour(&song.name, &song.colour)};", "{song.name}" }
@@ -808,9 +1156,18 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
             }
         }
         Target::Stack(i) => {
-            let st = d.perf.stacks.get(*i).map(|s| s.name.clone()).unwrap_or_default();
+            let st = d
+                .perf
+                .stacks
+                .get(*i)
+                .map(|s| s.name.clone())
+                .unwrap_or_default();
             let tape = tape_for(&st);
-            let ink = if tape == TAPE_GAFFER { INK.to_string() } else { lift(tape) };
+            let ink = if tape == TAPE_GAFFER {
+                INK.to_string()
+            } else {
+                lift(tape)
+            };
             rsx! {
                 span { style: "font-size: 13px; color: {INK_3};", "Filling" }
                 span { style: "font-size: 15px; font-weight: 650; color: {name_colour(&d.perf.profile_name)};", "{d.perf.profile_name}" }
@@ -868,12 +1225,26 @@ pub fn Browser(state: RigViewState, on_close: Option<EventHandler<()>>, narrow: 
     // Everything the picked part carries of its own — its picks and its
     // overrides — to clear at once.
     let own: Option<(String, Vec<String>, bool, usize)> = match &target {
-        Target::Part(k) => d.perf.parts.get(*k).map(|p| (p.name.clone(), p.picks.iter().map(|x| x.kind.clone()).collect(), !p.overrides.is_empty(), p.picks.len() + p.overrides.len())).filter(|o| o.3 > 0),
+        Target::Part(k) => d
+            .perf
+            .parts
+            .get(*k)
+            .map(|p| {
+                (
+                    p.name.clone(),
+                    p.picks.iter().map(|x| x.kind.clone()).collect(),
+                    !p.overrides.is_empty(),
+                    p.picks.len() + p.overrides.len(),
+                )
+            })
+            .filter(|o| o.3 > 0),
         _ => None,
     };
     // The playing variation's picks, to clear at once.
     let own_variation: Option<(String, String, usize)> = match &target {
-        Target::Preset(p, v) => Some((p.clone(), v.clone(), variation_picks(&d, &target).len())).filter(|o| o.2 > 0),
+        Target::Preset(p, v) => {
+            Some((p.clone(), v.clone(), variation_picks(&d, &target).len())).filter(|o| o.2 > 0)
+        }
         _ => None,
     };
     // ‹ › through the song's parts.
@@ -1045,7 +1416,12 @@ fn chain_block(d: &Data, ty: &str) -> Option<String> {
     d.comp
         .active_blocks
         .iter()
-        .find(|p| d.comp.block_presets.iter().any(|bp| bp.name == p.preset && bp.block_type.eq_ignore_ascii_case(ty)))
+        .find(|p| {
+            d.comp
+                .block_presets
+                .iter()
+                .any(|bp| bp.name == p.preset && bp.block_type.eq_ignore_ascii_case(ty))
+        })
         .map(|p| p.block.clone())
 }
 
@@ -1088,7 +1464,8 @@ fn apply(rig: Option<RigClient>, kind: &Kind, target: &Target, d: &Data, t: &Thi
             // In the stack already: a tap takes it out; else in it goes.
             Target::Stack(i) => {
                 if let Some(st) = d.perf.stacks.get(*i) {
-                    let (stack, patch, on) = (st.name.clone(), t.name.clone(), t.state != Some(State::In));
+                    let (stack, patch, on) =
+                        (st.name.clone(), t.name.clone(), t.state != Some(State::In));
                     call!(rig, |r| r.set_stack_patch(stack, patch, on));
                 }
             }
@@ -1137,14 +1514,20 @@ fn apply(rig: Option<RigClient>, kind: &Kind, target: &Target, d: &Data, t: &Thi
                 // clears it).
                 Target::Preset(pp, vv) => {
                     let (pp, vv) = (pp.clone(), vv.clone());
-                    let value = if t.inherited.is_empty() { format!("{p} · {v}") } else { String::new() };
+                    let value = if t.inherited.is_empty() {
+                        format!("{p} · {v}")
+                    } else {
+                        String::new()
+                    };
                     call!(rig, |r| r.set_variation_pick(pp, vv, m, value));
                 }
                 _ => call!(rig, |r| r.choose_module(m, p, v)),
             }
         }
         Kind::Block(b) => {
-            let Some(block) = chain_block(d, b) else { return };
+            let Some(block) = chain_block(d, b) else {
+                return;
+            };
             let preset = t.name.clone();
             match target {
                 Target::Part(k) => {
@@ -1154,7 +1537,11 @@ fn apply(rig: Option<RigClient>, kind: &Kind, target: &Target, d: &Data, t: &Thi
                 }
                 Target::Preset(pp, vv) => {
                     let (pp, vv) = (pp.clone(), vv.clone());
-                    let value = if t.inherited.is_empty() { preset } else { String::new() };
+                    let value = if t.inherited.is_empty() {
+                        preset
+                    } else {
+                        String::new()
+                    };
                     let kind = format!("block:{block}");
                     call!(rig, |r| r.set_variation_pick(pp, vv, kind, value));
                 }
@@ -1176,7 +1563,9 @@ fn into_view(e: MountedEvent) {
 /// The first of `items` in use (its state, or inherited): the one a list
 /// opens on.
 fn first_current(items: &[Thing]) -> Option<usize> {
-    items.iter().position(|i| i.state.is_some() || !i.inherited.is_empty())
+    items
+        .iter()
+        .position(|i| i.state.is_some() || !i.inherited.is_empty())
 }
 
 #[component]
@@ -1193,14 +1582,33 @@ fn SearchGlyph(size: u32, colour: &'static str) -> Element {
 /// only marking what kind a thing is), lifted and set bolder when open, and
 /// what is in use there now — an override, or what a preset higher up chose.
 #[component]
-fn KindRow(kind: Kind, on: bool, chevron: bool, items: Vec<Thing>, onclick: EventHandler<MouseEvent>) -> Element {
+fn KindRow(
+    kind: Kind,
+    on: bool,
+    chevron: bool,
+    items: Vec<Thing>,
+    onclick: EventHandler<MouseEvent>,
+) -> Element {
     let colour = kind.colour();
-    let cur = items.iter().find(|i| matches!(i.state, Some(State::Playing | State::Swapped))).or_else(|| items.iter().find(|i| !i.inherited.is_empty()));
+    let cur = items
+        .iter()
+        .find(|i| matches!(i.state, Some(State::Playing | State::Swapped)))
+        .or_else(|| items.iter().find(|i| !i.inherited.is_empty()));
     let swapped = cur.is_some_and(|c| c.state == Some(State::Swapped));
     let inherited_only = cur.is_some_and(|c| c.state.is_none() && !c.inherited.is_empty());
-    let label = cur.map(|c| if c.nested { c.id.clone() } else { c.name.clone() });
+    let label = cur.map(|c| {
+        if c.nested {
+            c.id.clone()
+        } else {
+            c.name.clone()
+        }
+    });
     let bg = if on { UP } else { CLEAR };
-    let sub_ink = if swapped { format!("color-mix(in oklab, {colour} 45%, {INK_3})") } else { INK_3.to_string() };
+    let sub_ink = if swapped {
+        format!("color-mix(in oklab, {colour} 45%, {INK_3})")
+    } else {
+        INK_3.to_string()
+    };
     rsx! {
         button {
             style: "position: relative; width: 100%; min-height: {pick(label.is_some(), 56, 48)}px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 4px 14px 4px 16px; border: none; border-bottom: 1px solid {RULE}; text-align: left; background: {bg}; color: {INK}; font-family: {FONT}; cursor: pointer;",
@@ -1229,7 +1637,9 @@ fn KindRow(kind: Kind, on: bool, chevron: bool, items: Vec<Thing>, onclick: Even
 #[component]
 fn ThingList(kind: Kind, items: Vec<Thing>, applies: bool) -> Element {
     // The row a routing pick points at, else the first in use.
-    let revealed = try_use_context::<Reveal>().and_then(|r| r.0.peek().clone()).and_then(|(p, _)| items.iter().position(|i| !p.is_empty() && i.name == p));
+    let revealed = try_use_context::<Reveal>()
+        .and_then(|r| r.0.peek().clone())
+        .and_then(|(p, _)| items.iter().position(|i| !p.is_empty() && i.name == p));
     let first = revealed.or_else(|| first_current(&items));
     let mut last = String::new();
     let rows: Vec<(Option<String>, Thing)> = items
@@ -1242,7 +1652,9 @@ fn ThingList(kind: Kind, items: Vec<Thing>, applies: bool) -> Element {
             (head, i)
         })
         .collect();
-    let empty = rows.is_empty().then(|| format!("No {} yet", kind.label().to_lowercase()));
+    let empty = rows
+        .is_empty()
+        .then(|| format!("No {} yet", kind.label().to_lowercase()));
     rsx! {
         div { style: "padding-bottom: 16px;",
             if let Some(t) = empty {
@@ -1271,18 +1683,40 @@ fn Row(kind: Kind, item: Thing, sub: String, applies: bool, scroll: bool) -> Ele
     let on = item.state.is_some();
     let nested = item.nested;
     let swapped = item.state == Some(State::Swapped);
-    let bar = if swapped { item.colour.clone() } else { LIVE.to_string() };
+    let bar = if swapped {
+        item.colour.clone()
+    } else {
+        LIVE.to_string()
+    };
     let state_label = match item.state {
         Some(State::Playing) => "Playing",
         Some(State::Swapped) => "Override",
         Some(State::In) => "In",
         None => "",
     };
-    let state_ink = if swapped { format!("color-mix(in oklab, {} 70%, white)", item.colour) } else { LIVE.to_string() };
-    let mark = if item.colour == TAPE_GAFFER { INK_3.to_string() } else { item.colour.clone() };
+    let state_ink = if swapped {
+        format!("color-mix(in oklab, {} 70%, white)", item.colour)
+    } else {
+        LIVE.to_string()
+    };
+    let mark = if item.colour == TAPE_GAFFER {
+        INK_3.to_string()
+    } else {
+        item.colour.clone()
+    };
     let guide = format!("color-mix(in oklab, {} 45%, transparent)", item.colour);
-    let dot = if on { item.colour.clone() } else { CLEAR.to_string() };
-    let weight = if on { 700 } else if nested { 520 } else { 560 };
+    let dot = if on {
+        item.colour.clone()
+    } else {
+        CLEAR.to_string()
+    };
+    let weight = if on {
+        700
+    } else if nested {
+        520
+    } else {
+        560
+    };
     let name_ink = if nested && !on { INK_2 } else { INK };
     let (k2, i2) = (kind.clone(), item.clone());
     let (ctx, build) = (use_context::<BrowserCtx>(), use_context::<BuildPick>());
@@ -1347,11 +1781,17 @@ fn PresetColumns(kind: Kind, items: Vec<Thing>, applies: bool) -> Element {
     let in_use = groups
         .iter()
         .find(|g| g.2.iter().any(|i| i.state.is_some()))
-        .or_else(|| groups.iter().find(|g| g.2.iter().any(|i| !i.inherited.is_empty())))
+        .or_else(|| {
+            groups
+                .iter()
+                .find(|g| g.2.iter().any(|i| !i.inherited.is_empty()))
+        })
         .or_else(|| groups.first())
         .map(|g| g.0.clone());
     // A routing pick: its preset open, on its variations.
-    let revealed = try_use_context::<Reveal>().and_then(|r| r.0.peek().clone()).filter(|(p, _)| groups.iter().any(|g| g.0 == *p));
+    let revealed = try_use_context::<Reveal>()
+        .and_then(|r| r.0.peek().clone())
+        .filter(|(p, _)| groups.iter().any(|g| g.0 == *p));
     let mut picked = use_signal(|| revealed.as_ref().map(|r| r.0.clone()).or(in_use));
     let mut variations = use_signal(|| revealed.is_some());
     let mut seen = use_signal(|| revealed.clone());
@@ -1366,8 +1806,15 @@ fn PresetColumns(kind: Kind, items: Vec<Thing>, applies: bool) -> Element {
     let reveal_variation = seen().map(|r| r.1).unwrap_or_default();
     let width = use_signal(|| None::<f64>);
     let narrow = width().is_some_and(|w| w < COLUMNS_NARROW_W);
-    let current = groups.iter().find(|g| Some(&g.0) == picked().as_ref()).or_else(|| groups.first()).map(|g| g.0.clone());
-    let preset = groups.iter().find(|g| Some(&g.0) == current.as_ref()).cloned();
+    let current = groups
+        .iter()
+        .find(|g| Some(&g.0) == picked().as_ref())
+        .or_else(|| groups.first())
+        .map(|g| g.0.clone());
+    let preset = groups
+        .iter()
+        .find(|g| Some(&g.0) == current.as_ref())
+        .cloned();
     let show_presets = !narrow || !variations();
     let show_variations = !narrow || variations();
     rsx! {
@@ -1458,7 +1905,11 @@ fn Variation(kind: Kind, item: Thing, colour: String, applies: bool, scroll: boo
     } else {
         CLEAR.to_string()
     };
-    let bar = if swapped { colour.clone() } else { LIVE.to_string() };
+    let bar = if swapped {
+        colour.clone()
+    } else {
+        LIVE.to_string()
+    };
     let override_ink = format!("color-mix(in oklab, {colour} 45%, {INK_2})");
     let (k2, i2) = (kind.clone(), item.clone());
     let (ctx, build) = (use_context::<BrowserCtx>(), use_context::<BuildPick>());
@@ -1549,7 +2000,16 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
         .map(|p| {
             p.stacks
                 .iter()
-                .map(|st| (st.clone(), p.patch_list.iter().filter(|x| x.song.is_empty() && &x.stack == st).map(|x| x.name.clone()).collect::<Vec<_>>()))
+                .map(|st| {
+                    (
+                        st.clone(),
+                        p.patch_list
+                            .iter()
+                            .filter(|x| x.song.is_empty() && &x.stack == st)
+                            .map(|x| x.name.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                })
                 .filter(|s| !s.1.is_empty())
                 .collect()
         })
@@ -1706,18 +2166,30 @@ fn ProfileColumns(d: Data, target: Target) -> Element {
 }
 
 #[component]
-fn SearchResults(d: Data, target: Target, set_songs: Vec<String>, q: String, raw: String) -> Element {
+fn SearchResults(
+    d: Data,
+    target: Target,
+    set_songs: Vec<String>,
+    q: String,
+    raw: String,
+) -> Element {
     let found: Vec<(Kind, Thing)> = kinds(&d)
         .into_iter()
         .flat_map(|k| {
             things(&k, &d, &target, &set_songs)
                 .into_iter()
-                .filter(|i| i.name.to_lowercase().contains(&q) || i.group.to_lowercase().contains(&q) || i.search.contains(&q))
+                .filter(|i| {
+                    i.name.to_lowercase().contains(&q)
+                        || i.group.to_lowercase().contains(&q)
+                        || i.search.contains(&q)
+                })
                 .map(move |i| (k.clone(), i))
                 .collect::<Vec<_>>()
         })
         .collect();
-    let first = found.iter().position(|(_, i)| i.state.is_some() || !i.inherited.is_empty());
+    let first = found
+        .iter()
+        .position(|(_, i)| i.state.is_some() || !i.inherited.is_empty());
     rsx! {
         if found.is_empty() {
             div { style: "padding: 32px 16px; font-size: 14px; color: {INK_3}; text-align: center; line-height: 1.4;", "Nothing called “{raw}”." }
@@ -1738,7 +2210,10 @@ fn SearchResults(d: Data, target: Target, set_songs: Vec<String>, q: String, raw
 
 /// A key's place in the circle's order; one it doesn't know comes first.
 fn key_rank(k: &str) -> i32 {
-    KEY_ORDER.iter().position(|x| *x == k).map_or(-1, |i| i as i32)
+    KEY_ORDER
+        .iter()
+        .position(|x| *x == k)
+        .map_or(-1, |i| i as i32)
 }
 
 /// The colour a new collection gets: the next of the palette.
@@ -1753,7 +2228,12 @@ fn SongFilters(lib: Rc<LibraryModel>, filter: Signal<SongFilter>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let host = PopupHost::try_use();
     let f = filter();
-    let mut artists: Vec<String> = lib.songs.iter().map(|s| s.artist.clone()).filter(|a| !a.is_empty()).collect();
+    let mut artists: Vec<String> = lib
+        .songs
+        .iter()
+        .map(|s| s.artist.clone())
+        .filter(|a| !a.is_empty())
+        .collect();
     artists.sort();
     artists.dedup();
     let mut keys: Vec<String> = Vec::new();
@@ -1763,14 +2243,26 @@ fn SongFilters(lib: Rc<LibraryModel>, filter: Signal<SongFilter>) -> Element {
         }
     }
     keys.sort_by_key(|k| key_rank(k));
-    let mut genres: Vec<String> = lib.songs.iter().map(|s| s.genre.clone()).filter(|a| !a.is_empty()).collect();
+    let mut genres: Vec<String> = lib
+        .songs
+        .iter()
+        .map(|s| s.genre.clone())
+        .filter(|a| !a.is_empty())
+        .collect();
     genres.sort();
     genres.dedup();
     let colour = collection_colour(&lib);
-    let col = f.collection.clone().and_then(|c| lib.collections.iter().find(|x| x.name == c).cloned());
+    let col = f
+        .collection
+        .clone()
+        .and_then(|c| lib.collections.iter().find(|x| x.name == c).cloned());
     let taken: Vec<String> = lib.collections.iter().map(|c| c.name.clone()).collect();
     let mut tabs: Vec<(Option<String>, String)> = vec![(None, String::new())];
-    tabs.extend(lib.collections.iter().map(|c| (Some(c.name.clone()), c.colour.clone())));
+    tabs.extend(
+        lib.collections
+            .iter()
+            .map(|c| (Some(c.name.clone()), c.colour.clone())),
+    );
     rsx! {
         div { style: "display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1; overflow-x: auto; scrollbar-width: none;",
             span { style: "display: flex; align-items: center; flex-shrink: 0; padding: 2px; border-radius: {R}; background: {FILL};",
@@ -1860,11 +2352,21 @@ fn SongFilters(lib: Rc<LibraryModel>, filter: Signal<SongFilter>) -> Element {
 /// A filter: its name when open to anything, its value (and a clear) when
 /// set; the choices open as a menu.
 #[component]
-fn Facet(label: &'static str, value: Option<String>, options: Vec<String>, onpick: EventHandler<Option<String>>) -> Element {
+fn Facet(
+    label: &'static str,
+    value: Option<String>,
+    options: Vec<String>,
+    onpick: EventHandler<Option<String>>,
+) -> Element {
     let host = PopupHost::try_use();
     let on = value.is_some();
-    let mut items = vec![MenuEntry::head(label), MenuEntry::run("__any", format!("Any {}", label.to_lowercase())).checked(!on)];
-    items.extend(options.iter().map(|o| MenuEntry::run(o.clone(), o.clone()).checked(value.as_deref() == Some(o.as_str()))));
+    let mut items = vec![
+        MenuEntry::head(label),
+        MenuEntry::run("__any", format!("Any {}", label.to_lowercase())).checked(!on),
+    ];
+    items.extend(options.iter().map(|o| {
+        MenuEntry::run(o.clone(), o.clone()).checked(value.as_deref() == Some(o.as_str()))
+    }));
     let shown = value.clone().unwrap_or_else(|| label.to_string());
     let mut button_el = use_signal(|| None::<Rc<MountedData>>);
     rsx! {
@@ -1914,17 +2416,33 @@ fn Facet(label: &'static str, value: Option<String>, options: Vec<String>, onpic
 /// The songs the filters let through; a tap adds one to the set (Setlist
 /// mode); ⋯ puts it in collections and sets its artist and genre.
 #[component]
-fn SongList(d: Data, songs: Vec<Thing>, filter: Signal<SongFilter>, add: bool, #[props(default = 1)] cols: usize) -> Element {
+fn SongList(
+    d: Data,
+    songs: Vec<Thing>,
+    filter: Signal<SongFilter>,
+    add: bool,
+    #[props(default = 1)] cols: usize,
+) -> Element {
     let f = filter();
-    let col = f.collection.clone().and_then(|c| d.lib.collections.iter().find(|x| x.name == c).cloned());
+    let col = f
+        .collection
+        .clone()
+        .and_then(|c| d.lib.collections.iter().find(|x| x.name == c).cloned());
     let shown: Vec<Thing> = songs
         .into_iter()
         .filter(|t| {
             let s = d.lib.songs.iter().find(|s| s.name == t.name);
-            col.as_ref().is_none_or(|c| c.songs.iter().any(|x| x.eq_ignore_ascii_case(&t.name)))
-                && f.artist.as_ref().is_none_or(|a| s.is_some_and(|s| &s.artist == a))
-                && f.key.as_ref().is_none_or(|k| s.is_some_and(|s| &s.key == k))
-                && f.genre.as_ref().is_none_or(|g| s.is_some_and(|s| &s.genre == g))
+            col.as_ref()
+                .is_none_or(|c| c.songs.iter().any(|x| x.eq_ignore_ascii_case(&t.name)))
+                && f.artist
+                    .as_ref()
+                    .is_none_or(|a| s.is_some_and(|s| &s.artist == a))
+                && f.key
+                    .as_ref()
+                    .is_none_or(|k| s.is_some_and(|s| &s.key == k))
+                && f.genre
+                    .as_ref()
+                    .is_none_or(|g| s.is_some_and(|s| &s.genre == g))
         })
         .collect();
     let filtered = f != SongFilter::default();
@@ -1963,17 +2481,48 @@ fn SongList(d: Data, songs: Vec<Thing>, filter: Signal<SongFilter>, add: bool, #
 #[component]
 fn SongRow(d: Data, item: Thing, add: bool, scroll: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let song = d.lib.songs.iter().find(|s| s.name == item.name).cloned().unwrap_or_default();
-    let ins: Vec<(String, String)> = d.lib.collections.iter().filter(|c| c.songs.iter().any(|x| x.eq_ignore_ascii_case(&item.name))).map(|c| (c.name.clone(), c.colour.clone())).collect();
+    let song = d
+        .lib
+        .songs
+        .iter()
+        .find(|s| s.name == item.name)
+        .cloned()
+        .unwrap_or_default();
+    let ins: Vec<(String, String)> = d
+        .lib
+        .collections
+        .iter()
+        .filter(|c| c.songs.iter().any(|x| x.eq_ignore_ascii_case(&item.name)))
+        .map(|c| (c.name.clone(), c.colour.clone()))
+        .collect();
     let on = item.state == Some(State::In);
     let taken: Vec<String> = d.lib.collections.iter().map(|c| c.name.clone()).collect();
     let mut items = vec![MenuEntry::head(item.name.clone())];
     for c in &d.lib.collections {
-        items.push(MenuEntry::run(format!("col:{}", c.name), c.name.clone()).checked(c.songs.iter().any(|x| x.eq_ignore_ascii_case(&item.name))));
+        items.push(
+            MenuEntry::run(format!("col:{}", c.name), c.name.clone())
+                .checked(c.songs.iter().any(|x| x.eq_ignore_ascii_case(&item.name))),
+        );
     }
-    items.push(MenuEntry::name("newcol", "New collection…", "", "Add", taken));
+    items.push(MenuEntry::name(
+        "newcol",
+        "New collection…",
+        "",
+        "Add",
+        taken,
+    ));
     items.push(MenuEntry::Sep);
-    items.push(MenuEntry::name("artist", if song.artist.is_empty() { "Artist…".to_string() } else { format!("Artist · {}", song.artist) }, song.artist.clone(), "Set", Vec::new()));
+    items.push(MenuEntry::name(
+        "artist",
+        if song.artist.is_empty() {
+            "Artist…".to_string()
+        } else {
+            format!("Artist · {}", song.artist)
+        },
+        song.artist.clone(),
+        "Set",
+        Vec::new(),
+    ));
     items.push(MenuEntry::head("Genre"));
     for g in GENRES {
         items.push(MenuEntry::run(format!("genre:{g}"), g).checked(song.genre == g));
@@ -2052,7 +2601,11 @@ fn all_patches(d: &Data) -> Vec<(String, String, String)> {
     for p in &d.lib.profiles {
         for x in &p.patch_list {
             if !x.stack.is_empty() && !out.iter().any(|o| o.0.eq_ignore_ascii_case(&x.name)) {
-                let from = if x.song.is_empty() { p.name.clone() } else { format!("{}'s own", x.song) };
+                let from = if x.song.is_empty() {
+                    p.name.clone()
+                } else {
+                    format!("{}'s own", x.song)
+                };
                 out.push((x.name.clone(), x.stack.clone(), from));
             }
         }
@@ -2061,7 +2614,11 @@ fn all_patches(d: &Data) -> Vec<(String, String, String)> {
     let song = song_now(d);
     for x in d.patches.iter() {
         if !out.iter().any(|o| o.0.eq_ignore_ascii_case(&x.name)) {
-            let stack = if x.stack.is_empty() { "Special".to_string() } else { x.stack.clone() };
+            let stack = if x.stack.is_empty() {
+                "Special".to_string()
+            } else {
+                x.stack.clone()
+            };
             out.push((x.name.clone(), stack, format!("{song}'s own")));
         }
     }
@@ -2073,11 +2630,26 @@ fn all_patches(d: &Data) -> Vec<(String, String, String)> {
 fn source_of(lib: &LibraryModel, profile: &str, patch: &str) -> (bool, Option<String>) {
     // A song's own patch is merged into the profile while it plays: not
     // the profile's own.
-    let mine = lib.profiles.iter().any(|p| p.name.eq_ignore_ascii_case(profile) && p.patch_list.iter().any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch)));
+    let mine = lib.profiles.iter().any(|p| {
+        p.name.eq_ignore_ascii_case(profile)
+            && p.patch_list
+                .iter()
+                .any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch))
+    });
     if mine {
         return (true, None);
     }
-    (false, lib.profiles.iter().find(|p| p.patch_list.iter().any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch))).map(|p| p.name.clone()))
+    (
+        false,
+        lib.profiles
+            .iter()
+            .find(|p| {
+                p.patch_list
+                    .iter()
+                    .any(|x| x.song.is_empty() && x.name.eq_ignore_ascii_case(patch))
+            })
+            .map(|p| p.name.clone()),
+    )
 }
 
 /// "n overrides".
@@ -2114,7 +2686,9 @@ const RULE_LINE: &str = "1px solid #222228"; // RULE
 
 /// The picks put over the playing variation (a preset target).
 fn variation_picks(d: &Data, target: &Target) -> Vec<crate::proto::PartPick> {
-    let Target::Preset(p, v) = target else { return Vec::new() };
+    let Target::Preset(p, v) = target else {
+        return Vec::new();
+    };
     d.comp
         .presets
         .iter()

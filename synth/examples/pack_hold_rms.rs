@@ -6,9 +6,9 @@
 //! cargo run -p signal-synth --release --example pack_hold_rms -- <spec_path> [note]
 //! ```
 
-use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use sampler::node_render::RenderNode;
 use sampler::rig_node::Container;
+use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 
 fn main() {
     // Surface the sampler's preload / cache-miss / zone tracing. `RUST_LOG`

@@ -111,7 +111,11 @@ pub fn Splash(ready: bool) -> Element {
     // no drawing on, no glint, no breathing.
     if reduce_motion() {
         let tall = LOGO_W * VIEW.3 / VIEW.2;
-        let fade = if leaving() { format!("opacity: 0; transition: opacity {OUT_MS}ms linear; pointer-events: none;") } else { String::new() };
+        let fade = if leaving() {
+            format!("opacity: 0; transition: opacity {OUT_MS}ms linear; pointer-events: none;")
+        } else {
+            String::new()
+        };
         return rsx! {
             div {
                 style: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #050506; {fade}",
@@ -123,8 +127,16 @@ pub fn Splash(ready: bool) -> Element {
         };
     }
     let tall = LOGO_W * VIEW.3 / VIEW.2;
-    let out = if leaving() { format!("animation: sig-out {OUT_MS}ms cubic-bezier(0.4, 0, 1, 1) forwards; pointer-events: none;") } else { String::new() };
-    let css = CSS.replace("__W__", &format!("{LOGO_W}")).replace("__SCAN__", &format!("{}", LOGO_W));
+    let out = if leaving() {
+        format!(
+            "animation: sig-out {OUT_MS}ms cubic-bezier(0.4, 0, 1, 1) forwards; pointer-events: none;"
+        )
+    } else {
+        String::new()
+    };
+    let css = CSS
+        .replace("__W__", &format!("{LOGO_W}"))
+        .replace("__SCAN__", &format!("{}", LOGO_W));
     rsx! {
         document::Style { {css} }
         div {

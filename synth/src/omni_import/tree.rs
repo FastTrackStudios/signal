@@ -62,10 +62,7 @@ fn modelled_filter(
         .with_param("knob_setting", format!("{setting:.4}"))
         .with_param(
             "cutoff",
-            format!(
-                "{:.4}",
-                sampler::native::NativeFilter::norm_from_cutoff(hz)
-            ),
+            format!("{:.4}", sampler::native::NativeFilter::norm_from_cutoff(hz)),
         )
         .with_param("resonance", format!("{:.4}", res.clamp(0.0, 1.0)))
         .with_param("mode", model.mode)
@@ -257,7 +254,9 @@ fn waves_resolve(layer: &super::OmniLayer) -> bool {
         Some((a, b)) => super::wavetable_path(a).is_some() && super::wavetable_path(b).is_some(),
         // The classic oscillator plays captured tables (or its noise), in
         // the same units as the named ones.
-        None => super::model::classic_osc(layer.osc_wave, layer.osc_shape, layer.osc_symmetry).is_some(),
+        None => {
+            super::model::classic_osc(layer.osc_wave, layer.osc_shape, layer.osc_symmetry).is_some()
+        }
     }
 }
 
@@ -351,7 +350,11 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             {
                 if layer.waves.is_none() {
                     // The classic oscillator, captured from the plugin.
-                    match super::model::classic_osc(layer.osc_wave, layer.osc_shape, layer.osc_symmetry) {
+                    match super::model::classic_osc(
+                        layer.osc_wave,
+                        layer.osc_shape,
+                        layer.osc_symmetry,
+                    ) {
                         Some(super::model::ClassicOsc::Tables { lo, hi, mix, shape }) => {
                             wt = wt
                                 .with_param("wave0", lo.to_string_lossy().to_string())
@@ -477,7 +480,7 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             if layer.amp_points.len() >= 2 {
                 sb = sb
                     .with_param("amp_points", amp_points_param(layer))
-                .with_param("amp_sync", if layer.amp_env_synced { "1" } else { "0" })
+                    .with_param("amp_sync", if layer.amp_env_synced { "1" } else { "0" })
                     .with_param("amp_attack", "0");
             } else if let Some((a, d, s, r)) = layer.amp_env {
                 sb = sb
@@ -515,7 +518,9 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             // The soundsource's key-up releases at the layer's Release Volume.
             sb = sb.with_param(
                 "release_db",
-                layer.release_db().map_or_else(|| "off".to_string(), |db| format!("{db:.2}")),
+                layer
+                    .release_db()
+                    .map_or_else(|| "off".to_string(), |db| format!("{db:.2}")),
             );
             let timbre = layer.timbre_semis();
             if timbre != 0 {

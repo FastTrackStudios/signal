@@ -3,9 +3,9 @@
 //! front-end concern.
 
 use facet::Facet;
-use signal_proto::block::BlockType;
 use sampler::rig_profile::RigStack;
 use sampler::{RigBlock, RigPatch, RigProfile};
+use signal_proto::block::BlockType;
 
 // ── Worship profile (hardcoded, one NAM per patch from ~/Downloads) ──────────
 
@@ -393,7 +393,10 @@ pub const ROLES: [&str; 5] = ["Clean", "Crunch", "Drive", "Lead", "Ambient"];
 /// `s` as a role, if it names one.
 #[must_use]
 pub fn role_named(s: &str) -> Option<&'static str> {
-    ROLES.iter().find(|r| r.eq_ignore_ascii_case(s.trim())).copied()
+    ROLES
+        .iter()
+        .find(|r| r.eq_ignore_ascii_case(s.trim()))
+        .copied()
 }
 
 impl PatchDef {
@@ -401,7 +404,11 @@ impl PatchDef {
     /// when that names a role), else its variation's.
     #[must_use]
     pub fn role_in(&self, stack: &str) -> String {
-        role_named(&self.role).or_else(|| role_named(stack)).or_else(|| role_named(&self.snapshot)).unwrap_or_default().to_string()
+        role_named(&self.role)
+            .or_else(|| role_named(stack))
+            .or_else(|| role_named(&self.snapshot))
+            .unwrap_or_default()
+            .to_string()
     }
 
     /// The unique module names this patch overrides (for the UI's
@@ -796,7 +803,9 @@ fn drive_board(drives: &[DriveSlotDef], dps: &[DrivePresetDef], patch: RigPatch)
 /// module; it keeps Modulation and Time.
 pub(crate) fn fit_to_instrument(patch: &mut RigPatch, instrument: crate::instrument::Instrument) {
     if instrument == crate::instrument::Instrument::Bass {
-        patch.chain.retain(|b| b.module != PRE_FX && b.module != "Motion");
+        patch
+            .chain
+            .retain(|b| b.module != PRE_FX && b.module != "Motion");
     }
 }
 
@@ -853,7 +862,15 @@ pub fn build_profile_for(
             .with_block(off_fx(
                 BlockType::Pitch,
                 TRANSPOSE,
-                &[("semitones", "0"), ("cents", "0"), ("engine", "0"), ("mix", "1"), ("a_level", "1"), ("b_level", "0"), ("dry", "0")],
+                &[
+                    ("semitones", "0"),
+                    ("cents", "0"),
+                    ("engine", "0"),
+                    ("mix", "1"),
+                    ("a_level", "1"),
+                    ("b_level", "0"),
+                    ("dry", "0"),
+                ],
             ))
             // The dive bomb: a whammy — one voice, the shifted signal alone,
             // its interval swept by the treadle; short frames, so it
@@ -861,7 +878,16 @@ pub fn build_profile_for(
             .with_block(off_fx(
                 BlockType::Pitch,
                 DIVE_BOMB,
-                &[("semitones", "0"), ("cents", "0"), ("engine", "0"), ("live", "1"), ("mix", "1"), ("a_level", "1"), ("b_level", "0"), ("dry", "0")],
+                &[
+                    ("semitones", "0"),
+                    ("cents", "0"),
+                    ("engine", "0"),
+                    ("live", "1"),
+                    ("mix", "1"),
+                    ("a_level", "1"),
+                    ("b_level", "0"),
+                    ("dry", "0"),
+                ],
             ))
             // Pedal-style squeeze before everything (off until a preset
             // engages it): slow-ish attack lets the pick through.
@@ -883,7 +909,15 @@ pub fn build_profile_for(
             .with_block(off_fx(
                 BlockType::Pitch,
                 "Pitch",
-                &[("semitones", "12"), ("cents", "0"), ("a_level", "0.7"), ("b_semitones", "-12"), ("b_level", "0.7"), ("dry", "1"), ("mix", "0.5")],
+                &[
+                    ("semitones", "12"),
+                    ("cents", "0"),
+                    ("a_level", "0.7"),
+                    ("b_semitones", "-12"),
+                    ("b_level", "0.7"),
+                    ("dry", "1"),
+                    ("mix", "0.5"),
+                ],
             ))
             // The harmonizer: a pitch block of its own beside the octaver
             // (Pitch), so each keeps its intervals — a major third and a
@@ -891,7 +925,15 @@ pub fn build_profile_for(
             .with_block(off_fx(
                 BlockType::Pitch,
                 "Harmonizer",
-                &[("semitones", "4"), ("cents", "0"), ("a_level", "0.6"), ("b_semitones", "7"), ("b_level", "0.5"), ("dry", "1"), ("mix", "0.5")],
+                &[
+                    ("semitones", "4"),
+                    ("cents", "0"),
+                    ("a_level", "0.6"),
+                    ("b_semitones", "7"),
+                    ("b_level", "0.5"),
+                    ("dry", "1"),
+                    ("mix", "0.5"),
+                ],
             ))
             // The envelope filter (a Q-Tron, a bass's auto-wah, a synth
             // sweep): a resonant band-pass low in the range that the
@@ -899,7 +941,16 @@ pub fn build_profile_for(
             .with_block(off_fx(
                 BlockType::Filter,
                 "Filter",
-                &[("mode", "2"), ("cutoff", "0.43"), ("resonance", "0.45"), ("env_octaves", "3"), ("env_sens", "0.5"), ("env_attack", "4"), ("env_release", "140"), ("mix", "1")],
+                &[
+                    ("mode", "2"),
+                    ("cutoff", "0.43"),
+                    ("resonance", "0.45"),
+                    ("env_octaves", "3"),
+                    ("env_sens", "0.5"),
+                    ("env_attack", "4"),
+                    ("env_release", "140"),
+                    ("mix", "1"),
+                ],
             ))
             // Volume pedal (clean gain, unity default) — the Control view's
             // left pedal drives it.
@@ -920,7 +971,16 @@ pub fn build_profile_for(
             // Modulation into the amp first (a chorus or vibe on the
             // board, before the slap).
             .with_block(in_module(
-                off_fx(BlockType::Chorus, PRE_MOD, &[("engine", "5"), ("rate", "0.6"), ("depth", "0.4"), ("mix", "0.5")]),
+                off_fx(
+                    BlockType::Chorus,
+                    PRE_MOD,
+                    &[
+                        ("engine", "5"),
+                        ("rate", "0.6"),
+                        ("depth", "0.4"),
+                        ("mix", "0.5"),
+                    ],
+                ),
                 PRE_FX,
             ))
             .with_block(in_module(
@@ -944,7 +1004,12 @@ pub fn build_profile_for(
                 off_fx(
                     BlockType::Reverb,
                     "Pre Verb",
-                    &[("algorithm", "3"), ("mix", "1"), ("level", "-16.5"), ("decay", "0.35")],
+                    &[
+                        ("algorithm", "3"),
+                        ("mix", "1"),
+                        ("level", "-16.5"),
+                        ("decay", "0.35"),
+                    ],
                 ),
                 PRE_FX,
             ))
@@ -956,7 +1021,11 @@ pub fn build_profile_for(
             .with_block(in_module(cab_r, "Amp"))
             .with_block(in_module(
                 // Attack and release stored too, so a preset can set them.
-                on_fx(BlockType::Gate, "Gate", &[("threshold", "-50"), ("attack", "1"), ("release", "120")]),
+                on_fx(
+                    BlockType::Gate,
+                    "Gate",
+                    &[("threshold", "-50"), ("attack", "1"), ("release", "120")],
+                ),
                 "Amp",
             ))
             .with_block(in_module(
@@ -1073,7 +1142,13 @@ pub fn build_profile_for(
                     // Its algorithm stored (Hall, the engine's default) so
                     // a preset or snapshot can switch it: an override only
                     // sets a param the block has.
-                    &[("mix", "1"), ("level", "-20"), ("algorithm", "1"), ("decay", "0.85"), ("size", "0.5")],
+                    &[
+                        ("mix", "1"),
+                        ("level", "-20"),
+                        ("algorithm", "1"),
+                        ("decay", "0.85"),
+                        ("size", "0.5"),
+                    ],
                 ),
                 "Time",
             ))
@@ -2121,14 +2196,24 @@ mod setlist_day_tests {
     use super::SetlistDef;
 
     fn set(name: &str, date: &str) -> SetlistDef {
-        SetlistDef { name: name.into(), date: date.into(), event: String::new(), title: String::new(), profile: String::new(), entries: Vec::new() }
+        SetlistDef {
+            name: name.into(),
+            date: date.into(),
+            event: String::new(),
+            title: String::new(),
+            profile: String::new(),
+            entries: Vec::new(),
+        }
     }
 
     #[test]
     fn a_setlist_is_dated_by_its_date_or_the_date_in_its_name() {
         let day = |y, m, d| chrono::NaiveDate::from_ymd_opt(y, m, d);
         assert_eq!(set("HSM 10-6-26 Worship Night", "").day(), day(2026, 10, 6));
-        assert_eq!(set("Kids Ministry 10-7-26 Worship Night", "").day(), day(2026, 10, 7));
+        assert_eq!(
+            set("Kids Ministry 10-7-26 Worship Night", "").day(),
+            day(2026, 10, 7)
+        );
         assert_eq!(set("XR Wednesday 7-8-26", "").day(), day(2026, 7, 8));
         assert_eq!(set("Easter 4/5/2026", "").day(), day(2026, 4, 5));
         // The date field wins over the name's.
@@ -2929,7 +3014,10 @@ mod module_of_block_tests {
         assert_eq!(module_of_block(PRE_COMP, BlockType::Compressor), Some(CORE));
         assert_eq!(module_of_block("Gate", BlockType::Gate), Some(CORE));
         assert_eq!(module_of_block("Amp EQ", BlockType::Eq), Some(CORE));
-        assert_eq!(module_of_block(POST_COMP, BlockType::Compressor), Some(CORE));
+        assert_eq!(
+            module_of_block(POST_COMP, BlockType::Compressor),
+            Some(CORE)
+        );
         assert_eq!(module_of_block("Drive 1", BlockType::Drive), Some("Drive"));
         assert_eq!(module_of_block("Amp L", BlockType::Amp), Some("Amp"));
         assert_eq!(module_of_block("DLY 1", BlockType::Delay), Some("Delay"));
@@ -2976,7 +3064,11 @@ mod tone_label_tests {
         p.rig_preset = "Worship".into();
         p.snapshot = "Clean".into();
         assert_eq!(p.tone_label(), "Worship · Clean");
-        p.modules.push(ModuleChoiceDef { module: "Time".into(), preset: "Dream Delay".into(), snapshot: String::new() });
+        p.modules.push(ModuleChoiceDef {
+            module: "Time".into(),
+            preset: "Dream Delay".into(),
+            snapshot: String::new(),
+        });
         assert_eq!(p.tone_label(), "Worship · Clean + Dream Delay");
     }
 }
@@ -2998,12 +3090,33 @@ mod role_tests {
 
     #[test]
     fn a_patch_is_the_kind_its_tag_or_stack_or_variation_says() {
-        let mut p = PatchDef { name: "Edge".into(), role: String::new(), snapshot: "Crunch".into(), ..patch_for_roles() };
-        assert_eq!(p.role_in(""), "Crunch", "its variation's, untagged and in no stack");
-        assert_eq!(p.role_in("Lead"), "Lead", "its stack's before its variation's");
-        assert_eq!(p.role_in("Special"), "Crunch", "a stack that names no role says nothing");
+        let mut p = PatchDef {
+            name: "Edge".into(),
+            role: String::new(),
+            snapshot: "Crunch".into(),
+            ..patch_for_roles()
+        };
+        assert_eq!(
+            p.role_in(""),
+            "Crunch",
+            "its variation's, untagged and in no stack"
+        );
+        assert_eq!(
+            p.role_in("Lead"),
+            "Lead",
+            "its stack's before its variation's"
+        );
+        assert_eq!(
+            p.role_in("Special"),
+            "Crunch",
+            "a stack that names no role says nothing"
+        );
         p.role = "ambient".into();
-        assert_eq!(p.role_in("Lead"), "Ambient", "its own tag first, as the role is spelled");
+        assert_eq!(
+            p.role_in("Lead"),
+            "Ambient",
+            "its own tag first, as the role is spelled"
+        );
         p.role = "Funky".into();
         assert_eq!(p.role_in(""), "Crunch", "a tag that is no role is none");
     }

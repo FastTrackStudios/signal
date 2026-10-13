@@ -6,22 +6,23 @@
 //! Edits are the section's own (its overrides and picks) until Save writes
 //! them into the patch it plays (`save_part_changes`) or Discard drops them.
 
-use dioxus::prelude::*;
-use crate::proto::rig::RigClient;
 use crate::proto::PerformanceModel;
+use crate::proto::rig::RigClient;
+use dioxus::prelude::*;
 
+use super::BuildPick;
 use super::colors::section_colour;
 use super::setlist::{sections_of, sound_of};
 use super::tokens::*;
-use super::BuildPick;
 use crate::ui::state::RigViewState;
-
 
 #[component]
 pub fn EditView(state: RigViewState, perf: PerformanceModel) -> Element {
     let picked = try_use_context::<BuildPick>().and_then(|b| (b.part)());
     // The section's own changes: its overrides and its module/block picks.
-    let edits = picked.and_then(|i| perf.parts.get(i)).map_or(0, |p| p.overrides.len() + p.picks.len());
+    let edits = picked
+        .and_then(|i| perf.parts.get(i))
+        .map_or(0, |p| p.overrides.len() + p.picks.len());
     rsx! {
         div { style: "height: 100%; display: flex; flex-direction: column; min-height: 0;",
             // Routing: the patch's modules and blocks, in chain order.
@@ -50,11 +51,22 @@ fn OverrideBar(perf: PerformanceModel, edits: usize, picked: Option<usize>) -> E
     let several = sec.parts.len() > 1;
     let preset = sound_of(&part);
     let note = if edits > 0 {
-        format!("{edits} change{} — this section's own", if edits > 1 { "s" } else { "" })
+        format!(
+            "{edits} change{} — this section's own",
+            if edits > 1 { "s" } else { "" }
+        )
     } else {
-        format!("plays {}", preset.clone().unwrap_or_else(|| "what came before".to_string()))
+        format!(
+            "plays {}",
+            preset
+                .clone()
+                .unwrap_or_else(|| "what came before".to_string())
+        )
     };
-    let save_label = format!("Save to {}", preset.clone().unwrap_or_else(|| "preset".to_string()));
+    let save_label = format!(
+        "Save to {}",
+        preset.clone().unwrap_or_else(|| "preset".to_string())
+    );
     let can_save = preset.is_some();
     let (r1, r2) = (rig.clone(), rig.clone());
     let (name1, name2) = (part.name.clone(), part.name.clone());

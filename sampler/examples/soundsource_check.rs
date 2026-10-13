@@ -103,7 +103,11 @@ fn play(e: &mut sampler::SampleEngine, note: u8, vel: u8) -> Take {
             e.render(chunk);
         }
     }
-    let mono = |b: &[f32]| b.chunks(2).map(|c| 0.5 * (c[0] + c[1])).collect::<Vec<f32>>();
+    let mono = |b: &[f32]| {
+        b.chunks(2)
+            .map(|c| 0.5 * (c[0] + c[1]))
+            .collect::<Vec<f32>>()
+    };
     let h = mono(&held);
     let t = mono(&tail);
     let peak = held.iter().chain(&tail).fold(0.0f32, |m, v| m.max(v.abs()));
@@ -120,7 +124,10 @@ fn play(e: &mut sampler::SampleEngine, note: u8, vel: u8) -> Take {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let dir = PathBuf::from(args.get(1).expect("usage: soundsource_check <pack-dir> [filter]"));
+    let dir = PathBuf::from(
+        args.get(1)
+            .expect("usage: soundsource_check <pack-dir> [filter]"),
+    );
     let filter = args.get(2).map(|s| s.to_lowercase());
     let mut packs: Vec<PathBuf> = std::fs::read_dir(&dir)
         .expect("read pack dir")
@@ -133,14 +140,17 @@ fn main() {
     if let Ok(only) = std::env::var("PACKS") {
         let only: Vec<String> = only.split(',').map(|s| s.trim().to_lowercase()).collect();
         packs.retain(|p| {
-            p.file_stem().is_some_and(|s| only.contains(&s.to_string_lossy().to_lowercase()))
+            p.file_stem()
+                .is_some_and(|s| only.contains(&s.to_string_lossy().to_lowercase()))
         });
     }
     let (mut ok, mut warn, mut fail) = (0, 0, 0);
     for pack in packs {
         let stem = pack.file_stem().unwrap().to_string_lossy().into_owned();
         let list = pack.with_file_name(format!("{stem}.soundsources.txt"));
-        let Ok(names) = std::fs::read_to_string(&list) else { continue };
+        let Ok(names) = std::fs::read_to_string(&list) else {
+            continue;
+        };
         let names: Vec<String> = names
             .lines()
             .map(str::trim)
@@ -160,11 +170,18 @@ fn main() {
             }
         };
         for name in names {
-            let zones: Vec<&sampler::spec::ZoneSpec> =
-                patch.spec.zones.iter().filter(|z| z.articulation == name).collect();
+            let zones: Vec<&sampler::spec::ZoneSpec> = patch
+                .spec
+                .zones
+                .iter()
+                .filter(|z| z.articulation == name)
+                .collect();
             let body: Vec<_> = zones.iter().filter(|z| z.trigger_mode.is_empty()).collect();
             let releases = zones.iter().filter(|z| z.trigger_mode == "release").count();
-            let pedals = zones.iter().filter(|z| z.trigger_mode.starts_with("pedal")).count();
+            let pedals = zones
+                .iter()
+                .filter(|z| z.trigger_mode.starts_with("pedal"))
+                .count();
             let mut issues: Vec<String> = Vec::new();
             let mut notes_w: Vec<String> = Vec::new();
             if zones.is_empty() {
@@ -177,14 +194,19 @@ fn main() {
             if body.len() * 20 < zones.len() {
                 // A release / pedal-noise soundsource: plays on key-up / CC64,
                 // nothing on note-on to check here.
-                println!("ok   {name} [{stem}]: {} zones ({releases} release, {pedals} pedal) — no note-on body", zones.len());
+                println!(
+                    "ok   {name} [{stem}]: {} zones ({releases} release, {pedals} pedal) — no note-on body",
+                    zones.len()
+                );
                 ok += 1;
                 continue;
             }
             // The range the body's samples are rooted in.
             let lo = body.iter().map(|z| z.root_key).min().unwrap();
             let hi = body.iter().map(|z| z.root_key).max().unwrap();
-            let notes: Vec<u8> = (0..5).map(|i| lo + ((u32::from(hi - lo) * i) / 4) as u8).collect();
+            let notes: Vec<u8> = (0..5)
+                .map(|i| lo + ((u32::from(hi - lo) * i) / 4) as u8)
+                .collect();
             let mut e = sampler::SampleEngine::new(patch.clone(), SR, "", "");
             e.set_articulation(name.clone());
             e.set_resample_transpose(true);
@@ -193,10 +215,15 @@ fn main() {
             cache.preload(paths.iter().map(PathBuf::as_path));
             // Key-up, pedal and mechanical noises have no pitch to check.
             let lower = name.to_lowercase();
-            let pitched = !["noise", "mechanical", "release", "pedal"].iter().any(|w| lower.contains(w));
+            let pitched = !["noise", "mechanical", "release", "pedal"]
+                .iter()
+                .any(|w| lower.contains(w));
             let extreme = |n: u8| n == lo || n == hi;
             for &n in &notes {
-                let takes: Vec<(u8, Take)> = [30u8, 80, 127].iter().map(|&v| (v, play(&mut e, n, v))).collect();
+                let takes: Vec<(u8, Take)> = [30u8, 80, 127]
+                    .iter()
+                    .map(|&v| (v, play(&mut e, n, v)))
+                    .collect();
                 for (v, t) in &takes {
                     let level = if pitched { t.held } else { t.held_all };
                     if level < -80.0 {
@@ -213,7 +240,10 @@ fn main() {
                 let (_, loud) = &takes[2];
                 let (_, soft) = &takes[0];
                 if loud.held + 1.0 < soft.held {
-                    notes_w.push(format!("note {n}: vel 127 ({:.0} dB) quieter than vel 30 ({:.0})", loud.held, soft.held));
+                    notes_w.push(format!(
+                        "note {n}: vel 127 ({:.0} dB) quieter than vel 30 ({:.0})",
+                        loud.held, soft.held
+                    ));
                 }
                 if pitched {
                     match loud.pitch {
@@ -226,7 +256,9 @@ fn main() {
                         Some((c, lvl)) if lvl > -30.0 && c.abs() > 25.0 => {
                             notes_w.push(format!("note {n} pitch {c:+.0} cents"))
                         }
-                        Some((_, lvl)) if lvl <= -30.0 => notes_w.push(format!("note {n}: pitch unclear")),
+                        Some((_, lvl)) if lvl <= -30.0 => {
+                            notes_w.push(format!("note {n}: pitch unclear"))
+                        }
                         None => notes_w.push(format!("note {n}: pitch unclear")),
                         _ => {}
                     }

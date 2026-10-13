@@ -25,8 +25,8 @@ use guitar::compose::{
 use guitar::library::DrivePresetLib;
 use guitar::profiles::{self, DrivePresetDef, PatchDef, ProfileDef};
 use guitar::session::param_specs;
-use signal_proto::BlockType;
 use sampler::rig::RigBlock;
+use signal_proto::BlockType;
 
 const MODULES: &str = include_str!("../default-config/modules.styx");
 const PRESETS: &str = include_str!("../default-config/presets.styx");

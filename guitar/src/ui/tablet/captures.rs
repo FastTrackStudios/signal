@@ -3,9 +3,9 @@
 //! tap loads one into the slot, where it becomes a variation (an amp) or an
 //! option (a drive) of that tone's preset.
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{CaptureImport, ImportOutcome, LocalCapture};
+use dioxus::prelude::*;
 
 use super::tokens::*;
 
@@ -50,20 +50,31 @@ pub fn CapturesPanel(slot: String) -> Element {
         if !c.gear.is_empty() && !gears.iter().any(|g| g.eq_ignore_ascii_case(&c.gear)) {
             continue;
         }
-        if !q.is_empty() && !c.name.to_lowercase().contains(&q) && !c.group.to_lowercase().contains(&q) && !c.creator.to_lowercase().contains(&q) {
+        if !q.is_empty()
+            && !c.name.to_lowercase().contains(&q)
+            && !c.group.to_lowercase().contains(&q)
+            && !c.creator.to_lowercase().contains(&q)
+        {
             continue;
         }
         if !c.gear.is_empty() {
             known += 1;
         }
         match groups.last_mut() {
-            Some((g, list)) if *g == c.group && list[0].gear.is_empty() == c.gear.is_empty() => list.push(c),
+            Some((g, list)) if *g == c.group && list[0].gear.is_empty() == c.gear.is_empty() => {
+                list.push(c)
+            }
             _ => groups.push((c.group.clone(), vec![c])),
         }
     }
-    let first_unknown = groups.iter().position(|(_, l)| l[0].gear.is_empty()).unwrap_or(usize::MAX);
+    let first_unknown = groups
+        .iter()
+        .position(|(_, l)| l[0].gear.is_empty())
+        .unwrap_or(usize::MAX);
     let loading = all.read().is_none();
-    let row = format!("width: 100%; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 14px; border: none; border-bottom: 1px solid {RULE}; background: transparent; color: {INK}; text-align: left; font-family: inherit; cursor: pointer;");
+    let row = format!(
+        "width: 100%; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 14px; border: none; border-bottom: 1px solid {RULE}; background: transparent; color: {INK}; text-align: left; font-family: inherit; cursor: pointer;"
+    );
 
     rsx! {
         div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column; font-family: {FONT}; color: {INK};",
@@ -157,7 +168,11 @@ pub fn CapturesPanel(slot: String) -> Element {
 #[component]
 pub(super) fn OutcomeBanner(outcome: ImportOutcome, on_dismiss: EventHandler<()>) -> Element {
     let o = outcome;
-    let bg = if o.ok { SHEET_2.to_string() } else { tint(VOID, 18) };
+    let bg = if o.ok {
+        SHEET_2.to_string()
+    } else {
+        tint(VOID, 18)
+    };
     rsx! {
         div { style: "flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 4px 0 14px; min-height: {HIT}px; background: {bg}; border-bottom: 1px solid {RULE_STRONG};",
             svg { width: "14", height: "14", view_box: "0 0 14 14", style: "flex-shrink: 0;",

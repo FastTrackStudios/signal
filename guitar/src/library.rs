@@ -172,7 +172,10 @@ impl RigHome {
         let dir = if *made_as == to {
             made_in.clone()
         } else {
-            sibling_of.map_or_else(|| made_in.join(to.dir_name()), |parent| parent.join(to.dir_name()))
+            sibling_of.map_or_else(
+                || made_in.join(to.dir_name()),
+                |parent| parent.join(to.dir_name()),
+            )
         };
         Self {
             instrument: to,
@@ -330,7 +333,11 @@ impl RigHome {
     /// on a run that writes nothing.
     #[must_use]
     pub fn di_clip_path(&self, id: &str) -> PathBuf {
-        let dir = if rig_is_ephemeral() { std::env::temp_dir().join("signal-di") } else { self.dir.join("di") };
+        let dir = if rig_is_ephemeral() {
+            std::env::temp_dir().join("signal-di")
+        } else {
+            self.dir.join("di")
+        };
         dir.join(format!("{id}.wav"))
     }
 }
@@ -387,12 +394,18 @@ impl SongInfoLib {
     /// A song's details (matched without regard to case).
     #[must_use]
     pub fn of(&self, song: &str) -> Option<&SongInfoDef> {
-        self.songs.iter().find(|s| s.song.eq_ignore_ascii_case(song))
+        self.songs
+            .iter()
+            .find(|s| s.song.eq_ignore_ascii_case(song))
     }
 
     /// A song's details to change, made when it has none.
     pub fn of_mut(&mut self, song: &str) -> &mut SongInfoDef {
-        if let Some(i) = self.songs.iter().position(|s| s.song.eq_ignore_ascii_case(song)) {
+        if let Some(i) = self
+            .songs
+            .iter()
+            .position(|s| s.song.eq_ignore_ascii_case(song))
+        {
             return &mut self.songs[i];
         }
         self.songs.push(SongInfoDef {
@@ -556,7 +569,11 @@ static BASS: Shipped = Shipped {
 /// laptop or an iPad at a service — and Blues on a phone.
 #[must_use]
 pub fn default_profile_name() -> &'static str {
-    if cfg!(target_os = "ios") && !is_ipad() { "Blues" } else { "Worship" }
+    if cfg!(target_os = "ios") && !is_ipad() {
+        "Blues"
+    } else {
+        "Worship"
+    }
 }
 
 /// Whether this is an iPad: the device's model (`hw.machine`, `iPad14,3`),
@@ -569,7 +586,15 @@ fn is_ipad() -> bool {
     let mut buf = [0u8; 64];
     let mut len = buf.len();
     // SAFETY: a NUL-terminated name, and a buffer with its length.
-    let ok = unsafe { libc::sysctlbyname(c"hw.machine".as_ptr(), buf.as_mut_ptr().cast(), &mut len, std::ptr::null_mut(), 0) } == 0;
+    let ok = unsafe {
+        libc::sysctlbyname(
+            c"hw.machine".as_ptr(),
+            buf.as_mut_ptr().cast(),
+            &mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    } == 0;
     ok && buf[..len.min(buf.len())].starts_with(b"iPad")
 }
 
@@ -577,7 +602,6 @@ fn is_ipad() -> bool {
 fn is_ipad() -> bool {
     false
 }
-
 
 /// Write each `(name, bytes)` into `dir` unless it is there already.
 fn seed_files(dir: &std::path::Path, files: &[(&str, &[u8])]) {
@@ -788,13 +812,17 @@ impl RigHome {
                 }
             };
             let had = seeded.iter().any(|n| n.eq_ignore_ascii_case(&def.name));
-            let present = profiles.iter().any(|p| p.name.eq_ignore_ascii_case(&def.name));
+            let present = profiles
+                .iter()
+                .any(|p| p.name.eq_ignore_ascii_case(&def.name));
             if !had {
                 seeded.push(def.name.clone());
                 changed = true;
             }
             // One the library has as the app shipped it takes the newer one.
-            if let Some(mine) = profiles.iter_mut().find(|p| p.name.eq_ignore_ascii_case(&def.name))
+            if let Some(mine) = profiles
+                .iter_mut()
+                .find(|p| p.name.eq_ignore_ascii_case(&def.name))
                 && factory_update(self.shipped().factory, file, &def.name, &*mine, &def)
             {
                 if self.writable_store().is_some() {
@@ -822,11 +850,19 @@ impl RigHome {
         }
         let default_marker = dir.dir().join(DEFAULT_MARKER);
         let opened_on = std::fs::read_to_string(&default_marker).unwrap_or_default();
-        if !opened_on.trim().eq_ignore_ascii_case(default_profile_name()) && self.writable_store().is_some() {
+        if !opened_on
+            .trim()
+            .eq_ignore_ascii_case(default_profile_name())
+            && self.writable_store().is_some()
+        {
             gained_default = true;
             let _ = std::fs::create_dir_all(dir.dir());
-            if let Err(e) = std::fs::write(&default_marker, format!("{}\n", default_profile_name())) {
-                tracing::warn!("rig library: cannot write {}: {e}", default_marker.display());
+            if let Err(e) = std::fs::write(&default_marker, format!("{}\n", default_profile_name()))
+            {
+                tracing::warn!(
+                    "rig library: cannot write {}: {e}",
+                    default_marker.display()
+                );
             }
         }
         profiles.sort_by_key(|p| p.name.to_lowercase());
@@ -848,7 +884,8 @@ impl RigHome {
         let Some(store) = self.writable_store() else {
             return false;
         };
-        let Ok(shipped) = facet_styx::from_str::<DrivePresetLib>(self.shipped().drive_presets) else {
+        let Ok(shipped) = facet_styx::from_str::<DrivePresetLib>(self.shipped().drive_presets)
+        else {
             tracing::warn!("rig library: shipped drive presets do not parse");
             return false;
         };
@@ -864,7 +901,10 @@ impl RigHome {
             }
             seeded.push(dp.name.clone());
             changed = true;
-            if !presets.iter().any(|p| p.name.eq_ignore_ascii_case(&dp.name)) {
+            if !presets
+                .iter()
+                .any(|p| p.name.eq_ignore_ascii_case(&dp.name))
+            {
                 tracing::info!(pedal = %dp.name, "rig library: seeded shipped drive preset");
                 presets.push(dp);
                 added = true;
@@ -886,7 +926,9 @@ impl RigHome {
     /// deleted. A file the library does not have yet is seeded whole on first
     /// read (see `read_compositions`); this is for the one it already has.
     fn seed_compositions(&self) {
-        let Some(store) = self.writable_store() else { return };
+        let Some(store) = self.writable_store() else {
+            return;
+        };
         seed_entries::<crate::compose::ModuleLib, crate::compose::ModulePresetDef>(
             &store,
             self.shipped().factory,
@@ -932,7 +974,9 @@ impl RigHome {
     /// player deletes stays deleted. A set the app ships (a worship night's
     /// order) reaches a phone that already has its own songs.
     fn seed_songs_and_setlists(&self) {
-        let Some(store) = self.writable_store() else { return };
+        let Some(store) = self.writable_store() else {
+            return;
+        };
         let store = &store;
         seed_entries::<SongLib, crate::profiles::SongDef>(
             store,
@@ -981,7 +1025,11 @@ pub(crate) fn fingerprint<T: for<'a> Facet<'a>>(entry: &T) -> String {
         token.clear();
     };
     for c in text.chars() {
-        let boundary = if quoted { c == '"' } else { c == '"' || c.is_whitespace() || ",(){}".contains(c) };
+        let boundary = if quoted {
+            c == '"'
+        } else {
+            c == '"' || c.is_whitespace() || ",(){}".contains(c)
+        };
         if boundary {
             flush(&mut token, &mut out);
             out.push(c);
@@ -1009,7 +1057,13 @@ pub(crate) fn factory_line(file: &str, key: &str, fingerprint: &str) -> String {
 /// Whether `mine` should take the shipped `ship`: it differs, and is still
 /// one of the versions the app shipped before (by the instrument's
 /// `factory` record, [`FACTORY`] for the guitar).
-fn factory_update<T: for<'a> Facet<'a>>(factory: &str, file: &str, key: &str, mine: &T, ship: &T) -> bool {
+fn factory_update<T: for<'a> Facet<'a>>(
+    factory: &str,
+    file: &str,
+    key: &str,
+    mine: &T,
+    ship: &T,
+) -> bool {
     let have = fingerprint(mine);
     have != fingerprint(ship) && factory.lines().any(|l| l == factory_line(file, key, &have))
 }
@@ -1031,7 +1085,9 @@ fn seed_entries<L, E>(
     E: Clone + for<'a> Facet<'a>,
 {
     let path = store.dir().join(file);
-    let Read::Ok(mut lib) = config_watch::read_tracked::<L>(&path) else { return };
+    let Read::Ok(mut lib) = config_watch::read_tracked::<L>(&path) else {
+        return;
+    };
     let Ok(mut ship) = facet_styx::from_str::<L>(shipped) else {
         tracing::warn!(file, "rig library: shipped compositions do not parse");
         return;
@@ -1040,7 +1096,11 @@ fn seed_entries<L, E>(
     let mut seeded: Vec<String> = std::fs::read_to_string(&marker)
         .map(|t| t.lines().map(str::to_string).collect())
         .unwrap_or_default();
-    let have: Vec<String> = list(&mut lib).iter().map(&key).map(|k| k.to_lowercase()).collect();
+    let have: Vec<String> = list(&mut lib)
+        .iter()
+        .map(&key)
+        .map(|k| k.to_lowercase())
+        .collect();
     let mut added = 0usize;
     for e in list(&mut ship).iter() {
         let k = key(e).to_lowercase();
@@ -1056,7 +1116,9 @@ fn seed_entries<L, E>(
     let mut updated = 0usize;
     for e in list(&mut ship).iter() {
         let k = key(e);
-        if let Some(mine) = list(&mut lib).iter_mut().find(|m| key(m).eq_ignore_ascii_case(&k))
+        if let Some(mine) = list(&mut lib)
+            .iter_mut()
+            .find(|m| key(m).eq_ignore_ascii_case(&k))
             && factory_update(factory, file, &k, &*mine, e)
         {
             *mine = e.clone();
@@ -1079,7 +1141,10 @@ impl RigHome {
             store.relativize(&mut preset.nam);
         }
         config_watch::write_guarded(
-            &self.profiles_store().dir().join(profile_file(&profile.name)),
+            &self
+                .profiles_store()
+                .dir()
+                .join(profile_file(&profile.name)),
             &profile,
         );
     }
@@ -1098,25 +1163,30 @@ impl RigHome {
         let mut profiles = self.load_profiles(&store);
         let gained_default = self.seed_profiles(&mut profiles);
         self.split_core_once(&store, &mut profiles);
-        let mut drive_presets =
-            read_or_seed::<DrivePresetLib>(&store, "drive-presets.styx", self.shipped().drive_presets, || {
-                DrivePresetLib {
-                    presets: drive_presets(),
-                }
-            })
-            .presets;
+        let mut drive_presets = read_or_seed::<DrivePresetLib>(
+            &store,
+            "drive-presets.styx",
+            self.shipped().drive_presets,
+            || DrivePresetLib {
+                presets: drive_presets(),
+            },
+        )
+        .presets;
         if self.seed_drive_presets(&mut drive_presets) {
             self.save_drive_presets(&drive_presets);
         }
         self.seed_compositions();
         self.seed_songs_and_setlists();
-        let songs = read_or_seed::<SongLib>(&store, "songs.styx", self.shipped().songs, || SongLib {
-            songs: song_library(),
-        })
-        .songs;
+        let songs =
+            read_or_seed::<SongLib>(&store, "songs.styx", self.shipped().songs, || SongLib {
+                songs: song_library(),
+            })
+            .songs;
         let setlists =
-            read_or_seed::<SetlistLib>(&store, "setlists.styx", self.shipped().setlists, || SetlistLib {
-                setlists: default_setlists(),
+            read_or_seed::<SetlistLib>(&store, "setlists.styx", self.shipped().setlists, || {
+                SetlistLib {
+                    setlists: default_setlists(),
+                }
             })
             .setlists;
         let midi_map =
@@ -1153,11 +1223,19 @@ impl RigHome {
         }
         // A library with no song details yet starts with one collection,
         // Church, empty, for the player to fill.
-        let song_info = store.read::<SongInfoLib>("song-info.styx").unwrap_or_else(|| SongInfoLib {
-            songs: Vec::new(),
-            collections: vec![CollectionDef { name: "Church".to_string(), colour: "#f472b6".to_string(), songs: Vec::new() }],
-        });
-        let setup = store.read::<crate::proto::SetupModel>("setup.styx").unwrap_or_else(|| self.seed_setup());
+        let song_info = store
+            .read::<SongInfoLib>("song-info.styx")
+            .unwrap_or_else(|| SongInfoLib {
+                songs: Vec::new(),
+                collections: vec![CollectionDef {
+                    name: "Church".to_string(),
+                    colour: "#f472b6".to_string(),
+                    songs: Vec::new(),
+                }],
+            });
+        let setup = store
+            .read::<crate::proto::SetupModel>("setup.styx")
+            .unwrap_or_else(|| self.seed_setup());
         RigLibrary {
             profile,
             profiles,
@@ -1231,7 +1309,11 @@ impl RigHome {
         &self,
         last_good: Option<&crate::compose::Compositions>,
     ) -> crate::compose::Compositions {
-        fn one<T: for<'a> Facet<'a> + Default>(home: &RigHome, file: &str, seed: &str) -> Result<T, ()> {
+        fn one<T: for<'a> Facet<'a> + Default>(
+            home: &RigHome,
+            file: &str,
+            seed: &str,
+        ) -> Result<T, ()> {
             let path = home.dir.join(file);
             match config_watch::read_tracked::<T>(&path) {
                 Read::Ok(v) => Ok(v),
@@ -1254,8 +1336,12 @@ impl RigHome {
             }
         }
         let store = self.store();
-        let modules =
-            one::<crate::compose::ModuleLib>(self, crate::compose::MODULES_FILE, self.shipped().modules).map(|l| l.presets);
+        let modules = one::<crate::compose::ModuleLib>(
+            self,
+            crate::compose::MODULES_FILE,
+            self.shipped().modules,
+        )
+        .map(|l| l.presets);
         let fresh_modules = modules.is_ok();
         let mut modules =
             modules.unwrap_or_else(|()| last_good.map(|c| c.modules.clone()).unwrap_or_default());
@@ -1269,25 +1355,35 @@ impl RigHome {
                 }
             }
         }
-        let presets = one::<crate::compose::PresetLib>(self, crate::compose::PRESETS_FILE, self.shipped().presets)
-            .map(|mut l| {
-                for p in &mut l.presets {
-                    for snap in &mut p.snapshots {
-                        store.resolve(&mut snap.frozen_nam);
-                        store.resolve(&mut snap.frozen_nam2);
-                    }
+        let presets = one::<crate::compose::PresetLib>(
+            self,
+            crate::compose::PRESETS_FILE,
+            self.shipped().presets,
+        )
+        .map(|mut l| {
+            for p in &mut l.presets {
+                for snap in &mut p.snapshots {
+                    store.resolve(&mut snap.frozen_nam);
+                    store.resolve(&mut snap.frozen_nam2);
                 }
-                l.presets
-            })
-            .unwrap_or_else(|()| last_good.map(|c| c.presets.clone()).unwrap_or_default());
-        let blocks = one::<crate::compose::BlockLib>(self, crate::compose::BLOCKS_FILE, self.shipped().blocks)
-            .map(|l| l.presets)
-            .unwrap_or_else(|()| last_good.map(|c| c.blocks.clone()).unwrap_or_default());
+            }
+            l.presets
+        })
+        .unwrap_or_else(|()| last_good.map(|c| c.presets.clone()).unwrap_or_default());
+        let blocks = one::<crate::compose::BlockLib>(
+            self,
+            crate::compose::BLOCKS_FILE,
+            self.shipped().blocks,
+        )
+        .map(|l| l.presets)
+        .unwrap_or_else(|()| last_good.map(|c| c.blocks.clone()).unwrap_or_default());
         // The presets: the library's, or the shipped ones until it has its own.
         let tones_path = self.dir.join(crate::compose::TONES_FILE);
         let tones = match config_watch::read_tracked::<crate::compose::ToneLib>(&tones_path) {
             Read::Ok(l) => l.tones,
-            Read::Missing => facet_styx::from_str::<crate::compose::ToneLib>(self.shipped().tones).map(|l| l.tones).unwrap_or_default(),
+            Read::Missing => facet_styx::from_str::<crate::compose::ToneLib>(self.shipped().tones)
+                .map(|l| l.tones)
+                .unwrap_or_default(),
             Read::Bad(e) => {
                 report_bad(&tones_path, &e);
                 last_good.map(|c| c.tones.clone()).unwrap_or_default()
@@ -1320,7 +1416,11 @@ impl RigHome {
             Read::Ok(l) => Some(l.songs),
             _ => None,
         };
-        let (split, split_profiles, split_songs) = crate::compose::split_core_with_songs(&comp, profiles, songs.as_deref().unwrap_or_default());
+        let (split, split_profiles, split_songs) = crate::compose::split_core_with_songs(
+            &comp,
+            profiles,
+            songs.as_deref().unwrap_or_default(),
+        );
         let changed = format!("{:?}", split.presets) != format!("{:?}", comp.presets);
         if !changed {
             return;
@@ -1328,11 +1428,18 @@ impl RigHome {
         let keep = |path: std::path::PathBuf| {
             if path.exists() {
                 if let Err(e) = std::fs::copy(&path, path.with_extension("styx.migrated")) {
-                    tracing::warn!("rig library: cannot keep {} before the Core split: {e}", path.display());
+                    tracing::warn!(
+                        "rig library: cannot keep {} before the Core split: {e}",
+                        path.display()
+                    );
                 }
             }
         };
-        for f in [crate::compose::PRESETS_FILE, crate::compose::MODULES_FILE, crate::compose::BLOCKS_FILE] {
+        for f in [
+            crate::compose::PRESETS_FILE,
+            crate::compose::MODULES_FILE,
+            crate::compose::BLOCKS_FILE,
+        ] {
             keep(store.dir().join(f));
         }
         for p in split_profiles.iter() {
@@ -1350,7 +1457,9 @@ impl RigHome {
         if songs.is_some() {
             config_watch::write_guarded(&songs_path, &SongLib { songs: split_songs });
         }
-        tracing::info!("rig library: presets are the Core module now — time effects, pre effects, chorus and tremolo moved out (old files kept as *.styx.migrated)");
+        tracing::info!(
+            "rig library: presets are the Core module now — time effects, pre effects, chorus and tremolo moved out (old files kept as *.styx.migrated)"
+        );
         *profiles = split_profiles;
     }
 
@@ -1381,7 +1490,12 @@ impl RigHome {
         // The presets, once there are any (or the file is there to update).
         let tones_path = dir.join(crate::compose::TONES_FILE);
         if !comp.tones.is_empty() || tones_path.exists() {
-            config_watch::write_guarded(&tones_path, &crate::compose::ToneLib { tones: comp.tones.clone() });
+            config_watch::write_guarded(
+                &tones_path,
+                &crate::compose::ToneLib {
+                    tones: comp.tones.clone(),
+                },
+            );
         }
         config_watch::write_guarded(
             &dir.join(crate::compose::PRESETS_FILE),
@@ -1432,7 +1546,9 @@ impl RigHome {
         };
         let mut profile = profile.clone();
         // Preset mode's bench is the session's, never the profile's.
-        profile.patches.retain(|p| p.name != crate::profiles::PRESET_BENCH);
+        profile
+            .patches
+            .retain(|p| p.name != crate::profiles::PRESET_BENCH);
         let (song_patches, own): (
             Vec<crate::profiles::PatchDef>,
             Vec<crate::profiles::PatchDef>,
@@ -1631,8 +1747,10 @@ impl RigLibrary {
 mod tests {
     #[test]
     fn the_shipped_compositions_parse_with_the_time_delay_and_reverb_presets() {
-        let modules: crate::compose::ModuleLib = facet_styx::from_str(super::DEFAULT_MODULES).expect("modules.styx parses");
-        let blocks: crate::compose::BlockLib = facet_styx::from_str(super::DEFAULT_BLOCKS).expect("blocks.styx parses");
+        let modules: crate::compose::ModuleLib =
+            facet_styx::from_str(super::DEFAULT_MODULES).expect("modules.styx parses");
+        let blocks: crate::compose::BlockLib =
+            facet_styx::from_str(super::DEFAULT_BLOCKS).expect("blocks.styx parses");
         let count = |m: &str| modules.presets.iter().filter(|p| p.module == m).count();
         assert!(count("Time") >= 10, "Time presets ship");
         assert!(count("Delay") >= 9, "Delay presets ship");
@@ -1663,9 +1781,15 @@ mod tests {
                 if !(quoted.ends_with(".nam") || quoted.ends_with(".wav")) {
                     continue;
                 }
-                assert!(!quoted.starts_with('/'), "{file} names an absolute path: {quoted}");
+                assert!(
+                    !quoted.starts_with('/'),
+                    "{file} names an absolute path: {quoted}"
+                );
                 let (dir, name) = quoted.split_once('/').unwrap_or(("", quoted));
-                assert!(shipped(dir, name), "{file} names {quoted}, which does not ship");
+                assert!(
+                    shipped(dir, name),
+                    "{file} names {quoted}, which does not ship"
+                );
             }
         }
     }
@@ -1691,8 +1815,10 @@ mod tests {
     /// machine the binary was installed on.
     #[test]
     fn the_shipped_setlists_parse_and_name_only_shipped_songs() {
-        let songs: super::SongLib = facet_styx::from_str(super::DEFAULT_SONGS).expect("songs.styx parses");
-        let sets: super::SetlistLib = facet_styx::from_str(super::DEFAULT_SETLISTS).expect("setlists.styx parses");
+        let songs: super::SongLib =
+            facet_styx::from_str(super::DEFAULT_SONGS).expect("songs.styx parses");
+        let sets: super::SetlistLib =
+            facet_styx::from_str(super::DEFAULT_SETLISTS).expect("setlists.styx parses");
         for set in &sets.setlists {
             for e in &set.entries {
                 assert!(
@@ -1703,9 +1829,17 @@ mod tests {
                 );
             }
         }
-        let hsm = sets.setlists.iter().find(|s| s.name == "HSM 10-6-26 Worship Night").expect("the HSM set ships");
+        let hsm = sets
+            .setlists
+            .iter()
+            .find(|s| s.name == "HSM 10-6-26 Worship Night")
+            .expect("the HSM set ships");
         assert_eq!(hsm.entries.len(), 8);
-        assert!(sets.setlists.iter().any(|s| s.name == "Kids Ministry 10-7-26 Worship Night"));
+        assert!(
+            sets.setlists
+                .iter()
+                .any(|s| s.name == "Kids Ministry 10-7-26 Worship Night")
+        );
     }
 
     #[test]
@@ -1845,19 +1979,37 @@ impl RigHome {
 /// AIRSTEP — and the other guitars, the Scarlett and the MC6 to choose.
 #[must_use]
 pub fn seed_setup_for(instrument: Instrument) -> crate::proto::SetupModel {
-    use crate::proto::{AudioRigEntry, ControllerEntry, GuitarEntry, GuitarTone, Pickup, SetupModel, ToneOverride};
-    let gates = |floor: f32| vec![floor + 5.0, floor + 10.0, floor + 16.0, floor + 24.0];
-    let pickups = |list: &[(&str, &str)]| list.iter().map(|(p, m)| Pickup { position: (*p).into(), model: (*m).into() }).collect();
-    let tone = |trim_db: f32, floor: f32, noisy: bool, low_cut_hz: f32, bass_db: f32, treble_db: f32| GuitarTone {
-        trim_db,
-        gates: gates(floor),
-        noisy,
-        low_cut_hz,
-        bass_db,
-        mid_db: 0.0,
-        treble_db,
+    use crate::proto::{
+        AudioRigEntry, ControllerEntry, GuitarEntry, GuitarTone, Pickup, SetupModel, ToneOverride,
     };
-    let guitar = |id: &str, name: &str, image: &str, colour: &str, p: Vec<Pickup>, t: GuitarTone, overrides: Vec<ToneOverride>| GuitarEntry {
+    let gates = |floor: f32| vec![floor + 5.0, floor + 10.0, floor + 16.0, floor + 24.0];
+    let pickups = |list: &[(&str, &str)]| {
+        list.iter()
+            .map(|(p, m)| Pickup {
+                position: (*p).into(),
+                model: (*m).into(),
+            })
+            .collect()
+    };
+    let tone =
+        |trim_db: f32, floor: f32, noisy: bool, low_cut_hz: f32, bass_db: f32, treble_db: f32| {
+            GuitarTone {
+                trim_db,
+                gates: gates(floor),
+                noisy,
+                low_cut_hz,
+                bass_db,
+                mid_db: 0.0,
+                treble_db,
+            }
+        };
+    let guitar = |id: &str,
+                  name: &str,
+                  image: &str,
+                  colour: &str,
+                  p: Vec<Pickup>,
+                  t: GuitarTone,
+                  overrides: Vec<ToneOverride>| GuitarEntry {
         id: id.into(),
         name: name.into(),
         image: image.into(),
@@ -1866,7 +2018,14 @@ pub fn seed_setup_for(instrument: Instrument) -> crate::proto::SetupModel {
         tone: t,
         overrides,
     };
-    let rig = |id: &str, name: &str, device: &str, buffer: u32, house: &str, house_db: f32, phones: &str, phones_db: f32| AudioRigEntry {
+    let rig = |id: &str,
+               name: &str,
+               device: &str,
+               buffer: u32,
+               house: &str,
+               house_db: f32,
+               phones: &str,
+               phones_db: f32| AudioRigEntry {
         id: id.into(),
         name: name.into(),
         device: device.into(),
@@ -1890,47 +2049,129 @@ pub fn seed_setup_for(instrument: Instrument) -> crate::proto::SetupModel {
                 "Geddy Lee Jazz Bass",
                 "",
                 "#18181b",
-                pickups(&[("Bridge", "Fender Jazz single-coil"), ("Neck", "Lawler Jazz")]),
+                pickups(&[
+                    ("Bridge", "Fender Jazz single-coil"),
+                    ("Neck", "Lawler Jazz"),
+                ]),
                 tone(0.0, -80.0, false, 25.0, 0.0, 0.0),
                 Vec::new(),
             ),
-            guitar("pbass", "Precision Bass", "", "#e9e4d8", pickups(&[("Middle", "Fender split-coil")]), tone(0.0, -80.0, false, 25.0, 0.0, 0.0), Vec::new()),
+            guitar(
+                "pbass",
+                "Precision Bass",
+                "",
+                "#e9e4d8",
+                pickups(&[("Middle", "Fender split-coil")]),
+                tone(0.0, -80.0, false, 25.0, 0.0, 0.0),
+                Vec::new(),
+            ),
         ]
     } else {
         Vec::new()
     };
     SetupModel {
-        guitars: if !instruments.is_empty() { instruments } else { vec![
-            guitar(
-                "strat",
-                "TMG Strat",
-                "strat-white-gold.webp",
-                "#e9e4d8",
-                pickups(&[("Bridge", "Seymour Duncan SH-PG1b Pearly Gates"), ("Middle", "Lawler Blonde"), ("Neck", "Lawler Blonde")]),
-                tone(0.0, -77.0, false, 70.0, 0.0, 0.0),
-                vec![ToneOverride { rig: "stage".into(), parts: vec!["trim".into(), "gates".into()], tone: GuitarTone { trim_db: 2.5, gates: gates(-72.0), ..GuitarTone::default() } }],
-            ),
-            guitar("tele", "Blacked Out Tele", "tele-black.webp", "#18181b", pickups(&[("Bridge", "Tele single-coil"), ("Neck", "Tele single-coil")]), tone(3.0, -70.0, true, 80.0, 1.0, -1.5), Vec::new()),
-            guitar(
-                "es339",
-                "Epiphone ES-339",
-                "es339-cherry.webp",
-                "#9f1d2b",
-                pickups(&[("Bridge", "P-90"), ("Neck", "P-90")]),
-                tone(1.5, -68.0, true, 90.0, -1.0, 0.5),
-                vec![ToneOverride { rig: "stage".into(), parts: vec!["noisy".into()], tone: GuitarTone { noisy: false, ..GuitarTone::default() } }],
-            ),
-            guitar("goldtop", "Goldtop Les Paul", "lp-goldtop.webp", "#c9a24a", pickups(&[("Bridge", "P-90"), ("Neck", "P-90")]), tone(1.0, -69.0, false, 80.0, -1.5, 1.0), Vec::new()),
-        ] },
+        guitars: if !instruments.is_empty() {
+            instruments
+        } else {
+            vec![
+                guitar(
+                    "strat",
+                    "TMG Strat",
+                    "strat-white-gold.webp",
+                    "#e9e4d8",
+                    pickups(&[
+                        ("Bridge", "Seymour Duncan SH-PG1b Pearly Gates"),
+                        ("Middle", "Lawler Blonde"),
+                        ("Neck", "Lawler Blonde"),
+                    ]),
+                    tone(0.0, -77.0, false, 70.0, 0.0, 0.0),
+                    vec![ToneOverride {
+                        rig: "stage".into(),
+                        parts: vec!["trim".into(), "gates".into()],
+                        tone: GuitarTone {
+                            trim_db: 2.5,
+                            gates: gates(-72.0),
+                            ..GuitarTone::default()
+                        },
+                    }],
+                ),
+                guitar(
+                    "tele",
+                    "Blacked Out Tele",
+                    "tele-black.webp",
+                    "#18181b",
+                    pickups(&[("Bridge", "Tele single-coil"), ("Neck", "Tele single-coil")]),
+                    tone(3.0, -70.0, true, 80.0, 1.0, -1.5),
+                    Vec::new(),
+                ),
+                guitar(
+                    "es339",
+                    "Epiphone ES-339",
+                    "es339-cherry.webp",
+                    "#9f1d2b",
+                    pickups(&[("Bridge", "P-90"), ("Neck", "P-90")]),
+                    tone(1.5, -68.0, true, 90.0, -1.0, 0.5),
+                    vec![ToneOverride {
+                        rig: "stage".into(),
+                        parts: vec!["noisy".into()],
+                        tone: GuitarTone {
+                            noisy: false,
+                            ..GuitarTone::default()
+                        },
+                    }],
+                ),
+                guitar(
+                    "goldtop",
+                    "Goldtop Les Paul",
+                    "lp-goldtop.webp",
+                    "#c9a24a",
+                    pickups(&[("Bridge", "P-90"), ("Neck", "P-90")]),
+                    tone(1.0, -69.0, false, 80.0, -1.5, 1.0),
+                    Vec::new(),
+                ),
+            ]
+        },
         guitar_index: 0,
         rigs: vec![
-            rig("minifuse", "MiniFuse 4", "Arturia MiniFuse 4", 128, "Outputs 1–2", -6.0, "Phones 1", -12.0),
-            rig("stage", "Scarlett 2i2", "Focusrite Scarlett 2i2", 64, "Outputs 1–2", 0.0, "Phones", -18.0),
+            rig(
+                "minifuse",
+                "MiniFuse 4",
+                "Arturia MiniFuse 4",
+                128,
+                "Outputs 1–2",
+                -6.0,
+                "Phones 1",
+                -12.0,
+            ),
+            rig(
+                "stage",
+                "Scarlett 2i2",
+                "Focusrite Scarlett 2i2",
+                64,
+                "Outputs 1–2",
+                0.0,
+                "Phones",
+                -18.0,
+            ),
         ],
         rig_index: 0,
         controllers: vec![
-            ControllerEntry { id: "airstep".into(), name: "AIRSTEP".into(), device: "XSonic AIRSTEP".into(), channel: 0, program_change: true, clock: "off".into() },
-            ControllerEntry { id: "mc6".into(), name: "MC6".into(), device: "Morningstar MC6".into(), channel: 1, program_change: true, clock: "off".into() },
+            ControllerEntry {
+                id: "airstep".into(),
+                name: "AIRSTEP".into(),
+                device: "XSonic AIRSTEP".into(),
+                channel: 0,
+                program_change: true,
+                clock: "off".into(),
+            },
+            ControllerEntry {
+                id: "mc6".into(),
+                name: "MC6".into(),
+                device: "Morningstar MC6".into(),
+                channel: 1,
+                program_change: true,
+                clock: "off".into(),
+            },
         ],
         controller_index: 0,
     }
@@ -1941,13 +2182,21 @@ mod seed_tests {
     use super::*;
 
     /// Every entry of `shipped` (a library file's text) as [`FACTORY`] lines.
-    fn lines<L, E>(file: &str, shipped: &str, list: impl Fn(&mut L) -> &mut Vec<E>, key: impl Fn(&E) -> String) -> Vec<String>
+    fn lines<L, E>(
+        file: &str,
+        shipped: &str,
+        list: impl Fn(&mut L) -> &mut Vec<E>,
+        key: impl Fn(&E) -> String,
+    ) -> Vec<String>
     where
         L: for<'a> Facet<'a>,
         E: for<'a> Facet<'a>,
     {
         let mut lib = facet_styx::from_str::<L>(shipped).expect("the shipped file parses");
-        list(&mut lib).iter().map(|e| factory_line(file, &key(e), &fingerprint(e))).collect()
+        list(&mut lib)
+            .iter()
+            .map(|e| factory_line(file, &key(e), &fingerprint(e)))
+            .collect()
     }
 
     /// Record what ships now in `default-config/factory.txt`, before it is
@@ -1960,18 +2209,53 @@ mod seed_tests {
         // Each instrument's shipped library, into its own record.
         for (dir, shipped) in [("default-config", &GUITAR), ("default-config-bass", &BASS)] {
             let mut all: Vec<String> = Vec::new();
-            all.extend(lines::<ModuleLib, _>(crate::compose::MODULES_FILE, shipped.modules, |l| &mut l.presets, |p| format!("{}\t{}", p.module, p.name)));
-            all.extend(lines::<BlockLib, _>(crate::compose::BLOCKS_FILE, shipped.blocks, |l| &mut l.presets, |p| format!("{}\t{}", p.block_type, p.name)));
-            all.extend(lines::<PresetLib, _>(crate::compose::PRESETS_FILE, shipped.presets, |l| &mut l.presets, |p| p.name.clone()));
-            all.extend(lines::<ToneLib, _>(crate::compose::TONES_FILE, shipped.tones, |l| &mut l.tones, |t| t.name.clone()));
-            all.extend(lines::<SongLib, _>("songs.styx", shipped.songs, |l| &mut l.songs, |s| s.name.clone()));
-            all.extend(lines::<SetlistLib, _>("setlists.styx", shipped.setlists, |l| &mut l.setlists, |s| s.name.clone()));
+            all.extend(lines::<ModuleLib, _>(
+                crate::compose::MODULES_FILE,
+                shipped.modules,
+                |l| &mut l.presets,
+                |p| format!("{}\t{}", p.module, p.name),
+            ));
+            all.extend(lines::<BlockLib, _>(
+                crate::compose::BLOCKS_FILE,
+                shipped.blocks,
+                |l| &mut l.presets,
+                |p| format!("{}\t{}", p.block_type, p.name),
+            ));
+            all.extend(lines::<PresetLib, _>(
+                crate::compose::PRESETS_FILE,
+                shipped.presets,
+                |l| &mut l.presets,
+                |p| p.name.clone(),
+            ));
+            all.extend(lines::<ToneLib, _>(
+                crate::compose::TONES_FILE,
+                shipped.tones,
+                |l| &mut l.tones,
+                |t| t.name.clone(),
+            ));
+            all.extend(lines::<SongLib, _>(
+                "songs.styx",
+                shipped.songs,
+                |l| &mut l.songs,
+                |s| s.name.clone(),
+            ));
+            all.extend(lines::<SetlistLib, _>(
+                "setlists.styx",
+                shipped.setlists,
+                |l| &mut l.setlists,
+                |s| s.name.clone(),
+            ));
             for (file, text) in shipped.profiles {
-                let def: ProfileDef = facet_styx::from_str(text).expect("the shipped profile parses");
+                let def: ProfileDef =
+                    facet_styx::from_str(text).expect("the shipped profile parses");
                 all.push(factory_line(file, &def.name, &fingerprint(&def)));
             }
             let path = format!("{}/{dir}/factory.txt", env!("CARGO_MANIFEST_DIR"));
-            let mut have: Vec<String> = std::fs::read_to_string(&path).unwrap_or_default().lines().map(str::to_string).collect();
+            let mut have: Vec<String> = std::fs::read_to_string(&path)
+                .unwrap_or_default()
+                .lines()
+                .map(str::to_string)
+                .collect();
             for l in all {
                 if !have.contains(&l) {
                     have.push(l);
@@ -1992,9 +2276,15 @@ mod seed_tests {
         new.snapshots.truncate(1);
         let mut file_lines = FACTORY.to_string();
         let key = format!("{}\t{}", old.module, old.name);
-        file_lines.push_str(&factory_line(crate::compose::MODULES_FILE, &key, &fingerprint(&old)));
+        file_lines.push_str(&factory_line(
+            crate::compose::MODULES_FILE,
+            &key,
+            &fingerprint(&old),
+        ));
         let followed = fingerprint(&old) != fingerprint(&new)
-            && file_lines.lines().any(|l| l == factory_line(crate::compose::MODULES_FILE, &key, &fingerprint(&old)));
+            && file_lines
+                .lines()
+                .any(|l| l == factory_line(crate::compose::MODULES_FILE, &key, &fingerprint(&old)));
         assert!(followed, "the shipped version as it was is recognised");
         // A path written differently is the same entry.
         let mut moved = old.clone();
@@ -2003,20 +2293,41 @@ mod seed_tests {
                 s.nam = format!("/Users/someone/.config/signal/rig/{}", s.nam);
             }
         }
-        assert_eq!(fingerprint(&moved), fingerprint(&old), "a library's absolute paths read as the shipped ones");
+        assert_eq!(
+            fingerprint(&moved),
+            fingerprint(&old),
+            "a library's absolute paths read as the shipped ones"
+        );
         // Edited by the player: no longer a factory version.
         let mut edited = old;
         edited.name.push_str(" (mine)");
-        assert!(!file_lines.lines().any(|l| l.ends_with(&fingerprint(&edited))));
+        assert!(
+            !file_lines
+                .lines()
+                .any(|l| l.ends_with(&fingerprint(&edited)))
+        );
     }
 
     fn names(dir: &std::path::Path) -> Vec<String> {
         let text = std::fs::read_to_string(dir.join("setlists.styx")).expect("setlists");
-        facet_styx::from_str::<SetlistLib>(&text).expect("parses").setlists.into_iter().map(|s| s.name).collect()
+        facet_styx::from_str::<SetlistLib>(&text)
+            .expect("parses")
+            .setlists
+            .into_iter()
+            .map(|s| s.name)
+            .collect()
     }
 
     fn seed(store: &StyxDir) {
-        seed_entries::<SetlistLib, crate::profiles::SetlistDef>(store, FACTORY, "setlists.styx", DEFAULT_SETLISTS, ".seeded-setlists", |l| &mut l.setlists, |s| s.name.clone());
+        seed_entries::<SetlistLib, crate::profiles::SetlistDef>(
+            store,
+            FACTORY,
+            "setlists.styx",
+            DEFAULT_SETLISTS,
+            ".seeded-setlists",
+            |l| &mut l.setlists,
+            |s| s.name.clone(),
+        );
     }
 
     /// A library from before a set shipped gets it on its next load; one the
@@ -2028,22 +2339,44 @@ mod seed_tests {
         std::fs::create_dir_all(&dir).unwrap();
         let store = StyxDir::new(&dir);
         // The player's own library: one set of theirs, nothing shipped yet.
-        let mut own = facet_styx::from_str::<SetlistLib>(DEFAULT_SETLISTS).expect("shipped sets parse").setlists.remove(0);
+        let mut own = facet_styx::from_str::<SetlistLib>(DEFAULT_SETLISTS)
+            .expect("shipped sets parse")
+            .setlists
+            .remove(0);
         own.name = "Mine".into();
-        let mine = SetlistLib { setlists: vec![own] };
-        std::fs::write(dir.join("setlists.styx"), facet_styx::to_string(&mine).unwrap()).unwrap();
+        let mine = SetlistLib {
+            setlists: vec![own],
+        };
+        std::fs::write(
+            dir.join("setlists.styx"),
+            facet_styx::to_string(&mine).unwrap(),
+        )
+        .unwrap();
 
         seed(&store);
         let got = names(&dir);
         assert!(got.contains(&"Mine".to_string()));
-        assert!(got.contains(&"SETLIST NAME".to_string()), "the shipped set arrives: {got:?}");
+        assert!(
+            got.contains(&"SETLIST NAME".to_string()),
+            "the shipped set arrives: {got:?}"
+        );
 
         // Deleted by the player: the next load leaves it gone.
-        let mut lib = facet_styx::from_str::<SetlistLib>(&std::fs::read_to_string(dir.join("setlists.styx")).unwrap()).unwrap();
+        let mut lib = facet_styx::from_str::<SetlistLib>(
+            &std::fs::read_to_string(dir.join("setlists.styx")).unwrap(),
+        )
+        .unwrap();
         lib.setlists.retain(|s| s.name != "SETLIST NAME");
-        std::fs::write(dir.join("setlists.styx"), facet_styx::to_string(&lib).unwrap()).unwrap();
+        std::fs::write(
+            dir.join("setlists.styx"),
+            facet_styx::to_string(&lib).unwrap(),
+        )
+        .unwrap();
         seed(&store);
-        assert!(!names(&dir).contains(&"SETLIST NAME".to_string()), "a deleted set stays deleted");
+        assert!(
+            !names(&dir).contains(&"SETLIST NAME".to_string()),
+            "a deleted set stays deleted"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

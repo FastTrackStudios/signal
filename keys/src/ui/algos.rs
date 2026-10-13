@@ -12,8 +12,8 @@ use dioxus::prelude::*;
 
 /// `delay::DelayStyle` order — the `TimeLine` MX machines.
 pub const DELAY_ALGOS: [&str; 13] = [
-    "Tape", "Digital", "Analog", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum",
-    "Oil Can", "MultiTap", "Spectral", "Filter",
+    "Tape", "Digital", "Analog", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum", "Oil Can",
+    "MultiTap", "Spectral", "Filter",
 ];
 
 /// `reverb::AlgorithmType::ALL` order.
