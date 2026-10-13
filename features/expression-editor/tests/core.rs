@@ -1080,7 +1080,8 @@ fn marquee_selects_the_notes_it_covers() {
     let x1 = ed.camera.x(PPQ * 1.95);
     let y0 = ed.camera.y(70.0, ed.viewport);
     let y1 = ed.camera.y(58.0, ed.viewport);
-    let mut box_ = view_gestures::Marquee::press((x0, y0), view_gestures::MarqueeMode::Replace);
+    let mut box_ =
+        editing::gestures::Marquee::press((x0, y0), editing::gestures::MarqueeMode::Replace);
     box_.moved((x1, y1));
     sel.marquee(&ed.doc, &ed.camera, ed.viewport, &box_, &[]);
     assert_eq!(sel.notes.len(), 2, "the first two notes only");
@@ -1089,7 +1090,8 @@ fn marquee_selects_the_notes_it_covers() {
     // Toggle flips what it touches against what was selected at the
     // press: the first two come out, a third goes in.
     let third = ed.doc.notes.get(2).expect("a third note").id;
-    let mut toggle = view_gestures::Marquee::press((x0, y0), view_gestures::MarqueeMode::Toggle);
+    let mut toggle =
+        editing::gestures::Marquee::press((x0, y0), editing::gestures::MarqueeMode::Toggle);
     toggle.moved((x1, y1));
     let mut base = first_two.clone();
     base.push(third);
@@ -1097,7 +1099,7 @@ fn marquee_selects_the_notes_it_covers() {
     assert_eq!(sel.notes, vec![third], "toggled, only the third is left");
 
     // Add keeps what was there.
-    let mut add = view_gestures::Marquee::press((x0, y0), view_gestures::MarqueeMode::Add);
+    let mut add = editing::gestures::Marquee::press((x0, y0), editing::gestures::MarqueeMode::Add);
     add.moved((x1, y1));
     sel.marquee(&ed.doc, &ed.camera, ed.viewport, &add, &[third]);
     assert_eq!(sel.notes.len(), 3, "the two, and the third kept");
@@ -2112,7 +2114,7 @@ fn held_doc() -> ExpressionDoc {
 fn a_razor_slices_notes_at_its_edges_rather_than_selecting_whole_ones() {
     let mut doc = held_doc();
     let area = RazorArea::new(PPQ * 2.0, PPQ * 4.0, 60, 60);
-    let inside = razor::carve(&mut doc, area);
+    let inside = expression_editor::razor::carve(&mut doc, area);
 
     assert_eq!(inside.len(), 1, "exactly the middle piece");
     let piece = doc.note(inside[0]).unwrap();
@@ -2129,7 +2131,7 @@ fn a_razor_slices_notes_at_its_edges_rather_than_selecting_whole_ones() {
 fn slicing_preserves_the_expression_at_the_cut() {
     let mut doc = held_doc();
     let area = RazorArea::new(PPQ * 2.0, PPQ * 4.0, 60, 60);
-    let inside = razor::carve(&mut doc, area);
+    let inside = expression_editor::razor::carve(&mut doc, area);
     let piece = doc.note(inside[0]).unwrap();
     // The pitch curve ramps 0→2 across 8 beats, so at beat 2 it is 0.5.
     assert!(
@@ -2142,7 +2144,7 @@ fn slicing_preserves_the_expression_at_the_cut() {
 fn deleting_an_area_leaves_a_hole_and_keeps_the_rest() {
     let mut doc = held_doc();
     let area = RazorArea::new(PPQ * 2.0, PPQ * 4.0, 60, 60);
-    assert!(razor::delete_contents(&mut doc, area));
+    assert!(expression_editor::razor::delete_contents(&mut doc, area));
 
     let row60: Vec<_> = doc.notes.iter().filter(|n| n.row == 60).collect();
     assert_eq!(row60.len(), 2, "before and after survive");
@@ -2158,7 +2160,7 @@ fn deleting_an_area_leaves_a_hole_and_keeps_the_rest() {
 fn moving_an_area_carries_its_contents_and_clears_the_destination() {
     let mut doc = held_doc();
     let area = RazorArea::new(PPQ * 2.0, PPQ * 3.0, 60, 60);
-    assert!(razor::move_contents(
+    assert!(expression_editor::razor::move_contents(
         &mut doc,
         area,
         PPQ * 4.0,
@@ -2187,7 +2189,7 @@ fn moving_an_area_carries_its_contents_and_clears_the_destination() {
 fn copying_an_area_leaves_the_original_in_place() {
     let mut doc = held_doc();
     let area = RazorArea::new(PPQ * 2.0, PPQ * 3.0, 60, 60);
-    assert!(razor::move_contents(
+    assert!(expression_editor::razor::move_contents(
         &mut doc,
         area,
         PPQ * 4.0,
@@ -2215,7 +2217,7 @@ fn a_nudge_does_not_delete_its_own_source() {
     let mut doc = held_doc();
     let area = RazorArea::new(PPQ * 2.0, PPQ * 4.0, 60, 60);
     // Destination overlaps the source — the classic way to lose data.
-    assert!(razor::move_contents(
+    assert!(expression_editor::razor::move_contents(
         &mut doc,
         area,
         PPQ * 0.5,
@@ -2235,7 +2237,7 @@ fn a_nudge_does_not_delete_its_own_source() {
 fn moving_an_area_vertically_transposes_its_contents() {
     let mut doc = held_doc();
     let area = RazorArea::new(PPQ * 2.0, PPQ * 3.0, 60, 60);
-    razor::move_contents(&mut doc, area, 0.0, 5, false, false);
+    expression_editor::razor::move_contents(&mut doc, area, 0.0, 5, false, false);
     assert!(doc.notes.iter().any(|n| n.row == 65));
 }
 
@@ -2251,7 +2253,12 @@ fn stretching_an_area_scales_positions_and_lengths_together() {
         ));
     }
     let area = RazorArea::new(0.0, PPQ, 60, 60);
-    assert!(razor::stretch_contents(&mut doc, area, 0.0, PPQ * 2.0));
+    assert!(expression_editor::razor::stretch_contents(
+        &mut doc,
+        area,
+        0.0,
+        PPQ * 2.0
+    ));
 
     let mut starts: Vec<f64> = doc.notes.iter().map(|n| n.start).collect();
     starts.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -2267,7 +2274,7 @@ fn reversing_an_area_mirrors_it_about_its_own_centre() {
     doc.push(Note::new(NoteId(1), 0.0, PPQ * 0.25, 60));
     doc.push(Note::new(NoteId(2), PPQ * 0.75, PPQ, 60));
     let area = RazorArea::new(0.0, PPQ, 60, 60);
-    assert!(razor::reverse_contents(&mut doc, area));
+    assert!(expression_editor::razor::reverse_contents(&mut doc, area));
 
     let mut starts: Vec<f64> = doc.notes.iter().map(|n| n.start).collect();
     starts.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -2280,7 +2287,7 @@ fn reversing_an_area_mirrors_it_about_its_own_centre() {
 fn razor_velocity_applies_only_inside_the_rectangle() {
     let mut doc = held_doc();
     let area = RazorArea::new(PPQ * 2.0, PPQ * 4.0, 60, 60);
-    assert!(razor::set_velocity(&mut doc, area, 0.25));
+    assert!(expression_editor::razor::set_velocity(&mut doc, area, 0.25));
 
     let inside = doc
         .notes
@@ -2298,7 +2305,11 @@ fn clearing_a_lane_across_an_area_keeps_the_notes() {
     let mut doc = held_doc();
     let before = doc.notes.len();
     let area = RazorArea::new(PPQ * 2.0, PPQ * 4.0, 60, 60);
-    assert!(razor::clear_lane(&mut doc, area, Dimension::Pitch));
+    assert!(expression_editor::razor::clear_lane(
+        &mut doc,
+        area,
+        Dimension::Pitch
+    ));
     assert_eq!(doc.notes.len(), before, "notes survive a dimension clear");
 }
 
@@ -4772,7 +4783,7 @@ fn a_band_split_cannot_be_pushed_past_its_neighbour() {
 #[test]
 fn an_adaptive_grid_coarsens_as_the_view_zooms_out() {
     let mut ed = grid_editor();
-    ed.grid.adaptive.density = adaptive_grid::Density::Medium;
+    ed.grid.adaptive.density = editing::grid::Density::Medium;
 
     // Fit the whole take, then keep zooming out.
     ed.reset_view();
@@ -4792,7 +4803,7 @@ fn an_adaptive_grid_coarsens_as_the_view_zooms_out() {
 /// And a fixed grid stays exactly where it was put.
 #[test]
 fn a_fixed_grid_ignores_the_zoom() {
-    use adaptive_grid::Density;
+    use editing::grid::Density;
 
     let mut ed = grid_editor();
     // Said out loud, not inherited. This passed by accident while
@@ -4813,7 +4824,7 @@ fn a_fixed_grid_ignores_the_zoom() {
 #[test]
 fn an_adaptive_grid_keeps_its_triplets() {
     let mut ed = grid_editor();
-    ed.grid.adaptive.density = adaptive_grid::Density::Medium;
+    ed.grid.adaptive.density = editing::grid::Density::Medium;
     ed.grid.triplet = true;
     ed.grid.division = 1.0 / 16.0;
     for _ in 0..6 {

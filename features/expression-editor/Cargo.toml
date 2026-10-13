@@ -30,7 +30,7 @@ ui-webview = ["dep:anyrender_vello_cpu", "dep:base64", "dep:futures-timer", "dep
 webview = ["dioxus/desktop", "dioxus/launch", "ui", "ui-webview"]
 
 [dependencies]
-adaptive-grid = { workspace = true }
+editing = { workspace = true }
 align-dsp = { workspace = true, optional = true }
 anyrender = { workspace = true, optional = true }
 anyrender_vello_cpu = { workspace = true, optional = true }
@@ -63,7 +63,6 @@ parley = { workspace = true, optional = true }
 peniko = { workspace = true, optional = true }
 png = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
-razor = { workspace = true }
 realfft = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
@@ -72,7 +71,6 @@ tokio = { workspace = true, features = ["rt-multi-thread"], optional = true }
 tracing = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 tune = { workspace = true, optional = true }
-view-gestures = { workspace = true }
 
 [dev-dependencies]
 # Its own tests and examples, with the features they need (see their

@@ -435,7 +435,7 @@ pub struct ArrangementWidget {
     skin_seen: u64,
     font: crate::text::Font,
     bars: Bars,
-    grid: adaptive_grid::Adaptive,
+    grid: editing::grid::Adaptive,
     /// Pixels per second before the zoom — the base the view scales.
     pps: f64,
     /// What the panel's live controls are drawn from.
@@ -722,7 +722,7 @@ impl ArrangementWidget {
             skin_seen: crate::skin::version(),
             font,
             bars: Bars::at(bpm),
-            grid: adaptive_grid::Adaptive::default(),
+            grid: editing::grid::Adaptive::default(),
             pps,
             rows,
             tracks,

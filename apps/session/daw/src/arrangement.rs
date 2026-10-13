@@ -2182,8 +2182,8 @@ pub fn razor_overlay(
     scene: &Arrangement,
     view: Viewport,
     origin: (f64, f64),
-    set: &razor::RazorSet,
-    in_flight: Option<razor::RazorArea>,
+    set: &editing::razor::RazorSet,
+    in_flight: Option<editing::razor::RazorArea>,
 ) {
     let (ox, oy) = origin;
     let x_of = |t: f64| t.mul_add(view.pps, ox);

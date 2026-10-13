@@ -8,9 +8,9 @@ use cc::CcDisplay;
 use chord::Chord;
 use doc::{Dimension, ExpressionDoc, NoteId};
 use edit::{Edit, History};
+use editing::razor::{RazorArea, RazorSet};
 use mode::Mode;
 use mouse::MouseMap;
-use razor::{RazorArea, RazorSet};
 use reference::MidiReference;
 use rows::RowSpace;
 use shape::Shape;
@@ -142,7 +142,7 @@ pub struct Editor {
     /// MRE's `H` and `L`, which are mutually exclusive there and are one
     /// field here for the same reason — two booleans would have a fourth
     /// state that means nothing.
-    pub razor_axis: Option<razor::RazorAxis>,
+    pub razor_axis: Option<editing::razor::RazorAxis>,
     /// The modifiers currently held down.
     ///
     /// Here rather than in a component signal because the *toolbar*

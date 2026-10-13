@@ -933,7 +933,7 @@ fn a_razor_drag_is_still_one_undo() {
 //
 // The verb table from MRE's `MRE_CMD.pdf` (see `spec/midi-editor.md`).
 // Driven through `key_down`, because the claim is that the *keys* reach
-// them — the operations themselves are `razor::`'s and tested there.
+// them — the operations themselves are `editing::razor::`'s and tested there.
 
 /// A razor over the first two notes, with the tool armed.
 fn razor_mode(area_end: f64) -> Editor {
@@ -1481,7 +1481,7 @@ fn the_velocity_tool_claims_a_note_drag() {
 /// scale.
 #[test]
 fn the_zoom_tool_moves_the_adaptive_grid() {
-    use adaptive_grid::Density;
+    use editing::grid::Density;
 
     let mut ed = four_notes();
     ed.tool = expression_editor::Tool::Zoom;
@@ -1519,7 +1519,7 @@ fn the_zoom_tool_moves_the_adaptive_grid() {
 /// A fixed grid stays put, however far the tool zooms.
 #[test]
 fn the_zoom_tool_leaves_a_fixed_grid_alone() {
-    use adaptive_grid::Density;
+    use editing::grid::Density;
 
     let mut ed = four_notes();
     ed.tool = expression_editor::Tool::Zoom;
@@ -1657,7 +1657,7 @@ fn the_grid_tree_toggles_snap_and_adaptive() {
 /// lying about where the next note will land.
 #[test]
 fn the_readout_shows_the_division_in_use_not_the_one_asked_for() {
-    use adaptive_grid::Density;
+    use editing::grid::Density;
 
     let mut ed = four_notes();
     ed.tool = expression_editor::Tool::Zoom;

@@ -13,7 +13,7 @@
 //! usable for comping and for rhythmic rearrangement, and it is why the
 //! area — not the note — is the unit of operation.
 
-pub use razor::{RazorArea, RazorAxis, RazorSet};
+pub use editing::razor::{RazorArea, RazorAxis, RazorSet};
 
 use crate::doc::{Dimension, ExpressionDoc, NoteId};
 

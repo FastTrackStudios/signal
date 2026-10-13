@@ -344,9 +344,9 @@ impl Editor {
         self.settle_camera();
     }
 
-    /// How tightly the grid packs its lines, or [`adaptive_grid::Density::Fixed`] to
+    /// How tightly the grid packs its lines, or [`editing::grid::Density::Fixed`] to
     /// stop it following the zoom at all.
-    pub fn set_grid_density(&mut self, density: adaptive_grid::Density) {
+    pub fn set_grid_density(&mut self, density: editing::grid::Density) {
         self.grid.adaptive.density = density;
         self.settle_camera();
     }

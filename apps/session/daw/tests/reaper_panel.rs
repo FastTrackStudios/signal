@@ -27,9 +27,9 @@
 
 #![cfg(feature = "reaper-tests")]
 
-use studio::test::reaper_test;
 use daw_proto::track::TrackEvent;
 use session_daw::engine::{Applied, Applier, Edit, Watch, apply_event};
+use studio::test::reaper_test;
 
 /// How long to give the host's 30 Hz poller.
 ///

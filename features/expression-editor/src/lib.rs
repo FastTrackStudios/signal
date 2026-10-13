@@ -88,11 +88,11 @@ pub use doc::{
 };
 pub use draft::PitchDraft;
 pub use edit::{Edit, History};
+pub use editing::razor::{RazorArea, RazorSet};
 pub use handles::{Handle, Scope};
 pub use mode::{Mode, ModeFamily};
 pub use mouse::{Action, MouseMap};
 pub use multitool::{Bend, Steepness, Zone};
-pub use razor::{RazorArea, RazorSet};
 pub use reference::{MidiReference, RefNote, SnapSource};
 pub use rows::{Articulation, DrumMap, NoteShape, RowSpace, StringTuning};
 pub use shape::Shape;

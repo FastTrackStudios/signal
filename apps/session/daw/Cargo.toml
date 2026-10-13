@@ -143,12 +143,10 @@ image = { workspace = true }
 # Finding REAPER's resource path, for the toolbar icons it installs.
 dirs = { version = "6", optional = true }
 skrifa = "0.42"
-adaptive-grid = { workspace = true }
+editing = { workspace = true }
 # Razor areas, the same ones the expression editor uses — see the
 # `razor` crate for why the rectangle is shared and the operations on
 # its contents are not.
-razor = { workspace = true }
-view-gestures = { workspace = true }
 winit = { version = "0.31.0-beta.2", optional = true }
 # The pointer shapes, which winit re-exports; named directly so the web
 # host (CSS `cursor`) shares them.

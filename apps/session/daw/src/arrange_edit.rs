@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 
 use daw_proto::Track;
 use daw_ui::studio::project::Project;
-use razor::RazorArea;
+use editing::razor::RazorArea;
 
 use crate::arrangement::{Arrangement, Fades, ItemZone, Viewport};
 use crate::cursor;
@@ -37,9 +37,9 @@ use crate::mousemap::{self, Gesture, Mods};
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ZoomTool {
     /// The drag itself, in window pixels — the Editor's too
-    /// (`view_gestures::ZoomDrag`): how far a drag zooms, which way, and
+    /// (`editing::gestures::ZoomDrag`): how far a drag zooms, which way, and
     /// when a sweep is still a click.
-    drag: view_gestures::ZoomDrag,
+    drag: editing::gestures::ZoomDrag,
     /// The second under the press, and the content row under it at a
     /// vertical zoom of one.
     anchor_t: f64,
@@ -143,7 +143,7 @@ pub struct FadeDrag {
 struct MarqueeDrag {
     from: (f64, f64),
     to: (f64, f64),
-    mode: view_gestures::MarqueeMode,
+    mode: editing::gestures::MarqueeMode,
     /// What was selected at the press, which the mode combines with.
     base: HashSet<String>,
 }
@@ -187,17 +187,17 @@ pub struct Editor {
     /// Public because the paint passes read it and the window owns no
     /// copy: an area is editor state the way the selection is, and two
     /// copies of it would be two answers to "what is the razor over".
-    pub razor: razor::RazorSet,
+    pub razor: editing::razor::RazorSet,
     /// A razor area being drawn or moved.
     razor_drag: Option<RazorDrag>,
 }
 
 /// A razor area under the hand: the Editor's razor gesture
-/// (`razor::RazorGesture` — drawing, moving, resizing an edge), with what
+/// (`editing::razor::RazorGesture` — drawing, moving, resizing an edge), with what
 /// only the arrangement adds to it.
 #[derive(Clone, Debug)]
 struct RazorDrag {
-    gesture: razor::RazorGesture,
+    gesture: editing::razor::RazorGesture,
     /// Whether the edges land on the grid — resolved at the press and
     /// obeyed for the rest of the gesture, like every other drag here.
     snap: bool,
@@ -467,8 +467,10 @@ impl Editor {
                 // A drag across empty lanes is a marquee; until it moves
                 // it is the click below, decided on release.
                 let mode = match mousemap::resolve(hit.context, Gesture::Drag, keys).action {
-                    mousemap::Action::MarqueeSelect => Some(view_gestures::MarqueeMode::Replace),
-                    mousemap::Action::MarqueeAdd => Some(view_gestures::MarqueeMode::Add),
+                    mousemap::Action::MarqueeSelect => {
+                        Some(editing::gestures::MarqueeMode::Replace)
+                    }
+                    mousemap::Action::MarqueeAdd => Some(editing::gestures::MarqueeMode::Add),
                     _ => None,
                 };
                 if let Some(mode) = mode {
@@ -536,11 +538,13 @@ impl Editor {
         if let Some((index, area)) = self.razor.at(at, row) {
             let bound = mousemap::resolve(self.context_at(hit), Gesture::Drag, keys);
             let gesture = match bound.action {
-                mousemap::Action::MoveRazorArea => razor::RazorGesture::grab(index, area, at, row),
-                mousemap::Action::ResizeRazorArea => razor::RazorGesture::edge(
+                mousemap::Action::MoveRazorArea => {
+                    editing::razor::RazorGesture::grab(index, area, at, row)
+                }
+                mousemap::Action::ResizeRazorArea => editing::razor::RazorGesture::edge(
                     index,
                     area,
-                    razor::RazorGesture::nearer_start(area, at),
+                    editing::razor::RazorGesture::nearer_start(area, at),
                     RAZOR_MIN_SECS,
                 ),
                 _ => return false,
@@ -562,7 +566,7 @@ impl Editor {
         // existence a beat wide on mousedown would be a click that
         // edits, and a razor is never that.
         self.razor_drag = Some(RazorDrag {
-            gesture: razor::RazorGesture::draw(at, row),
+            gesture: editing::razor::RazorGesture::draw(at, row),
             snap: bound.snap,
             on_click: Self::click_instead(hit, at, keys, scene),
         });
@@ -639,7 +643,7 @@ impl Editor {
     }
 
     /// The marquee let go: the items its box touches, combined with the
-    /// selection at the press by its mode (`view_gestures::combine`). A
+    /// selection at the press by its mode (`editing::gestures::combine`). A
     /// box that never went anywhere on screen is a click on empty lanes:
     /// the cursor goes there, and with Replace the selection clears.
     pub fn marquee_released(
@@ -656,14 +660,14 @@ impl Editor {
         let travel = (drag.to.0 - drag.from.0)
             .abs()
             .mul_add(view.pps, (drag.to.1 - drag.from.1).abs() * zoom_y);
-        let click = travel <= view_gestures::SLOP;
-        let span = view_gestures::Span::new(drag.from, drag.to);
+        let click = travel <= editing::gestures::SLOP;
+        let span = editing::gestures::Span::new(drag.from, drag.to);
         let hits = scene.item_boxes().iter().filter_map(|item| {
             let (top, height) = scene.item_box(item)?;
             span.touches(item.x0, item.x1, top, top + height)
                 .then(|| item.guid.clone())
         });
-        let chosen = view_gestures::combine(drag.mode, &drag.base, hits, click);
+        let chosen = editing::gestures::combine(drag.mode, &drag.base, hits, click);
         // Nothing to say when nothing changed — a click on empty lanes
         // with nothing selected is only the cursor.
         if chosen != self.selected {
@@ -715,7 +719,7 @@ impl Editor {
         let Some(drag) = self.razor_drag.take() else {
             return false;
         };
-        drag.gesture.release(&mut self.razor) != razor::Released::Nothing
+        drag.gesture.release(&mut self.razor) != editing::razor::Released::Nothing
     }
 
     /// The pointer moved to the time `at` (if it is over the timeline).
@@ -843,7 +847,7 @@ impl Editor {
         // still zero-wide means the press never became a drag, and then
         // the gesture was the click the press was also standing in for.
         if let Some(drag) = self.razor_drag.take() {
-            if drag.gesture.grab != razor::Grab::Draw || !drag.gesture.area.is_empty() {
+            if drag.gesture.grab != editing::razor::Grab::Draw || !drag.gesture.area.is_empty() {
                 self.razor_drag = Some(drag);
                 return self.razor_released();
             }
@@ -1103,7 +1107,7 @@ impl Editor {
         }
         let zoom_y = if view.zoom_y > 0.0 { view.zoom_y } else { 1.0 };
         self.zoom = Some(ZoomTool {
-            drag: view_gestures::ZoomDrag::press(at, keys.alt),
+            drag: editing::gestures::ZoomDrag::press(at, keys.alt),
             anchor_t: (x - lanes.0 + view.scroll_x) / view.pps.max(f64::EPSILON),
             anchor_y: (y - lanes.1 + view.scroll_y) / zoom_y,
             base_pps: view.pps,
@@ -5649,7 +5653,9 @@ mod comp_tests {
             !editor.comp_razors(1, &mut project, &rows, &mut effects),
             "no razor"
         );
-        editor.razor.add(razor::RazorArea::new(2.0, 3.0, 0, 0));
+        editor
+            .razor
+            .add(editing::razor::RazorArea::new(2.0, 3.0, 0, 0));
         assert!(editor.comp_razors(1, &mut project, &rows, &mut effects));
         assert!(editor.razor.is_empty(), "the razor used");
         assert!(project.items["in"].iter().any(|i| i.fixed_lane == Some(0)

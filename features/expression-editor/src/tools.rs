@@ -348,18 +348,18 @@ impl Selection {
     /// The selection `marquee` leaves, from `base` (the notes selected
     /// when it was pressed): the notes it touches, combined by its mode —
     /// replace, add or toggle — the arrangement's marquee over items too
-    /// (`view_gestures::Marquee`). A note sits on the band half a row
+    /// (`editing::gestures::Marquee`). A note sits on the band half a row
     /// either side of its row; a touch at all counts.
     pub fn marquee(
         &mut self,
         doc: &ExpressionDoc,
         camera: &Camera,
         vp: Viewport,
-        marquee: &view_gestures::Marquee,
+        marquee: &editing::gestures::Marquee,
         base: &[NoteId],
     ) {
         let ((x0, y0), (x1, y1)) = marquee.rect();
-        let span = view_gestures::Span::new(
+        let span = editing::gestures::Span::new(
             (camera.t_at(x0), camera.pitch_at(y0, vp)),
             (camera.t_at(x1), camera.pitch_at(y1, vp)),
         );
@@ -462,7 +462,7 @@ pub struct Grid {
     /// Whether — and how tightly — the division follows the zoom.
     ///
     /// **On** by default, at the middle density — see
-    /// [`adaptive_grid::Adaptive::default`]. [`Grid::division`] stays the
+    /// [`editing::grid::Adaptive::default`]. [`Grid::division`] stays the
     /// user's ceiling and the zoom only ever coarsens away from it, so a
     /// grid that follows the view can never snap finer than was asked
     /// for. [`Grid::label`] reports what is in use, not the ceiling,
@@ -471,7 +471,7 @@ pub struct Grid {
     /// `triplet` stays a separate flag precisely so this can scale the
     /// division by powers of two without ever straightening a triplet
     /// grid.
-    pub adaptive: adaptive_grid::Adaptive,
+    pub adaptive: editing::grid::Adaptive,
 }
 
 impl Default for Grid {
@@ -482,7 +482,7 @@ impl Default for Grid {
             triplet: false,
             dotted: false,
             enabled: true,
-            adaptive: adaptive_grid::Adaptive::default(),
+            adaptive: editing::grid::Adaptive::default(),
         }
     }
 }

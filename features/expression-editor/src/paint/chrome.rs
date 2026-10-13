@@ -517,8 +517,8 @@ const fn shape_short(shape: Shape) -> &'static str {
     }
 }
 
-const fn density_short(density: adaptive_grid::Density) -> &'static str {
-    use adaptive_grid::Density as D;
+const fn density_short(density: editing::grid::Density) -> &'static str {
+    use editing::grid::Density as D;
     match density {
         D::Widest => "WIDE+",
         D::Wide => "WIDE",
@@ -530,8 +530,8 @@ const fn density_short(density: adaptive_grid::Density) -> &'static str {
     }
 }
 
-const fn next_density(current: adaptive_grid::Density) -> adaptive_grid::Density {
-    use adaptive_grid::Density as D;
+const fn next_density(current: editing::grid::Density) -> editing::grid::Density {
+    use editing::grid::Density as D;
     match current {
         D::Fixed => D::Widest,
         D::Widest => D::Wide,

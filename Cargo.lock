@@ -88,10 +88,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "adaptive-grid"
-version = "0.1.0"
-
-[[package]]
 name = "addr2line"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5958,6 +5954,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "editing"
+version = "0.1.0"
+
+[[package]]
 name = "editor-crdt"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.21#01cb65d0e2c293e1e019762a235a8708d306f105"
@@ -6400,7 +6400,6 @@ dependencies = [
 name = "expression-editor"
 version = "0.1.0"
 dependencies = [
- "adaptive-grid",
  "align-dsp",
  "anyrender 0.11.1",
  "anyrender_vello_cpu",
@@ -6422,6 +6421,7 @@ dependencies = [
  "dioxus-native-dom",
  "dioxus-ssr",
  "dioxus-test",
+ "editing",
  "expression-editor",
  "eyre",
  "facet",
@@ -6441,7 +6441,6 @@ dependencies = [
  "peniko 0.6.1",
  "png 0.17.16",
  "rand 0.8.8",
- "razor",
  "realfft",
  "regex",
  "serde_json",
@@ -6452,7 +6451,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tune",
- "view-gestures",
 ]
 
 [[package]]
@@ -15427,10 +15425,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "razor"
-version = "0.1.0"
-
-[[package]]
 name = "read-fonts"
 version = "0.22.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17146,7 +17140,6 @@ dependencies = [
 name = "session-daw"
 version = "0.1.0"
 dependencies = [
- "adaptive-grid",
  "anyrender 0.11.1",
  "anyrender_vello 0.12.0",
  "anyrender_vello_cpu",
@@ -17175,6 +17168,7 @@ dependencies = [
  "dirs",
  "dsp-core",
  "dynamic-template",
+ "editing",
  "editor-crdt",
  "editor-keyflow-lang",
  "editor-state",
@@ -17206,7 +17200,6 @@ dependencies = [
  "pollster",
  "pprof",
  "rayon",
- "razor",
  "realfft",
  "reqwest 0.12.28",
  "reverb",
@@ -17226,7 +17219,6 @@ dependencies = [
  "vello 0.9.0",
  "vello_common",
  "vello_hybrid",
- "view-gestures",
  "vox",
  "vox-core",
  "wasm-bindgen",
@@ -21869,10 +21861,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "view-gestures"
-version = "0.1.0"
 
 [[package]]
 name = "void"

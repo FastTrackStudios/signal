@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/editing",
     "features/ui/plugin-core",
     "features/ui/dock",
     "features/sync",
@@ -53,8 +54,6 @@ members = [
     "vendor/dioxus-native-dom",
     "vendor/dioxus-native",
     "xtask/session-reaper",
-    "features/editing/razor",
-    "features/editing/view-gestures",
     "vendor/anyrender_vello",
     "vendor/anyrender_vello_hybrid",
     "features/rigs/fx",
@@ -105,7 +104,6 @@ members = [
     "crates/daw/standalone",
     "features/adapters/reaper/daw-audio-sync",
     "crates/daw/transport-sync",
-    "features/editing/adaptive-grid",
     "crates/daw/macros",
     "xtask/devtools",
     "features/ui/fts-chrome",
@@ -198,6 +196,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+editing = { path = "features/editing" }
 plugin-core = { path = "features/ui/plugin-core" }
 dock = { path = "features/ui/dock" }
 daw-sync = { path = "features/sync" }
@@ -241,8 +240,6 @@ tune = { path = "features/dsp/tune" }
 # Razor edit areas: a rectangle of time by row, and the set algebra over
 # it. Dependency-free and shared by the expression editor and the
 # arrangement, so the two cannot disagree about what an area is.
-razor = { path = "features/editing/razor" }
-view-gestures = { path = "features/editing/view-gestures" }
 # ── Internal — every moved crate, path declared ONCE here ─────────────
 fts-chrome = { path = "features/ui/fts-chrome" }
 # These two moved from `daw` to `processor` on the September 2026 FX
@@ -261,7 +258,6 @@ utils = { path = "crates/daw/utils" }
 # The grid that follows the zoom. Pure arithmetic and no dependencies, so
 # the arrange view and the expression editor can agree on it without
 # either depending on the other.
-adaptive-grid = { path = "features/editing/adaptive-grid" }
 neural-amp-modeler = { git = "https://github.com/FastTrackStudios/neural-amp-modeler-rs", tag = "v0.1.1" }
 # Defaults OFF at the root so lean consumers (probe-only scanners, the
 # iOS-clean session-guide) don't drag the pack engine in; each consumer

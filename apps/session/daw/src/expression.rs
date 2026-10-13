@@ -822,10 +822,10 @@ impl Expression {
         if zooming && self.spring_from.is_some() {
             self.spring_used = true;
         }
-        match view_gestures::wheel(dx, dy, zooming, mods.shift) {
-            view_gestures::Wheel::ZoomTime(by) => self.editor.zoom_time_at(rx, by),
-            view_gestures::Wheel::ZoomRows(by) => self.editor.zoom_pitch_at(ry, by),
-            view_gestures::Wheel::Scroll(sx, sy) => self.editor.pan_px(-sx, -sy),
+        match editing::gestures::wheel(dx, dy, zooming, mods.shift) {
+            editing::gestures::Wheel::ZoomTime(by) => self.editor.zoom_time_at(rx, by),
+            editing::gestures::Wheel::ZoomRows(by) => self.editor.zoom_pitch_at(ry, by),
+            editing::gestures::Wheel::Scroll(sx, sy) => self.editor.pan_px(-sx, -sy),
         }
         true
     }

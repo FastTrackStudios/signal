@@ -1,0 +1,11 @@
+[package]
+name = "editing"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Editing time by rows — the grid that follows the zoom, razor areas, and the view gestures the arrangement and the Editor share"
+
+[lints]
+workspace = true

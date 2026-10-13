@@ -663,13 +663,13 @@ pub fn StatusBar(editor: Signal<Editor>) -> Element {
     drop(ed);
 
     let density_short = match density {
-        adaptive_grid::Density::Widest => "WIDE+",
-        adaptive_grid::Density::Wide => "WIDE",
-        adaptive_grid::Density::Medium => "MED",
-        adaptive_grid::Density::Narrow => "NARR",
-        adaptive_grid::Density::Narrowest => "NARR-",
-        adaptive_grid::Density::Custom(_) => "CUST",
-        adaptive_grid::Density::Fixed => "AUTO",
+        editing::grid::Density::Widest => "WIDE+",
+        editing::grid::Density::Wide => "WIDE",
+        editing::grid::Density::Medium => "MED",
+        editing::grid::Density::Narrow => "NARR",
+        editing::grid::Density::Narrowest => "NARR-",
+        editing::grid::Density::Custom(_) => "CUST",
+        editing::grid::Density::Fixed => "AUTO",
     };
 
     rsx! {
@@ -887,8 +887,8 @@ pub fn StatusBar(editor: Signal<Editor>) -> Element {
 /// A cycle rather than a menu because there are only six states and the
 /// interesting move is "a bit more/less room", which a menu makes into
 /// two clicks and a decision.
-fn next_density(current: adaptive_grid::Density) -> adaptive_grid::Density {
-    use adaptive_grid::Density as D;
+fn next_density(current: editing::grid::Density) -> editing::grid::Density {
+    use editing::grid::Density as D;
     match current {
         D::Fixed => D::Widest,
         D::Widest => D::Wide,

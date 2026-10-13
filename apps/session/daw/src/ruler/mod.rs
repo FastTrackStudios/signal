@@ -22,8 +22,8 @@
 //! refines the way a REAPER user expects it to rather than the way this
 //! file would have invented.
 
-use adaptive_grid::Adaptive;
 use anyrender::PaintScene;
+use editing::grid::Adaptive;
 use vello::kurbo::{Affine, Rect};
 use vello::peniko::{Color, Fill};
 

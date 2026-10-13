@@ -305,7 +305,7 @@ async fn shoot_razor() {
 
     // Moving it slices the held notes at both edges and carries the
     // middle — the thing a marquee cannot do.
-    razor::move_contents(&mut ed.doc, area, demo::PPQ * 4.0, 0, false, false);
+    expression_editor::razor::move_contents(&mut ed.doc, area, demo::PPQ * 4.0, 0, false, false);
     ed.razor.clear();
     ed.razor.add(area.translated(demo::PPQ * 4.0, 0));
     shoot(ed, "18-razor-moved").await;

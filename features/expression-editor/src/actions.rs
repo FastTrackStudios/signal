@@ -644,7 +644,7 @@ pub mod takes {
 /// `view::MEMAGIC` are deliberately not handled here (see the module
 /// docs), and the caller falls through to whatever else it knows about.
 pub fn run(ed: &mut Editor, id: &str) -> bool {
-    use adaptive_grid::Density;
+    use editing::grid::Density;
 
     // ── grid ─────────────────────────────────────────────────────────
     if id == grid::MEASURE.id {

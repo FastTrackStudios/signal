@@ -4,7 +4,7 @@ use super::*;
 impl Editor {
     // ── razor operations ─────────────────────────────────────────────
     //
-    // The razor's *operations* have existed in `razor::` since it was
+    // The razor's *operations* have existed in `editing::razor::` since it was
     // written; what was missing was any way to reach them. They took a
     // single area and a document, which is the right shape for the
     // algorithm and the wrong one for a command: every caller then had
@@ -41,12 +41,12 @@ impl Editor {
     /// commonest pair (delete, then paste something else there) take two
     /// gestures to set up.
     pub fn razor_delete_contents(&mut self) -> bool {
-        self.razor_op(razor::delete_contents)
+        self.razor_op(crate::razor::delete_contents)
     }
 
     /// Mirror each area's contents in time about its own centre.
     pub fn razor_reverse(&mut self) -> bool {
-        self.razor_op(razor::reverse_contents)
+        self.razor_op(crate::razor::reverse_contents)
     }
 
     /// Split notes at the area edges and leave everything in place.
@@ -56,7 +56,7 @@ impl Editor {
     /// "this rectangle" into real note boundaries you can then work with
     /// by ordinary means.
     pub fn razor_split(&mut self) -> bool {
-        self.razor_op(|doc, area| !razor::carve(doc, area).is_empty())
+        self.razor_op(|doc, area| !crate::razor::carve(doc, area).is_empty())
     }
 
     /// Scale each area's contents in time about the area's start.
@@ -69,7 +69,7 @@ impl Editor {
             return false;
         }
         let ok = self.razor_op(|doc, area| {
-            razor::stretch_contents(doc, area, area.t0, area.t0 + area.width() * factor)
+            crate::razor::stretch_contents(doc, area, area.t0, area.t0 + area.width() * factor)
         });
         if ok {
             for a in &mut self.razor.areas {
@@ -81,12 +81,12 @@ impl Editor {
 
     /// Reverse the pitches, keeping the rhythm.
     pub fn razor_reverse_pitches(&mut self) -> bool {
-        self.razor_op(razor::reverse_pitches)
+        self.razor_op(crate::razor::reverse_pitches)
     }
 
     /// Mirror the pitches about their own centre.
     pub fn razor_invert(&mut self) -> bool {
-        self.razor_op(razor::invert_pitches)
+        self.razor_op(crate::razor::invert_pitches)
     }
 
     /// Copy the contents forward by the area's own width, and take the
@@ -105,7 +105,7 @@ impl Editor {
         let mut ok = false;
         for area in &areas {
             let width = area.width();
-            ok |= razor::move_contents(&mut self.doc, *area, width, 0, true, insert);
+            ok |= crate::razor::move_contents(&mut self.doc, *area, width, 0, true, insert);
         }
         for a in &mut self.razor.areas {
             let width = a.width();
@@ -123,7 +123,7 @@ impl Editor {
             .razor
             .areas
             .iter()
-            .flat_map(|a| razor::peek(&self.doc, *a))
+            .flat_map(|a| crate::razor::peek(&self.doc, *a))
             .collect();
         let before = self.selection.notes.len();
         self.selection.notes.retain(|id| !inside.contains(id));
@@ -150,7 +150,7 @@ impl Editor {
     /// Erase the active expression lane across the areas.
     pub fn razor_clear_lane(&mut self) -> bool {
         let dimension = self.dimension;
-        self.razor_op(move |doc, area| razor::clear_lane(doc, area, dimension))
+        self.razor_op(move |doc, area| crate::razor::clear_lane(doc, area, dimension))
     }
 
     /// Select the notes inside the areas, keeping the areas.
@@ -171,7 +171,7 @@ impl Editor {
         self.begin_gesture();
         let mut ids = Vec::new();
         for area in areas {
-            ids.extend(razor::carve(&mut self.doc, area));
+            ids.extend(crate::razor::carve(&mut self.doc, area));
         }
         ids.sort_unstable();
         ids.dedup();
@@ -190,7 +190,7 @@ impl Editor {
         self.begin_gesture();
         let mut ok = false;
         for area in &areas {
-            ok |= razor::move_contents(&mut self.doc, *area, dt, drows, false, insert);
+            ok |= crate::razor::move_contents(&mut self.doc, *area, dt, drows, false, insert);
         }
         for a in &mut self.razor.areas {
             *a = a.translated(dt, drows);

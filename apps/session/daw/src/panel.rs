@@ -138,7 +138,7 @@ pub fn zoom_about(at: f64, scroll: f64, was: f64, to: f64) -> f64 {
 /// benchmark that sweeps a drag zooms by what a hand would.
 #[must_use]
 pub fn factor(pixels: f64) -> f64 {
-    view_gestures::zoom_factor(pixels)
+    editing::gestures::zoom_factor(pixels)
 }
 
 thread_local! {
@@ -719,18 +719,18 @@ impl ArrangementPanel {
                 if input.zooming {
                     self.pointing.borrow_mut().tool_used = true;
                 }
-                // The Editor's wheel too (`view_gestures::wheel`). Either
+                // The Editor's wheel too (`editing::gestures::wheel`). Either
                 // axis of the wheel counts for a zoom: macOS turns a
                 // shifted wheel sideways, so the notch arrives in `dx`.
                 // winit's deltas are the other way round to a browser's.
-                match view_gestures::wheel(-dx, -dy, input.zooming, input.shift) {
-                    view_gestures::Wheel::ZoomTime(by) => {
+                match editing::gestures::wheel(-dx, -dy, input.zooming, input.shift) {
+                    editing::gestures::Wheel::ZoomTime(by) => {
                         self.rezoom(((zx * by).clamp(x0, x1), zy), input.pointer);
                     }
-                    view_gestures::Wheel::ZoomRows(by) => {
+                    editing::gestures::Wheel::ZoomRows(by) => {
                         self.rezoom((zx, (zy * by).clamp(y0, y1)), input.pointer);
                     }
-                    view_gestures::Wheel::Scroll(sx, sy) => {
+                    editing::gestures::Wheel::Scroll(sx, sy) => {
                         let (ex, ey) = self.extent(r, zx, zy);
                         let across = *scroll.peek();
                         scroll.set((across + sx).clamp(0.0, ex));

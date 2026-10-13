@@ -88,8 +88,8 @@ pub enum Drag {
     Marquee {
         origin: (f64, f64),
         current: (f64, f64),
-        /// Replace, add or toggle (`view_gestures::MarqueeMode`).
-        mode: view_gestures::MarqueeMode,
+        /// Replace, add or toggle (`editing::gestures::MarqueeMode`).
+        mode: editing::gestures::MarqueeMode,
         /// The notes selected at the press, which the mode combines with.
         base: Vec<NoteId>,
     },
@@ -538,7 +538,7 @@ fn resolve_razor(
     // In pixels, so the threshold means the same thing at every zoom.
     // A time threshold would be unreachable when zoomed out and
     // trivially exceeded when zoomed in.
-    if (current.0 - origin.0).abs() < view_gestures::SLOP {
+    if (current.0 - origin.0).abs() < editing::gestures::SLOP {
         return None;
     }
     let t0 = ed.camera.t_at(origin.0);
@@ -547,7 +547,7 @@ fn resolve_razor(
     let r1 = ed.camera.pitch_at(current.1, ed.viewport).round() as i32;
     // Shift is the escape from the grid, matching every other snapped
     // gesture on the surface. The geometry is the arrangement's razor
-    // too (`razor::RazorGesture`).
+    // too (`editing::razor::RazorGesture`).
     let snap = |t: f64| {
         if ed.grid.enabled && !mods.shift {
             ed.snap_time(t)
@@ -555,7 +555,7 @@ fn resolve_razor(
             t
         }
     };
-    let mut gesture = razor::RazorGesture::draw(t0, r0);
+    let mut gesture = editing::razor::RazorGesture::draw(t0, r0);
     gesture.moved(t1, r1, snap);
     let area = gesture.area;
     // Snapping can collapse a short sweep onto one grid line. That is a
@@ -909,11 +909,11 @@ fn run_action(ed: &mut Editor, action: Action, x: f64, y: f64, mods: Mods) -> Op
         Action::MarqueeSelect | Action::MarqueeAdd | Action::MarqueeToggle => {
             let base = ed.selection.notes.clone();
             let mode = match action {
-                Action::MarqueeAdd => view_gestures::MarqueeMode::Add,
-                Action::MarqueeToggle => view_gestures::MarqueeMode::Toggle,
+                Action::MarqueeAdd => editing::gestures::MarqueeMode::Add,
+                Action::MarqueeToggle => editing::gestures::MarqueeMode::Toggle,
                 _ => {
                     ed.selection.clear();
-                    view_gestures::MarqueeMode::Replace
+                    editing::gestures::MarqueeMode::Replace
                 }
             };
             Some(Drag::Marquee {
@@ -1595,10 +1595,10 @@ fn legacy_pointer_down(ed: &mut Editor, x: f64, y: f64, mods: Mods, button: u16)
             } else {
                 let base = ed.selection.notes.clone();
                 let mode = if mods.shift {
-                    view_gestures::MarqueeMode::Add
+                    editing::gestures::MarqueeMode::Add
                 } else {
                     ed.selection.clear();
-                    view_gestures::MarqueeMode::Replace
+                    editing::gestures::MarqueeMode::Replace
                 };
                 Drag::Marquee {
                     origin: (x, y),
@@ -1983,7 +1983,7 @@ pub fn pointer_move(ed: &mut Editor, drag: &mut Drag, x: f64, y: f64, mods: Mods
             base,
         } => {
             let area = *base;
-            // The arrangement's razor edge too (`razor::RazorGesture`):
+            // The arrangement's razor edge too (`editing::razor::RazorGesture`):
             // the dragged edge, never across the fixed one.
             let snap = |t: f64| {
                 if ed.grid.enabled && !mods.shift {
@@ -1992,7 +1992,7 @@ pub fn pointer_move(ed: &mut Editor, drag: &mut Drag, x: f64, y: f64, mods: Mods
                     t
                 }
             };
-            let mut gesture = razor::RazorGesture::edge(*index, area, *start_edge, 1.0);
+            let mut gesture = editing::razor::RazorGesture::edge(*index, area, *start_edge, 1.0);
             gesture.moved(ed.camera.t_at(x), area.row_lo, snap);
             let next = gesture.area;
             if *stretch {
@@ -2072,10 +2072,10 @@ pub fn pointer_move(ed: &mut Editor, drag: &mut Drag, x: f64, y: f64, mods: Mods
             current,
         } => {
             *current = (x, y);
-            // The arrangement's drag too (`view_gestures::ZoomDrag`):
+            // The arrangement's drag too (`editing::gestures::ZoomDrag`):
             // direction is the axis, right and up zoom in, Shift is the
             // fine control; a sweep moves nothing until release.
-            let drag = view_gestures::ZoomDrag {
+            let drag = editing::gestures::ZoomDrag {
                 origin: *origin,
                 current: *current,
                 sweep: *marquee,
@@ -2310,8 +2310,8 @@ pub fn pointer_up(ed: &mut Editor, drag: Drag, x: f64, y: f64, mods: Mods) -> Dr
         } => {
             // Only the Alt sweep has anything left to do: the continuous
             // drag already zoomed on the way. A sweep that never moved is
-            // a click, and frames nothing (`view_gestures::ZoomDrag`).
-            let drag = view_gestures::ZoomDrag {
+            // a click, and frames nothing (`editing::gestures::ZoomDrag`).
+            let drag = editing::gestures::ZoomDrag {
                 origin,
                 current,
                 sweep: marquee,
@@ -2333,10 +2333,10 @@ pub fn pointer_up(ed: &mut Editor, drag: Drag, x: f64, y: f64, mods: Mods) -> Dr
             mode,
             base,
         } => {
-            // The arrangement's marquee too (`view_gestures::Marquee`):
+            // The arrangement's marquee too (`editing::gestures::Marquee`):
             // what the box touches, combined with the selection at the
             // press; a click selects nothing new.
-            let marquee = view_gestures::Marquee {
+            let marquee = editing::gestures::Marquee {
                 origin,
                 current,
                 mode,
