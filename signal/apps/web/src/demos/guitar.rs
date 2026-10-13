@@ -246,6 +246,7 @@ fn eq_block() -> LiveBlock {
         }
     }
     LiveBlock {
+        module: String::new(),
         overridden: false,
         engine: 0,
         output_level_db: None,
@@ -343,6 +344,7 @@ fn demo_blocks() -> Vec<LiveBlock> {
     let mut blocks = vec![
         eq_block(),
         LiveBlock {
+            module: String::new(),
             overridden: true,
             engine: 0,
             output_level_db: None,
@@ -397,6 +399,7 @@ fn demo_blocks() -> Vec<LiveBlock> {
     ];
     blocks.extend(BOARD.iter().copied().map(
         |(id, block_type, name, preset, bypassed, param, value, min, max)| LiveBlock {
+            module: String::new(),
             overridden: false,
             engine: 0,
             output_level_db: None,

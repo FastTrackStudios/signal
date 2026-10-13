@@ -122,15 +122,15 @@ pub async fn load_demo_profile(daw: &Daw) -> Result<()> {
     }
 
     // Store profile metadata
-    profile
-        .set_ext_state("fts_signal", "profile_type", "guitar")
-        .await?;
-    profile
-        .set_ext_state("fts_signal", "profile_name", "All-Around")
-        .await?;
-    profile
-        .set_ext_state("fts_signal", "scene_count", &scene_count.to_string())
-        .await?;
+    TrackHandleCompat::set_ext_state(&profile, "fts_signal", "profile_type", "guitar").await?;
+    TrackHandleCompat::set_ext_state(&profile, "fts_signal", "profile_name", "All-Around").await?;
+    TrackHandleCompat::set_ext_state(
+        &profile,
+        "fts_signal",
+        "scene_count",
+        &scene_count.to_string(),
+    )
+    .await?;
 
     info!("[demo-profile] All-Around profile created with {scene_count} scenes");
     Ok(())

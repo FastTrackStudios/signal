@@ -202,12 +202,15 @@ pub async fn load_demo_guitar_rig(daw: &Daw) -> Result<()> {
         ]
     });
 
-    rig.set_ext_state("fts_signal", "macro_config", &macro_config.to_string())
-        .await?;
-    rig.set_ext_state("fts_signal", "rig_type", "guitar")
-        .await?;
-    rig.set_ext_state("fts_signal", "rig_name", "Guitar Rig")
-        .await?;
+    TrackHandleCompat::set_ext_state(
+        &rig,
+        "fts_signal",
+        "macro_config",
+        &macro_config.to_string(),
+    )
+    .await?;
+    TrackHandleCompat::set_ext_state(&rig, "fts_signal", "rig_type", "guitar").await?;
+    TrackHandleCompat::set_ext_state(&rig, "fts_signal", "rig_name", "Guitar Rig").await?;
 
     info!("[demo-rig] Demo guitar rig created successfully");
     Ok(())

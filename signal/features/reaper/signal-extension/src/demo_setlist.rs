@@ -175,9 +175,13 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
         .wrap_err("add Signal Controller to Guitar Rig")?;
 
     // Store song count so the controller knows how many songs exist
-    rig_folder
-        .set_ext_state("fts_signal", "scene_count", &SETLIST.len().to_string())
-        .await?;
+    TrackHandleCompat::set_ext_state(
+        &rig_folder,
+        "fts_signal",
+        "scene_count",
+        &SETLIST.len().to_string(),
+    )
+    .await?;
 
     // ── Guitar Input ──────────────────────────────────────────────────
     // Rig-level audio source. Sends are created to each section track.
@@ -231,9 +235,13 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
         }
 
         // Store section count for section switching
-        song_folder
-            .set_ext_state("fts_signal", "scene_count", &section_count.to_string())
-            .await?;
+        TrackHandleCompat::set_ext_state(
+            &song_folder,
+            "fts_signal",
+            "scene_count",
+            &section_count.to_string(),
+        )
+        .await?;
 
         // ── Build sections ────────────────────────────────────────────
         // Each section is a single track, direct child of song folder.
@@ -376,9 +384,13 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
     }
 
     // Store the Guitar Input track's GUID so the scene timer can find it
-    rig_folder
-        .set_ext_state("fts_signal", "input_track_guid", rig_input.guid())
-        .await?;
+    TrackHandleCompat::set_ext_state(
+        &rig_folder,
+        "fts_signal",
+        "input_track_guid",
+        rig_input.guid(),
+    )
+    .await?;
 
     let total_sections: usize = SETLIST.iter().map(|s| s.sections.len()).sum();
     info!(

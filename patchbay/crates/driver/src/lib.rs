@@ -26,6 +26,9 @@ pub const STORAGE_KEY_APPLIED_STATE: &str = "applied_state";
 pub const KIND_LOOPBACK: &str = "loopback";
 
 pub mod coreaudio_types;
+// The AudioServerPlugIn itself: CoreAudio, so macOS only; the state types
+// above build anywhere.
+#[cfg(target_os = "macos")]
 pub mod plugin;
 
 /// Tests touch process-global driver state; they take this lock.

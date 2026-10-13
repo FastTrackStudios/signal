@@ -262,6 +262,9 @@ eyre = { workspace = true, optional = true }
 dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The rig's store and config dir: rig_engine.rs (native, and its TONE3000
+# session on every desktop, not only macOS).
+signal-rig-host = { workspace = true }
 # The Blitz native renderer — the desktop path and the iPhone's.
 #
 # `dioxus::desktop` puts WebKit/WRY behind the same components, and a WebView

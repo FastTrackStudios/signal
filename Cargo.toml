@@ -8,13 +8,14 @@
 resolver = "3"
 
 members = [
+    # ── session ──
+    "libs/vendor/dioxus-native-dom",
+    "libs/vendor/dioxus-native",
     "apps/session-reaper-xtask",
     "libs/razor",
     "libs/view-gestures",
     "libs/vendor/anyrender_vello",
     "libs/vendor/anyrender_vello_hybrid",
-    "libs/vendor/dioxus-native-dom",
-    "libs/vendor/dioxus-native",
     "features/builtin-fx",
     "features/drum-hits",
     "features/signal-fx",
@@ -61,6 +62,239 @@ members = [
     "features/reaper/session-extension",
     "features/reaper/session-extension/xtask",
     "features/song",
+    # ── daw ──
+    "daw/crates/audiocore/audiocore-core",
+    "daw/crates/audiocore/audiocore-dsp",
+    "daw/crates/audiocore/audiocore-gui",
+    "daw/crates/audiocore/fts-modulation",
+    "daw/crates/audiocore/fts-sample",
+    "daw/crates/audiocore/fts-themes",
+    "daw/crates/audiocore/meter-dsp",
+    "daw/crates/audiocore/meter-ui",
+    "daw/crates/daw/actions",
+    "daw/crates/daw/control",
+    "daw/crates/daw/daw",
+    "daw/crates/daw/module",
+    "daw/crates/daw/proto",
+    "daw/crates/input/input",
+    "daw/crates/input/input-config-proto",
+    "daw/crates/input/input-dioxus",
+    "daw/crates/input/input-keybinds",
+    "daw/crates/keyflow/keyflow-proto",
+    "daw/crates/keyflow/keyflow-syntax",
+    "daw/crates/kontrol/kontrol",
+    "daw/crates/midicore/midicore",
+    "daw/crates/midicore/midicore-macos",
+    "daw/crates/midicore/midicore-midir",
+    "daw/crates/midicore/midicore-pipewire",
+    "daw/crates/midicore/midicore-proto",
+    "daw/crates/midicore/midicore-ui",
+    "daw/crates/midicore/midicore-wasm",
+    "daw/features/align/align-dsp",
+    "daw/features/audio/audio-controls",
+    "daw/features/audio/daw-allocator",
+    "daw/features/audio/daw-audio-graph",
+    "daw/features/audio/daw-audio-io",
+    "daw/features/audio/fts-audio-proto",
+    "daw/features/dawfile/dawfile-aaf",
+    "daw/features/dawfile/dawfile-ableton",
+    "daw/features/dawfile/dawfile-dawproject",
+    "daw/features/dawfile/dawfile-logic",
+    "daw/features/dawfile/dawfile-protools",
+    "daw/features/dawfile/dawfile-reaper",
+    "daw/features/dawfile/dawfile-standalone",
+    "daw/features/dawfile/dawfile-store",
+    "daw/features/fx/level/level-dsp",
+    "daw/features/fx/pitch/pitch-dsp",
+    "daw/features/fx/tune/tune-dsp",
+    "daw/features/launcher/fts-launcher",
+    "daw/features/reaper/daw-bridge",
+    "daw/features/reaper/daw-extension-runtime",
+    "daw/features/reaper/daw-perf-test",
+    "daw/features/reaper/daw-reaper",
+    "daw/features/reaper/daw-reaper-dioxus",
+    "daw/features/reaper/daw-reaper-embed",
+    "daw/features/reaper/daw-reaper/xtask",
+    "daw/features/reaper/fts-icons",
+    "daw/features/reaper/reaper-config",
+    "daw/features/reaper/reaper-dioxus",
+    "daw/features/reaper/reaper-embed",
+    "daw/features/reaper/reaper-hwnd",
+    "daw/features/reaper/reaper-input",
+    "daw/features/reaper/reaper-input-config",
+    "daw/features/reaper/reaper-kbd",
+    "daw/features/reaper/reaper-launcher",
+    "daw/features/standalone/daw-standalone",
+    "daw/features/surfaces/daw-csi",
+    "daw/features/sync/daw-audio-sync",
+    "daw/features/sync/daw-transport-sync",
+    "daw/features/sync/daw-link",
+    "daw/features/sync/daw-network",
+    "daw/features/sync/daw-synchronization",
+    "daw/libs/adaptive-grid",
+    "daw/libs/devtools/daw-test-macro",
+    "daw/libs/devtools/fts-devtools",
+    "daw/libs/dock/dock-dioxus",
+    "daw/libs/dock/dock-proto",
+    "daw/libs/engine-launcher",
+    "daw/libs/fts-chrome",
+    "daw/libs/installer-core",
+    "daw/libs/utils",
+    "daw/libs/vendor/dioxus-test",
+    "daw/libs/vendor/world",
+    # ── processor ──
+    "processor/apps/plugins/comp",
+    "processor/apps/plugins/delay",
+    "processor/apps/plugins/eq",
+    "processor/apps/plugins/gate",
+    "processor/apps/plugins/host",
+    "processor/apps/plugins/level",
+    "processor/apps/plugins/mic",
+    "processor/apps/plugins/limiter",
+    "processor/apps/plugins/meter",
+    "processor/apps/plugins/modulation",
+    "processor/apps/plugins/pitch",
+    "processor/apps/plugins/reverb",
+    "processor/apps/plugins/saturate",
+    "processor/apps/plugins/trigger",
+    "processor/apps/plugins/tune",
+    "processor/apps/plugins/unison",
+    "processor/apps/plugins/xtask",
+    "processor/features/fx/comp/comp",
+    "processor/features/fx/comp/comp-dsp",
+    "processor/features/fx/comp/comp-profiles",
+    "processor/features/fx/comp/comp-ui",
+    "processor/features/fx/comp/limiter-ui",
+    "processor/features/fx/delay/delay",
+    "processor/features/fx/delay/delay-dsp",
+    "processor/features/fx/delay/delay-profiles",
+    "processor/features/fx/delay/delay-ui",
+    "processor/features/fx/dsp-core",
+    "processor/features/fx/dsp-golden",
+    "processor/features/fx/eq/apps/eq-standalone",
+    "processor/features/fx/eq/eq",
+    "processor/features/fx/eq/eq-dsp",
+    "processor/features/fx/eq/eq-profiles",
+    "processor/features/fx/eq/eq-ui",
+    "processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer",
+    "processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer-dsp",
+    "processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer-ui",
+    "processor/features/fx/hit-detect/hit-detect-dsp",
+    "processor/features/fx/level/level",
+    "processor/features/fx/modulation/chorus-dsp",
+    "processor/features/fx/modulation/modulation",
+    "processor/features/fx/modulation/modulation-profiles",
+    "processor/features/fx/modulation/modulation-ui",
+    "processor/features/fx/modulation/pattern-ui",
+    "processor/features/fx/modulation/trem-dsp",
+    "processor/features/fx/modulation/wah-dsp",
+    "processor/features/fx/gate/gate",
+    "processor/features/fx/gate/gate-dsp",
+    "processor/features/fx/mic/mic-dsp",
+    "processor/features/fx/mic/mic-ui",
+    "processor/features/fx/multiband",
+    "processor/features/fx/musical-time/musical-time",
+    "processor/features/fx/musical-time/musical-time-ui",
+    "processor/features/fx/pitch/pitch",
+    "processor/features/fx/reverb/reverb",
+    "processor/features/fx/reverb/reverb-dsp",
+    "processor/features/fx/reverb/reverb-profiles",
+    "processor/features/fx/reverb/reverb-ui",
+    "processor/features/fx/stretch/stretch",
+    "processor/features/fx/stretch/stretch-dsp",
+    "processor/features/fx/saturate/saturate",
+    "processor/features/fx/saturate/saturate-dsp",
+    "processor/features/fx/saturate/saturate-profiles",
+    "processor/features/fx/saturate/saturate-ui",
+    "processor/features/fx/fx-blocks",
+    "processor/features/fx/stack",
+    "processor/features/fx/trigger/trigger",
+    "processor/features/fx/trigger/trigger-dsp",
+    "processor/features/fx/trigger/trigger-ui",
+    "processor/features/fx/tune/tune",
+    "processor/features/preset-browser/preset-browser",
+    "processor/features/preset-browser/preset-browser-ui",
+    "processor/libs/ui/fts-audio-ui",
+    "processor/libs/ui/kit-sheet",
+    "processor/libs/ui/fts-plug-ui",
+    # ── signal ──
+    "signal/apps/desktop",
+    "signal/apps/mobile",
+    "signal/libs/vendor/dioxus-core",
+    "signal/libs/vendor/winit-uikit",
+    "signal/libs/vendor/wgpu-hal",
+    "signal/apps/web",
+    "signal/apps/cli",
+    "signal/apps/fts-convert",
+    "signal/apps/plugins/guide",
+    "signal/apps/plugins/nam",
+    "signal/apps/plugins/signal",
+    "signal/crates/signal/browser",
+    "signal/crates/signal/controller",
+    "signal/crates/signal/daw-bridge",
+    "signal/crates/signal/grid",
+    "signal/crates/signal/grid-ui",
+    "signal/crates/signal/import",
+    "signal/crates/signal/live",
+    "signal/crates/signal/proto",
+    "signal/crates/signal/rig-host",
+    "signal/crates/signal/rigs-proto",
+    "signal/crates/signal/signal",
+    "signal/crates/signal/space",
+    "signal/crates/signal/space/proto",
+    "signal/crates/signal/storage",
+    "signal/crates/signal/account",
+    "signal/crates/signal/account-proto",
+    "signal/crates/signal/tone3000",
+    "signal/crates/signal/tone3000-proto",
+    "signal/crates/signal/tone3000-ui",
+    "signal/crates/signal/ui",
+    "signal/crates/signal/widgets",
+    "signal/features/analyzer/signal-analyzer",
+    "signal/features/separator/signal-separator",
+    "signal/features/fx/macromod",
+    "signal/features/nam",
+    "signal/features/plugin-host",
+    "signal/features/reaper/signal-extension",
+    "signal/features/reaper/signal-reaper-controller",
+    "signal/features/rigs/drums",
+    "signal/features/rigs/drums/proto",
+    "signal/features/rigs/drums/ui",
+    "signal/features/rigs/ekit",
+    "signal/features/rigs/ekit/proto",
+    "signal/features/rigs/ekit/ui",
+    "signal/features/rigs/guitar",
+    "signal/features/rigs/guitar/proto",
+    "signal/features/rigs/guitar/ui",
+    "signal/features/rigs/guitar/phones",
+    "signal/features/rigs/keys",
+    "signal/features/rigs/keys/proto",
+    "signal/features/rigs/keys/ui",
+    "signal/features/rigs/keys/worklet",
+    "signal/features/rigs/guitar/worklet",
+    "signal/features/rigs/orchestra",
+    "signal/features/rigs/synth",
+    "signal/features/rigs/synth/proto",
+    "signal/features/rigs/synth/rig",
+    "signal/features/rigs/synth/ui",
+    "signal/features/rigs/wurli/openwurli-dsp",
+    "signal/features/sampler/pack-library",
+    "signal/features/sampler/packs-proto",
+    "signal/features/sampler/signal-sampler",
+    "signal/features/sampler/signal-sampler-clap",
+    # ── patchbay ──
+    "patchbay/crates/patchbay",
+    "patchbay/crates/proto",
+    "patchbay/crates/ui",
+    "patchbay/crates/device",
+    "patchbay/crates/driver",
+    "patchbay/crates/adapters/antelope",
+    "patchbay/crates/adapters/yamaha",
+    "patchbay/crates/adapters/dante",
+    "patchbay/crates/host",
+    "patchbay/crates/host-coreaudio",
+    "patchbay/app",
+    "patchbay/app/web",
 ]
 
 [workspace.package]
@@ -78,15 +312,15 @@ repository = "https://github.com/FastTrackStudios/session"
 razor = { path = "libs/razor" }
 view-gestures = { path = "libs/view-gestures" }
 # ── Internal — every moved crate, path declared ONCE here ─────────────
-fts-chrome = { path = "../daw/libs/fts-chrome" }
+fts-chrome = { path = "daw/libs/fts-chrome" }
 # These two moved from `daw` to `processor` on the September 2026 FX
 # split and have diverged since — `../daw` still carries an older copy,
 # and taking that one puts two different `fts-audio-ui v0.1.0` in one
 # lockfile, which cargo refuses outright.
-fts-audio-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
-fts-plug-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
-dock-dioxus = { path = "../daw/libs/dock/dock-dioxus", default-features = false }
-dock-proto = { path = "../daw/libs/dock/dock-proto" }
+fts-audio-ui = { path = "processor/libs/ui/fts-audio-ui" }
+fts-plug-ui = { path = "processor/libs/ui/fts-plug-ui" }
+dock-dioxus = { path = "daw/libs/dock/dock-dioxus", default-features = false }
+dock-proto = { path = "daw/libs/dock/dock-proto" }
 # nice-plug lives in its own fork repo (upstream RustAudio/nice-plug's
 # baseview-03 branch + the FTS delta: nice-plug-dioxus, embedded editors,
 # rich track-info, param rescan). The ONE sanctioned exception to
@@ -94,45 +328,44 @@ dock-proto = { path = "../daw/libs/dock/dock-proto" }
 nice-plug = { git = "https://github.com/FastTrackStudios/nice-plug.git", branch = "fts-baseview-03" }
 nice-plug-dioxus = { git = "https://github.com/FastTrackStudios/nice-plug.git", branch = "fts-baseview-03" }
 nice-plug-xtask = { git = "https://github.com/FastTrackStudios/nice-plug.git", branch = "fts-baseview-03" }
-utils = { path = "../daw/libs/utils" }
+utils = { path = "daw/libs/utils" }
 # The grid that follows the zoom. Pure arithmetic and no dependencies, so
 # the arrange view and the expression editor can agree on it without
 # either depending on the other.
-adaptive-grid = { path = "../daw/libs/adaptive-grid" }
-installer-core = { path = "../daw/libs/installer-core" }
-engine-launcher = { path = "../daw/libs/engine-launcher" }
+adaptive-grid = { path = "daw/libs/adaptive-grid" }
+installer-core = { path = "daw/libs/installer-core" }
+engine-launcher = { path = "daw/libs/engine-launcher" }
 neural-amp-modeler = { git = "https://github.com/FastTrackStudios/neural-amp-modeler-rs", tag = "v0.1.0" }
-audiocore-core = { path = "../daw/crates/audiocore/audiocore-core" }
-audiocore-dsp = { path = "../daw/crates/audiocore/audiocore-dsp", default-features = false }
-audiocore-gui = { path = "../daw/crates/audiocore/audiocore-gui" }
-fts-modulation = { path = "../daw/crates/audiocore/fts-modulation" }
+audiocore-core = { path = "daw/crates/audiocore/audiocore-core" }
+audiocore-dsp = { path = "daw/crates/audiocore/audiocore-dsp", default-features = false }
+audiocore-gui = { path = "daw/crates/audiocore/audiocore-gui" }
+fts-modulation = { path = "daw/crates/audiocore/fts-modulation" }
 # Defaults OFF at the root so lean consumers (probe-only scanners, the
 # iOS-clean session-guide) don't drag the pack engine in; each consumer
 # names the features it needs ("load" / "write" / "engine").
-fts-sample = { path = "../daw/crates/audiocore/fts-sample", default-features = false }
-fts-themes = { path = "../daw/crates/audiocore/fts-themes" }
-meter-dsp = { path = "../daw/crates/audiocore/meter-dsp" }
-meter-ui = { path = "../daw/crates/audiocore/meter-ui" }
+fts-sample = { path = "daw/crates/audiocore/fts-sample", default-features = false }
+fts-themes = { path = "daw/crates/audiocore/fts-themes" }
+meter-dsp = { path = "daw/crates/audiocore/meter-dsp" }
+meter-ui = { path = "daw/crates/audiocore/meter-ui" }
 # Canonical MIDI facade. Defaults OFF at the root: daw-proto re-exports
 # `midicore::MidiEvent` and must not drag midicore's `vox` service traits
 # (nor the `midir` feature — midicore-midir pins midir 0.10/alsa-sys 0.3,
 # colliding with daw's midir 0.11/alsa-sys 0.4 via `links = "alsa"`).
 # Consumers that want the vox surface set `features = ["vox"]` themselves.
-midicore = { path = "../daw/crates/midicore/midicore", default-features = false }
-midicore-proto = { path = "../daw/crates/midicore/midicore-proto" }
-midicore-midir = { path = "../daw/crates/midicore/midicore-midir" }
-midicore-ui = { path = "../daw/crates/midicore/midicore-ui" }
+midicore = { path = "daw/crates/midicore/midicore", default-features = false }
+midicore-proto = { path = "daw/crates/midicore/midicore-proto" }
+midicore-midir = { path = "daw/crates/midicore/midicore-midir" }
+midicore-ui = { path = "daw/crates/midicore/midicore-ui" }
 # NI Komplete Kontrol keyboard driver (Light Guide / per-key RGB LEDs).
-kontrol = { path = "../daw/crates/kontrol/kontrol" }
-input-config-proto = { path = "../daw/crates/input/input-config-proto" }
+kontrol = { path = "daw/crates/kontrol/kontrol" }
+input-config-proto = { path = "daw/crates/input/input-config-proto" }
 arborium ={ version = "2.16.0", default-features = false }
 arborium-theme = "2.16.0"
 arborium-tree-sitter = "2.16.0"
 ropey = "1.6"
-input = { path = "../daw/crates/input/input" }
-input-dioxus = { path = "../daw/crates/input/input-dioxus" }
-input-keybinds = { path = "../daw/crates/input/input-keybinds" }
-
+input = { path = "daw/crates/input/input" }
+input-dioxus = { path = "daw/crates/input/input-dioxus" }
+input-keybinds = { path = "daw/crates/input/input-keybinds" }
 # ── frame themes ──────────────────────────────────────────────────────
 # The mixer (then the TCP, then the arrangement) drawn from frame
 # documents — runtime-swappable, hot-reloaded themes. See
@@ -149,58 +382,58 @@ frame-live = { path = "../../frame/crates/frame-live", features = ["anyrender-0-
 # Facade crate — the only public API surface for the daw domain.
 # daw-proto, daw-control, daw-standalone, dawfile-* are INTERNAL to the
 # domain; consumers outside it go through the `daw` facade.
-daw = { path = "../daw/crates/daw/daw" }
-daw-proto = { path = "../daw/crates/daw/proto" }
-daw-actions = { path = "../daw/crates/daw/actions" }
-daw-control = { path = "../daw/crates/daw/control" }
-daw-module = { path = "../daw/crates/daw/module" }
-fts-devtools = { path = "../daw/libs/devtools/fts-devtools" }
-daw-test-macro = { path = "../daw/libs/devtools/daw-test-macro" }
-daw-audio-graph = { path = "../daw/features/audio/daw-audio-graph" }
-daw-audio-io = { path = "../daw/features/audio/daw-audio-io" }
+daw = { path = "daw/crates/daw/daw" }
+daw-proto = { path = "daw/crates/daw/proto" }
+daw-actions = { path = "daw/crates/daw/actions" }
+daw-control = { path = "daw/crates/daw/control" }
+daw-module = { path = "daw/crates/daw/module" }
+fts-devtools = { path = "daw/libs/devtools/fts-devtools" }
+daw-test-macro = { path = "daw/libs/devtools/daw-test-macro" }
+daw-audio-graph = { path = "daw/features/audio/daw-audio-graph" }
+daw-audio-io = { path = "daw/features/audio/daw-audio-io" }
 # RT-aware allocator — offloads RT deallocation to background thread
-daw-allocator = { path = "../daw/features/audio/daw-allocator" }
-fts-audio-proto = { path = "../daw/features/audio/fts-audio-proto" }
-audio-controls = { path = "../daw/features/audio/audio-controls" }
-daw-synchronization = { path = "../daw/features/sync/daw-synchronization" }
-daw-link = { path = "../daw/features/sync/daw-link" }
-daw-network = { path = "../daw/features/sync/daw-network" }
-daw-audio-sync = { path = "../daw/features/sync/daw-audio-sync" }
-daw-transport-sync = { path = "../daw/features/sync/daw-transport-sync" }
-dawfile-aaf = { path = "../daw/features/dawfile/dawfile-aaf" }
-dawfile-ableton = { path = "../daw/features/dawfile/dawfile-ableton" }
-dawfile-dawproject = { path = "../daw/features/dawfile/dawfile-dawproject" }
-dawfile-logic = { path = "../daw/features/dawfile/dawfile-logic" }
-dawfile-protools = { path = "../daw/features/dawfile/dawfile-protools" }
-dawfile-reaper = { path = "../daw/features/dawfile/dawfile-reaper" }
-dawfile-standalone = { path = "../daw/features/dawfile/dawfile-standalone" }
-dawfile-store = { path = "../daw/features/dawfile/dawfile-store" }
+daw-allocator = { path = "daw/features/audio/daw-allocator" }
+fts-audio-proto = { path = "daw/features/audio/fts-audio-proto" }
+audio-controls = { path = "daw/features/audio/audio-controls" }
+daw-synchronization = { path = "daw/features/sync/daw-synchronization" }
+daw-link = { path = "daw/features/sync/daw-link" }
+daw-network = { path = "daw/features/sync/daw-network" }
+daw-audio-sync = { path = "daw/features/sync/daw-audio-sync" }
+daw-transport-sync = { path = "daw/features/sync/daw-transport-sync" }
+dawfile-aaf = { path = "daw/features/dawfile/dawfile-aaf" }
+dawfile-ableton = { path = "daw/features/dawfile/dawfile-ableton" }
+dawfile-dawproject = { path = "daw/features/dawfile/dawfile-dawproject" }
+dawfile-logic = { path = "daw/features/dawfile/dawfile-logic" }
+dawfile-protools = { path = "daw/features/dawfile/dawfile-protools" }
+dawfile-reaper = { path = "daw/features/dawfile/dawfile-reaper" }
+dawfile-standalone = { path = "daw/features/dawfile/dawfile-standalone" }
+dawfile-store = { path = "daw/features/dawfile/dawfile-store" }
 # default = all-formats; the daw facade opts into formats individually,
 # so the root entry keeps defaults OFF and consumers that want every
 # importer set `default-features = true`.
-daw-reaper = { path = "../daw/features/reaper/daw-reaper", default-features = false }
-daw-bridge = { path = "../daw/features/reaper/daw-bridge" }
+daw-reaper = { path = "daw/features/reaper/daw-reaper", default-features = false }
+daw-bridge = { path = "daw/features/reaper/daw-bridge" }
 # Extension runtime — integrated REAPER extension helpers
-daw-extension-runtime = { path = "../daw/features/reaper/daw-extension-runtime" }
-daw-reaper-dioxus = { path = "../daw/features/reaper/daw-reaper-dioxus" }
+daw-extension-runtime = { path = "daw/features/reaper/daw-extension-runtime" }
+daw-reaper-dioxus = { path = "daw/features/reaper/daw-reaper-dioxus" }
 daw-reaper-dioxus-ext = { path = "features/ui/daw-reaper-dioxus-ext" }
-daw-reaper-embed = { path = "../daw/features/reaper/daw-reaper-embed" }
-reaper-launcher = { path = "../daw/features/reaper/reaper-launcher" }
-fts-icons = { path = "../daw/features/reaper/fts-icons" }
+daw-reaper-embed = { path = "daw/features/reaper/daw-reaper-embed" }
+reaper-launcher = { path = "daw/features/reaper/reaper-launcher" }
+fts-icons = { path = "daw/features/reaper/fts-icons" }
 fts-themer = { path = "features/ui/fts-themer", default-features = false }
 fts-themer-ui = { path = "features/ui/fts-themer-ui" }
-reaper-config = { path = "../daw/features/reaper/reaper-config" }
-reaper-kbd = { path = "../daw/features/reaper/reaper-kbd" }
-reaper-hwnd = { path = "../daw/features/reaper/reaper-hwnd" }
-reaper-embed = { path = "../daw/features/reaper/reaper-embed" }
-reaper-dioxus = { path = "../daw/features/reaper/reaper-dioxus" }
+reaper-config = { path = "daw/features/reaper/reaper-config" }
+reaper-kbd = { path = "daw/features/reaper/reaper-kbd" }
+reaper-hwnd = { path = "daw/features/reaper/reaper-hwnd" }
+reaper-embed = { path = "daw/features/reaper/reaper-embed" }
+reaper-dioxus = { path = "daw/features/reaper/reaper-dioxus" }
 # default-features = false: `overlay-prewarm` allocates wgpu/Vello surfaces
 # eagerly, which OOMs when loaded at REAPER plugin_main time. The only
 # consumer (fts-extensions) wants it off; enable per-member if needed.
-reaper-input = { path = "../daw/features/reaper/reaper-input", default-features = false }
-fts-launcher = { path = "../daw/features/launcher/fts-launcher" }
-daw-standalone = { path = "../daw/features/standalone/daw-standalone" }
-daw-csi = { path = "../daw/features/surfaces/daw-csi" }
+reaper-input = { path = "daw/features/reaper/reaper-input", default-features = false }
+fts-launcher = { path = "daw/features/launcher/fts-launcher" }
+daw-standalone = { path = "daw/features/standalone/daw-standalone" }
+daw-csi = { path = "daw/features/surfaces/daw-csi" }
 daw-ui = { path = "features/ui/daw-ui", default-features = false }
 daw-theme = { path = "features/ui/daw-theme" }
 daw-theme-art = { path = "features/ui/daw-theme-art", default-features = false }
@@ -275,11 +508,10 @@ engraver-score = { git = "https://github.com/FastTrackStudios/keyflow", tag = "v
 # is wasm-portable; the vello/nice-plug editor is behind its `native` feature.
 # The comp plugin editor. Core (profile view data model) is portable; the
 # nice-plug/Blitz editor is behind its `native` feature.
-pitch-dsp = { path = "../daw/features/fx/pitch/pitch-dsp" }
-world-sys = { path = "../daw/libs/vendor/world" }
-tune-dsp = { path = "../daw/features/fx/tune/tune-dsp" }
-align-dsp = { path = "../daw/features/align/align-dsp" }
-
+pitch-dsp = { path = "daw/features/fx/pitch/pitch-dsp" }
+world-sys = { path = "daw/libs/vendor/world" }
+tune-dsp = { path = "daw/features/fx/tune/tune-dsp" }
+align-dsp = { path = "daw/features/align/align-dsp" }
 # ── The built-in FX, from the processor repo ──────────────────────────
 # The mixer's Tone rack draws a real EQ, compressor and saturator, and
 # it draws them from the SAME functions the plugins' own editors do:
@@ -291,54 +523,53 @@ align-dsp = { path = "../daw/features/align/align-dsp" }
 # Core only — `default-features = false` drops the nice-plug/Blitz
 # editors, which is what keeps this to response math rather than a
 # second plugin host inside the mixer.
-comp-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-eq-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-saturate-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
+comp-ui = { path = "processor/features/fx/comp/comp-ui", default-features = false }
+eq-ui = { path = "processor/features/fx/eq/eq-ui", default-features = false }
+saturate-dsp = { path = "processor/features/fx/saturate/saturate-dsp", default-features = false }
 # The Depth units draw the plugins' own machines: the delay's style
 # family decides how a repeat is drawn, and the reverb's envelope is
 # the algorithm's actual impulse response, rendered by `reverb-dsp`'s
 # analysis probe rather than an exponential drawn from the decay knob.
-delay-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
-reverb-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
-reverb-profiles = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
-delay-profiles = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
+delay-dsp = { path = "processor/features/fx/delay/delay-dsp" }
+reverb-dsp = { path = "processor/features/fx/reverb/reverb-dsp" }
+reverb-profiles = { path = "processor/features/fx/reverb/reverb-profiles" }
+delay-profiles = { path = "processor/features/fx/delay/delay-profiles" }
 # The effects' own painted pictures — every reverb family, every delay
 # family, and the six modulation engines — which the FX view's devices
 # draw (`paint_reverb`, `paint_delay`, `paint_mod`, behind `viz`).
-reverb-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false, features = ["viz"] }
-delay-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false, features = ["viz"] }
-modulation-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false, features = ["viz"] }
-saturate-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false, features = ["viz"] }
+reverb-ui = { path = "processor/features/fx/reverb/reverb-ui", default-features = false, features = ["viz"] }
+delay-ui = { path = "processor/features/fx/delay/delay-ui", default-features = false, features = ["viz"] }
+modulation-ui = { path = "processor/features/fx/modulation/modulation-ui", default-features = false, features = ["viz"] }
+saturate-ui = { path = "processor/features/fx/saturate/saturate-ui", default-features = false, features = ["viz"] }
 # The saturator's five circuits and their profiles — what its selector
 # picks from, applied through the plugin's own `apply`.
-saturate-profiles = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
+saturate-profiles = { path = "processor/features/fx/saturate/saturate-profiles" }
 # The FTS plugins themselves, run in-process as the engine's built-in FX
 # (`builtin-fx`): their CLAP/VST3 exports off (`default-features`).
-comp-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-delay-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-eq-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-gate-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-level-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-limiter-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-meter-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-modulation-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-reverb-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-saturate-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-pitch-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-tune-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-unison-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
-mic-plugin = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1", default-features = false }
+comp-plugin = { path = "processor/apps/plugins/comp", default-features = false }
+delay-plugin = { path = "processor/apps/plugins/delay", default-features = false }
+eq-plugin = { path = "processor/apps/plugins/eq", default-features = false }
+gate-plugin = { path = "processor/apps/plugins/gate", default-features = false }
+level-plugin = { path = "processor/apps/plugins/level", default-features = false }
+limiter-plugin = { path = "processor/apps/plugins/limiter", default-features = false }
+meter-plugin = { path = "processor/apps/plugins/meter", default-features = false }
+modulation-plugin = { path = "processor/apps/plugins/modulation", default-features = false }
+reverb-plugin = { path = "processor/apps/plugins/reverb", default-features = false }
+saturate-plugin = { path = "processor/apps/plugins/saturate", default-features = false }
+pitch-plugin = { path = "processor/apps/plugins/pitch", default-features = false }
+tune-plugin = { path = "processor/apps/plugins/tune", default-features = false }
+unison-plugin = { path = "processor/apps/plugins/unison", default-features = false }
+mic-plugin = { path = "processor/apps/plugins/mic", default-features = false }
 builtin-fx = { path = "features/builtin-fx" }
 # signal's rigs in the session engine: the bass rig, the kit's voices.
 signal-fx = { path = "features/signal-fx" }
 # signal's in-process rig engine (NAM, convolver, the sampler), from the
 # sibling checkout as daw is: both resolve daw to ../daw, so its
 # processors are the session engine's `PluginInstance`s.
-signal-sampler = { path = "../signal/features/sampler/signal-sampler" }
+signal-sampler = { path = "signal/features/sampler/signal-sampler" }
 # signal's rig library — its profiles, scenes and how a profile becomes the
 # chains a scene plays (the bass rig's profile mode, signal-fx).
-signal-guitar = { path = "../signal/features/rigs/guitar" }
-
+signal-guitar = { path = "signal/features/rigs/guitar" }
 expression-editor-audio = { path = "features/expression-editor/expression-editor-audio" }
 expression-editor-core = { path = "features/expression-editor/expression-editor-core" }
 expression-editor-corpus = { path = "features/expression-editor/expression-editor-corpus" }
@@ -351,7 +582,7 @@ expression-editor-standalone = { path = "features/expression-editor/expression-e
 expression-editor-tools = { path = "features/expression-editor/expression-editor-tools" }
 expression-editor-paint = { path = "features/expression-editor/expression-editor-paint" }
 expression-editor-ui = { path = "features/expression-editor/expression-editor-ui" }
-level-dsp = { path = "../daw/features/fx/level/level-dsp" }
+level-dsp = { path = "daw/features/fx/level/level-dsp" }
 # Internal DSP cores (behind the facades).
 
 # ── Facet reflection + vox RPC — the rc.5 fleet pins ──────────────────
@@ -556,7 +787,7 @@ dioxus-native-dom = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a
 dioxus-mcp-probe = { git = "https://github.com/tonybierman/dioxus-mcp" }
 # Vendored DioxusLabs/dioxus-test on the pins above — headless component
 # tests on blitz-dom (no browser). See libs/vendor/dioxus-test.
-dioxus-test = { path = "../daw/libs/vendor/dioxus-test" }
+dioxus-test = { path = "daw/libs/vendor/dioxus-test" }
 dioxus-devtools = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc" }
 # FTS fork branches carrying the dioxus-0.8 bumps until upstream moves.
 lumen-blocks = { git = "https://github.com/FastTrackStudios/lumen-blocks", branch = "main" }
@@ -581,8 +812,8 @@ swell-ui = { git = "https://codeberg.org/FastTrackStudios/reaper-lib.git", branc
 
 # ── Plugin frameworks / hosting (daw) ─────────────────────────────────
 nih_plug = { git = "https://codeberg.org/FastTrackStudios/nih-plug.git", branch = "reaper-embed-ui" }
-clack-host = { git = "https://github.com/prokopyl/clack" }
-clack-extensions = { git = "https://github.com/prokopyl/clack", features = [
+clack-host = { git = "https://github.com/prokopyl/clack", rev = "f874e858ad576c601367b3038af5088a4e671744" }
+clack-extensions = { git = "https://github.com/prokopyl/clack", rev = "f874e858ad576c601367b3038af5088a4e671744", features = [
     "clack-host",
     # Bridge host windows (winit 0.30) into CLAP embedded GUIs (fts-clap-host).
     "raw-window-handle_06",
@@ -840,6 +1071,124 @@ vox-codegen = "0.10.0-rc.5"
 # vendored in architect as architect-launcher-*, and fts-ui is
 # architect-ui. Nothing resolves a crate named `fts-ui` any more.
 
+# ── from daw's workspace (joined into studio) ──
+midicore-macos = { path = "daw/crates/midicore/midicore-macos" }
+midicore-pipewire = { path = "daw/crates/midicore/midicore-pipewire" }
+midicore-wasm = { path = "daw/crates/midicore/midicore-wasm" }
+
+# ── from processor's workspace (joined into studio) ──
+tone3000 = "0.1"
+signal-nam = { path = "signal/features/nam" }
+saturate = { path = "processor/features/fx/saturate/saturate" }
+dsp-golden = { path = "processor/features/fx/dsp-golden" }
+dsp-core = { path = "processor/features/fx/dsp-core" }
+trigger = { path = "processor/features/fx/trigger/trigger" }
+trigger-dsp = { path = "processor/features/fx/trigger/trigger-dsp" }
+hit-detect-dsp = { path = "processor/features/fx/hit-detect/hit-detect-dsp" }
+trigger-ui = { path = "processor/features/fx/trigger/trigger-ui", default-features = false }
+eq = { path = "processor/features/fx/eq/eq" }
+eq-profiles = { path = "processor/features/fx/eq/eq-profiles" }
+spectrum-analyzer = { path = "processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer" }
+spectrum-analyzer-dsp = { path = "processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer-dsp" }
+spectrum-analyzer-ui = { path = "processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer-ui" }
+comp = { path = "processor/features/fx/comp/comp" }
+limiter-ui = { path = "processor/features/fx/comp/limiter-ui" }
+reverb = { path = "processor/features/fx/reverb/reverb" }
+delay = { path = "processor/features/fx/delay/delay" }
+pitch = { path = "processor/features/fx/pitch/pitch" }
+tune = { path = "processor/features/fx/tune/tune" }
+level = { path = "processor/features/fx/level/level" }
+modulation = { path = "processor/features/fx/modulation/modulation" }
+eq-dsp = { path = "processor/features/fx/eq/eq-dsp" }
+comp-dsp = { path = "processor/features/fx/comp/comp-dsp" }
+gate = { path = "processor/features/fx/gate/gate" }
+gate-dsp = { path = "processor/features/fx/gate/gate-dsp" }
+mic-dsp = { path = "processor/features/fx/mic/mic-dsp" }
+mic-ui = { path = "processor/features/fx/mic/mic-ui" }
+stretch = { path = "processor/features/fx/stretch/stretch" }
+stretch-dsp = { path = "processor/features/fx/stretch/stretch-dsp" }
+chorus-dsp = { path = "processor/features/fx/modulation/chorus-dsp" }
+modulation-profiles = { path = "processor/features/fx/modulation/modulation-profiles" }
+multiband-dsp = { path = "processor/features/fx/multiband" }
+fx-stack = { path = "processor/features/fx/stack" }
+musical-time = { path = "processor/features/fx/musical-time/musical-time" }
+musical-time-ui = { path = "processor/features/fx/musical-time/musical-time-ui" }
+pattern-ui = { path = "processor/features/fx/modulation/pattern-ui" }
+trem-dsp = { path = "processor/features/fx/modulation/trem-dsp" }
+wah-dsp = { path = "processor/features/fx/modulation/wah-dsp" }
+preset-browser = { path = "processor/features/preset-browser/preset-browser" }
+preset-browser-ui = { path = "processor/features/preset-browser/preset-browser-ui" }
+fx-blocks = { path = "processor/features/fx/fx-blocks" }
+web-time = "1"
+
+# ── from signal's workspace (joined into studio) ──
+signal-account = { path = "signal/crates/signal/account" }
+signal-tone3000 = { path = "signal/crates/signal/tone3000" }
+signal-account-proto = { path = "signal/crates/signal/account-proto" }
+signal-tone3000-proto = { path = "signal/crates/signal/tone3000-proto" }
+signal-tone3000-ui = { path = "signal/crates/signal/tone3000-ui" }
+signal = { path = "signal/crates/signal/signal" }
+signal-proto = { path = "signal/crates/signal/proto" }
+signal-ui = { path = "signal/crates/signal/ui", default-features = false }
+signal-browser = { path = "signal/crates/signal/browser", default-features = false }
+signal-space = { path = "signal/crates/signal/space" }
+signal-space-proto = { path = "signal/crates/signal/space/proto" }
+signal-ekit = { path = "signal/features/rigs/ekit" }
+signal-ekit-proto = { path = "signal/features/rigs/ekit/proto" }
+signal-ekit-ui = { path = "signal/features/rigs/ekit/ui" }
+signal-grid = { path = "signal/crates/signal/grid" }
+signal-grid-ui = { path = "signal/crates/signal/grid-ui" }
+signal-controller = { path = "signal/crates/signal/controller" }
+signal-live = { path = "signal/crates/signal/live" }
+signal-storage = { path = "signal/crates/signal/storage" }
+signal-import = { path = "signal/crates/signal/import" }
+fts-convert = { path = "signal/apps/fts-convert" }
+signal-web = { path = "signal/apps/web" }
+signal-daw-bridge = { path = "signal/crates/signal/daw-bridge" }
+signal-rig-host = { path = "signal/crates/signal/rig-host" }
+signal-rigs-proto = { path = "signal/crates/signal/rigs-proto" }
+signal-widgets = { path = "signal/crates/signal/widgets" }
+signal-extension = { path = "signal/features/reaper/signal-extension" }
+signal-macromod = { path = "signal/features/fx/macromod" }
+signal-plugin-host = { path = "signal/features/plugin-host", default-features = false }
+signal-packs-proto = { path = "signal/features/sampler/packs-proto" }
+signal-pack-library = { path = "signal/features/sampler/pack-library" }
+signal-guitar-proto = { path = "signal/features/rigs/guitar/proto" }
+signal-guitar-ui = { path = "signal/features/rigs/guitar/ui" }
+signal-phones = { path = "signal/features/rigs/guitar/phones" }
+signal-keys = { path = "signal/features/rigs/keys" }
+signal-keys-proto = { path = "signal/features/rigs/keys/proto" }
+signal-keys-ui = { path = "signal/features/rigs/keys/ui" }
+signal-keys-worklet = { path = "signal/features/rigs/keys/worklet" }
+signal-guitar-worklet = { path = "signal/features/rigs/guitar/worklet" }
+openwurli-dsp = { path = "signal/features/rigs/wurli/openwurli-dsp" }
+signal-orchestra = { path = "signal/features/rigs/orchestra" }
+signal-drums = { path = "signal/features/rigs/drums" }
+signal-drums-proto = { path = "signal/features/rigs/drums/proto" }
+signal-drums-ui = { path = "signal/features/rigs/drums/ui" }
+signal-synth = { path = "signal/features/rigs/synth" }
+signal-synth-proto = { path = "signal/features/rigs/synth/proto" }
+signal-synth-ui = { path = "signal/features/rigs/synth/ui" }
+signal-synth-rig = { path = "signal/features/rigs/synth/rig" }
+signal-analyzer = { path = "signal/features/analyzer/signal-analyzer" }
+signal-separator = { path = "signal/features/separator/signal-separator" }
+
+# ── from patchbay's workspace (joined into studio) ──
+patchbay = { path = "patchbay/crates/patchbay" }
+patchbay-proto = { path = "patchbay/crates/proto" }
+patchbay-ui = { path = "patchbay/crates/ui" }
+patchbay-device = { path = "patchbay/crates/device" }
+patchbay-antelope = { path = "patchbay/crates/adapters/antelope" }
+patchbay-yamaha = { path = "patchbay/crates/adapters/yamaha" }
+patchbay-dante = { path = "patchbay/crates/adapters/dante" }
+patchbay-host = { path = "patchbay/crates/host" }
+patchbay-host-coreaudio = { path = "patchbay/crates/host-coreaudio" }
+socket2 = { version = "0.6", features = ["all"] }
+
+# ── joined into studio ──
+raw-window-metal = { path = "processor/vendor/raw-window-metal" }  # from processor
+winit-uikit = { path = "signal/libs/vendor/winit-uikit" }  # from signal
+wgpu-hal = { path = "signal/libs/vendor/wgpu-hal" }  # from signal
 
 [patch.crates-io]
 # Vendored one-line fix: parse_schema_bytes rejected every real schema
@@ -873,7 +1222,7 @@ vox-phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.3.0" 
 # an offline (vendored, nix) build a source holds only what the lockfile
 # took from it — the sibling patch below took baseview elsewhere, so the
 # tag's copy was never vendored and the patch could not resolve.
-baseview = { path = "../processor/vendor/baseview" }
+baseview = { path = "processor/vendor/baseview" }
 # pipewire-rs one commit past its v0.10.0 release. PipeWire 1.6 rewrote
 # constants like SPA_ID_INVALID from a bare `0xffffffff` into a cast form,
 # `((uint32_t)0xffffffff)`, which bindgen's own macro evaluator cannot fold —
@@ -1230,174 +1579,158 @@ opt-level = 3
 opt-level = 3
 
 # Preserve audio sources on newly split items until the upstream exporter is fixed.
-[patch."https://github.com/FastTrackStudios/daw"]
-# And signal's, from daw (signal-fx).
-midicore-pipewire = { path = "../daw/crates/midicore/midicore-pipewire" }
-# The daw repository is developed as a SIBLING CHECKOUT, not consumed
-# by tag. Edit `../daw` directly and push upstream when a change is
-# worth landing; nothing here needs a tag bump to try something.
-#
-# The path is relative to this repo, so it holds for anyone who checks
-# the two out side by side — which is the convention this expects.
-# The root CLAUDE.md warns against committing path overrides because
-# they are usually machine-specific absolute paths; a sibling is not,
-# and this one is deliberate rather than a leftover from debugging.
-#
-# `[workspace.dependencies]` names these same paths directly; this block
-# is for the daw crates other repos' crates (keyflow, processor) ask for
-# by git. It used to be the only route — the entries there named a daw
-# tag — but cargo opens a git source even when every crate taken from it
-# is patched away, and the offline (vendored, nix) build cannot open one
-# its lockfile never pinned: every deploy stopped at the daw tag.
-adaptive-grid = { path = "../daw/libs/adaptive-grid" }
-align-dsp = { path = "../daw/features/align/align-dsp" }
-audio-controls = { path = "../daw/features/audio/audio-controls" }
-audiocore-core = { path = "../daw/crates/audiocore/audiocore-core" }
-audiocore-dsp = { path = "../daw/crates/audiocore/audiocore-dsp" }
-audiocore-gui = { path = "../daw/crates/audiocore/audiocore-gui" }
-daw = { path = "../daw/crates/daw/daw" }
-# These two were un-forked into the sibling but never added here, so a
-# tag-version copy stayed in the graph alongside the patched one — and
-# compiled against the PATCHED `daw-proto`, whose `Track` has gained
-# `height` and `width` since. `cargo check -p session-daw` passed
-# throughout because it reaches them through the patched `daw`; only a
-# workspace-wide check sees the other copy.
-daw-standalone = { path = "../daw/features/standalone/daw-standalone" }
-dawfile-standalone = { path = "../daw/features/dawfile/dawfile-standalone" }
-daw-actions = { path = "../daw/crates/daw/actions" }
-daw-allocator = { path = "../daw/features/audio/daw-allocator" }
-daw-audio-graph = { path = "../daw/features/audio/daw-audio-graph" }
-daw-audio-io = { path = "../daw/features/audio/daw-audio-io" }
-daw-audio-sync = { path = "../daw/features/sync/daw-audio-sync" }
-daw-transport-sync = { path = "../daw/features/sync/daw-transport-sync" }
-daw-bridge = { path = "../daw/features/reaper/daw-bridge" }
-daw-control = { path = "../daw/crates/daw/control" }
-daw-csi = { path = "../daw/features/surfaces/daw-csi" }
-daw-extension-runtime = { path = "../daw/features/reaper/daw-extension-runtime" }
-daw-link = { path = "../daw/features/sync/daw-link" }
-daw-module = { path = "../daw/crates/daw/module" }
-daw-network = { path = "../daw/features/sync/daw-network" }
-daw-proto = { path = "../daw/crates/daw/proto" }
-daw-reaper = { path = "../daw/features/reaper/daw-reaper" }
-daw-reaper-dioxus = { path = "../daw/features/reaper/daw-reaper-dioxus" }
-daw-reaper-embed = { path = "../daw/features/reaper/daw-reaper-embed" }
-daw-synchronization = { path = "../daw/features/sync/daw-synchronization" }
-daw-test-macro = { path = "../daw/libs/devtools/daw-test-macro" }
-dawfile-aaf = { path = "../daw/features/dawfile/dawfile-aaf" }
-dawfile-ableton = { path = "../daw/features/dawfile/dawfile-ableton" }
-dawfile-dawproject = { path = "../daw/features/dawfile/dawfile-dawproject" }
-dawfile-logic = { path = "../daw/features/dawfile/dawfile-logic" }
-dawfile-protools = { path = "../daw/features/dawfile/dawfile-protools" }
-dawfile-reaper = { path = "../daw/features/dawfile/dawfile-reaper" }
-dioxus-test = { path = "../daw/libs/vendor/dioxus-test" }
-dock-dioxus = { path = "../daw/libs/dock/dock-dioxus" }
-dock-proto = { path = "../daw/libs/dock/dock-proto" }
-engine-launcher = { path = "../daw/libs/engine-launcher" }
-fts-audio-proto = { path = "../daw/features/audio/fts-audio-proto" }
-fts-chrome = { path = "../daw/libs/fts-chrome" }
-fts-devtools = { path = "../daw/libs/devtools/fts-devtools" }
-fts-icons = { path = "../daw/features/reaper/fts-icons" }
-fts-launcher = { path = "../daw/features/launcher/fts-launcher" }
-fts-modulation = { path = "../daw/crates/audiocore/fts-modulation" }
-fts-sample = { path = "../daw/crates/audiocore/fts-sample" }
-fts-themes = { path = "../daw/crates/audiocore/fts-themes" }
-input = { path = "../daw/crates/input/input" }
-input-config-proto = { path = "../daw/crates/input/input-config-proto" }
-input-dioxus = { path = "../daw/crates/input/input-dioxus" }
-input-keybinds = { path = "../daw/crates/input/input-keybinds" }
-installer-core = { path = "../daw/libs/installer-core" }
-# keyflow-proto and keyflow-syntax moved into the keyflow repo (its
-# features/proto and features/syntax); daw keeps a copy for the crates
-# below it. Both sources point at keyflow's, so there is ONE keyflow-proto
-# in the graph — two would be two incompatible `Chart` types.
-keyflow-proto = { git = "https://github.com/FastTrackStudios/keyflow", tag = "v0.2.4" }
-keyflow-syntax = { git = "https://github.com/FastTrackStudios/keyflow", tag = "v0.2.4" }
-kontrol = { path = "../daw/crates/kontrol/kontrol" }
-level-dsp = { path = "../daw/features/fx/level/level-dsp" }
-meter-dsp = { path = "../daw/crates/audiocore/meter-dsp" }
-meter-ui = { path = "../daw/crates/audiocore/meter-ui" }
-midicore = { path = "../daw/crates/midicore/midicore" }
-midicore-midir = { path = "../daw/crates/midicore/midicore-midir" }
-midicore-proto = { path = "../daw/crates/midicore/midicore-proto" }
-midicore-ui = { path = "../daw/crates/midicore/midicore-ui" }
-pitch-dsp = { path = "../daw/features/fx/pitch/pitch-dsp" }
-reaper-config = { path = "../daw/features/reaper/reaper-config" }
-reaper-dioxus = { path = "../daw/features/reaper/reaper-dioxus" }
-reaper-embed = { path = "../daw/features/reaper/reaper-embed" }
-reaper-hwnd = { path = "../daw/features/reaper/reaper-hwnd" }
-reaper-input = { path = "../daw/features/reaper/reaper-input" }
-reaper-kbd = { path = "../daw/features/reaper/reaper-kbd" }
-reaper-launcher = { path = "../daw/features/reaper/reaper-launcher" }
-tune-dsp = { path = "../daw/features/fx/tune/tune-dsp" }
-utils = { path = "../daw/libs/utils" }
-world-sys = { path = "../daw/libs/vendor/world" }
 
 [patch."https://github.com/FastTrackStudios/neural-amp-modeler-rs"]
 # signal's NAM, from its sibling checkout as signal builds it (signal-fx).
 neural-amp-modeler = { path = "../neural-amp-modeler-rs" }
 
-[patch."https://github.com/FastTrackStudios/processor"]
-# What signal's rigs build against, from the same checkout as the rest (signal-fx).
-chorus-dsp = { path = "../processor/features/fx/modulation/chorus-dsp" }
-comp = { path = "../processor/features/fx/comp/comp" }
-delay = { path = "../processor/features/fx/delay/delay" }
-delay-profiles = { path = "../processor/features/fx/delay/delay-profiles" }
-eq = { path = "../processor/features/fx/eq/eq" }
-eq-dsp = { path = "../processor/features/fx/eq/eq-dsp" }
-fx-blocks = { path = "../processor/features/fx/fx-blocks" }
-modulation = { path = "../processor/features/fx/modulation/modulation" }
-modulation-profiles = { path = "../processor/features/fx/modulation/modulation-profiles" }
-musical-time = { path = "../processor/features/fx/musical-time/musical-time" }
-musical-time-ui = { path = "../processor/features/fx/musical-time/musical-time-ui" }
-pattern-ui = { path = "../processor/features/fx/modulation/pattern-ui" }
-reverb = { path = "../processor/features/fx/reverb/reverb" }
-reverb-profiles = { path = "../processor/features/fx/reverb/reverb-profiles" }
-spectrum-analyzer-ui = { path = "../processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer-ui" }
-trem-dsp = { path = "../processor/features/fx/modulation/trem-dsp" }
-tune = { path = "../processor/features/fx/tune/tune" }
-wah-dsp = { path = "../processor/features/fx/modulation/wah-dsp" }
-# baseview lives in the processor repo's own `vendor/`, which is why it
-# is patched from here rather than from a fork's URL — see the
-# `[workspace.dependencies]` entry.
-baseview = { path = "../processor/vendor/baseview" }
-comp-dsp = { path = "../processor/features/fx/comp/comp-dsp" }
-comp-profiles = { path = "../processor/features/fx/comp/comp-profiles" }
-comp-ui = { path = "../processor/features/fx/comp/comp-ui" }
-dsp-core = { path = "../processor/features/fx/dsp-core" }
-eq-profiles = { path = "../processor/features/fx/eq/eq-profiles" }
-eq-ui = { path = "../processor/features/fx/eq/eq-ui" }
-saturate-dsp = { path = "../processor/features/fx/saturate/saturate-dsp" }
-delay-dsp = { path = "../processor/features/fx/delay/delay-dsp" }
-reverb-dsp = { path = "../processor/features/fx/reverb/reverb-dsp" }
-reverb-ui = { path = "../processor/features/fx/reverb/reverb-ui" }
-delay-ui = { path = "../processor/features/fx/delay/delay-ui" }
-modulation-ui = { path = "../processor/features/fx/modulation/modulation-ui" }
-saturate-ui = { path = "../processor/features/fx/saturate/saturate-ui" }
-saturate-profiles = { path = "../processor/features/fx/saturate/saturate-profiles" }
-spectrum-analyzer = { path = "../processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer" }
-spectrum-analyzer-dsp = { path = "../processor/features/fx/eq/spectrum-analyzer/spectrum-analyzer-dsp" }
-fts-audio-ui = { path = "../processor/libs/ui/fts-audio-ui" }
-fts-plug-ui = { path = "../processor/libs/ui/fts-plug-ui" }
-comp-plugin = { path = "../processor/apps/plugins/comp" }
-delay-plugin = { path = "../processor/apps/plugins/delay" }
-eq-plugin = { path = "../processor/apps/plugins/eq" }
-gate-plugin = { path = "../processor/apps/plugins/gate" }
-level-plugin = { path = "../processor/apps/plugins/level" }
-limiter-plugin = { path = "../processor/apps/plugins/limiter" }
-meter-plugin = { path = "../processor/apps/plugins/meter" }
-modulation-plugin = { path = "../processor/apps/plugins/modulation" }
-reverb-plugin = { path = "../processor/apps/plugins/reverb" }
-saturate-plugin = { path = "../processor/apps/plugins/saturate" }
-pitch-plugin = { path = "../processor/apps/plugins/pitch" }
-tune-plugin = { path = "../processor/apps/plugins/tune" }
-unison-plugin = { path = "../processor/apps/plugins/unison" }
-mic-plugin = { path = "../processor/apps/plugins/mic" }
-
-
-
-# Clear native DOM mappings before Blitz recycles removed node slots.
 [patch."https://github.com/DioxusLabs/dioxus"]
 dioxus-native-dom = { path = "libs/vendor/dioxus-native-dom" }
 # The renderer's pick, with the iOS simulator on vello-hybrid (see its
 # UPSTREAM.md).
 dioxus-native = { path = "libs/vendor/dioxus-native" }
+
+# ── joined into studio ──
+dioxus-core = { path = "signal/libs/vendor/dioxus-core" }  # from signal
+
+# keyflow (a git dependency) still takes daw, dawfile-reaper and fts-sample
+# from daw's old repo; this gives it the copies here, so there is one of
+# each. Goes when keyflow takes them from studio.
+[patch."https://github.com/FastTrackStudios/daw"]
+daw = { path = "daw/crates/daw/daw" }
+dawfile-reaper = { path = "daw/features/dawfile/dawfile-reaper" }
+fts-sample = { path = "daw/crates/audiocore/fts-sample" }
+
+# from processor
+[profile.dev.package.fx-blocks]
+opt-level = 3
+
+# from processor
+[profile.dev.package.eq-dsp]
+opt-level = 3
+
+# from processor
+[profile.dev.package.comp-dsp]
+opt-level = 3
+
+# from processor
+[profile.dev.package.reverb-dsp]
+opt-level = 3
+
+# from processor
+[profile.dev.package.delay-dsp]
+opt-level = 3
+
+# from processor
+[profile.dev.package.trigger-dsp]
+opt-level = 3
+
+# from signal
+[profile.dev.package.signal-sampler]
+opt-level = 3
+
+# from signal
+[profile.dev.package.signal-guitar]
+opt-level = 3
+
+# from signal
+[profile.dev.package.blitz-dom]
+opt-level = 3
+
+# from signal
+[profile.dev.package.blitz-paint]
+opt-level = 3
+
+# from signal
+[profile.dev.package.blitz-shell]
+opt-level = 3
+
+# from signal
+[profile.dev.package.blitz-traits]
+opt-level = 3
+
+# from signal
+[profile.dev.package.anyrender]
+opt-level = 3
+
+# from signal
+[profile.dev.package.anyrender_vello]
+opt-level = 3
+
+# from signal
+[profile.dev.package.vello]
+opt-level = 3
+
+# from signal
+[profile.dev.package.vello_encoding]
+opt-level = 3
+
+# from signal
+[profile.dev.package.wgpu]
+opt-level = 3
+
+# from signal
+[profile.dev.package.wgpu-core]
+opt-level = 3
+
+# from signal
+[profile.dev.package.wgpu-hal]
+opt-level = 3
+
+# from signal
+[profile.dev.package.naga]
+opt-level = 3
+
+# from signal
+[profile.dev.package.stylo]
+opt-level = 3
+
+# from signal
+[profile.dev.package.selectors]
+opt-level = 3
+
+# from signal
+[profile.dev.package.taffy]
+opt-level = 3
+
+# from signal
+[profile.dev.package.parley]
+opt-level = 3
+
+# from signal
+[profile.dev.package.skrifa]
+opt-level = 3
+
+# from signal
+[profile.dev.package.read-fonts]
+opt-level = 3
+
+# from signal
+[profile.dev.package.swash]
+opt-level = 3
+
+# from signal
+[profile.dev.package.fontique]
+opt-level = 3
+
+# from signal
+[profile.dev.package.peniko]
+opt-level = 3
+
+# from signal
+[profile.dev.package.kurbo]
+opt-level = 3
+
+# from signal
+[profile.dev.package.dioxus-core]
+opt-level = 3
+
+# from signal
+[profile.dev.package.dioxus-native-dom]
+opt-level = 3
+
+# from signal
+[profile.release-lto]
+inherits = "release"
+lto = "thin"
+codegen-units = 16

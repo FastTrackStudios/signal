@@ -92,7 +92,11 @@ bytemuck = { version = "1", features = ["derive"] }
 # Pages designed in frame, rendered by frame on this window's device and
 # hot-reloaded from their files (see frame_surface.rs). `wgpu_context` is
 # the type Blitz boxes its device in.
-frame-live = { workspace = true, features = ["anyrender-0-11"] }
+# frame's fleet-rc7 branch, not the workspace's frame (a local theme-runtime
+# checkout): the iPad FX row's faces take live streams there
+# (`LiveSurface::apply_stream`, `paint_vectors_at`), which theme-runtime
+# does not have yet. One frame again once the two branches meet.
+frame-live = { git = "https://github.com/FastTrackStudios/frame", branch = "fleet-rc7", features = ["anyrender-0-11"] }
 wgpu_context = "0.7"
 tracing.workspace = true
 

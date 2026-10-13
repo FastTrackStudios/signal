@@ -194,9 +194,7 @@ async fn update_mapping(
     }
 
     let config_json = config.to_string();
-    track
-        .set_ext_state(EXT_SECTION, "mapping_config", &config_json)
-        .await?;
+    TrackHandleCompat::set_ext_state(track, EXT_SECTION, "mapping_config", &config_json).await?;
 
     Ok(())
 }
@@ -312,10 +310,13 @@ pub async fn handle_macro_clear(daw: &Daw) -> Result<()> {
                 let removed = before - mappings.len();
 
                 let config_json = config.to_string();
-                touched
-                    .track
-                    .set_ext_state(EXT_SECTION, "mapping_config", &config_json)
-                    .await?;
+                TrackHandleCompat::set_ext_state(
+                    &touched.track,
+                    EXT_SECTION,
+                    "mapping_config",
+                    &config_json,
+                )
+                .await?;
 
                 let msg = format!("Cleared {removed} mapping(s) for Macro {macro_idx}");
                 console_log(daw, &msg).await;
