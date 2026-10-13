@@ -8,7 +8,7 @@
 //! axes — with their configured descriptor vocabularies attached. The engine
 //! later expands and collapses that schema per project.
 
-use dynamic_template_proto::{IdealFullSessionTemplate, NodeRouting, TemplateNode};
+use crate::proto::{IdealFullSessionTemplate, NodeRouting, TemplateNode};
 use monarchy::Group;
 
 use crate::buses::{all_buses, bus_for_path, is_attachment_point};
@@ -158,7 +158,7 @@ fn dimension_chain(dims: &[&Group<ItemMetadata>], mic_vocab: &[String]) -> Optio
 mod tests {
     use super::*;
     use crate::buses::names as bus;
-    use dynamic_template_proto::{BusMaterialization, NodeKind};
+    use crate::proto::{BusMaterialization, NodeKind};
 
     fn find<'a>(node: &'a TemplateNode, name: &str) -> Option<&'a TemplateNode> {
         node.children.iter().find(|c| c.name == name)

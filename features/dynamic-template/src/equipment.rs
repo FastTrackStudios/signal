@@ -314,7 +314,7 @@ pub fn contains_synth_hardware(input: &str) -> bool {
 /// # Examples
 ///
 /// ```
-/// use dynamic_template::equipment::strip_equipment;
+/// use crate::equipment::strip_equipment;
 ///
 /// assert_eq!(strip_equipment("Kick OptoComp"), "Kick");
 /// assert_eq!(strip_equipment("OH L 260VU"), "OH L");

@@ -1,3 +1,6 @@
+
+pub mod proto;
+
 use daw_proto::{FolderDepthChange, TrackHierarchy, TrackNode};
 #[cfg(test)]
 use monarchy::StructureAssertions;
@@ -310,7 +313,7 @@ pub trait IntoTracks<M: Metadata> {
     ///
     /// # Example
     /// ```ignore
-    /// use dynamic_template::{default_config, IntoTracks};
+    /// use crate::{default_config, IntoTracks};
     /// use monarchy::monarchy_sort;
     ///
     /// let structure = monarchy_sort(vec!["Kick In"], default_config())?;

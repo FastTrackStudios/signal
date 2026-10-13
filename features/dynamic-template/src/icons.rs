@@ -312,7 +312,7 @@ static ICON_MAP: LazyLock<HashMap<&'static str, IconName>> = LazyLock::new(|| {
 ///
 /// # Example
 /// ```
-/// use dynamic_template::icons::icon_for_group;
+/// use crate::icons::icon_for_group;
 ///
 /// assert_eq!(icon_for_group("Drums"), Some("drum.png"));
 /// assert_eq!(icon_for_group("Electric Guitar"), Some("electric_guitar.png"));
@@ -331,7 +331,7 @@ pub fn icon_for_group(group: &str) -> Option<IconName> {
 ///
 /// # Example
 /// ```
-/// use dynamic_template::icons::icon_for_path;
+/// use crate::icons::icon_for_path;
 ///
 /// // Returns Electric Guitar icon
 /// assert_eq!(icon_for_path(&["Guitars", "Electric"]), Some("electric_guitar.png"));

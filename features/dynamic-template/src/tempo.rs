@@ -10,7 +10,7 @@
 /// # Examples
 ///
 /// ```
-/// use dynamic_template::strip_tempo;
+/// use crate::strip_tempo;
 ///
 /// assert_eq!(strip_tempo("Track.126bpm.wav"), "Track.wav");
 /// assert_eq!(strip_tempo("83.5BPM_song"), "song");
@@ -93,7 +93,7 @@ pub fn strip_tempo(input: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// use dynamic_template::extract_tempo;
+/// use crate::extract_tempo;
 ///
 /// assert_eq!(extract_tempo("Track.126bpm.wav"), Some(126.0));
 /// assert_eq!(extract_tempo("83.5BPM_song"), Some(83.5));

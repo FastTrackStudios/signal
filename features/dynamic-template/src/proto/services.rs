@@ -3,7 +3,7 @@
 //! Defines the `DynamicTemplateService` trait for organizing items into
 //! track hierarchies.
 
-use crate::types::{
+use crate::proto::types::{
     ExtractMetadataRequest, ExtractMetadataResponse, GroupInfo, OrganizeRequest, OrganizeResponse,
 };
 use vox::service;
@@ -17,7 +17,7 @@ use vox::service;
 /// # Example
 ///
 /// ```ignore
-/// use dynamic_template_proto::{DynamicTemplateServiceClient, OrganizeRequest};
+/// use crate::proto::{DynamicTemplateServiceClient, OrganizeRequest};
 ///
 /// let client = DynamicTemplateServiceClient::new(handle);
 /// let response = client.organize(OrganizeRequest::new(vec![

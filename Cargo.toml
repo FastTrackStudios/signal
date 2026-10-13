@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dynamic-template",
     "features/audio",
     "features/dsp/builtin",
     "features/dsp/core",
@@ -74,9 +75,7 @@ members = [
     "features/session/sync",
     "features/session/library",
     "features/session/ui",
-    "features/dynamic-template/dynamic-template",
     "features/dynamic-template/dynamic-template-extension",
-    "features/dynamic-template/dynamic-template-proto",
     "features/guide",
     "features/patch-list",
     "features/adapters/reaper/session-extension",
@@ -286,6 +285,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+dynamic-template = { path = "features/dynamic-template" }
 audio = { path = "features/audio" }
 builtin = { path = "features/dsp/builtin" }
 dsp-core = { path = "features/dsp/core" }
@@ -675,9 +675,7 @@ sha2 = "0.10"
 totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
 
 # ── Dynamic session templates (subtree-imported into the tree) ────────
-dynamic-template = { path = "features/dynamic-template/dynamic-template", default-features = false }
 patch-list = { path = "features/patch-list" }
-dynamic-template-proto = { path = "features/dynamic-template/dynamic-template-proto" }
 
 # ── music-convention (its own repo since 2026-08-15) ──────────────────
 # The canonical music-production taxonomy (instrument groups + the REAPER

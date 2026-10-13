@@ -7,7 +7,7 @@
 //! # Usage
 //!
 //! ```rust
-//! use dynamic_template::colors::{color_for_group, groups, drums};
+//! use crate::colors::{color_for_group, groups, drums};
 //!
 //! // Get color for a top-level group
 //! let drum_color = groups::DRUMS;

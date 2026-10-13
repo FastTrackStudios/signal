@@ -17,7 +17,7 @@
 //! are ported with their reasoning, because the scene renders committed
 //! beside them were taken against exactly this layout.
 
-use dynamic_template_proto::{IdealFullSessionTemplate, TemplateNode};
+use crate::proto::{IdealFullSessionTemplate, TemplateNode};
 
 use super::kind::Kind;
 

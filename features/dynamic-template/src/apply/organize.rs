@@ -10,7 +10,7 @@
 
 use std::collections::BTreeMap;
 
-use dynamic_template_proto::TemplateBus;
+use crate::proto::TemplateBus;
 
 use super::{
     apply_buses, apply_colors, apply_routing, classified_paths, gather_unsorted,

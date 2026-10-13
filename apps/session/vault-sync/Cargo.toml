@@ -46,5 +46,5 @@ chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 dawfile-reaper = { workspace = true }
-dynamic-template = { path = "../../../features/dynamic-template/dynamic-template" }
+dynamic-template = { path = "../../../features/dynamic-template" }
 monarchy = { workspace = true }

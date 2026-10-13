@@ -5,7 +5,7 @@ use dynamic_template::apply::{organize, UNSORTED_FOLDER};
 use dynamic_template::{
     bus_nodes, default_config, golden_template, ItemMetadata, OrganizeIntoTracks,
 };
-use dynamic_template_proto::{NodeKind, TemplateNode};
+use dynamic_template::proto::{NodeKind, TemplateNode};
 use monarchy::Parser;
 use std::env;
 
@@ -607,7 +607,7 @@ fn print_bus_summary(
     input: &str,
     existing: usize,
     unclassified: usize,
-    buses: &[dynamic_template_proto::TemplateBus],
+    buses: &[dynamic_template::proto::TemplateBus],
     justified: &BTreeMap<&'static str, Vec<String>>,
 ) {
     println!("{input}");

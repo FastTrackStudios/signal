@@ -188,7 +188,7 @@ const EXCLUDED_PATTERNS: &[&str] = &[
 /// # Example
 ///
 /// ```
-/// use dynamic_template::song_name::detect_song_names;
+/// use crate::song_name::detect_song_names;
 ///
 /// let inputs: Vec<String> = vec![
 ///     "08-Kick-TheTrooper.wav".to_string(),

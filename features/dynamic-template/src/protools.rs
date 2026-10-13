@@ -41,7 +41,7 @@ impl ProToolsMetadata {
 /// # Examples
 ///
 /// ```
-/// use dynamic_template::protools::extract_protools_metadata;
+/// use crate::protools::extract_protools_metadata;
 ///
 /// let meta = extract_protools_metadata("Guitar_01.wav");
 /// assert_eq!(meta.playlist, Some(1));
@@ -91,7 +91,7 @@ pub fn extract_protools_metadata(input: &str) -> ProToolsMetadata {
 /// # Examples
 ///
 /// ```
-/// use dynamic_template::protools::strip_protools_markers;
+/// use crate::protools::strip_protools_markers;
 ///
 /// assert_eq!(strip_protools_markers("Guitar_01.wav"), "Guitar.wav");
 /// assert_eq!(strip_protools_markers("Vocal.01.wav"), "Vocal.wav");

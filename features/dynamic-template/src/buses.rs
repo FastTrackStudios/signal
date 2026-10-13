@@ -51,7 +51,7 @@
 //!
 //! Instrument folders are the other case: they sit elsewhere in the project
 //! and reach their bus by an explicit send
-//! ([`NodeRouting::to_bus`](dynamic_template_proto::NodeRouting::to_bus),
+//! ([`NodeRouting::to_bus`](crate::proto::NodeRouting::to_bus),
 //! which drops the parent send). [`bus_nodes`] renders the bus tree as the
 //! nested [`TemplateNode`] folder tracks a DAW layer can create directly.
 //!
@@ -73,7 +73,7 @@
 
 use std::collections::HashSet;
 
-use dynamic_template_proto::{BusMaterialization, TemplateBus, TemplateNode};
+use crate::proto::{BusMaterialization, TemplateBus, TemplateNode};
 
 use crate::colors::color_for_path;
 
@@ -319,7 +319,7 @@ pub const BUS_TREE: &[BusSpec] = &[
 ///
 /// # Example
 /// ```
-/// use dynamic_template::buses::{bus_for_path, names};
+/// use crate::buses::{bus_for_path, names};
 ///
 /// assert_eq!(bus_for_path(&["Drums".into()]), Some(names::DRUM));
 /// assert_eq!(bus_for_path(&["Vocals".into(), "BGVs".into()]), Some(names::BGV));
@@ -352,7 +352,7 @@ pub fn bus_for_path(path: &[String]) -> Option<&'static str> {
 }
 
 /// Whether `path` is exactly a bus attachment point — the node that carries
-/// the [`NodeRouting`](dynamic_template_proto::NodeRouting) into a bus, as
+/// the [`NodeRouting`](crate::proto::NodeRouting) into a bus, as
 /// opposed to a descendant that merely inherits it.
 #[must_use]
 pub fn is_attachment_point(path: &[String]) -> bool {
@@ -460,9 +460,9 @@ pub fn all_buses() -> Vec<TemplateBus> {
 ///
 /// A bus becomes a child of the node named by its
 /// [`parent`](TemplateBus::parent); buses with no parent come back as roots,
-/// in `buses` order. A bus with children is a [`Folder`](dynamic_template_proto::NodeKind::Folder)
+/// in `buses` order. A bus with children is a [`Folder`](crate::proto::NodeKind::Folder)
 /// and reaches its parent by the folder parent-send; a leaf bus like
-/// `DRUM BUS` is a [`Track`](dynamic_template_proto::NodeKind::Track).
+/// `DRUM BUS` is a [`Track`](crate::proto::NodeKind::Track).
 ///
 /// A bus whose parent is not in `buses` is emitted as a root rather than
 /// dropped, so a partial slice still renders everything it was given.
@@ -506,7 +506,7 @@ pub fn bus_nodes_for_paths<'a>(paths: impl IntoIterator<Item = &'a [String]>) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dynamic_template_proto::NodeKind;
+    use crate::proto::NodeKind;
 
     fn p(parts: &[&str]) -> Vec<String> {
         parts.iter().map(|s| (*s).to_string()).collect()

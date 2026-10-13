@@ -13,7 +13,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use dynamic_template_proto::{OrganizeRequest, OrganizeOptions};
+//! use crate::proto::{OrganizeRequest, OrganizeOptions};
 //!
 //! let request = OrganizeRequest {
 //!     items: vec![

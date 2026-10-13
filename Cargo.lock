@@ -6147,7 +6147,6 @@ dependencies = [
  "daw-reaper",
  "daw-standalone",
  "dawfile-reaper",
- "dynamic-template-proto",
  "eyre",
  "facet",
  "facet-json",
@@ -6173,16 +6172,6 @@ dependencies = [
  "eyre",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "dynamic-template-proto"
-version = "0.1.0"
-dependencies = [
- "daw-proto",
- "facet",
- "thiserror 2.0.20",
- "vox",
 ]
 
 [[package]]

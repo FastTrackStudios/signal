@@ -116,7 +116,7 @@ static LAYOUT_MAP: LazyLock<HashMap<&'static str, TrackLayout>> = LazyLock::new(
 ///
 /// # Example
 /// ```
-/// use dynamic_template::layouts::layout_for_group;
+/// use crate::layouts::layout_for_group;
 ///
 /// let layout = layout_for_group("Guide");
 /// assert!(layout.is_some());

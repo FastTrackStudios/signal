@@ -26,7 +26,7 @@
 use std::collections::HashMap;
 
 use daw_proto::FolderDepthChange;
-use dynamic_template_proto::{TemplateBus, TemplateNode};
+use crate::proto::{TemplateBus, TemplateNode};
 
 use crate::buses::bus_nodes;
 
@@ -375,7 +375,7 @@ pub fn apply_buses<T: TemplateTarget>(
 /// This is the instrument-folder side of the routing — the bus tree itself
 /// nests, so a bus reaches its parent by the folder send and never comes
 /// through here. Mirrors
-/// [`NodeRouting::to_bus`](dynamic_template_proto::NodeRouting::to_bus): the
+/// [`NodeRouting::to_bus`](crate::proto::NodeRouting::to_bus): the
 /// attachment point feeds its bus instead of the folder above it.
 ///
 /// Does nothing if the send is already there.

@@ -275,7 +275,7 @@ pub use monarchy::IntoVec;
 ///
 /// Import this to get all types and the extension trait in scope:
 /// ```ignore
-/// use dynamic_template::item_metadata::prelude::*;
+/// use crate::item_metadata::prelude::*;
 /// ```
 pub mod prelude {
     pub use super::ItemMetadata;

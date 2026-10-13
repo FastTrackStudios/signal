@@ -1,60 +1,50 @@
 [package]
 name = "dynamic-template"
 version.workspace = true
-edition = "2021"  # original edition of the dissolved workspace (root is 2024)
+edition = "2021"
 authors.workspace = true
 license.workspace = true
-description = "Dynamic template system using monarchy for hierarchical organization"
-keywords = ["template", "dynamic", "hierarchy", "organization", "fasttrack"]
-categories = ["template-engine", "web-programming"]
+description = "Dynamic session templates: organize a project by its tracks' names"
 
-[[bin]]
-name = "dynamic-template"
-path = "src/main.rs"
-required-features = ["reaper"]
+[lints]
+workspace = true
+
+[features]
+default = ["reaper"]
+reaper = ["daw/reaper", "dep:daw-reaper"]
 
 [dependencies]
-dynamic-template-proto = { workspace = true }
+anyhow = { workspace = true }
 architect = { workspace = true }
+color-palette = { workspace = true }
 daw = { workspace = true }
 daw-proto = { workspace = true }
 daw-reaper = { workspace = true, default-features = true, optional = true }
 dawfile-reaper = { workspace = true }
 eyre = { workspace = true }
-monarchy = { workspace = true }
-color-palette = { workspace = true }
-music-catalog = { workspace = true }
 facet = { workspace = true }
-vox = { workspace = true }
+monarchy = { workspace = true }
+music-catalog = { workspace = true }
+num-traits = { version = "0.2" }
 serde = { workspace = true }
-serde_json = "1.0"
-# Float to sample conversions in the performed media, without an `as`.
-num-traits = "0.2"
+serde_json = { version = "1.0" }
 thiserror = { workspace = true }
-anyhow = { workspace = true }
 tracing = { workspace = true }
+vox = { workspace = true }
 
 [dev-dependencies]
-# The integration tests (the former dynamic-template-tests crate).
 daw-standalone = { workspace = true, features = ["audio"] }
-facet-styx = { workspace = true }
-tempfile = "3.8"
-pretty_assertions = "1.4"
-insta = "1.34"
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 facet-json = { workspace = true }
+facet-styx = { workspace = true }
+insta = { version = "1.34" }
+pretty_assertions = { version = "1.4" }
+tempfile = { version = "3.8" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
-[features]
-default = ["reaper"]
-# The REAPER side: the live organizer (`apply`), the REAPER actions
-# (`daw_module`) and the CLI. Off, what is left is the classification —
-# groups, scenes, the visibility grouping, track kinds, the golden
-# session's RPP builder — which is pure and builds for wasm32 (the Session
-# web demo).
-reaper = ["daw/reaper", "dep:daw-reaper"]
-
-[lints]
-workspace = true
+[[bin]]
+name = "dynamic-template"
+path = "src/main.rs"
+required-features = ["reaper"]
 
 [[test]]
 name = "01_no_unneccesary_folders"

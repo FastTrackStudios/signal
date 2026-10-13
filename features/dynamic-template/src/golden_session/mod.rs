@@ -32,7 +32,7 @@ pub use shape::{maximal, vocal_fx, Shape};
 /// The fixtures directory, resolved from this crate's manifest.
 #[must_use]
 pub fn fixtures_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/golden")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/golden")
 }
 
 /// Every fixture this module builds, in the order they are written.
