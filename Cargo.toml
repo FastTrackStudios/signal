@@ -29,7 +29,7 @@ signal-tone3000.workspace = true
 signal-tone3000-proto.workspace = true
 # Where downloads land, and the config dir the session file sits in.
 signal-nam.workspace = true
-signal-sampler.workspace = true
+sampler = { workspace = true }
 # The in-process engine: a memory-link server for the editor's clients.
 architect = { workspace = true, features = ["local", "vox"] }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
